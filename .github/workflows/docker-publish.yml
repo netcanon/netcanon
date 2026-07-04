@@ -7,12 +7,12 @@ on:
       - 'v*.*.*-*'    # rc / alpha / beta pre-release tags
   workflow_dispatch:
 
+# Least-privilege default: at the workflow level only the pytest `test`
+# gate's checkout runs, so read is all it needs.  The registry-push,
+# signing, SARIF-upload and CI-gate scopes are declared on the
+# `build-and-publish` job so the test gate can't reach them (PKG-4).
 permissions:
   contents: read
-  packages: write
-  id-token: write          # cosign keyless signing via Sigstore + GitHub OIDC
-  security-events: write   # Trivy SARIF upload to Code Scanning
-  actions: read            # read the CI run conclusion for the "require CI success" gate
 
 # Serialise release runs for a given ref so a re-pushed tag (or a
 # workflow_dispatch racing the tag push) can't double-build / double-push
@@ -71,8 +71,34 @@ jobs:
     name: Build, push, sign, attest
     needs: [test]
     runs-on: ubuntu-latest
+    # Elevated scopes scoped to the publish job only (PKG-4): push to
+    # GHCR, keyless-sign via OIDC, upload the Trivy SARIF, read the CI
+    # run conclusion for the gate, and read the checkout.
+    permissions:
+      contents: read
+      packages: write          # push image + cosign artifacts to GHCR
+      id-token: write          # cosign keyless signing via Sigstore + GitHub OIDC
+      security-events: write   # Trivy SARIF upload to Code Scanning
+      actions: read            # read the CI run conclusion for the "require CI success" gate
 
     steps:
+      # Refuse to publish from anything but a version tag.  A bare
+      # `workflow_dispatch` selects a git ref in the UI; on a branch ref
+      # `type=semver` emits no versioned tag, but `type=raw,value=latest`
+      # would still move `:latest` onto a `.devN` build — the same
+      # dev-publish footgun as pypi-publish.yml (PKG-5).  Tag pushes
+      # satisfy the guard; a workflow_dispatch rebuild must select a tag.
+      # Uses $GITHUB_REF (a default env var), not a `${{ }}` template, so
+      # there is no injection surface.
+      - name: Refuse a non-tag ref (workflow_dispatch footgun guard)
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" != refs/tags/v* ]]; then
+            echo "::error::Refusing to publish from '${GITHUB_REF}' — the image publish must run from a version tag (refs/tags/v*), not a branch. A branch run would move :latest onto a .devN build."
+            exit 1
+          fi
+          echo "OK: publishing from tag '${GITHUB_REF}'."
+
       - uses: actions/checkout@v7.0.0
         with:
           # Full history so the on-main ancestry guard below can run a

@@ -59,6 +59,16 @@ _CONNECT_TIMEOUT = 30
 # latency low and the separate-session cost acceptable.
 _PROBE_IDLE_THRESHOLD = 8   # consecutive idle polls (~1.6s)
 _PROBE_MAX_SECONDS = 30
+# Absolute bounds for `_drain` so a device that streams without ever
+# pausing (wedged, or hostile once the connection is trusted) can't
+# hang the worker or exhaust memory.  `_drain` only resets its idle
+# window on new data — without a hard cap that window never expires
+# against a continuous stream (SEC-5).  `_drain` is a best-effort
+# pre-command flush (login banner / OPNsense menu), NOT a config
+# capture, so on hitting a cap it returns what it has rather than
+# failing closed the way `_collect_output` does.
+_DRAIN_MAX_SECONDS = 10      # absolute wall-clock cap; idle-reset can't extend past it
+_DRAIN_MAX_BYTES = 1 << 20   # 1 MiB — banners/menus are tiny; bound a runaway stream
 
 
 _SHELL_PROMPT_RE = re.compile(
@@ -348,20 +358,46 @@ class ParamikoShellCollector(BaseCollector):
     def _drain(self, shell: paramiko.Channel, timeout: float = 0.5) -> str:
         """Read and return all immediately available output, then stop.
 
+        Returns once the channel has been quiet for *timeout* seconds,
+        or on hitting the absolute ``_DRAIN_MAX_SECONDS`` /
+        ``_DRAIN_MAX_BYTES`` cap — whichever comes first.  The idle
+        window resets on new data (so a briefly-chatty device still
+        drains promptly once it settles), but the absolute caps do NOT
+        reset, so a device that streams without pause can no longer keep
+        the loop alive forever or grow the buffer unbounded (SEC-5).
+
+        This is a best-effort pre-command flush (banner / menu text),
+        not a config capture, so hitting a cap returns the truncated
+        buffer rather than raising — unlike :meth:`_collect_output`,
+        which fails closed to avoid persisting a partial backup.
+
         Args:
             shell: Active Paramiko channel.
-            timeout: Maximum seconds to wait for data before returning.
+            timeout: Idle window — seconds of silence before returning.
 
         Returns:
-            All data received within *timeout* seconds, decoded as UTF-8.
+            Data received before the idle window or an absolute cap was
+            hit, decoded as UTF-8.
         """
         buf = ""
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
+        now = time.monotonic()
+        idle_deadline = now + timeout
+        hard_deadline = now + _DRAIN_MAX_SECONDS
+        while True:
+            now = time.monotonic()
+            if now >= idle_deadline or now >= hard_deadline:
+                break
             if shell.recv_ready():
                 chunk = shell.recv(65536).decode("utf-8", errors="replace")
                 buf += chunk
-                deadline = time.monotonic() + timeout  # reset on new data
+                idle_deadline = time.monotonic() + timeout  # reset on new data
+                if len(buf) >= _DRAIN_MAX_BYTES:
+                    logger.warning(
+                        "_drain hit the %d-byte cap (device streaming without "
+                        "pause) — returning truncated pre-command output",
+                        _DRAIN_MAX_BYTES,
+                    )
+                    break
             else:
                 time.sleep(0.05)
         return buf

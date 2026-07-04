@@ -12,7 +12,13 @@ All severity fields use the same three-step convention introduced by
 
     ok    — safe to proceed, no user action needed
     warn  — proceed with awareness (lossy or partial)
-    block — stop unless the caller explicitly overrides (force=True)
+    block — the strongest signal.  In the migration pipeline the render
+            still runs and the job is flagged ``partial`` (the target
+            can't faithfully consume the tree); ``block`` does not abort
+            the run, and ``force`` does NOT clear it — ``force`` only
+            skips the separate cross-device-class guard.  Drop the
+            offending paths with the ``strip_unsupported`` transform to
+            clear a ``block``.
 """
 
 from __future__ import annotations
@@ -125,8 +131,12 @@ class LossyPath(BaseModel):
         path: YANG xpath expression (adapter-scoped interpretation — see
             ``CapabilityMatrix.classify``).
         reason: Human-readable explanation of what's lost.
-        severity: ``warn`` (default) lets the migration proceed; ``error``
-            escalates to a block unless ``force=True``.
+        severity: ``warn`` (default) surfaces a warning and the report
+            stays ``warn``; ``error`` escalates the report to ``block``,
+            which flags the rendered job ``partial``.  Neither aborts the
+            render, and ``force`` does not downgrade a ``block`` (it only
+            skips the cross-device-class guard) — drop the path with the
+            ``strip_unsupported`` transform to avoid it.
     """
 
     path: str
@@ -138,9 +148,11 @@ class UnsupportedPath(BaseModel):
     """A YANG path the target adapter cannot emit at all.
 
     Presence of any unsupported path in a tree forces the
-    ``ValidationReport`` severity to ``block``.  The caller may still
-    override with ``force=True``; in that case ``strip_unsupported`` is
-    the natural transform to apply before render.
+    ``ValidationReport`` severity to ``block``, which flags the rendered
+    job ``partial`` (the render still runs — the path is simply absent
+    from the output).  ``force`` does NOT clear this (it only skips the
+    cross-device-class guard); apply the ``strip_unsupported`` transform
+    before render to drop the path explicitly and clear the block.
     """
 
     path: str
@@ -650,7 +662,9 @@ class MigrationPlanRequest(BaseModel):
         raw_text: Inline config text.  Mutually exclusive with
             ``source_filename``.
         source_filename: Name of a stored config to load.
-        force: Skip the device-class guard.  Default ``False``.
+        force: Skip the stage-0 cross-device-class guard.  Does NOT clear
+            a validation ``block`` — unsupported / error-level paths still
+            flag the job ``partial``.  Default ``False``.
     """
 
     source: str

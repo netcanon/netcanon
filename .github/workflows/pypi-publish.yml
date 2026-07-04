@@ -70,6 +70,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Refuse to publish from anything but a version tag.  A bare
+      # `workflow_dispatch` selects a git ref in the UI; if that ref is a
+      # branch (e.g. main) rather than a tag, setuptools_scm derives a
+      # `X.Y.Z.devN` version and `no-local-version` (pyproject.toml)
+      # strips the `+g<sha>` local segment PyPI would otherwise reject —
+      # making that accidental dev build a PyPI-legal upload.  The on-main
+      # ancestry check below passes trivially for a branch on main, so it
+      # does NOT catch this.  Tag pushes always satisfy the guard; a
+      # workflow_dispatch backfill must select a tag in the ref picker
+      # (PKG-5).  Uses $GITHUB_REF (a default env var), not a `${{ }}`
+      # template, so there is no injection surface.
+      - name: Refuse a non-tag ref (workflow_dispatch footgun guard)
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" != refs/tags/v* ]]; then
+            echo "::error::Refusing to publish from '${GITHUB_REF}' — the PyPI publish must run from a version tag (refs/tags/v*), not a branch. A workflow_dispatch on a branch would build a .devN version."
+            exit 1
+          fi
+          echo "OK: publishing from tag '${GITHUB_REF}'."
+
       - uses: actions/checkout@v7.0.0
         with:
           # Full history + tags for setuptools_scm to derive the package
