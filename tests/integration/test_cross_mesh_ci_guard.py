@@ -161,6 +161,37 @@ def test_no_new_codec_bug_pairs(mesh_and_recon, baseline):
     )
 
 
+def test_no_pair_codec_bug_count_regressed(mesh_and_recon, baseline):
+    """No EXISTING pair's codec-bug count may exceed its baseline (TEST-2).
+
+    The aggregate-total and pair-membership guards above both miss an
+    intra-corpus shuffle where one pair drops (e.g. 1→0, leaving the set)
+    while another rises (2→3): the total stays equal and no NEW pair
+    appears, so both pass green while a real per-pair regression hides.
+    This pins each pair's count with ``<=`` so a genuine fix (lower count)
+    still passes but a rise is caught."""
+    _, result = mesh_and_recon
+
+    def _by_pair(rows):
+        return {
+            (r["source_codec"], r["target_codec"]): r["codec_bug_count"]
+            for r in rows
+        }
+
+    live = _by_pair(result["pair_codec_bug_counts"])
+    base = _by_pair(baseline["pair_codec_bug_counts"])
+    regressed = {
+        pair: (base[pair], live[pair])
+        for pair in base
+        if live.get(pair, 0) > base[pair]
+    }
+    assert not regressed, (
+        "existing codec-bug pair(s) regressed (baseline→live): "
+        f"{regressed}. A previously-tolerated pair now drifts MORE on the "
+        "committed corpus even though the aggregate total / pair set held."
+    )
+
+
 def test_mesh_cell_count_matches_baseline(mesh_and_recon, baseline):
     """The baseline was computed on a fixed corpus size; if fixtures are
     added/removed the count shifts and the CODEC_BUG baseline must be
