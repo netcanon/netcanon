@@ -145,13 +145,21 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
     from ...models.device import BackupRequest, DeviceCredentials, DeviceTarget
     from ...models.device_profile import DeviceProfile
     from ...services.backup_runner import run_backup_job
+    from ...storage.device_profile_store import DEVICE_PROFILE_REGISTRY_LOCK
 
     schedules = app.state.schedules
     schedule = schedules.get(schedule_id)
     if not schedule or not schedule.enabled:
         return
 
-    device_profiles: dict[str, DeviceProfile] = app.state.device_profiles
+    # Snapshot the shared device-profile registry under its lock (CONC-6):
+    # this coroutine runs on the scheduler/event-loop thread while the
+    # create/update/delete routes mutate the same dict from FastAPI's
+    # threadpool. Iterating the live dict raced a mutation -> "dictionary
+    # changed size during iteration" RuntimeError that silently skipped the
+    # whole scheduled run. The lock is held only for the O(n) copy.
+    with DEVICE_PROFILE_REGISTRY_LOCK:
+        device_profiles: dict[str, DeviceProfile] = dict(app.state.device_profiles)
 
     # Resolve target devices (new-style: profile-based).
     # Build a type_key index for O(n) instead of O(n*m) resolution.

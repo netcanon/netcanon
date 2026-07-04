@@ -218,7 +218,12 @@ class FileConfigStore(BaseConfigStore):
         """
         records: list[ConfigRecord] = []
         for path in self._dir.rglob("*"):
-            if path.is_file():
+            # Skip half-written atomic-save artifacts: a crash between the
+            # temp write and the rename leaves a `<stem>.tmp` that matches
+            # _FILENAME_RE and would otherwise be listed (and downloadable)
+            # as a real config (CONC-4). Mirrors the sidecar `.meta.json`
+            # handling.
+            if path.is_file() and path.suffix != ".tmp":
                 record = self._parse_filename(path)
                 if record is not None:
                     meta_path = path.parent / f"{path.name}.meta.json"
@@ -311,7 +316,9 @@ class FileConfigStore(BaseConfigStore):
         """
         moved = 0
         for path in list(self._dir.iterdir()):
-            if not path.is_file():
+            if not path.is_file() or path.suffix == ".tmp":
+                # A crash-orphaned `.tmp` matches _FILENAME_RE; don't migrate
+                # it into a subdir as if it were a real config (CONC-4).
                 continue
             m = _FILENAME_RE.match(path.name)
             if not m:

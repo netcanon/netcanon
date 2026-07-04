@@ -354,6 +354,22 @@ class TestDiffCompatibility:
         )
         assert resp.status_code == 404
 
+    def test_diff_deleted_mid_read_returns_404_not_500(self, client, monkeypatch):
+        """CONC-9 (2026-07-03 review): a config deleted between the
+        list_configs() resolution and the get_content() read (TOCTOU) must
+        surface as 404, not a raw FileNotFoundError → 500."""
+        a = _seed_config_of_type(client, "Cisco", "10.9.9.1")
+        b = _seed_config_of_type(client, "Cisco", "10.9.9.2")
+
+        def _deleted(filename):
+            raise FileNotFoundError(filename)
+
+        monkeypatch.setattr(client.app.state.storage, "get_content", _deleted)
+        resp = client.post(
+            "/api/v1/configs/diff", json={"left": a, "right": b},
+        )
+        assert resp.status_code == 404
+
 
 class TestDiffEfficiency:
     """blind-audit 276eaeb T0-5: a two-sided diff resolves both records from

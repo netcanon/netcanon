@@ -178,19 +178,24 @@ class ParamikoShellCollector(BaseCollector):
             device.port,
             device.credentials.username,
         )
-        client.connect(
-            hostname=device.host,
-            port=device.port,
-            username=device.credentials.username,
-            password=device.credentials.password.get_secret_value(),
-            timeout=_CONNECT_TIMEOUT,
-            look_for_keys=False,
-            allow_agent=False,
-        )
-        # TOFU: persist the (possibly newly-learned) host key for next time.
-        persist_paramiko_host_keys(client, settings)
-
+        # CONC-8: connect + host-key persist live INSIDE the try so the
+        # finally's client.close() also covers a connect/auth failure —
+        # otherwise a failed connect propagated without closing the client,
+        # leaking it (and its socket/Transport) on a repeatedly-unreachable
+        # device.
         try:
+            client.connect(
+                hostname=device.host,
+                port=device.port,
+                username=device.credentials.username,
+                password=device.credentials.password.get_secret_value(),
+                timeout=_CONNECT_TIMEOUT,
+                look_for_keys=False,
+                allow_agent=False,
+            )
+            # TOFU: persist the (possibly newly-learned) host key for next time.
+            persist_paramiko_host_keys(client, settings)
+
             shell = client.invoke_shell(width=220, height=50)
             time.sleep(2)
             initial = self._drain(shell)
@@ -291,6 +296,7 @@ class ParamikoShellCollector(BaseCollector):
                 device.host,
                 exc,
             )
+            client.close()  # CONC-8: don't leak the client on connect failure
             return {}
 
         try:

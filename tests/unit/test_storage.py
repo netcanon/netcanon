@@ -247,6 +247,20 @@ class TestFileConfigStoreList:
         store = FileConfigStore(tmp_path)
         assert store.list_configs() == []
 
+    def test_list_ignores_orphaned_tmp_files(self, tmp_path: Path):
+        """CONC-4 (2026-07-03 review): a crash between the atomic-save temp
+        write and the rename leaves a `<stem>.tmp` that matches _FILENAME_RE;
+        it must NOT be listed (nor downloadable) as a real config."""
+        store = FileConfigStore(tmp_path)
+        rec = store.save("Cisco", "1.2.3.4", _ts(), "cfg", "real")
+        # Simulate the crash artifact next to the real file.
+        real_path = tmp_path / "Cisco" / "1-2-3-4" / rec.filename
+        orphan = real_path.with_suffix(".tmp")
+        orphan.write_text("half-written", encoding="utf-8")
+        listed = {r.filename for r in store.list_configs()}
+        assert rec.filename in listed
+        assert not any(name.endswith(".tmp") for name in listed)
+
     def test_list_multiple_device_types(self, tmp_path: Path):
         store = FileConfigStore(tmp_path)
         store.save("Cisco", "1.1.1.1", _ts(second=0), "cfg", "cisco")
