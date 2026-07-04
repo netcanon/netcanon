@@ -296,7 +296,7 @@ _KV_RE = re.compile(
     ([\w\-]+)             # key
     =
     (                     # value:
-        "[^"]*"           #   double-quoted string, OR
+        "(?:\\.|[^"\\])*"  #  double-quoted string (spans \" / \\ escapes), OR
       | [^\s]+            #   bare token (no spaces)
     )
     """,
@@ -315,10 +315,34 @@ def _parse_kv(line: str) -> dict[str, str]:
     for m in _KV_RE.finditer(line):
         key = m.group(1)
         val = m.group(2)
-        if val.startswith('"') and val.endswith('"'):
-            val = val[1:-1]
+        if len(val) >= 2 and val.startswith('"') and val.endswith('"'):
+            # Strip the surrounding quotes, then reverse the render-side
+            # escaping (``\\`` → ``\``, ``\"`` → ``"``) so a comment /
+            # name containing either character round-trips byte-stable.
+            val = _unescape(val[1:-1])
         pairs[key] = val
     return pairs
+
+
+def _unescape(value: str) -> str:
+    """Reverse :func:`~netcanon.migration.codecs.mikrotik_routeros.render._escape`.
+
+    Single left-to-right pass: a backslash consumes the next character
+    literally (so ``\\\\`` → ``\\`` and ``\\"`` → ``"``), which is the exact
+    inverse of doubling backslashes then escaping quotes.  A trailing lone
+    backslash is emitted verbatim."""
+    out: list[str] = []
+    i = 0
+    n = len(value)
+    while i < n:
+        c = value[i]
+        if c == "\\" and i + 1 < n:
+            out.append(value[i + 1])
+            i += 2
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
 
 
 _FIND_DEFAULT_NAME_RE = re.compile(r"\[\s*find\s+default-name=(\S+)\s*\]")

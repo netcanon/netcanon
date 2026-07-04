@@ -879,8 +879,17 @@ def _yes_no(flag: bool) -> str:
 
 
 def _escape(value: str) -> str:
-    """Escape double-quotes in a string for inclusion in ``"..."``."""
-    return value.replace('"', '\\"')
+    """Escape a string for inclusion inside a RouterOS ``"..."`` literal.
+
+    RouterOS treats ``\\`` as the escape introducer inside a quoted
+    string, so a literal backslash must itself be doubled *before*
+    double-quotes are escaped — otherwise ``a\\b`` renders as ``a\\b``
+    where ``\\b`` is read back as a backspace escape, and a value
+    containing ``"`` closes the literal early.  Mirrors the sibling
+    :func:`_quote_if_needed` (which already escapes both) and the
+    parse-side :func:`~netcanon.migration.codecs.mikrotik_routeros.parse._parse_kv`
+    which reverses this.  Backslash first, then quote (order matters)."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _render_vrrp(
