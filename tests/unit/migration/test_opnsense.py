@@ -149,6 +149,15 @@ class TestParseErrors:
         with pytest.raises(ParseError, match="non-integer <subnet>"):
             OPNsenseCodec().parse(raw)
 
+    def test_non_integer_vlan_tag_raises(self):
+        """ROB-1 (2026-07-03 review): a non-numeric ``<vlan><tag>`` must
+        surface as a ParseError (→ clean 4xx), not a raw ValueError that
+        escapes the codec boundary and becomes an HTTP 500 on /sanitize."""
+        raw = """<?xml version="1.0"?>
+<opnsense><vlans><vlan><tag>abc</tag><descr>Users</descr></vlan></vlans></opnsense>"""
+        with pytest.raises(ParseError, match="non-integer <tag>"):
+            OPNsenseCodec().parse(raw)
+
 
 class TestParseTolerancePreamble:
     """Defensive: the parse() prefix-trim rescues OPNsense backups
