@@ -22,7 +22,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ... import config as app_config
-from ...migration.codecs.base import ParseError
+from ...migration.codecs.base import ParseError, RenderError
 from ...migration.codecs.registry import list_public_codecs
 from ...tools.sanitize import sanitize_text
 
@@ -83,6 +83,14 @@ async def post_sanitize(
         raise HTTPException(
             status_code=400,
             detail=f"Failed to parse upload as {source_vendor!r}: {e}",
+        ) from e
+    except RenderError as e:
+        # RenderError is a sibling of ParseError (not caught above); a render
+        # failure on the sanitized tree must be a clean 4xx, not an uncaught
+        # 500 (API-3).
+        raise HTTPException(
+            status_code=422,
+            detail=f"Failed to render sanitized {source_vendor!r}: {e}",
         ) from e
 
     if dry_run:

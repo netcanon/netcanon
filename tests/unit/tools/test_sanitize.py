@@ -1854,3 +1854,30 @@ class TestOverlayFieldRedaction:
         blob = sanitized.model_dump_json()
         leaked = [t for t in ("65501:100", "239.7.7.7", "9.9.9.9") if t in blob]
         assert not leaked, f"overlay identifiers survived sanitisation: {leaked}"
+
+
+class TestUnrecognizedInputRejected:
+    """API-4 (2026-07-03 review): sanitising input the declared codec can't
+    parse must RAISE (ParseError), not silently emit a bare scaffold with
+    zero substitutions — otherwise an operator believes a config was redacted
+    when its secrets were actually discarded."""
+
+    def test_wrong_source_vendor_raises_parse_error(self):
+        # A Junos set-form config declared as cisco_iosxe_cli parses to an
+        # empty canonical tree (the Cisco CLI parser recognises nothing).
+        junos = (
+            "set system host-name r1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/24\n"
+        )
+        with pytest.raises(ParseError, match="not recognised"):
+            sanitize_text(junos, "cisco_iosxe_cli", dry_run=True)
+
+    def test_recognised_config_still_sanitises(self):
+        # Negative control: a real Cisco config is recognised and sanitised.
+        cisco = (
+            "hostname R1\n"
+            "interface GigabitEthernet0/0\n"
+            " ip address 8.8.8.8 255.255.255.0\n"
+        )
+        result = sanitize_text(cisco, "cisco_iosxe_cli", dry_run=True)
+        assert result.substitutions  # at least the hostname + public IP

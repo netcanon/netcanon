@@ -48,6 +48,29 @@ class TestDemoModule:
         assert "OUTPUT" in out
         assert "FAILED" not in out
 
+    def test_partial_job_exits_nonzero(self, capsys, monkeypatch):
+        """API-5 (2026-07-03 review): the demo keyed success off the enum's
+        repr suffix (``endswith('failed')``), so a *partial* job printed the
+        full success flow and exited 0. It must now treat only ``completed``
+        as success — a partial job prints a PARTIAL section and returns
+        non-zero."""
+        from types import SimpleNamespace
+
+        import netcanon.tools.demo as demo_mod
+        from netcanon.models.migration import MigrationJobStatus
+
+        monkeypatch.setattr(
+            demo_mod, "run_plan_with_rename",
+            lambda *a, **k: SimpleNamespace(
+                status=MigrationJobStatus.partial, error=None,
+            ),
+        )
+        rc = demo_main(["--pair", "cisco__junos"])
+        out = capsys.readouterr().out
+        assert rc == 1
+        assert "PARTIAL" in out
+        assert "OUTPUT" not in out
+
 
 class TestDemoViaCLI:
     """``netcanon demo …`` must delegate to the same module (the shipped path)."""

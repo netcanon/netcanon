@@ -324,7 +324,7 @@ def plan_migration_ports(
 
     First concrete per-pane override endpoint.  Establishes the
     pattern that subsequent category endpoints (``/plan/vlans``,
-    ``/plan/snmp``, ``/plan/local_users``, ``/plan/snmpv3_users``)
+    ``/plan/snmp``, ``/plan/local_users``, ``/plan/snmpv3``)
     will follow: each accepts the same :class:`MigrationPlanRequest`
     body and dispatches to :func:`run_plan_with_overrides` with only
     its category's override map populated.

@@ -134,6 +134,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ..migration.canonical.intent import CanonicalIntent
+from ..migration.codecs.base import ParseError
 from ..migration.codecs.registry import get_codec
 
 #: A DNS hostname: dot-separated labels (alnum, internal hyphen, and
@@ -230,6 +231,28 @@ def sanitize_text(
     # to 400 and the CLI reports cleanly.  No per-call pydantic handling
     # needed (this generalised #229's single sanitize-boundary conversion).
     intent = codec.parse(raw)
+
+    # API-4: whole-input-rejection guard.  A permissive ``parse()`` returns an
+    # essentially-empty canonical tree for input it doesn't understand (wrong
+    # source vendor, garbage) — ``sanitize`` would then emit a bare scaffold
+    # with ZERO substitutions, silently discarding a config the operator
+    # believed was redacted.  Mirror the migration pipeline's "recognized zero
+    # surfaces" signal (services.migration_pipeline._input_not_recognized):
+    # non-trivial input that walks to no xpaths is a rejection, surfaced as a
+    # ParseError (which the CLI + /sanitize route already report cleanly)
+    # rather than a misleading empty scaffold.
+    if (
+        raw.strip()
+        and isinstance(intent, CanonicalIntent)
+        and next(iter(codec.iter_xpaths(intent)), None) is None
+    ):
+        raise ParseError(
+            f"input not recognised as {source_codec_name!r} — it parsed to an "
+            "empty configuration (wrong source vendor?); nothing was "
+            "sanitised.",
+            snippet=raw.lstrip()[:120],
+        )
+
     sanitized_intent, substitutions = sanitize_intent(intent)
 
     if dry_run:

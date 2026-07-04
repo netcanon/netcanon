@@ -37,6 +37,7 @@ import sys
 from dataclasses import dataclass
 
 from ..migration.codecs.registry import get_codec
+from ..models.migration import MigrationJobStatus
 from ..services.migration_pipeline import run_plan_with_rename
 
 # ---------------------------------------------------------------------------
@@ -271,9 +272,22 @@ def _run_scenario(scenario: Scenario) -> int:
     target = get_codec(scenario.target_codec)
     job = run_plan_with_rename(source, target, scenario.source_text, port_rename_map={})
 
-    if str(job.status).endswith("failed"):
-        _print_section("FAILED")
-        print(f"Error: {job.error}")
+    # API-5: branch on the enum, not the stringified repr. There are THREE
+    # terminal states (completed / partial / failed); the old
+    # ``str(job.status).endswith("failed")`` matched only `failed` and let a
+    # `partial` job (a block-severity validation, or a wrong-codec empty tree)
+    # print the full success flow and exit 0.
+    if job.status != MigrationJobStatus.completed:
+        label = "FAILED" if job.status == MigrationJobStatus.failed else "PARTIAL"
+        _print_section(label)
+        if job.error:
+            print(f"Error: {job.error}")
+        if job.status == MigrationJobStatus.partial:
+            print(
+                "Job did not fully translate (lossy / unsupported surfaces or "
+                "unrecognised input); output is NOT deploy-safe. See the "
+                "validation report."
+            )
         return 1
 
     _print_section(
