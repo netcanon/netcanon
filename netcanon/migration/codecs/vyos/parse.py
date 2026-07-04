@@ -459,7 +459,17 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         if len(stk) == 2:
             return _touch_iface(arg, typ)
         if len(stk) == 3 and stk[2][0] == "vif" and stk[2][1]:
-            return _touch_iface(f"{arg}.{stk[2][1]}", "ethernet")
+            sc = _touch_iface(f"{arg}.{stk[2][1]}", "ethernet")
+            # A VyOS ``vif <vid>`` IS the 802.1Q tag of a routed
+            # sub-interface.  Record it on ``dot1q_vlan`` so cross-vendor
+            # targets emit a valid encapsulation (e.g. Cisco IOS
+            # ``encapsulation dot1Q <vid>``) instead of a tag-less — and
+            # therefore invalid — sub-interface.  Same-vendor render is
+            # unaffected: it reconstructs ``vif <vid>`` from the ``.<vid>``
+            # name suffix, not from this field.
+            if stk[2][1].isdigit():
+                sc["dot1q_vlan"] = int(stk[2][1])
+            return sc
         return None  # deeper nesting we don't model in v1
 
     for raw_line in raw.splitlines():
@@ -891,4 +901,5 @@ def _build_iface(sc: dict) -> CanonicalInterface:
         dhcp_client_v6=sc.get("dhcp_client_v6", ""),
         lag_member_of=sc.get("lag_member_of"),
         vrf=sc.get("vrf", ""),
+        dot1q_vlan=sc.get("dot1q_vlan"),
     )
