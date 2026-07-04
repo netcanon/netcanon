@@ -26,6 +26,112 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-04
+
+Post-review hardening release: the complete remediation of the 2026-07-03
+Fable-5 full-project review (verdict *GO-WITH-FIXES, healthy codebase*).  22
+fixes spanning security, codec fidelity/honesty, concurrency, robustness,
+packaging and docs — **no breaking changes and no new features**.  The review's
+headline pattern was "a hardened path with an un-hardened sibling" (a guard
+written once but never mirrored to its twin); most fixes below port an existing
+in-tree defence to the surface that lacked it.
+
+### Security
+
+- **SEC-3** — `GET /api/v1/backups/{job_id}` now constrains `job_id` to a strict
+  UUID pattern, closing a path-traversal / existence-oracle vector that reached
+  the file-store path join unguarded (the sibling config store was already
+  guarded).  A malformed id is a clean `422`.  (#282)
+- **SEC-1** — `GET /api/v1/schedules/` no longer echoes legacy inline device
+  `password` / `enable_password` over the read API (`BackupSchedulePublic`).
+  (#271)
+- **SEC-2 / SEC-7** — the device-profile and schedule stores scrub a pydantic
+  `ValidationError`'s `input_value` before logging (`scrub_exc_for_log`), and
+  SECURITY.md's credential-log claim now cites the test that actually asserts
+  it.  (#270)
+- **SEC-6** — the SNMP community (a shared secret) is no longer logged verbatim
+  at DEBUG nor echoed into operator-facing rename warnings — presence-only.
+  (#282)
+- **SEC-10** — `POST /api/v1/migration/detect` caps `raw_text` at 10 MB, matching
+  `/plan` (DoS-surface parity).  (#282)
+- **SEC-11** — the opt-in egress allow-list now blocks the unspecified address
+  (`0.0.0.0` / `::`, incl. IPv4-mapped), which routes to loopback on many stacks.
+  (#282)
+
+### Fixed
+
+- **PKG-1 (HIGH)** — the Docker image (and the MSI) shipped an **empty vendor
+  registry**: `migration/vendors/*.yaml` reached the wheel only via
+  setuptools_scm's VCS file-finder, so the git-less container build loaded zero
+  vendors and the translator core was non-functional.  Added the package-data
+  glob; the docker-smoke gate now asserts a vendor actually loads.  (#265)
+- **API-1** — `POST /api/v1/migration/plan` with a non-port override map passed
+  `port_rename_map=None`, silently disengaging the translator so interface names
+  rendered verbatim.  Restores the v0.3.2 auto-translate-by-default contract for
+  API callers.  (#266)
+- **UX-1** — the migrate-page parse-failure banner/button rendered the literal
+  text "undefined" instead of the codec label.  (#267)
+- **ROB-1** — the opnsense and cisco_iosxe (XML) parsers raised a raw `ValueError`
+  on a malformed numeric field (`<vlan><tag>`, `<subinterface><index>`), escaping
+  the codec boundary as an HTTP 500; both now raise `ParseError` (clean 4xx).
+  (#277)
+- **CODEC-1 / CODEC-3** — `fortigate_cli`, `aruba_aoss` and `mikrotik_routeros`
+  now escape `"` and `\` inside quoted free-text (description / SNMP
+  location+contact / community), so a value containing a quote no longer emits
+  device-invalid config; matched parse-side unescaping keeps the round-trip
+  stable.  (#275)
+- **VyOS free-text quotes** — VyOS rejects an embedded double-quote in a value
+  string even when escaped (vyos.dev/T1246), so its renderer *sanitises* the
+  quote (to an apostrophe) rather than escaping it, and logs the alteration.
+  (#281)
+- **CODEC-2** — a VyOS `vif <vid>` sub-interface now populates `dot1q_vlan`, so it
+  cross-renders to a valid routed sub-interface (e.g. Cisco IOS `encapsulation
+  dot1Q <vid>`) instead of a tag-less, device-rejected one.  (#276)
+- **MTX-1 / MTX-2** — `cisco_nxos` and `aruba_aoscx` declare `/vxlan-vnis/udp-port`
+  **lossy**: they silently normalised a non-default VXLAN UDP port to 4789 while
+  reporting `severity: ok`.  (#278)
+- **MTX-4** — `cisco_iosxr` and `vyos` now declare `/anycast-gateway-mac`
+  **unsupported** (was undeclared → fail-open to supported).  (#280)
+- **MTX-5** — the VLAN/SVI-mount secondary-IP walk now uses address cardinality
+  (not the `is_secondary` flag), so a flagless multi-address SVI's dropped
+  secondary surfaces in the validation report instead of `severity: ok` —
+  mirroring the interface-mount fix.  (#284)
+- **CONC-1** — `BackupJobRegistry` is lock-guarded; a concurrent poll during a
+  list no longer raises `RuntimeError: OrderedDict mutated during iteration`
+  (user-visible 500).  (#272)
+- **CONC-2** — the schedule store is lock-guarded and re-checks existence before
+  its post-run save, so a schedule deleted mid-run is no longer resurrected on
+  disk.  (#274)
+- **CONC-4 / CONC-6 / CONC-8 / CONC-9** — `list_configs` skips crash-orphaned
+  `.tmp` files; the scheduler snapshots the device-profile registry under its
+  lock (was an unlocked iteration that could silently skip a run); the paramiko
+  collector closes its client on a connect failure; and the two-sided config diff
+  returns `404` (not `500`) when a config is deleted mid-request.  (#283)
+- **PERF-1 / PERF-4** — the Aruba AOS-S port-range expander and the target-profile
+  `range:` shorthand both clamp their span, so a hostile / typo'd range can't
+  allocate ~1e9 / ~1e6 entries.  (#273, #286)
+- **API-3 / API-4 / API-5** — `sanitize` catches `RenderError` (was an uncaught
+  traceback / 500), rejects input the declared codec can't parse instead of
+  emitting an empty scaffold with zero substitutions, and the demo reports a
+  `partial` job as non-success.  (#285)
+- **TEST-1** — the `/detect` stored-config end-to-end test no longer
+  permanently self-skips (it compared against `200` where the backup route
+  returns `202`), and feeds real OPNsense content.  (#279)
+
+### Changed
+
+- **GUARD-1** — the two PII review directories are gitignored and the PII guard
+  gained a tracked-path assertion (its prior 'is gitignored' comment was false).
+  (#268)
+- **Doc / matrix drift** — corrected the Junos dot1q lossy-reason, four
+  CAPABILITIES.md drifts, SECURITY.md's browser-fetch claim, the CONTRIBUTING
+  regen-tool name, THIRD-PARTY-NOTICES (+7 missing deps), the lock-gen base
+  digest, and two API docstrings (`/plan/snmpv3`, `port_rename_map`).  (#269, #285)
+- **TEST-2 / TEST-5** — the cross-mesh CI guard now catches a per-pair codec-bug
+  regression (not just the aggregate total + pair set), and the best-effort
+  tracemalloc memory test skips rather than fatally aborting the `-x` suite on a
+  flake.  (#286)
+
 ## [0.4.15] - 2026-07-03
 
 ### Fixed
