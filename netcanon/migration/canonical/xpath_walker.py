@@ -212,7 +212,7 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
         # reports severity:ok while the SVI/management IP silently vanishes
         # (the same fail-surfaced principle as the {tagged,untagged}-ports
         # twin above; blind-audit 3ec11f3 T0-2).  Droppers declare it lossy.
-        for addr in vlan.ipv4_addresses:
+        for idx, addr in enumerate(vlan.ipv4_addresses):
             yield "/vlans/vlan/ipv4/address/ip"
             # VLAN-SVI L3 sub-fields — the twin of the interface-mount walk
             # above.  Previously the VLAN-SVI mount yielded ONLY .../ip while
@@ -223,7 +223,14 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
             # (blind-audit f92e97a T0-2).  Walk them (conditionally, mirroring
             # the interface loop) so the loss surfaces; droppers declare them
             # lossy/unsupported per the per-codec capability matrix.
-            if addr.is_secondary:
+            # Cardinality discriminator (MTX-5): mirror the interface-mount
+            # walk (idx > 0 or is_secondary). VLAN-centric sources that don't
+            # model a primary/secondary distinction leave is_secondary False
+            # on every SVI address, so a flag-only gate emitted nothing for a
+            # genuinely multi-address SVI and the dropped secondary rode the
+            # classify() default to "supported" (severity:ok) — the same hole
+            # the interface-mount twin closed at line 96.
+            if idx > 0 or addr.is_secondary:
                 yield "/vlans/vlan/ipv4/address/secondary-ip"
             if addr.virtual_gateway_address:
                 yield "/vlans/vlan/ipv4/address/virtual-gateway-address"
