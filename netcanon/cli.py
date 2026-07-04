@@ -130,7 +130,7 @@ def _cmd_sanitize(args: argparse.Namespace) -> int:
     """``netcanon sanitize`` subcommand handler."""
     # Lazy import — keeps `netcanon --help` fast and avoids loading
     # the migration codec graph for non-sanitize subcommands.
-    from .migration.codecs.base import ParseError
+    from .migration.codecs.base import ParseError, RenderError
     from .tools.sanitize import sanitize_text
 
     try:
@@ -153,6 +153,15 @@ def _cmd_sanitize(args: argparse.Namespace) -> int:
         print(
             f"error: failed to parse {args.input!r} as "
             f"{args.source_vendor!r}: {e}",
+            file=sys.stderr,
+        )
+        return 2
+    except RenderError as e:
+        # ParseError and RenderError are sibling CodecError subclasses, so a
+        # render failure on the sanitized tree isn't caught above — surface it
+        # as a clean CLI error instead of an uncaught traceback (API-3).
+        print(
+            f"error: failed to render sanitized {args.source_vendor!r}: {e}",
             file=sys.stderr,
         )
         return 2

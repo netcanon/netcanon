@@ -667,8 +667,14 @@ class MigrationPlanRequest(BaseModel):
     """Optional per-port target-name override map.  When provided, the
     pipeline runs the Tier 2 port-name translator with these entries
     taking precedence over the auto-heuristic.  Used by the Tier 3 UI
-    rename modal.  Backwards-compatible: callers that don't set this
-    get the legacy behaviour (no port-name translation at all).
+    rename modal.
+
+    Note (API-6): omitting this map does NOT disable port-name
+    translation on the ``/plan`` route.  Since v0.3.2 the route defaults
+    an absent map to ``{}`` (auto-translate-by-default), so a request with
+    no ``port_rename_map`` still gets auto port-name translation.  The
+    ``None``-disengages-the-translator behaviour is a property of the
+    lower-level ``run_plan_with_overrides`` function, not the API route.
 
     Entry value semantics:
 
