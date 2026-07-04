@@ -316,8 +316,17 @@ def diff_configs(
             },
         )
 
-    left_text = storage.get_content(body.left)
-    right_text = storage.get_content(body.right)
+    # CONC-9: a config deleted between the list_configs() snapshot above and
+    # this read is a TOCTOU — surface it as 404 (matching the single-config
+    # routes' FileNotFoundError handling) rather than letting the raw
+    # FileNotFoundError fall through to the global handler as a 500.
+    try:
+        left_text = storage.get_content(body.left)
+        right_text = storage.get_content(body.right)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404, detail=f"Config not found: {exc}"
+        ) from exc
     report = compute_diff(
         left_rec, left_text, right_rec, right_text, force=body.force
     )

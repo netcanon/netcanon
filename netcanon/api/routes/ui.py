@@ -332,8 +332,16 @@ def diff_page(
             },
         )
 
-    left_text = storage.get_content(left)
-    right_text = storage.get_content(right)
+    # CONC-9: a config deleted between the list_configs() resolution above and
+    # this read is a TOCTOU — raise 404 (rendered as the themed error page by
+    # the StarletteHTTPException handler) instead of a raw FileNotFoundError 500.
+    try:
+        left_text = storage.get_content(left)
+        right_text = storage.get_content(right)
+    except FileNotFoundError as exc:
+        raise StarletteHTTPException(
+            status_code=404, detail=f"Config not found: {exc}"
+        ) from exc
     report: DiffReport = compute_diff(
         left_rec, left_text, right_rec, right_text, force=force
     )
