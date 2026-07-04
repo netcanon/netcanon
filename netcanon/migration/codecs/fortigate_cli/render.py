@@ -82,6 +82,20 @@ _RFC1918_NETWORKS = (
 )
 
 
+def _esc(value: str) -> str:
+    """Escape a free-text value for a FortiOS ``"..."`` literal.
+
+    FortiOS uses ``\\`` as the in-quote escape introducer, so a literal
+    backslash is doubled and an embedded double-quote becomes ``\\"`` —
+    otherwise the value closes the literal early (an operator
+    description like ``Link "A"`` would break the ``edit`` body).  The
+    parse side already unescapes via ``shlex.split(posix=True)``, so this
+    is the render half of a symmetric pair.  Backslash first, then quote
+    (order matters).  A no-op for the common quote-free / backslash-free
+    case, keeping output tidy."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _svi_ip_mask(addr: Any) -> tuple[str, str]:
     """Return ``(ip, dotted-mask)`` for an SVI IPv4 address.
 
@@ -552,7 +566,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if iface.description:
                 # FortiOS alias caps at 25 chars per spec.
                 alias = iface.description[:25]
-                out.append(f'        set alias "{alias}"')
+                out.append(f'        set alias "{_esc(alias)}"')
             # LAG aggregate marker takes precedence over VLAN.
             lag = lag_by_name.get(iface.name)
             if lag is not None:
@@ -758,9 +772,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append("config system snmp sysinfo")
         out.append("    set status enable")
         if tree.snmp.location:
-            out.append(f'    set location "{tree.snmp.location}"')
+            out.append(f'    set location "{_esc(tree.snmp.location)}"')
         if tree.snmp.contact:
-            out.append(f'    set contact-info "{tree.snmp.contact}"')
+            out.append(f'    set contact-info "{_esc(tree.snmp.contact)}"')
         out.append("end")
         # FortiOS nests trap targets inside ``config system snmp
         # community / config hosts`` — there is no top-level "trap
@@ -962,7 +976,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # FortiOS uses ``set comment`` (singular) on static-route
             # entries; max 255 chars.
             # Ref: https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/522620/config-router-static
-            out.append(f'        set comment "{route.description}"')
+            out.append(f'        set comment "{_esc(route.description)}"')
 
     if v4_routes:
         out.append("config router static")

@@ -116,6 +116,19 @@ _VLAN_ID_DOTTED_RE = re.compile(
 )
 
 
+def _esc(value: str) -> str:
+    """Escape a free-text value for an AOS-Switch ``"..."`` literal.
+
+    AOS-S (ProVision) uses ``\\`` as the in-quote escape introducer — an
+    embedded double-quote must be written ``\\"`` (per HPE's variable-file
+    docs) or the value terminates the literal early.  A literal backslash
+    is doubled first so the pair round-trips.  Reversed on the parse side
+    by :func:`~netcanon.migration.codecs.aruba_aoss.parse._unquote`.
+    Backslash first, then quote (order matters); a no-op for the common
+    quote-free / backslash-free case."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _vlan_iface_id(name: str) -> int | None:
     """Extract a VLAN id encoded in an interface name, if any.
 
@@ -376,7 +389,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     )
 
     if tree.hostname:
-        lines.append(f'hostname "{tree.hostname}"')
+        lines.append(f'hostname "{_esc(tree.hostname)}"')
 
     # Domain suffix — AOS-S form is ``ip dns domain-name <name>``,
     # verified against Aruba AOS-S 16.10/16.11 Management &
@@ -587,7 +600,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     for vlan in tree.vlans:
         lines.append(f"vlan {vlan.id}")
         if vlan.name:
-            lines.append(f'   name "{vlan.name}"')
+            lines.append(f'   name "{_esc(vlan.name)}"')
         if vlan.untagged_ports:
             lines.append(
                 f"   untagged {_format_port_list(vlan.untagged_ports)}"
@@ -813,7 +826,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         else:
             lines.append(f"interface {iface.name}")
         if iface.description:
-            lines.append(f'   name "{iface.description}"')
+            lines.append(f'   name "{_esc(iface.description)}"')
         # Skip enable/disable + routing markers on logical
         # interfaces (loopback is always-up, has no routing toggle).
         is_logical = lname.startswith("loopback")
