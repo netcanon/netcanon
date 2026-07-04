@@ -128,7 +128,10 @@ class MigrationDetectRequest(BaseModel):
     input modes (paste vs. stored-config) on a single endpoint.
     """
 
-    raw_text: str | None = None
+    # Cap the pasted-config body at 10 MB, matching MigrationPlanRequest —
+    # otherwise /detect buffers an unbounded body while /plan is capped
+    # (SEC-10 DoS-surface parity).
+    raw_text: str | None = Field(default=None, max_length=10_000_000)
     source_filename: str | None = None
     min_confidence: int = Field(default=1, ge=0, le=100)
 

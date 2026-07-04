@@ -36,19 +36,26 @@ class EgressBlocked(Exception):
 
 
 def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    """A target IP is blocked if it is loopback or link-local.
+    """A target IP is blocked if it is loopback, link-local or unspecified.
 
     ``is_link_local`` covers ``169.254.0.0/16`` (and ``fe80::/10``), which
     includes the ``169.254.169.254`` cloud-metadata endpoint.
+
+    ``is_unspecified`` covers ``0.0.0.0`` and ``::`` — on many stacks a
+    connect to the unspecified address routes to loopback, so without this
+    check the allow-list could be bypassed to reach a loopback service.
 
     IPv4-mapped IPv6 literals (``::ffff:127.0.0.1``) parse as IPv6 and would
     otherwise sidestep the IPv4 loopback/link-local checks, so the embedded
     IPv4 address is unwrapped and re-checked.
     """
-    if ip.is_loopback or ip.is_link_local:
+    if ip.is_loopback or ip.is_link_local or ip.is_unspecified:
         return True
     mapped = getattr(ip, "ipv4_mapped", None)
-    return bool(mapped is not None and (mapped.is_loopback or mapped.is_link_local))
+    return bool(
+        mapped is not None
+        and (mapped.is_loopback or mapped.is_link_local or mapped.is_unspecified)
+    )
 
 
 def assert_egress_allowed(host: str) -> None:

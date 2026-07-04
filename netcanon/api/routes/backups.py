@@ -46,7 +46,14 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Path,
+    Request,
+)
 from pydantic import SecretStr
 
 # ``get_collector`` is imported here — and only here — to preserve the
@@ -259,7 +266,18 @@ def list_jobs(
     summary="Get a backup job by ID",
 )
 def get_job(
-    job_id: str,
+    job_id: str = Path(
+        ...,
+        # Job ids are `str(uuid.uuid4())`; constrain to the exact UUID shape
+        # so a crafted id (e.g. a URL-encoded `\`, a real path separator on
+        # Windows) can never reach the file-store path join as a traversal /
+        # existence-oracle vector.  Mirrors the FileConfigStore filename
+        # guard on the sibling config routes (SEC-3).
+        pattern=(
+            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+            r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        ),
+    ),
     jobs: BackupJobRegistry = Depends(get_jobs),
 ) -> BackupJob:
     """Return the current state of a backup job.
