@@ -323,6 +323,32 @@ def test_parse_vif_subinterface(codec: VyOSCodec) -> None:
     assert vif.ipv4_addresses[0].ip == "10.0.100.1"
 
 
+def test_parse_vif_sets_dot1q_vlan(codec: VyOSCodec) -> None:
+    """CODEC-2 (2026-07-03 review): a VyOS ``vif <vid>`` IS the 802.1Q tag
+    of the routed sub-interface, so it must land on ``dot1q_vlan`` — not
+    just be encoded in the ``.<vid>`` name suffix.  Without it, targets
+    that need an explicit encapsulation (Cisco IOS et al.) emit a tag-less,
+    invalid sub-interface with a clean report."""
+    intent = codec.parse(_SAMPLE)
+    vif = next(i for i in intent.interfaces if i.name == "eth1.100")
+    assert vif.dot1q_vlan == 100
+    # The parent carries no tag.
+    parent = next(i for i in intent.interfaces if i.name == "eth1")
+    assert parent.dot1q_vlan is None
+
+
+def test_vif_renders_valid_ios_subinterface(codec: VyOSCodec) -> None:
+    """End-to-end: a VyOS ``vif`` must cross-render to a *valid* Cisco IOS
+    routed sub-interface — i.e. with ``encapsulation dot1Q <vid>``.  This
+    is the deployment-validity payoff of carrying ``dot1q_vlan`` (CODEC-2);
+    a routed IOS sub-interface without an encapsulation is rejected by the
+    device."""
+    intent = codec.parse(_SAMPLE)
+    out = get_codec("cisco_iosxe_cli").render(intent)
+    assert "interface eth1.100" in out
+    assert "encapsulation dot1Q 100" in out
+
+
 def test_parse_loopback_dual_stack(codec: VyOSCodec) -> None:
     lo = next(i for i in codec.parse(_SAMPLE).interfaces if i.name == "lo")
     assert lo.ipv4_addresses[0].ip == "192.0.2.255"
