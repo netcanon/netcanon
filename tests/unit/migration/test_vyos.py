@@ -808,6 +808,73 @@ def test_render_vif_nested_under_parent(codec: VyOSCodec) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Free-text quote sanitisation (CODEC-1 VyOS carve-out)
+# ---------------------------------------------------------------------------
+
+
+class TestFreeTextQuoteSanitise:
+    """VyOS rejects an embedded double-quote in a value string even when
+    backslash-escaped (vyos.dev/T1246), so — unlike the escape-codecs — the
+    vyos renderer SANITISES an embedded ``"`` to an apostrophe to keep the
+    config valid on-device.  These tests assert deployment-VALIDITY of the
+    rendered text (the number of ``"`` on the leaf line is exactly the
+    wrapping pair), NOT a parse(render())==tree round-trip — the lenient
+    ``_unquote`` would pass the round-trip even with the bug present.
+    """
+
+    @staticmethod
+    def _leaf(out: str, key: str) -> str:
+        return next(ln for ln in out.splitlines() if ln.strip().startswith(key))
+
+    def test_interface_description_quote_is_sanitised(self, codec):
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalInterface,
+        )
+        intent = CanonicalIntent(
+            hostname="r1",
+            interfaces=[
+                CanonicalInterface(name="eth0", description='link to "core"'),
+            ],
+        )
+        line = self._leaf(codec.render(intent), "description")
+        # Exactly the wrapping pair — no embedded (value-breaking) quote.
+        assert line.count('"') == 2, line
+        assert "'core'" in line          # sanitised to apostrophes
+        assert 'description "' in line
+
+    def test_snmp_contact_and_location_quotes_sanitised(self, codec):
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalSNMP,
+        )
+        intent = CanonicalIntent(
+            hostname="r1",
+            snmp=CanonicalSNMP(
+                contact='the "netops" team',
+                location='rack "A"',
+            ),
+        )
+        out = codec.render(intent)
+        assert self._leaf(out, "contact").count('"') == 2
+        assert self._leaf(out, "location").count('"') == 2
+
+    def test_plain_description_is_untouched(self, codec):
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalInterface,
+        )
+        intent = CanonicalIntent(
+            hostname="r1",
+            interfaces=[
+                CanonicalInterface(name="eth0", description="plain uplink"),
+            ],
+        )
+        line = self._leaf(codec.render(intent), "description")
+        assert line.strip() == 'description "plain uplink"'
+
+
+# ---------------------------------------------------------------------------
 # Capability matrix
 # ---------------------------------------------------------------------------
 
