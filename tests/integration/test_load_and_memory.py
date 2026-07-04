@@ -175,6 +175,37 @@ class TestSustainedLoad:
             finally:
                 test_app.state.jobs = original_registry
 
+    def test_running_job_survives_eviction_via_creation_persist(self, test_app):
+        """CONC-5: a job is persisted to disk at creation, so it stays
+        reachable via disk fallback even after an LRU eviction *before*
+        the runner's terminal save — polling an active-but-evicted job
+        returns its state instead of a 404.  The background runner is
+        stubbed out so the creation-time persist is the ONLY disk write,
+        isolating the fix from the runner's on-completion save."""
+        with patch(
+            "netcanon.api.routes.backups.run_backup_job",
+        ), TestClient(test_app) as c:
+            original_registry = _swap_registry(test_app, max_memory_jobs=1)
+            try:
+                first = c.post(
+                    "/api/v1/backups",
+                    json={"devices": [_device_payload(host="10.0.0.1")]},
+                ).json()
+                # On disk immediately — before any runner save (stubbed).
+                assert test_app.state.job_store.load_one(first["id"]) is not None
+                # A second submission evicts the first from the cap-1 cache.
+                c.post(
+                    "/api/v1/backups",
+                    json={"devices": [_device_payload(host="10.0.0.2")]},
+                )
+                assert first["id"] not in list(test_app.state.jobs.keys())
+                # Still reachable via disk fallback — 200, not 404.
+                resp = c.get(f"/api/v1/backups/{first['id']}")
+                assert resp.status_code == 200, resp.text
+                assert resp.json()["id"] == first["id"]
+            finally:
+                test_app.state.jobs = original_registry
+
 
 # ---------------------------------------------------------------------------
 # Concurrency: parallel POSTs against the registry

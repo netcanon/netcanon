@@ -61,6 +61,7 @@ import json
 import logging
 import re
 import shutil
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -120,6 +121,11 @@ class FileConfigStore(BaseConfigStore):
         # find no flat files and do nothing.
         self._dir = Path(storage_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
+        # Serialises the collision-resolution → write → rename critical
+        # section in :meth:`save` so two concurrent saves (backup runs
+        # execute on a ThreadPoolExecutor) for the same device+second
+        # can't both claim the same path or share a tmp file (CONC-3).
+        self._save_lock = threading.Lock()
         self._migrate_flat_files()
 
     # ------------------------------------------------------------------
@@ -168,32 +174,39 @@ class FileConfigStore(BaseConfigStore):
         subdir.mkdir(parents=True, exist_ok=True)
         path = subdir / filename
 
-        # Collision safety — append _1, _2, … if the same-second file exists.
-        counter = 0
-        while path.exists():
-            counter += 1
-            filename = f"{stem}_{counter}.{extension}"
-            path = subdir / filename
-            logger.warning(
-                "Filename collision: renamed to %r (counter=%d)", filename, counter
-            )
+        # Collision-resolution → write → rename runs under the store lock
+        # so two concurrent saves for the same device+second can't both
+        # pass the `exists()` check and pick the same path (a TOCTOU that
+        # silently collapses two backups into one), nor race on a shared
+        # `.tmp` (CONC-3).  Saves are small local writes on a cold path
+        # (≤ backup_concurrency at a time), so the serialisation is free.
+        with self._save_lock:
+            # Collision safety — append _1, _2, … if the same-second file exists.
+            counter = 0
+            while path.exists():
+                counter += 1
+                filename = f"{stem}_{counter}.{extension}"
+                path = subdir / filename
+                logger.warning(
+                    "Filename collision: renamed to %r (counter=%d)", filename, counter
+                )
 
-        # Atomic write: write to temp then rename to prevent corruption.
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(content, encoding="utf-8")
-        tmp.replace(path)
-        size = path.stat().st_size
-        logger.info("Saved config %r (%d bytes) → %s", filename, size, subdir)
+            # Atomic write: write to temp then rename to prevent corruption.
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(content, encoding="utf-8")
+            tmp.replace(path)
+            size = path.stat().st_size
+            logger.info("Saved config %r (%d bytes) → %s", filename, size, subdir)
 
-        if device_profile_id is not None:
-            meta_path = subdir / f"{filename}.meta.json"
-            meta_tmp = meta_path.with_suffix(".tmp")
-            meta_tmp.write_text(
-                json.dumps({"device_profile_id": device_profile_id}),
-                encoding="utf-8",
-            )
-            meta_tmp.replace(meta_path)
-            logger.debug("Wrote sidecar metadata %s", meta_path.name)
+            if device_profile_id is not None:
+                meta_path = subdir / f"{filename}.meta.json"
+                meta_tmp = meta_path.with_suffix(".tmp")
+                meta_tmp.write_text(
+                    json.dumps({"device_profile_id": device_profile_id}),
+                    encoding="utf-8",
+                )
+                meta_tmp.replace(meta_path)
+                logger.debug("Wrote sidecar metadata %s", meta_path.name)
 
         return ConfigRecord(
             device_type=device_type,

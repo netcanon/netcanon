@@ -5,6 +5,8 @@ All I/O is directed to pytest's ``tmp_path`` — no network, no shared state.
 """
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -134,6 +136,31 @@ class TestCollisionSafety:
         store.save("Cisco", "1.1.1.1", _ts(), "cfg", "b")
         r3 = store.save("Cisco", "1.1.1.1", _ts(), "cfg", "c")
         assert "_2" in r3.filename
+
+    def test_concurrent_same_second_saves_dont_clobber(self, tmp_path: Path):
+        """CONC-3: N threads saving the same device+second concurrently
+        must produce N distinct files with all N contents intact.  The
+        old non-atomic ``exists()``-loop plus a shared ``.tmp`` was a
+        TOCTOU that could collapse two backups (which run on a
+        ThreadPoolExecutor) into a single clobbered file."""
+        store = FileConfigStore(tmp_path)
+        n = 16
+        barrier = threading.Barrier(n)
+        contents = [f"config-{i}" for i in range(n)]
+
+        def _save(text: str):
+            # Release all threads into save() together to maximise overlap
+            # on the collision-resolution window.
+            barrier.wait(timeout=10)
+            return store.save("Cisco", "1.1.1.1", _ts(), "cfg", text)
+
+        with ThreadPoolExecutor(max_workers=n) as pool:
+            records = [f.result() for f in [pool.submit(_save, c) for c in contents]]
+
+        # One distinct filename per save — nothing overwrote another.
+        assert len({r.filename for r in records}) == n
+        # Every content round-trips off disk — no write was lost.
+        assert {store.get_content(r.filename) for r in records} == set(contents)
 
 
 # ---------------------------------------------------------------------------

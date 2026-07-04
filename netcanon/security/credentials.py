@@ -65,6 +65,7 @@ import base64
 import binascii
 import logging
 import os
+import threading
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -96,6 +97,11 @@ _ACCOUNT = "master_key"
 _ENV_VAR = "NETCANON_FERNET_KEY"
 _KEY_FILENAME = ".fernet_key"
 _fernet = None  # Fernet instance, initialised lazily on first use
+# Serialises lazy key initialisation so a fresh install (no env key, no
+# keyring, no key file) can't have two threads each generate a *different*
+# key and both persist it — the loser's ciphertext would then fail to
+# decrypt against the surviving key (CONC-7).
+_fernet_lock = threading.Lock()
 
 
 def _data_dir() -> Path:
@@ -243,16 +249,31 @@ def _resolve_key() -> str:
 
 
 def _get_fernet():
-    """Return a Fernet instance, initialising the key on first call."""
+    """Return a Fernet instance, initialising the key on first call.
+
+    Double-checked locking on ``_fernet_lock``: the fast path returns the
+    already-built instance with no lock, and the first-call path
+    serialises so exactly one thread resolves/generates + persists the
+    key.  Without this, two threads racing the very first
+    ``encrypt``/``decrypt`` on a fresh install would each generate and
+    persist a different key (last-writer-wins on the key file); the
+    loser's in-flight ciphertext would later fail to decrypt against the
+    surviving key (CONC-7).
+    """
     global _fernet
     if _fernet is not None:
         return _fernet
 
     from cryptography.fernet import Fernet
 
-    raw = _resolve_key()
-    _fernet = Fernet(raw.encode())
-    return _fernet
+    with _fernet_lock:
+        # Re-check inside the lock — another thread may have initialised
+        # while we were blocked on it.
+        if _fernet is not None:
+            return _fernet
+        raw = _resolve_key()
+        _fernet = Fernet(raw.encode())
+        return _fernet
 
 
 def encrypt(plaintext: str) -> str:
