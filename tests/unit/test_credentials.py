@@ -6,6 +6,8 @@ The OS keyring is mocked throughout — no real credential store is touched.
 """
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import pytest
@@ -420,3 +422,52 @@ class TestFileFallback:
             credentials._fernet = None
             plaintext = "container-deployment-password"
             assert credentials.decrypt(credentials.encrypt(plaintext)) == plaintext
+
+
+class TestFernetInitRace:
+    """CONC-7: concurrent first-call key initialisation must generate
+    exactly one key.  Without the double-checked lock in ``_get_fernet``,
+    N threads racing the very first encrypt/decrypt on a fresh install
+    (no env key, no keyring, no key file) each generate a *different* key
+    and persist it (last-writer-wins on the key file); the losers'
+    ciphertext then fails to decrypt against the surviving key."""
+
+    def test_concurrent_get_fernet_generates_one_key(self, tmp_path, monkeypatch):
+        from cryptography.fernet import Fernet
+        from keyring.errors import NoKeyringError
+
+        from netcanon.security import credentials
+
+        # Fresh install: no env key, keyring unavailable, key file under
+        # a clean tmp dir → resolution deterministically hits the file
+        # tier (a single generate per resolve).
+        monkeypatch.delenv("NETCANON_FERNET_KEY", raising=False)
+        monkeypatch.setenv("NETCANON_DATA_DIR", str(tmp_path))
+        credentials._fernet = None
+
+        n = 16
+        barrier = threading.Barrier(n)
+
+        with (
+            patch("keyring.get_password", side_effect=NoKeyringError("no backend")),
+            patch(
+                "cryptography.fernet.Fernet.generate_key",
+                wraps=Fernet.generate_key,
+            ) as gen_spy,
+        ):
+            def _init():
+                # Release all threads into _get_fernet() simultaneously.
+                barrier.wait(timeout=10)
+                return credentials._get_fernet()
+
+            with ThreadPoolExecutor(max_workers=n) as pool:
+                instances = [
+                    f.result() for f in [pool.submit(_init) for _ in range(n)]
+                ]
+
+        # Exactly one key generated despite N racing first-callers.
+        assert gen_spy.call_count == 1
+        # Every thread received the identical Fernet instance.
+        assert all(inst is instances[0] for inst in instances)
+        # The single key was persisted to the file tier.
+        assert (tmp_path / credentials._KEY_FILENAME).is_file()

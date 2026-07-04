@@ -224,6 +224,21 @@ def create_backup(
         total_devices=len(resolved_request.devices),
     )
     jobs[job.id] = job
+    # Persist the pending job to disk immediately so it survives an LRU
+    # eviction from the in-memory cache during its run.  The runner only
+    # saves on completion (backup_runner terminal save), so without this a
+    # job evicted while still running would disk-miss and poll as a 404
+    # for an active job (CONC-5).  The runner's terminal save later
+    # overwrites this pending snapshot with the final state.
+    try:
+        job_store.save(job)
+    except OSError as exc:
+        # Non-fatal: the job still runs and is saved on completion — we
+        # only lose the mid-run disk fallback for this one.  Don't fail
+        # the request over it.
+        logger.warning(
+            "Could not persist pending job %s at creation: %s", job.id, exc
+        )
     max_workers = getattr(
         request.app.state.settings, "backup_concurrency", MAX_BACKUP_CONCURRENCY
     )
