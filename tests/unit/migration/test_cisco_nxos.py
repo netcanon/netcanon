@@ -1263,6 +1263,30 @@ class TestPhase4VXLAN:
         assert "  member vni 10030" in out
         assert "    mcast-group 239.1.1.30" in out
 
+    def test_non_default_udp_port_drops_on_render(self, codec):
+        # MTX-1 (Fable review): a non-default VXLAN UDP port is not emitted
+        # (no `vxlan udp-port` line) and re-parses as the IANA default 4789.
+        # This is the behaviour the `/vxlan-vnis/udp-port` lossy declaration
+        # describes; the render-drop is documented here so a future "fix"
+        # can't quietly flip the matrix back to supported without preserving
+        # the port.
+        tree = CanonicalIntent(
+            hostname="X",
+            vlans=[CanonicalVlan(id=40, name="P")],
+            vxlan_vnis=[
+                CanonicalVxlan(
+                    vlan_id=40, vni=10040, udp_port=8472,
+                    source_interface="loopback0",
+                ),
+            ],
+        )
+        out = codec.render(tree)
+        assert "8472" not in out
+        assert "udp-port" not in out
+        reparsed = codec.parse(out)
+        v = next(v for v in reparsed.vxlan_vnis if v.vni == 10040)
+        assert v.udp_port == 4789  # non-default silently normalised (lossy)
+
     def test_mcast_group_parse_inline(self, codec):
         # Regression (gap-hunt): the inline ``member vni N mcast-group X``
         # form was never harvested — a matrix-`supported` surface lost
@@ -1353,7 +1377,6 @@ interface nve1
         caps = codec.capabilities
         for path in [
             "/vxlan-vnis/source-interface",
-            "/vxlan-vnis/udp-port",
             "/vxlan-vnis/mcast-group",
             "/vxlan-vnis/flood-list",
             "/routing-instances/instance/l3-vni",
@@ -1363,6 +1386,10 @@ interface nve1
         # evpn-type5 is lossy (modelled via the l3_vni VRF binding).
         assert caps.classify("/vxlan-vnis/vni") == "lossy"
         assert caps.classify("/evpn-type5-routes/route") == "lossy"
+        # udp-port: the NVE render emits no `vxlan udp-port` override, so a
+        # non-default port drops on render (re-parses as 4789). Declared
+        # lossy (was mis-declared supported — Fable review MTX-1).
+        assert caps.classify("/vxlan-vnis/udp-port") == "lossy"
         # IPv4 DAG anycast graduated; only the IPv6 companion is deferred.
         assert caps.classify("/anycast-gateway-mac") == "supported"
         # Demoted supported -> lossy (Bucket-C stage 3): DAG round-trips only

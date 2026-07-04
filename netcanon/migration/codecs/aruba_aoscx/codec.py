@@ -429,6 +429,19 @@ class ArubaAOSCXCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/vxlan-vnis/udp-port",
+                reason=(
+                    "Render emits the `interface vxlan 1` VTEP + per-VNI "
+                    "`vni`/`vlan` bindings but no UDP-port override, so a "
+                    "non-default VXLAN UDP port (e.g. the legacy 8472) is "
+                    "dropped on render and re-parses as the IANA default "
+                    "4789.  The VLAN↔VNI binding survives; only the custom "
+                    "port is lost.  Previously undeclared (classify() "
+                    "fail-opened to supported) — Fable review MTX-2."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
             UnsupportedPath(

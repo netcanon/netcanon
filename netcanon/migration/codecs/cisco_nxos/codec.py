@@ -169,7 +169,6 @@ class CiscoNXOSCodec(CodecBase):
             # VXLAN-EVPN (Phase 4) — L2 VLAN↔VNI + VTEP + L3VNI
             "/vxlan-vnis/vni",
             "/vxlan-vnis/source-interface",
-            "/vxlan-vnis/udp-port",
             "/vxlan-vnis/mcast-group",
             "/vxlan-vnis/flood-list",
             "/routing-instances/instance/l3-vni",
@@ -181,6 +180,20 @@ class CiscoNXOSCodec(CodecBase):
             "/anycast-gateway-mac",
         ],
         lossy=[
+            LossyPath(
+                path="/vxlan-vnis/udp-port",
+                reason=(
+                    "The NX-OS NVE render emits the VTEP source-interface + "
+                    "per-VNI `member vni` bindings but no `vxlan udp-port` "
+                    "override, so a non-default VXLAN UDP port (e.g. the "
+                    "legacy 8472) is dropped on render and re-parses as the "
+                    "IANA default 4789. The VNI binding survives; only the "
+                    "custom port is lost. Declared lossy so validate_against "
+                    "surfaces the drop instead of reporting severity:ok "
+                    "(was mis-declared supported — Fable review MTX-1)."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(
