@@ -21,6 +21,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+import netcanon.migration  # noqa: F401  (side-effect: populate codec registry)
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -29,8 +30,18 @@ from netcanon.migration.canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVRRPGroup,
 )
+from netcanon.migration.codecs.registry import list_public_codecs
 
 pytestmark = pytest.mark.unit
+
+#: Ship-before-wire invariant roster — derived from the codec registry so a
+#: newly-added codec is checked automatically instead of being silently
+#: skipped.  A frozen 8-of-12 literal list previously let the 4 newest codecs
+#: (aruba_aoscx / cisco_iosxr / cisco_nxos / vyos) evade the invariant (Fable
+#: review MTX-3).  ``list_public_codecs`` already excludes the hidden ``mock``
+#: reference codec.  The ``import netcanon.migration`` above triggers the
+#: pkgutil auto-discovery that populates the registry at collection time.
+_SHIP_BEFORE_WIRE_ROSTER = sorted(list_public_codecs())
 
 
 # ---------------------------------------------------------------------------
@@ -400,34 +411,44 @@ class TestShipBeforeWireUnsupportedDeclarations:
         "opnsense": {
             "/interfaces/interface/vrrp-groups/group",
         },
+        # The four newest codecs — previously omitted from the frozen
+        # roster (Fable review MTX-3), so their graduations were never
+        # invariant-checked.  Entries below reflect each matrix's ACTUAL
+        # graduated (supported / lossy) paths, verified against the
+        # explicit capability lists.
+        # AOS-CX: VARP active-gateway (ipv4 anycast VIP + the chassis MAC)
+        # graduated; VRRP / IPv6-anycast / per-VRF static / routed
+        # sub-interface stay unsupported.
+        "aruba_aoscx": {
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            "/anycast-gateway-mac",
+        },
+        # IOS-XR: per-VRF static routes + routed sub-interface dot1q
+        # graduated (v0.1.5 GAP-7); VRRP / anycast stay unsupported.
+        "cisco_iosxr": {
+            "/routing/static-route/vrf",
+            "/interfaces/interface/dot1q-vlan",
+        },
+        # NX-OS: HSRP (VRRP-group lossy) + DAG anycast (ipv4 VARP lossy,
+        # chassis anycast-gateway-mac supported) + per-VRF static +
+        # routed sub-interface dot1q all graduated; only IPv6 anycast
+        # stays unsupported.
+        "cisco_nxos": {
+            "/interfaces/interface/vrrp-groups/group",
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            "/anycast-gateway-mac",
+            "/routing/static-route/vrf",
+            "/interfaces/interface/dot1q-vlan",
+        },
+        # VyOS: none of the six graduated yet — every new path stays
+        # unsupported (ship-before-wire).
+        "vyos": set(),
     }
 
-    @pytest.mark.parametrize(
-        "codec_name",
-        [
-            "cisco_iosxe_cli",
-            "cisco_iosxe",
-            "juniper_junos",
-            "arista_eos",
-            "aruba_aoss",
-            "fortigate_cli",
-            "mikrotik_routeros",
-            "opnsense",
-        ],
-    )
+    @pytest.mark.parametrize("codec_name", _SHIP_BEFORE_WIRE_ROSTER)
     def test_codec_declares_new_paths_unsupported(self, codec_name):
-        # Side-effect import to populate the registry — uses the same
-        # mechanism as test_real_captures.py.
-        from netcanon.migration.codecs import (  # noqa: F401
-            arista_eos,
-            aruba_aoss,
-            cisco_iosxe,
-            cisco_iosxe_cli,
-            fortigate_cli,
-            juniper_junos,
-            mikrotik_routeros,
-            opnsense,
-        )
+        # Registry is populated at import time (see the module-level
+        # ``import netcanon.migration`` + ``_SHIP_BEFORE_WIRE_ROSTER``).
         from netcanon.migration.codecs.registry import get_codec
 
         codec = get_codec(codec_name)
@@ -469,3 +490,17 @@ class TestShipBeforeWireUnsupportedDeclarations:
                 f"{path!r} to "
                 f"_WIRED_UP_BY_CODEC[{codec_name!r}]."
             )
+
+    def test_roster_covers_every_public_codec(self):
+        """The invariant roster MUST equal the live public-codec registry —
+        guards against silently re-freezing it to a literal list (the
+        MTX-3 regression, where 4 of 12 codecs went unchecked).  A new
+        codec added to the registry is then auto-included here, and the
+        hidden ``mock`` codec must never leak into the roster."""
+        assert set(_SHIP_BEFORE_WIRE_ROSTER) == set(list_public_codecs())
+        assert "mock" not in _SHIP_BEFORE_WIRE_ROSTER
+        # Every rostered codec has an explicit wire-up entry (even if an
+        # empty set) OR relies on the ``.get(..., set())`` default; assert
+        # the map has no stale entry for a codec no longer in the registry.
+        stale = set(self._WIRED_UP_BY_CODEC) - set(_SHIP_BEFORE_WIRE_ROSTER)
+        assert not stale, f"_WIRED_UP_BY_CODEC has stale codec(s): {stale}"

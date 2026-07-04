@@ -371,6 +371,16 @@ class CiscoIOSXRCodec(CodecBase):
                     "stage 3)."
                 ),
             ),
+            UnsupportedPath(
+                path="/anycast-gateway-mac",
+                reason=(
+                    "Companion to the anycast virtual-gateway entries above: "
+                    "IOS-XR has no VARP / distributed-anycast-gateway grammar, "
+                    "so the chassis-wide anycast-gateway MAC is dropped on "
+                    "render. Previously undeclared (classify() fail-opened to "
+                    "supported) — Fable review MTX-3."
+                ),
+            ),
             # ── L2 switchport surface (ENG-01) — this codec has no
             #    Cisco-style access/trunk port model, so the per-port VLAN
             #    membership the walker yields is dropped on render.  Declared
