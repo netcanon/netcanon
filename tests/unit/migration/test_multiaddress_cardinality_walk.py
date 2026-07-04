@@ -29,6 +29,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalIPv6Address,
+    CanonicalVlan,
 )
 from netcanon.migration.canonical.xpath_walker import _walk_canonical
 from netcanon.migration.codecs import (  # noqa: F401  (register codecs)
@@ -94,6 +95,39 @@ class TestCardinalityDiscriminator:
             _intent([_v4("10.0.0.1", sec=True)], [])
         ))
         assert _V4_SEC in paths
+
+
+_VLAN_V4_SEC = "/vlans/vlan/ipv4/address/secondary-ip"
+
+
+class TestVlanMountCardinalityDiscriminator:
+    """MTX-5 (2026-07-03 review): the VLAN/SVI-mount walk must use the same
+    cardinality discriminator as the interface-mount twin — a multi-address
+    SVI whose extra addresses are flagless (is_secondary False) previously
+    walked only ``.../ip`` and rode classify() to a silent ``supported``."""
+
+    @staticmethod
+    def _vlan_intent(v4: list[CanonicalIPv4Address]) -> CanonicalIntent:
+        return CanonicalIntent(
+            hostname="r1",
+            vlans=[CanonicalVlan(id=10, name="SVI", ipv4_addresses=v4)],
+        )
+
+    def test_flagless_multi_svi_ipv4_yields_secondary(self):
+        paths = set(_walk_canonical(
+            self._vlan_intent([_v4("10.0.10.1"), _v4("10.0.99.1")])
+        ))
+        assert _VLAN_V4_SEC in paths
+
+    def test_single_svi_address_does_not_yield_secondary(self):
+        paths = set(_walk_canonical(self._vlan_intent([_v4("10.0.10.1")])))
+        assert _VLAN_V4_SEC not in paths
+
+    def test_explicit_flagged_svi_secondary_still_yields(self):
+        paths = set(_walk_canonical(
+            self._vlan_intent([_v4("10.0.10.1", sec=True)])
+        ))
+        assert _VLAN_V4_SEC in paths
 
 
 class TestEndToEndLossSurfaces:
