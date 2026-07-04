@@ -8,7 +8,11 @@ Covers:
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
+
+from tests.conftest import OPNSENSE_FAKE_OUTPUT, FakeCollector
 
 pytestmark = pytest.mark.integration
 
@@ -1802,11 +1806,18 @@ class TestDetectEndpoint:
         assert all(c["confidence"] >= 80 for c in strict)
 
     def test_detect_stored_config_end_to_end(self, client):
-        """User-flow: backup an OPNsense config, then /detect on the
-        filename — should return opnsense as the top candidate."""
-        # Step 1: run a backup to produce a stored config.
-        # The integration test harness has a FakeCollector keyed by
-        # type_key; use the opnsense type to get XML output.
+        """User-flow: back up an OPNsense device, then /detect on the stored
+        config — opnsense must rank as the top candidate.
+
+        TEST-1 (2026-07-03 review): this test used to self-skip forever
+        because it compared the backup status against 200, but
+        ``POST /api/v1/backups`` returns **202 Accepted** — so ``202 != 200``
+        skipped before any assertion ran.  It also stored *Cisco* content
+        (the shared client fixture wires a Cisco-emitting FakeCollector for
+        every device), so the opnsense assertion could never have held.
+        Both are fixed: assert 202, and re-patch the collector locally so
+        this backup stores real OPNsense XML for /detect to recognise.
+        """
         devices = [
             {
                 "type_key": "OPNsense",
@@ -1814,21 +1825,26 @@ class TestDetectEndpoint:
                 "credentials": {"username": "admin", "password": "x"},
             }
         ]
-        backup_resp = client.post(
-            "/api/v1/backups", json={"devices": devices}
-        )
-        if backup_resp.status_code != 200:
-            pytest.skip("FakeCollector doesn't handle OPNsense here")
+        # The shared `client` fixture returns CISCO_FAKE_OUTPUT for every
+        # device; override locally so THIS backup stores OPNsense XML —
+        # otherwise /detect would (correctly) rank cisco on Cisco content.
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=FakeCollector(output=OPNSENSE_FAKE_OUTPUT),
+        ):
+            backup_resp = client.post(
+                "/api/v1/backups", json={"devices": devices}
+            )
+        # POST /api/v1/backups returns 202 Accepted; TestClient runs the
+        # BackgroundTask synchronously, so the config is already stored.
+        assert backup_resp.status_code == 202, backup_resp.text
+
         configs = client.get("/api/v1/configs/").json()
-        if not configs:
-            pytest.skip("no stored configs produced by FakeCollector")
-        # Pick an opnsense-ish filename.
+        assert configs, "backup should have produced a stored config"
         opn_cfg = next(
             (c for c in configs if "opnsense" in c["filename"].lower()),
-            None,
+            configs[0],
         )
-        if opn_cfg is None:
-            pytest.skip("no opnsense-prefixed config in store")
         resp = client.post(
             "/api/v1/migration/detect",
             json={"source_filename": opn_cfg["filename"]},
@@ -1836,7 +1852,8 @@ class TestDetectEndpoint:
         assert resp.status_code == 200
         body = resp.json()
         assert len(body) >= 1
-        # The FakeCollector's OPNsense fixture is valid config.xml.
+        # Detect resolves by CONTENT: the stored OPNsense config.xml ranks
+        # opnsense top.
         assert body[0]["codec"] == "opnsense"
 
 
