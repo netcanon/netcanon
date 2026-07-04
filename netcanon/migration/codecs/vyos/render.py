@@ -36,9 +36,12 @@ Grammar notes that shape the output (see
 
 from __future__ import annotations
 
+import logging
 import re
 
 from ...canonical.intent import CanonicalIntent
+
+logger = logging.getLogger(__name__)
 
 #: Stamped into the ``// vyos-config-version`` trailer.  Cosmetic — the
 #: parser skips the trailer entirely (the probe only substring-matches
@@ -103,7 +106,37 @@ def render_intent(tree: CanonicalIntent) -> str:
 
 
 def _q(value: str) -> str:
-    """Double-quote a leaf value (VyOS 1.4+ ``show configuration`` style)."""
+    """Double-quote a leaf value (VyOS 1.4+ ``show configuration`` style).
+
+    VyOS is the odd codec out on embedded double-quotes.  Every other
+    quoted-free-text codec (``juniper_junos`` / ``fortigate_cli`` /
+    ``aruba_aoss`` / ``mikrotik_routeros``) *escapes* an inner ``"`` as
+    ``\\"`` — but VyOS's config parser **rejects an embedded double-quote in
+    a value string even when backslash-escaped** (vyos.dev/T1246), and its
+    backslash handling is itself buggy (T1001).  So escaping here would still
+    produce a config the device refuses to load.
+
+    Instead we **sanitise**: an embedded ``"`` is replaced with an apostrophe
+    (an ordinary character inside a VyOS value) so the rendered leaf is valid
+    on-device.  This is a genuine — but rare — alteration of cross-vendor
+    free-text: an operator can't normally type an embedded double-quote into
+    a VyOS description, so this only bites a description / snmp
+    contact-or-location / vrf value carried in from another vendor.  Because
+    ``validate_against`` classifies per-*path* (value-blind), a matrix
+    ``LossyPath`` on ``description`` would warn on every description — the
+    common no-quote case included — so the honest, value-specific signal is a
+    log line emitted only when a substitution actually happens.  Structured
+    values (IP / prefix) never contain a quote, so this is a no-op for them.
+    """
+    if '"' in value:
+        logger.warning(
+            "vyos render: replaced %d embedded double-quote(s) with "
+            "apostrophes in a free-text value — VyOS rejects embedded "
+            "quotes in value strings even when escaped (vyos.dev/T1246); "
+            "the value's punctuation was altered to keep the config valid.",
+            value.count('"'),
+        )
+        value = value.replace('"', "'")
     return f'"{value}"'
 
 
