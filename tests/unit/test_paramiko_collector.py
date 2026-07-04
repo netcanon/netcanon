@@ -279,3 +279,65 @@ class TestCollectOutputFailsClosedOnTruncation:
         with pytest.raises(TimeoutError) as exc:
             _collector()._collect_output(_SettlingChannel([]), "silent.example")
         assert "No output received" in str(exc.value)
+
+
+class _ChattyChannel:
+    """Never fully idle but never floods: drips one byte every other
+    poll, so the idle window keeps resetting (idle exit never fires)
+    while the volume stays far below the byte cap.  Exercises the
+    absolute ``_DRAIN_MAX_SECONDS`` wall-clock cap specifically."""
+
+    def __init__(self) -> None:
+        self._ready = True
+
+    def recv_ready(self) -> bool:
+        # Flip each poll: half the polls report idle (→ the else-branch
+        # sleeps, advancing the virtual clock toward the hard cap), the
+        # other half deliver a byte (→ reset the idle window).
+        self._ready = not self._ready
+        return self._ready
+
+    def recv(self, _n: int) -> bytes:
+        return b"."
+
+
+class TestDrainBounded:
+    """SEC-5: ``_drain`` used to reset its idle deadline on every chunk
+    with no absolute ceiling, so a device that streamed without pausing
+    kept the read loop alive forever and grew the buffer unbounded (hung
+    worker + OOM).  It must now terminate on the byte cap (a flood) or
+    the wall-clock cap (a never-settling drip), and — being a best-effort
+    pre-command flush, not a config capture — return what it has rather
+    than raising."""
+
+    @pytest.fixture(autouse=True)
+    def _virtual_time(self, monkeypatch):
+        clock = _VirtualClock()
+        monkeypatch.setattr(
+            paramiko_collector,
+            "time",
+            types.SimpleNamespace(monotonic=clock.monotonic, sleep=clock.sleep),
+        )
+        return clock
+
+    def test_unbounded_flood_hits_byte_cap_and_returns(self, monkeypatch):
+        """An always-ready stream terminates on ``_DRAIN_MAX_BYTES`` and
+        returns a bounded buffer (never hangs / grows without limit)."""
+        monkeypatch.setattr(paramiko_collector, "_DRAIN_MAX_BYTES", 512)
+        out = _collector()._drain(_NeverIdleChannel())
+        # Bounded: the cap plus at most one final over-cap chunk.
+        assert 512 <= len(out) <= 512 + len(b"flood flood flood\n")
+        assert "flood" in out
+
+    def test_never_settling_drip_hits_time_cap_and_returns(self):
+        """A trickle that never goes idle but never floods terminates on
+        the wall-clock cap — NOT the byte cap — and returns its buffer."""
+        out = _collector()._drain(_ChattyChannel())
+        assert 0 < len(out) < paramiko_collector._DRAIN_MAX_BYTES
+
+    def test_settled_stream_returns_promptly(self):
+        """Healthy path preserved: output that arrives then goes quiet
+        drains on the idle window and returns the full buffer."""
+        out = _collector()._drain(_SettlingChannel([b"banner\n", b"prompt> "]))
+        assert "banner" in out
+        assert "prompt>" in out

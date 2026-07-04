@@ -36,11 +36,13 @@ on:
         required: true
         type: string
 
-# Need write access to the Releases API so the action can create the
-# release page + upload the MSI as a release asset.
+# Least-privilege default: at the workflow level only the pytest `test`
+# gate's checkout runs, and it needs no more than read.  The elevated
+# scopes the MSI build needs (Releases-API write + CI-run read) are
+# declared on the `build-msi` job itself so the test gate can't reach
+# them (PKG-4).
 permissions:
-  contents: write
-  actions: read    # read the CI run conclusion for the "require CI success" gate
+  contents: read
 
 # Prevent two simultaneous MSI builds for the same ref from racing
 # the release-upload step.  Within a single ref, we let the second
@@ -94,6 +96,12 @@ jobs:
     name: Build Windows MSI
     needs: [test]
     runs-on: windows-latest
+    # Write access to the Releases API (create the release page + upload
+    # the MSI asset) plus read of the CI run conclusion for the gate
+    # below.  Scoped here so the pytest `test` gate never gets it (PKG-4).
+    permissions:
+      contents: write
+      actions: read
 
     steps:
       - name: Checkout (full history for setuptools_scm)
