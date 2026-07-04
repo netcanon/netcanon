@@ -165,6 +165,29 @@ ports:
   - {range: "10-1", kind: physical}
 """)
 
+    def test_oversized_range_span_rejected(self, tmp_path):
+        """PERF-4 (2026-07-03 review): an absurd range span must be refused
+        at load (mirrors the aoss port-range clamp) rather than materialise
+        ~1e6 port dicts at boot."""
+        with pytest.raises(ProfileLoadError, match="exceeds the .* cap"):
+            self._write(tmp_path, """
+vendor: aruba_aoss
+model: t
+ports:
+  - {range: "1-1000000", kind: physical}
+""")
+
+    def test_large_but_in_cap_range_still_expands(self, tmp_path):
+        """A big-but-plausible range (a real high-density chassis) still
+        loads — the cap only rejects the absurd."""
+        profile = self._write(tmp_path, """
+vendor: aruba_aoss
+model: t
+ports:
+  - {range: "1-4096", kind: physical}
+""")
+        assert len(profile.ports) == 4096
+
 
 class TestProfileWithModulesLoader:
     """YAML loader support for the ``modules:`` key."""

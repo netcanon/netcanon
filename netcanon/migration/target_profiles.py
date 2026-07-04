@@ -386,6 +386,12 @@ _RANGE_RE = re.compile(
     r"^(?P<prefix>.*?)(?P<start>\d+)-(?P<prefix2>.*?)(?P<end>\d+)$"
 )
 
+#: Upper bound on a single ``range:`` shorthand's span, mirroring the
+#: aoss port-range clamp (PERF-1).  A typo'd / hostile operator range like
+#: ``1-1000000`` would otherwise materialise ~1e6 port dicts at boot; refuse
+#: it up front with a clear error.  No real switch has this many ports.
+_MAX_PROFILE_RANGE_SPAN = 4096
+
 
 def _expand_range_entries(ports_raw: list[Any]) -> list[dict[str, Any]]:
     """Expand ``range`` shorthand entries into concrete port records.
@@ -441,6 +447,13 @@ def _expand_range_entries(ports_raw: list[Any]) -> list[dict[str, Any]]:
         if start > end:
             raise ProfileLoadError(
                 f"invalid range {range_str!r}: start {start} > end {end}"
+            )
+        span = end - start + 1
+        if span > _MAX_PROFILE_RANGE_SPAN:
+            raise ProfileLoadError(
+                f"invalid range {range_str!r}: spans {span} entries, "
+                f"exceeds the {_MAX_PROFILE_RANGE_SPAN} cap (PERF-4) — a "
+                f"single profile range that large is almost certainly a typo"
             )
         shared = {k: v for k, v in entry.items() if k != "range"}
         for n in range(start, end + 1):
