@@ -207,6 +207,18 @@ class TestEdgeCases:
         assert "does not match" in result.warnings[0]
         assert intent.snmp.community == "public"  # unchanged
 
+    def test_community_value_never_appears_in_warnings(self):
+        """SEC-6 (2026-07-03 review): the SNMP community is a shared secret;
+        the operator-visible warnings (and the DEBUG entry log) must name the
+        source rename key but NEVER echo the parsed community value."""
+        intent = _tree_with_snmp(community="S3CRET-COMMUNITY")
+        result = translate_snmp_community(
+            intent, rename_map={"wrong-src": "monitoring-ro"},
+        )
+        assert result.warnings  # a non-match warning fired
+        assert all("S3CRET-COMMUNITY" not in w for w in result.warnings)
+        assert any("wrong-src" in w for w in result.warnings)  # key still named
+
     def test_empty_community_with_override(self):
         """Source has a bare SNMP block with location but no
         community.  Operator's rename map can't match (current

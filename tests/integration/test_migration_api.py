@@ -1703,6 +1703,15 @@ class TestOpnsenseParamikoShellEchoRescue:
 
 
 class TestDetectEndpoint:
+    def test_detect_oversized_raw_text_rejected_422(self, client):
+        """SEC-10 (2026-07-03 review): /detect must cap raw_text at 10 MB
+        like /plan, so it can't be used to buffer an unbounded body."""
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": "x" * 10_000_001},
+        )
+        assert resp.status_code == 422
+
     def test_detect_opnsense_xml(self, client):
         resp = client.post(
             "/api/v1/migration/detect",

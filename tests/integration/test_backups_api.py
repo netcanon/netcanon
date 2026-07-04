@@ -541,12 +541,31 @@ class TestGetJob:
         assert resp.json()["status"] == "completed"
 
     def test_get_nonexistent_job_returns_404(self, client):
-        resp = client.get("/api/v1/backups/nonexistent-id")
+        # A well-formed-but-unknown UUID reaches the handler and 404s.
+        resp = client.get(
+            "/api/v1/backups/00000000-0000-0000-0000-000000000000"
+        )
         assert resp.status_code == 404
 
     def test_404_detail_mentions_job_id(self, client):
-        resp = client.get("/api/v1/backups/missing-id-123")
-        assert "missing-id-123" in resp.json()["detail"]
+        missing = "11111111-2222-3333-4444-555555555555"
+        resp = client.get(f"/api/v1/backups/{missing}")
+        assert missing in resp.json()["detail"]
+
+    def test_malformed_job_id_rejected_422_not_reaching_store(self, client):
+        """SEC-3 (2026-07-03 review): a non-UUID job_id must be rejected by
+        the route's UUID pattern (422) before it can reach the file-store
+        path join as a traversal or existence-oracle vector. (A payload
+        containing an encoded separator decodes to a multi-segment path and
+        never matches the single-segment route at all — also safe.)"""
+        for bad in (
+            "nonexistent-id",
+            "a" * 40,                                   # right-ish length, non-hex
+            "..%5C..%5Cwindows",                        # encoded backslash, single seg
+            "11111111-2222-3333-4444-55555555555",      # 35 hex — one short
+        ):
+            resp = client.get(f"/api/v1/backups/{bad}")
+            assert resp.status_code == 422, (bad, resp.status_code)
 
     def test_job_has_results(self, client):
         job_id = _post_backup(client).json()["id"]

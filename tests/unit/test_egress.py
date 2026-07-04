@@ -27,6 +27,9 @@ pytestmark = pytest.mark.unit
         "fe80::1",
         "::ffff:127.0.0.1",      # IPv4-mapped IPv6 loopback (bypass guard)
         "::ffff:169.254.169.254",  # IPv4-mapped metadata endpoint
+        "0.0.0.0",               # SEC-11: unspecified — routes to loopback
+        "::",                    # SEC-11: IPv6 unspecified
+        "::ffff:0.0.0.0",        # SEC-11: IPv4-mapped unspecified
     ],
 )
 def test_loopback_and_link_local_are_blocked(host: str) -> None:

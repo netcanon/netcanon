@@ -146,11 +146,14 @@ def translate_snmp_community(
     current_community = ""
     if isinstance(intent, CanonicalIntent) and intent.snmp is not None:
         current_community = intent.snmp.community or ""
+    # The SNMP community is a shared secret — log only its presence, never
+    # its value (CodeQL py/clear-text-logging-sensitive-data), matching the
+    # count-only convention of the three sibling per-pane orchestrators.
     logger.debug(
-        "translate_snmp_community: entry rename_map=%s current=%r",
+        "translate_snmp_community: entry rename_map=%s has_community=%s",
         "None" if rename_map is None
         else f"{len(rename_map)}-entry dict",
-        current_community,
+        bool(current_community),
     )
 
     result = SnmpRenameResult()
@@ -204,17 +207,21 @@ def translate_snmp_community(
     matched = False
     for src, tgt in valid_map.items():
         if src != current:
+            # Do NOT interpolate the parsed community value: these warnings
+            # surface to the operator (SnmpRenameResult.warnings) and land in
+            # logs — the community is a shared secret. Name the source key
+            # (operator-supplied) only.
             result.warnings.append(
                 f"snmp_community_rename: source name {src!r} does not "
-                f"match parsed community {current!r} — rewrite skipped"
+                f"match the parsed community — rewrite skipped"
             )
             continue
         if matched:
             # Defensive — shouldn't happen because src is compared
             # literally and the current community is a single string.
             result.warnings.append(
-                f"snmp_community_rename: multiple entries matched "
-                f"community {current!r}; using first"
+                "snmp_community_rename: multiple entries matched the parsed "
+                "community; using the first"
             )
             continue
         if tgt is None:
