@@ -321,6 +321,24 @@ class TestParseErrors:
         with pytest.raises(ParseError, match="non-integer prefix-length"):
             CiscoIOSXECodec().parse(raw)
 
+    def test_non_integer_subinterface_index_raises(self):
+        """ROB-1 (2026-07-03 review): a non-numeric ``<subinterface><index>``
+        must surface as a ParseError (→ clean 4xx), not a raw ValueError
+        that escapes the codec boundary and becomes an HTTP 500."""
+        raw = """<?xml version="1.0"?>
+<interfaces xmlns="http://openconfig.net/yang/interfaces">
+  <interface>
+    <name>eth0</name>
+    <subinterfaces>
+      <subinterface>
+        <index>notanumber</index>
+      </subinterface>
+    </subinterfaces>
+  </interface>
+</interfaces>"""
+        with pytest.raises(ParseError, match="non-integer subinterface <index>"):
+            CiscoIOSXECodec().parse(raw)
+
 
 # ---------------------------------------------------------------------------
 # Render + round-trip

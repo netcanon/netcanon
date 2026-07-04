@@ -421,7 +421,14 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         for vlan_el in vlans_el.findall("vlan"):
             tag_el = vlan_el.find("tag")
             if tag_el is not None and tag_el.text:
-                vid = int(tag_el.text.strip())
+                try:
+                    vid = int(tag_el.text.strip())
+                except ValueError as e:
+                    raise ParseError(
+                        f"opnsense: non-integer <tag> {tag_el.text!r}",
+                        path="/vlans/vlan/tag",
+                        snippet=(tag_el.text or "")[:120],
+                    ) from e
                 descr_el = vlan_el.find("descr")
                 intent.vlans.append(CanonicalVlan(
                     id=vid,

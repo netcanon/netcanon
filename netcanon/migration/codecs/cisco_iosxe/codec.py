@@ -1148,7 +1148,17 @@ def _parse_subinterface(el: ET.Element, iface_idx: int = 0) -> dict[str, Any]:
     out: dict[str, Any] = {}
     idx_el = el.find(_q("index"))
     if idx_el is not None and idx_el.text is not None:
-        out["index"] = int(idx_el.text.strip())
+        try:
+            out["index"] = int(idx_el.text.strip())
+        except ValueError as e:
+            raise ParseError(
+                f"cisco_iosxe: non-integer subinterface <index> {idx_el.text!r}",
+                path=(
+                    f"/interfaces/interface[{iface_idx}]"
+                    "/subinterfaces/subinterface/index"
+                ),
+                snippet=(idx_el.text or "")[:120],
+            ) from e
 
     # <ipv4> block — IP augment namespace, but we strip and treat uniformly.
     ipv4_el = None
