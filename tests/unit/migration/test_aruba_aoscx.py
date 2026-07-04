@@ -334,6 +334,33 @@ def test_render_vxlan_omits_non_ip_source(codec: ArubaAOSCXCodec) -> None:
     assert "source ip" not in out
 
 
+def test_non_default_udp_port_drops_on_render(codec: ArubaAOSCXCodec) -> None:
+    """MTX-2 (Fable review): the AOS-CX VTEP render emits no UDP-port
+    override, so a non-default VXLAN UDP port is dropped and re-parses as
+    the IANA default 4789 — the behaviour the ``/vxlan-vnis/udp-port``
+    lossy declaration describes.  Documented so a future change can't flip
+    the matrix back to (implicit) supported without preserving the port."""
+    from netcanon.migration.canonical.intent import (
+        CanonicalIntent,
+        CanonicalVxlan,
+    )
+    intent = CanonicalIntent(
+        hostname="leaf",
+        vxlan_vnis=[
+            CanonicalVxlan(
+                vlan_id=10, vni=10010, udp_port=8472,
+                source_interface="10.0.0.1",
+            ),
+        ],
+    )
+    out = codec.render(intent)
+    assert "8472" not in out
+    assert "udp-port" not in out
+    reparsed = codec.parse(out)
+    v = next(v for v in reparsed.vxlan_vnis if v.vni == 10010)
+    assert v.udp_port == 4789  # non-default silently normalised (lossy)
+
+
 def test_interface_l3_addressing(codec: ArubaAOSCXCodec) -> None:
     intent = codec.parse(_SAMPLE)
     by_name = {i.name: i for i in intent.interfaces}
@@ -630,6 +657,10 @@ def test_matrix_supported(codec: ArubaAOSCXCodec, path: str) -> None:
     "/snmp/v3-user/priv-passphrase",
     "/snmp/v3-user/group",
     "/vxlan-vnis/source-interface",
+    # Fable review MTX-2: the VTEP render emits no UDP-port override, so a
+    # non-default VXLAN UDP port drops on render (re-parses as 4789). Was
+    # undeclared (classify() fail-opened to supported).
+    "/vxlan-vnis/udp-port",
 ])
 def test_matrix_lossy(codec: ArubaAOSCXCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "lossy"
