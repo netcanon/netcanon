@@ -72,8 +72,12 @@ logger = logging.getLogger(__name__)
 # Capture the whole remainder (quoted-with-escapes or bare); ``_unquote``
 # strips the outer pair and reverses ``\"`` / ``\\`` escapes.  A prior
 # ``"?([^"\n]+)"?`` form truncated at the first *inner* ``\"`` and so
-# shredded any name/description containing an embedded quote.
-_HOSTNAME_RE = re.compile(r"^hostname\s+(.+)$", re.IGNORECASE)
+# shredded any name/description containing an embedded quote.  The capture
+# starts with ``\S`` (disjoint from the preceding ``\s+``) and carries no
+# ``$`` anchor, so ``\s+`` and ``.`` can never both match a run of spaces
+# under backtracking — avoids the ``py/polynomial-redos`` shape a
+# ``\s+(.+)$`` form would introduce.
+_HOSTNAME_RE = re.compile(r"^hostname\s+(\S.*)", re.IGNORECASE)
 # Capture the quoted community token.  AOS-S: `snmp-server community "public" Operator`
 _SNMP_COMMUNITY_LINE_RE = re.compile(
     r'^snmp-server\s+community\s+"?([^"\s]+)"?', re.IGNORECASE,
@@ -247,7 +251,7 @@ _IFACE_HEADER_RE = re.compile(
     r'^interface\s+("?[A-Za-z0-9][A-Za-z0-9./\-]*"?)\s*$', re.IGNORECASE,
 )
 
-_VLAN_NAME_RE = re.compile(r"^name\s+(.+)$", re.IGNORECASE)
+_VLAN_NAME_RE = re.compile(r"^name\s+(\S.*)", re.IGNORECASE)
 _UNTAGGED_RE = re.compile(r"^(no\s+)?untagged\s+(.+)$", re.IGNORECASE)
 _TAGGED_RE = re.compile(r"^(no\s+)?tagged\s+(.+)$", re.IGNORECASE)
 _IP_ADDR_CIDR_RE = re.compile(
@@ -266,7 +270,7 @@ _IPV6_ADDR_RE = re.compile(
     r"^ipv6\s+address\s+([0-9A-Fa-f:]+)/(\d+)(?:\s+(link-local))?\s*$",
     re.IGNORECASE,
 )
-_IFACE_NAME_RE = re.compile(r"^name\s+(.+)$", re.IGNORECASE)
+_IFACE_NAME_RE = re.compile(r"^name\s+(\S.*)", re.IGNORECASE)
 
 # VRRP grammar — nested inside ``vlan N`` stanzas, with a global
 # ``router vrrp`` enable.
