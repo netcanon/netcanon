@@ -26,6 +26,60 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-07-04
+
+Post-v0.5.0 hardening tail: three small batches remediating the deferred
+low-value items from the 2026-07-03 Fable-5 review.  All defense-in-depth,
+concurrency and CI-hygiene fixes — **no breaking changes and no new
+features**.
+
+### Security
+
+- **SEC-9** — added a `Content-Security-Policy` header.  Every response gets a
+  strict same-origin policy (`default-src`/`connect-src 'self'`, `object-src
+  'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`);
+  script/style keep `'unsafe-inline'` because the UI is inline-heavy.  The
+  `/docs` page gets a scoped variant that additionally allows the Swagger UI
+  CDN (jsDelivr) it loads from — a same-origin-only policy would blank it.
+  Audited live in the browser (zero violations across the UI; /docs renders
+  fully).  (#290)
+- **SEC-5** — the paramiko `_drain` pre-command flush now has absolute
+  wall-clock + byte caps that its idle-reset can't extend past, so a device
+  that streams without pausing can no longer hang the worker or grow the read
+  buffer unbounded (OOM).  (#288)
+
+### Fixed
+
+- **CONC-3** — `FileConfigStore.save` serialises its collision-resolution →
+  write → rename under a store lock, so two concurrent saves for the same
+  device+second can't both claim the base path (a TOCTOU that silently
+  collapsed two backups into one clobbered file).  (#289)
+- **CONC-5** — a backup job is persisted to disk at creation, so a job
+  LRU-evicted from the in-memory registry *while still running* is still
+  reachable via the disk fallback instead of returning a `404` for an active
+  job.  (#289)
+- **CONC-7** — `_get_fernet` uses double-checked locking around lazy key
+  initialisation, so on a fresh install two threads racing the first
+  encrypt/decrypt can no longer each generate and persist a *different* key
+  (last-writer-wins on the key file), which would fail the loser's ciphertext
+  closed later.  (#289)
+
+### Changed
+
+- **PKG-4** — the release workflows' write scopes (`contents: write` on the
+  MSI build; `packages`/`id-token`/`security-events: write` on the Docker
+  build) are declared at the job level so the publish-time pytest gate runs
+  read-only, matching pypi-publish.yml's already-scoped model.  (#288)
+- **PKG-5** — the PyPI and Docker publish jobs refuse to run from anything but
+  a version tag, so a `workflow_dispatch` on a branch can no longer build a
+  PyPI-legal `.devN` release (or move the Docker `:latest` tag onto one).
+  (#288)
+- **API-7 (docs)** — corrected the `LossyPath` / `UnsupportedPath` / severity
+  docstrings that claimed `force=True` clears a validation `block`.  It does
+  not: `force` only skips the cross-device-class guard; a `block` renders
+  anyway and flags the job `partial` — `strip_unsupported` is the mechanism
+  that actually drops the offending paths.  (#288)
+
 ## [0.5.0] - 2026-07-04
 
 Post-review hardening release: the complete remediation of the 2026-07-03
