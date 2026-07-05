@@ -1156,6 +1156,88 @@ class TestSubInterfaces:
 # ---------------------------------------------------------------------------
 
 
+class TestPreElsPortMode:
+    """Pre-ELS Junos (and platforms like the EX4550 that stayed non-ELS at
+    15.1) spell the L2 switchport mode ``port-mode`` where ELS spells it
+    ``interface-mode``.  Both must parse — otherwise a ``port-mode access``
+    port falls through to the ``vlan members``-without-explicit-mode default
+    and is silently promoted to a TRUNK on reparse (an access port becoming
+    a trunk = a real data-fidelity bug)."""
+
+    def test_pre_els_port_mode_access_stays_access(self):
+        raw = (
+            "set vlans V10 vlan-id 10\n"
+            "set interfaces ge-0/0/1 unit 0 family ethernet-switching "
+            "port-mode access\n"
+            "set interfaces ge-0/0/1 unit 0 family ethernet-switching "
+            "vlan members V10\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/1")
+        assert iface.switchport_mode == "access"
+        assert iface.access_vlan == 10
+        assert iface.trunk_allowed_vlans == []  # NOT promoted to a trunk
+
+    def test_pre_els_port_mode_trunk_stays_trunk(self):
+        raw = (
+            "set vlans V10 vlan-id 10\n"
+            "set vlans V20 vlan-id 20\n"
+            "set interfaces xe-0/0/0 unit 0 family ethernet-switching "
+            "port-mode trunk\n"
+            "set interfaces xe-0/0/0 unit 0 family ethernet-switching "
+            "vlan members V10\n"
+            "set interfaces xe-0/0/0 unit 0 family ethernet-switching "
+            "vlan members V20\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "xe-0/0/0")
+        assert iface.switchport_mode == "trunk"
+        assert iface.trunk_allowed_vlans == [10, 20]
+
+    def test_els_interface_mode_still_parses(self):
+        raw = (
+            "set vlans V10 vlan-id 10\n"
+            "set interfaces ge-0/0/2 unit 0 family ethernet-switching "
+            "interface-mode trunk\n"
+            "set interfaces ge-0/0/2 unit 0 family ethernet-switching "
+            "vlan members V10\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/2")
+        assert iface.switchport_mode == "trunk"
+        assert iface.trunk_allowed_vlans == [10]
+
+    def test_pre_els_access_round_trips(self):
+        raw = (
+            "set vlans V10 vlan-id 10\n"
+            "set interfaces ge-0/0/1 unit 0 family ethernet-switching "
+            "port-mode access\n"
+            "set interfaces ge-0/0/1 unit 0 family ethernet-switching "
+            "vlan members V10\n"
+        )
+        codec = JunosCodec()
+        tree = codec.parse(raw)
+        reparsed = codec.parse(codec.render(tree))
+        iface = next(i for i in reparsed.interfaces if i.name == "ge-0/0/1")
+        assert iface.switchport_mode == "access"
+        assert iface.access_vlan == 10
+
+    def test_ksator_ex4550_trunk_ports_unchanged(self):
+        """The committed real 15.1 EX4550 fixture uses ``port-mode trunk`` on
+        xe-0/0/0-2 — recognising ``port-mode`` explicitly must leave those
+        trunk ports (and their allowed-VLAN lists) exactly as before."""
+        import pathlib
+        raw = pathlib.Path(
+            "tests/fixtures/real/junos/"
+            "ksator_labmgmt_ex4550_junos151.set"
+        ).read_text(encoding="utf-8")
+        intent = JunosCodec().parse(raw)
+        by_name = {i.name: i for i in intent.interfaces}
+        for name in ("xe-0/0/0", "xe-0/0/1", "xe-0/0/2"):
+            assert by_name[name].switchport_mode == "trunk"
+            assert by_name[name].trunk_allowed_vlans  # non-empty
+
+
 class TestPerUnitVlanTagging:
     """``set interfaces <parent> unit <N> vlan-id <tag>`` is Junos's
     per-subinterface 802.1Q tag primitive — semantically equivalent to
