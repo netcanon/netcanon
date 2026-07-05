@@ -371,6 +371,31 @@ class TestParseInterfaces:
         assert by_name["Ethernet1"] == "BLUE"
         assert by_name["Ethernet2"] == "forwarding"
 
+    def test_top_level_vrf_definition_legacy_harvested(self):
+        """Older EOS (<=4.22) declares a top-level VRF with
+        ``vrf definition <name>``; modern EOS (4.23+) uses
+        ``vrf instance <name>``.  Both must populate routing_instances —
+        the legacy form was previously dropped silently."""
+        raw = (
+            "hostname sw1\n"
+            "vrf definition RED\n"
+            "   rd 1:1\n"
+            "!\n"
+            "vrf instance BLUE\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        assert sorted(r.name for r in intent.routing_instances) == ["BLUE", "RED"]
+
+    def test_top_level_vrf_definition_round_trips(self):
+        """A legacy ``vrf definition`` re-renders as the modern
+        ``vrf instance`` form and reparses to the same routing instance."""
+        raw = "hostname sw1\nvrf definition RED\n!\n"
+        codec = AristaEOSCodec()
+        tree = codec.parse(raw)
+        reparsed = codec.parse(codec.render(tree))
+        assert [r.name for r in reparsed.routing_instances] == ["RED"]
+
     def test_interface_loopback(self):
         raw = (
             "hostname sw1\n"

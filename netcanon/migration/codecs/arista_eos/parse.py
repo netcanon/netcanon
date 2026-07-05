@@ -177,7 +177,13 @@ _RADIUS_ACCT_PORT_RE = re.compile(r"\bacct-port\s+(\d+)")
 # Key payload: bare token or quoted string.  EOS accepts both.
 _RADIUS_KEY_RE = re.compile(r'\bkey\s+(?:"([^"]*)"|(\S+))')
 
-_VRF_INSTANCE_RE = re.compile(r"^vrf\s+instance\s+(\S+)\s*$", re.MULTILINE)
+# Top-level VRF declaration.  Modern EOS (4.23+) uses ``vrf instance <name>``;
+# older EOS (<=4.22) uses ``vrf definition <name>`` for the identical stanza.
+# Accept both so a legacy config's VRFs aren't silently dropped from
+# routing_instances.  RD + RTs are populated later from the router-bgp pass.
+_VRF_INSTANCE_RE = re.compile(
+    r"^vrf\s+(?:instance|definition)\s+(\S+)\s*$", re.MULTILINE
+)
 _INTERFACE_HEADER_RE = re.compile(r"^interface\s+(\S+)\s*$")
 
 # VARP system-wide MAC (Wave C anycast-gateway wire-up).  Form:
