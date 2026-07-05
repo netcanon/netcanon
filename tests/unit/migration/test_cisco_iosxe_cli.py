@@ -703,6 +703,70 @@ class TestRender:
                (second.snmp.community if second.snmp else "")
 
 
+class TestTopLevelVrfHarvest:
+    """Top-level VRF stanzas come in two forms: the modern IOS-XE
+    ``vrf definition <name>`` and the classic IOS 12 ``ip vrf <name>``
+    (RD + route-targets directly under it, no address-family framing).
+    Both must populate routing_instances — the classic form was
+    previously dropped silently while its interface binding (``ip vrf
+    forwarding``) was still captured, leaving a dangling VRF reference."""
+
+    def test_classic_ip_vrf_harvested(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "ip vrf CUST\n"
+            " rd 65000:1\n"
+            " route-target export 65000:1\n"
+            " route-target import 65000:1\n"
+            "!\n"
+        )
+        ri = next(r for r in intent.routing_instances if r.name == "CUST")
+        assert ri.route_distinguisher == "65000:1"
+        assert ri.rt_exports == ["65000:1"]
+        assert ri.rt_imports == ["65000:1"]
+
+    def test_modern_vrf_definition_still_harvested(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "vrf definition MODERN\n"
+            " rd 65000:2\n"
+            " address-family ipv4\n"
+            "  route-target export 65000:2\n"
+            " exit-address-family\n"
+            "!\n"
+        )
+        ri = next(r for r in intent.routing_instances if r.name == "MODERN")
+        assert ri.route_distinguisher == "65000:2"
+        assert ri.rt_exports == ["65000:2"]
+
+    def test_ip_vrf_forwarding_on_interface_not_mistaken_for_definition(self):
+        # The interface-level membership line must NOT create a top-level
+        # routing instance named "forwarding" (it binds Gi0/0 to CUST).
+        intent = CiscoIOSXECLICodec().parse(
+            "ip vrf CUST\n"
+            " rd 65000:1\n"
+            "!\n"
+            "interface GigabitEthernet0/0\n"
+            " ip vrf forwarding CUST\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!\n"
+        )
+        assert [r.name for r in intent.routing_instances] == ["CUST"]
+        iface = next(
+            i for i in intent.interfaces if i.name == "GigabitEthernet0/0"
+        )
+        assert iface.vrf == "CUST"
+
+    def test_classic_ip_vrf_round_trips(self):
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(
+            "ip vrf CUST\n rd 65000:1\n route-target both 65000:1\n!\n"
+        )
+        reparsed = codec.parse(codec.render(tree))
+        ri = next(r for r in reparsed.routing_instances if r.name == "CUST")
+        assert ri.route_distinguisher == "65000:1"
+        assert ri.rt_exports == ["65000:1"]
+        assert ri.rt_imports == ["65000:1"]
+
+
 class TestLocalUserPasswordRoundTrip:
     """Regression for the ``password 0 X`` round-trip bug.
 

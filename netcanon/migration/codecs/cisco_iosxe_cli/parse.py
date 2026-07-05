@@ -385,8 +385,16 @@ _TOP_NTP_SERVER_RE = re.compile(
 # <rt>``, and ``address-family ipv4 / exit-address-family`` markers
 # (the markers themselves carry no canonical state — they just gate
 # the RT import/export sub-block on the wire).
+#
+# Classic IOS 12 (and IOS-XE configs migrated from it) open the identical
+# stanza with the legacy top-level ``ip vrf <name>`` — RD + route-targets
+# hang directly under it with no address-family framing.  Accept both
+# openers so a legacy config's VRFs aren't dropped from routing_instances.
+# The trailing ``\s*$`` keeps this disjoint from the interface-level
+# ``ip vrf forwarding <name>`` membership line (two tokens after ``ip vrf``,
+# and that line is indented — this header is column-0).
 _VRF_DEFINITION_RE = re.compile(
-    r"^vrf\s+definition\s+(\S+)\s*$", re.IGNORECASE,
+    r"^(?:ip\s+vrf|vrf\s+definition)\s+(\S+)\s*$", re.IGNORECASE,
 )
 # ``(\S.*)`` (not ``(.+)``) so the ``\s+`` separator and the value can't both
 # match the same spaces -- the polynomial-ReDoS overlap CodeQL flagged
