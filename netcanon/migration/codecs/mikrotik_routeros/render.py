@@ -31,6 +31,7 @@ render → parse for shared utilities is fine).
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from typing import Any
 
@@ -94,6 +95,75 @@ def _routeros_group_for_privilege(level: int) -> str:
 # ---------------------------------------------------------------------------
 # Top-level entry
 # ---------------------------------------------------------------------------
+
+
+def _ros_major(version: str) -> int | None:
+    """RouterOS major version (6 or 7) from a captured ``source_version`` like
+    ``6.48.1`` / ``7.18.2``.
+
+    Returns ``None`` for an empty string, garbage, or a dot-less token — the
+    v6 NTP dialect gate only fires on affirmative dotted major-version
+    evidence, never on a guess.
+    """
+    m = re.match(r"(\d+)\.", version or "")
+    return int(m.group(1)) if m else None
+
+
+def _all_ip_literals(servers: list[str]) -> bool:
+    """True iff ``servers`` is non-empty and every entry is an IP literal.
+
+    RouterOS 6's ``primary-ntp=``/``secondary-ntp=`` slots accept IP
+    addresses only; a hostname NTP server must stay on the v7 ``servers=``
+    form (or the v6 ``server-dns-names=`` key, which this renderer doesn't
+    emit)."""
+    if not servers:
+        return False
+    for s in servers:
+        try:
+            ipaddress.ip_address(s)
+        except ValueError:
+            return False
+    return True
+
+
+def _render_ntp_client(tree: Any) -> list[str]:
+    """Render the ``/system ntp client`` block, dialect-aware.
+
+    RouterOS 7 (the default, and every cross-vendor / unknown-version render)
+    uses the inline ``set ... servers=A,B`` form.  When the tree was parsed
+    from a RouterOS **6** device (same-vendor sanitize / mikrotik→mikrotik)
+    and carries one or two IP-literal NTP servers, emit the RouterOS-6
+    ``set ... primary-ntp=A [secondary-ntp=B]`` form instead — a 6.x device
+    rejects the v7 ``servers=`` key outright.
+
+    Every other case (cross-vendor source, unknown version, hostname servers,
+    3+ servers) keeps today's v7 output byte-identically.  The parser unions
+    both forms, so the round-trip is stable on either dialect.
+
+    Note: not idempotent across a *double* sanitize — the v6 output carries
+    no version header, so a second pass sees ``source_version == ""`` and
+    falls back to v7.  The canonical tree (``ntp_servers``) is preserved
+    either way; only the emitted dialect differs, and a single sanitize (the
+    real use case) produces valid 6.x output.
+    """
+    if not tree.ntp_servers:
+        return []
+    servers = tree.ntp_servers
+    lines = ["/system ntp client"]
+    if (
+        tree.source_vendor == "mikrotik_routeros"
+        and _ros_major(tree.source_version) == 6
+        and 1 <= len(servers) <= 2
+        and _all_ip_literals(servers)
+    ):
+        parts = ["set enabled=yes", f"primary-ntp={servers[0]}"]
+        if len(servers) == 2:
+            parts.append(f"secondary-ntp={servers[1]}")
+        lines.append(" ".join(parts))
+    else:
+        lines.append(f"set enabled=yes servers={','.join(servers)}")
+    lines.append("")
+    return lines
 
 
 def render_intent(tree: Any) -> str:  # noqa: C901
@@ -724,13 +794,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         lines.append(f"set servers={','.join(tree.dns_servers)}")
         lines.append("")
 
-    # ----- /system ntp client -----
-    if tree.ntp_servers:
-        lines.append("/system ntp client")
-        lines.append(
-            f"set enabled=yes servers={','.join(tree.ntp_servers)}"
-        )
-        lines.append("")
+    # ----- /system ntp client (dialect-aware: v6 vs v7) -----
+    lines.extend(_render_ntp_client(tree))
 
     # Trim trailing blanks, leave exactly one newline at EOF.
     while lines and lines[-1] == "":
