@@ -69,6 +69,54 @@ configure_logging(level=Settings().log_level)
 logger = logging.getLogger(__name__)
 
 
+# --------------------------------------------------------------------------
+# Content-Security-Policy (SEC-9)
+# --------------------------------------------------------------------------
+# Defense-in-depth on top of Jinja2 autoescape.  The hand-written UI is
+# inline-heavy (inline <script>/<style> blocks, `onclick=` handlers and
+# `style=` attributes across every template + the JS partials that build
+# DOM), so a nonce/hash policy would need a full template refactor and is
+# out of scope here — hence `'unsafe-inline'` on script-src/style-src.  The
+# value this policy DOES add is real and non-breaking: it forbids loading
+# or connecting to any off-origin host (`default-src 'self'`,
+# `connect-src 'self'`), kills plugins (`object-src 'none'`), blocks
+# `<base>` hijacking (`base-uri 'self'`), pins form submission to same
+# origin so an injected form can't exfiltrate (`form-action 'self'`), and
+# blocks framing (`frame-ancestors 'none'` — the modern companion to the
+# `X-Frame-Options: DENY` set below).
+_CSP_DEFAULT = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+# The custom /docs page wraps FastAPI's ``get_swagger_ui_html()``, which
+# pulls the Swagger UI bundle + stylesheet from jsDelivr and a favicon
+# from fastapi.tiangolo.com.  A same-origin-only policy would blank the
+# page, so /docs gets a variant that additionally allows exactly those
+# CDN hosts (and only those).  Everything else stays as strict as the
+# default policy.
+_CSP_DOCS = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "img-src 'self' data: https://cdn.jsdelivr.net https://fastapi.tiangolo.com; "
+    "font-src 'self' https://cdn.jsdelivr.net; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create and configure a Netcanon FastAPI application instance.
 
@@ -299,6 +347,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
+        # SEC-9: Content-Security-Policy. The /docs Swagger page needs the
+        # CDN-permitting variant; every other route (UI pages + JSON API)
+        # gets the strict same-origin policy.
+        response.headers["Content-Security-Policy"] = (
+            _CSP_DOCS if request.url.path == "/docs" else _CSP_DEFAULT
+        )
         return response
 
     # ------------------------------------------------------------------
