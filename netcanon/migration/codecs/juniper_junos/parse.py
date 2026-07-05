@@ -1529,12 +1529,18 @@ def _apply_interfaces(  # noqa: C901
 
         # --- Phase 4 rank-4: L2 family ethernet-switching ---
         # ``unit 0 family ethernet-switching interface-mode access|trunk``
+        # ELS (EX/QFX 15.1+ on most platforms) spells this ``interface-mode``;
+        # pre-ELS Junos (and platforms like the EX4550 that stayed non-ELS at
+        # 15.1) spell the identical construct ``port-mode``.  Accept both — a
+        # ``port-mode access`` port must record mode=access here, otherwise the
+        # ``vlan members``-without-explicit-mode default below silently
+        # promotes it to a trunk (an access port becoming a trunk on reparse).
         if (
             unit_num == 0
             and len(tokens) >= 7
             and tokens[3] == "family"
             and tokens[4] == "ethernet-switching"
-            and tokens[5] == "interface-mode"
+            and tokens[5] in ("interface-mode", "port-mode")
         ):
             mode = tokens[6]
             if mode in ("access", "trunk"):
