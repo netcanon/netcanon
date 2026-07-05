@@ -148,6 +148,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             _parse_system_dns(lines, intent)
         elif section == "/system ntp client":
             _parse_system_ntp(lines, intent)
+        elif section == "/system ntp client servers":
+            _parse_system_ntp_client_servers(lines, intent)
         elif section == "/interface ethernet":
             _parse_interface_ethernet(lines, iface_by_name)
         elif section == "/interface vlan":
@@ -373,14 +375,71 @@ def _parse_system_dns(lines: list[str], intent: CanonicalIntent) -> None:
                 ]
 
 
+# RouterOS "no server configured" markers: an empty string (``servers=""``,
+# ``server-dns-names=""``) and the ``0.0.0.0`` unset sentinel RouterOS 6
+# writes into ``primary-ntp``/``secondary-ntp`` when a slot is unconfigured.
+_NTP_UNSET_TOKENS = frozenset({"", "0.0.0.0"})
+
+
+def _add_ntp_servers(intent: CanonicalIntent, candidates: list[str]) -> None:
+    """Union NTP server tokens onto ``intent.ntp_servers``.
+
+    Order-preserving and de-duplicated, skipping empty / ``0.0.0.0``
+    unset sentinels.  Shared by both NTP handlers so the RouterOS 6
+    (``primary-ntp=``/``secondary-ntp=``/``server-dns-names=``), the
+    RouterOS 7 inline (``servers=A,B``) and the RouterOS 7 subsection
+    (``/system ntp client servers``) forms all merge into one list.
+    """
+    servers = list(intent.ntp_servers)
+    seen = set(servers)
+    for raw in candidates:
+        token = raw.strip()
+        if token in _NTP_UNSET_TOKENS or token in seen:
+            continue
+        seen.add(token)
+        servers.append(token)
+    intent.ntp_servers = servers
+
+
 def _parse_system_ntp(lines: list[str], intent: CanonicalIntent) -> None:
+    """Parse the ``/system ntp client`` ``set`` line across RouterOS versions.
+
+    RouterOS 7 uses ``servers=A,B`` (a comma list); RouterOS 6 uses
+    ``primary-ntp=A`` / ``secondary-ntp=B`` (IP literals) plus
+    ``server-dns-names=`` (a comma list of hostnames).  Union every form
+    so a v6 export no longer silently loses its NTP servers.
+    """
     for line in lines:
-        if line.startswith("set"):
-            kv = _parse_kv(line)
-            if "servers" in kv:
-                intent.ntp_servers = [
-                    s.strip() for s in kv["servers"].split(",") if s.strip()
-                ]
+        if not line.startswith("set"):
+            continue
+        kv = _parse_kv(line)
+        candidates: list[str] = []
+        if "servers" in kv:                            # RouterOS 7 inline
+            candidates.extend(kv["servers"].split(","))
+        for key in ("primary-ntp", "secondary-ntp"):   # RouterOS 6 IP literals
+            if key in kv:
+                candidates.append(kv[key])
+        if "server-dns-names" in kv:                   # RouterOS 6 hostnames
+            candidates.extend(kv["server-dns-names"].split(","))
+        _add_ntp_servers(intent, candidates)
+
+
+def _parse_system_ntp_client_servers(
+    lines: list[str], intent: CanonicalIntent
+) -> None:
+    """Parse the RouterOS 7 ``/system ntp client servers`` subsection.
+
+    RouterOS 7 moved NTP servers out of the ``set`` line into a dedicated
+    subsection of ``add address=X`` rows (each an IP literal or a
+    hostname).  Merge them into ``intent.ntp_servers`` alongside anything
+    the ``set`` line already produced.
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        if "address" in kv:
+            _add_ntp_servers(intent, [kv["address"]])
 
 
 def _parse_interface_ethernet(

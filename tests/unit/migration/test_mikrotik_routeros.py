@@ -211,6 +211,95 @@ class TestParse:
         assert vlan_iface.ipv4_addresses[0].prefix_length == 24
 
 
+class TestNtpVersionForms:
+    """``/system ntp client`` grammar differs by RouterOS major version.
+
+    RouterOS 7 writes ``servers=A,B`` (or a ``/system ntp client servers``
+    subsection); RouterOS 6 writes ``primary-ntp=``/``secondary-ntp=`` +
+    ``server-dns-names=``.  Parse must union every form — a version-agnostic
+    fidelity fix: v6 and v7-subsection exports previously dropped all NTP
+    servers silently.
+    """
+
+    def test_v7_inline_servers(self):
+        raw = "/system ntp client\nset enabled=yes servers=10.0.0.1,10.0.0.2\n"
+        tree = MikroTikRouterOSCodec().parse(raw)
+        assert tree.ntp_servers == ["10.0.0.1", "10.0.0.2"]
+
+    def test_v6_primary_secondary(self):
+        raw = (
+            "/system ntp client\n"
+            "set enabled=yes primary-ntp=10.0.0.1 secondary-ntp=10.0.0.2\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        assert tree.ntp_servers == ["10.0.0.1", "10.0.0.2"]
+
+    def test_v6_duplicate_primary_secondary_dedups(self):
+        # A real export (routeros_diff_verbose_export.rsc) repeats the same
+        # IP in both slots — order-preserving dedup yields a single entry.
+        raw = (
+            "/system ntp client\n"
+            "set enabled=yes primary-ntp=10.200.0.15 secondary-ntp=10.200.0.15"
+            ' server-dns-names=""\n'
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        assert tree.ntp_servers == ["10.200.0.15"]
+
+    def test_v6_server_dns_names(self):
+        raw = (
+            "/system ntp client\n"
+            "set enabled=yes server-dns-names=time.google.com,pool.ntp.org\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        assert tree.ntp_servers == ["time.google.com", "pool.ntp.org"]
+
+    def test_v7_subsection_add_address(self):
+        raw = (
+            "/system ntp client\n"
+            "set enabled=yes\n"
+            "/system ntp client servers\n"
+            "add address=time.google.com\n"
+            "add address=10.0.0.9\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        assert tree.ntp_servers == ["time.google.com", "10.0.0.9"]
+
+    def test_unset_sentinels_skipped(self):
+        # servers="" (v7) and 0.0.0.0 (v6 unconfigured slot) are not servers.
+        raw = (
+            "/system ntp client\n"
+            'set enabled=no servers="" primary-ntp=0.0.0.0 secondary-ntp=0.0.0.0'
+            ' server-dns-names=""\n'
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        assert tree.ntp_servers == []
+
+    @pytest.mark.parametrize(
+        "fixture,expected",
+        [
+            ("routeros_diff_verbose_export.rsc", ["10.200.0.15"]),
+            ("taqavi_initial_provisioning.rsc", ["time.google.com"]),
+        ],
+    )
+    def test_real_fixtures_no_longer_drop_ntp(self, fixture, expected):
+        raw = (
+            Path(__file__).resolve().parents[2]
+            / "fixtures" / "real" / "mikrotik" / fixture
+        ).read_text(encoding="utf-8")
+        tree = MikroTikRouterOSCodec().parse(raw)
+        assert tree.ntp_servers == expected
+
+    def test_v6_ntp_round_trips(self):
+        raw = (
+            "/system ntp client\n"
+            "set enabled=yes primary-ntp=10.0.0.1 secondary-ntp=10.0.0.2\n"
+        )
+        codec = MikroTikRouterOSCodec()
+        tree = codec.parse(raw)
+        reparsed = codec.parse(codec.render(tree))
+        assert reparsed.ntp_servers == tree.ntp_servers == ["10.0.0.1", "10.0.0.2"]
+
+
 class TestParseErrors:
     def test_empty_input_raises(self):
         with pytest.raises(ParseError, match="empty input"):
