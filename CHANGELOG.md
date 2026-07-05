@@ -26,6 +26,48 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-07-05
+
+Codec fidelity fixes surfaced by the 2026-07-05 version-vector feasibility
+assessment: five real silent-loss / mislabel bugs, each shipped as an ordinary
+version-AGNOSTIC correction (union grammar or same-vendor echo), NOT as
+version-gated behaviour.  **No breaking changes and no new features.**
+
+### Fixed
+
+- **MikroTik NTP** — the parser read only the RouterOS 7 inline `servers=` NTP
+  form, silently dropping every server written in the RouterOS 6
+  `primary-ntp=` / `secondary-ntp=` / `server-dns-names=` form or the RouterOS 7
+  `/system ntp client servers` subsection.  All three forms are now union-parsed
+  (order-preserving, de-duplicated, skipping the empty and `0.0.0.0` unset
+  sentinels).  (#293)
+- **Junos pre-ELS switchport mode** — pre-ELS Junos (and platforms like the
+  EX4550 that stayed non-ELS at 15.1) spell the L2 mode `port-mode`, where ELS
+  spells it `interface-mode`.  The parser recognised only `interface-mode`, so a
+  `port-mode access` port fell through to the `vlan members` trunk-default and an
+  **access port silently became a trunk** on reparse.  `port-mode` is now
+  accepted alongside `interface-mode`.  (#294)
+- **Arista legacy VRF** — top-level `vrf definition <name>` stanzas (EOS 4.22 and
+  earlier) were dropped from `routing_instances`; only the modern `vrf instance`
+  form was harvested.  Both forms are now accepted.  (#295)
+- **Cisco IOS-12 VRF** — classic top-level `ip vrf <name>` stanzas were dropped
+  from `routing_instances` (only the modern `vrf definition` form was harvested),
+  leaving a dangling interface `ip vrf forwarding` reference.  Both forms are now
+  accepted.  (#296)
+- **Version-stamp fidelity** — on a same-vendor re-render (sanitize, or an X→X
+  migration) the cisco_nxos / cisco_iosxr / aruba_aoscx / vyos renderers stamped
+  a hardcoded release constant into their version banner, silently relabeling the
+  device's real OS version (e.g. sanitizing a `10.3(2)` NX-OS config returned
+  `9.3(11)`).  Each now echoes the source device's own `source_version` when the
+  tree came from that codec; cross-vendor and unknown-version renders stay
+  byte-identical.  (#297)
+
+### Changed
+
+- **API-7 docs** — removed a documented `strip_unsupported` migration affordance
+  that was never implemented; the `force` / `block` unsupported-handling
+  behaviour was already correct, so only the docs needed reconciling.  (#292)
+
 ## [0.5.1] - 2026-07-04
 
 Post-v0.5.0 hardening tail: three small batches remediating the deferred
