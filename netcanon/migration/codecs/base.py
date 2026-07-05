@@ -313,10 +313,13 @@ class CodecBase(ABC):
         the adapter's supported subset.
 
         Raises:
-            RenderError: When *tree* contains paths the adapter
-                cannot emit.  Callers should have run the
-                ``strip_unsupported`` transform first if the target
-                :class:`ValidationReport` flagged any paths.
+            RenderError: When *tree* contains a construct the adapter
+                cannot render into valid config.  Note most
+                target-unsupported paths are NOT raised here — they are
+                omitted from the output and surfaced as a ``block`` in
+                the :class:`ValidationReport` (a ``partial`` job).
+                ``RenderError`` is reserved for a tree the adapter
+                genuinely cannot serialise.
         """
 
     def iter_xpaths(self, tree: Any) -> Iterable[str]:

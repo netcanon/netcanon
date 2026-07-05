@@ -13,12 +13,14 @@ All severity fields use the same three-step convention introduced by
     ok    — safe to proceed, no user action needed
     warn  — proceed with awareness (lossy or partial)
     block — the strongest signal.  In the migration pipeline the render
-            still runs and the job is flagged ``partial`` (the target
-            can't faithfully consume the tree); ``block`` does not abort
-            the run, and ``force`` does NOT clear it — ``force`` only
-            skips the separate cross-device-class guard.  Drop the
-            offending paths with the ``strip_unsupported`` transform to
-            clear a ``block``.
+            still runs and the job is flagged ``partial``: the target
+            can't faithfully consume the tree, so the unsupported paths
+            are simply absent from the rendered output.  ``block`` does
+            not abort the run, and nothing "clears" it — the ``partial``
+            status plus the ``ValidationReport`` are the honest record of
+            what was dropped, which the caller reviews before deploying.
+            (``force`` is unrelated: it only skips the separate
+            cross-device-class guard.)
 """
 
 from __future__ import annotations
@@ -134,9 +136,9 @@ class LossyPath(BaseModel):
         severity: ``warn`` (default) surfaces a warning and the report
             stays ``warn``; ``error`` escalates the report to ``block``,
             which flags the rendered job ``partial``.  Neither aborts the
-            render, and ``force`` does not downgrade a ``block`` (it only
-            skips the cross-device-class guard) — drop the path with the
-            ``strip_unsupported`` transform to avoid it.
+            render, and ``force`` does not downgrade a ``block`` — it only
+            skips the cross-device-class guard.  A ``block`` is the honest
+            "this render is partial" signal, not an error to suppress.
     """
 
     path: str
@@ -149,10 +151,12 @@ class UnsupportedPath(BaseModel):
 
     Presence of any unsupported path in a tree forces the
     ``ValidationReport`` severity to ``block``, which flags the rendered
-    job ``partial`` (the render still runs — the path is simply absent
-    from the output).  ``force`` does NOT clear this (it only skips the
-    cross-device-class guard); apply the ``strip_unsupported`` transform
-    before render to drop the path explicitly and clear the block.
+    job ``partial``: the target adapter simply omits the path from its
+    output (it has no way to emit it).  This is deliberate "declare what
+    you drop" honesty — the ``partial`` status + report tell the caller
+    exactly what was lost.  There is no auto-strip step (and ``force``
+    does not apply — it only skips the cross-device-class guard); the
+    caller reviews the report before deploying.
     """
 
     path: str
