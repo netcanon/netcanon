@@ -146,8 +146,12 @@ class CodecBase(ABC):
         name: Class-level registration key.  Must be unique across the
             registry and stable across releases.
         version_hint: Optional vendor OS version this adapter targets
-            (e.g. ``"17.x"`` for Cisco IOS-XE 17.x).  Informational;
-            version gating lives in the :class:`CapabilityMatrix`.
+            (e.g. ``"17.x"`` for Cisco IOS-XE 17.x).  DISPLAY-ONLY — surfaced
+            in the /migrate codec catalogue; nothing reads it to gate parse
+            or render.  Where a codec does vary output by OS version it reads
+            the parsed ``CanonicalIntent.source_version`` at render time (see
+            the MikroTik RouterOS-6 NTP dialect), not this hint.  There is no
+            version-scoped ``CapabilityMatrix``.
         input_format: Short catalogue tag describing what ``parse()``
             expects.  Used by the UI to (a) show a human-readable hint
             on the /migrate page, (b) provide a matching placeholder,

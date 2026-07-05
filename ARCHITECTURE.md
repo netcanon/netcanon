@@ -356,8 +356,10 @@ persisted under
 `netcanon.rename-ack.v1:<source_codec>:<target_codec>:<hostname>`.
 Moving to a different device (different hostname), different
 codec pair, or pressing Reset-all clears or scopes away saved
-state.  Version segments for source/target are omitted until
-parsers start populating `CanonicalIntent.source_version`.
+state.  Version segments for source/target are omitted from the
+key today: all 12 parsers populate `CanonicalIntent.source_version`
+now, but the ack key is not yet version-scoped (it would only matter
+once version-targeted rendering grows an operator-facing surface).
 
 **Source-shape capture:** `run_plan_with_overrides` injects a
 capture-first transform that populates `MigrationJob.source_vlans`,

@@ -1893,12 +1893,14 @@
    * of clobbering the operator's prior work.
    *
    * Versioning (source_version / target_version) is intentionally
-   * NOT part of the key today — the canonical parsers don't yet
-   * populate source_version, so folding empty strings into the key
-   * adds noise without discrimination.  When per-OS-version parsers
-   * land (P1C3+), extend _ackKey to append @<version> for each side
-   * and bump _ACK_SCHEMA_VERSION so any old entries get ignored on
-   * next load (cheap migration — the entries are strictly optional).
+   * NOT part of the key today.  All 12 parsers populate
+   * source_version now, but there is no operator-facing target-version
+   * knob and wild source_version coverage is uneven, so folding it into
+   * the key would add noise without reliable discrimination.  If a
+   * target-version channel lands, extend _ackKey to append @<version>
+   * for each side and bump _ACK_SCHEMA_VERSION so any old entries get
+   * ignored on next load (cheap migration — the entries are strictly
+   * optional).
    *
    * Schema (v1 — additive-only; new category maps can be added as
    * new keys without bumping the version because missing keys load
