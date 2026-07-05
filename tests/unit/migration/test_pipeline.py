@@ -122,6 +122,22 @@ class TestRunPlanFailures:
         assert job.validation.severity == "block"
         assert job.rendered is not None  # still produced for review
 
+    def test_force_does_not_clear_a_validation_block(self):
+        """API-7: ``force`` only skips the cross-device-class guard — it
+        does NOT clear a validation ``block``.  A tree with an unsupported
+        path renders to ``partial`` whether or not ``force`` is set; there
+        is no ``strip_unsupported`` mechanism (the ``partial`` status is
+        the honest record of what the target dropped).  MockCodec→MockCodec
+        share a device class, so the class guard is a no-op and the block
+        comes purely from the unsupported path — isolating the invariant.
+        """
+        raw = json.dumps({"/unsafe/kernel_module": "rootkit.ko"})
+        forced = run_plan(MockCodec(), MockCodec(), raw, force=True)
+        assert forced.status is MigrationJobStatus.partial
+        assert forced.validation is not None
+        assert forced.validation.severity == "block"
+        assert forced.rendered is not None
+
     def test_failed_job_still_has_completed_at(self):
         job = run_plan(MockCodec(), MockCodec(), "not valid json")
         assert job.completed_at is not None
