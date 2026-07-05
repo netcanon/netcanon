@@ -718,3 +718,29 @@ def test_port_name_classify(name: str, kind: str) -> None:
 def test_port_name_round_trip(name: str) -> None:
     ident = port_names.classify_port_name(name)
     assert port_names.format_port_identity(ident) == name
+
+
+def test_same_vendor_banner_echoes_source_version() -> None:
+    """Sanitize / AOS-CX→AOS-CX re-render echoes the device's own release
+    token after ``!Version ArubaOS-CX`` instead of the synthetic default —
+    and the probe-marker prefix is preserved so it still detects as AOS-CX."""
+    from netcanon.migration.canonical.intent import CanonicalIntent
+    tree = CanonicalIntent(
+        hostname="sw1", source_vendor="aruba_aoscx",
+        source_version="FL.10.10.1000",
+    )
+    out = ArubaAOSCXCodec().render(tree)
+    assert "!Version ArubaOS-CX FL.10.10.1000" in out
+    assert "Virtual.10.13.1000" not in out
+    assert ArubaAOSCXCodec.probe(out) is not None  # marker prefix survived
+
+
+def test_cross_vendor_banner_uses_default_version() -> None:
+    from netcanon.migration.canonical.intent import CanonicalIntent
+    codec = ArubaAOSCXCodec()
+    cross = CanonicalIntent(
+        hostname="sw1", source_vendor="cisco_nxos", source_version="10.3(2)"
+    )
+    assert "!Version ArubaOS-CX Virtual.10.13.1000" in codec.render(cross)
+    empty = CanonicalIntent(hostname="sw1", source_vendor="aruba_aoscx")
+    assert "!Version ArubaOS-CX Virtual.10.13.1000" in codec.render(empty)

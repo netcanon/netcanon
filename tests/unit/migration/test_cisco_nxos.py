@@ -1440,3 +1440,28 @@ class TestAnycastGateway:
             [(a.ip, a.virtual_gateway_address) for a in s1.ipv4_addresses]
             == [(a.ip, a.virtual_gateway_address) for a in s2.ipv4_addresses]
         )
+
+
+class TestSameVendorBannerEcho:
+    """Sanitize / NX-OS→NX-OS re-render must echo the device's own release
+    into the version banner + boot string, not relabel it with the synthetic
+    default.  Cross-vendor / unknown-version renders keep the default."""
+
+    def test_same_vendor_echoes_source_version(self):
+        tree = CanonicalIntent(
+            hostname="sw1", source_vendor="cisco_nxos", source_version="10.3(2)"
+        )
+        out = CiscoNXOSCodec().render(tree)
+        assert "version 10.3(2) Bios:version" in out
+        assert "nxos.10.3(2).bin" in out
+        assert "9.3(11)" not in out
+
+    def test_cross_vendor_and_empty_use_default(self):
+        codec = CiscoNXOSCodec()
+        cross = CanonicalIntent(
+            hostname="sw1", source_vendor="juniper_junos",
+            source_version="25.4R1",
+        )
+        assert "version 9.3(11) Bios:version" in codec.render(cross)
+        empty = CanonicalIntent(hostname="sw1", source_vendor="cisco_nxos")
+        assert "version 9.3(11) Bios:version" in codec.render(empty)

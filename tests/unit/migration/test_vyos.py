@@ -937,3 +937,29 @@ def test_matrix_lossy(codec: VyOSCodec, path: str) -> None:
 ])
 def test_matrix_unsupported(codec: VyOSCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "unsupported"
+
+
+def test_same_vendor_release_trailer_echoes_source_version() -> None:
+    """Sanitize / VyOS→VyOS re-render echoes the device's own release into
+    the ``// Release version`` trailer; the ``// vyos-config-version``
+    component vector is a different axis and stays fixed."""
+    from netcanon.migration.canonical.intent import CanonicalIntent
+    tree = CanonicalIntent(
+        hostname="vyos", source_vendor="vyos", source_version="1.5"
+    )
+    out = VyOSCodec().render(tree)
+    assert "// Release version: 1.5" in out
+    assert "// Release version: 1.4" not in out
+    # The component-version fingerprint is untouched.
+    assert "// vyos-config-version:" in out
+
+
+def test_cross_vendor_release_trailer_uses_default() -> None:
+    from netcanon.migration.canonical.intent import CanonicalIntent
+    codec = VyOSCodec()
+    cross = CanonicalIntent(
+        hostname="vyos", source_vendor="cisco_nxos", source_version="10.3(2)"
+    )
+    assert "// Release version: 1.4" in codec.render(cross)
+    empty = CanonicalIntent(hostname="vyos", source_vendor="vyos")
+    assert "// Release version: 1.4" in codec.render(empty)

@@ -695,3 +695,26 @@ class TestTier3Display:
         assert any(d.startswith("route-policy ") for d in dropped)
         # The `.35` dot1q subinterface still synthesises a VLAN.
         assert intent.vlans
+
+
+class TestSameVendorBannerEcho:
+    """Sanitize / IOS-XR→IOS-XR re-render echoes the device's own release
+    into the ``!! IOS XR Configuration`` banner; cross-vendor / unknown-
+    version renders keep the synthetic default."""
+
+    def test_same_vendor_echoes_source_version(self):
+        tree = CanonicalIntent(
+            hostname="R1", source_vendor="cisco_iosxr", source_version="7.5.2"
+        )
+        out = CiscoIOSXRCodec().render(tree)
+        assert "!! IOS XR Configuration 7.5.2" in out
+        assert "6.6.2" not in out
+
+    def test_cross_vendor_and_empty_use_default(self):
+        codec = CiscoIOSXRCodec()
+        cross = CanonicalIntent(
+            hostname="R1", source_vendor="cisco_nxos", source_version="10.3(2)"
+        )
+        assert "!! IOS XR Configuration 6.6.2" in codec.render(cross)
+        empty = CanonicalIntent(hostname="R1", source_vendor="cisco_iosxr")
+        assert "!! IOS XR Configuration 6.6.2" in codec.render(empty)
