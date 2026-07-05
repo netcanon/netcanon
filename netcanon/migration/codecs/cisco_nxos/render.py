@@ -35,9 +35,21 @@ from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from .._helpers import _coalesce_vlan_ids
 from . import port_names as _port_names
 
-#: Synthesised NX-OS release stamped into the banner.  Cosmetic — the
-#: parsed ``source_version`` is metadata only and not echoed.
+#: Synthesised NX-OS release stamped into the banner when the source device's
+#: own release is unknown.  When the tree was parsed from THIS codec and
+#: carries a ``source_version`` (i.e. sanitize / NX-OS→NX-OS re-render), that
+#: real release is echoed instead — otherwise a same-vendor pass silently
+#: relabels the device's config with a constant.  Comparator-invisible
+#: (``source_version`` is metadata-excluded from every comparator).
 _DEFAULT_VERSION = "9.3(11)"
+
+
+def _version_token(tree: CanonicalIntent) -> str:
+    """The NX-OS release to stamp: the device's own when same-vendor and
+    known, else the synthetic default."""
+    if tree.source_vendor == "cisco_nxos" and tree.source_version:
+        return tree.source_version
+    return _DEFAULT_VERSION
 
 #: Canonical LAG mode -> NX-OS ``channel-group ... mode`` keyword
 #: (inverse of parse._NXOS_LAG_MODE_MAP; canonical ``static`` -> ``on``).
@@ -67,7 +79,7 @@ def render_intent(tree: CanonicalIntent) -> str:
     # ── Banner / version / vdc wrapper ──
     lines.append("!Command: show running-config")
     lines.append("")
-    lines.append(f"version {_DEFAULT_VERSION} Bios:version")
+    lines.append(f"version {_version_token(tree)} Bios:version")
     lines.append(f"hostname {hostname}")
     lines.append(f"vdc {hostname} id 1")
     lines.append("")
@@ -168,7 +180,7 @@ def render_intent(tree: CanonicalIntent) -> str:
     # ── Footers (synthesised defaults) ──
     lines.append("line console")
     lines.append("line vty")
-    lines.append(f"boot nxos bootflash:/nxos.{_DEFAULT_VERSION}.bin")
+    lines.append(f"boot nxos bootflash:/nxos.{_version_token(tree)}.bin")
 
     return "\n".join(lines) + "\n"
 

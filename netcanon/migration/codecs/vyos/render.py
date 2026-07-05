@@ -56,8 +56,23 @@ _CONFIG_VERSION = (
     "pptp@2:qos@2:quagga@11:rpki@2:salt@1:snmp@3:ssh@2:sstp@6:system@27:"
     "vrf@3:vrrp@4:wanloadbalance@3:webproxy@2"
 )
-#: Stamped into the ``// Release version`` trailer (cosmetic).
+#: Stamped into the ``// Release version`` trailer when the source device's
+#: own release is unknown.  When the tree was parsed from THIS codec and
+#: carries a ``source_version`` (sanitize / VyOS→VyOS re-render), that real
+#: release is echoed instead, so a same-vendor pass doesn't relabel the
+#: device with a constant.  Only the ``// Release version`` trailer varies —
+#: the ``// vyos-config-version`` component vector above is NEVER touched
+#: (it's a component-schema fingerprint, a different axis).  Comparator-
+#: invisible (``source_version`` is metadata-excluded).
 _RELEASE_VERSION = "1.4"
+
+
+def _release_token(tree: CanonicalIntent) -> str:
+    """The VyOS release to stamp into ``// Release version``: the device's own
+    when same-vendor and known, else the synthetic default."""
+    if tree.source_vendor == "vyos" and tree.source_version:
+        return tree.source_version
+    return _RELEASE_VERSION
 
 #: Interface-type render rank — ethernet, then loopback, dummy, bonding.
 _TYPE_RANK = {"ethernet": 0, "loopback": 1, "dummy": 2, "bonding": 3}
@@ -100,7 +115,7 @@ def render_intent(tree: CanonicalIntent) -> str:
     # Trailer — every config.boot ends with the component-version stamp.
     lines.append("// Warning: Do not remove the following line.")
     lines.append(f'// vyos-config-version: "{_CONFIG_VERSION}"')
-    lines.append(f"// Release version: {_RELEASE_VERSION}")
+    lines.append(f"// Release version: {_release_token(tree)}")
 
     return "\n".join(lines) + "\n"
 

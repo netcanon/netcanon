@@ -47,11 +47,23 @@ import re
 from ...canonical.intent import CanonicalIntent
 from .._helpers import _coalesce_vlan_ids
 
-#: Synthesised AOS-CX release stamped into the ``!Version`` banner.
-#: Cosmetic — the parsed ``source_version`` is metadata only and not
-#: echoed (mirrors the cisco_nxos ``_DEFAULT_VERSION`` convention).  The
-#: ``Virtual.`` prefix is the AOS-CX simulator image family.
+#: Synthesised AOS-CX release stamped into the ``!Version`` banner when the
+#: source device's own release is unknown.  When the tree was parsed from THIS
+#: codec and carries a ``source_version`` (sanitize / AOS-CX→AOS-CX
+#: re-render), that real release is echoed instead, so a same-vendor pass
+#: doesn't relabel the device with a constant.  The ``!Version ArubaOS-CX``
+#: PREFIX is this codec's detection marker and is always preserved; only the
+#: release token varies.  Comparator-invisible (``source_version`` is
+#: metadata-excluded).  The ``Virtual.`` prefix is the simulator image family.
 _DEFAULT_VERSION = "Virtual.10.13.1000"
+
+
+def _version_token(tree: CanonicalIntent) -> str:
+    """The AOS-CX release token to stamp after ``!Version ArubaOS-CX``: the
+    device's own when same-vendor and known, else the synthetic default."""
+    if tree.source_vendor == "aruba_aoscx" and tree.source_version:
+        return tree.source_version
+    return _DEFAULT_VERSION
 
 #: Canonical SNMPv3 privacy cipher -> AOS-CX `priv` keyword.  AOS-CX
 #: supports `des` and `aes`; NX-OS-style aes128/192/256 collapse to
@@ -69,7 +81,7 @@ def render_intent(tree: CanonicalIntent) -> str:
 
     # ── Banner / version ──
     lines.append("!")
-    lines.append(f"!Version ArubaOS-CX {_DEFAULT_VERSION}")
+    lines.append(f"!Version ArubaOS-CX {_version_token(tree)}")
     lines.append("!export-password: default")
     lines.append(f"hostname {hostname}")
 
