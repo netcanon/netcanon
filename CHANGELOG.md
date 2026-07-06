@@ -26,6 +26,33 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-07-05
+
+Follow-on to the 2026-07-05 version-vector feasibility assessment: the one
+semantic version-gating slice worth shipping, plus its truth-maintenance
+docs.  No breaking changes and no new public API.
+
+### Added
+
+- **MikroTik RouterOS-6 NTP dialect** — on a *same-vendor* render (sanitize,
+  or a mikrotik→mikrotik plan) of a device whose captured version is
+  RouterOS 6, the `/system ntp client` block now emits the v6
+  `set ... primary-ntp=A [secondary-ntp=B]` form (1–2 IP-literal servers)
+  instead of the v7 `servers=` form a 6.x device rejects.  Gated on
+  affirmative same-vendor v6 evidence; cross-vendor, unknown-version,
+  hostname, and 3+-server renders keep the v7 form byte-identically, so the
+  cross-mesh baseline is unchanged.  This is the sole version-gating slice
+  the assessment recommended building — the rest of the "version vector"
+  stays out of scope.  (#299)
+
+### Changed
+
+- **Docs (truth maintenance)** — reconciled three stale version claims now
+  that all 12 parsers populate `source_version` and version-conditional
+  rendering actually exists: the `codecs/base.py` `version_hint` "version
+  gating lives in the CapabilityMatrix" phantom, and the `ARCHITECTURE.md`
+  / `migrate.html` "parsers don't yet populate source_version" notes.  (#300)
+
 ## [0.5.2] - 2026-07-05
 
 Codec fidelity fixes surfaced by the 2026-07-05 version-vector feasibility
