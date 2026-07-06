@@ -104,9 +104,16 @@ def _ros_major(version: str) -> int | None:
     Returns ``None`` for an empty string, garbage, or a dot-less token — the
     v6 NTP dialect gate only fires on affirmative dotted major-version
     evidence, never on a guess.
+
+    Regex-free (a plain split): ``source_version`` is parser-derived from
+    config text, so a regex here trips CodeQL's polynomial-ReDoS check for
+    no real benefit.
     """
-    m = re.match(r"(\d+)\.", version or "")
-    return int(m.group(1)) if m else None
+    v = version or ""
+    if "." not in v:
+        return None
+    head = v.split(".", 1)[0]
+    return int(head) if head.isdigit() else None
 
 
 def _all_ip_literals(servers: list[str]) -> bool:
