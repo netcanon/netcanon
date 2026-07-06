@@ -300,6 +300,81 @@ class TestNtpVersionForms:
         assert reparsed.ntp_servers == tree.ntp_servers == ["10.0.0.1", "10.0.0.2"]
 
 
+class TestNtpV6RenderDialect:
+    """On a same-vendor render (sanitize / mikrotik→mikrotik) of a RouterOS 6
+    device with IP-literal NTP servers, emit the v6
+    ``primary-ntp=``/``secondary-ntp=`` form (a 6.x device rejects the v7
+    ``servers=`` key).  Every other case keeps today's v7 output."""
+
+    def _ntp_line(self, out: str) -> str:
+        return next(
+            (ln for ln in out.splitlines()
+             if ln.startswith("set ") and ("ntp" in ln or "servers=" in ln)),
+            "",
+        )
+
+    def _render(self, **kw) -> str:
+        tree = CanonicalIntent(hostname="r", **kw)
+        return self._ntp_line(MikroTikRouterOSCodec().render(tree))
+
+    def test_v6_one_ip_emits_primary(self):
+        line = self._render(
+            source_vendor="mikrotik_routeros", source_version="6.48.1",
+            ntp_servers=["10.0.0.1"],
+        )
+        assert line == "set enabled=yes primary-ntp=10.0.0.1"
+
+    def test_v6_two_ips_emits_primary_secondary(self):
+        line = self._render(
+            source_vendor="mikrotik_routeros", source_version="6.48.6",
+            ntp_servers=["10.0.0.1", "10.0.0.2"],
+        )
+        assert line == (
+            "set enabled=yes primary-ntp=10.0.0.1 secondary-ntp=10.0.0.2"
+        )
+
+    def test_v6_hostname_falls_back_to_v7(self):
+        # v6 primary-ntp slots are IP-only; a hostname must stay on servers=.
+        line = self._render(
+            source_vendor="mikrotik_routeros", source_version="6.48.1",
+            ntp_servers=["pool.ntp.org"],
+        )
+        assert line == "set enabled=yes servers=pool.ntp.org"
+
+    def test_v6_three_servers_falls_back_to_v7(self):
+        # v6 has only primary/secondary slots — 3+ servers stay on servers=.
+        line = self._render(
+            source_vendor="mikrotik_routeros", source_version="6.48.1",
+            ntp_servers=["10.0.0.1", "10.0.0.2", "10.0.0.3"],
+        )
+        assert line == "set enabled=yes servers=10.0.0.1,10.0.0.2,10.0.0.3"
+
+    @pytest.mark.parametrize("vendor,version", [
+        ("mikrotik_routeros", "7.18.2"),  # v7 source
+        ("mikrotik_routeros", ""),         # unknown version
+        ("cisco_nxos", "6.0"),             # cross-vendor (never gates)
+    ])
+    def test_non_v6_cases_use_v7_form(self, vendor, version):
+        line = self._render(
+            source_vendor=vendor, source_version=version,
+            ntp_servers=["10.0.0.1"],
+        )
+        assert line == "set enabled=yes servers=10.0.0.1"
+
+    def test_real_v6_fixture_renders_v6_and_round_trips(self):
+        codec = MikroTikRouterOSCodec()
+        raw = (
+            Path(__file__).resolve().parents[2]
+            / "fixtures" / "real" / "mikrotik"
+            / "routeros_diff_verbose_export.rsc"
+        ).read_text(encoding="utf-8")
+        tree = codec.parse(raw)
+        out = codec.render(tree)
+        assert "primary-ntp=10.200.0.15" in out
+        assert "servers=10.200.0.15" not in out
+        assert codec.parse(out).ntp_servers == tree.ntp_servers == ["10.200.0.15"]
+
+
 class TestParseErrors:
     def test_empty_input_raises(self):
         with pytest.raises(ParseError, match="empty input"):
