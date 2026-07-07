@@ -185,3 +185,36 @@ class TestCredentialsNeverSerialised:
         for key in self._CRED_KEYS:
             assert key not in body, f"PUT response leaked {key!r}"
         assert body["notes"] == "rotated"
+
+
+def _raise_oserror(*_args, **_kwargs):
+    raise OSError("disk full")
+
+
+class TestPersistFailureRollback:
+    """Create/update roll the in-memory registry back when the sole-persistence
+    disk save fails, so the registry can't drift ahead of disk (review #47b)."""
+
+    def test_create_rolls_back_on_save_oserror(self, client, monkeypatch):
+        monkeypatch.setattr(
+            client.app.state.device_profile_store, "save", _raise_oserror
+        )
+        resp = client.post("/api/v1/devices/", json=_create_body())
+        assert resp.status_code == 500
+        # No phantom profile left behind in the in-memory registry.
+        assert client.app.state.device_profiles == {}
+
+    def test_update_rolls_back_to_pre_update_on_save_oserror(
+        self, client, monkeypatch
+    ):
+        pid = client.post(
+            "/api/v1/devices/", json=_create_body(os_version="17.12")
+        ).json()["id"]
+        monkeypatch.setattr(
+            client.app.state.device_profile_store, "save", _raise_oserror
+        )
+        resp = client.put(f"/api/v1/devices/{pid}", json={"os_version": "18.1"})
+        assert resp.status_code == 500
+        # The in-memory profile keeps its pre-update value (not the 18.1 that
+        # failed to persist).
+        assert client.app.state.device_profiles[pid].os_version == "17.12"

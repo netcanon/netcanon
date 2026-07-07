@@ -188,6 +188,22 @@ def open_config(
             import subprocess
             subprocess.run(["xdg-open", str(path)], check=True)
         logger.info("Opened config %r in default editor", filename)
+    except FileNotFoundError as exc:
+        # subprocess couldn't find the "open"/"xdg-open" helper — a platform
+        # capability gap, not a server fault, so 501 like the os.startfile
+        # NotImplementedError branch below (review #47a).  The config path
+        # itself was already resolved (404s above) so this is not a missing file.
+        logger.warning(
+            "OS open helper missing while opening config %r: %s", filename, exc
+        )
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                f"No OS default-editor helper is available on this platform "
+                f"({sys.platform!r}).  Use the download link to fetch the file "
+                f"instead."
+            ),
+        ) from exc
     except NotImplementedError as exc:
         # os.startfile is Windows-only; the linux/darwin branches above use
         # subprocess so this typically fires only on exotic platforms.

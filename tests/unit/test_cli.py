@@ -116,6 +116,21 @@ class TestCLIErrorHandling:
         assert rc == 2
         assert "cannot read" in capsys.readouterr().err
 
+    def test_unwritable_output_reports_error(self, capsys, tmp_path):
+        # The write half is now guarded like the read half (review #46 — the
+        # write half of API-3): a missing parent dir is a clean `error: cannot
+        # write ...` + exit 2, not a raw traceback with the output lost.
+        target = tmp_path / "no_such_dir" / "out.cfg"  # parent does not exist
+        rc = main([
+            "sanitize",
+            "-i", str(ARUBA_FIXTURE),
+            "-s", "aruba_aoss",
+            "-o", str(target),
+        ])
+        assert rc == 2
+        assert "cannot write" in capsys.readouterr().err
+        assert not target.exists()
+
 
 class TestCLIArgvFromList:
     """Pass argv as a list (not relying on sys.argv) for in-process testing."""
