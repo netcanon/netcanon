@@ -229,6 +229,20 @@ class TestOpenConfig:
         # Privacy fix — raw exception text must NOT leak through.
         assert "access denied" not in detail
 
+    def test_open_returns_501_when_helper_missing(self, open_client):
+        """A missing OS launcher (``xdg-open`` / ``open`` / ``os.startfile``)
+        is a platform capability gap, not a server fault: 501, not the generic
+        500 (review #47a).  Patches both launcher paths so it runs on any host.
+        """
+        filename = _seed_config(open_client)
+        with patch(
+            "subprocess.run", side_effect=FileNotFoundError("xdg-open")
+        ), patch(
+            "os.startfile", create=True, side_effect=FileNotFoundError("startfile")
+        ):
+            resp = open_client.post(f"/api/v1/configs/{filename}/open")
+        assert resp.status_code == 501
+
     def test_open_rejects_disallowed_extension(self, open_client):
         """Executable and other non-config extensions must return 400."""
         # No patch needed — extension whitelist rejects with 400 before

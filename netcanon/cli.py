@@ -180,7 +180,15 @@ def _cmd_sanitize(args: argparse.Namespace) -> int:
         return 0
 
     if args.output:
-        Path(args.output).write_text(result.sanitized_text, encoding="utf-8")
+        try:
+            Path(args.output).write_text(result.sanitized_text, encoding="utf-8")
+        except OSError as e:
+            # The read half is already guarded above; guard the write too so a
+            # missing parent dir / read-only target is a clean error instead of
+            # a traceback with the sanitized output lost (review #46 — the write
+            # half of API-3; #285 fixed only the read/render halves).
+            print(f"error: cannot write {args.output!r}: {e}", file=sys.stderr)
+            return 2
         print(
             f"Sanitized output written to {args.output} "
             f"({len(result.substitutions)} substitutions applied).",

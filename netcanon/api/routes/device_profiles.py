@@ -101,7 +101,18 @@ def create_device_profile(
                 detail="Maximum device profile limit reached (1000). Delete unused profiles first.",
             )
         device_profiles[profile.id] = profile
-        device_profile_store.save(profile)
+        try:
+            device_profile_store.save(profile)
+        except OSError as exc:
+            # This save is the SOLE persistence — a partial insert would leave
+            # the registry ahead of disk (lost on restart).  Roll the in-memory
+            # insert back and 500 rather than swallow (review #47b).
+            del device_profiles[profile.id]
+            logger.error("Failed to persist new device profile: %s", exc)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to persist device profile to disk.",
+            ) from exc
     logger.info(
         "Created device profile '%s' (id=%s)", profile.name, profile.id[:8]
     )
@@ -145,7 +156,17 @@ def update_device_profile(
         updates = {k: v for k, v in body.model_dump().items() if v is not None}
         updated_profile = profile.model_copy(update=updates)
         device_profiles[profile_id] = updated_profile
-        device_profile_store.save(updated_profile)
+        try:
+            device_profile_store.save(updated_profile)
+        except OSError as exc:
+            # Sole persistence — roll the registry back to the pre-update
+            # profile so memory can't drift ahead of disk (review #47b).
+            device_profiles[profile_id] = profile
+            logger.error("Failed to persist updated device profile: %s", exc)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to persist device profile to disk.",
+            ) from exc
     logger.info(
         "Updated device profile '%s' (id=%s)", updated_profile.name, profile_id[:8]
     )
