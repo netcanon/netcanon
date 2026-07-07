@@ -21,6 +21,7 @@ carry a directive ruff's textual noqa scanner would try to parse.)
 """
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 
@@ -31,9 +32,22 @@ pytestmark = pytest.mark.unit
 _ROOT = Path(__file__).resolve().parents[2]
 _TREES = ("netcanon", "netcanon_desktop", "tools")
 
-#: The inline-suppression marker, assembled so the literal directive text never
-#: appears verbatim in this source file.
-_MARKER = "# noqa:" + " C901"
+#: Every legal inline spelling that suppresses C901 on a line: the canonical
+#: noqa-C901 comment plus its spacing, letter-case, and comma-list variants
+#: (C901 sharing the directive with other codes).  The ``\s*`` in the pattern
+#: means the literal directive text never appears verbatim in this file, so
+#: this guard is neither self-counted nor self-suppressed (review #57 — the old
+#: exact-substring marker matched only the canonical spelling, so every variant
+#: dodged the ratchet).
+_C901_INLINE_RE = re.compile(r"#\s*noqa:?[^\n]*\bC901\b", re.IGNORECASE)
+
+#: A file-level ruff directive (the ``ruff:``-prefixed noqa form), optionally
+#: followed by ``: <codes>``.  The bare form blanket-suppresses the whole file;
+#: a form naming C90/C901 disables the complexity gate file-wide — either makes
+#: the inline ratchet inert.  (Kept out of literal form for the reason above.)
+_RUFF_FILE_DIRECTIVE_RE = re.compile(
+    r"#\s*ruff:\s*noqa(?::\s*(?P<codes>[^\n]*))?", re.IGNORECASE
+)
 
 #: Pre-existing functions over the max-complexity ceiling, grandfathered with an
 #: inline ``C901`` suppression.  RATCHET: decrement as hot spots are refactored;
@@ -46,7 +60,7 @@ def _c901_suppression_count() -> int:
     for tree in _TREES:
         for path in (_ROOT / tree).rglob("*.py"):
             for line in path.read_text(encoding="utf-8").splitlines():
-                if _MARKER in line:
+                if _C901_INLINE_RE.search(line):
                     n += 1
     return n
 
@@ -73,3 +87,37 @@ def test_mccabe_gate_is_configured() -> None:
     lint = data["tool"]["ruff"]["lint"]
     assert "C90" in lint["select"], "`C90` (mccabe) dropped from ruff select -- the complexity gate is off"
     assert lint["mccabe"]["max-complexity"] == 25, "mccabe max-complexity ceiling changed unexpectedly"
+
+
+def test_no_blanket_or_c901_file_directive() -> None:
+    """No module may blanket-suppress lint (a bare file-level ``ruff: noqa``)
+    or file-wide-disable the complexity gate (a C90/C901 in a file-level
+    directive) — either would silently make the inline ratchet inert (#57)."""
+    offenders = []
+    for tree in _TREES:
+        for path in (_ROOT / tree).rglob("*.py"):
+            for line in path.read_text(encoding="utf-8").splitlines():
+                m = _RUFF_FILE_DIRECTIVE_RE.search(line)
+                if m is None:
+                    continue
+                codes = (m.group("codes") or "").strip()
+                if codes == "" or "C90" in codes.upper():
+                    offenders.append(f"{path.relative_to(_ROOT)}: {line.strip()}")
+    assert not offenders, (
+        "file-level ruff directive blanket-suppresses lint or disables the "
+        f"complexity gate: {offenders}"
+    )
+
+
+def test_no_per_file_ignore_disables_complexity_gate() -> None:
+    """A ``[tool.ruff.lint.per-file-ignores]`` entry carrying C90/C901 would
+    disable the gate for whole files with no inline marker the ratchet counts
+    (#57)."""
+    data = tomllib.loads((_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    per_file = data["tool"]["ruff"]["lint"].get("per-file-ignores", {})
+    bad = {
+        k: v
+        for k, v in per_file.items()
+        if any("C90" in str(code).upper() for code in v)
+    }
+    assert not bad, f"per-file-ignores disables the complexity gate for: {bad}"
