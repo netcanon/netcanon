@@ -41,9 +41,10 @@ The rest of this document is about the migration layer.  The backup
 layer is architecturally simpler — see
 [`netcanon/collectors/README.md`](netcanon/collectors/README.md).
 Backup definitions ship for Cisco IOS-XE, Fortigate FortiOS, MikroTik
-RouterOS, OPNsense, Aruba AOS-S, Juniper Junos, and Arista EOS, plus
-provisional definitions for Cisco NX-OS, Cisco IOS-XR, Aruba AOS-CX,
-and VyOS — see [`netcanon/definitions/library/README.md`](netcanon/definitions/library/README.md) for the
+RouterOS, OPNsense, Aruba AOS-S, Juniper Junos, Arista EOS, and VyOS
+(the last live-validated 2026-06-17, #113), plus provisional definitions
+for Cisco NX-OS, Cisco IOS-XR, and Aruba AOS-CX — see
+[`netcanon/definitions/library/README.md`](netcanon/definitions/library/README.md) for the
 per-vendor authoring notes and validation status.
 
 ---

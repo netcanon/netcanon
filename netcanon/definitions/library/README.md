@@ -252,9 +252,10 @@ only via `resolve()`.
 - Pairs with the `aruba_aoscx` migration codec.
 
 ### VyOS 1.3 / 1.4
-- ⚠ **Not yet validated on live hardware** — collection wiring verified in
-  code + against sample output only (Notes column flags it).  Confirm on a
-  real router.
+- ✅ **Live-validated 2026-06-17 (#113)** — the backup ran end-to-end against a
+  real VyOS rolling instance (netmiko `vyos` driver → `show configuration
+  commands` set-form capture; `show version` probe matched); graduated from
+  provisional.
 - `collector.netmiko_device_type: vyos` — netmiko's VyOS driver lands in
   operational mode and disables the pager itself.
 - `connection.needs_enable: false` — no enable equivalent on VyOS.
