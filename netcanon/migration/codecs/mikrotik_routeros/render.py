@@ -37,6 +37,7 @@ from typing import Any
 
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalVlan
+from .._helpers import same_vendor_version
 from ..base import RenderError
 from .parse import (
     _is_ethernet_name,
@@ -194,8 +195,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # the v6 NTP dialect gate stays idempotent across a double sanitize instead
     # of decaying to the v7 form on pass 2 (when no header was emitted, pass 2
     # saw source_version == "").
-    if tree.source_vendor == "mikrotik_routeros" and tree.source_version:
-        lines.append(f"# by RouterOS {tree.source_version}")
+    header_version = same_vendor_version(
+        tree, vendor_id="mikrotik_routeros", default=""
+    )
+    if header_version:
+        lines.append(f"# by RouterOS {header_version}")
         lines.append("")
 
     # ----- /system identity -----

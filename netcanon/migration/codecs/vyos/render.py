@@ -40,6 +40,7 @@ import logging
 import re
 
 from ...canonical.intent import CanonicalIntent
+from .._helpers import same_vendor_version
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +70,9 @@ _RELEASE_VERSION = "1.4"
 
 def _release_token(tree: CanonicalIntent) -> str:
     """The VyOS release to stamp into ``// Release version``: the device's own
-    when same-vendor and known, else the synthetic default."""
-    if tree.source_vendor == "vyos" and tree.source_version:
-        return tree.source_version
-    return _RELEASE_VERSION
+    when same-vendor and known, else the synthetic default (review #63 —
+    shared helper)."""
+    return same_vendor_version(tree, vendor_id="vyos", default=_RELEASE_VERSION)
 
 #: Interface-type render rank — ethernet, then loopback, dummy, bonding.
 _TYPE_RANK = {"ethernet": 0, "loopback": 1, "dummy": 2, "bonding": 3}
