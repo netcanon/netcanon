@@ -283,10 +283,14 @@ across vendors.  Full per-codec matrix is in
 
 * **Tier 1 — auto-translatable.**  hostname, interfaces (name /
   description / enabled state / IPv4 + IPv6 addresses / per-interface
-  VRF binding), VLANs, static routes, DNS / NTP / syslog servers,
-  timezone.  Every shipped codec parses + renders these fully (the
-  experimental `cisco_iosxe` NETCONF stub excepted — it renders
-  interfaces only).
+  VRF binding), VLANs, static routes.  Every shipped codec parses +
+  renders these fully (the experimental `cisco_iosxe` NETCONF stub
+  excepted — it renders interfaces only).  DNS / NTP servers translate
+  on most codecs; `syslog` servers and `timezone` are wired on only a
+  subset — check the per-codec matrices in
+  [`docs\CAPABILITIES.md`](docs\CAPABILITIES.md), and note that where a
+  codec doesn't wire a field the source-side value is currently dropped
+  without a banner.
 * **Tier 2 — translatable with caveats.**  SNMP (incl. SNMPv3 USM),
   LAGs, local users, RADIUS, DHCP server pools, VXLAN VNIs, EVPN
   type-5 routes, routing instances / VRFs, Junos `apply-groups`.

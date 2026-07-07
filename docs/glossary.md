@@ -37,7 +37,9 @@ by concern and listed alphabetically within each section.
   in the matching schema-test guard files.
 - **Tier 1 / Tier 2 / Tier 3** — canonical-field categorisation.
   Tier 1 = cross-vendor stable, auto-translatable (hostname,
-  interfaces, vlans, static_routes, DNS/NTP/syslog).  Tier 2 =
+  interfaces, vlans, static_routes, DNS/NTP; plus `timezone` and
+  `syslog_servers`, which are Tier-1 by data shape but wired on only a
+  subset of codecs — see `docs/CAPABILITIES.md`).  Tier 2 =
   translatable with caveats (SNMP, local_users, lags, dhcp,
   radius, vxlan_vnis, evpn_type5_routes, routing_instances,
   apply_groups).  Tier 3 = detected-but-deliberately-not-translated;

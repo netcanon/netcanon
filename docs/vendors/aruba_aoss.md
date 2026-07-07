@@ -20,8 +20,9 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 
 [Tier 1](../CAPABILITIES.md#tier-1--auto-translatable-cross-vendor-stable):
 
-- `hostname`, `domain`, DNS / NTP / syslog servers, `timezone`
-  + DST rule
+- `hostname`, DNS / NTP servers (`domain`, `syslog_servers` and
+  `timezone` + DST rule are declared **unsupported** on this codec —
+  see the capability matrix; they do not round-trip)
 - Interfaces — slot-port and letter-slot-port (`A1-A24`, `B1-B24`
   on modular 5400R) port-id ranges, descriptions, IPv4 SVI L3
 - VLANs — ID, name, tagged/untagged port lists with comma-separated

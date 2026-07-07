@@ -188,10 +188,16 @@ section comments.  The tier governs the pipeline's validation banner
 and the codec's `CapabilityMatrix` declarations:
 
 * **Tier 1 — auto-translatable.**  Every vendor models the concept;
-  cross-vendor semantics are stable.  Fields: `hostname`, `domain`,
-  `dns_servers`, `ntp_servers`, `timezone`, `syslog_servers`,
-  `interfaces`, `vlans`, `static_routes`.  Codecs that don't yet wire
-  a Tier 1 field are bugs, not gaps.
+  cross-vendor semantics are stable.  Core fields — `hostname`,
+  `domain`, `interfaces`, `vlans`, `static_routes` — are wired on every
+  bidirectional codec, and a codec that fails to wire one of these is a
+  bug, not a gap.  `dns_servers` / `ntp_servers` are wired on most
+  codecs; `timezone` and `syslog_servers` are Tier-1 *schema slots* that
+  are wired on only a subset (`timezone` on none as of this release;
+  `syslog_servers` on `juniper_junos`) — for these two, an unwired codec
+  is a known gap declared `unsupported` in its `CapabilityMatrix`, not a
+  bug, and the source-side value is currently dropped on parse without a
+  banner.  Per-codec truth lives in the `CapabilityMatrix` tables.
 * **Tier 2 — auto-translate with review.**  Common enough to model;
   vendor mappings are partially lossy.  Fields: `dhcp_servers`,
   `snmp` (community + v3 users), `lags`, `local_users`,

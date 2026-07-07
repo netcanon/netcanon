@@ -832,9 +832,17 @@ class CanonicalIntent(BaseModel):
         dns_servers: Tier 1 — DNS resolver IPs in operator-stated
             order.
         ntp_servers: Tier 1 — NTP peer IPs / hostnames.
-        timezone: Tier 1 — operator-stated timezone string (vendor-
-            specific format; e.g. ``"PST -8"``, ``"Europe/London"``).
-        syslog_servers: Tier 1 — syslog destination IPs / hostnames.
+        timezone: Tier 1 *schema slot* — operator-stated timezone string
+            (vendor-specific format; e.g. ``"PST -8"``,
+            ``"Europe/London"``).  NOTE: wired on NO shipped codec as of
+            this release (every ``CapabilityMatrix`` declares
+            ``/system/timezone`` unsupported); a source-side value is
+            currently dropped on parse.  Kept Tier-1 by data shape, not
+            a cross-vendor round-trip guarantee — see docs/CAPABILITIES.md.
+        syslog_servers: Tier 1 *schema slot* — syslog destination IPs /
+            hostnames.  NOTE: wired on ``juniper_junos`` only as of this
+            release; other codecs declare it unsupported and drop it on
+            parse.  Tier-1 by data shape, not a universal guarantee.
         interfaces: Tier 1 — per-interface configuration records.
         vlans: Tier 1 — VLAN definitions with port membership.
         static_routes: Tier 1 — static route entries.

@@ -89,7 +89,14 @@ names the canonical surface, not a blanket guarantee.
 * `static_routes` — `destination`, `gateway`, `interface`, `metric`,
   `description`; plus per-VRF `vrf` discriminator (v0.2.0 Wave A —
   see Tier 2 ship-before-wire note below)
-* `dns_servers`, `ntp_servers`, `syslog_servers`, `timezone`
+* `dns_servers`, `ntp_servers` — wired on most codecs (not all: e.g.
+  cisco_nxos / cisco_iosxr render-drop the management plane); plus
+  `syslog_servers` and `timezone`, which are schema slots wired on only
+  a **subset** of codecs (`timezone` on none as of this release;
+  `syslog_servers` on juniper_junos).  These two are Tier-1 by data
+  shape but NOT a cross-vendor guarantee — the §A per-codec panels are
+  authoritative, and an unwired field is currently dropped silently on
+  parse.
 * `interfaces[].vrrp_groups` (v0.2.0 Wave B — classic FHRP
   redundancy, mode discriminator `vrrp` / `hsrp` / `carp`) — wired
   across the bidirectional codecs.  See
