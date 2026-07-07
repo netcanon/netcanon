@@ -140,8 +140,10 @@ must be empty — that blocks by path regardless of content. (3) Optional:
 correct the comment.
 
 Minor note while verifying: the `C:[\]Users` pattern misses the
-forward-slash form (`C:/Users/...`). `git grep -E 'C:/Users'` over tracked
+forward-slash form (`C:/[U]sers/...`). `git grep -E 'C:/[U]sers'` over tracked
 files is currently clean (verified), so this is a hardening nit, not a leak.
+(Remediated in #34 — the guard now collapses both separators case-insensitively;
+the fragments here are masked so the widened guard does not flag this note.)
 
 ---
 

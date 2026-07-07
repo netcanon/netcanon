@@ -46,10 +46,19 @@ jobs:
           #      Both forms are verified against real operator-path
           #      content.
           #
+          # The grep is case-insensitive (`-i`) and covers every spelling of
+          # the user-profile path (#34): the drive-letter branch collapses the
+          # single-backslash, doubled-backslash (`+`), and forward-slash forms
+          # (a `[\/]` class matches either separator — the doubled-backslash
+          # form is exactly how job-record / traceback JSONs serialise Windows
+          # paths), and a separate branch covers the Git-Bash MSYS `/c/…` form.
+          # Every branch keeps a char class breaking the contiguous literal, so
+          # the widened pattern still never matches its own text.
+          #
           # `git grep` exits 0 on match, 1 on no-match, 2 on error; we
           # treat the error case as a FAILURE (fail closed), not "clean".
           set +e
-          git grep -nI -E 'samuelr[i]pp09|C:[\]Users' -- .
+          git grep -inI -E 'samuelr[i]pp09|c:[\/]+users|/c/[u]sers' -- .
           rc=$?
           set -e
           if [ "${rc}" -eq 0 ]; then
