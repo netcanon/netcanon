@@ -33,6 +33,8 @@ from netcanon.migration.canonical.intent import (
     CanonicalLAG,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
+    CanonicalVxlan,
 )
 from netcanon.migration.canonical.port_names import (
     build_port_rename_transform,
@@ -1084,3 +1086,86 @@ class TestAbsentKeyDropHonesty:
         )
         assert result.dropped == ["GigabitEthernet0/2"]
         assert [i.name for i in intent.interfaces] == ["GigabitEthernet0/1"]
+
+
+class TestRenameOntoDroppedName:
+    """(#6) Renaming A onto B while dropping B must keep the renamed
+    survivor: user drops are stripped BEFORE the rename sweep, so the
+    post-rename tree isn't re-filtered against the (reused) source name."""
+
+    def test_rename_onto_dropped_target_keeps_survivor(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="GigabitEthernet1/0/1"),
+                CanonicalInterface(name="GigabitEthernet1/0/2"),
+            ],
+        )
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), CiscoIOSXECLICodec(),
+            rename_map={
+                "GigabitEthernet1/0/1": "GigabitEthernet1/0/2",
+                "GigabitEthernet1/0/2": None,
+            },
+        )
+        # Pre-fix: BOTH interfaces were deleted (0 survivors) while
+        # ``applied`` still claimed the rename landed.
+        assert [i.name for i in intent.interfaces] == ["GigabitEthernet1/0/2"]
+        assert result.applied == {
+            "GigabitEthernet1/0/1": "GigabitEthernet1/0/2"
+        }
+        assert result.dropped == ["GigabitEthernet1/0/2"]
+
+
+class TestCrossReferenceRewrite:
+    """(#3) The rename sweep must rewrite VRRP ``track_interfaces`` and
+    VXLAN ``source_interface`` — else a cross-vendor rename leaves dangling
+    references (failover silently disabled, VTEP binding broken)."""
+
+    def _tree(self):
+        return CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="GigabitEthernet1/0/1"),
+                CanonicalInterface(
+                    name="Vlan10",
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10,
+                            virtual_ips=["10.0.0.1"],
+                            track_interfaces=["GigabitEthernet1/0/1"],
+                        )
+                    ],
+                ),
+            ],
+            vxlan_vnis=[
+                CanonicalVxlan(
+                    vlan_id=10, vni=10010, source_interface="Loopback0"
+                )
+            ],
+        )
+
+    def test_rename_rewrites_track_and_source(self):
+        intent = self._tree()
+        translate_port_names(
+            intent, CiscoIOSXECLICodec(), CiscoIOSXECLICodec(),
+            rename_map={
+                "GigabitEthernet1/0/1": "TenGigabitEthernet1/0/1",
+                "Loopback0": "Loopback5",
+            },
+        )
+        vlan_if = next(i for i in intent.interfaces if i.name == "Vlan10")
+        assert vlan_if.vrrp_groups[0].track_interfaces == [
+            "TenGigabitEthernet1/0/1"
+        ]
+        assert intent.vxlan_vnis[0].source_interface == "Loopback5"
+
+    def test_drop_clears_track_and_source(self):
+        intent = self._tree()
+        translate_port_names(
+            intent, CiscoIOSXECLICodec(), CiscoIOSXECLICodec(),
+            rename_map={"GigabitEthernet1/0/1": None, "Loopback0": None},
+        )
+        vlan_if = next(i for i in intent.interfaces if i.name == "Vlan10")
+        # Dangling references removed rather than left pointing at a
+        # now-deleted interface.
+        assert vlan_if.vrrp_groups[0].track_interfaces == []
+        assert intent.vxlan_vnis[0].source_interface == ""

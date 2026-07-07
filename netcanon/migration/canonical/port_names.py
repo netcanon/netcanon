@@ -292,12 +292,14 @@ def translate_port_names(  # noqa: C901
 
         * ``intent.interfaces[].name``
         * ``intent.interfaces[].lag_member_of``
+        * ``intent.interfaces[].vrrp_groups[].track_interfaces[]``
         * ``intent.vlans[].tagged_ports[]``
         * ``intent.vlans[].untagged_ports[]``
         * ``intent.lags[].name``
         * ``intent.lags[].members[]``
         * ``intent.static_routes[].interface``
         * ``intent.dhcp_servers[].interface``
+        * ``intent.vxlan_vnis[].source_interface``
 
     Mutates *intent* in place.
 
@@ -332,9 +334,16 @@ def translate_port_names(  # noqa: C901
 
     user_map = dict(rename_map or {})
     # Split user map into drops (value is None) and renames (value is str).
-    # Drops never go through the target codec — they're stripped from the
-    # canonical tree after the rename pass completes.
-    dropped_set: set[str] = {
+    # Drops never go through the target codec.
+    #
+    # (#6) User drops are keyed by SOURCE names and are stripped BEFORE the
+    # rename sweep, not after: a rename can move a DIFFERENT interface ONTO a
+    # dropped name (``{A: B, B: None}``), and a post-sweep strip keyed by ``B``
+    # would then also delete the freshly-renamed survivor — silently losing a
+    # configured interface while ``applied`` still claims the rename landed.
+    # Stripping first (while names are still source-form) removes exactly the
+    # operator's target and leaves the renamed survivor intact.
+    user_dropped: set[str] = {
         name for name, tgt in user_map.items() if tgt is None
     }
     str_map: dict[str, str] = {
@@ -343,6 +352,12 @@ def translate_port_names(  # noqa: C901
     applied: dict[str, str] = {}
     warnings: list[str] = []
     memo: dict[str, str] = {}
+    # Auto-drops accumulate DURING resolve() when ``strip_unmappable`` removes a
+    # name the target codec can't format.  Unlike user drops, these names stay
+    # verbatim through the sweep (they were never renamed to something else), so
+    # their post-sweep name still equals their source name and stripping them
+    # AFTER the sweep is safe.
+    auto_dropped: set[str] = set()
 
     # Per-interface kind overrides — populated by source codecs that
     # detect logical role (mgmt, etc.) from CONTEXT rather than from
@@ -366,10 +381,11 @@ def translate_port_names(  # noqa: C901
         # the same output without re-classifying.
         if name in memo:
             return memo[name]
-        if name in dropped_set:
-            # Leave verbatim in the rename pass — the strip pass
-            # below removes the name entirely.  Memoise to skip the
-            # classifier lookup for subsequent references.
+        if name in user_dropped:
+            # User drops are stripped from the tree BEFORE this sweep runs,
+            # so resolve() normally never sees them; this guard is defensive
+            # (any residual reference stays verbatim rather than being
+            # classified/renamed).  Memoise to skip the classifier lookup.
             memo[name] = name
             return name
         if name in str_map:
@@ -464,7 +480,7 @@ def translate_port_names(  # noqa: C901
             # keep it can use a verbatim-override (``map[name] =
             # name``) or the Tier 3 UI's "keep verbatim" link.
             if strip_unmappable:
-                dropped_set.add(name)
+                auto_dropped.add(name)
             memo[name] = name
             return name
         # A structurally-clean rename can STILL drop a source-side
@@ -501,6 +517,9 @@ def translate_port_names(  # noqa: C901
         present_names.add(iface.name)
         if iface.lag_member_of:
             present_names.add(iface.lag_member_of)
+        # (#3) VRRP track-interface references are port names too.
+        for grp in iface.vrrp_groups:
+            present_names.update(grp.track_interfaces)
     for vlan in intent.vlans:
         present_names.update(vlan.tagged_ports)
         present_names.update(vlan.untagged_ports)
@@ -513,6 +532,15 @@ def translate_port_names(  # noqa: C901
     for pool in intent.dhcp_servers:
         if pool.interface:
             present_names.add(pool.interface)
+    # (#3) VXLAN VTEP source-interface is a port name (Loopback0 / lo0.0).
+    for vx in intent.vxlan_vnis:
+        if vx.source_interface:
+            present_names.add(vx.source_interface)
+
+    # (#6) Strip operator-requested drops BEFORE the rename sweep so a rename
+    # TARGET that reuses a dropped SOURCE name isn't itself deleted afterwards.
+    if user_dropped:
+        _strip_dropped_ports(intent, user_dropped)
 
     # Rewrite everywhere a port name might be referenced.  Order doesn't
     # matter — memoisation keeps us idempotent.
@@ -520,6 +548,10 @@ def translate_port_names(  # noqa: C901
         iface.name = resolve(iface.name)
         if iface.lag_member_of:
             iface.lag_member_of = resolve(iface.lag_member_of)
+        # (#3) Rewrite each VRRP group's track-interface list so failover
+        # tracking survives a rename (a stale name silently disables it).
+        for grp in iface.vrrp_groups:
+            grp.track_interfaces = [resolve(t) for t in grp.track_interfaces]
     for vlan in intent.vlans:
         vlan.tagged_ports = [resolve(p) for p in vlan.tagged_ports]
         vlan.untagged_ports = [resolve(p) for p in vlan.untagged_ports]
@@ -532,12 +564,18 @@ def translate_port_names(  # noqa: C901
     for pool in intent.dhcp_servers:
         if pool.interface:
             pool.interface = resolve(pool.interface)
+    # (#3) Rewrite the VXLAN VTEP source-interface so the binding stays valid
+    # on the target (a stale source name breaks the whole VTEP).
+    for vx in intent.vxlan_vnis:
+        if vx.source_interface:
+            vx.source_interface = resolve(vx.source_interface)
 
-    # Strip pass: remove every reference to a dropped name from the
-    # canonical tree.  Runs AFTER the rename sweep so dropped entries
-    # don't interfere with other sources' resolution.
-    if dropped_set:
-        _strip_dropped_ports(intent, dropped_set)
+    # Strip pass: remove every reference to an AUTO-dropped (unmappable) name
+    # from the canonical tree.  Runs AFTER the rename sweep — these names stay
+    # verbatim through the sweep so their post-sweep name equals their source
+    # name.  (User drops were already stripped above, pre-sweep — see #6.)
+    if auto_dropped:
+        _strip_dropped_ports(intent, auto_dropped)
 
     # (#49b) Operator drop/rename keys that named a port absent from the tree
     # did nothing — warn instead of silently over-reporting them as dropped.
@@ -549,7 +587,9 @@ def translate_port_names(  # noqa: C901
             )
     # Report only drops that actually removed a present name (auto-dropped
     # unmappable names were resolved from real references, so they qualify).
-    reported_dropped = sorted(d for d in dropped_set if d in present_names)
+    reported_dropped = sorted(
+        d for d in (user_dropped | auto_dropped) if d in present_names
+    )
 
     logger.debug(
         "translate_port_names: exit %s → %s applied=%d dropped=%d "
@@ -584,6 +624,11 @@ def _strip_dropped_ports(
           dropped are deleted (they no longer have a viable egress).
         * ``intent.dhcp_servers`` — pools whose ``interface`` is
           dropped are deleted (pool has no interface to serve).
+        * ``intent.interfaces[].vrrp_groups[].track_interfaces`` — dropped
+          names filtered out (a dangling track ref silently disables
+          failover on the target).
+        * ``intent.vxlan_vnis[].source_interface`` — cleared if dropped
+          (a dangling VTEP source breaks the whole overlay binding).
 
     Mutates *intent* in place.  Idempotent: subsequent calls with the
     same *dropped* set are no-ops.
@@ -594,6 +639,11 @@ def _strip_dropped_ports(
     for iface in intent.interfaces:
         if iface.lag_member_of in dropped:
             iface.lag_member_of = None
+        # (#3) Drop dangling VRRP track-interface references.
+        for grp in iface.vrrp_groups:
+            grp.track_interfaces = [
+                t for t in grp.track_interfaces if t not in dropped
+            ]
     for vlan in intent.vlans:
         vlan.tagged_ports = [
             p for p in vlan.tagged_ports if p not in dropped
@@ -610,6 +660,10 @@ def _strip_dropped_ports(
     intent.dhcp_servers = [
         p for p in intent.dhcp_servers if p.interface not in dropped
     ]
+    # (#3) Clear dangling VXLAN VTEP source-interface references.
+    for vx in intent.vxlan_vnis:
+        if vx.source_interface in dropped:
+            vx.source_interface = ""
 
 
 def build_port_rename_transform(
