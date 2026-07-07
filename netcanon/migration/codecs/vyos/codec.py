@@ -19,9 +19,9 @@ Module layout mirrors the ``cisco_nxos`` / ``aruba_aoscx`` post-split shape:
 * ``port_names.py`` — cross-vendor port-name bridge (Linux-style
   ``ethN`` / ``lo`` / ``bondN`` device names).
 
-``iter_xpaths`` reuses ``_walk_canonical`` from
-:mod:`netcanon.migration.codecs.cisco_iosxe_cli.codec` — VyOS introduces
-no new canonical xpaths in Phase 1.
+``iter_xpaths`` is inherited from :class:`CodecBase`, which walks a
+``CanonicalIntent`` via the shared ``canonical.xpath_walker`` — VyOS
+introduces no new canonical xpaths, so no override is needed (#64).
 
 This codec lands in phases (Tier-1 first, mirroring the ``aruba_aoscx``
 cadence).  **Phase 1**: ``system host-name``; interfaces (``ethernet``
@@ -52,7 +52,6 @@ VyOS set-form from Junos set-form (which the ``juniper_junos`` codec owns).
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from ....models.migration import (
@@ -619,16 +618,6 @@ class VyOSCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
-
-    # -----------------------------------------------------------------
-    # iter_xpaths — reuse the shared canonical walker
-    # -----------------------------------------------------------------
-
-    def iter_xpaths(self, tree: Any) -> Iterable[str]:
-        """Yield schema xpaths from a :class:`CanonicalIntent`."""
-        if isinstance(tree, CanonicalIntent):
-            from ..cisco_iosxe_cli.codec import _walk_canonical
-            yield from _walk_canonical(tree)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation (delegated to .port_names)

@@ -28,7 +28,6 @@ purely for backwards compatibility.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from ....models.migration import (
@@ -456,18 +455,6 @@ class ArubaAOSSCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
-
-    # -----------------------------------------------------------------
-    # iter_xpaths
-    # -----------------------------------------------------------------
-
-    def iter_xpaths(self, tree: Any) -> Iterable[str]:
-        if isinstance(tree, CanonicalIntent):
-            from ..cisco_iosxe_cli.codec import _walk_canonical
-            # The shared walker now emits the VLAN port-membership xpaths
-            # (/vlans/vlan/{tagged,untagged}-ports) for every codec, so no
-            # codec-local supplement is needed here (review #9 completion).
-            yield from _walk_canonical(tree)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

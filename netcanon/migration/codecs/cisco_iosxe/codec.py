@@ -975,7 +975,9 @@ class CiscoIOSXECodec(CodecBase):
         """
         from ...canonical.intent import CanonicalIntent
         if isinstance(tree, CanonicalIntent):
-            from ..cisco_iosxe_cli.codec import _walk_canonical
+            # Shared canonical walker, from its real home — a non-vendor
+            # package — not through cisco_iosxe_cli (#64).
+            from ...canonical.xpath_walker import _walk_canonical
             yield from _walk_canonical(tree)
             return
         if not isinstance(tree, dict):

@@ -82,9 +82,10 @@ god-file cleanup), **opnsense** (XML wire-format reference),
 **aruba_aoss** (banner + positional port-list reference),
 **arista_eos** (Cisco-dialect parallel reference),
 **mikrotik_routeros** (slash-prefixed CLI reference),
-**cisco_iosxe_cli** (largest render path; ``_walk_canonical`` kept
-at module level in ``codec.py`` to preserve the cross-codec import
-surface every other codec's ``iter_xpaths`` reuses), and
+**cisco_iosxe_cli** (largest render path; ``_walk_canonical`` is
+re-exported at module level in ``codec.py`` for back-compat, though the
+walker's real home is ``canonical/xpath_walker.py`` and codecs now inherit
+``iter_xpaths`` from ``CodecBase``), and
 **juniper_junos** (two-pass groups-then-top-level dispatch +
 block-form-to-set-form conversion both kept cohesive in
 ``parse.py``).  All shipped CLI/XML codecs now follow the split
@@ -179,11 +180,11 @@ class MyVendorCodec(CodecBase):
         # Return a config string the vendor can ingest.
         ...
 
-    def iter_xpaths(self, tree: Any) -> Iterable[str]:
-        # Yield canonical xpaths present in `tree`.  Used by capability
-        # validation.  The cisco_iosxe_cli codec exports a shared
-        # `_walk_canonical` helper most other codecs reuse.
-        ...
+    # iter_xpaths is INHERITED from CodecBase: it walks a CanonicalIntent
+    # via the shared `canonical/xpath_walker.py` walker (and handles the flat
+    # mock dict).  A canonical-bridged codec needs NO override.  Override only
+    # if your tree has a genuinely different shape (e.g. the NETCONF
+    # cisco_iosxe codec's nested XML dict).
 
     @classmethod
     def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
@@ -402,9 +403,11 @@ public.
 
 The cross-codec matrix validates that every xpath a codec yields via
 `iter_xpaths(tree)` is declared in its `capabilities`.  A mismatch is
-a test failure.  Use the shared `_walk_canonical` from
-`cisco_iosxe_cli/codec.py` when possible — it's the canonical walker
-every canonical-bridged codec reuses.
+a test failure.  `CodecBase.iter_xpaths` already walks a `CanonicalIntent`
+via the shared walker in `canonical/xpath_walker.py`, so a canonical-bridged
+codec inherits the right behaviour and should NOT override it (nor import
+`_walk_canonical` through `cisco_iosxe_cli`).  Override only for a genuinely
+different tree shape (e.g. the NETCONF codec's nested XML dict).
 
 ---
 
