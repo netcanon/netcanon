@@ -92,7 +92,12 @@ _FIXTURE_EXTENSIONS = {".txt", ".cfg", ".xml", ".conf", ".rsc", ".set"}
 # Mirrors the precedent set by ``test_real_captures::
 # _KNOWN_ROUNDTRIP_GAPS``.  Key format is ``"<codec_name>::<filename>"``
 # matching the parametrise id so the lookup is unambiguous.
-_KNOWN_ROUNDTRIP_GAPS: dict[str, str] = {
+# (#37) Each value is ``(reason, expected_diff_paths)``: the reason plus the
+# EXACT set of dotted leaf paths that may differ after parse->render->parse.
+# The round-trip still runs (it is NOT skipped fixture-wide) and asserts the
+# diff equals this set precisely — a WIDER diff is a new regression, a NARROWER
+# one means the gap was fixed and this entry must be deleted (rot detection).
+_KNOWN_ROUNDTRIP_GAPS: dict[str, tuple[str, frozenset[str]]] = {
     # mikrotik_routeros: bond-interface ``description`` round-trip drop
     # — surfaced by the kitchen-sink's "LACP bond to upstream core"
     # description on a synthetic bonding interface.  The render path
@@ -100,9 +105,11 @@ _KNOWN_ROUNDTRIP_GAPS: dict[str, str] = {
     # the second parse sees an empty description.  Real-capture
     # coverage doesn't hit this because none of the committed real
     # RouterOS exports describe a bond with a description string.
+    # bond1 / bond2 sort to interfaces[0] / [1] (``_compare`` sorts by name).
     "mikrotik_routeros::kitchen_sink.rsc": (
         "bond-interface description not preserved through render — "
-        "TODO on mikrotik_routeros codec"
+        "TODO on mikrotik_routeros codec",
+        frozenset({"interfaces[0].description", "interfaces[1].description"}),
     ),
 }
 
@@ -244,10 +251,6 @@ def test_synthetic_round_trips_stable(
             f"{codec_name} is parse_only; round-trip not applicable"
         )
 
-    gap_reason = _KNOWN_ROUNDTRIP_GAPS.get(f"{codec_name}::{path.name}")
-    if gap_reason is not None:
-        pytest.skip(f"known round-trip gap: {gap_reason}")
-
     raw = path.read_text(encoding="utf-8")
     try:
         first = codec.parse(raw)
@@ -271,10 +274,48 @@ def test_synthetic_round_trips_stable(
             f"Rendered (first 400 chars): {rendered[:400]!r}"
         )
 
-    assert _compare(first) == _compare(second), (
+    a, b = _compare(first), _compare(second)
+    gap = _KNOWN_ROUNDTRIP_GAPS.get(f"{codec_name}::{path.name}")
+    if gap is not None:
+        # (#37) Field-targeted exemption: run the FULL comparison and assert
+        # the diff is EXACTLY the documented gap — so every OTHER field is
+        # still covered (the old fixture-wide skip asserted nothing), and the
+        # entry rots loudly once the gap is fixed or a new field starts drifting.
+        reason, expected = gap
+        actual = _leaf_diff_paths(a, b)
+        assert actual == expected, (
+            f"{codec_name} round-trip diff on {path.name} != the documented "
+            f"gap ({reason}).\n"
+            f"  new regression (unexpected drift): {sorted(actual - expected)}\n"
+            f"  gap fixed (delete the _KNOWN_ROUNDTRIP_GAPS entry): "
+            f"{sorted(expected - actual)}"
+        )
+        return
+    assert a == b, (
         f"{codec_name} round-trip not stable on synthetic {path.name}: "
         f"canonical representation changed after parse->render->parse"
     )
+
+
+def _leaf_diff_paths(a: Any, b: Any, prefix: str = "") -> set[str]:
+    """Dotted leaf paths where two ``_compare`` dumps differ (#37).
+
+    Recurses dicts + equal-length lists; a length/type mismatch or a differing
+    scalar is reported at the current path (e.g. ``interfaces[0].description``).
+    """
+    if isinstance(a, dict) and isinstance(b, dict):
+        out: set[str] = set()
+        for k in set(a) | set(b):
+            out |= _leaf_diff_paths(
+                a.get(k), b.get(k), f"{prefix}.{k}" if prefix else k
+            )
+        return out
+    if isinstance(a, list) and isinstance(b, list) and len(a) == len(b):
+        out = set()
+        for i, (ai, bi) in enumerate(zip(a, b)):
+            out |= _leaf_diff_paths(ai, bi, f"{prefix}[{i}]")
+        return out
+    return set() if a == b else {prefix}
 
 
 def _compare(intent: CanonicalIntent) -> dict[str, Any]:
@@ -287,6 +328,12 @@ def _compare(intent: CanonicalIntent) -> dict[str, Any]:
     d.pop("source_vendor", None)
     d.pop("source_format", None)
     d.pop("source_version", None)
+    # (#38) Match the test_real_captures twin exactly: drop the Tier-3
+    # notification metadata (correct-by-design to differ) and sort
+    # routing_instances.  The synthetic copy had drifted from the real twin
+    # (missing both), so a second Tier-3 stanza would have failed here while
+    # passing the real harness.  Both are pure relaxations -> green stays green.
+    d.pop("dropped_tier3_sections", None)
     for key, id_key in [
         ("interfaces", "name"),
         ("vlans", "id"),
@@ -295,6 +342,7 @@ def _compare(intent: CanonicalIntent) -> dict[str, Any]:
         ("dhcp_servers", "network"),
         ("local_users", "name"),
         ("radius_servers", "host"),
+        ("routing_instances", "name"),
     ]:
         if key in d and isinstance(d[key], list):
             d[key] = sorted(d[key], key=lambda x: x.get(id_key, ""))

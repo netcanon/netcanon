@@ -45,14 +45,14 @@ _BASELINE_PATH = (
     _REPO_ROOT / "tests" / "fixtures" / "real" / "_phase4_runs" / "latest.json"
 )
 
-# Render failures EXPECTED on the committed corpus: the vyos synthetic
-# kitchen-sink carries constructs cisco_iosxe_cli / fortigate_cli have no
-# render path for.  Any render failure OUTSIDE this set is a regression.
-# (source_codec, target_codec)
-_ALLOWED_RENDER_FAILURES = {
-    ("vyos", "cisco_iosxe_cli"),
-    ("vyos", "fortigate_cli"),
-}
+# Render failures EXPECTED on the committed corpus, keyed by
+# (source_codec, target_codec, fixture_basename) — NOT pair-only (#36): a
+# pair-scoped allowlist let a regression that crashed on any of the 12
+# committed REAL vyos captures hide inside an allowlisted (vyos, target) pair.
+# Every committed cell renders OK on current main, so this is empty; scope any
+# genuinely render-incapable cell here BY BASENAME (e.g. the vyos synthetic
+# kitchen-sink on a target lacking a render path) rather than a whole pair.
+_ALLOWED_RENDER_FAILURES: set[tuple[str, str, str]] = set()
 
 
 def _load_tool(mod_name: str, rel_path: str):
@@ -117,15 +117,16 @@ def test_render_failures_within_allowlist(mesh_and_recon):
     allowlist; a new (source, target) render crash is a codec regression."""
     mesh, _ = mesh_and_recon
     failing = {
-        (c["source_codec"], c["target_codec"])
+        (c["source_codec"], c["target_codec"], _fixture_name(c))
         for c in mesh["cells"]
         if c["render_status"] != "ok"
     }
     new = failing - _ALLOWED_RENDER_FAILURES
     assert not new, (
         f"new render failure(s) beyond the allowlist: {sorted(new)}. "
-        "If intentional, add to _ALLOWED_RENDER_FAILURES with a reason; "
-        "otherwise it's a codec render regression."
+        "If intentional, add the (source, target, fixture) triple to "
+        "_ALLOWED_RENDER_FAILURES with a reason; otherwise it's a codec "
+        "render regression."
     )
 
 
@@ -247,4 +248,40 @@ def test_mesh_cell_count_matches_baseline(mesh_and_recon, baseline):
         f"{baseline['cells_total']}. Adding/removing a fixture (or a codec) "
         "changes this — regenerate tests/fixtures/real/_phase4_runs/latest.json "
         "(python tools/run_phase4_reconciliation.py) and commit it."
+    )
+
+
+def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
+    """No pair-expectation YAML silently drops out of coverage (#35).
+
+    The four CODEC_BUG guards classify only the cells that HAVE a pair
+    expectation YAML.  A codec rename orphans a YAML silently (the loader keys
+    by filename stem), removing its CODEC_BUG classification while cells_total,
+    the aggregate count and the vanished-pair checks all stay green.  Pin the
+    coverage denominator: fewer loaded YAMLs, MORE uncovered cells, or fewer
+    classified field-cells all turn this red.  live==baseline today
+    (56>=56, 723<=723) so no re-baseline is needed."""
+    _, result = mesh_and_recon
+    assert (
+        result["expectation_yamls_loaded"]
+        >= baseline["expectation_yamls_loaded"]
+    ), (
+        "expectation-YAML coverage regressed: "
+        f"{result['expectation_yamls_loaded']} < baseline "
+        f"{baseline['expectation_yamls_loaded']} — a pair YAML was "
+        "deleted/orphaned (codec rename?) and its CODEC_BUG coverage vanished."
+    )
+    assert len(result["cells_without_expectation_yaml"]) <= len(
+        baseline["cells_without_expectation_yaml"]
+    ), (
+        "cross-vendor cells without a pair YAML rose vs baseline — a pair lost "
+        "its expectation YAML; the CODEC_BUG ratchet is now blind to it. "
+        "Investigate before re-baselining latest.json."
+    )
+    assert (
+        result["aggregate"]["fields_total"]
+        >= baseline["aggregate"]["fields_total"]
+    ), (
+        "reconciled field-cells dropped vs baseline — fewer fields are being "
+        "classified than the committed coverage floor."
     )
