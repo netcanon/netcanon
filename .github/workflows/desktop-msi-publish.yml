@@ -117,6 +117,24 @@ jobs:
           # (not git config); no git push from this job either.
           persist-credentials: false
 
+      # PKG-5 (review #55): a workflow_dispatch can pass any `inputs.tag` —
+      # including a branch name.  checkout would then build from a mutable
+      # branch tip while softprops/action-gh-release later creates the tag at
+      # default-branch HEAD, so the MSI and the tag would point at different
+      # commits.  Refuse anything that isn't an existing tag (the pypi/docker
+      # jobs gained this guard in #288).  fetch-depth:0 above fetched tags.
+      - name: Refuse a non-tag ref
+        shell: bash
+        env:
+          TAG_RAW: ${{ inputs.tag || github.ref_name }}
+        run: |
+          tag="${TAG_RAW#refs/tags/}"   # tolerate a full-ref input form
+          if ! git show-ref --verify --quiet "refs/tags/${tag}"; then
+            echo "::error::Ref '${TAG_RAW}' is not a tag — refusing to build/publish an MSI from a non-tag ref."
+            exit 1
+          fi
+          echo "OK: '${tag}' is a tag."
+
       # Refuse to build/attach an MSI for a tag that isn't on main (see
       # pypi-publish.yml for rationale).  Covers both tag-push and the
       # workflow_dispatch backfill path — `git rev-parse HEAD` is the
@@ -163,6 +181,36 @@ jobs:
           echo "::error::Timed out waiting for CI to complete for $head_sha — refusing to publish."
           exit 1
 
+      # Belt-and-suspenders for the one check whose failure already cost a
+      # history rewrite: the gate above covers ci.yml, but pii-guard is a
+      # SEPARATE workflow with no publish-time backstop (review #54). Poll its
+      # run for this commit the same fail-closed way. Needs actions:read.
+      - name: Require PII-guard success for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          for attempt in $(seq 1 30); do
+            out="$(gh api \
+              "repos/$REPO/actions/workflows/pii-guard.yml/runs?head_sha=$head_sha&event=push&per_page=1" \
+              --jq '(.workflow_runs[0].status // "none") + " " + (.workflow_runs[0].conclusion // "none")' \
+              2>/dev/null || true)"
+            status="${out%% *}"; conclusion="${out##* }"
+            if [ "$conclusion" = "success" ]; then
+              echo "PII-guard concluded success for $head_sha."; exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              echo "::error::PII-guard for $head_sha concluded '$conclusion' (not success) — refusing to publish."
+              exit 1
+            fi
+            echo "PII-guard for $head_sha is '${status:-unknown}' (attempt $attempt/30); waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for PII-guard to complete for $head_sha — refusing to publish."
+          exit 1
+
       - name: Set up Python
         uses: actions/setup-python@v6.2.0
         with:
@@ -205,8 +253,10 @@ jobs:
           pip install -e ".[desktop-build]"
 
       - name: Build MSI via cx_Freeze
-        # cx_Freeze auto-downloads WiX on first use (Windows runners
-        # have the .NET Framework runtime needed for it).
+        # cx_Freeze's bdist_msi writes the MSI database directly — there is no
+        # WiX download or toolchain step (the old note here was wrong; review
+        # #56).  Dependency-closure pinning for the [desktop-build] extra is a
+        # separate follow-up (it needs a Windows/CPython-3.13 pip resolution).
         run: python setup_desktop.py bdist_msi
 
       - name: Sanity-check MSI exists + reasonable size
