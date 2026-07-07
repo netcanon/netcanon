@@ -409,6 +409,11 @@ def plan_migration_vlans(
     raw_text = resolve_input_text(body, storage)
     job = run_plan_with_overrides(
         source, target, raw_text,
+        # (#16) Engage auto port-name translation like /plan's default path;
+        # {} is auto-only (an explicit port map on this VLAN pane stays
+        # ignored) — without it the render leaks invalid source-vendor
+        # interface names that /plan translates.
+        port_rename_map={},
         vlan_rename_map=body.vlan_rename_map or {},
         force=body.force,
     )
@@ -472,6 +477,9 @@ def plan_migration_local_users(
     raw_text = resolve_input_text(body, storage)
     job = run_plan_with_overrides(
         source, target, raw_text,
+        # (#16) Engage auto port-name translation like /plan; {} is auto-only
+        # (an explicit port map on this pane stays ignored).
+        port_rename_map={},
         local_user_rename_map=body.local_user_rename_map or {},
         force=body.force,
     )
@@ -536,6 +544,9 @@ def plan_migration_snmp(
     raw_text = resolve_input_text(body, storage)
     job = run_plan_with_overrides(
         source, target, raw_text,
+        # (#16) Engage auto port-name translation like /plan; {} is auto-only
+        # (an explicit port map on this pane stays ignored).
+        port_rename_map={},
         snmp_community_rename_map=body.snmp_community_rename_map or {},
         force=body.force,
     )
@@ -600,6 +611,9 @@ def plan_migration_snmpv3(
     raw_text = resolve_input_text(body, storage)
     job = run_plan_with_overrides(
         source, target, raw_text,
+        # (#16) Engage auto port-name translation like /plan; {} is auto-only
+        # (an explicit port map on this pane stays ignored).
+        port_rename_map={},
         snmpv3_user_rename_map=body.snmpv3_user_rename_map or {},
         force=body.force,
     )
