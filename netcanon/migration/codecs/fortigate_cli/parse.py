@@ -309,6 +309,13 @@ def _apply_system_ntp(block: _ConfigBlock, intent: CanonicalIntent) -> None:
 def _apply_system_interface(  # noqa: C901
     block: _ConfigBlock, intent: CanonicalIntent,
 ) -> None:
+    # Name -> interface index for O(1) LAG member reverse-linking.  Holds
+    # exactly the interfaces appended so far (the current ``iface`` is added
+    # at the end of each iteration), mirroring the previously-appended set the
+    # old ``for prev in intent.interfaces`` scan saw — but O(1) instead of the
+    # O(members x interfaces) quadratic that pinned a worker on adversarial
+    # thousand-aggregate inputs (2026-07-06 review MEDIUM #30).
+    iface_by_name: dict[str, CanonicalInterface] = {}
     for edit in block.edits:
         name = edit.edit_id
         iface = CanonicalInterface(name=name, enabled=True)
@@ -423,11 +430,11 @@ def _apply_system_interface(  # noqa: C901
             ))
             # Reverse-link on members we already know about.  Members
             # defined later in the same block will be wired up on the
-            # second-pass below.
+            # second-pass below.  O(1) name lookup — see iface_by_name.
             for m in members:
-                for prev in intent.interfaces:
-                    if prev.name == m and prev.lag_member_of is None:
-                        prev.lag_member_of = name
+                prev = iface_by_name.get(m)
+                if prev is not None and prev.lag_member_of is None:
+                    prev.lag_member_of = name
         else:
             iface.interface_type = _infer_iface_type(name)
 
@@ -520,6 +527,7 @@ def _apply_system_interface(  # noqa: C901
                 iface.vrrp_groups.append(group)
 
         intent.interfaces.append(iface)
+        iface_by_name[name] = iface
 
     # Second pass: interface-order independence — members defined after
     # their aggregate edit still get their lag_member_of stamped.

@@ -799,17 +799,22 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     # captured during the pass, synthesise the LAG if the child
     # interfaces named it — EOS doesn't require a standalone
     # ``interface Port-ChannelN`` stanza.
+    # Index by name once so the per-channel-group merge is O(1), not the
+    # O(D**2) rescan of the growing intent.lags a ``next()`` scan incurred
+    # (2026-07-06 review MEDIUM #31).  Pre-seeding from intent.lags keeps the
+    # defensive else-branch semantics byte-identical.
+    lags_by_name: dict[str, CanonicalLAG] = {lag.name: lag for lag in intent.lags}
     for chan_id, members in lag_members.items():
         lag_name = f"Port-Channel{chan_id}"
-        existing = next(
-            (lag for lag in intent.lags if lag.name == lag_name), None,
-        )
+        existing = lags_by_name.get(lag_name)
         if existing is None:
-            intent.lags.append(CanonicalLAG(
+            new_lag = CanonicalLAG(
                 name=lag_name,
                 members=sorted(set(members)),
                 mode=lag_modes.get(chan_id, "active"),
-            ))
+            )
+            intent.lags.append(new_lag)
+            lags_by_name[lag_name] = new_lag
         else:
             existing.members = sorted(set(existing.members + members))
             if chan_id in lag_modes:
