@@ -64,7 +64,6 @@ default, so repeated parse/render cycles stabilise after one pass.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from ....models.migration import (
@@ -474,18 +473,6 @@ class MikroTikRouterOSCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
-
-    # -----------------------------------------------------------------
-    # iter_xpaths
-    # -----------------------------------------------------------------
-
-    def iter_xpaths(self, tree: Any) -> Iterable[str]:
-        """Yield schema xpaths from a :class:`CanonicalIntent`."""
-        if isinstance(tree, CanonicalIntent):
-            # Reuse the shared canonical walker so every codec emits
-            # the same set of xpaths for the same tree.
-            from ..cisco_iosxe_cli.codec import _walk_canonical
-            yield from _walk_canonical(tree)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

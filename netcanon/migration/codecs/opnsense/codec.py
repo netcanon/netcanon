@@ -587,8 +587,9 @@ class OPNsenseCodec(CodecBase):
     def iter_xpaths(self, tree: Any) -> Iterable[str]:
         """Yield schema xpaths from a :class:`CanonicalIntent` or legacy dict."""
         if isinstance(tree, CanonicalIntent):
-            # Reuse the CLI codec's canonical walker.
-            from ..cisco_iosxe_cli.codec import _walk_canonical
+            # Shared canonical walker, imported from its real home — a
+            # non-vendor package — not through cisco_iosxe_cli (#64).
+            from ...canonical.xpath_walker import _walk_canonical
             yield from _walk_canonical(tree)
             return
         if not isinstance(tree, dict):

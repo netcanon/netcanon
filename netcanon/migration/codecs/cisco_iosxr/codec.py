@@ -19,10 +19,9 @@ shape:
 * ``render.py`` — canonical tree → IOS-XR running-config text.
 * ``port_names.py`` — cross-vendor 4-segment port-name bridge.
 
-``iter_xpaths`` reuses ``_walk_canonical`` from
-:mod:`netcanon.migration.codecs.cisco_iosxe_cli.codec` — IOS-XR
-introduces no new canonical xpaths, so the shared walker yields exactly
-the right set.
+``iter_xpaths`` is inherited from :class:`CodecBase`, which walks a
+``CanonicalIntent`` via the shared ``canonical.xpath_walker`` — IOS-XR
+introduces no new canonical xpaths, so no override is needed (#64).
 
 This codec lands in four phases (see
 ``docs/v0.2.0-planning/04-iosxr-codec/``).  **Phases 1-2 are complete.**
@@ -55,7 +54,6 @@ batfish lacks), all parsing + round-tripping cleanly — well past the
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from ....models.migration import (
@@ -597,16 +595,6 @@ class CiscoIOSXRCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
-
-    # -----------------------------------------------------------------
-    # iter_xpaths — reuse the shared canonical walker
-    # -----------------------------------------------------------------
-
-    def iter_xpaths(self, tree: Any) -> Iterable[str]:
-        """Yield schema xpaths from a :class:`CanonicalIntent`."""
-        if isinstance(tree, CanonicalIntent):
-            from ..cisco_iosxe_cli.codec import _walk_canonical
-            yield from _walk_canonical(tree)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation (delegated to .port_names)

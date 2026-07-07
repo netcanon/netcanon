@@ -55,7 +55,6 @@ bodies + the ``set apply-groups`` statements.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from ....models.migration import (
@@ -407,15 +406,6 @@ class JunosCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
-
-    # -----------------------------------------------------------------
-    # iter_xpaths — reuse the shared canonical walker.
-    # -----------------------------------------------------------------
-
-    def iter_xpaths(self, tree: Any) -> Iterable[str]:
-        if isinstance(tree, CanonicalIntent):
-            from ..cisco_iosxe_cli.codec import _walk_canonical
-            yield from _walk_canonical(tree)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

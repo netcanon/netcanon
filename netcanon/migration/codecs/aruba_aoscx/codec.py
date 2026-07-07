@@ -20,10 +20,9 @@ Module layout mirrors the ``cisco_nxos`` post-split shape:
 * ``port_names.py`` — cross-vendor port-name bridge (the multi-token
   ``vlan N`` / ``lag N`` / ``1/1/1`` name shapes).
 
-``iter_xpaths`` reuses ``_walk_canonical`` from
-:mod:`netcanon.migration.codecs.cisco_iosxe_cli.codec` — AOS-CX
-introduces no new canonical xpaths in Phase 1, so the shared walker
-yields exactly the right set.
+``iter_xpaths`` is inherited from :class:`CodecBase`, which walks a
+``CanonicalIntent`` via the shared ``canonical.xpath_walker`` — AOS-CX
+introduces no new canonical xpaths, so no override is needed (#64).
 
 This codec landed in phases (Tier-1 first, mirroring the ``cisco_nxos``
 cadence).  **Phase 1**: hostname, basic-L3 interfaces (description /
@@ -55,7 +54,6 @@ IRB L3VNI (``vni N / vrf``), VSX, and VRRP.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 from typing import Any, ClassVar
 
 from ....models.migration import (
@@ -682,16 +680,6 @@ class ArubaAOSCXCodec(CodecBase):
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
-
-    # -----------------------------------------------------------------
-    # iter_xpaths — reuse the shared canonical walker
-    # -----------------------------------------------------------------
-
-    def iter_xpaths(self, tree: Any) -> Iterable[str]:
-        """Yield schema xpaths from a :class:`CanonicalIntent`."""
-        if isinstance(tree, CanonicalIntent):
-            from ..cisco_iosxe_cli.codec import _walk_canonical
-            yield from _walk_canonical(tree)
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation (delegated to .port_names)

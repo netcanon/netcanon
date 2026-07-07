@@ -335,16 +335,28 @@ class CodecBase(ABC):
         strings declared in ``CapabilityMatrix.supported /
         .lossy / .unsupported``.
 
-        The default implementation handles the flat ``dict[str, str]``
-        shape used by the reference mock adapter.  Adapters with
-        nested tree shapes (e.g. :class:`CiscoIOSXECodec`, which
-        uses a nested dict mirroring the OpenConfig XML tree) MUST
-        override.
+        Handles the two shapes every codec actually produces: the flat
+        ``dict[str, str]`` of the reference mock adapter, and a
+        :class:`CanonicalIntent`, walked by the shared
+        ``canonical.xpath_walker._walk_canonical`` — the walker's real
+        home (a NON-vendor package).  Before review #64 each codec
+        copy-pasted an override that reached the walker THROUGH the
+        ``cisco_iosxe_cli`` package; inheriting this default removes that
+        cross-vendor edge.  A codec with a genuinely different tree shape
+        (e.g. the NETCONF ``cisco_iosxe`` codec's nested XML dict) still
+        overrides.  Imports are deferred so ``base`` carries no
+        canonical-layer import at module load.
         """
         if isinstance(tree, dict):
             for key in tree:
                 if isinstance(key, str):
                     yield key
+            return
+        from ..canonical.intent import CanonicalIntent
+        from ..canonical.xpath_walker import _walk_canonical
+
+        if isinstance(tree, CanonicalIntent):
+            yield from _walk_canonical(tree)
 
     # ------------------------------------------------------------------
     # Cross-vendor port-name translation — vendor-agnostic bridge
