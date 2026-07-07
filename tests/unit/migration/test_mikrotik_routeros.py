@@ -374,6 +374,26 @@ class TestNtpV6RenderDialect:
         assert "servers=10.200.0.15" not in out
         assert codec.parse(out).ntp_servers == tree.ntp_servers == ["10.200.0.15"]
 
+    def test_v6_gate_idempotent_across_double_sanitize(self):
+        # #61: a same-vendor render now echoes a `# by RouterOS <ver>` header
+        # that the parser reads back into source_version, so a SECOND sanitize
+        # still sees major==6 and keeps the v6 dialect.  Pre-fix, pass 2 saw
+        # source_version="" (no header) and decayed to the v7 `servers=` form.
+        codec = MikroTikRouterOSCodec()
+        tree = CanonicalIntent(
+            hostname="r",
+            source_vendor="mikrotik_routeros",
+            source_version="6.48.6",
+            ntp_servers=["10.0.0.1", "10.0.0.2"],
+        )
+        first = codec.render(tree)
+        assert "# by RouterOS 6.48.6" in first
+        second = codec.render(codec.parse(first))
+        assert self._ntp_line(second) == (
+            "set enabled=yes primary-ntp=10.0.0.1 secondary-ntp=10.0.0.2"
+        )
+        assert first == second  # true fixpoint — no dialect decay on re-sanitize
+
 
 class TestParseErrors:
     def test_empty_input_raises(self):
