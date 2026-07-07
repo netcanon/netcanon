@@ -266,12 +266,19 @@ def create_backup(
 @router.get(
     "/",
     response_model=list[BackupJob],
-    summary="List all backup jobs",
+    summary="List recent (memory-resident) backup jobs",
 )
 def list_jobs(
     jobs: BackupJobRegistry = Depends(get_jobs),
 ) -> list[BackupJob]:
-    """Return all backup jobs, sorted newest-first."""
+    """Return the most-recent memory-resident backup jobs, newest-first (#29).
+
+    NOT full disk history: this reflects only the LRU cache (up to
+    ``max_memory_jobs``, default 1000).  Older jobs are evicted from this
+    list but remain retrievable by ID via ``GET /{job_id}`` (disk lazy-load).
+    With ``max_memory_jobs=0`` the cache is disabled, so this list is always
+    empty even though jobs are still persisted and get-by-id works.
+    """
     return sorted(jobs.values(), key=lambda j: j.created_at, reverse=True)
 
 

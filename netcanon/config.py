@@ -174,7 +174,9 @@ class Settings(BaseSettings):
             of this setting.  Jobs evicted from memory remain accessible
             by ID via the registry's transparent disk lazy-load.  Default
             1000 caps memory at ~5 MB.  Set to 0 to disable in-memory
-            caching entirely (every read hits disk).
+            caching entirely: get-by-id still works (it hits disk), but the
+            ``GET /backups`` LIST endpoint reflects only the cache and so
+            returns empty at 0 (#29) — jobs are still persisted.
         block_private_egress: When ``True``, the backup entry points
             reject targets that resolve to loopback (``127.0.0.0/8``,
             ``::1``) or link-local (``169.254.0.0/16`` — which includes the
