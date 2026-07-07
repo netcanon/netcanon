@@ -45,10 +45,20 @@ import threading
 from collections import OrderedDict
 from collections.abc import Iterator
 
-from ..models.backup import BackupJob
+from ..models.backup import BackupJob, JobStatus
 from .job_store import FileJobStore
 
 logger = logging.getLogger(__name__)
+
+# A job in a terminal status will not change again, so evicting it from the
+# memory cache is safe (disk retains it).  A non-terminal (pending / running)
+# job must NOT be evicted: eviction + a later poll would promote the stale
+# pending disk snapshot into the cache and mask the live job's eventual
+# terminal state forever (#25 — the terminal save writes to disk only, never
+# re-inserts into the registry).
+_TERMINAL_STATUSES = frozenset(
+    {JobStatus.completed, JobStatus.partial, JobStatus.failed}
+)
 
 
 # Default cap on memory-resident jobs.  Sized for the typical Netcanon
@@ -158,13 +168,37 @@ class BackupJobRegistry:
                 return
             self._cache[job_id] = job
             if len(self._cache) > self._max:
-                # Pop the LRU entry (the oldest insertion still in cache).
-                evicted_id, _ = self._cache.popitem(last=False)
-                logger.debug(
-                    "BackupJobRegistry evicted %s (cache at cap %d)",
-                    evicted_id,
-                    self._max,
+                # (#25) Evict the LRU-most TERMINAL job — NOT the oldest
+                # unconditionally.  Evicting a still-running/pending job and
+                # then serving a poll from disk promotes its stale pending
+                # snapshot to MRU, masking the live job's terminal state
+                # forever.  If every resident job is non-terminal, allow a
+                # temporary cap overshoot rather than evict a live job (the
+                # overshoot self-corrects as jobs terminalise).  Find the id
+                # first, then delete, to avoid mutating during iteration.
+                evict_id = next(
+                    (
+                        jid
+                        for jid, j in self._cache.items()  # oldest-first
+                        if j.status in _TERMINAL_STATUSES
+                    ),
+                    None,
                 )
+                if evict_id is not None:
+                    del self._cache[evict_id]
+                    logger.debug(
+                        "BackupJobRegistry evicted terminal %s (cache over "
+                        "cap %d)",
+                        evict_id,
+                        self._max,
+                    )
+                else:
+                    logger.debug(
+                        "BackupJobRegistry over cap %d but all %d resident "
+                        "job(s) are non-terminal; allowing temporary overshoot",
+                        self._max,
+                        len(self._cache),
+                    )
 
     def __getitem__(self, job_id: str) -> BackupJob:
         """Return the job with this ID.
