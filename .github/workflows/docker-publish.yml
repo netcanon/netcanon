@@ -214,14 +214,17 @@ jobs:
             # Major.minor floating tag (only emits for stable releases
             # by default; pre-releases like `-rc4` are skipped).
             type=semver,pattern={{major}}.{{minor}}
-            # `:latest` updates on every release-tag push.  Earlier
+            # `:latest` tracks the newest STABLE release only.  An earlier
             # `enable={{is_default_branch}}` gate suppressed `:latest`
             # entirely on tag-triggered runs (the ref is the tag, not
-            # `main`, so `is_default_branch` evaluated false).  The
-            # README + CHANGELOG both document `docker pull
-            # netcanon/netcanon:latest` as the recommended quickstart;
-            # `:latest` needs to actually exist for that to work.
-            type=raw,value=latest
+            # `main`); dropping it (commit e809839) then let a pre-release
+            # tag like `v0.6.0-rc1` repoint `:latest` — the README/SECURITY
+            # quickstart pull — onto an rc (review #13).  Gate on the tag
+            # NOT being a semver pre-release (those carry a `-`), so rc
+            # pushes publish their versioned image without touching
+            # `:latest`, while a stable tag updates the documented quickstart
+            # tag.  `{{major}}.{{minor}}` above is already prerelease-aware.
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Build and push
         id: build
