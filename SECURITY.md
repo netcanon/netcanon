@@ -421,6 +421,42 @@ XSS via template injection is not possible under the current design.
 
 ---
 
+## Content-Security-Policy (SEC-9)
+
+Every response carries a `Content-Security-Policy` header (set in the
+middleware in `netcanon/main.py`) as defense-in-depth on top of Jinja2
+autoescape.  Two policies are served:
+
+- **Default** (`_CSP_DEFAULT`, every UI page + JSON API route):
+  `default-src 'self'` with `img-src` also allowing `data:`, `object-src
+  'none'`, and `frame-ancestors 'none'` (the modern companion to the
+  `X-Frame-Options: DENY` header set alongside it).  It forbids loading or
+  connecting to any off-origin host.
+- **`/docs` variant** (`_CSP_DOCS`, the Swagger page only): the same base
+  policy widened to permit the `cdn.jsdelivr.net` (and `fastapi.tiangolo.com`
+  image) hosts Swagger UI needs, and nothing else.
+
+`script-src` / `style-src` carry `'unsafe-inline'`: the hand-written UI uses
+inline `<script>`/`style=` throughout, so a nonce/hash policy would require a
+full template refactor.  The origin restriction is the control that adds real,
+non-breaking value; the constants in `main.py` are the source of truth for the
+exact directive strings.
+
+---
+
+## SSH Session Output Bounds (SEC-5)
+
+The paramiko shell collector's pre-command flush (`_drain` in
+`netcanon/collectors/paramiko_collector.py`) carries absolute idle-poll,
+wall-clock, and byte caps so a device that streams output without ever pausing
+— wedged, or hostile once the connection is already trusted — cannot hang a
+worker or exhaust memory: without a hard cap the idle window never expires
+against a continuous stream.  `_drain` is a best-effort banner / menu flush,
+not the config capture, so on hitting a cap it returns what it has rather than
+failing the backup.
+
+---
+
 ## Dependency Supply Chain
 
 Key dependencies and their security relevance:

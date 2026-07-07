@@ -235,8 +235,10 @@ _VERSION_RE = re.compile(r"RouterOS\s+(\d[\w.]*)", re.MULTILINE)
 def _extract_version(raw: str) -> str:
     """Return the RouterOS release from the export header comment.
 
-    Stored as :attr:`CanonicalIntent.source_version` (metadata only); the
-    render path does not echo it, so it is informational.  Returns ``""``
+    Stored as :attr:`CanonicalIntent.source_version` (metadata).  The
+    render path emits no version header (MikroTik is outside #297's
+    same-vendor echo), but it DOES consume this value: ``_ros_major``
+    gates the RouterOS-6 NTP render dialect on it (#299).  Returns ``""``
     when the header comment is absent.
     """
     m = _VERSION_RE.search(raw)

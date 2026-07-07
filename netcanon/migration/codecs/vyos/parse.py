@@ -142,9 +142,11 @@ def _extract_version(raw: str) -> str:
     """Return the VyOS release from the trailing ``// Release version:``
     comment.
 
-    Stored as :attr:`CanonicalIntent.source_version` (metadata only); the
-    render path does not echo it, so it is informational.  Returns ``""``
-    when the trailing comment block is absent.
+    Stored as :attr:`CanonicalIntent.source_version` (metadata).  On a
+    same-vendor render the device's own release is echoed into the
+    ``// Release version`` trailer (#297); the ``// vyos-config-version``
+    component vector is never touched.  Returns ``""`` when the trailing
+    comment block is absent.
     """
     m = _VERSION_RE.search(raw)
     return m.group(1) if m else ""
