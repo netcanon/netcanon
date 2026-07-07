@@ -66,6 +66,55 @@ def _resolve_global_backup_ceiling() -> int:
 MAX_GLOBAL_BACKUP_CONCURRENCY: int = _resolve_global_backup_ceiling()
 
 
+#: Default ceiling on the number of *backup jobs* dispatched concurrently.
+#: Distinct from the two device-level caps above: those bound how many
+#: *devices* a job (or the whole process) collects at once; this bounds how
+#: many whole jobs run in parallel on the dedicated backup executor.  A job
+#: submitted while the executor is saturated waits in its FIFO queue (stays
+#: ``pending`` until a slot frees — back-pressure, never a failure).
+#:
+#: The executor exists to keep minutes-long backup runs off the shared pools
+#: that serve the rest of the app: pre-fix the manual (``POST /backups``)
+#: path ran each job on one of anyio's ~40 default worker-thread tokens — so
+#: ~40 in-flight jobs starved *every* synchronous route — and the scheduled
+#: path shared asyncio's default executor with ``/sanitize`` and the egress
+#: filter (2026-07-06 review MEDIUM #27).  8 is a conservative default; raise
+#: it (8-16 typical) for large deployments via
+#: ``NETCANON_MAX_CONCURRENT_BACKUP_JOBS``.
+_DEFAULT_MAX_CONCURRENT_BACKUP_JOBS: int = 8
+
+
+def _resolve_max_concurrent_backup_jobs() -> int:
+    """Read the max-concurrent-*jobs* ceiling from the environment.
+
+    Module-level (not a :class:`Settings` field) because the executor it
+    sizes is a single *process-wide* object created once, independent of any
+    per-job ``Settings`` snapshot — exactly like
+    :func:`_resolve_global_backup_ceiling`.  Reads
+    ``NETCANON_MAX_CONCURRENT_BACKUP_JOBS``, falling back to
+    :data:`_DEFAULT_MAX_CONCURRENT_BACKUP_JOBS` when unset or unparseable;
+    floored at 1 so the executor always has at least one worker.
+    """
+    raw = os.environ.get("NETCANON_MAX_CONCURRENT_BACKUP_JOBS")
+    if raw is None:
+        return _DEFAULT_MAX_CONCURRENT_BACKUP_JOBS
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        warnings.warn(
+            f"NETCANON_MAX_CONCURRENT_BACKUP_JOBS={raw!r} is not an integer; "
+            f"falling back to {_DEFAULT_MAX_CONCURRENT_BACKUP_JOBS}",
+            stacklevel=2,
+        )
+        return _DEFAULT_MAX_CONCURRENT_BACKUP_JOBS
+
+
+#: Resolved at import; the backup executor in
+#: :mod:`netcanon.services.backup_runner` reads
+#: ``config.MAX_CONCURRENT_BACKUP_JOBS`` when it lazily builds its pool.
+MAX_CONCURRENT_BACKUP_JOBS: int = _resolve_max_concurrent_backup_jobs()
+
+
 #: Default ceiling on a single ``POST /api/v1/sanitize`` upload (16 MiB).
 #: Network configs are well under a megabyte even for large chassis, so 16 MiB
 #: is generous headroom while still bounding the work an unauthenticated /

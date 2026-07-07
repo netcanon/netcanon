@@ -270,6 +270,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         scheduler.shutdown(wait=False)
         logger.info("Scheduler stopped")
+        # Release the dedicated backup-job executor's threads (#27).  Let
+        # already-queued runs drain (cancel_futures=False) but don't block
+        # server shutdown behind an in-flight backup (wait=False).  Dropping
+        # the module-level singleton also lets a subsequent create_app() in
+        # the same process — every test builds a fresh app — rebuild a live
+        # executor instead of reusing a shut-down one.
+        from .services.backup_runner import reset_job_executor
+        reset_job_executor(wait=False, cancel_futures=False)
 
     # Resolve the package version from installed metadata so the
     # OpenAPI doc / Swagger UI tracks the actual release rather than
