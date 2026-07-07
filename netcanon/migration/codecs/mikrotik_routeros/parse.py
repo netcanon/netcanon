@@ -885,6 +885,11 @@ def _materialise_vrrp_groups(
             preempt=scratch["preempt"],
             advertisement_interval=scratch["advertisement_interval"],
             authentication=scratch["authentication"],
+            # (#22) Carry the VIP prefix stashed by the /ip[v6] address
+            # post-pass onto the group so render preserves the on-wire netmask
+            # instead of falling back to the parent interface's prefix.
+            virtual_ip_prefix=scratch.get("virtual_ip_prefix", 0),
+            virtual_ip6_prefix=scratch.get("virtual_ip6_prefix", 0),
         )
         parent_iface.vrrp_groups.append(group)
 

@@ -1006,16 +1006,14 @@ def _render_vrrp(
     the address emit.  Mirrors the per-user review-comment pattern in
     the ``/user`` render block.
 
-    VIP prefix-length recovery:
-    * If the canonical record was created by the MikroTik parser, the
-      prefix lives in the scratch dict (see ``_parse_interface_vrrp``)
-      and is mirrored onto the group via the ``virtual_ip_prefix``
-      hint stashed on the parent interface during a same-vendor round-
-      trip.  Currently we use the parent interface's first ipv4 prefix
-      as a fallback when the source canonical tree didn't carry one
-      (cross-vendor case).
-    * IPv6 VIPs fall back to ``/128`` host-form when no parent prefix
-      is available.
+    VIP prefix-length recovery (#22):
+    * ``CanonicalVRRPGroup.virtual_ip_prefix`` / ``virtual_ip6_prefix``
+      carry the VIP mask when the source modelled it (the MikroTik parser
+      stashes it via the ``/ip[v6] address`` post-pass); render prefers it so
+      a same-vendor round-trip preserves the on-wire netmask.
+    * When the group carries no prefix (``0`` — the cross-vendor case, where
+      the source VIP had no independent mask) we fall back to the parent
+      interface's first ipv4 prefix, and ``/128`` host-form for IPv6.
     """
     vrrp_lines: list[str] = []
     v4_rows: list[tuple[str, int, str]] = []
@@ -1059,16 +1057,18 @@ def _render_vrrp(
             parts.extend(auth_kv)
             vrrp_lines.append(" ".join(parts))
 
-            # /ip address VIP rows — fall back to parent's first ipv4
-            # prefix when the canonical record didn't preserve one.
-            v4_prefix = (
+            # /ip address VIP rows — prefer the prefix the group carried
+            # (#22: MikroTik source stashes it), else fall back to the parent's
+            # first ipv4 prefix.  Without the group prefix a same-vendor
+            # round-trip silently rewrote e.g. a /28 VIP to the parent's /24.
+            v4_prefix = group.virtual_ip_prefix or (
                 iface.ipv4_addresses[0].prefix_length
                 if iface.ipv4_addresses else 32
             )
             for vip in group.virtual_ips:
                 v4_rows.append((vip, v4_prefix, pseudo_name))
             # /ipv6 address VIP rows.
-            v6_prefix = (
+            v6_prefix = group.virtual_ip6_prefix or (
                 iface.ipv6_addresses[0].prefix_length
                 if iface.ipv6_addresses else 128
             )

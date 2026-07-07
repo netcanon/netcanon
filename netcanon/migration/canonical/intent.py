@@ -601,6 +601,14 @@ class CanonicalVRRPGroup(BaseModel):
             ``vrrp N track Ethernet1 decrement 10``.  The
             priority-decrement value is per-vendor lossy.
         description: Operator-supplied description.
+        virtual_ip_prefix: Prefix length (0-32) of the IPv4 VIP when the
+            vendor carries the VIP with its own mask (MikroTik ``/ip address
+            add address=X/Y interface=vrrpN``).  ``0`` = unset; the renderer
+            then falls back to the parent interface's prefix.  Only MikroTik
+            populates it today — other vendors' VRRP VIPs have no independent
+            mask (#22).
+        virtual_ip6_prefix: IPv6 counterpart (0-128); ``0`` = unset (renderer
+            falls back to the parent v6 prefix / ``/128`` host form).
 
     Wired in v0.2.0 (Wave B/C): the seven bidirectional codecs declare
     ``/interfaces/interface/vrrp-groups/group`` ``supported``/``lossy``
@@ -620,6 +628,11 @@ class CanonicalVRRPGroup(BaseModel):
     authentication: str = ""
     track_interfaces: list[str] = Field(default_factory=list)
     description: str = ""
+    # (#22) VIP prefix carried on the group when the vendor models the VIP
+    # with its own mask (MikroTik).  0 = unset -> render falls back to the
+    # parent interface prefix.  Walked only when non-zero (see xpath_walker).
+    virtual_ip_prefix: int = Field(default=0, ge=0, le=32)
+    virtual_ip6_prefix: int = Field(default=0, ge=0, le=128)
 
 
 class CanonicalLocalUser(BaseModel):
