@@ -150,6 +150,37 @@ jobs:
           echo "::error::Timed out waiting for CI to complete for $head_sha — refusing to publish."
           exit 1
 
+      # Belt-and-suspenders for the one check whose failure already cost a
+      # history rewrite: the gate above covers ci.yml, but pii-guard is a
+      # SEPARATE workflow with no publish-time backstop (review #54 — the T0-4
+      # "holds even if the merge gate was bypassed" property was false for it).
+      # Poll its run for this commit the same fail-closed way. Needs actions:read.
+      - name: Require PII-guard success for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          for attempt in $(seq 1 30); do
+            out="$(gh api \
+              "repos/$REPO/actions/workflows/pii-guard.yml/runs?head_sha=$head_sha&event=push&per_page=1" \
+              --jq '(.workflow_runs[0].status // "none") + " " + (.workflow_runs[0].conclusion // "none")' \
+              2>/dev/null || true)"
+            status="${out%% *}"; conclusion="${out##* }"
+            if [ "$conclusion" = "success" ]; then
+              echo "PII-guard concluded success for $head_sha."; exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              echo "::error::PII-guard for $head_sha concluded '$conclusion' (not success) — refusing to publish."
+              exit 1
+            fi
+            echo "PII-guard for $head_sha is '${status:-unknown}' (attempt $attempt/30); waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for PII-guard to complete for $head_sha — refusing to publish."
+          exit 1
+
       - name: Set up Python
         uses: actions/setup-python@v6.2.0
         with:
