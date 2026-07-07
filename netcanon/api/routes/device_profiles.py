@@ -22,6 +22,7 @@ from ...storage.device_profile_store import (
     DEVICE_PROFILE_REGISTRY_LOCK,
     FileDeviceProfileStore,
 )
+from ...storage.schedule_store import SCHEDULE_REGISTRY_LOCK
 from ..deps import get_device_profile_store, get_device_profiles
 
 logger = logging.getLogger(__name__)
@@ -87,15 +88,18 @@ def create_device_profile(
     Returns:
         The newly created ``DeviceProfile``.
     """
-    if len(device_profiles) >= 1000:
-        raise HTTPException(
-            status_code=409,
-            detail="Maximum device profile limit reached (1000). Delete unused profiles first.",
-        )
     profile = DeviceProfile(**body.model_dump())
     # Serialise dict-mutate + persist against the backup worker thread and
-    # the other route mutators (review finding #10).
+    # the other route mutators (review finding #10).  The cap check runs
+    # INSIDE the lock (review #44): checked outside, two concurrent creates
+    # both passed at 999 and landed 1001 profiles.  create_schedule already
+    # enforces its cap under the lock — this mirrors it.
     with DEVICE_PROFILE_REGISTRY_LOCK:
+        if len(device_profiles) >= 1000:
+            raise HTTPException(
+                status_code=409,
+                detail="Maximum device profile limit reached (1000). Delete unused profiles first.",
+            )
         device_profiles[profile.id] = profile
         device_profile_store.save(profile)
     logger.info(
@@ -169,20 +173,25 @@ def delete_device_profile(
     Raises:
         HTTPException 404: If no profile with *profile_id* exists.
     """
-    # Hold the lock across the existence check + delete + file removal so it
-    # can't interleave with the backup worker's detected_facts save and
+    # Snapshot the schedules under THEIR lock (review #43).  Iterating the
+    # live dict here under the profile lock races a concurrent schedule
+    # create/delete → "dictionary changed size during iteration".  Take a
+    # copy under SCHEDULE_REGISTRY_LOCK first (released immediately), then
+    # warn on the copy — the CONC-6 snapshot pattern.  The two registry
+    # locks are never held nested.
+    with SCHEDULE_REGISTRY_LOCK:
+        schedules_snapshot = list(request.app.state.schedules.values())
+    referencing = [
+        s.name for s in schedules_snapshot if profile_id in s.target_device_ids
+    ]
+    # Hold the profile lock across the existence check + delete + file removal
+    # so it can't interleave with the backup worker's detected_facts save and
     # resurrect the profile on disk (review finding #10).
     with DEVICE_PROFILE_REGISTRY_LOCK:
         if profile_id not in device_profiles:
             raise HTTPException(
                 status_code=404, detail=f"Device profile not found: {profile_id!r}"
             )
-        # Warn if any schedules reference this profile.
-        referencing = [
-            s.name
-            for s in request.app.state.schedules.values()
-            if profile_id in s.target_device_ids
-        ]
         if referencing:
             logger.warning(
                 "Deleting profile %s which is referenced by schedules: %s",
