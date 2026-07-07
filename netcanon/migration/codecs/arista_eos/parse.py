@@ -184,7 +184,54 @@ _RADIUS_KEY_RE = re.compile(r'\bkey\s+(?:"([^"]*)"|(\S+))')
 _VRF_INSTANCE_RE = re.compile(
     r"^vrf\s+(?:instance|definition)\s+(\S+)\s*$", re.MULTILINE
 )
+# (#21) Indented body lines inside a ``vrf instance|definition`` stanza.
+# Pre-4.23 EOS (the ``vrf definition`` dialect) carries rd / description /
+# route-target IOS-style in the stanza body; the header-only harvest dropped
+# them.  ``route-target`` accepts the optional EOS ``evpn`` keyword.
+_VRF_RD_RE = re.compile(r"^\s+rd\s+(\S+)\s*$")
+_VRF_DESC_RE = re.compile(r"^\s+description\s+(.+?)\s*$")
+_VRF_RT_RE = re.compile(
+    r"^\s+route-target\s+(import|export|both)\s+(?:evpn\s+)?(\S+)\s*$"
+)
 _INTERFACE_HEADER_RE = re.compile(r"^interface\s+(\S+)\s*$")
+
+
+def _parse_vrf_stanzas(raw: str) -> list[CanonicalRoutingInstance]:
+    """Harvest ``vrf instance|definition <name>`` stanzas INCLUDING the body
+    (rd / description / route-target), mirroring cisco_iosxe_cli's
+    ``_parse_routing_instances``.  The header-only predecessor created the
+    instance with an empty RD/description, so a legacy ``vrf definition`` RD
+    was silently lost (2026-07-06 review MEDIUM #21).  The ``_parse_router_bgp``
+    pass merges by name on top and its RD wins where present (EOS precedence).
+    """
+    def _on_line(line: str, current: CanonicalRoutingInstance) -> None:
+        dm = _VRF_DESC_RE.match(line)
+        if dm:
+            current.description = dm.group(1).strip()
+            return
+        rm = _VRF_RD_RE.match(line)
+        if rm:
+            current.route_distinguisher = rm.group(1)
+            return
+        rtm = _VRF_RT_RE.match(line)
+        if rtm:
+            direction = rtm.group(1).lower()
+            rt = rtm.group(2)
+            if direction in ("import", "both") and rt not in current.rt_imports:
+                current.rt_imports.append(rt)
+            if direction in ("export", "both") and rt not in current.rt_exports:
+                current.rt_exports.append(rt)
+
+    return scan_stanzas(
+        raw.splitlines(),
+        is_header=_VRF_INSTANCE_RE.match,
+        open_scratch=lambda m: CanonicalRoutingInstance(name=m.group(1)),
+        on_line=_on_line,
+        build=lambda ri: ri,
+        is_terminator=lambda line: (
+            line.startswith("!") or (line and not line[0].isspace())
+        ),
+    )
 
 # VARP system-wide MAC (Wave C anycast-gateway wire-up).  Form:
 # ``ip virtual-router mac-address 00:1c:73:00:dc:01``.  Top-level
@@ -568,13 +615,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     #     "DHCP and DHCP Relay".
     intent.dhcp_servers = _parse_dhcp_pools(raw)
 
-    # --- VRF declarations (GAP 6) — ``vrf instance <name>`` top-
-    #     level lines create CanonicalRoutingInstance records.
-    #     RD + RTs get populated later from the router-bgp pass.
-    for vrf_m in _VRF_INSTANCE_RE.finditer(raw):
-        intent.routing_instances.append(
-            CanonicalRoutingInstance(name=vrf_m.group(1))
-        )
+    # --- VRF declarations (GAP 6 + #21) — ``vrf instance|definition <name>``
+    #     stanzas create CanonicalRoutingInstance records, harvesting the
+    #     stanza BODY (rd / description / route-target) so a legacy
+    #     ``vrf definition`` RD isn't silently lost.  The router-bgp pass
+    #     below merges by name on top (its RD wins where present).
+    intent.routing_instances.extend(_parse_vrf_stanzas(raw))
 
     # --- Interface + VLAN + Vxlan stanzas (line-scan with
     #     current-stanza tracking, same pattern as cisco_iosxe_cli) ---

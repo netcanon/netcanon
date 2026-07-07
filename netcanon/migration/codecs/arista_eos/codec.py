@@ -141,6 +141,17 @@ class AristaEOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing-instances/instance/description",
+                reason=(
+                    "The VRF/routing-instance is harvested with its rd + "
+                    "route-targets (which render under `router bgp / vrf`), "
+                    "but EOS render has no `vrf instance <name> / description` "
+                    "emit path, so a description parsed from a legacy "
+                    "`vrf definition` stanza is dropped on render (#21)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "Arista EOS renders only IETF VRRP; a cross-family source "
