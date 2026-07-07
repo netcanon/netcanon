@@ -23,6 +23,8 @@ field:
     CanonicalInterface.trunk_allowed_vlans (list)
     CanonicalInterface.trunk_native_vlan
     CanonicalInterface.voice_vlan
+    CanonicalInterface.dot1q_vlan (routed L3 sub-interface tag)
+    CanonicalVxlan.vlan_id (VLAN-to-VNI mapping)
 
 Drop semantics (map value is None):
 
@@ -101,8 +103,10 @@ def translate_vlan_ids(  # noqa: C901
 
     For each entry ``{src: tgt}``:
       * ``tgt`` is an int → rename the VLAN + update every
-        referring field (access_vlan, trunk lists, native, voice).
-      * ``tgt`` is None → drop the VLAN entirely.
+        referring field (access_vlan, trunk lists, native, voice,
+        routed-sub-interface dot1q tag, and VXLAN VNI vlan_id).
+      * ``tgt`` is None → drop the VLAN entirely (interfaces detached,
+        matching VXLAN VNI mappings removed).
 
     Collisions (two source VLANs → same target ID, or target ID
     already exists in the tree) merge tagged/untagged port lists
@@ -221,10 +225,16 @@ def translate_vlan_ids(  # noqa: C901
             iface.access_vlan,
             iface.trunk_native_vlan,
             iface.voice_vlan,
+            iface.dot1q_vlan,
         ):
             if vid is not None:
                 referenced_ids.add(vid)
         referenced_ids.update(iface.trunk_allowed_vlans or [])
+    # (#5) VXLAN VNI records carry a vlan_id that this orchestrator now
+    # rewrites (Pass 3) — count it as a reference so a rename touching ONLY a
+    # vni mapping isn't wrongly flagged "present nowhere".
+    for vx in intent.vxlan_vnis:
+        referenced_ids.add(vx.vlan_id)
     for missing in sorted((set(renames) | drops) - referenced_ids):
         result.warnings.append(
             f"vlan_rename: VLAN {missing} is present nowhere in the parsed "
@@ -306,6 +316,20 @@ def translate_vlan_ids(  # noqa: C901
             elif iface.voice_vlan in renames:
                 iface.voice_vlan = renames[iface.voice_vlan]
 
+        # (#5) 802.1Q tag on a routed (L3) sub-interface.  A stale tag
+        # renders ``encapsulation dot1Q <old>`` on the renumbered VLAN —
+        # L3 dead on deploy.  Rewrite like access_vlan.
+        if iface.dot1q_vlan is not None:
+            if iface.dot1q_vlan in drops:
+                result.warnings.append(
+                    f"vlan_rename: interface {iface.name!r} had 802.1Q "
+                    f"sub-interface VLAN {iface.dot1q_vlan} which was dropped "
+                    f"— tag cleared"
+                )
+                iface.dot1q_vlan = None
+            elif iface.dot1q_vlan in renames:
+                iface.dot1q_vlan = renames[iface.dot1q_vlan]
+
         # Trunk allowed list — remove drops, rename renames, dedupe.
         if iface.trunk_allowed_vlans:
             new_list: list[int] = []
@@ -318,6 +342,28 @@ def translate_vlan_ids(  # noqa: C901
                     seen.add(new_vid)
                     new_list.append(new_vid)
             iface.trunk_allowed_vlans = new_list
+
+    # ------------------------------------------------------------------
+    # Pass 3 — VXLAN VNI records carry a vlan_id that must track the rename.
+    # ------------------------------------------------------------------
+    # intent.py documents that CanonicalVxlan.vlan_id stays in sync with
+    # CanonicalVlan.id.  cisco_nxos render unions vni vlan_ids into the
+    # emitted VLAN list, so a stale vlan_id resurrects the OLD VLAN with the
+    # vn-segment bound to it — a rename/drop that skips this leaves a broken
+    # overlay.  Rename in place; drop the whole VNI record with a warning.
+    if intent.vxlan_vnis:
+        kept_vnis: list = []
+        for vx in intent.vxlan_vnis:
+            if vx.vlan_id in drops:
+                result.warnings.append(
+                    f"vlan_rename: VXLAN VNI {vx.vni} mapped to VLAN "
+                    f"{vx.vlan_id} which was dropped — VNI mapping removed"
+                )
+                continue
+            if vx.vlan_id in renames:
+                vx.vlan_id = renames[vx.vlan_id]
+            kept_vnis.append(vx)
+        intent.vxlan_vnis = kept_vnis
 
     logger.debug(
         "translate_vlan_ids: exit applied=%d dropped=%d warnings=%d",

@@ -20,6 +20,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalVlan,
+    CanonicalVxlan,
 )
 from netcanon.migration.canonical.vlan_names import (
     build_vlan_rename_transform,
@@ -308,4 +309,48 @@ class TestNotFoundEntryWarning:
         )
         result = translate_vlan_ids(intent, rename_map={30: 40})
         assert intent.interfaces[0].access_vlan == 40
+        assert not any("nowhere" in w for w in result.warnings)
+
+
+class TestDot1qAndVxlanRewrite:
+    """(#5) translate_vlan_ids must rewrite the routed-sub-interface
+    ``dot1q_vlan`` tag and the VXLAN VNI ``vlan_id`` — else a rename
+    renders broken configs (L3 sub-if on the old tag; nxos resurrects
+    the old VLAN via the vni union)."""
+
+    def test_rename_rewrites_dot1q_and_vxlan(self):
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(id=10, name="V10")],
+            interfaces=[
+                CanonicalInterface(name="Gi0/1.10", dot1q_vlan=10),
+            ],
+            vxlan_vnis=[CanonicalVxlan(vlan_id=10, vni=10010)],
+        )
+        result = translate_vlan_ids(intent, rename_map={10: 20})
+        assert intent.interfaces[0].dot1q_vlan == 20
+        assert intent.vxlan_vnis[0].vlan_id == 20
+        assert result.applied == {10: 20}
+
+    def test_drop_clears_dot1q_and_removes_vni(self):
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(id=10, name="V10")],
+            interfaces=[
+                CanonicalInterface(name="Gi0/1.10", dot1q_vlan=10),
+            ],
+            vxlan_vnis=[CanonicalVxlan(vlan_id=10, vni=10010)],
+        )
+        result = translate_vlan_ids(intent, rename_map={10: None})
+        assert intent.interfaces[0].dot1q_vlan is None
+        assert intent.vxlan_vnis == []
+        assert any("802.1Q sub-interface" in w for w in result.warnings)
+        assert any("VNI 10010" in w for w in result.warnings)
+
+    def test_reference_only_via_dot1q_not_flagged(self):
+        # VLAN 55 exists only as a dot1q sub-interface tag — Pass 2 now
+        # rewrites it, so it must NOT be flagged "present nowhere" (#5+#49a).
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="Gi0/1.55", dot1q_vlan=55)],
+        )
+        result = translate_vlan_ids(intent, rename_map={55: 66})
+        assert intent.interfaces[0].dot1q_vlan == 66
         assert not any("nowhere" in w for w in result.warnings)

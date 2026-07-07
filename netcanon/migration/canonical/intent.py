@@ -695,8 +695,11 @@ class CanonicalVxlan(BaseModel):
         source_interface: VTEP source interface name in operator-form
             (Arista ``Loopback0``, Junos ``lo0.0``, NX-OS ``loopback0``).
             Opaque string — cross-vendor renders accept whatever the
-            source codec emitted; operators rename via the existing
-            port-rename pane when crossing platforms.  Empty string
+            source codec emitted; the port-rename orchestrator
+            (``translate_port_names``) rewrites this field alongside the
+            other port-name references when a rename/drop is applied, so
+            a cross-platform rename keeps the VTEP binding valid.  Empty
+            string
             means undeclared and codecs should fall back to a sensible
             default (typically ``Loopback0`` on Arista, ``lo0.0`` on
             Junos).  This is a switch-level / global attribute on the
