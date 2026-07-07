@@ -113,9 +113,12 @@ def translate_vlan_ids(  # noqa: C901
       * Source or target IDs outside 1-4094 → warning; entry
         skipped (invalid IDs can't survive AOS-S validation
         downstream anyway).
-      * Mapping a VLAN ID that doesn't exist in ``intent.vlans`` →
-        warning + no-op.  The UI should avoid sending these but the
-        orchestrator doesn't crash on them.
+      * Mapping a VLAN ID that is present nowhere in the tree — neither
+        as a ``vlan`` stanza nor as an interface reference (access /
+        native / voice / trunk-allowed) → warning + no-op.  The UI should
+        avoid sending these but the orchestrator doesn't crash on them.
+        (An ID present only as an interface reference is still rewritten
+        by Pass 2, so it is NOT flagged as a no-op.)
 
     Args:
         intent: Canonical tree to mutate.  Passed through the
@@ -206,6 +209,27 @@ def translate_vlan_ids(  # noqa: C901
     # Collect which IDs exist in the source tree so "rename to
     # already-existing ID" is detectable.
     source_ids = {v.id for v in intent.vlans}
+
+    # (#49a) Warn on map entries whose source VLAN is present nowhere — not as
+    # a stanza (source_ids) and not as an interface reference (rewritten by
+    # Pass 2 below).  The docstring promises this; without it a typo'd entry
+    # silently no-ops.  Computed from ORIGINAL interface fields (Pass 2 hasn't
+    # run yet).
+    referenced_ids: set[int] = set(source_ids)
+    for iface in intent.interfaces:
+        for vid in (
+            iface.access_vlan,
+            iface.trunk_native_vlan,
+            iface.voice_vlan,
+        ):
+            if vid is not None:
+                referenced_ids.add(vid)
+        referenced_ids.update(iface.trunk_allowed_vlans or [])
+    for missing in sorted((set(renames) | drops) - referenced_ids):
+        result.warnings.append(
+            f"vlan_rename: VLAN {missing} is present nowhere in the parsed "
+            f"config (no stanza or interface reference); entry ignored"
+        )
 
     # Build the post-rewrite vlans list.  We defer actually assigning
     # back onto intent.vlans until we've resolved all collisions,
