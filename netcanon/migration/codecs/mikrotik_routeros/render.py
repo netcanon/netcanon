@@ -147,11 +147,11 @@ def _render_ntp_client(tree: Any) -> list[str]:
     3+ servers) keeps today's v7 output byte-identically.  The parser unions
     both forms, so the round-trip is stable on either dialect.
 
-    Note: not idempotent across a *double* sanitize — the v6 output carries
-    no version header, so a second pass sees ``source_version == ""`` and
-    falls back to v7.  The canonical tree (``ntp_servers``) is preserved
-    either way; only the emitted dialect differs, and a single sanitize (the
-    real use case) produces valid 6.x output.
+    Idempotent across a double sanitize: ``render_intent`` now echoes a
+    ``# by RouterOS <ver>`` export-header comment on a same-vendor render
+    (review #61), which the parser reads back into ``source_version`` — so a
+    second pass still sees major==6 and re-emits the v6 form.  The canonical
+    tree (``ntp_servers``) is preserved regardless of dialect.
     """
     if not tree.ntp_servers:
         return []
@@ -187,6 +187,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         )
 
     lines: list[str] = []
+
+    # Echo the device's own RouterOS release as an export-header comment on a
+    # same-vendor render (review #61 — brings MikroTik into #297's same-vendor
+    # echo).  The parser reads it back into source_version (see _VERSION_RE), so
+    # the v6 NTP dialect gate stays idempotent across a double sanitize instead
+    # of decaying to the v7 form on pass 2 (when no header was emitted, pass 2
+    # saw source_version == "").
+    if tree.source_vendor == "mikrotik_routeros" and tree.source_version:
+        lines.append(f"# by RouterOS {tree.source_version}")
+        lines.append("")
 
     # ----- /system identity -----
     if tree.hostname:
