@@ -40,6 +40,36 @@ logger = logging.getLogger(__name__)
         "sanitized config as text/plain by default, or a JSON "
         "audit log when `dry_run=true`."
     ),
+    # Default response is text/plain (the sanitized config); the dry_run
+    # branch returns JSON explicitly.  Declaring the class + both content
+    # types + the count header keeps the generated OpenAPI honest (#51).
+    response_class=PlainTextResponse,
+    responses={
+        200: {
+            "description": (
+                "Sanitized config — `text/plain` by default, or a JSON "
+                "substitution audit when `dry_run=true`."
+            ),
+            "content": {"text/plain": {}, "application/json": {}},
+            "headers": {
+                "X-Netcanon-Substitution-Count": {
+                    "description": (
+                        "Number of PII substitutions applied "
+                        "(text/plain response only)."
+                    ),
+                    "schema": {"type": "integer"},
+                },
+            },
+        },
+        400: {"description": "Upload could not be parsed as `source_vendor`."},
+        413: {"description": "Upload exceeds the configured size cap."},
+        422: {
+            "description": (
+                "Unknown `source_vendor`, or the sanitized tree could not be "
+                "re-rendered in that vendor's format."
+            )
+        },
+    },
 )
 async def post_sanitize(
     source_vendor: str = Form(...),
@@ -48,8 +78,10 @@ async def post_sanitize(
 ):
     available = list_public_codecs()
     if source_vendor not in available:
+        # 422 (not 400) — unify with every migration endpoint's unknown-vendor
+        # rejection so an unknown codec is one consistent status (#50).
         raise HTTPException(
-            status_code=400,
+            status_code=422,
             detail=f"Unknown source_vendor {source_vendor!r}; available: {available}",
         )
 

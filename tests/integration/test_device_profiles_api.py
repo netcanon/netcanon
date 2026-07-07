@@ -218,3 +218,29 @@ class TestPersistFailureRollback:
         # The in-memory profile keeps its pre-update value (not the 18.1 that
         # failed to persist).
         assert client.app.state.device_profiles[pid].os_version == "17.12"
+
+
+class TestTypeKeyValidation:
+    """create/update validate type_key against loaded definitions (#53) — a
+    typo'd key now 422s at write time instead of 201'ing and failing days
+    later at backup time."""
+
+    def test_create_unknown_type_key_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/devices/", json=_create_body(type_key="NoSuchVendor"),
+        )
+        assert resp.status_code == 422
+        assert "type_key" in resp.json()["detail"]
+
+    def test_update_unknown_type_key_returns_422(self, client):
+        pid = client.post("/api/v1/devices/", json=_create_body()).json()["id"]
+        resp = client.put(
+            f"/api/v1/devices/{pid}", json={"type_key": "NoSuchVendor"},
+        )
+        assert resp.status_code == 422
+        assert "type_key" in resp.json()["detail"]
+
+    def test_create_known_type_key_still_201(self, client):
+        # Regression guard: the valid type_key path is unaffected.
+        resp = client.post("/api/v1/devices/", json=_create_body())
+        assert resp.status_code == 201

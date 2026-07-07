@@ -106,13 +106,15 @@ class TestSanitizeEndpoint:
 
 
 class TestSanitizeEndpointErrors:
-    def test_unknown_source_vendor_returns_400(self, client):
+    def test_unknown_source_vendor_returns_422(self, client):
+        # 422 (unified with every migration endpoint's unknown-vendor
+        # rejection) since review #50 — was 400.
         response = client.post(
             "/api/v1/sanitize",
             data={"source_vendor": "no_such_vendor"},
             files={"config": ("test.cfg", b"hostname x\n", "text/plain")},
         )
-        assert response.status_code == 400
+        assert response.status_code == 422
         assert "Unknown source_vendor" in response.json()["detail"]
 
     def test_missing_source_vendor_returns_422(self, client):

@@ -12,6 +12,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ...definitions.schema import DeviceDefinition
 from ...models.device_profile import (
     DeviceProfile,
     DeviceProfileCreate,
@@ -23,10 +24,34 @@ from ...storage.device_profile_store import (
     FileDeviceProfileStore,
 )
 from ...storage.schedule_store import SCHEDULE_REGISTRY_LOCK
-from ..deps import get_device_profile_store, get_device_profiles
+from ..deps import (
+    get_definitions,
+    get_device_profile_store,
+    get_device_profiles,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/devices", tags=["device-profiles"])
+
+
+def _require_known_type_key(
+    type_key: str, definitions: dict[str, DeviceDefinition]
+) -> None:
+    """422 if *type_key* is not a loaded definition (review #53).
+
+    The docs have always said ``type_key`` "must match a loaded definition",
+    but the value was previously only checked at backup time — so a typo'd
+    profile 201'd and failed days later.  Validate at create/update instead,
+    mirroring the POST /backups check.
+    """
+    if type_key not in definitions:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Unknown type_key {type_key!r}. "
+                f"Loaded definitions: {sorted(definitions.keys())}"
+            ),
+        )
 
 
 @router.get(
@@ -79,6 +104,7 @@ def create_device_profile(
     body: DeviceProfileCreate,
     device_profiles: dict[str, DeviceProfile] = Depends(get_device_profiles),
     device_profile_store: FileDeviceProfileStore = Depends(get_device_profile_store),
+    definitions: dict[str, DeviceDefinition] = Depends(get_definitions),
 ) -> DeviceProfile:
     """Create a new device profile and persist it to disk.
 
@@ -87,7 +113,11 @@ def create_device_profile(
 
     Returns:
         The newly created ``DeviceProfile``.
+
+    Raises:
+        HTTPException 422: If ``type_key`` is not a loaded definition.
     """
+    _require_known_type_key(body.type_key, definitions)
     profile = DeviceProfile(**body.model_dump())
     # Serialise dict-mutate + persist against the backup worker thread and
     # the other route mutators (review finding #10).  The cap check runs
@@ -129,6 +159,7 @@ def update_device_profile(
     body: DeviceProfileUpdate,
     device_profiles: dict[str, DeviceProfile] = Depends(get_device_profiles),
     device_profile_store: FileDeviceProfileStore = Depends(get_device_profile_store),
+    definitions: dict[str, DeviceDefinition] = Depends(get_definitions),
 ) -> DeviceProfile:
     """Partially update an existing device profile.
 
@@ -144,7 +175,12 @@ def update_device_profile(
 
     Raises:
         HTTPException 404: If no profile with *profile_id* exists.
+        HTTPException 422: If a supplied ``type_key`` is not a loaded definition.
     """
+    # Validate an explicitly-supplied type_key against loaded definitions
+    # (review #53) before taking the lock — fail fast, not at backup time.
+    if body.type_key is not None:
+        _require_known_type_key(body.type_key, definitions)
     # Hold the lock across the existence check + mutate + persist so a
     # concurrent delete can't slip between them (review finding #10).
     with DEVICE_PROFILE_REGISTRY_LOCK:
