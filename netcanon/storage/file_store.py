@@ -257,10 +257,19 @@ class FileConfigStore(BaseConfigStore):
     def get_content(self, filename: str) -> str:
         """Return the text of a stored config file.
 
+        Invalid UTF-8 bytes are replaced with U+FFFD rather than raising
+        (#28): this is the codec/CLI/sanitizer stack convention
+        (``errors="replace"``), and a strict decode here escaped as a bare
+        500 on GET /configs/{f}, /configs/diff, /migration/detect and the six
+        plan/render endpoints for any out-of-band non-UTF-8 file dropped in
+        the store dir — while the file was still listable + selectable.
+
         Raises:
             FileNotFoundError: If the file does not exist.
         """
-        return self.resolve_path(filename).read_text(encoding="utf-8")
+        return self.resolve_path(filename).read_text(
+            encoding="utf-8", errors="replace"
+        )
 
     def delete(self, filename: str) -> None:
         """Delete a stored config file.
