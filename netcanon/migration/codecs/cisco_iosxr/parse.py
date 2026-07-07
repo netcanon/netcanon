@@ -310,8 +310,9 @@ def _extract_domain(raw: str) -> str:
 def _extract_version(raw: str) -> str:
     """Return the XR release from the ``!! IOS XR Configuration`` banner.
 
-    Stored as :attr:`CanonicalIntent.source_version` (metadata); the
-    render path synthesises a fresh banner so it is informational only.
+    Stored as :attr:`CanonicalIntent.source_version` (metadata).  On a
+    same-vendor render the device's own release is echoed (#297); a
+    cross-vendor render synthesises a fresh banner.
     """
     # Two banner forms occur in the wild:
     #   ``!! IOS XR Configuration 6.3.1``            (older)

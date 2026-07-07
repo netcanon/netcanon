@@ -13,7 +13,7 @@ Surface (Phase 1 = Tier-1; Phase 2 adds the L2 + LAG + users surface):
 
 * ``hostname <name>`` → :attr:`CanonicalIntent.hostname`.
 * ``!Version ArubaOS-CX <ver>`` → :attr:`CanonicalIntent.source_version`
-  (metadata only; the banner is synthesised on render).
+  (echoed on same-vendor render, #297; a fresh banner otherwise).
 * ``vlan <id>`` stanzas (one id per line) + nested ``name`` / ``description``
   → :class:`CanonicalVlan`, plus SVI synthesis from ``interface vlan N``.
 * ``vrf <name>`` (top-level) → :class:`CanonicalRoutingInstance` (name
@@ -415,9 +415,10 @@ def _extract_hostname(raw: str) -> str:
 def _extract_version(raw: str) -> str:
     """Return the AOS-CX release string from the ``!Version`` banner.
 
-    Stored as :attr:`CanonicalIntent.source_version` (metadata).  The
-    render path synthesises a fresh banner rather than echoing this, so
-    it is informational only.
+    Stored as :attr:`CanonicalIntent.source_version` (metadata).  On a
+    same-vendor render the device's own release is echoed rather than
+    relabelled with a constant (#297); a cross-vendor render synthesises
+    a fresh banner.  The ``!Version ArubaOS-CX`` probe prefix is preserved.
     """
     m = _VERSION_RE.search(raw)
     return m.group(1) if m else ""

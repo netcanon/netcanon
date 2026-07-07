@@ -148,6 +148,10 @@ features**.
   not: `force` only skips the cross-device-class guard; a `block` renders
   anyway and flags the job `partial` — `strip_unsupported` is the mechanism
   that actually drops the offending paths.  (#288)
+  _Erratum (v0.5.2, #292): the `strip_unsupported` mechanism named above
+  never existed — it was vaporware.  `force` / `block` behaviour was already
+  correct, so the affordance was dropped rather than implemented; see the
+  [0.5.2] entry._
 
 ## [0.5.0] - 2026-07-04
 

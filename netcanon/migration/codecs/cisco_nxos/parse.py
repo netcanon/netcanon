@@ -12,7 +12,7 @@ Phase 1 surface (see ``docs/v0.2.0-planning/03-nxos-codec/``):
 
 * ``hostname <name>`` → :attr:`CanonicalIntent.hostname`.
 * ``version <N.N(N)> Bios:version`` → :attr:`CanonicalIntent.source_version`
-  (metadata only; the banner line itself is synthesised on render).
+  (echoed on same-vendor render, #297; a fresh banner otherwise).
 * ``vrf context <name>`` (top-level) → :class:`CanonicalRoutingInstance`
   (name + description + ``rd`` + ``route-target import/export/both``;
   nested per-VRF ``ip route`` → :class:`CanonicalStaticRoute` with
@@ -481,9 +481,10 @@ def _extract_hostname(raw: str) -> str:
 def _extract_version(raw: str) -> str:
     """Return the NX-OS release string from the ``version`` line.
 
-    Stored as :attr:`CanonicalIntent.source_version` (metadata).  The
-    render path synthesises a fresh banner rather than echoing this, so
-    it is informational only.
+    Stored as :attr:`CanonicalIntent.source_version` (metadata).  On a
+    same-vendor render the device's own release is echoed rather than
+    relabelled with a constant (#297); a cross-vendor render synthesises
+    a fresh banner.
     """
     m = _VERSION_RE.search(raw)
     return m.group(1) if m else ""

@@ -170,8 +170,10 @@ def request_has_overrides_or_profile(body: MigrationPlanRequest) -> bool:
     auto-heuristic + return diagnostics the UI can render," and still
     needs the rename-aware pipeline.
 
-    Legacy callers that supply none of these get the plain
-    :func:`run_plan` path unchanged.
+    Requests that supply none of these still get auto port-name
+    translation via ``run_plan_with_overrides(port_rename_map={})`` — the
+    default ``/plan`` flow (this module imports no bare :func:`run_plan`).
+    The ``run_plan`` primitive itself remains unchanged.
     """
     return (
         body.port_rename_map is not None
