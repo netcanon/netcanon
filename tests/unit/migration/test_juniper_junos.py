@@ -972,9 +972,10 @@ class TestApplyGroupsHostname:
         """Regression guard specifically for the ksator QFX5100
         fixture — before GAP 4, its hostname came out empty."""
         import pathlib
-        raw = pathlib.Path(
-            "tests/fixtures/real/junos/"
-            "ksator_labmgmt_qfx5100_junos173.set"
+        raw = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "fixtures" / "real" / "junos"
+            / "ksator_labmgmt_qfx5100_junos173.set"
         ).read_text(encoding="utf-8")
         intent = JunosCodec().parse(raw)
         assert intent.hostname == "QFX5100-183"
@@ -983,9 +984,10 @@ class TestApplyGroupsHostname:
         """Regression guard specifically for the ksator EX4550
         fixture — before GAP 4, its hostname came out empty."""
         import pathlib
-        raw = pathlib.Path(
-            "tests/fixtures/real/junos/"
-            "ksator_labmgmt_ex4550_junos151.set"
+        raw = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "fixtures" / "real" / "junos"
+            / "ksator_labmgmt_ex4550_junos151.set"
         ).read_text(encoding="utf-8")
         intent = JunosCodec().parse(raw)
         assert intent.hostname == "EX4550-190"
@@ -1227,9 +1229,10 @@ class TestPreElsPortMode:
         xe-0/0/0-2 — recognising ``port-mode`` explicitly must leave those
         trunk ports (and their allowed-VLAN lists) exactly as before."""
         import pathlib
-        raw = pathlib.Path(
-            "tests/fixtures/real/junos/"
-            "ksator_labmgmt_ex4550_junos151.set"
+        raw = (
+            pathlib.Path(__file__).resolve().parents[2]
+            / "fixtures" / "real" / "junos"
+            / "ksator_labmgmt_ex4550_junos151.set"
         ).read_text(encoding="utf-8")
         intent = JunosCodec().parse(raw)
         by_name = {i.name: i for i in intent.interfaces}
