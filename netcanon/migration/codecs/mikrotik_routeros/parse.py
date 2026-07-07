@@ -1281,14 +1281,31 @@ def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
         dest = kv.get("dst-address")
         if not dest:
             continue
-        gateway = kv.get("gateway", "")
-        # gateway may be an IP or an interface name; both are fine for
-        # the canonical form since we expose both fields.
-        route = CanonicalStaticRoute(
-            destination=dest,
-            gateway=gateway,
-            description=kv.get("comment", ""),
-        )
+        gateway_raw = kv.get("gateway", "")
+        # (#9) RouterOS combines an IP next-hop and an egress interface
+        # into one ``gateway=<ip>%<iface>`` argument (also the shape of an
+        # IPv6 link-local scoped next-hop, ``fe80::1%ether1``).  render.py
+        # emits exactly this form, but parse used to store the whole token
+        # in ``gateway`` — so cross-vendor targets got an invalid next-hop
+        # (`ip route 0.0.0.0 0.0.0.0 192.168.88.1%ether1`) and the codec's
+        # own emission reparsed asymmetrically.  Split on ``%`` into the
+        # two canonical fields we already expose.
+        gw, sep, egress = gateway_raw.partition("%")
+        if sep:
+            route = CanonicalStaticRoute(
+                destination=dest,
+                gateway=gw,
+                interface=egress,
+                description=kv.get("comment", ""),
+            )
+        else:
+            # Bare IP or bare interface name — kept in ``gateway`` as before
+            # (render's gateway/interface ladder round-trips both).
+            route = CanonicalStaticRoute(
+                destination=dest,
+                gateway=gateway_raw,
+                description=kv.get("comment", ""),
+            )
         intent.static_routes.append(route)
 
 

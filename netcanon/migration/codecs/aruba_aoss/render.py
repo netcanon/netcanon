@@ -636,6 +636,22 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             lines.append(
                 f"   ip address {addr.ip}/{addr.prefix_length}"
             )
+        # (#10) SVI IPv6 — CanonicalVlan is IPv4-only, so a vlan-context
+        # ``ipv6 address`` rides on the sibling ``Vlan<N>`` (or vlan-id-
+        # encoding) interface.  Emit it inside the vlan stanza so the
+        # absorbed SVI carries v6 on aoss round-trip AND cross-vendor
+        # input (was a silent, undeclared drop).  Mirror the IPv4 lookup:
+        # Vlan<N> first, then any vlan-id-encoding interface.
+        v6_source = svi_iface if svi_iface is not None else id_match
+        if v6_source is not None and v6_source.ipv6_addresses:
+            absorbed_iface_names.add(v6_source.name)
+            for addr in v6_source.ipv6_addresses:
+                suffix = (
+                    " link-local" if addr.scope == "link-local" else ""
+                )
+                lines.append(
+                    f"   ipv6 address {addr.ip}/{addr.prefix_length}{suffix}"
+                )
         # VRRP groups — emit nested ``ip vrrp vrid N`` sub-blocks
         # (Wave B v0.2.0).  AOS-S only mounts VRRP inside ``vlan N``
         # blocks; the canonical model attaches groups to a sibling

@@ -544,22 +544,27 @@ def _infer_iface_type(name: str) -> str:
 
 def _parse_vlan_stanza(
     lines: list[str], start: int, vlan_id: int,
-) -> tuple[CanonicalVlan, list[CanonicalVRRPGroup], int]:
+) -> tuple[
+    CanonicalVlan, list[CanonicalVRRPGroup], list[CanonicalIPv6Address], int
+]:
     """Parse a ``vlan N`` stanza starting at *start* (body line).
 
     Returns the parsed :class:`CanonicalVlan`, the list of nested
     :class:`CanonicalVRRPGroup` instances (one per ``vrrp vrid N``
-    sub-block), and the index of the first line AFTER the stanza's
-    outer ``exit``.
+    sub-block), the list of SVI :class:`CanonicalIPv6Address` records
+    (``ipv6 address`` inside the stanza — #10), and the index of the
+    first line AFTER the stanza's outer ``exit``.
 
-    VRRP groups parse here (rather than at the top level) because
-    AOS-S nests the ``vrrp vrid N`` block INSIDE the ``vlan N``
-    stanza — the VLAN is the SVI on this platform.  Returned groups
-    attach to the synthesised ``Vlan<N>`` :class:`CanonicalInterface`
-    by the caller (the SVI-absorption path in :func:`parse_intent`).
+    VRRP groups and SVI IPv6 addresses parse here (rather than at the
+    top level) because AOS-S nests them INSIDE the ``vlan N`` stanza —
+    the VLAN is the SVI on this platform.  Both attach to the
+    synthesised ``Vlan<N>`` :class:`CanonicalInterface` by the caller
+    (the SVI-absorption path in :func:`parse_intent`); ``CanonicalVlan``
+    itself is IPv4-only.
     """
     vlan = CanonicalVlan(id=vlan_id)
     vrrp_groups: list[CanonicalVRRPGroup] = []
+    svi_ipv6: list[CanonicalIPv6Address] = []
     i = start
     while i < len(lines):
         line = lines[i]
@@ -623,13 +628,25 @@ def _parse_vlan_stanza(
             i += 1
             continue
 
-        # GAP-EVPN-3: IPv6 address.  CanonicalVlan does not carry an
-        # ipv6_addresses list today (the SVI-on-VLAN model is IPv4-
-        # only), so we skip the line.  Static IPv6 addresses inside
-        # `vlan <N>` stanzas are rare on AOS-S in practice; if they
-        # appear in a future fixture corpus we extend CanonicalVlan
-        # at that point.
-        if _IPV6_ADDR_RE.match(stripped):
+        # (#10) Vlan-context IPv6 SVI address.  CanonicalVlan is
+        # IPv4-only, so — exactly like VRRP below — collect it here and
+        # let the caller attach it to the synthesised ``Vlan<N>``
+        # CanonicalInterface (the canonical SVI home).  Previously the
+        # line was skipped outright → a SILENT, UNDECLARED drop on both
+        # the aoss round-trip and any cross-vendor render.  ``ipv6
+        # address dhcp full`` has no static address and doesn't match
+        # the regex, so it still falls through.
+        v6m = _IPV6_ADDR_RE.match(stripped)
+        if v6m:
+            scope = "link-local" if v6m.group(3) else "global"
+            try:
+                svi_ipv6.append(CanonicalIPv6Address(
+                    ip=v6m.group(1),
+                    prefix_length=int(v6m.group(2)),
+                    scope=scope,
+                ))
+            except ValueError:
+                pass
             i += 1
             continue
 
@@ -648,7 +665,7 @@ def _parse_vlan_stanza(
             continue
 
         i += 1
-    return vlan, vrrp_groups, i
+    return vlan, vrrp_groups, svi_ipv6, i
 
 
 def _parse_vrrp_group_stanza(
@@ -1201,7 +1218,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         vm = _VLAN_HEADER_RE.match(stripped_line)
         if vm:
             vlan_id = int(vm.group(1))
-            vlan, vrrp_groups, next_i = _parse_vlan_stanza(
+            vlan, vrrp_groups, svi_ipv6, next_i = _parse_vlan_stanza(
                 lines, i + 1, vlan_id,
             )
             # Aruba AOS-S VLAN reassignment semantic: when a port
@@ -1244,13 +1261,14 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             # implies an SVI), we still synthesise the Vlan<N>
             # interface so the groups have somewhere to attach.
             # Render path is robust to either input shape.
-            if vlan.ipv4_addresses or vrrp_groups:
+            if vlan.ipv4_addresses or vrrp_groups or svi_ipv6:
                 intent.interfaces.append(CanonicalInterface(
                     name=f"Vlan{vlan_id}",
                     description=vlan.name,
                     enabled=True,
                     interface_type="ianaift:l3ipvlan",
                     ipv4_addresses=list(vlan.ipv4_addresses),
+                    ipv6_addresses=list(svi_ipv6),
                     vrrp_groups=list(vrrp_groups),
                 ))
             i = next_i
