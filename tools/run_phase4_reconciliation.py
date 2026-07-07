@@ -1035,6 +1035,9 @@ def run_reconciliation(mesh_json_path: Path) -> dict[str, Any]:
         "aggregate": aggregate,
         "severity_matrix": severity_matrix,
         "pair_codec_bug_counts": pair_codec_bug_counts,
+        "pair_drift_yaml_less": build_pair_drift_counts(
+            mesh.get("cells", []), set(expectations)
+        ),
         "cells": cells_out,
     }
 
@@ -1101,6 +1104,40 @@ def build_pair_codec_bug_counts(
         for (src, tgt), n in pair_counts.items()
     ]
     out.sort(key=lambda r: (-r["codec_bug_count"], r["source_codec"], r["target_codec"]))
+    return out
+
+
+def build_pair_drift_counts(
+    mesh_cells: list[dict[str, Any]],
+    yaml_pairs: set[tuple[str, str]],
+) -> list[dict[str, Any]]:
+    """Per (source, target) pair WITHOUT a Phase-3 expectation YAML: the
+    total MECHANICALLY-drifted fields summed across the pair's cells (#14).
+
+    Uses the Phase-1 mesh cell's ``summary.fields_drifted`` — the raw
+    round-trip drift count, which exists independent of any expectation
+    YAML.  (The RECONCILED disposition can't help here: a YAML-less cell
+    has ``field_variances={}`` and its every field punts to ALIGNED /
+    TRIVIAL_EMPTY, so the CODEC_BUG ratchet is structurally blind to these
+    pairs — the 4 newest codecs' pairs + every same-vendor pair, ~723/1224
+    cells.)  Pinning this coverage-independent drift total per pair against
+    the committed baseline turns a regression that silently drops fields on
+    an uncovered pair (e.g. arista -> cisco_nxos) from green into red, until
+    a proper expectation YAML is authored (the long-term fix).
+    """
+    pair_drift: dict[tuple[str, str], int] = {}
+    for cell in mesh_cells:
+        key = (cell["source_codec"], cell["target_codec"])
+        # YAML-covered pairs are already guarded by the CODEC_BUG ratchet.
+        if key in yaml_pairs:
+            continue
+        drifted = (cell.get("summary") or {}).get("fields_drifted", 0)
+        pair_drift[key] = pair_drift.get(key, 0) + drifted
+    out = [
+        {"source_codec": src, "target_codec": tgt, "drifted_total": n}
+        for (src, tgt), n in pair_drift.items()
+    ]
+    out.sort(key=lambda r: (r["source_codec"], r["target_codec"]))
     return out
 
 

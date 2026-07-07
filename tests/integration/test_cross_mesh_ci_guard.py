@@ -11,8 +11,11 @@ committed baseline (``tests/fixtures/real/_phase4_runs/latest.json``):
 * render failures stay within a documented allowlist (a new render crash
   on the committed corpus is a codec regression),
 * the reconciled high-severity ``CODEC_BUG`` count doesn't exceed the
-  baseline (the confusion-matrix fidelity ratchet), and
-* no NEW codec-bug ``(source, target)`` pair appears.
+  baseline (the confusion-matrix fidelity ratchet),
+* no NEW codec-bug ``(source, target)`` pair appears, and
+* no YAML-less pair's raw mechanical drift exceeds the baseline — the
+  coverage ratchet that catches regressions on the ~723/1224 cells the
+  CODEC_BUG ratchet is structurally blind to (#14).
 
 This turns the manual ``python tools/run_full_mesh.py`` +
 ``run_phase4_reconciliation.py`` dogfood loop into a permanent CI
@@ -189,6 +192,47 @@ def test_no_pair_codec_bug_count_regressed(mesh_and_recon, baseline):
         "existing codec-bug pair(s) regressed (baseline→live): "
         f"{regressed}. A previously-tolerated pair now drifts MORE on the "
         "committed corpus even though the aggregate total / pair set held."
+    )
+
+
+def test_no_yaml_less_pair_drift_regressed(mesh_and_recon, baseline):
+    """No YAML-less (source, target) pair may drift MORE than the committed
+    baseline (#14).
+
+    The 56 expectation YAMLs cover only the original 8-codec cross-mesh; the
+    4 newest codecs' pairs (cisco_nxos / cisco_iosxr / aruba_aoscx / vyos)
+    plus every same-vendor pair — ~723/1224 cells — have no YAML, so their
+    ``field_variances`` is empty and NO field can classify as ``CODEC_BUG``.
+    The four CODEC_BUG guards above are therefore structurally blind to them:
+    a regression that drops every static route on ``arista_eos -> cisco_nxos``
+    keeps all of them green.  This pins each YAML-less pair's raw mechanical
+    ``fields_drifted`` total (from the Phase-1 mesh, expectation-independent)
+    with ``<=`` — a genuine improvement (less drift) still passes, a
+    regression (more drift) turns red.  Long-term fix: author expectation
+    YAMLs for these pairs so they get the richer CODEC_BUG classification.
+    """
+    _, result = mesh_and_recon
+
+    def _by_pair(rows):
+        return {
+            (r["source_codec"], r["target_codec"]): r["drifted_total"]
+            for r in rows
+        }
+
+    live = _by_pair(result["pair_drift_yaml_less"])
+    base = _by_pair(baseline["pair_drift_yaml_less"])
+    regressed = {
+        pair: (base[pair], live.get(pair, 0))
+        for pair in base
+        if live.get(pair, 0) > base[pair]
+    }
+    assert not regressed, (
+        "YAML-less cross-mesh pair(s) drifted MORE than the baseline "
+        f"(baseline->live): {regressed}.\nA field that used to round-trip on "
+        "an uncovered pair now drops, and the CODEC_BUG ratchet can't see it. "
+        "Investigate the regression before re-baselining "
+        "(regenerate tests/fixtures/real/_phase4_runs/latest.json's "
+        "pair_drift_yaml_less via tools/run_phase4_reconciliation.py)."
     )
 
 
