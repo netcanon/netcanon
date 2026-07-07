@@ -13,9 +13,10 @@ contributor / methodology level.
 
 ## TL;DR
 
-Netcanon ships with **four test layers**.  CI gates every release on the
-**unit + integration** tiers; the **E2E** (Playwright) and **desktop**
-(PySide6) tiers run locally and on demand, not on every PR:
+Netcanon ships with **four test layers**.  CI runs **all four on every PR** —
+unit + integration across Python 3.11–3.14, plus **E2E** (Playwright) and
+**desktop** (PySide6) on 3.13.  The only maintainer-run tool below is the
+cross-mesh audit, which is NOT a CI gate:
 
 | Layer | What it tests | Speed |
 |---|---|---|
@@ -41,7 +42,7 @@ spot until the device behaves wrong in production.
 
 The cross-mesh audit runs locally / on demand — it is a maintainer tool
 re-generated on every codec change (per the doc-sync checklist), NOT a CI
-gate on every PR (only the unit + integration tiers gate).
+gate on every PR (the four pytest tiers gate; the cross-mesh audit does not).
 Its results live in
 [`tests/fixtures/real/PHASE4_RECONCILIATION.md`](../tests/fixtures/real/PHASE4_RECONCILIATION.md)
 (machine-generated; not hand-edited).
@@ -139,7 +140,8 @@ variance taxonomy and generates
 `tests/fixtures/real/PHASE4_RECONCILIATION.md` (the matrix).
 
 Both run locally / on demand — the cross-mesh audit is a maintainer tool,
-NOT a CI gate (only the unit + integration tiers gate every PR).  The
+NOT a CI gate (the four pytest tiers gate every PR; the cross-mesh audit
+does not).  The
 matrix gets regenerated on every codec change per the
 [doc-sync checklist](../AGENTS.md#documentation-sync-checklist).
 

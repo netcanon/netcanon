@@ -379,11 +379,11 @@ Tests run across four layers: unit (pure functions, no I/O — the
 real-capture validation harness lives here as a unit subset),
 integration (TestClient + mocked SSH at the `get_collector`
 factory), e2e (Playwright against a live Uvicorn), and desktop
-(PySide6 + pystray mocked).  CI runs the **unit + integration** tiers
-on Python 3.11 / 3.12 / 3.13 / 3.14 against Ubuntu; the e2e + desktop
-tiers run locally, not in CI.  The CI pytest invocation uses `-x`
-(stop at first failure), so a green run reports the authoritative
-pass count while a red run stops early.
+(PySide6 + pystray mocked).  CI runs **all four tiers on every PR** —
+unit + integration on Python 3.11 / 3.12 / 3.13 / 3.14 against Ubuntu,
+plus e2e (Playwright) and desktop (PySide6) on Python 3.13.  No pytest
+invocation uses `-x`, so each tier reports its full pass/fail count
+(see `SECURITY.md` for the authoritative required merge checks).
 
 ### Layout
 
