@@ -1169,3 +1169,40 @@ class TestCrossReferenceRewrite:
         # now-deleted interface.
         assert vlan_if.vrrp_groups[0].track_interfaces == []
         assert intent.vxlan_vnis[0].source_interface == ""
+
+
+class TestGroupContentFlattenedOnRename:
+    """(#4) Verbatim apply-group bodies must be cleared once a rename/drop
+    is applied — else the target render re-emits the group body under the
+    PRE-rename name, resurrecting the interface with the same IP."""
+
+    def _tree(self):
+        return CanonicalIntent(
+            interfaces=[CanonicalInterface(name="GigabitEthernet1/0/1")],
+            apply_groups=["G"],
+            group_content={
+                "G": [["interfaces", "GigabitEthernet1/0/1", "x"]]
+            },
+        )
+
+    def test_rename_clears_group_content_and_warns(self):
+        intent = self._tree()
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), CiscoIOSXECLICodec(),
+            rename_map={"GigabitEthernet1/0/1": "TenGigabitEthernet1/0/1"},
+        )
+        assert intent.group_content == {}
+        assert intent.apply_groups == []
+        assert any("apply-group" in w for w in result.warnings)
+
+    def test_noop_keeps_group_content(self):
+        # No rename applied (identity map) → verbatim bodies preserved for
+        # same-vendor round-trip fidelity.
+        intent = self._tree()
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), CiscoIOSXECLICodec(),
+            rename_map={},
+        )
+        assert intent.group_content != {}
+        assert intent.apply_groups == ["G"]
+        assert not any("apply-group" in w for w in result.warnings)

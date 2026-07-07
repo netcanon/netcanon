@@ -74,6 +74,39 @@ from ..base import ParseError
 logger = logging.getLogger(__name__)
 
 
+def _resolve_vlan_member_to_vids(
+    vname: str, vid_by_vlan_name: dict[str, int]
+) -> list[int]:
+    """Resolve one Junos ``vlan members`` token to VID(s).
+
+    Junos accepts three member spellings; the parser must handle all
+    three or the membership is silently dropped (port lands in VLAN 1 /
+    trunk defaults to all-4094 on cross-vendor targets — #8):
+
+      * a VLAN *name* present in ``vid_by_vlan_name`` → its VID
+      * a bare numeric VID (``100``) → that VID (1-4094)
+      * a numeric range (``100-110``) → every VID in the inclusive range
+
+    Returns ``[]`` for anything that doesn't resolve (unknown name,
+    out-of-range, malformed) — matching the parser's silent tolerance.
+    Numeric parsing uses ``str.isdigit`` / ``str.partition`` (not a
+    regex over parser-derived text) to stay clear of CodeQL's
+    polynomial-redos rule.
+    """
+    vid = vid_by_vlan_name.get(vname)
+    if vid is not None:
+        return [vid]
+    if vname.isdigit():
+        n = int(vname)
+        return [n] if 1 <= n <= 4094 else []
+    lo_str, sep, hi_str = vname.partition("-")
+    if sep and lo_str.isdigit() and hi_str.isdigit():
+        lo, hi = int(lo_str), int(hi_str)
+        if 1 <= lo <= hi <= 4094:
+            return list(range(lo, hi + 1))
+    return []
+
+
 def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     """Parse Junos ``set``-form (or block-form) text into a
     :class:`CanonicalIntent`.
@@ -540,10 +573,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         if iface.switchport_mode == "access":
             # Access mode: the first resolved member becomes the
             # access_vlan (operators rarely declare more than one).
+            # (#8) Numeric ``members <vid>`` resolve directly, not just
+            # via the name→id map.
             for vname in names_list:
-                vid = vid_by_vlan_name.get(vname)
-                if vid is not None:
-                    iface.access_vlan = vid
+                vids = _resolve_vlan_member_to_vids(vname, vid_by_vlan_name)
+                if vids:
+                    iface.access_vlan = vids[0]
                     break
         elif iface.switchport_mode == "trunk":
             # Junos `vlan members all` is the operator-form for "all
@@ -556,10 +591,14 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             if any(vname == "all" for vname in names_list):
                 iface.trunk_allowed_vlans = list(range(1, 4095))
                 continue
+            # (#8) Each member may be a name, a numeric VID, or a numeric
+            # range (``100-110``) — resolve/expand all three.
             for vname in names_list:
-                vid = vid_by_vlan_name.get(vname)
-                if vid is not None and vid not in iface.trunk_allowed_vlans:
-                    iface.trunk_allowed_vlans.append(vid)
+                for vid in _resolve_vlan_member_to_vids(
+                    vname, vid_by_vlan_name
+                ):
+                    if vid not in iface.trunk_allowed_vlans:
+                        iface.trunk_allowed_vlans.append(vid)
 
     # 3. Attach IRB SVI L3 addresses to the matching CanonicalVlan
     #    AND prune the redundant irb.<vid> interface — but ONLY
@@ -986,6 +1025,28 @@ def _blockform_to_setform(raw: str) -> str:
     def emit_leaf(words: list[str]) -> None:
         if not words:
             return
+        # (#7) Expand a bracket value-list into one set-line per value.
+        # Block-form writes multi-value leaves as ``key [ v1 v2 … ];``;
+        # the set-form equivalent is one ``set <path> key <vi>`` per value.
+        # Without this the literal ``[`` / values are ingested as data
+        # (``name-server [ 8.8.8.8 1.1.1.1 ]`` → dns_servers == ['[']).
+        if "[" in words:
+            lb = words.index("[")
+            prefix = words[:lb]
+            try:
+                rb = words.index("]", lb + 1)
+            except ValueError:
+                rb = len(words)
+            values = words[lb + 1:rb]
+            trailing = words[rb + 1:]  # tokens after ] (rare); kept verbatim
+            if prefix and values:
+                for v in values:
+                    out_lines.append(
+                        "set " + " ".join(path_stack + prefix + [v] + trailing)
+                    )
+                return
+            # Empty list or bracket-first (no leaf key) — fall through to
+            # verbatim emission rather than silently dropping the line.
         line = "set " + " ".join(path_stack + words)
         out_lines.append(line)
 
