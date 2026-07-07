@@ -174,6 +174,12 @@ _WALK_EXEMPT: dict[tuple[str, str], tuple[str, str]] = {
     ("CanonicalEvpnType5Route", "rt_exports"): ("ENVELOPE_AUDIT_BACKSTOPPED", "EVPN-Type5 sub-leaf; audit-backstopped"),
     ("CanonicalRADIUSServer", "auth_port"): ("ENVELOPE_AUDIT_BACKSTOPPED", "defaulted 1812; non-default backstopped"),
     ("CanonicalRADIUSServer", "acct_port"): ("ENVELOPE_AUDIT_BACKSTOPPED", "defaulted 1813; non-default backstopped"),
+    # (#22) VIP prefix is a MikroTik-specific VIP mask (other vendors' VRRP
+    # VIPs have no independent prefix).  The /vrrp-groups/group envelope is
+    # walked; MikroTik round-trips the prefix losslessly and it is now a model
+    # field, so the offline cross-mesh model_dump audit backstops any drop.
+    ("CanonicalVRRPGroup", "virtual_ip_prefix"): ("ENVELOPE_AUDIT_BACKSTOPPED", "MikroTik VIP mask; audit-backstopped"),
+    ("CanonicalVRRPGroup", "virtual_ip6_prefix"): ("ENVELOPE_AUDIT_BACKSTOPPED", "MikroTik v6 VIP mask; backstopped"),
     # NOTE: the former KNOWN_GAP exemptions (IPv6 scope, routing-instance
     # instance_type, static-route gateway) are now WALKED -- PR-2c (audit
     # e5b77d7) closed the last three silent-loss leaves, completing the
