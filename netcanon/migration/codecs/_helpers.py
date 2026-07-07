@@ -21,8 +21,32 @@ from __future__ import annotations
 import ipaddress
 import re
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from .base import ParseError, RenderError
+
+if TYPE_CHECKING:
+    from ..canonical.intent import CanonicalIntent
+
+
+def same_vendor_version(
+    tree: CanonicalIntent, *, vendor_id: str, default: str
+) -> str:
+    """The version token to stamp on render: the device's OWN ``source_version``
+    when the tree was parsed by THIS codec (``source_vendor == vendor_id``) and
+    carries a version, else the synthetic *default*.
+
+    Compare against the codec's ``capabilities.vendor_id`` — NOT its registry
+    key.  Some codecs stamp a different vendor_id than their registry name
+    (``cisco_iosxe_cli`` → ``cisco_iosxe``, ``fortigate_cli`` → ``fortigate``),
+    so a registry-key literal would silently never fire for those.  Keeps a
+    same-vendor re-render (sanitize / X→X) echoing the device's real release
+    instead of relabelling it with a constant.  ``source_version`` is
+    metadata-excluded from every comparator, so this is round-trip-invisible.
+    """
+    if tree.source_vendor == vendor_id and tree.source_version:
+        return tree.source_version
+    return default
 
 
 def _normalise_mac_to_colon_hex(mac: str) -> str:

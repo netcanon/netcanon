@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
-from .._helpers import _coalesce_vlan_ids
+from .._helpers import _coalesce_vlan_ids, same_vendor_version
 from . import port_names as _port_names
 
 #: Synthesised NX-OS release stamped into the banner when the source device's
@@ -46,10 +46,10 @@ _DEFAULT_VERSION = "9.3(11)"
 
 def _version_token(tree: CanonicalIntent) -> str:
     """The NX-OS release to stamp: the device's own when same-vendor and
-    known, else the synthetic default."""
-    if tree.source_vendor == "cisco_nxos" and tree.source_version:
-        return tree.source_version
-    return _DEFAULT_VERSION
+    known, else the synthetic default (review #63 — shared helper)."""
+    return same_vendor_version(
+        tree, vendor_id="cisco_nxos", default=_DEFAULT_VERSION
+    )
 
 #: Canonical LAG mode -> NX-OS ``channel-group ... mode`` keyword
 #: (inverse of parse._NXOS_LAG_MODE_MAP; canonical ``static`` -> ``on``).

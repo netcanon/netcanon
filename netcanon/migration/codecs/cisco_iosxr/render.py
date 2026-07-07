@@ -40,7 +40,7 @@ from __future__ import annotations
 import re
 
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
-from .._helpers import _prefix_to_mask
+from .._helpers import _prefix_to_mask, same_vendor_version
 from . import port_names as _port_names
 
 #: Synthesised IOS-XR release stamped into the banner when the source
@@ -54,10 +54,10 @@ _DEFAULT_VERSION = "6.6.2"
 
 def _version_token(tree: CanonicalIntent) -> str:
     """The IOS-XR release to stamp: the device's own when same-vendor and
-    known, else the synthetic default."""
-    if tree.source_vendor == "cisco_iosxr" and tree.source_version:
-        return tree.source_version
-    return _DEFAULT_VERSION
+    known, else the synthetic default (review #63 — shared helper)."""
+    return same_vendor_version(
+        tree, vendor_id="cisco_iosxr", default=_DEFAULT_VERSION
+    )
 
 #: Canonical LAG mode → IOS-XR ``bundle id ... mode`` keyword (inverse of
 #: parse._IOSXR_LAG_MODE_MAP; canonical ``static`` → XR ``on``).

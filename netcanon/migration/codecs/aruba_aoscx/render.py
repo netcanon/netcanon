@@ -45,7 +45,7 @@ import ipaddress
 import re
 
 from ...canonical.intent import CanonicalIntent
-from .._helpers import _coalesce_vlan_ids
+from .._helpers import _coalesce_vlan_ids, same_vendor_version
 
 #: Synthesised AOS-CX release stamped into the ``!Version`` banner when the
 #: source device's own release is unknown.  When the tree was parsed from THIS
@@ -60,10 +60,11 @@ _DEFAULT_VERSION = "Virtual.10.13.1000"
 
 def _version_token(tree: CanonicalIntent) -> str:
     """The AOS-CX release token to stamp after ``!Version ArubaOS-CX``: the
-    device's own when same-vendor and known, else the synthetic default."""
-    if tree.source_vendor == "aruba_aoscx" and tree.source_version:
-        return tree.source_version
-    return _DEFAULT_VERSION
+    device's own when same-vendor and known, else the synthetic default
+    (review #63 — shared helper)."""
+    return same_vendor_version(
+        tree, vendor_id="aruba_aoscx", default=_DEFAULT_VERSION
+    )
 
 #: Canonical SNMPv3 privacy cipher -> AOS-CX `priv` keyword.  AOS-CX
 #: supports `des` and `aes`; NX-OS-style aes128/192/256 collapse to
