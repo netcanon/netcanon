@@ -40,9 +40,11 @@ from ..config import Settings
 
 logger = logging.getLogger(__name__)
 
-#: Serialises read + write of the shared ``known_hosts`` store.  Backups run
-#: in a ThreadPoolExecutor (up to 10 workers), so two concurrent TOFU
-#: ``save_host_keys`` calls could otherwise interleave and corrupt the file.
+#: Serialises read-merge-write of the shared ``known_hosts`` store.  Backups
+#: run in a ThreadPoolExecutor (up to 10 workers); without one lock spanning
+#: the whole load+merge+save, two concurrent TOFU persists (or a Netmiko
+#: ``verify_host_key`` save) would each write only their own learned key and
+#: clobber the other's freshly-pinned entry (review #2).
 _KNOWN_HOSTS_LOCK = threading.Lock()
 
 #: Socket + key-exchange timeout (seconds) for the Netmiko host-key
@@ -89,6 +91,16 @@ def persist_paramiko_host_keys(
 ) -> None:
     """Persist newly-learned host keys after a successful ``tofu`` connect.
 
+    Read-merge-write under one lock hold (review #2).  ``client.save_host_keys``
+    plain-overwrites the file with only THIS client's in-memory keys, so when
+    the store didn't exist at policy-apply time (nothing loaded), two concurrent
+    first-time backups — or a concurrent Netmiko ``verify_host_key`` save —
+    would each write just their own key and silently drop the other's pin,
+    re-TOFU'ing the dropped device unverified next run (the MITM window v0.4.5
+    closed).  Instead load the current file, union in the client's learned
+    keys, and save the merged set; never call ``client.save_host_keys``.
+    Mirrors the already-atomic :func:`verify_host_key`.
+
     No-op for ``auto_add`` (no store) and ``reject`` (the store is operator-
     curated; we never extend it implicitly).
     """
@@ -97,8 +109,17 @@ def persist_paramiko_host_keys(
     kh = known_hosts_path(settings)
     try:
         with _KNOWN_HOSTS_LOCK:
+            merged = paramiko.HostKeys()
+            if kh.exists():
+                try:
+                    merged.load(str(kh))
+                except OSError as exc:  # race: file vanished/locked since exists()
+                    logger.warning("Could not read known_hosts at %s: %s", kh, exc)
+            for hostname, keytypes in client.get_host_keys().items():
+                for keytype, key in keytypes.items():
+                    merged.add(hostname, keytype, key)
             kh.parent.mkdir(parents=True, exist_ok=True)
-            client.save_host_keys(str(kh))
+            merged.save(str(kh))
     except OSError as exc:  # pragma: no cover - disk/permission edge
         logger.warning("Could not persist known_hosts at %s: %s", kh, exc)
 

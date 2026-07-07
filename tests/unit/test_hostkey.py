@@ -13,6 +13,7 @@ from netcanon.collectors.hostkey import (
     host_key_warning_reason,
     known_hosts_path,
     netmiko_host_key_params,
+    persist_paramiko_host_keys,
 )
 from netcanon.config import Settings
 
@@ -65,3 +66,36 @@ def test_warning_reason_fires_when_auto_add_selected(tmp_path) -> None:
 def test_no_warning_reason_for_strict_modes(tmp_path, mode) -> None:
     s = Settings(ssh_host_key_checking=mode, data_dir=tmp_path)
     assert host_key_warning_reason(s) is None
+
+
+def test_persist_merges_concurrent_first_time_keys(tmp_path) -> None:
+    """persist_paramiko_host_keys read-merge-writes the store (review #2).
+
+    Two first-time TOFU backups that each learned a different device key must
+    BOTH end up pinned.  ``client.save_host_keys`` (the pre-fix call) plain-
+    overwrites with only the calling client's keys, so the second persist
+    would drop the first device's pin — silently re-TOFU'ing it unverified.
+    """
+    import paramiko
+
+    s = Settings(ssh_host_key_checking="tofu", data_dir=tmp_path)
+    kh = known_hosts_path(s)
+
+    def _client_with(hostname: str, key) -> paramiko.SSHClient:
+        c = paramiko.SSHClient()
+        c.get_host_keys().add(hostname, key.get_name(), key)
+        return c
+
+    key_a = paramiko.ECDSAKey.generate()
+    key_b = paramiko.ECDSAKey.generate()
+    # Each worker starts from an EMPTY in-memory store (the file did not exist
+    # when its client applied the policy), then persists in sequence.
+    persist_paramiko_host_keys(_client_with("10.0.0.1", key_a), s)
+    persist_paramiko_host_keys(_client_with("10.0.0.2", key_b), s)
+
+    saved = paramiko.HostKeys()
+    saved.load(str(kh))
+    assert saved.lookup("10.0.0.1") is not None, (
+        "first device's pin was clobbered — persist overwrote instead of merging"
+    )
+    assert saved.lookup("10.0.0.2") is not None
