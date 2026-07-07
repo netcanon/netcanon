@@ -354,3 +354,30 @@ class TestDot1qAndVxlanRewrite:
         result = translate_vlan_ids(intent, rename_map={55: 66})
         assert intent.interfaces[0].dot1q_vlan == 66
         assert not any("nowhere" in w for w in result.warnings)
+
+
+class TestGroupContentFlattenedOnVlanRename:
+    """(#4) A VLAN renumber must clear verbatim apply-group bodies — else
+    the render re-emits the group's pre-renumber VLAN definitions."""
+
+    def test_rename_clears_group_content_and_warns(self):
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(id=10, name="V10")],
+            apply_groups=["G"],
+            group_content={"G": [["vlans", "V10", "vlan-id", "10"]]},
+        )
+        result = translate_vlan_ids(intent, rename_map={10: 20})
+        assert intent.group_content == {}
+        assert intent.apply_groups == []
+        assert any("apply-group" in w for w in result.warnings)
+
+    def test_noop_keeps_group_content(self):
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(id=10, name="V10")],
+            apply_groups=["G"],
+            group_content={"G": [["vlans", "V10", "vlan-id", "10"]]},
+        )
+        result = translate_vlan_ids(intent, rename_map={})
+        assert intent.group_content != {}
+        assert intent.apply_groups == ["G"]
+        assert not any("apply-group" in w for w in result.warnings)

@@ -591,6 +591,24 @@ def translate_port_names(  # noqa: C901
         d for d in (user_dropped | auto_dropped) if d in present_names
     )
 
+    # (#4) A rename/drop invalidates any verbatim vendor-provenance group
+    # bodies (Junos apply-groups): the target's render re-emits those bodies
+    # UNCHANGED, resurrecting the PRE-rename interface names alongside the
+    # renamed ones (the same IP ends up on two ports).  The flattened
+    # canonical tree already carries the group semantics, so drop the
+    # verbatim bodies + apply-group refs once names have moved — mirrors the
+    # sanitizer's group_content strip.  Fail closed with a warning.
+    if (applied or reported_dropped) and (
+        intent.group_content or intent.apply_groups
+    ):
+        intent.group_content = {}
+        intent.apply_groups = []
+        warnings.append(
+            "port_rename: cleared verbatim apply-group bodies because a "
+            "rename/drop was applied — group content was flattened into the "
+            "canonical tree to avoid resurrecting pre-rename names"
+        )
+
     logger.debug(
         "translate_port_names: exit %s → %s applied=%d dropped=%d "
         "warnings=%d",

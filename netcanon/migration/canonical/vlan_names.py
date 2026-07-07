@@ -365,6 +365,22 @@ def translate_vlan_ids(  # noqa: C901
             kept_vnis.append(vx)
         intent.vxlan_vnis = kept_vnis
 
+    # (#4) A rename/drop invalidates verbatim vendor-provenance group bodies
+    # (Junos apply-groups): re-emitting them resurrects the PRE-renumber VLAN
+    # definitions alongside the renumbered ones.  The flattened canonical tree
+    # already carries the semantics, so clear the bodies + apply-group refs
+    # once IDs have moved — mirrors the port-rename orchestrator + sanitizer.
+    if (result.applied or result.dropped) and (
+        intent.group_content or intent.apply_groups
+    ):
+        intent.group_content = {}
+        intent.apply_groups = []
+        result.warnings.append(
+            "vlan_rename: cleared verbatim apply-group bodies because a "
+            "rename/drop was applied — group content was flattened into the "
+            "canonical tree to avoid resurrecting pre-rename VLAN ids"
+        )
+
     logger.debug(
         "translate_vlan_ids: exit applied=%d dropped=%d warnings=%d",
         len(result.applied),
