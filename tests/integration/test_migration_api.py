@@ -744,10 +744,15 @@ interface GigabitEthernet1/0/1
         )
         assert resp.status_code == 200
         body = resp.json()
-        # VLAN applied, port NOT applied.
+        # VLAN applied.  Port auto-translation IS now engaged (#16) — Gi1/0/1
+        # -> aruba 1/1 — so the render carries no invalid source-vendor name;
+        # but the EXPLICIT port map on this VLAN pane is still ignored
+        # (GigabitEthernet99 never applied).
         vlan_renames = body["vlan_renames"]
         assert "10" in vlan_renames or 10 in vlan_renames
-        assert body["port_renames"] == {}
+        assert body["port_renames"].get("GigabitEthernet1/0/1") == "1/1"
+        assert "GigabitEthernet99" not in body["port_renames"].values()
+        assert "GigabitEthernet1/0/1" not in (body["rendered"] or "")
 
 
 class TestPlanLocalUsersEndpoint:
@@ -837,8 +842,11 @@ interface GigabitEthernet1/0/1
         assert resp.status_code == 200
         body = resp.json()
         assert body["local_user_renames"] == {"admin": "netadmin"}
-        # Neither port nor VLAN maps engaged.
-        assert body["port_renames"] == {}
+        # VLAN map ignored; port auto-translation IS engaged (#16) — Gi1/0/1
+        # -> aruba 1/1 — but the EXPLICIT port map (GigabitEthernet99) is not
+        # applied.
+        assert body["port_renames"].get("GigabitEthernet1/0/1") == "1/1"
+        assert "GigabitEthernet99" not in body["port_renames"].values()
         assert body["vlan_renames"] == {}
 
 
@@ -1942,3 +1950,39 @@ class TestDroppedTier3SectionsWireThrough:
         # ACL header is in dropped_tier3_sections (notification),
         # NOT in rendered (would mean we accidentally translated it).
         assert "access-list extended OUTSIDE_IN" not in rendered
+
+
+class TestPerPanePortNameParity:
+    """(#16) Every per-pane endpoint must engage auto port-name translation
+    like /plan, so a cross-vendor render never leaks an invalid source-vendor
+    interface name — even when the pane's own category map is empty.  Before
+    the fix, /plan/{vlans,local_users,snmp,snmpv3} left port_rename_map=None,
+    disengaging the translator and rendering ``GigabitEthernet1/0/1`` verbatim
+    into a Junos config."""
+
+    _IOSXE = (
+        "hostname r1\n!\n"
+        "interface GigabitEthernet1/0/1\n"
+        " description uplink\n"
+        "!\n"
+        "vlan 10\n name DATA\n!\n"
+    )
+
+    @pytest.mark.parametrize(
+        "endpoint",
+        ["plan/vlans", "plan/local_users", "plan/snmp", "plan/snmpv3"],
+    )
+    def test_per_pane_translates_port_names(self, client, endpoint):
+        resp = client.post(
+            f"/api/v1/migration/{endpoint}",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "juniper_junos",
+                "raw_text": self._IOSXE,
+            },
+        )
+        assert resp.status_code == 200
+        rendered = resp.json().get("rendered") or ""
+        # Source-vendor name must NOT survive; the Junos-format name must.
+        assert "GigabitEthernet1/0/1" not in rendered
+        assert "ge-1/0/1" in rendered
