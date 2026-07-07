@@ -220,7 +220,15 @@ def merge_trunk_allowed(
         return [vid for vid in range(1, 4095) if vid not in blocked]
     base = list(existing)
     if keyword == "add":
-        return base + [vid for vid in ids if vid not in base]
+        # (#11) ``vid not in base`` is an O(len(base)) list scan per id;
+        # a config with K× ``allowed vlan add 1-4094`` lines drove the
+        # accumulating 4094-element list to ~8.4M comparisons per line
+        # (K=200 → ~7 s parse; near-cap bodies → hours, on the default
+        # local bind).  A set membership check is O(1) and behaviour-
+        # identical (order preserved; the comprehension doesn't observe
+        # its own additions either way, so duplicate ids resolve the same).
+        seen = set(base)
+        return base + [vid for vid in ids if vid not in seen]
     # keyword == "remove"
     drop = set(ids)
     return [vid for vid in base if vid not in drop]

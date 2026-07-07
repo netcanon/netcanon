@@ -9,6 +9,7 @@ do not need to be re-entered for each operation.
 from __future__ import annotations
 
 import logging
+from typing import get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -32,6 +33,17 @@ from ..deps import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/devices", tags=["device-profiles"])
+
+#: DeviceProfile fields whose annotation admits ``None`` — the only fields a
+#: PUT may explicitly clear (``enable_password``, ``notes``, ``os_version``,
+#: ``model``; plus the API-read-only ``detected_facts``).  Derived from the
+#: model so a future nullable field is covered automatically.  An explicit
+#: ``null`` for any OTHER (required) field is a 422, not a silent no-op (#12).
+_NULLABLE_PROFILE_FIELDS = frozenset(
+    name
+    for name, field in DeviceProfile.model_fields.items()
+    if type(None) in get_args(field.annotation)
+)
 
 
 def _require_known_type_key(
@@ -163,8 +175,12 @@ def update_device_profile(
 ) -> DeviceProfile:
     """Partially update an existing device profile.
 
-    Only fields that are explicitly supplied (non-``None``) in the request
-    body are applied; omitted fields remain unchanged.
+    Only fields the client actually SENT are applied; omitted fields remain
+    unchanged.  An explicit ``null`` clears a nullable field
+    (``enable_password`` / ``notes`` / ``os_version`` / ``model``); an
+    explicit ``null`` for a required field (name, type_key, host, port,
+    username, password) is rejected with 422 rather than being silently
+    ignored (#12).
 
     Args:
         profile_id: UUID of the profile to update.
@@ -175,12 +191,25 @@ def update_device_profile(
 
     Raises:
         HTTPException 404: If no profile with *profile_id* exists.
-        HTTPException 422: If a supplied ``type_key`` is not a loaded definition.
+        HTTPException 422: If a supplied ``type_key`` is not a loaded
+            definition, or a required field was explicitly set to ``null``.
     """
+    # (#12) exclude_unset distinguishes "field omitted" (leave unchanged)
+    # from "field explicitly null" (clear it) — the previous ``v is not
+    # None`` filter conflated the two, so a nullable field could never be
+    # cleared via the API despite the docstring promising it.
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        if value is None and field not in _NULLABLE_PROFILE_FIELDS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Field {field!r} is required and cannot be cleared "
+                f"(null).",
+            )
     # Validate an explicitly-supplied type_key against loaded definitions
     # (review #53) before taking the lock — fail fast, not at backup time.
-    if body.type_key is not None:
-        _require_known_type_key(body.type_key, definitions)
+    if updates.get("type_key") is not None:
+        _require_known_type_key(updates["type_key"], definitions)
     # Hold the lock across the existence check + mutate + persist so a
     # concurrent delete can't slip between them (review finding #10).
     with DEVICE_PROFILE_REGISTRY_LOCK:
@@ -189,7 +218,6 @@ def update_device_profile(
                 status_code=404, detail=f"Device profile not found: {profile_id!r}"
             )
         profile = device_profiles[profile_id]
-        updates = {k: v for k, v in body.model_dump().items() if v is not None}
         updated_profile = profile.model_copy(update=updates)
         device_profiles[profile_id] = updated_profile
         try:

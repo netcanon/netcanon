@@ -65,9 +65,10 @@ class TestCreateWithPins:
 class TestUpdatePins:
     """``PUT /api/v1/devices/{id}`` updates pin fields.
 
-    UI contract: omitted fields = "keep existing" (handler filters
-    ``None`` values before model_copy).  So the UI sends pins only
-    when they have values; blanks are interpreted as "unchanged"."""
+    UI contract: an OMITTED field = "keep existing" (the handler uses
+    ``model_dump(exclude_unset=True)``); an EXPLICIT ``null`` clears a
+    nullable field (see :class:`TestUpdateNullSemantics`).  So the UI
+    omits a pin to leave it unchanged and sends ``null`` to clear it."""
 
     def test_update_adds_os_version_pin(self, client):
         created = client.post(
@@ -114,6 +115,59 @@ class TestUpdatePins:
         assert body["os_version"] == "17.12"
         assert body["model"] == "C9300-48P"
         assert body["notes"] == "updated notes"
+
+
+class TestUpdateNullSemantics:
+    """(#12) An explicit ``null`` clears a nullable field; a ``null`` for a
+    required field is a 422 — the previous handler silently ignored BOTH
+    (``v is not None`` filter), so a pin could never be cleared via the API
+    despite the docstring promising ``pass None to clear``."""
+
+    def test_explicit_null_clears_os_version_pin(self, client):
+        created = client.post(
+            "/api/v1/devices/", json=_create_body(os_version="17.12"),
+        ).json()
+        pid = created["id"]
+        resp = client.put(
+            f"/api/v1/devices/{pid}", json={"os_version": None},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["os_version"] is None
+        # Persisted, not just echoed.
+        assert client.get(f"/api/v1/devices/{pid}").json()["os_version"] is None
+
+    def test_explicit_null_clears_model_and_notes(self, client):
+        created = client.post(
+            "/api/v1/devices/",
+            json=_create_body(model="C9300-48P", notes="rack 3"),
+        ).json()
+        pid = created["id"]
+        resp = client.put(
+            f"/api/v1/devices/{pid}", json={"model": None, "notes": None},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["model"] is None
+        assert body["notes"] is None
+
+    def test_omitted_field_still_preserved(self, client):
+        # Regression guard: exclude_unset must NOT clear a field just
+        # because it wasn't sent (only explicit null clears).
+        created = client.post(
+            "/api/v1/devices/", json=_create_body(os_version="17.12"),
+        ).json()
+        pid = created["id"]
+        resp = client.put(f"/api/v1/devices/{pid}", json={"notes": "x"})
+        assert resp.status_code == 200
+        assert resp.json()["os_version"] == "17.12"
+
+    def test_explicit_null_on_required_field_is_422(self, client):
+        created = client.post("/api/v1/devices/", json=_create_body()).json()
+        pid = created["id"]
+        resp = client.put(f"/api/v1/devices/{pid}", json={"host": None})
+        assert resp.status_code == 422
+        # The stored profile is untouched.
+        assert client.get(f"/api/v1/devices/{pid}").json()["host"] == "10.0.0.1"
 
 
 class TestGetReturnsAllFields:
