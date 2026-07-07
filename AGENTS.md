@@ -281,8 +281,13 @@ tests use these exclusively — never CSS classes or element structure.  See
   patch `netcanon.api.routes.backups.get_collector` instead (the single
   factory used by the backup route).
 - **Never** assert on the POST `/api/v1/backups` response body for final job
-  state — it always returns `pending` (serialised before background task runs).
-  Always GET the job by ID to read the completed state.
+  state — it always returns `pending` (the job runs in the background).  Since
+  #27 the job runs on a dedicated executor (`backup_runner.submit_backup_job`),
+  NOT synchronously before the response — even under `TestClient` — so do not
+  assume it has finished the instant the POST returns.  **Poll** `GET /{id}`
+  until the status is terminal (`completed`/`partial`/`failed`): use the
+  `wait_for_job(client, job_id)` helper in `tests/conftest.py` (the integration
+  `client` fixture applies it automatically after a backups POST).
 - **Never** change the signatures of the existing pipeline-stage functions
   in `netcanon/services/migration_pipeline.py`.  API routes and dozens of
   tests depend on their exact shape.  Later phases add NEW public

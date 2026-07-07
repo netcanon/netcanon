@@ -18,8 +18,9 @@ seam is ``get_collector``, the single factory used by the backup
 route.
 
 POST/GET sequence rationale (AGENTS.md hard rule): the POST response
-is serialised before the BackgroundTask runs and always shows
-``status: pending``.  Always GET the job by ID for the final state.
+always shows ``status: pending`` (the job runs in the background on a
+dedicated executor since #27).  Poll GET the job by ID for the final
+state — the auto-waiting client aliased below does this after each POST.
 """
 
 from __future__ import annotations
@@ -27,12 +28,17 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
 
 from netcanon.collectors.base import BaseCollector
 from netcanon.config import Settings
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.main import create_app
+
+# #27: backup dispatch is now async on a dedicated executor, so a POST returns
+# before the job finishes.  Alias the auto-waiting client (polls each created
+# backup job to completion) to TestClient so the POST-then-GET happy-path
+# assertions keep their pre-#27 semantics.
+from tests.conftest import AutoWaitTestClient as TestClient
 
 pytestmark = pytest.mark.integration
 

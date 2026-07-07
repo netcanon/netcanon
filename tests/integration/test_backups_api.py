@@ -1,11 +1,13 @@
 """
 Integration tests for ``/api/v1/backups/`` endpoints.
 
-Key property of TestClient + BackgroundTasks:
-FastAPI's ``TestClient`` executes background tasks **synchronously** before
-returning the HTTP response.  This means the backup job is always in
-``completed`` state by the time the ``POST /api/v1/backups`` response arrives —
-no polling or sleep required in tests.
+Dispatch model (#27): backup jobs run on a dedicated background executor, so
+a ``POST /api/v1/backups`` returns while the job is still ``pending`` — the
+job is NOT run synchronously before the response.  These tests use the
+auto-waiting client (``TestClient`` here is aliased to
+``tests.conftest.AutoWaitTestClient``, which polls each created job to
+completion after the POST), so the POST-then-GET assertions read the terminal
+state without an explicit ``wait_for_job`` call.
 """
 from __future__ import annotations
 
@@ -42,9 +44,10 @@ def _post_backup(client, devices: list[dict] | None = None) -> dict:
 def _post_and_get(client, devices: list[dict] | None = None) -> dict:
     """POST a backup job and return the final job state via GET.
 
-    Background tasks run synchronously in TestClient but AFTER the POST
-    response body is serialized.  The POST response always shows
-    ``status: pending``; a subsequent GET reflects the completed state.
+    The POST response always shows ``status: pending`` (the job runs in the
+    background on a dedicated executor, #27).  With the auto-waiting client,
+    the POST blocks until the job is terminal, so the subsequent GET reflects
+    the completed state.
     """
     post_resp = _post_backup(client, devices)
     assert post_resp.status_code == 202
@@ -67,12 +70,13 @@ class TestCreateBackup:
         assert "id" in resp.json()
 
     def test_post_returns_pending(self, client):
-        """POST response is serialised before background tasks run → always pending."""
+        """POST body is a frozen pending snapshot (#27) — the live job runs in
+        the background, but the response is always ``pending``."""
         resp = _post_backup(client)
         assert resp.json()["status"] == "pending"
 
     def test_job_completed_after_get(self, client):
-        """Background task runs synchronously; GET reflects completed state."""
+        """Job runs in the background; after the auto-wait, GET is completed."""
         job = _post_and_get(client)
         assert job["status"] == "completed"
 
@@ -173,7 +177,7 @@ class TestJobTerminalStatus:
     def _run(self, test_app, fail_hosts: set[str], hosts: list[str]) -> dict:
         from unittest.mock import patch
 
-        from fastapi.testclient import TestClient
+        from tests.conftest import AutoWaitTestClient as TestClient
 
         collector = _SelectiveFailCollector(fail_hosts)
         with patch(
@@ -253,7 +257,7 @@ class TestDeviceStatusLifecycle:
         """While device N is being collected, N is 'running' and N+1..end are 'queued'."""
         from unittest.mock import patch
 
-        from fastapi.testclient import TestClient
+        from tests.conftest import AutoWaitTestClient as TestClient
 
         collector = _ObservingCollector(test_app)
         with patch(
@@ -357,7 +361,7 @@ class TestBackupConcurrency:
         """Barrier(3) only opens if 3 workers arrive simultaneously."""
         from unittest.mock import patch
 
-        from fastapi.testclient import TestClient
+        from tests.conftest import AutoWaitTestClient as TestClient
 
         app = _build_parallel_app(test_settings, concurrency=3)
         collector = _BarrierCollector(parties=3)
@@ -406,7 +410,7 @@ class TestBackupConcurrency:
         import time
         from unittest.mock import patch
 
-        from fastapi.testclient import TestClient
+        from tests.conftest import AutoWaitTestClient as TestClient
 
         app = _build_parallel_app(test_settings, concurrency=5)
 
@@ -462,7 +466,7 @@ class TestBackupConcurrency:
         import threading
         from unittest.mock import patch
 
-        from fastapi.testclient import TestClient
+        from tests.conftest import AutoWaitTestClient as TestClient
         thread_names: list[str] = []
 
         class ThreadNameCollector:
@@ -481,8 +485,79 @@ class TestBackupConcurrency:
             )
 
         assert len(thread_names) == 1
-        # Serial path runs in the caller's thread, not a "backup-…" worker.
-        assert not thread_names[0].startswith("backup-")
+        # #27: the job runs on the dedicated backup-job executor, and a
+        # single-device job takes the serial fast-path — the collect runs
+        # directly on that job-executor thread ("backup-job_N"), NOT in a
+        # per-job sub-pool worker (which would be named "backup-<jobid8>_N").
+        assert thread_names[0].startswith("backup-job"), thread_names[0]
+
+
+# ---------------------------------------------------------------------------
+# #27 — background dispatch contract (POST returns before the job finishes)
+# ---------------------------------------------------------------------------
+
+
+class TestBackgroundDispatchContract:
+    """The manual POST dispatches to the dedicated backup-job executor, not
+    FastAPI ``BackgroundTasks``: it returns a frozen ``pending`` snapshot while
+    the job is *still running* in the background (#27)."""
+
+    def test_post_returns_while_job_still_running_on_dedicated_executor(
+        self, test_app
+    ):
+        """POST returns 202 + ``pending`` while a deliberately-blocked collector
+        is mid-run — proof the dispatch is async, not synchronous.  The collect
+        also runs on a ``backup-job`` executor thread.
+
+        Negative control: under the pre-#27 ``BackgroundTasks`` dispatch this
+        POST blocked until the whole job finished, so it could not return while
+        the collector was still gated, the body serialised as ``completed`` /
+        ``running`` (not a frozen ``pending``), and the collector ran on an
+        anyio worker thread — every assertion below would fail.
+        """
+        import threading
+        from unittest.mock import patch
+
+        # Plain client: do NOT auto-wait — we assert on the in-flight state.
+        from fastapi.testclient import TestClient
+
+        from tests.conftest import wait_for_job
+
+        started = threading.Event()
+        release = threading.Event()
+        thread_names: list[str] = []
+
+        class _GatedCollector:
+            def collect(self, device, definition):
+                thread_names.append(threading.current_thread().name)
+                started.set()
+                # Block so the job is unambiguously mid-run when POST returns.
+                release.wait(timeout=10)
+                return "! config"
+
+        try:
+            with patch(
+                "netcanon.api.routes.backups.get_collector",
+                return_value=_GatedCollector(),
+            ), TestClient(test_app, raise_server_exceptions=True) as c:
+                resp = c.post(
+                    "/api/v1/backups",
+                    json={"devices": [_device_payload(host="1.1.1.1")]},
+                )
+                assert resp.status_code == 202
+                # Frozen pending snapshot — not the racy live status.
+                assert resp.json()["status"] == "pending"
+                # The job started on the executor while POST already returned.
+                assert started.wait(timeout=10), "job never started"
+                assert thread_names[0].startswith("backup-job"), thread_names[0]
+                # Let the job finish, then confirm terminal state.
+                release.set()
+                job = wait_for_job(c, resp.json()["id"])
+                assert job["status"] == "completed"
+        finally:
+            # Ensure the gated collector is always released (even on assert
+            # failure) so the executor thread can exit and teardown is clean.
+            release.set()
 
 
 # ---------------------------------------------------------------------------
@@ -606,7 +681,7 @@ class TestServerSideCredentialResolution:
     def test_profile_backup_resolves_credentials_server_side(self, test_app):
         from unittest.mock import patch
 
-        from fastapi.testclient import TestClient
+        from tests.conftest import AutoWaitTestClient as TestClient
 
         collector = _CredCapturingCollector()
         with patch(
@@ -700,7 +775,7 @@ class TestEgressAllowlist:
     def test_loopback_target_rejected_when_enabled(self, test_settings):
         from unittest.mock import patch
 
-        from fastapi.testclient import TestClient
+        from tests.conftest import AutoWaitTestClient as TestClient
 
         app = self._strict_app(test_settings)
         with patch(
@@ -717,7 +792,7 @@ class TestEgressAllowlist:
     def test_metadata_endpoint_rejected_when_enabled(self, test_settings):
         from unittest.mock import patch
 
-        from fastapi.testclient import TestClient
+        from tests.conftest import AutoWaitTestClient as TestClient
 
         app = self._strict_app(test_settings)
         with patch(
@@ -733,7 +808,7 @@ class TestEgressAllowlist:
     def test_public_target_allowed_when_enabled(self, test_settings):
         from unittest.mock import patch
 
-        from fastapi.testclient import TestClient
+        from tests.conftest import AutoWaitTestClient as TestClient
 
         app = self._strict_app(test_settings)
         with patch(

@@ -14,10 +14,15 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
 
 from netcanon.main import create_app
 from tests.conftest import CISCO_FAKE_OUTPUT, FakeCollector
+
+# #27: backup dispatch is now async on a dedicated executor, so a POST returns
+# before the job finishes.  Alias the auto-waiting client (polls each created
+# backup job to completion) to TestClient so the POST-then-GET UI assertions
+# keep their pre-#27 semantics.
+from tests.conftest import AutoWaitTestClient as TestClient
 
 pytestmark = pytest.mark.integration
 

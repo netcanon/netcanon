@@ -12,9 +12,11 @@ Session-scoped resources for the live-server E2E layer live in
 from __future__ import annotations
 
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from netcanon.collectors.base import BaseCollector
 from netcanon.config import Settings
@@ -86,6 +88,94 @@ OPNSENSE_FAKE_OUTPUT = (
     '<?xml version="1.0"?>\n'
     "<opnsense><version>25.1</version></opnsense>\n"
 )
+
+
+# ---------------------------------------------------------------------------
+# Backup-job polling helper (#27)
+# ---------------------------------------------------------------------------
+
+#: Terminal backup-job statuses — a job in one of these has finished running.
+TERMINAL_JOB_STATUSES = frozenset({"completed", "partial", "failed"})
+
+
+def wait_for_job(client, job_id: str, *, timeout: float = 10.0, poll: float = 0.01):
+    """Poll ``GET /api/v1/backups/{job_id}`` until the job reaches a terminal
+    state, and return that terminal job JSON.
+
+    Since #27, backup dispatch runs on a dedicated background
+    ``ThreadPoolExecutor`` (``backup_runner.submit_backup_job``) rather than
+    FastAPI ``BackgroundTasks``, so a ``POST /api/v1/backups`` returns while
+    the job is still ``pending`` — it is no longer executed synchronously
+    before the next request under ``TestClient``.  Any test that needs the
+    terminal job state (or a side effect of the run, e.g. the stored config
+    file) must wait for completion first.  Mocked collectors finish in
+    milliseconds, so this returns almost immediately; ``timeout`` is only a
+    backstop against a genuinely stuck job.
+
+    The integration ``client`` fixture applies this automatically after a
+    successful backups POST; call it explicitly only when you build your own
+    ``TestClient`` (custom collector / settings).
+
+    Args:
+        client: A ``TestClient`` (or anything with ``.get(url)`` returning an
+            object exposing ``.status_code`` and ``.json()``).
+        job_id: The job id from the POST response body.
+        timeout: Seconds to wait before raising ``AssertionError``.
+        poll: Seconds between polls.
+
+    Raises:
+        AssertionError: The job did not reach a terminal state in *timeout*.
+    """
+    deadline = time.monotonic() + timeout
+    last_status: str | None = None
+    while True:
+        resp = client.get(f"/api/v1/backups/{job_id}")
+        if resp.status_code == 200:
+            body = resp.json()
+            last_status = body.get("status")
+            if last_status in TERMINAL_JOB_STATUSES:
+                return body
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"job {job_id!r} did not reach a terminal state within "
+                f"{timeout}s (last status: {last_status or 'not found'})"
+            )
+        time.sleep(poll)
+
+
+class AutoWaitTestClient(TestClient):
+    """``TestClient`` that waits for each backup job it creates to finish.
+
+    #27 moved backup dispatch off FastAPI ``BackgroundTasks`` (which
+    ``TestClient`` ran synchronously before the next request) onto a
+    dedicated background executor, so a ``POST /api/v1/backups`` now returns
+    while the job is still ``pending``.  This subclass polls the created job
+    to a terminal state right after a successful backups POST, restoring the
+    pre-#27 "the job has finished by the next request" timing the existing
+    tests were written against — without each test needing an explicit
+    :func:`wait_for_job` call.  The response returned is the original
+    (``pending``) POST body, so a test asserting the POST itself is
+    ``pending`` still passes; only the *timing* is restored.
+
+    Use this in place of ``TestClient`` for any client that POSTs backups and
+    then reads the job / its side effects.  Do NOT use it for a client whose
+    job is deliberately held non-terminal (e.g. the runner is stubbed so the
+    job stays ``pending``) — the post-POST poll would then hit its timeout.
+    """
+
+    def post(self, url, *args, **kwargs):
+        resp = super().post(url, *args, **kwargs)
+        # Only a successful create against the backups *collection* endpoint
+        # spawns a job to wait on (not GET /{id}, not a 422/400 rejection,
+        # not a POST to some other resource).
+        if resp.status_code == 202 and url.rstrip("/").endswith("/api/v1/backups"):
+            try:
+                job_id = resp.json().get("id")
+            except Exception:  # non-JSON / unexpected body — nothing to wait on
+                job_id = None
+            if job_id:
+                wait_for_job(self, job_id)
+        return resp
 
 
 # ---------------------------------------------------------------------------
