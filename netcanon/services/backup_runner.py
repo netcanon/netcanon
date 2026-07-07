@@ -54,11 +54,12 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from datetime import UTC, datetime
 
 from ..config import (
     MAX_BACKUP_CONCURRENCY,
+    MAX_CONCURRENT_BACKUP_JOBS,
     MAX_GLOBAL_BACKUP_CONCURRENCY,
     Settings,
 )
@@ -121,6 +122,99 @@ def reset_global_limiter() -> None:
     global _GLOBAL_LIMITER
     with _GLOBAL_LIMITER_LOCK:
         _GLOBAL_LIMITER = None
+
+
+# ---------------------------------------------------------------------------
+# Dedicated backup-job executor (2026-07-06 review MEDIUM #27)
+# ---------------------------------------------------------------------------
+# ``run_backup_job`` is a minutes-long, blocking (SSH/NETCONF) call.  Both
+# entry points used to dispatch it onto a *shared* pool:
+#
+#   * the manual ``POST /api/v1/backups`` route via FastAPI ``BackgroundTasks``
+#     — which runs sync tasks on anyio's ~40-token default worker pool, the
+#     SAME pool that serves every synchronous route, so ~40 in-flight jobs
+#     froze the whole sync API while async ``/health`` stayed green;
+#   * the scheduler via ``asyncio.to_thread`` — asyncio's default executor,
+#     shared with ``/sanitize`` and the egress DNS filter.
+#
+# Neither capped the *number of jobs* (only the per-job / global device
+# fan-out).  This module-level ``ThreadPoolExecutor`` is a dedicated pool for
+# whole jobs: work runs off the shared pools, and ``max_workers`` gives an
+# explicit ceiling on concurrent jobs (extra submissions queue FIFO and start
+# as slots free — the job just stays ``pending`` until its turn, never a
+# failure).  It mirrors the ``_GLOBAL_LIMITER`` idiom above: a lazily-built
+# process-wide singleton behind a double-checked lock, with a reset helper so
+# the size can be monkeypatched before first use in tests.
+_JOB_EXECUTOR: ThreadPoolExecutor | None = None
+_JOB_EXECUTOR_LOCK = threading.Lock()
+
+
+def _job_executor() -> ThreadPoolExecutor:
+    """Return the process-wide backup-job executor, building it once.
+
+    Sized from :data:`~netcanon.config.MAX_CONCURRENT_BACKUP_JOBS`.  Lazily
+    created (double-checked lock) so the size can be monkeypatched before
+    first use in tests; :func:`reset_job_executor` drops the cached instance
+    so a later call rebuilds at the patched size.  ``thread_name_prefix`` is
+    ``"backup-job"`` so the dedicated threads are identifiable in logs / a
+    thread dump (and assertable in tests).
+    """
+    global _JOB_EXECUTOR
+    if _JOB_EXECUTOR is None:
+        with _JOB_EXECUTOR_LOCK:
+            if _JOB_EXECUTOR is None:
+                _JOB_EXECUTOR = ThreadPoolExecutor(
+                    max_workers=MAX_CONCURRENT_BACKUP_JOBS,
+                    thread_name_prefix="backup-job",
+                )
+    return _JOB_EXECUTOR
+
+
+def reset_job_executor(*, wait: bool = False, cancel_futures: bool = True) -> None:
+    """Drop and shut down the cached backup-job executor.
+
+    Called from the application lifespan on shutdown (clean thread release)
+    and from tests (to rebuild the pool at a monkeypatched size).  The
+    reference is cleared *inside* the lock and the (potentially blocking)
+    ``shutdown`` runs *outside* it, so a concurrent :func:`_job_executor`
+    immediately builds a fresh pool rather than handing back one that is
+    being torn down.
+
+    Args:
+        wait: Passed to ``ThreadPoolExecutor.shutdown``.  Defaults to
+            ``False`` so neither server shutdown nor a test teardown blocks
+            behind an in-flight (possibly minutes-long) backup.
+        cancel_futures: Passed to ``shutdown``.  Defaults to ``True`` so
+            queued-but-not-started jobs are dropped on reset; the lifespan
+            passes ``cancel_futures=False`` to let already-queued runs drain.
+    """
+    global _JOB_EXECUTOR
+    with _JOB_EXECUTOR_LOCK:
+        executor = _JOB_EXECUTOR
+        _JOB_EXECUTOR = None
+    if executor is not None:
+        executor.shutdown(wait=wait, cancel_futures=cancel_futures)
+
+
+def submit_backup_job(*args, **kwargs) -> Future:
+    """Submit :func:`run_backup_job` to the dedicated backup-job executor.
+
+    The single dispatch seam for the manual ``POST /api/v1/backups`` route
+    (the scheduler uses ``loop.run_in_executor(_job_executor(), ...)`` so it
+    can *await* completion on the event loop).  Positional / keyword arguments
+    are forwarded verbatim to :func:`run_backup_job`.  Returns the
+    :class:`~concurrent.futures.Future`; the route fires and forgets (the job
+    mutates its own ``BackupJob`` state, persisted by ``run_backup_job``), so
+    the caller need not hold the future — but returning it keeps the function
+    testable and lets a caller wait if it wants to.
+
+    Unlike the old ``BackgroundTasks`` dispatch, this does **not** run
+    synchronously before the POST response: the job runs truly in the
+    background, so ``POST /backups`` returns while the job is still
+    ``pending`` and callers must poll ``GET /backups/{id}`` for the terminal
+    state (see AGENTS.md "Hard Rules").
+    """
+    return _job_executor().submit(run_backup_job, *args, **kwargs)
 
 
 def _process_one_device_limited(*args, **kwargs) -> None:

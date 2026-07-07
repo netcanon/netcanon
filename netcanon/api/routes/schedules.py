@@ -144,7 +144,7 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
 
     from ...models.device import BackupRequest, DeviceCredentials, DeviceTarget
     from ...models.device_profile import DeviceProfile
-    from ...services.backup_runner import run_backup_job
+    from ...services.backup_runner import _job_executor, run_backup_job
     from ...storage.device_profile_store import DEVICE_PROFILE_REGISTRY_LOCK
 
     schedules = app.state.schedules
@@ -270,7 +270,17 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
             job.id,
             exc,
         )
-    await asyncio.to_thread(
+    # (#27) Dispatch onto the dedicated backup-job executor rather than
+    # asyncio's default pool — the default pool is shared with /sanitize and
+    # the egress DNS filter, and startup re-registration anchors same-interval
+    # schedules together so they burst after a restart.  ``run_in_executor``
+    # keeps the exact await-to-completion semantics ``asyncio.to_thread`` had
+    # (this coroutine still blocks until the run finishes); only the pool
+    # changes.  Args are passed positionally — ``run_in_executor`` takes no
+    # kwargs, which matches ``run_backup_job``'s positional call here.
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(
+        _job_executor(),
         run_backup_job,
         job,
         request,
