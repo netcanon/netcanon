@@ -27,7 +27,7 @@ tests.  Backup-side device definitions are listed under
 |---|---|---|---|---|
 | `cisco_iosxe_cli` | Cisco IOS-XE | `show running-config` text | bidirectional | certified |
 | `cisco_iosxe`     | Cisco IOS-XE | NETCONF / OpenConfig XML  | bidirectional | best_effort (Phase 0.5 stub render) |
-| `cisco_nxos`      | Cisco NX-OS  | `show running-config` text | bidirectional | certified (all 4 phases — L1/L3 + L2 switchport/LAG + SNMP/users + HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed Anycast Gateway; round-trip-validated against a 6-config `batfish/lab-validation` corpus across 4 NX-OS 9.x scenarios; only IPv6 anycast + Tier-3 remain unsupported) |
+| `cisco_nxos`      | Cisco NX-OS  | `show running-config` text | bidirectional | certified (all 4 phases — L1/L3 + L2 switchport/LAG + SNMP/users + HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed Anycast Gateway; round-trip-validated against a 6-config `batfish/lab-validation` corpus across 4 NX-OS 9.x scenarios; IPv6 anycast, plus a documented set of Tier-2/Tier-3 surfaces, remain unsupported — see the live matrix / §A) |
 | `cisco_iosxr`     | Cisco IOS-XR | `show running-config` text | bidirectional | certified (all 4 phases — interfaces (4-segment) + VRF + RT + RD-from-`router bgp` + per-iface VRF + Bundle-Ether LAGs + local users + per-VRF static + dot1q→VLAN; SP-routing/route-policy/MPLS/IS-IS surfaced via the Tier-3 banner; round-trip-validated against a 10-config corpus from two sources — `batfish/lab-validation` + `ios-xr/xrd-tools` SR/SRv6/IS-IS) |
 | `arista_eos`      | Arista EOS    | EOS CLI text              | bidirectional | certified |
 | `aruba_aoss`      | Aruba AOS-S   | AOS-S CLI banner + positional port lists | bidirectional | certified |
@@ -185,15 +185,23 @@ the rendered output or screen-grab the panel.
 
 The migrate page renders three lists under **Validation details**:
 Supported / Lossy / Unsupported.  Each codec declares its own matrix
-in `netcanon/migration/codecs/<vendor>/codec.py`.  The table below
-enumerates every `UnsupportedPath` and `LossyPath` declared today.
+in `netcanon/migration/codecs/<vendor>/codec.py`.
+
+> **Authoritative source:** the live capability matrices in
+> `netcanon/migration/codecs/<vendor>/codec.py` (surfaced verbatim by the
+> `/api/v1/definitions` endpoint and the migrate page's Validation panel)
+> are the single source of truth.  The per-codec tables below are a
+> hand-maintained **illustrative digest** of the most operator-relevant
+> lossy / unsupported paths with their rationale — they are NOT a complete
+> enumeration and may lag the code between releases.  When a table and the
+> live matrix disagree, the live matrix wins.
 
 #### `cisco_iosxe_cli` (Cisco IOS-XE CLI, bidirectional)
 
 | Path | Class | Reason summary |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses the `vrrp <vrid> ip|ipv6|priority|preempt|description|authentication|track|timers` family inside `interface` stanzas; renders the classic single-line per-attribute form (broadest IOS-XE compatibility, 15.x onward). |
-| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Supported (Wave C) | SD-Access anycast-gateway: per-SVI `fabric forwarding mode anycast-gateway` mirrors the primary IP into `virtual_gateway_address` and round-trips back out on render. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Lossy (Wave C) | SD-Access anycast-gateway (`virtual_gateway_address == the interface primary IP`) round-trips via `fabric forwarding mode anycast-gateway`, but a SEPARATE cross-vendor VARP virtual IP (the Arista/Junos shape, `virtual_gateway_address != the interface IP`) has no IOS-XE equivalent and drops on render (review comment only).  Demoted from supported to **lossy** so the separate-VIP loss surfaces instead of reporting `severity:ok` (silent-loss guard). |
 | `/anycast-gateway-mac` | Supported (Wave C) | Top-level `fabric forwarding anycast-gateway-mac <MAC>` round-trips between Cisco dotted-triplet wire form (`0001.c73a.0000`) and canonical colon-hex. |
 | `/interfaces/interface/vrrp-groups/group/address-family` | Lossy (Wave B) | IOS-XE 17.12+ modern multi-line `vrrp <VRID> address-family ipv4` nested block is detected (so lossiness is visible) but not deep-populated; render always emits the classic single-line form (accepted by every IOS-XE 15.x+).  A config that uses ONLY the modern AF form round-trips as an empty group shell — the lossiness is intentional and operator-visible. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | IPv6 SD-Access anycast parses-and-ignores in v1.  Corpus has zero fixtures exercising it; wire-up deferred until demand arrives.  IPv4 SD-Access anycast IS supported (row above). |
@@ -340,7 +348,7 @@ output.
 
 #### `cisco_nxos` (Cisco NX-OS, bidirectional, certified)
 
-46 supported surfaces (L1/L3 + L2 switchport/LAG + SNMP/local-users +
+Broad supported surface (L1/L3 + L2 switchport/LAG + SNMP/local-users +
 HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed
 Anycast Gateway).  The lossy / unsupported exceptions:
 
@@ -369,7 +377,7 @@ Anycast Gateway).  The lossy / unsupported exceptions:
 
 #### `cisco_iosxr` (Cisco IOS-XR, bidirectional, certified)
 
-22 supported surfaces (Tier-1 + VRF + RT + per-interface VRF + LAG +
+Broad supported surface (Tier-1 + VRF + RT + per-interface VRF + LAG +
 local users + per-VRF static + dot1q sub-interfaces).  The lossy /
 unsupported exceptions:
 
@@ -392,7 +400,7 @@ unsupported exceptions:
 
 #### `aruba_aoscx` (Aruba AOS-CX, bidirectional, certified)
 
-36 supported surfaces (Tier-1 + L2 switchport/LAG + local users + SNMP
+Broad supported surface (Tier-1 + L2 switchport/LAG + local users + SNMP
 v2c/v3 + IPv4 active-gateway anycast + VXLAN L2VNI VLAN↔VNI binding).
 Distinct from the campus `aruba_aoss` (AOS-S) codec.  The lossy /
 unsupported exceptions:
@@ -419,7 +427,7 @@ unsupported exceptions:
 
 #### `vyos` (VyOS, bidirectional, certified)
 
-30 supported surfaces (curly-brace `config.boot` **and** set-form
+Broad supported surface (curly-brace `config.boot` **and** set-form
 `show configuration commands` input; Tier-1 + local users + NTP +
 bonding LAGs + SNMP + VRF + VXLAN L2VNI).  Render always emits the
 curly-brace form.  The lossy / unsupported exceptions:
