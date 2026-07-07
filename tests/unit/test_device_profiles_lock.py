@@ -111,11 +111,18 @@ def test_create_cap_check_is_inside_lock(tmp_path) -> None:
         password="hunter2",
     )
     outcome: dict[str, object] = {}
+    # create_device_profile validates type_key against loaded definitions
+    # (review #53); on a direct call the Depends() default isn't resolved, so
+    # pass a stand-in — _require_known_type_key only tests key membership.
+    defs = {"Cisco": None}
 
     def _create() -> None:
         try:
             routes_mod.create_device_profile(
-                body, device_profiles=registry, device_profile_store=store
+                body,
+                device_profiles=registry,
+                device_profile_store=store,
+                definitions=defs,
             )
             outcome["result"] = "created"
         except HTTPException as exc:
