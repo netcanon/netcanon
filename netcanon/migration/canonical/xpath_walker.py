@@ -292,8 +292,23 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
                 yield "/snmp/v3-user/group"
             if v3.engine_id:
                 yield "/snmp/v3-user/engine-id"
-    for _ in intent.dhcp_servers:
+    for pool in intent.dhcp_servers:
         yield "/dhcp-servers/pool"
+        # (#24) DHCP was the one Tier-2 surface with no sub-field vocabulary,
+        # so a codec that drops a pool sub-field (MikroTik silently resets a
+        # non-default lease_time to the 86400 default) could not declare it
+        # honestly — a /dhcp-servers/pool/lease-time declaration was flagged as
+        # a dead path by the honesty guard.  Walk the sub-fields (only when
+        # populated / non-default) so classify() sees them instead of
+        # fail-opening to "supported".
+        if pool.gateway:
+            yield "/dhcp-servers/pool/gateway"
+        if pool.dns_servers:
+            yield "/dhcp-servers/pool/dns-servers"
+        if pool.domain_name:
+            yield "/dhcp-servers/pool/domain-name"
+        if pool.lease_time is not None and pool.lease_time != 86400:
+            yield "/dhcp-servers/pool/lease-time"
     for _ in intent.lags:
         yield "/lags/lag/name"
         yield "/lags/lag/members"

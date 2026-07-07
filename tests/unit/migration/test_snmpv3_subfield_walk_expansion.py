@@ -32,12 +32,14 @@ _SUBPATHS = [
 # explicit lossy/unsupported declaration or the silent loss returns.
 _EXPECTED: dict[str, dict[str, str]] = {
     "/snmp/v3-user/auth-protocol": {
-        "aruba_aoscx": "lossy", "vyos": "lossy",
+        "aruba_aoscx": "lossy", "aruba_aoss": "lossy",
+        "mikrotik_routeros": "lossy", "vyos": "lossy",
         "cisco_iosxe": "unsupported", "cisco_iosxr": "unsupported",
         "opnsense": "unsupported",
     },
     "/snmp/v3-user/priv-protocol": {
-        "aruba_aoscx": "lossy", "fortigate_cli": "lossy", "vyos": "lossy",
+        "aruba_aoscx": "lossy", "aruba_aoss": "lossy", "fortigate_cli": "lossy",
+        "mikrotik_routeros": "lossy", "vyos": "lossy",
         "cisco_iosxe": "unsupported", "cisco_iosxr": "unsupported",
         "opnsense": "unsupported",
     },

@@ -205,7 +205,13 @@ def _maximal_intent() -> CanonicalIntent:
             metric=200, description="primary uplink", interface="Ethernet2")],
         anycast_gateway_mac="00:1c:73:00:dc:01",
         dhcp_servers=[CanonicalDHCPPool(
-            network="10.0.0.0/24", start_ip="10.0.0.10", end_ip="10.0.0.99")],
+            network="10.0.0.0/24", start_ip="10.0.0.10", end_ip="10.0.0.99",
+            # (#24) Populate the sub-fields + a NON-default lease so the walker
+            # yields /dhcp-servers/pool/{gateway,dns-servers,domain-name,
+            # lease-time} — otherwise a codec's lease-time lossy declaration is
+            # an un-walkable dead path the honesty guard rejects.
+            gateway="10.0.0.1", dns_servers=["10.0.0.2"],
+            domain_name="lab.example", lease_time=7200)],
         snmp=CanonicalSNMP(
             community="c", location="l", contact="ct", trap_hosts=["10.0.0.9"],
             v3_users=[CanonicalSNMPv3User(
