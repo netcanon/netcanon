@@ -184,6 +184,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # Phase 4 rank-4: IRB SVI accumulator.  Keyed by vid (the irb
     # unit number); each entry holds the per-vid IPv4 list.
     irb_state: dict[int, dict[str, Any]] = {}
+    # VLAN indices threaded through the dispatcher so ``set vlans`` lookups
+    # are O(1) instead of rescanning the growing intent.vlans per line — the
+    # O(n**2) the review flagged on vlan-heavy configs (2026-07-06 MEDIUM #32).
+    # ``vlan_by_name`` is keep-first (setdefault) to preserve the old
+    # ``next(... if v.name == name)`` first-match semantics on duplicate names.
+    vlan_by_id: dict[int, CanonicalVlan] = {}
+    vlan_by_name: dict[str, CanonicalVlan] = {}
     # Cluster E.1-B: DHCP-server accumulator.  Junos has two grammars:
     #
     #  * Modern form -- ``set access address-assignment pool <P>
@@ -279,6 +286,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             _dispatch_set(
                 tokens, intent, iface_state, range_state,
                 lag_state, irb_state, dhcp_pool_state, dhcp_group_iface,
+                vlan_by_id, vlan_by_name,
             )
     # Pass 2b: apply top-level content.  Scalars set by group
     # content get overwritten; list-shaped fields accumulate
@@ -287,6 +295,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         _dispatch_set(
             tokens, intent, iface_state, range_state,
             lag_state, irb_state, dhcp_pool_state, dhcp_group_iface,
+            vlan_by_id, vlan_by_name,
         )
 
     # GAP 9b: preserve both the apply-groups STATEMENT and the
@@ -527,18 +536,21 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # 1. Materialise CanonicalLAG records from the lag_state
     #    accumulator.  Each entry is keyed by ae-name (e.g. ``ae0``)
     #    with the ordered member list and the LACP mode.
+    # Index by name once (O(1) merge) instead of rescanning the growing
+    # intent.lags per ae — the O(D**2) sibling of the arista channel-group
+    # scan (2026-07-06 review MEDIUM #31).  Pre-seed from intent.lags so the
+    # apply-groups-composition else-branch stays byte-identical.
+    lags_by_name: dict[str, CanonicalLAG] = {lag.name: lag for lag in intent.lags}
     for ae_name, lag_entry in lag_state.items():
         members = list(lag_entry.get("members", []))
         mode = lag_entry.get("mode", "active") or "active"
         # Don't accumulate duplicates if the same LAG already exists
         # (defensive for groups + apply-groups composition).
-        existing = next(
-            (lag for lag in intent.lags if lag.name == ae_name), None,
-        )
+        existing = lags_by_name.get(ae_name)
         if existing is None:
-            intent.lags.append(
-                CanonicalLAG(name=ae_name, members=members, mode=mode)
-            )
+            new_lag = CanonicalLAG(name=ae_name, members=members, mode=mode)
+            intent.lags.append(new_lag)
+            lags_by_name[ae_name] = new_lag
         else:
             existing.mode = mode
             for m in members:
@@ -637,6 +649,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # See ``project_switchport_to_vlan`` for the symmetric fix on
     # the per-port vlan-members surface.
     bound_vids: set[int] = set()
+    # O(1) id lookup for the fold; stubs appended below are added to the index
+    # so a later irb entry sharing a vid still matches (2026-07-06 MEDIUM #32).
+    fold_vlan_by_id: dict[int, CanonicalVlan] = {v.id: v for v in intent.vlans}
     for vid, irb_entry in irb_state.items():
         if "vlan_name" not in irb_entry:
             # No l3-interface binding — preserve irb.<vid> as-is.
@@ -652,11 +667,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         ):
             # Load-bearing — leave the iface alone, don't fold to vlan.
             continue
-        vlan = next((v for v in intent.vlans if v.id == vid), None)
+        vlan = fold_vlan_by_id.get(vid)
         if vlan is None:
             stub_name = irb_entry.get("vlan_name", f"VLAN-{vid}")
             vlan = CanonicalVlan(id=vid, name=stub_name)
             intent.vlans.append(vlan)
+            fold_vlan_by_id[vid] = vlan
         # Source-shape (a): IPs gathered from ``set interfaces irb
         # unit <vid>`` lines via the irb_state accumulator.  Wave C:
         # also carry per-address virtual_gateway_address + per-unit
@@ -1130,6 +1146,8 @@ def _dispatch_set(
     irb_state: dict[int, dict[str, Any]] | None = None,
     dhcp_pool_state: dict[str, dict[str, Any]] | None = None,
     dhcp_group_iface: dict[str, str] | None = None,
+    vlan_by_id: dict[int, CanonicalVlan] | None = None,
+    vlan_by_name: dict[str, CanonicalVlan] | None = None,
 ) -> None:
     """Apply one set-line's token list to *intent*.
 
@@ -1164,7 +1182,7 @@ def _dispatch_set(
             tokens[1:], iface_state, range_state, lag_state, irb_state,
         )
     elif head == "vlans":
-        _apply_vlans(tokens[1:], intent, irb_state)
+        _apply_vlans(tokens[1:], intent, irb_state, vlan_by_id, vlan_by_name)
     elif head == "routing-options":
         _apply_routing_options(tokens[1:], intent)
     elif head == "snmp":
@@ -1801,24 +1819,42 @@ def _apply_vlans(
     tokens: list[str],
     intent: CanonicalIntent,
     irb_state: dict[int, dict[str, Any]] | None = None,
+    vlan_by_id: dict[int, CanonicalVlan] | None = None,
+    vlan_by_name: dict[str, CanonicalVlan] | None = None,
 ) -> None:
     """``set vlans <NAME> vlan-id <N>``
     ``set vlans <NAME> vxlan vni <VNI>``  (GAP 6)
     ``set vlans <NAME> l3-interface irb.<vid>``  (Phase 4 rank-4)
+
+    ``vlan_by_id`` / ``vlan_by_name`` are the O(1) indices threaded from
+    ``parse_intent`` (2026-07-06 review MEDIUM #32).  Legacy/isolated callers
+    may omit them; we then build one-shot indices from ``intent.vlans`` so the
+    lookup stays correct (just not amortised — fine for small test inputs).
     """
     if len(tokens) < 3:
         return
+    if vlan_by_id is None:
+        vlan_by_id = {v.id: v for v in intent.vlans}
+    if vlan_by_name is None:
+        vlan_by_name = {v.name: v for v in intent.vlans if v.name}
     vlan_name = tokens[0]
     if tokens[1] == "vlan-id":
         try:
             vid = int(tokens[2])
         except ValueError:
             return
-        existing = next((v for v in intent.vlans if v.id == vid), None)
+        existing = vlan_by_id.get(vid)
         if existing is None:
-            intent.vlans.append(CanonicalVlan(id=vid, name=vlan_name))
+            new_vlan = CanonicalVlan(id=vid, name=vlan_name)
+            intent.vlans.append(new_vlan)
+            vlan_by_id[vid] = new_vlan
+            vlan_by_name.setdefault(vlan_name, new_vlan)
         else:
+            # Re-key the by-name index on rename so keep-first semantics
+            # stay consistent with the (single) renamed VLAN object.
+            vlan_by_name.pop(existing.name, None)
             existing.name = vlan_name
+            vlan_by_name.setdefault(vlan_name, existing)
         return
     # Phase 4 rank-4: l3-interface binding.  Capture the name->vid
     # link so the post-pass can attach IRB addresses to the right
@@ -1848,9 +1884,7 @@ def _apply_vlans(
             vni = int(tokens[3])
         except ValueError:
             return
-        existing_vlan = next(
-            (v for v in intent.vlans if v.name == vlan_name), None,
-        )
+        existing_vlan = vlan_by_name.get(vlan_name)
         if existing_vlan is not None:
             # Don't duplicate if already recorded.
             already = any(

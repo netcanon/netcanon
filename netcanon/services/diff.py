@@ -115,9 +115,13 @@ def compute_diff(
     lines: list[DiffLine] = []
     stats = {"added": 0, "removed": 0, "equal": 0}
 
-    matcher = difflib.SequenceMatcher(
-        a=left_lines, b=right_lines, autojunk=False
-    )
+    # Keep difflib's default autojunk heuristic: configs are dense with
+    # repeated delimiter lines (``!``, ``exit``, blanks) and disabling
+    # autojunk made SequenceMatcher O(n**2) on them (~25 s at 16k lines via
+    # /configs/diff — 2026-07-06 review MEDIUM #33).  autojunk treats
+    # >1%-popular lines as junk, which stays near-linear and diffs realistic
+    # configs identically.
+    matcher = difflib.SequenceMatcher(a=left_lines, b=right_lines)
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
             for offset in range(i2 - i1):
