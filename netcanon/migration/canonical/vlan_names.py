@@ -50,24 +50,34 @@ Collision detection:
       non-collision rename conflict) → same merge semantics: the
       renamed VLAN's membership is unioned into the existing one.
 
-The orchestrator does NOT rename SVI interfaces (``Vlan10`` →
-``Vlan20``).  Those live in the port-rename pipeline's domain —
-their naming convention is vendor-specific (``Vlan10`` on Cisco,
-``vlan0.10`` on OPNsense, etc.), so it's the port-rename
-orchestrator's job to rewrite them.  If the operator wants SVI
-renames to follow their VLAN renames, the UI composes the two maps
-on the client side before posting.
+SVI interfaces named with the canonical ``Vlan<N>`` spelling (Cisco /
+Arista / NX-OS — the exact form render-side
+``synthesize_svis_from_vlan_l3`` keys off) DO track the VLAN rename
+(#18): renaming VLAN 10→20 also renames ``interface Vlan10`` → ``Vlan20``
+(merging into an existing ``Vlan20`` SVI rather than rendering two
+same-named stanzas), and dropping VLAN 10 removes the ``Vlan10`` SVI.
+Without this, the renamed VLAN's L3 rendered a fresh ``interface Vlan20``
+while the stale ``Vlan10`` still rendered — two overlapping-subnet SVIs
+the device rejects.  Vendor-specific SVI spellings that are NOT
+``Vlan<N>`` (OPNsense ``vlan0.10``, Junos ``irb.10``) are left to the
+port-rename orchestrator's domain.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+# Canonical SVI interface spelling (Cisco / Arista / NX-OS) — the exact form
+# render-side ``synthesize_svis_from_vlan_l3`` synthesises and keys off.  Used
+# by Pass 2b (#18) to keep an SVI interface's name tracking its VLAN rename.
+_SVI_NAME_RE = re.compile(r"^Vlan(\d+)$")
 
 if TYPE_CHECKING:
     from .intent import CanonicalIntent
@@ -344,6 +354,56 @@ def translate_vlan_ids(  # noqa: C901
             iface.trunk_allowed_vlans = new_list
 
     # ------------------------------------------------------------------
+    # Pass 2b — track the rename/drop on canonical ``Vlan<N>`` SVIs (#18).
+    # ------------------------------------------------------------------
+    # A Cisco/Arista/NX-OS SVI is a CanonicalInterface named ``Vlan<N>``.  The
+    # passes above renamed the CanonicalVlan record + its folded L3 but left
+    # the SVI interface NAME untouched, so render-side synthesis emitted a new
+    # ``interface Vlan<M>`` (from the renamed VLAN's L3) while the stale
+    # ``Vlan<N>`` also rendered — two overlapping-subnet SVIs the device
+    # rejects, with no warning.  Rename the SVI alongside its VLAN (merging
+    # into a pre-existing ``Vlan<M>`` SVI) / drop it when the VLAN is dropped.
+    if renames or drops:
+        svi_kept: list = []
+        iface_by_name: dict[str, object] = {
+            i.name: i for i in intent.interfaces
+        }
+        for iface in intent.interfaces:
+            m = _SVI_NAME_RE.match(iface.name)
+            if m is None:
+                svi_kept.append(iface)
+                continue
+            svi_vid = int(m.group(1))
+            if svi_vid in drops:
+                result.warnings.append(
+                    f"vlan_rename: SVI interface {iface.name!r} removed "
+                    f"because VLAN {svi_vid} was dropped"
+                )
+                continue  # SVI disappears with its VLAN
+            if svi_vid in renames:
+                new_name = f"Vlan{renames[svi_vid]}"
+                existing = iface_by_name.get(new_name)
+                if existing is not None and existing is not iface:
+                    # A Vlan<M> SVI already exists — merge this SVI's L3
+                    # into it rather than render two same-named stanzas.
+                    _merge_svi_addresses(existing, iface)
+                    result.warnings.append(
+                        f"vlan_rename: SVI {iface.name!r} merged into existing "
+                        f"{new_name!r} (VLAN {svi_vid}->{renames[svi_vid]} "
+                        f"rename)"
+                    )
+                    continue
+                result.warnings.append(
+                    f"vlan_rename: SVI interface renamed {iface.name!r}->"
+                    f"{new_name!r} to track the VLAN "
+                    f"{svi_vid}->{renames[svi_vid]} rename"
+                )
+                iface.name = new_name
+                iface_by_name[new_name] = iface
+            svi_kept.append(iface)
+        intent.interfaces = svi_kept
+
+    # ------------------------------------------------------------------
     # Pass 3 — VXLAN VNI records carry a vlan_id that must track the rename.
     # ------------------------------------------------------------------
     # intent.py documents that CanonicalVxlan.vlan_id stays in sync with
@@ -415,6 +475,25 @@ def _merge_vlan(dest, src) -> None:
         dest.name = src.name
     if not dest.description and src.description:
         dest.description = src.description
+
+
+def _merge_svi_addresses(dest, src) -> None:
+    """Merge SVI *src* interface's L3 addresses into *dest* in-place (#18).
+
+    Used when a VLAN rename lands a ``Vlan<N>`` SVI onto an already-present
+    ``Vlan<M>`` interface — union the v4/v6 address lists (dedupe on
+    ``(ip, prefix_length)``) so the target renders one SVI, not two.
+    """
+    seen4 = {(a.ip, a.prefix_length) for a in dest.ipv4_addresses}
+    for a in src.ipv4_addresses:
+        if (a.ip, a.prefix_length) not in seen4:
+            seen4.add((a.ip, a.prefix_length))
+            dest.ipv4_addresses.append(a)
+    seen6 = {(a.ip, a.prefix_length) for a in dest.ipv6_addresses}
+    for a in src.ipv6_addresses:
+        if (a.ip, a.prefix_length) not in seen6:
+            seen6.add((a.ip, a.prefix_length))
+            dest.ipv6_addresses.append(a)
 
 
 def build_vlan_rename_transform(

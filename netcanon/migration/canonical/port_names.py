@@ -333,6 +333,25 @@ def translate_port_names(  # noqa: C901
         return PortRenameResult(applied={}, warnings=[], dropped=[])
 
     user_map = dict(rename_map or {})
+    applied: dict[str, str] = {}
+    warnings: list[str] = []
+    memo: dict[str, str] = {}
+
+    # (#19) Reject empty / blank source keys BEFORE the drop/rename split.
+    # ``interface`` defaults to '' on gateway-only static routes and unbound
+    # DHCP pools, so an empty-string drop key (``{'': None}``) would match all
+    # of them in _strip_dropped_ports and silently delete every such
+    # route/pool.  Pydantic accepts the key (port_rename_map is
+    # ``dict[str, str | None]``) and a UI row with a blank source + "drop"
+    # produces exactly this.  Mirror local_user_names.py: warn + skip.
+    for key in list(user_map):
+        if not isinstance(key, str) or not key.strip():
+            warnings.append(
+                f"port_rename: source port {key!r} is empty or blank; "
+                f"entry skipped"
+            )
+            del user_map[key]
+
     # Split user map into drops (value is None) and renames (value is str).
     # Drops never go through the target codec.
     #
@@ -349,9 +368,6 @@ def translate_port_names(  # noqa: C901
     str_map: dict[str, str] = {
         name: tgt for name, tgt in user_map.items() if isinstance(tgt, str)
     }
-    applied: dict[str, str] = {}
-    warnings: list[str] = []
-    memo: dict[str, str] = {}
     # Auto-drops accumulate DURING resolve() when ``strip_unmappable`` removes a
     # name the target codec can't format.  Unlike user drops, these names stay
     # verbatim through the sweep (they were never renamed to something else), so
@@ -577,6 +593,31 @@ def translate_port_names(  # noqa: C901
     if auto_dropped:
         _strip_dropped_ports(intent, auto_dropped)
 
+    # (#17) Detect rename TARGET collisions: two+ source ports resolving to the
+    # same final interface/LAG name render duplicate stanzas (same-vendor) or
+    # fuse into one interface on re-parse (cross-vendor) — previously silent
+    # (warnings=[]).  The vlan / local-user / snmpv3 orchestrators surface
+    # target collisions; the ports pane didn't.  Warn (naming the colliding
+    # sources) so the operator can map each source to a distinct target.  We do
+    # NOT drop/merge here: some targets already dedupe + annotate the collision
+    # at render time (FortiGate emits ``# port collision``), and dropping at the
+    # orchestrator would pre-empt that and silently discard a port's config.
+    def _warn_collisions(objs: list, kind: str) -> None:
+        counts: dict[str, int] = {}
+        for obj in objs:
+            counts[obj.name] = counts.get(obj.name, 0) + 1
+        for final in sorted(n for n, c in counts.items() if c > 1):
+            sources = sorted(s for s, f in memo.items() if f == final) or [final]
+            warnings.append(
+                f"port_rename: multiple source ports map to {final!r} "
+                f"(sources: {', '.join(sources)}); the target will render "
+                f"duplicate/fused {kind} stanzas — map each source to a "
+                f"distinct target"
+            )
+
+    _warn_collisions(intent.interfaces, "interface")
+    _warn_collisions(intent.lags, "LAG")
+
     # (#49b) Operator drop/rename keys that named a port absent from the tree
     # did nothing — warn instead of silently over-reporting them as dropped.
     for key in user_map:
@@ -672,11 +713,16 @@ def _strip_dropped_ports(
     intent.lags = [lag for lag in intent.lags if lag.name not in dropped]
     for lag in intent.lags:
         lag.members = [m for m in lag.members if m not in dropped]
+    # (#19) Guard on a truthy interface: a gateway-only route / unbound pool
+    # has ``interface == ''`` and must never be matched by a drop set (an
+    # empty-string drop key would otherwise delete every one of them).
     intent.static_routes = [
-        r for r in intent.static_routes if r.interface not in dropped
+        r for r in intent.static_routes
+        if not (r.interface and r.interface in dropped)
     ]
     intent.dhcp_servers = [
-        p for p in intent.dhcp_servers if p.interface not in dropped
+        p for p in intent.dhcp_servers
+        if not (p.interface and p.interface in dropped)
     ]
     # (#3) Clear dangling VXLAN VTEP source-interface references.
     for vx in intent.vxlan_vnis:

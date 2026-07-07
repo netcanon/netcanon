@@ -144,6 +144,31 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
     _TRUNK_ALL_RANGE_FULL = set(range(1, 4095))
     _TRUNK_ALL_RANGE_OPERATIONAL = set(range(2, 4095))
 
+    # (#20) PASS 1 — materialise every VLAN record a switchport references
+    # BEFORE any membership stamping.  The trunk-all branch below stamps the
+    # iface onto every VLAN in ``intent.vlans``; if a trunk-all uplink is
+    # declared BEFORE an access port whose VLAN has no top-level stanza, that
+    # VLAN is synthesised only later and the trunk-all stamp misses it — an
+    # interface-order dependence that also made a second call add the entry
+    # (violating the documented idempotency).  Pre-materialising decouples the
+    # VLAN set from interface order.  This never stamps, so it can't change
+    # what an already-order-correct config produced.
+    for iface in intent.interfaces:
+        mode = iface.switchport_mode
+        if mode == "access":
+            if iface.access_vlan is not None:
+                _vlan(iface.access_vlan)
+        elif mode == "trunk":
+            allowed_set = set(iface.trunk_allowed_vlans)
+            if allowed_set not in (
+                _TRUNK_ALL_RANGE_FULL, _TRUNK_ALL_RANGE_OPERATIONAL
+            ):
+                for vid in iface.trunk_allowed_vlans:
+                    _vlan(vid)
+            if iface.trunk_native_vlan is not None:
+                _vlan(iface.trunk_native_vlan)
+
+    # PASS 2 — stamp membership; the trunk-all branch now sees the full set.
     for iface in intent.interfaces:
         mode = iface.switchport_mode
         if mode is None:
