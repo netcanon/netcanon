@@ -331,3 +331,46 @@ class TestScheduleDeleteResurrection:
         assert sid in app.state.schedules
         assert app.state.schedules[sid].last_run_at is not None
         assert (Path(app.state.schedule_store._dir) / f"{sid}.json").exists()
+
+
+class TestScheduledJobCreationPersist:
+    """(#26) A scheduled job must be persisted to disk at creation, mirroring
+    backups.py's CONC-5 save — else an LRU-evicted scheduled job (or every run
+    under max_memory_jobs=0) 404s while genuinely running."""
+
+    @staticmethod
+    def _cisco_profile(app):
+        from netcanon.models.device_profile import DeviceProfile
+
+        profile = DeviceProfile(
+            name="sw", type_key="Cisco", host="10.0.0.1", port=22,
+            username="admin", password="pw",
+        )
+        app.state.device_profiles[profile.id] = profile
+        return profile
+
+    async def test_scheduled_job_persisted_at_creation(
+        self, client, monkeypatch,
+    ):
+        from netcanon.api.routes.schedules import _run_scheduled_backup_inner
+        from netcanon.services import backup_runner
+
+        app = client.app
+        self._cisco_profile(app)
+        sid = _create_schedule(client)["id"]
+
+        captured: list = []
+
+        def _capture(job, *a, **k):
+            # Capture the job WITHOUT saving — the creation-time persist is then
+            # the only disk write, isolating the #26 fix from the terminal save.
+            captured.append(job)
+
+        monkeypatch.setattr(backup_runner, "run_backup_job", _capture)
+        await _run_scheduled_backup_inner(sid, app)
+
+        assert captured, "runner never dispatched (no resolvable target?)"
+        job = captured[0]
+        # #26: on disk from the creation-time persist even though the stubbed
+        # runner wrote nothing.  Pre-fix the scheduled path never saved -> None.
+        assert app.state.job_store.load_one(job.id) is not None

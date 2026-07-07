@@ -257,6 +257,19 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
 
     job_store: FileJobStore = app.state.job_store
     max_workers = getattr(app.state.settings, "backup_concurrency", 10)
+    # (#26) Persist the pending job immediately, mirroring backups.py's CONC-5
+    # save.  Without it a scheduled job LRU-evicted mid-run — or EVERY
+    # scheduled run when max_memory_jobs=0 — disk-misses and GET /{id} 404s
+    # while the job is genuinely running (the tool's primary unattended mode).
+    # run_backup_job's terminal save overwrites this pending snapshot.
+    try:
+        job_store.save(job)
+    except OSError as exc:
+        logger.warning(
+            "Could not persist pending scheduled job %s at creation: %s",
+            job.id,
+            exc,
+        )
     await asyncio.to_thread(
         run_backup_job,
         job,
