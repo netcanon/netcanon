@@ -162,3 +162,31 @@ class TestMultiLineAddWiring:
 
     def test_bare_single_line_unchanged_arista(self) -> None:
         assert _arista_trunk("10,20,30-32") == [10, 20, 30, 31, 32]
+
+
+class TestAddIsLinearNotQuadratic:
+    """(#11) The ``add`` branch used ``vid not in base`` (O(len(base)) per
+    id), so K repeated ``add 1-4094`` lines cost ~8.4M comparisons each.
+    The set-membership fix is behaviour-identical AND linear."""
+
+    def test_add_semantics_unchanged(self) -> None:
+        # Behaviour identity: union, order preserved, no re-dup of ids
+        # already present, ids duplicated within one line still resolve
+        # the same (the comprehension never observed its own additions).
+        assert merge_trunk_allowed([10, 20], "add 30,40") == [10, 20, 30, 40]
+        assert merge_trunk_allowed([10, 20], "add 20,30") == [10, 20, 30]
+        assert merge_trunk_allowed([10], "add 30,30") == [10, 30, 30]
+
+    def test_repeated_full_range_add_is_fast(self) -> None:
+        # Pre-fix: 200× ``add 1-4094`` against a growing 4094-list took
+        # ~7 s (quadratic).  Post-fix it's ~0.03 s.  A 4 s ceiling fails
+        # the quadratic path with a wide margin either direction.
+        import time
+
+        existing: list[int] = []
+        start = time.perf_counter()
+        for _ in range(200):
+            existing = merge_trunk_allowed(existing, "add 1-4094")
+        elapsed = time.perf_counter() - start
+        assert existing == list(range(1, 4095))
+        assert elapsed < 4.0, f"add merge is quadratic ({elapsed:.1f}s)"
