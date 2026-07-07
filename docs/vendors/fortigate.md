@@ -24,7 +24,9 @@ firewall translation is your primary need, see
 
 [Tier 1](../CAPABILITIES.md#tier-1--auto-translatable-cross-vendor-stable):
 
-- `hostname` (alias / hostname), `domain`, DNS / NTP / syslog
+- `hostname` (alias / hostname), `domain`, DNS / NTP servers
+  (`syslog_servers` is declared **unsupported** in the capability
+  matrix and does not round-trip)
 - Interfaces — physical (`port1`-`portN`, `wan1`/`wan2`,
   `internal1`-`internalN`), VLAN sub-interfaces (`VL_<id>`,
   `LAN_TRUNK`), aggregate (`fortilink`, `LAG_INTERNAL`), tunnel
