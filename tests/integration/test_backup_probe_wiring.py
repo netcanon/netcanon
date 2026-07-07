@@ -26,7 +26,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
 
 from netcanon.collectors.base import BaseCollector
 from netcanon.definitions import LIBRARY_DIR
@@ -34,6 +33,12 @@ from netcanon.definitions.schema import DeviceDefinition
 from netcanon.main import create_app
 from netcanon.models.device import DeviceTarget
 from tests.conftest import CISCO_FAKE_OUTPUT
+
+# #27: backup dispatch is now async on a dedicated executor, so a POST returns
+# before the job finishes.  Alias the auto-waiting client (polls each created
+# backup job to completion) to TestClient so the POST-then-GET probe-wiring
+# assertions keep their pre-#27 semantics.
+from tests.conftest import AutoWaitTestClient as TestClient
 
 pytestmark = pytest.mark.integration
 

@@ -661,12 +661,35 @@ class MigratePage:
 # ---------------------------------------------------------------------------
 
 
+def _wait_for_job(page: Page, job_id: str, *, timeout: float = 15.0) -> None:
+    """Poll ``GET /api/v1/backups/{job_id}`` until the job is terminal.
+
+    Since #27, backups run on a dedicated background executor on the live
+    server, so ``POST /api/v1/backups`` returns before the job — and its
+    stored config file — is done.  Seeding helpers must wait for completion
+    before reading ``/api/v1/configs/`` or the config may not exist yet.
+    """
+    import time as _time
+
+    terminal = {"completed", "partial", "failed"}
+    deadline = _time.monotonic() + timeout
+    while _time.monotonic() < deadline:
+        resp = page.request.get(f"/api/v1/backups/{job_id}")
+        if resp.ok and resp.json().get("status") in terminal:
+            return
+        _time.sleep(0.05)
+    raise AssertionError(
+        f"e2e: backup job {job_id} did not finish within {timeout}s"
+    )
+
+
 def ensure_cisco_config(page: Page) -> str:
     """Make sure at least one Cisco config exists, then return its filename.
 
-    Posts a backup via the API (FakeCollector returns canned Cisco output).
+    Posts a backup via the API (FakeCollector returns canned Cisco output)
+    and waits for the job to finish before reading the config list (#27).
     """
-    page.request.post(
+    resp = page.request.post(
         "/api/v1/backups/",
         data={
             "devices": [
@@ -678,6 +701,7 @@ def ensure_cisco_config(page: Page) -> str:
             ]
         },
     )
+    _wait_for_job(page, resp.json()["id"])
     resp = page.request.get("/api/v1/configs/")
     assert resp.ok
     records = resp.json()
@@ -690,9 +714,14 @@ def ensure_n_configs_of_type(
     page: Page, type_key: str, count: int
 ) -> list[str]:
     """Create *count* configs of the given type via the live API and
-    return their filenames (newest-first)."""
+    return their filenames (newest-first).
+
+    Each backup job is polled to completion before the config list is read,
+    since backups now run asynchronously on a dedicated executor (#27).
+    """
+    job_ids: list[str] = []
     for i in range(count):
-        page.request.post(
+        resp = page.request.post(
             "/api/v1/backups/",
             data={
                 "devices": [
@@ -704,6 +733,9 @@ def ensure_n_configs_of_type(
                 ]
             },
         )
+        job_ids.append(resp.json()["id"])
+    for jid in job_ids:
+        _wait_for_job(page, jid)
     records = page.request.get("/api/v1/configs/").json()
     files = [
         r["filename"] for r in records if r["device_type"] == type_key

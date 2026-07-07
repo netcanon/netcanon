@@ -22,9 +22,10 @@ pytestmark = pytest.mark.integration
 def _seed_config(client, host: str = "192.168.1.1") -> str:
     """Run a backup job and return the saved filename.
 
-    Background tasks run synchronously in TestClient but AFTER the POST
-    response body is serialised (so POST always returns ``status: pending``).
-    We GET the job immediately after to read the completed state.
+    The POST always returns ``status: pending`` (the job runs in the
+    background on a dedicated executor, #27).  With the auto-waiting ``client``
+    fixture the POST blocks until the job is terminal, so the config file has
+    landed and the GET below reads the completed state.
     """
     post_resp = client.post(
         "/api/v1/backups",
@@ -149,10 +150,14 @@ class TestOpenConfig:
         """TestClient with ``open_in_editor=True`` and SSH mocked out."""
         from unittest.mock import patch
 
-        from fastapi.testclient import TestClient
-
         from netcanon.main import create_app
         from tests.conftest import CISCO_FAKE_OUTPUT, FakeCollector
+
+        # #27: seeding a config POSTs a backup that now runs async on a
+        # dedicated executor, so use the auto-waiting client (aliased to
+        # TestClient) — it blocks until the seed job finishes and the config
+        # file has landed.
+        from tests.conftest import AutoWaitTestClient as TestClient
 
         settings = Settings(
             definitions_dir=sample_definitions_dir,

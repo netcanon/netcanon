@@ -39,10 +39,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient as _PlainTestClient
 
 from netcanon.models.backup import BackupJob
 from netcanon.storage.job_registry import BackupJobRegistry
+
+# #27: most load tests assert on terminal job state / the LRU cap, which now
+# requires the async backup job to finish first — alias the auto-waiting client
+# to TestClient so those POST-then-assert tests keep their semantics.  The one
+# test that deliberately holds a job ``pending`` (stubbed dispatch) uses
+# ``_PlainTestClient`` so its post-POST poll doesn't time out.
+from tests.conftest import AutoWaitTestClient as TestClient
 from tests.conftest import FakeCollector
 
 pytestmark = pytest.mark.integration
@@ -183,9 +190,12 @@ class TestSustainedLoad:
         so the first job stays ``pending``; a second submission would normally
         evict the LRU entry, but the non-terminal protection keeps it resident.
         It is reachable either way (cache OR the creation-time disk persist)."""
+        # Stub the dispatch seam so the job is created + persisted but never
+        # runs (stays ``pending``).  Use the PLAIN client — the auto-waiting
+        # one would poll a job that never completes and hit its timeout.
         with patch(
-            "netcanon.api.routes.backups.run_backup_job",
-        ), TestClient(test_app) as c:
+            "netcanon.api.routes.backups.submit_backup_job",
+        ), _PlainTestClient(test_app) as c:
             original_registry = _swap_registry(test_app, max_memory_jobs=1)
             try:
                 first = c.post(

@@ -6,8 +6,10 @@ list of :class:`~netcanon.models.device.DeviceTarget` into persisted
 config records funnels through :func:`run_backup_job`.  The
 ``POST /api/v1/backups`` route (:mod:`netcanon.api.routes.backups`) and
 the APScheduler-driven scheduler
-(:mod:`netcanon.api.routes.schedules`) both dispatch this function into
-a worker thread; integration / e2e / desktop tests drive it
+(:mod:`netcanon.api.routes.schedules`) both dispatch this function onto
+the dedicated backup-job executor below (:func:`_job_executor` — the
+route via :func:`submit_backup_job`, the scheduler via
+``loop.run_in_executor``); integration / e2e / desktop tests drive it
 transitively through those endpoints.
 
 Structural sibling of :mod:`netcanon.services.migration_pipeline`:
@@ -38,9 +40,11 @@ Mock-point contract (AGENTS.md "Hard Rules" — load-bearing):
 Thread-safety / async-boundary contract (unchanged from the original
 route-module home):
 
-    * Runs in a worker thread, never on the event loop.  The route
-      dispatches via FastAPI ``BackgroundTasks``; the scheduler via
-      ``asyncio.to_thread`` — blocking SSH must not run on the loop.
+    * Runs in a worker thread, never on the event loop.  Both entry
+      points use the dedicated backup-job executor (:func:`_job_executor`)
+      — the route via :func:`submit_backup_job`, the scheduler via
+      ``loop.run_in_executor`` — so blocking SSH never runs on the loop
+      and never on the shared anyio / default pools (#27).
     * ``job.results`` is pre-populated before dispatch and never
       resized; each worker mutates exactly one element, so no locking
       is required (the GIL makes the individual attribute writes
@@ -485,13 +489,15 @@ def run_backup_job(
 ) -> None:
     """Execute all device backups for *job* and update its state.
 
-    Runs in a worker thread (FastAPI ``BackgroundTasks`` for the route,
-    ``asyncio.to_thread`` for the scheduler); never returns to the route
-    response — see AGENTS.md "Hard Rules".  ``POST /api/v1/backups``
-    always returns ``status=pending`` and the caller polls
-    ``GET /api/v1/backups/{id}`` for the terminal state this function
-    writes.  Tests rely on TestClient executing background tasks
-    synchronously before the POST response is returned.
+    Runs in a worker thread on the dedicated backup-job executor
+    (:func:`submit_backup_job` for the route, ``loop.run_in_executor`` for
+    the scheduler); never returns to the route response — see AGENTS.md
+    "Hard Rules".  ``POST /api/v1/backups`` always returns
+    ``status=pending`` and the caller polls ``GET /api/v1/backups/{id}``
+    for the terminal state this function writes.  Because the job runs
+    truly in the background (not synchronously before the POST response,
+    even under ``TestClient``, unlike the pre-#27 ``BackgroundTasks``
+    dispatch), tests must poll for completion (``wait_for_job``).
 
     Device work is dispatched to a bounded ``ThreadPoolExecutor`` so up
     to *max_workers* devices are processed in parallel; additional

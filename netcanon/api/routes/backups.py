@@ -6,10 +6,12 @@ Endpoints:
     POST /api/v1/backups/
         → Create a backup job.  Validates every device's ``type_key``
           against loaded definitions, creates the :class:`BackupJob`
-          synchronously in ``pending`` state, then enqueues the actual
-          SSH / NETCONF / REST collection as a FastAPI
-          ``BackgroundTask``.  Returns the freshly-created job (always
-          ``pending`` at this point — see test-mocking note below).
+          synchronously in ``pending`` state, then submits the actual
+          SSH / NETCONF / REST collection to the dedicated backup-job
+          executor (:func:`netcanon.services.backup_runner.submit_backup_job`).
+          Returns the freshly-created job (always ``pending`` at this
+          point — the job runs in the background; see test-mocking note
+          below).
 
     GET  /api/v1/backups/
         → List every :class:`BackupJob` in memory, newest first.
@@ -19,17 +21,23 @@ Endpoints:
           to observe progression through ``running`` → ``completed`` /
           ``partial`` / ``failed``.
 
-Backup jobs are created immediately (synchronously) and then run in a
-FastAPI ``BackgroundTask``.  Callers receive a job ID and poll
-``GET /api/v1/backups/{job_id}`` for status.
+Backup jobs are created immediately (synchronously) and then run on a
+dedicated, capped background thread pool
+(:func:`netcanon.services.backup_runner.submit_backup_job`, #27).
+Callers receive a job ID and poll ``GET /api/v1/backups/{job_id}`` for
+status.
 
-During testing, FastAPI's ``TestClient`` executes background tasks
-synchronously before returning the response, so integration tests see
-a completed job immediately after ``POST /api/v1/backups`` — but the
-POST response body itself is always serialised in ``pending`` state
-(it's built before the background task runs).  Tests that need the
-final job state must always GET the job by ID after POSTing — never
-assert on the POST response body.  See AGENTS.md "Hard Rules".
+Async contract (changed by #27): the job runs *truly* in the
+background, so ``POST /api/v1/backups`` returns while the job is still
+``pending`` — it is NOT run synchronously before the response, even
+under ``TestClient`` (the pre-#27 behaviour, where FastAPI
+``BackgroundTasks`` ran the job before the next request).  Tests that
+need the final job state must poll ``GET /{id}`` until it is terminal —
+never assert final state on the POST body, and never assume the job has
+finished the instant the POST returns.  The ``wait_for_job`` helper
+(``tests/conftest.py``) does the poll; the integration ``client``
+fixture applies it automatically after a backups POST.  See AGENTS.md
+"Hard Rules".
 
 Mocking convention: tests mock collection by patching
 ``netcanon.api.routes.backups.get_collector`` — the single factory
@@ -48,7 +56,6 @@ from datetime import UTC, datetime
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     HTTPException,
     Path,
@@ -67,7 +74,7 @@ from ...definitions.schema import DeviceDefinition
 from ...models.backup import BackupJob, JobStatus
 from ...models.device import BackupRequest, DeviceCredentials, DeviceTarget
 from ...models.device_profile import DeviceProfile
-from ...services.backup_runner import run_backup_job
+from ...services.backup_runner import submit_backup_job
 from ...services.egress import EgressBlocked, assert_egress_allowed
 from ...storage.base import BaseConfigStore
 from ...storage.device_profile_store import FileDeviceProfileStore
@@ -153,7 +160,6 @@ def _resolve_credentials(
 )
 def create_backup(
     request_body: BackupRequest,
-    background_tasks: BackgroundTasks,
     request: Request,
     definitions: dict[str, DeviceDefinition] = Depends(get_definitions),
     definition_loader: DefinitionLoader = Depends(get_definition_loader),
@@ -242,8 +248,25 @@ def create_backup(
     max_workers = getattr(
         request.app.state.settings, "backup_concurrency", MAX_BACKUP_CONCURRENCY
     )
-    background_tasks.add_task(
-        run_backup_job,
+    # (#27) Snapshot the pending job for the response BEFORE handing the live
+    # object to the executor.  The worker thread flips job.status to `running`
+    # and appends results the instant it is scheduled — which can happen before
+    # FastAPI finishes serialising the response — so returning the live `job`
+    # would race a non-deterministic pending/running/completed status into the
+    # POST body.  The registry + disk hold the LIVE object (GET /{id} reflects
+    # real-time state); the response is a frozen `pending` acknowledgement,
+    # preserving the documented "POST always returns pending" contract.
+    pending_snapshot = job.model_copy(deep=True)
+    # Dispatch onto the dedicated backup-job executor rather than FastAPI
+    # BackgroundTasks.  BackgroundTasks ran the minutes-long, blocking
+    # run_backup_job on one of anyio's ~40 shared worker-thread tokens — the
+    # same pool that serves every synchronous route — so ~40 in-flight jobs
+    # froze the whole sync API.  submit_backup_job runs the job on a dedicated,
+    # capped pool instead.  The job now runs truly in the background, so
+    # callers must poll GET /backups/{id} for the terminal state; the job is
+    # already in the registry + persisted above, so the poll sees it
+    # immediately.  See AGENTS.md "Hard Rules".
+    submit_backup_job(
         job,
         resolved_request,
         definitions,
@@ -260,7 +283,7 @@ def create_backup(
         job.total_devices,
         max_workers,
     )
-    return job
+    return pending_snapshot
 
 
 @router.get(
