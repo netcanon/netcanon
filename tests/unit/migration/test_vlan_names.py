@@ -287,3 +287,25 @@ class TestBuildTransform:
         # Same rewrite applied twice → same applied entry, just once
         # in the result (dict semantics).
         assert result.applied == {10: 100}
+
+
+class TestNotFoundEntryWarning:
+    """Map entries for VLANs absent from the tree warn + no-op (#49a)."""
+
+    def test_absent_vlan_entry_warns(self):
+        intent = _tree_with_vlans(10, 20)
+        result = translate_vlan_ids(intent, rename_map={99: 88})
+        assert result.applied == {}
+        assert [v.id for v in intent.vlans] == [10, 20]
+        assert any("99" in w and "nowhere" in w for w in result.warnings)
+
+    def test_reference_only_vlan_not_flagged(self):
+        # VLAN 30 has no stanza but IS an interface access VLAN — Pass 2
+        # rewrites the reference, so it must NOT be flagged as a no-op (#49a).
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(id=10, name="V10")],
+            interfaces=[CanonicalInterface(name="Gi0/1", access_vlan=30)],
+        )
+        result = translate_vlan_ids(intent, rename_map={30: 40})
+        assert intent.interfaces[0].access_vlan == 40
+        assert not any("nowhere" in w for w in result.warnings)

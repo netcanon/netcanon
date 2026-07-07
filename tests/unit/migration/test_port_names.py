@@ -1047,3 +1047,40 @@ class TestNonCanonicalIntentTreeIsNoOp:
         assert job.rendered  # the (unsafe) rendered output is present
         assert job.port_renames == {}
         assert job.warnings == []
+
+
+class TestAbsentKeyDropHonesty:
+    """Drop/rename keys for ports absent from the tree warn + aren't
+    over-reported as ``dropped`` (#49b)."""
+
+    def test_absent_drop_key_warns_not_reported(self):
+        # Same-vendor so nothing is auto-dropped as unmappable; the only drop
+        # candidate is the (absent) map key.
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="GigabitEthernet0/1")],
+        )
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), CiscoIOSXECLICodec(),
+            rename_map={"GigabitEthernet9/9": None},
+        )
+        assert result.dropped == []
+        assert any(
+            "GigabitEthernet9/9" in w and "does not exist" in w
+            for w in result.warnings
+        )
+
+    def test_present_drop_key_still_reported(self):
+        # Regression guard against over-correcting: a drop for a port that
+        # DOES exist is still reported + removed.
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="GigabitEthernet0/1"),
+                CanonicalInterface(name="GigabitEthernet0/2"),
+            ],
+        )
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), CiscoIOSXECLICodec(),
+            rename_map={"GigabitEthernet0/2": None},
+        )
+        assert result.dropped == ["GigabitEthernet0/2"]
+        assert [i.name for i in intent.interfaces] == ["GigabitEthernet0/1"]

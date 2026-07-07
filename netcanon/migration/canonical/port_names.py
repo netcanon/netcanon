@@ -491,6 +491,29 @@ def translate_port_names(  # noqa: C901
             applied[name] = out
         return out
 
+    # (#49b) Snapshot every port name actually present in the tree BEFORE the
+    # rewrite sweep mutates names in place — used to (a) warn on operator map
+    # entries that named a port absent from the config, and (b) avoid
+    # over-reporting those absent names as "dropped" (mirrors local_user /
+    # snmpv3 honesty).
+    present_names: set[str] = set()
+    for iface in intent.interfaces:
+        present_names.add(iface.name)
+        if iface.lag_member_of:
+            present_names.add(iface.lag_member_of)
+    for vlan in intent.vlans:
+        present_names.update(vlan.tagged_ports)
+        present_names.update(vlan.untagged_ports)
+    for lag in intent.lags:
+        present_names.add(lag.name)
+        present_names.update(lag.members)
+    for route in intent.static_routes:
+        if route.interface:
+            present_names.add(route.interface)
+    for pool in intent.dhcp_servers:
+        if pool.interface:
+            present_names.add(pool.interface)
+
     # Rewrite everywhere a port name might be referenced.  Order doesn't
     # matter — memoisation keeps us idempotent.
     for iface in intent.interfaces:
@@ -516,18 +539,30 @@ def translate_port_names(  # noqa: C901
     if dropped_set:
         _strip_dropped_ports(intent, dropped_set)
 
+    # (#49b) Operator drop/rename keys that named a port absent from the tree
+    # did nothing — warn instead of silently over-reporting them as dropped.
+    for key in user_map:
+        if key not in present_names:
+            warnings.append(
+                f"port_rename: source port {key!r} does not exist in the "
+                f"parsed config; entry ignored"
+            )
+    # Report only drops that actually removed a present name (auto-dropped
+    # unmappable names were resolved from real references, so they qualify).
+    reported_dropped = sorted(d for d in dropped_set if d in present_names)
+
     logger.debug(
         "translate_port_names: exit %s → %s applied=%d dropped=%d "
         "warnings=%d",
         source_codec.name, target_codec.name,
         len(applied),
-        len(dropped_set),
+        len(reported_dropped),
         len(warnings),
     )
     return PortRenameResult(
         applied=applied,
         warnings=warnings,
-        dropped=sorted(dropped_set),
+        dropped=reported_dropped,
     )
 
 

@@ -209,7 +209,6 @@ def translate_snmpv3_users(
             new_name = u.name
         else:
             new_name = decision
-            result.applied[u.name] = decision
         if new_name in seen_targets and seen_targets[new_name] != u.name:
             # Collision: a previous user (renamed or not) already
             # occupies this target name.  First-wins — drop this one
@@ -220,7 +219,12 @@ def translate_snmpv3_users(
                 f"{seen_targets[new_name]!r}; dropping {u.name!r} "
                 f"(first-wins)"
             )
+            # (#48) A collision-dropped record must be reported in ``dropped``,
+            # and NOT in ``applied`` — record the rename only once it survives.
+            result.dropped.append(u.name)
             continue
+        if decision != "__pass__":
+            result.applied[u.name] = decision
         seen_targets[new_name] = u.name
         # Mutate in-place to preserve all other attributes (group,
         # auth, priv, engine_id).

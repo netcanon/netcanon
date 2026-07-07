@@ -127,8 +127,11 @@ class TestSnmpV3UserNameRename:
             intent,
             rename_map={"userA": "shared", "userB": "shared"},
         )
-        # First-wins: userA landed at "shared", userB dropped.
-        assert r.applied == {"userA": "shared", "userB": "shared"}
+        # First-wins: userA landed at "shared", userB collided + dropped.
+        # userB is reported in `dropped`, NOT `applied` (#48 — applied used to
+        # record the rename before the collision check, contradicting reality).
+        assert r.applied == {"userA": "shared"}
+        assert r.dropped == ["userB"]
         names = [u.name for u in intent.snmp.v3_users]
         assert names.count("shared") == 1
         assert "userC" in names
