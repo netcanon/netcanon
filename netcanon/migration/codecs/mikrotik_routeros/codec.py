@@ -251,6 +251,38 @@ class MikroTikRouterOSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/auth-protocol",
+                reason=(
+                    "RouterOS SNMPv3 auth supports only MD5 / SHA1; the "
+                    "renderer substitutes sha224->SHA256, sha384->SHA512, and "
+                    "any unknown algorithm->SHA1, so an SNMP manager keyed for "
+                    "the source algorithm stops authenticating.  Declared lossy "
+                    "so validate_against surfaces the downgrade (#23)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/priv-protocol",
+                reason=(
+                    "RouterOS SNMPv3 privacy supports only DES / AES; the "
+                    "renderer substitutes 3des->DES (a strength DOWNGRADE) and "
+                    "any unknown algorithm->AES.  Declared lossy so the crypto "
+                    "substitution is not reported as severity:ok (#23)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/dhcp-servers/pool/lease-time",
+                reason=(
+                    "RouterOS lease-time lives on the `/ip dhcp-server` "
+                    "instance, not the `/ip dhcp-server network` this codec "
+                    "renders, so a non-default lease_time is not emitted and "
+                    "re-parses as the 86400 default — a 2h lease policy "
+                    "silently becomes 1 day.  Declared lossy (#24)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing/static-route/metric",
                 reason=(
                     "Render emits destination + gateway + comment only; the "

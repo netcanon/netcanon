@@ -241,6 +241,27 @@ class ArubaAOSSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/auth-protocol",
+                reason=(
+                    "AOS-S emits the auth protocol verbatim but its parser "
+                    "accepts only md5 / sha / sha256; sha224 / sha384 / sha512 "
+                    "render an unreadable clause that drops the auth config on "
+                    "re-parse.  Declared lossy so the loss is not reported as "
+                    "severity:ok (#23)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/priv-protocol",
+                reason=(
+                    "AOS-S privacy emits aes128 as bare `aes`, losing the "
+                    "key-length designation, and has no representation for "
+                    "aes192 / aes256; the privacy config round-trips lossily. "
+                    "Declared lossy so validate_against surfaces it (#23)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing/static-route/metric",
                 reason=(
                     "Render emits destination + next-hop only; the static-"
