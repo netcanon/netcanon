@@ -58,9 +58,50 @@ from netcanon.migration.canonical.intent import (
     CanonicalIPv4Address,
     CanonicalStaticRoute,
 )
+from netcanon.migration.codecs.mikrotik_routeros.parse import parse_intent
 from netcanon.migration.codecs.mikrotik_routeros.render import render_intent
 
 pytestmark = pytest.mark.unit
+
+
+class TestCombinedGatewayParse:
+    """(#9) ``gateway=<ip>%<iface>`` must split into gateway + interface
+    on parse (RouterOS emits this form; the previous parse stored the
+    whole token in ``gateway`` → invalid next-hop on every target)."""
+
+    def test_ipv4_gateway_iface_split(self):
+        intent = parse_intent(
+            "/ip route\nadd dst-address=0.0.0.0/0 gateway=192.168.88.1%ether1\n"
+        )
+        r = intent.static_routes[0]
+        assert r.gateway == "192.168.88.1"
+        assert r.interface == "ether1"
+
+    def test_ipv6_linklocal_scoped_gateway_split(self):
+        # IPv6 link-local next-hops carry the egress as a %-scope zone;
+        # the same split applies.
+        intent = parse_intent(
+            "/ip route\nadd dst-address=::/0 gateway=fe80::1%ether2\n"
+        )
+        r = intent.static_routes[0]
+        assert r.gateway == "fe80::1"
+        assert r.interface == "ether2"
+
+    def test_bare_gateway_unchanged(self):
+        intent = parse_intent(
+            "/ip route\nadd dst-address=10.0.0.0/24 gateway=192.168.1.1\n"
+        )
+        r = intent.static_routes[0]
+        assert r.gateway == "192.168.1.1"
+        assert r.interface == ""
+
+    def test_combined_form_round_trips(self):
+        # parse -> render must reproduce the combined ``%`` token.
+        cfg = (
+            "/ip route\nadd dst-address=0.0.0.0/0 gateway=192.168.88.1%ether1\n"
+        )
+        out = render_intent(parse_intent(cfg))
+        assert "gateway=192.168.88.1%ether1" in out
 
 # ---------------------------------------------------------------------------
 # Issue 1: Loopback / Tunnel emission
