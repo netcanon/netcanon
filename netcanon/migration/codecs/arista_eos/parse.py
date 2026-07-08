@@ -189,7 +189,13 @@ _VRF_INSTANCE_RE = re.compile(
 # route-target IOS-style in the stanza body; the header-only harvest dropped
 # them.  ``route-target`` accepts the optional EOS ``evpn`` keyword.
 _VRF_RD_RE = re.compile(r"^\s+rd\s+(\S+)\s*$")
-_VRF_DESC_RE = re.compile(r"^\s+description\s+(.+?)\s*$")
+# Capture is anchored ``\S.*`` (value starts non-space, run to EOL) rather than
+# a lazy ``(.+?)\s*$``: the lazy quantifier competing with the trailing ``\s*``
+# over the same whitespace is a polynomial-ReDoS — a ``description a<many
+# spaces>!`` line backtracks O(n^2) (CodeQL py/polynomial-redos).  ``\s+`` and
+# ``\S`` are disjoint classes so there is exactly one split; the ``.strip()``
+# on the captured group still trims any trailing whitespace ``.*`` absorbed.
+_VRF_DESC_RE = re.compile(r"^\s+description\s+(\S.*)$")
 _VRF_RT_RE = re.compile(
     r"^\s+route-target\s+(import|export|both)\s+(?:evpn\s+)?(\S+)\s*$"
 )
