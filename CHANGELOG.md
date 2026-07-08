@@ -26,6 +26,130 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-07-07
+
+Post-review hardening release: the complete remediation of the 2026-07-06
+Fable multi-lens review of v0.5.3 (verdict *SHIP-WITH-FIXES*; zero parse
+crashes across ~18k fuzzed inputs, every prior v0.5.x remediation verified
+healthy).  62 findings across three waves — the rename-transform seam that
+could silently render inconsistent / duplicate-IP configs on the default
+`/plan` flow, silent VLAN / DNS / next-hop corruption on documented Junos and
+MikroTik input shapes, a Tier-1 docs over-promise, honest lossy declarations,
+concurrency / jobs hardening, and a dedicated backup thread pool.  One new
+operator env knob (`NETCANON_MAX_CONCURRENT_BACKUP_JOBS`); **no breaking API
+changes**.  As in the prior review, the dominant pattern was a hardened path
+with an un-hardened sibling.  (0.5.4 skipped intentionally.)
+
+### Added
+
+- **`NETCANON_MAX_CONCURRENT_BACKUP_JOBS`** — backup jobs now run on a
+  dedicated, capped `ThreadPoolExecutor` (default 8 concurrent jobs) instead of
+  the shared request thread pools.  A minutes-long backup used to hold one of
+  anyio's ~40 default worker tokens (manual path) or share the default executor
+  with `/sanitize` + the egress filter (scheduled path), so a pile-up starved
+  every synchronous route; both entry points now dispatch to the dedicated
+  pool.  The manual `POST /api/v1/backups` runs the job truly in the background
+  — it returns `pending` and callers poll `GET /{id}` for the terminal state
+  (the documented contract, now enforced end-to-end).  (#333, #334)
+
+### Fixed
+
+- **Rename-transform seam — silent inconsistent / duplicate-IP output (DATA-1/2)**
+  — the default `/plan` rename+translate seam walked an incomplete set of
+  canonical cross-references: a rename could leave dangling VXLAN
+  `source_interface` / VRRP `track_interfaces`, a `{A: B, B: None}` map dropped
+  *both* endpoints, and only one of the two VLAN-id surfaces was translated — so
+  the flow could render internally inconsistent or duplicate-IP configs with
+  `warnings=[]`.  The sweep now covers those cross-refs and both `dot1q_vlan` +
+  `vxlan_vnis[].vlan_id`.  (#315)  Four further rename-bookkeeping gaps
+  (collision warn-only, SVI `Vlan<N>` tracking, empty-key guard, two-pass
+  switchport projection) and the applied/dropped accounting + not-found
+  warnings are closed too.  (#323, #306)
+- **Junos block-form input silently corrupted VLANs (11-F1)** — a Junos
+  `vlan members [ v1 v2 ]` bracket list and numeric / `range` members were
+  dropped, and a rename left stale `apply-groups` references; both orchestrators
+  now expand the members and flatten stale group content (mirroring
+  `sanitize`).  (#316)
+- **MikroTik `%`-gateway + Aruba SVI IPv6 (11-F3 / F2)** — a MikroTik
+  `gateway=<ip>%<iface>` next-hop lost its interface (link-local v6 broke
+  entirely); an Aruba AOS-S VLAN-context `ipv6 address` was dropped despite the
+  matrix declaring it supported.  Both now round-trip.  (#317)
+- **Per-pane endpoints skipped port translation** — the four per-pane
+  `/plan/{vlans,local_users,snmp,snmpv3}` endpoints did not engage
+  interface-name translation the main `/plan` flow does.  (#324)
+- **Arista `vrf definition` body dropped** — the legacy (≤4.22) `vrf definition`
+  stanza body (route-distinguisher / route-target / description) was lost on
+  harvest.  (#327)
+- **MikroTik VRRP virtual-IP prefix** — a VRRP virtual address took the parent
+  interface's mask instead of its own configured prefix.  (#326)
+- **Live backup jobs could vanish** — a running (non-terminal) job could be
+  LRU-evicted from the in-memory registry mid-run (→ `GET /{id}` 404 for a job
+  that is genuinely running), and scheduled jobs weren't persisted at creation
+  (invisible for their whole run — the primary unattended mode).  Non-terminal
+  jobs are now never evicted and scheduled jobs persist immediately.  (#328)
+- **Non-UTF-8 stored config → opaque 500** — a stored config containing
+  non-UTF-8 bytes raised an uncaught decode error (HTTP 500) on read / diff /
+  migrate / detect; content is now decoded with `errors="replace"`.  (#329)
+- **Lock siblings** — the device-profile registry cap is enforced under the
+  registry lock, and the scheduler snapshots the schedule set before iterating
+  (an unlocked iteration could silently skip a run).  (#304)
+- **CLI / open-config / profile save** — CLI `sanitize` guards its `-o` write,
+  the open-config endpoint returns `501` when disabled, and a failed
+  device-profile save rolls back cleanly.  (#305)
+- **Sanitize errors + OpenAPI + device type** — `/sanitize` returns a unified
+  `422` on bad input with an accurate OpenAPI `responses` block, and a device
+  `type_key` absent from the library is a clean `422`.  (#308)
+- **Quadratic parse/diff scans** — four O(n²) hot-path scans (FortiGate / Arista
+  / Junos parse, and the config diff) replaced with dict/set lookups.  (#322)
+
+### Changed
+
+- **Tier-1 docs over-promise (HIGH #1)** — the front-page "Tier 1 … every
+  shipped codec parses + renders these fully" claim listed **timezone** (wired
+  on 0/12 codecs) and **syslog** (1/12); both are removed and DNS/NTP scoped to
+  "most codecs — see the per-codec tables".  A new guard pins the claim to the
+  live matrix.  (#319)
+- **CAPABILITIES §A honesty** — dropped the "enumerates every path" completeness
+  claim (the live capability matrix is the source of truth), fixed a
+  wrong-direction row (`iosxe_cli virtual-gateway-address` → **Lossy**), and
+  removed five stale hard-coded "N supported surfaces" counts.  (#320)
+- **Honest lossy declarations** — MikroTik / Aruba SNMPv3 auth+priv-protocol
+  substitution and MikroTik DHCP lease-time loss now declare `lossy` instead of
+  silently normalising while reporting `severity: ok`.  (#325)
+- **PUT device-profile null semantics** — an explicit `null` in a
+  `PUT /api/v1/devices/{id}` body now clears a nullable field (and a required
+  field returns `422`) instead of being silently ignored.  (#318)
+- **Docs microcopy** — corrected v0.5.x version-echo / `strip_unsupported`
+  drift (#303) and three stale microcopy claims (a CI-gate description, the
+  VyOS "in progress" status now that it's graduated, and a stale SNMPv3 / VRRP
+  migrate-page example).  (#330)
+- **Same-vendor idempotency + internal dedup** — a MikroTik render now echoes
+  its RouterOS version header so the v6 NTP dialect gate is idempotent across a
+  double-sanitize (#311); the same-vendor version-echo logic and the
+  `iter_xpaths` codec walk were de-duplicated into shared helpers with no
+  behaviour change (#312, #313).
+- **CI / test guards** — the PII recurrence guard was widened to every
+  operator-path spelling and given a publish-time backstop in all three publish
+  workflows (#332, #309); the complexity ratchet catches every `noqa` spelling
+  (#310); the cross-mesh CI guard gained a YAML-less pair-drift ratchet, a
+  coverage pin, a fixture-scoped render allowlist, and a field-targeted diff
+  (#321, #331); the three review artifacts are committed in-tree under
+  `docs/reviews/` (#314).
+
+### Security
+
+- **Docker `:latest` gating + TOFU host-keys** — the Docker `:latest` tag is
+  gated off pre-release tags (a pre-release could otherwise move `:latest`), and
+  the paramiko trust-on-first-use host-key store is now read-merge-write instead
+  of overwrite (the overwrite silently re-opened the MITM window the v0.4.5
+  TOFU default closed).  (#307)
+
+### Performance
+
+- **Linear `trunk allowed` merge** — the `switchport trunk allowed vlan add`
+  merge is now linear (was O(|ids|·|base|); a ~250 KB config, well under the
+  10 MB cap, pinned a threadpool worker for minutes).  (#318)
+
 ## [0.5.3] - 2026-07-05
 
 Follow-on to the 2026-07-05 version-vector feasibility assessment: the one
