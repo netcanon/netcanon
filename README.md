@@ -288,7 +288,7 @@ across vendors.  Full per-codec matrix is in
   excepted — it renders interfaces only).  DNS / NTP servers translate
   on most codecs; `syslog` servers and `timezone` are wired on only a
   subset — check the per-codec matrices in
-  [`docs\CAPABILITIES.md`](docs\CAPABILITIES.md), and note that where a
+  [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md), and note that where a
   codec doesn't wire a field the source-side value is currently dropped
   without a banner.
 * **Tier 2 — translatable with caveats.**  SNMP (incl. SNMPv3 USM),
