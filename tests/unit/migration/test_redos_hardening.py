@@ -1,5 +1,6 @@
-"""ReDoS hardening guard for the five parse.py regexes CodeQL flagged
-(``py/polynomial-redos`` alerts #124-#128).
+"""ReDoS hardening guard for the parse.py regexes CodeQL flagged
+(``py/polynomial-redos`` alerts #124-#128, plus #151 — the arista_eos VRF
+description regex that #327 reintroduced with the same lazy shape).
 
 Each pattern paired a ``\\s+`` separator (or a greedy ``(\\S+)`` next-hop) with a
 value group whose character class OVERLAPPED it (``.+`` / ``.+?`` / ``.*`` all
@@ -22,7 +23,12 @@ import time
 
 import pytest
 
-from netcanon.migration.codecs.arista_eos.parse import _DHCP_DNS_SERVER_RE
+from netcanon.migration.codecs.arista_eos.parse import (
+    _DHCP_DNS_SERVER_RE,
+)
+from netcanon.migration.codecs.arista_eos.parse import (
+    _VRF_DESC_RE as _ARISTA_VRF_DESC_RE,
+)
 from netcanon.migration.codecs.aruba_aoscx.parse import _VLAN_TRUNK_ALLOWED_RE
 from netcanon.migration.codecs.cisco_iosxe_cli.parse import (
     _STATIC_ROUTE_RE,
@@ -64,7 +70,13 @@ def test_vlan_trunk_allowed_still_captures():
 
 
 def test_vrf_description_still_captures():
-    for rx in (_NXOS_VRF_DESCRIPTION_RE, _IOSXE_VRF_DESCRIPTION_RE):
+    # arista_eos joined this set in #151 — #327 reintroduced the lazy
+    # ``(.+?)\\s*$`` shape the #124-#128 pass had eliminated everywhere else.
+    for rx in (
+        _NXOS_VRF_DESCRIPTION_RE,
+        _IOSXE_VRF_DESCRIPTION_RE,
+        _ARISTA_VRF_DESC_RE,
+    ):
         assert rx.match("  description   Uplink to core  ").group(1).strip() == "Uplink to core"
 
 
@@ -91,8 +103,13 @@ def test_static_route_still_captures_and_keeps_trailing_tokens():
         (_NXOS_VRF_DESCRIPTION_RE, "   description " + "  " * _REPS),     # #126
         (_IOSXE_VRF_DESCRIPTION_RE, "   description " + "  " * _REPS),    # #127
         (_STATIC_ROUTE_RE, "ip route 9.9.9.9 9.9.9.9 !" + "!!" * _REPS),  # #128
+        # arista lazy ``(.+?)\s*$`` blows up specifically when the value
+        # STARTS with a non-space so the greedy ``\s+`` can't absorb the run;
+        # the trailing ``!`` defeats ``\s*$`` and forces the O(n^2) rescan.
+        (_ARISTA_VRF_DESC_RE, "   description a" + " " * _REPS + "!"),    # #151
     ],
-    ids=["dns-server", "vlan-trunk", "nxos-desc", "iosxe-desc", "static-route"],
+    ids=["dns-server", "vlan-trunk", "nxos-desc", "iosxe-desc", "static-route",
+         "arista-desc"],
 )
 def test_attack_string_is_linear_time(rx, attack):
     _m, elapsed = _timed_match(rx, attack)
