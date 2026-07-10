@@ -19,3 +19,16 @@ rules:
         "actions/*": ref-pin   # GitHub-owned, force-push protected
         "github/*": ref-pin    # GitHub-owned
         "*": hash-pin          # third-party publishers: SHA required
+
+  # `superfluous-actions` (note) flags the MSI-publish "Attach MSI to
+  # GitHub Release" step for using softprops/action-gh-release where a
+  # `gh release` script would also work.  Kept intentionally: the action
+  # gives create-page-if-missing + idempotent asset append + prerelease
+  # sorting in one SHA-pinned step; a hand-rolled `gh release create/upload`
+  # equivalent is more error-prone on the release-critical path (the MSI is
+  # already double-saved as a 30-day artifact, but we don't want the attach
+  # itself flaky).  Suppress the note rather than destabilise a verified
+  # publish step.
+  superfluous-actions:
+    ignore:
+      - desktop-msi-publish.yml
