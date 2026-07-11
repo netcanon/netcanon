@@ -384,7 +384,23 @@ def _apply_system_interface(  # noqa: C901
         # FortiOS native).  ``set ip6-address ::/0`` is "no IPv6
         # address" — drop the all-zero placeholder rather than emit
         # a canonical record for it.
+        #
+        # FortiOS 6.x puts ``set ip6-address`` directly on the interface
+        # edit; FortiOS 7.x nests it under a ``config ipv6`` sub-block
+        # (``edit port1 / config ipv6 / set ip6-address .../64 / end``).
+        # Read the direct form first, then the nested block if the direct
+        # form was absent — a real config carries the address in exactly
+        # one place, so this never double-appends (promotion #2: the path
+        # is declared supported, so a dropped nested address was a
+        # fail-open silent loss).  Only ``ip6-address`` is harvested from
+        # the nested block; nested ``ip6-mode`` is a separate surface left
+        # untouched here.
         ip6_tokens = edit.settings.get("ip6-address")
+        if not (ip6_tokens and ip6_tokens[0]):
+            for sub in edit.sub_blocks:
+                if sub.config_path == "ipv6":
+                    ip6_tokens = sub.settings.get("ip6-address")
+                    break
         if ip6_tokens and ip6_tokens[0]:
             v6_token = ip6_tokens[0]
             if "/" in v6_token:
