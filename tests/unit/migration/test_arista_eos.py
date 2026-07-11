@@ -128,6 +128,72 @@ class TestParseScalars:
             ("::/0", "fe80::1"),
         ]
 
+    def test_per_vrf_static_route_parsed(self):
+        """``ip route vrf MGMT ...`` harvests the VRF onto ``route.vrf``.
+
+        Pre-fix the ``vrf`` infix broke ``_IP_ROUTE_RE`` (the next token
+        after ``ip route`` was ``vrf``, not a digit), so the whole route
+        was silently dropped — a real management-default-route loss present
+        in 2 of the committed EOS fixtures.
+        """
+        raw = (
+            "hostname sw1\n"
+            "ip route 0.0.0.0/0 10.0.0.1\n"
+            "ip route vrf MGMT 0.0.0.0/0 192.168.2.1\n"
+            "ipv6 route vrf MGMT 2001:db8::/48 2001:db8::1\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        by_vrf = sorted(
+            (r.destination, r.gateway, r.vrf) for r in intent.static_routes
+        )
+        assert by_vrf == [
+            ("0.0.0.0/0", "10.0.0.1", ""),
+            ("0.0.0.0/0", "192.168.2.1", "MGMT"),
+            ("2001:db8::/48", "2001:db8::1", "MGMT"),
+        ]
+        # A per-VRF route must NEVER conjure a phantom routing-instance —
+        # that surface comes only from ``vrf instance|definition`` stanzas.
+        assert intent.routing_instances == []
+
+    def test_per_vrf_static_route_round_trips(self):
+        """render emits the ``vrf <name>`` qualifier; reparse preserves it."""
+        raw = (
+            "ip route vrf MGMT 0.0.0.0/0 192.168.2.1\n"
+            "ipv6 route vrf RED 2001:db8::/48 2001:db8::1\n"
+        )
+        codec = AristaEOSCodec()
+        intent = codec.parse(raw)
+        rendered = codec.render(intent)
+        assert "ip route vrf MGMT 0.0.0.0/0 192.168.2.1" in rendered
+        assert "ipv6 route vrf RED 2001:db8::/48 2001:db8::1" in rendered
+        reparsed = codec.parse(rendered)
+        assert [(r.destination, r.gateway, r.vrf) for r in reparsed.static_routes] == \
+               [(r.destination, r.gateway, r.vrf) for r in intent.static_routes]
+
+    def test_donor_vrf_route_not_emitted_into_global_table(self):
+        """A donor-carried ``route.vrf`` must render WITH the ``vrf``
+        qualifier — never as a bare global-table route (wrong-VRF emission,
+        which is worse than a drop).
+        """
+        tree = CanonicalIntent(
+            static_routes=[
+                CanonicalStaticRoute(
+                    destination="10.9.0.0/16",
+                    gateway="192.168.9.1",
+                    vrf="RED",
+                ),
+            ],
+        )
+        rendered = AristaEOSCodec().render(tree)
+        assert "ip route vrf RED 10.9.0.0/16 192.168.9.1" in rendered
+        # The bare global-table line must NOT appear.
+        assert "\nip route 10.9.0.0/16 192.168.9.1" not in rendered
+
+    def test_static_route_vrf_classified_supported(self):
+        """The matrix flip: ``/routing/static-route/vrf`` is now supported."""
+        caps = AristaEOSCodec().capabilities
+        assert caps.classify("/routing/static-route/vrf") == "supported"
+
 
 # ---------------------------------------------------------------------------
 # Parse — SNMP

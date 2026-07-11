@@ -383,12 +383,16 @@ class TestShipBeforeWireUnsupportedDeclarations:
         # Wave B + C — see commit feat(arista_eos): wire VRRP +
         # VARP.  Per-IP virtual-gateway-mac is ``lossy`` (Arista
         # only has chassis-wide ``ip virtual-router mac-address``;
-        # per-IP override doesn't exist).
+        # per-IP override doesn't exist).  Per-VRF static routes
+        # graduated to ``supported`` — ``ip route vrf <NAME> <dest>
+        # <gw>`` round-trips through parse + render (donor: the
+        # cisco_iosxe_cli graduation, PR #24).
         "arista_eos": {
             "/interfaces/interface/vrrp-groups/group",
             "/interfaces/interface/ipv4/address/virtual-gateway-address",
             "/interfaces/interface/ipv6/address/virtual-gateway-address",
             "/anycast-gateway-mac",
+            "/routing/static-route/vrf",
             # GAP 7 — routed sub-interface `encapsulation dot1q vlan N`.
             "/interfaces/interface/dot1q-vlan",
         },

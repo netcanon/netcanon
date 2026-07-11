@@ -936,13 +936,23 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for route in tree.static_routes:
             if not route.gateway:
                 continue
+            # Per-VRF routes carry the ``vrf <name>`` qualifier between the
+            # ``ip route`` / ``ipv6 route`` keyword and the destination.
+            # Without this, a donor-carried ``route.vrf`` (e.g. a cisco
+            # ``ip route vrf MGMT ...`` source) rendered into the GLOBAL
+            # table — a wrong-VRF emission, worse than a drop.
+            vrf_prefix = f"vrf {route.vrf} " if route.vrf else ""
             # EOS keys the address family off the keyword: IPv6 destinations
             # use ``ipv6 route`` (emitting ``ip route <v6>`` is invalid CLI).
             if ":" in (route.destination or ""):
-                out.append(f"ipv6 route {route.destination} {route.gateway}")
+                out.append(
+                    f"ipv6 route {vrf_prefix}{route.destination} {route.gateway}"
+                )
                 has_v6 = True
             else:
-                out.append(f"ip route {route.destination} {route.gateway}")
+                out.append(
+                    f"ip route {vrf_prefix}{route.destination} {route.gateway}"
+                )
                 has_v4 = True
         out.append("!")
         if has_v4:
