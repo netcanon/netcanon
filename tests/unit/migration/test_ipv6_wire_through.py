@@ -402,6 +402,59 @@ class TestFortiGateIPv6:
         assert first.interfaces[0].ipv6_addresses == \
                second.interfaces[0].ipv6_addresses
 
+    def test_parse_nested_config_ipv6(self):
+        """FortiOS 7.x nests the interface IPv6 address under a ``config
+        ipv6`` sub-block (promotion #2).  Parsing only the legacy direct form
+        silently dropped it while the matrix declared it supported —
+        fail-open silent loss."""
+        raw = (
+            "config system interface\n"
+            '    edit "port1"\n'
+            "        config ipv6\n"
+            "            set ip6-address 2001:db8:1::1/64\n"
+            "            set ip6-mode static\n"
+            "        end\n"
+            "    next\n"
+            "end\n"
+        )
+        iface = FortiGateCLICodec().parse(raw).interfaces[0]
+        assert [(a.ip, a.prefix_length, a.scope) for a in iface.ipv6_addresses] == \
+               [("2001:db8:1::1", 64, "global")]
+        # Only ip6-address is harvested from the nested block — ip6-mode is a
+        # separate surface (left untouched so the mesh stays flat).
+        assert iface.dhcp_client_v6 == ""
+
+    def test_nested_placeholder_filtered(self):
+        raw = (
+            "config system interface\n"
+            '    edit "port1"\n'
+            "        config ipv6\n"
+            "            set ip6-address ::/0\n"
+            "        end\n"
+            "    next\n"
+            "end\n"
+        )
+        assert FortiGateCLICodec().parse(raw).interfaces[0].ipv6_addresses == []
+
+    def test_nested_round_trips_via_direct_render(self):
+        """The nested-parsed address round-trips through the existing direct
+        render form (render is unchanged by this promotion)."""
+        c = FortiGateCLICodec()
+        raw = (
+            "config system interface\n"
+            '    edit "port1"\n'
+            "        config ipv6\n"
+            "            set ip6-address 2001:db8:1::1/64\n"
+            "        end\n"
+            "    next\n"
+            "end\n"
+        )
+        first = c.parse(raw)
+        assert "set ip6-address 2001:db8:1::1/64" in c.render(first)
+        second = c.parse(c.render(first))
+        assert first.interfaces[0].ipv6_addresses == \
+               second.interfaces[0].ipv6_addresses
+
 
 # ---------------------------------------------------------------------------
 # MikroTik RouterOS
