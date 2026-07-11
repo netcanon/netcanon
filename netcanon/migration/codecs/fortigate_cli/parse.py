@@ -347,6 +347,25 @@ def _apply_system_interface(  # noqa: C901
                 prefix_length=_mask_to_prefix(mask, vendor="fortigate_cli"),
             ))
 
+        # Additional interface IPs live in a nested ``config secondaryip``
+        # sub-table (``set secondary-IP enable`` gates it).  Without this
+        # every secondary subnet vanishes on parse — a whole-subnet
+        # reachability loss (promotion #3).  Harvest each ``set ip <ip>
+        # <mask>`` onto a secondary CanonicalIPv4Address.
+        for sub in edit.sub_blocks:
+            if sub.config_path != "secondaryip":
+                continue
+            for sec in sub.edits:
+                sec_tokens = sec.settings.get("ip")
+                if sec_tokens and len(sec_tokens) >= 2:
+                    iface.ipv4_addresses.append(CanonicalIPv4Address(
+                        ip=sec_tokens[0],
+                        prefix_length=_mask_to_prefix(
+                            sec_tokens[1], vendor="fortigate_cli",
+                        ),
+                        is_secondary=True,
+                    ))
+
         # IPv6 dynamic-address mode: ``set ip6-mode {static|dhcp|
         # delegated|pppoe}`` on FortiOS.  The ``dhcp`` value populates
         # the canonical ``dhcp_client_v6`` field.  Other modes

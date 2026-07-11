@@ -605,6 +605,26 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 mask = _prefix_to_mask(addr.prefix_length)
                 out.append(f"        set ip {addr.ip} {mask}")
                 out.append("        set mode static")
+                # Additional interface IPs → FortiOS ``config secondaryip``
+                # table (whole-subnet reachability that used to vanish —
+                # promotion #3).  Skip rows with no real IP: a VARP virtual-
+                # gateway anycast row carries ip='' + virtual_gateway_address,
+                # and emitting ``set ip  <mask>`` would be invalid CLI.
+                secondaries = [
+                    a for a in iface.ipv4_addresses[1:]
+                    if a.ip and not a.virtual_gateway_address
+                ]
+                if secondaries:
+                    out.append("        set secondary-IP enable")
+                    out.append("        config secondaryip")
+                    for i, sec in enumerate(secondaries, start=1):
+                        sec_mask = _prefix_to_mask(sec.prefix_length)
+                        out.append(f"            edit {i}")
+                        out.append(
+                            f"                set ip {sec.ip} {sec_mask}"
+                        )
+                        out.append("            next")
+                    out.append("        end")
             elif iface.dhcp_client:
                 # Finding 20 (``user_smoke_findings.md``): foreign
                 # DHCP-client interfaces (OPNsense ``<ipaddr>dhcp
