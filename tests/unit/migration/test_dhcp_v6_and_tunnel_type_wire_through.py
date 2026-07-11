@@ -41,6 +41,7 @@ from netcanon.migration.canonical.intent import (
 )
 from netcanon.migration.codecs.arista_eos import AristaEOSCodec
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.cisco_nxos import CiscoNXOSCodec
 from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
 from netcanon.migration.codecs.juniper_junos import JunosCodec
 from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
@@ -473,3 +474,59 @@ class TestCrossVendorPreservation:
         out = MikroTikRouterOSCodec().render(intent)
         # Render must not raise.
         assert isinstance(out, str)
+
+
+class TestCiscoNxosTunnelType:
+    """Promotion #17: NX-OS gre/ipip tunnel encapsulation round-trips via
+    ``tunnel mode`` + ``feature tunnel``.  ipsec/vxlan stay declared lossy."""
+
+    def test_parse_gre_and_ipip(self):
+        raw = (
+            "interface Tunnel1\n"
+            "  tunnel mode gre ip\n"
+            "  no shutdown\n"
+            "interface Tunnel2\n"
+            "  tunnel mode ipip\n"
+        )
+        by_name = {i.name: i for i in CiscoNXOSCodec().parse(raw).interfaces}
+        assert by_name["Tunnel1"].interface_type == "ianaift:tunnel"
+        assert by_name["Tunnel1"].tunnel_type == "gre"
+        assert by_name["Tunnel2"].tunnel_type == "ipip"
+
+    def test_render_emits_mode_and_feature(self):
+        intent = CanonicalIntent(interfaces=[CanonicalInterface(
+            name="Tunnel1", interface_type="ianaift:tunnel", tunnel_type="gre")])
+        out = CiscoNXOSCodec().render(intent)
+        assert "feature tunnel" in out
+        assert "tunnel mode gre ip" in out
+
+    def test_round_trips(self):
+        codec = CiscoNXOSCodec()
+        for kind, line in (("gre", "tunnel mode gre ip"), ("ipip", "tunnel mode ipip")):
+            intent = CanonicalIntent(interfaces=[CanonicalInterface(
+                name="Tunnel1", interface_type="ianaift:tunnel", tunnel_type=kind)])
+            rendered = codec.render(intent)
+            assert line in rendered
+            assert codec.parse(rendered).interfaces[0].tunnel_type == kind
+
+    def test_nve_does_not_trigger_feature_tunnel(self):
+        """``nve1`` is also ianaift:tunnel but is a VXLAN VTEP — it must NOT
+        emit ``feature tunnel`` (it uses ``feature nv overlay``)."""
+        from netcanon.migration.canonical.intent import CanonicalVxlan
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(
+                name="nve1", interface_type="ianaift:tunnel")],
+            vxlan_vnis=[CanonicalVxlan(vni=10010, vlan_id=10)],
+        )
+        out = CiscoNXOSCodec().render(intent)
+        assert "feature tunnel" not in out
+        assert "feature nv overlay" in out
+
+    def test_ipsec_still_drops_and_declared_lossy(self):
+        intent = CanonicalIntent(interfaces=[CanonicalInterface(
+            name="Tunnel9", interface_type="ianaift:tunnel", tunnel_type="ipsec")])
+        out = CiscoNXOSCodec().render(intent)
+        assert "tunnel mode" not in out       # no clean NX-OS ipsec encap line
+        assert "feature tunnel" in out         # the interface itself is valid
+        assert CiscoNXOSCodec().capabilities.classify(
+            "/interfaces/interface/tunnel-type") == "lossy"

@@ -95,6 +95,13 @@ _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
 _MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
+# ``tunnel mode <encap>`` inside an ``interface Tunnel<N>`` stanza.  NX-OS
+# spells GRE ``tunnel mode gre ip`` and IP-in-IP ``tunnel mode ipip``;
+# ``ipv6ip`` (IPv6-over-IPv4) collapses to the canonical ``ipip``.  Ignored
+# on non-tunnel interfaces (the field is only meaningful there).
+_TUNNEL_MODE_RE = re.compile(
+    r"^\s+tunnel\s+mode\s+(gre|ipip|ipsec|vxlan|ipv6ip)\b", re.IGNORECASE,
+)
 #: ``ip address 10.10.10.1/24`` — CIDR form, NEVER dotted mask.  The
 #: optional ``secondary`` trailer is consumed but not modelled in Phase 1.
 _IP_CIDR_RE = re.compile(
@@ -348,6 +355,7 @@ _TYPE_HINTS: tuple[tuple[str, str], ...] = (
     ("vlan", "ianaift:l3ipvlan"),
     ("port-channel", "ianaift:ieee8023adLag"),
     ("nve", "ianaift:tunnel"),
+    ("tunnel", "ianaift:tunnel"),   # ``interface Tunnel<N>`` (GRE / IP-in-IP)
     ("mgmt", "ianaift:ethernetCsmacd"),
 )
 
@@ -620,6 +628,7 @@ def _new_iface_scratch(name: str) -> dict:
         "description": "",
         "enabled": True,
         "type": _infer_type(name),
+        "tunnel_type": "",
         "mtu": None,
         "ipv4": [],
         "ipv6": [],
@@ -734,6 +743,12 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
                 current["mtu"] = int(mm.group(1))
             except ValueError:
                 pass
+            return
+
+        tmm = _TUNNEL_MODE_RE.match(line)
+        if tmm:
+            mode = tmm.group(1).lower()
+            current["tunnel_type"] = "ipip" if mode == "ipv6ip" else mode
             return
 
         im = _IP_CIDR_RE.match(line)
@@ -871,6 +886,7 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         description=raw.get("description", ""),
         enabled=raw.get("enabled", True),
         interface_type=raw.get("type", ""),
+        tunnel_type=raw.get("tunnel_type", ""),
         mtu=raw.get("mtu"),
         ipv4_addresses=[
             CanonicalIPv4Address(

@@ -196,6 +196,12 @@ def _derive_features(tree: CanonicalIntent) -> list[str]:
     features: set[str] = set()
     if any(_is_svi(i.name) for i in tree.interfaces):
         features.add("interface-vlan")
+    # A bare ``interface Tunnel<N>`` is invalid on a real Nexus without
+    # ``feature tunnel``.  Gate on the ``Tunnel`` name prefix — NOT
+    # interface_type=="ianaift:tunnel", which also covers ``nve1`` (a VXLAN
+    # VTEP gated by ``feature nv overlay``, not ``feature tunnel``).
+    if any(i.name.lower().startswith("tunnel") for i in tree.interfaces):
+        features.add("tunnel")
     if tree.lags:
         features.add("lacp")
     if any(i.vrrp_groups for i in tree.interfaces):
@@ -442,6 +448,17 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
         block.append("  no shutdown")
     if iface.mtu is not None:
         block.append(f"  mtu {iface.mtu}")
+
+    # Tunnel encapsulation mode.  NX-OS spells GRE ``tunnel mode gre ip``
+    # and IP-in-IP ``tunnel mode ipip``.  Only gre/ipip have a clean NX-OS
+    # interface-encap equivalent; ipsec/vxlan/eoip carry no such line and
+    # stay dropped (declared lossy on /interfaces/interface/tunnel-type).
+    if iface.tunnel_type and iface.interface_type == "ianaift:tunnel":
+        _tt = iface.tunnel_type.lower()
+        if _tt == "gre":
+            block.append("  tunnel mode gre ip")
+        elif _tt == "ipip":
+            block.append("  tunnel mode ipip")
 
     block.extend(_render_switchport_lines(iface))
 

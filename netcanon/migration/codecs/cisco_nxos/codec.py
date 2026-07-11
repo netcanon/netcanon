@@ -300,12 +300,11 @@ class CiscoNXOSCodec(CodecBase):
             LossyPath(
                 path="/interfaces/interface/tunnel-type",
                 reason=(
-                    "Render emits `interface Tunnel<N>` with no `tunnel "
-                    "mode <kind>` sub-command, so the canonical tunnel_type "
-                    "(gre/ipip/ipsec) drops on render while the interface "
-                    "name survives.  NX-OS supports the `tunnel mode` "
-                    "grammar; this is a render-coverage gap (silent-loss "
-                    "guard, Bucket-C stage 3)."
+                    "`gre` and `ipip` round-trip via `tunnel mode gre ip` / "
+                    "`tunnel mode ipip` (with `feature tunnel`).  `ipsec` / "
+                    "`vxlan` / `eoip` have no clean NX-OS interface-encap "
+                    "equivalent and drop on render — the residual lossy "
+                    "surface (silent-loss guard, Bucket-C stage 3)."
                 ),
                 severity="warn",
             ),
