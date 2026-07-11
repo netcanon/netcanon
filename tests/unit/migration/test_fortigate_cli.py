@@ -476,6 +476,82 @@ end
         assert norm(first) == norm(second)
 
 
+class TestSecondaryIp:
+    """Promotion #3: additional interface IPs via ``config secondaryip``."""
+
+    _CFG = (
+        "config system interface\n"
+        '    edit "port1"\n'
+        "        set ip 10.0.0.1 255.255.255.0\n"
+        "        set secondary-IP enable\n"
+        "        config secondaryip\n"
+        "            edit 1\n"
+        "                set ip 10.0.1.1 255.255.255.0\n"
+        "            next\n"
+        "            edit 2\n"
+        "                set ip 10.0.2.1 255.255.255.0\n"
+        "            next\n"
+        "        end\n"
+        "    next\n"
+        "end\n"
+    )
+
+    def test_parse_harvests_secondaries(self):
+        iface = FortiGateCLICodec().parse(self._CFG).interfaces[0]
+        got = [(a.ip, a.is_secondary) for a in iface.ipv4_addresses]
+        assert got == [
+            ("10.0.0.1", False),
+            ("10.0.1.1", True),
+            ("10.0.2.1", True),
+        ]
+
+    def test_round_trips(self):
+        codec = FortiGateCLICodec()
+        intent = codec.parse(self._CFG)
+        rendered = codec.render(intent)
+        assert "config secondaryip" in rendered
+        reparsed = codec.parse(rendered)
+        assert [(a.ip, a.is_secondary) for a in reparsed.interfaces[0].ipv4_addresses] == \
+               [(a.ip, a.is_secondary) for a in intent.interfaces[0].ipv4_addresses]
+
+    def test_coequal_source_emits_secondaryip_table(self):
+        """A donor with co-equal (unflagged) additional IPs still renders the
+        secondaryip table — every subnet survives."""
+        tree = CanonicalIntent(interfaces=[CanonicalInterface(
+            name="port1",
+            ipv4_addresses=[
+                CanonicalIPv4Address(ip="10.0.0.1", prefix_length=24),
+                CanonicalIPv4Address(ip="10.0.9.1", prefix_length=24),
+            ],
+        )])
+        rendered = FortiGateCLICodec().render(tree)
+        assert "set secondary-IP enable" in rendered
+        assert "set ip 10.0.9.1 255.255.255.0" in rendered
+
+    def test_varp_row_not_emitted_as_secondary(self):
+        """A VARP anycast row (ip='' + virtual_gateway_address) must NOT emit
+        a ``set ip  <mask>`` line into the secondaryip table (invalid CLI)."""
+        tree = CanonicalIntent(interfaces=[CanonicalInterface(
+            name="vlan110",
+            ipv4_addresses=[
+                CanonicalIPv4Address(ip="10.1.1.1", prefix_length=24),
+                CanonicalIPv4Address(
+                    ip="", prefix_length=24,
+                    virtual_gateway_address="10.1.1.254",
+                ),
+            ],
+        )])
+        rendered = FortiGateCLICodec().render(tree)
+        assert "config secondaryip" not in rendered
+        assert "set ip  " not in rendered
+
+    def test_interface_v4_secondary_supported_twins_stay_unsupported(self):
+        caps = FortiGateCLICodec().capabilities
+        assert caps.classify("/interfaces/interface/ipv4/address/secondary-ip") == "supported"
+        assert caps.classify("/vlans/vlan/ipv4/address/secondary-ip") == "unsupported"
+        assert caps.classify("/interfaces/interface/ipv6/address/secondary-ip") == "unsupported"
+
+
 class TestRoundTrip:
     def test_roundtrip_minimal(self):
         codec = FortiGateCLICodec()

@@ -121,6 +121,9 @@ class FortiGateCLICodec(CodecBase):
             "/interfaces/interface/config/type",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            # Additional interface IPs via ``config secondaryip`` (promotion #3).
+            # The VLAN-SVI twin + the IPv6 twin stay unsupported (below).
+            "/interfaces/interface/ipv4/address/secondary-ip",
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             # Per-interface MTU — parse (`set mtu N` →
@@ -360,14 +363,6 @@ class FortiGateCLICodec(CodecBase):
                     "/anycast-gateway-mac), so a per-address virtual-gateway "
                     "MAC on a VLAN SVI is dropped. Declared unsupported "
                     "(blind-audit f92e97a T0-2)."
-                ),
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/ipv4/address/secondary-ip",
-                reason=(
-                    "Render emits one IPv4 address per interface; "
-                    "is_secondary addresses are dropped — a whole-subnet "
-                    "reachability loss (run3)."
                 ),
             ),
             UnsupportedPath(

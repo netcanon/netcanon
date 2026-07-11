@@ -134,8 +134,13 @@ class TestEndToEndLossSurfaces:
     """The flagless multi-address loss surfaces in the live validation
     report on a single-address target codec (was a silent ``ok``)."""
 
-    @pytest.mark.parametrize("target", ["opnsense", "fortigate_cli"])
-    def test_flagless_multiaddress_blocks_on_single_address_codec(self, target):
+    @pytest.mark.parametrize(
+        "target,expect_v4_unsup",
+        [("opnsense", True), ("fortigate_cli", False)],
+    )
+    def test_flagless_multiaddress_blocks_on_single_address_codec(
+        self, target, expect_v4_unsup,
+    ):
         tree = _intent(
             [_v4("10.0.0.1"), _v4("10.0.9.1")],
             [_v6("2001:db8::1"), _v6("2001:db8:9::1")],
@@ -144,6 +149,10 @@ class TestEndToEndLossSurfaces:
             tree, get_codec(target), source=get_codec("cisco_iosxe_cli"),
         )
         unsup = {u.path for u in report.unsupported_paths}
-        assert _V4_SEC in unsup
+        # fortigate_cli graduated the interface-mount v4 secondary-ip
+        # (promotion #3 — `config secondaryip`), so its v4 secondaries now
+        # round-trip; the v6 twin still drops, so the report stays
+        # incompatible via the v6 loss.  opnsense still drops both.
+        assert (_V4_SEC in unsup) is expect_v4_unsup
         assert _V6_SEC in unsup
         assert report.compatible is False

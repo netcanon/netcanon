@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-11T18:18:14+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260711T181813Z.json",
-  "mesh_run_started_utc": "2026-07-11T18:18:07+00:00",
+  "started_utc": "2026-07-11T19:20:46+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260711T192044Z.json",
+  "mesh_run_started_utc": "2026-07-11T19:20:30+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4136,17 +4136,17 @@
   "aggregate": {
     "ALIGNED": 1581,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 1227,
+    "EXPECTED_LOSSY": 1224,
     "EXPECTED_UNSUPPORTED": 729,
-    "METHODOLOGY_ISSUE_under": 944,
+    "METHODOLOGY_ISSUE_under": 947,
     "METHODOLOGY_ISSUE_over": 25,
     "STRUCTURAL_ONLY": 1194,
     "TRIVIAL_EMPTY": 9515,
     "fields_total": 15220,
     "severity_high": 5,
     "severity_medium": 111,
-    "severity_low": 2052,
-    "severity_ok": 13052
+    "severity_low": 2055,
+    "severity_ok": 13049
   },
   "severity_matrix": {
     "arista_eos": {
@@ -4346,7 +4346,7 @@
     {
       "source_codec": "cisco_iosxr",
       "target_codec": "arista_eos",
-      "drifted_total": 31
+      "drifted_total": 28
     },
     {
       "source_codec": "cisco_iosxr",
