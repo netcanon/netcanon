@@ -125,6 +125,11 @@ class VyOSCodec(CodecBase):
         supported=[
             # System
             "/system/hostname",
+            # ── Promotion #12: system domain-name + name-server ──
+            # (system-level only; a dhcp-server subnet's leaves feed the
+            # DHCP pool, not these scalars; non-IP name-servers are filtered).
+            "/system/domain",
+            "/system/dns-server",
             # Interfaces — name + basic L3 (Phase 1; incl. vif VLAN
             # sub-interfaces modelled as ethN.<vid> interfaces).
             "/interfaces/interface/name",
@@ -485,16 +490,8 @@ class VyOSCodec(CodecBase):
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──
             UnsupportedPath(
-                path="/system/domain",
-                reason="Render emits no system domain-name; intent.domain is dropped on migration.",
-            ),
-            UnsupportedPath(
                 path="/system/timezone",
                 reason="Render emits no time-zone stanza; intent.timezone is dropped on migration.",
-            ),
-            UnsupportedPath(
-                path="/system/dns-server",
-                reason="Render emits no name-server config; intent.dns_servers are dropped on migration.",
             ),
             UnsupportedPath(
                 path="/system/syslog-server",

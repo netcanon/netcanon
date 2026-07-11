@@ -286,6 +286,69 @@ def test_parse_hostname(codec: VyOSCodec) -> None:
     assert codec.parse(_SAMPLE).hostname == "vyos-sample"
 
 
+def test_parse_system_dns_and_domain(codec: VyOSCodec) -> None:
+    """Promotion #12: ``system domain-name`` + ``system name-server`` harvest.
+    A non-IP name-server (``eth0`` = use-DHCP-resolvers) is filtered."""
+    cfg = (
+        "system {\n"
+        "    domain-name example.com\n"
+        "    host-name r1\n"
+        "    name-server 8.8.8.8\n"
+        "    name-server 1.1.1.1\n"
+        "    name-server eth0\n"
+        "}\n"
+    )
+    intent = codec.parse(cfg)
+    assert intent.domain == "example.com"
+    assert intent.dns_servers == ["8.8.8.8", "1.1.1.1"]  # eth0 filtered
+
+
+def test_dns_domain_round_trip(codec: VyOSCodec) -> None:
+    cfg = (
+        "system {\n"
+        "    domain-name corp.local\n"
+        "    host-name r1\n"
+        "    name-server 9.9.9.9\n"
+        "}\n"
+    )
+    intent = codec.parse(cfg)
+    rendered = codec.render(intent)
+    assert "domain-name corp.local" in rendered
+    assert "name-server 9.9.9.9" in rendered
+    reparsed = codec.parse(rendered)
+    assert reparsed.domain == "corp.local"
+    assert reparsed.dns_servers == ["9.9.9.9"]
+
+
+def test_dhcp_subnet_dns_domain_not_harvested_to_system(codec: VyOSCodec) -> None:
+    """A dhcp-server subnet's ``name-server`` / ``domain-name`` leaves feed the
+    DHCP pool — the system-level path-guard keeps them off the system scalars."""
+    cfg = (
+        "service {\n"
+        "    dhcp-server {\n"
+        "        shared-network-name LAN {\n"
+        "            subnet 192.168.1.0/24 {\n"
+        "                domain-name vyos.net\n"
+        "                name-server 192.168.1.5\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+        "system {\n"
+        "    host-name r2\n"
+        "}\n"
+    )
+    intent = codec.parse(cfg)
+    assert intent.domain == ""
+    assert intent.dns_servers == []
+
+
+def test_system_dns_domain_classified_supported(codec: VyOSCodec) -> None:
+    caps = codec.capabilities
+    assert caps.classify("/system/domain") == "supported"
+    assert caps.classify("/system/dns-server") == "supported"
+
+
 def test_source_version_release_comment(codec: VyOSCodec) -> None:
     """The OS release is captured from the ``// Release version:`` trailer."""
     raw = _SAMPLE + "// Release version: 1.4-rolling-202307070317\n"

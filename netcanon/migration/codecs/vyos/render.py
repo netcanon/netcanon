@@ -103,8 +103,14 @@ def render_intent(tree: CanonicalIntent) -> str:
     # ``system`` always carries at least the host-name; Phase 2 adds the
     # ``login`` (local users) and ``ntp`` sub-blocks.
     lines.append("system {")
+    # VyOS orders system children alphabetically: domain-name, host-name,
+    # login, name-server, ntp (promotion #12 wired domain-name + name-server).
+    if tree.domain:
+        lines.append(f"    domain-name {tree.domain}")
     lines.append(f"    host-name {tree.hostname or 'vyos'}")
     lines.extend(_render_login(tree.local_users))
+    for _ns in tree.dns_servers:
+        lines.append(f"    name-server {_ns}")
     lines.extend(_render_ntp(tree.ntp_servers))
     lines.append("}")
 

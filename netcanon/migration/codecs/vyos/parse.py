@@ -87,6 +87,7 @@ single-device SVD ``vlan-to-vni``, per-VRF static routes (``vrf name
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import re
 
@@ -592,6 +593,37 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             and value
         ):
             intent.hostname = value
+            continue
+
+        # system domain-name (single scalar).  PATH-GUARDED to the top-level
+        # ``system {}`` block (stack depth 1) — a dhcp-server subnet's
+        # ``domain-name`` leaf lives deeper and feeds CanonicalDHCPPool, NOT
+        # this system scalar (promotion #12).
+        if (
+            len(stack) == 1
+            and stack[0][0] == "system"
+            and key == "domain-name"
+            and value
+        ):
+            intent.domain = value
+            continue
+
+        # system name-server (multi-value), same system-level path-guard.
+        # ``name-server eth0`` is legal VyOS ("use eth0's DHCP-obtained
+        # resolvers") but not a real server — skip any non-IP value so a
+        # cross-vendor target never renders an invalid ``ip name-server eth0``.
+        if (
+            len(stack) == 1
+            and stack[0][0] == "system"
+            and key == "name-server"
+            and value
+        ):
+            try:
+                ipaddress.ip_address(value)
+            except ValueError:
+                continue
+            if value not in intent.dns_servers:
+                intent.dns_servers.append(value)
             continue
 
         # static-route metric (distance) inside the open next-hop block
