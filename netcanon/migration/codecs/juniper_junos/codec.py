@@ -153,6 +153,10 @@ class JunosCodec(CodecBase):
             "/vxlan-vnis/udp-port",              # GAP-EVPN-2
             "/routing-instances/instance",       # GAP 6
             "/dhcp-servers/pool",                # Cluster E.1-B
+            # LACP mode round-trips: active/passive emit a `lacp` line, and a
+            # static (non-LACP) bundle emits none + re-parses as static
+            # (promotion #5 — a bundle with no lacp line is static, not active).
+            "/lags/lag/mode",
             # -- v0.2.0 Wave B: classic FHRP redundancy groups --
             "/interfaces/interface/vrrp-groups/group",
             # -- v0.2.0 Wave C: anycast-gateway companions --
@@ -162,17 +166,6 @@ class JunosCodec(CodecBase):
             "/interfaces/interface/ipv6/address/virtual-gateway-mac",
         ],
         lossy=[
-            LossyPath(
-                path="/lags/lag/mode",
-                reason=(
-                    "Junos renders LACP `active`/`passive` faithfully, but a "
-                    "`static` (non-LACP) aggregate carries no `lacp` statement "
-                    "and re-parses as `active` -- the static/LACP distinction "
-                    "is dropped (audit bb47f21 T0-1, verified by round-trip "
-                    "probe)."
-                ),
-                severity="warn",
-            ),
             LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(

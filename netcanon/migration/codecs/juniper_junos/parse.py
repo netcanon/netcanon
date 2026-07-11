@@ -543,7 +543,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     lags_by_name: dict[str, CanonicalLAG] = {lag.name: lag for lag in intent.lags}
     for ae_name, lag_entry in lag_state.items():
         members = list(lag_entry.get("members", []))
-        mode = lag_entry.get("mode", "active") or "active"
+        # A Junos aggregate with NO ``aggregated-ether-options lacp
+        # active|passive`` line is a STATIC (non-LACP) bundle — NOT active.
+        # Defaulting to ``active`` invented ``set … lacp active`` on re-render,
+        # which taken to a static-bonded peer brings the bundle DOWN
+        # (protocol-changing loss).  ``static`` round-trips (render emits no
+        # lacp line for it) — promotion #5.
+        mode = lag_entry.get("mode", "static") or "static"
         # Don't accumulate duplicates if the same LAG already exists
         # (defensive for groups + apply-groups composition).
         existing = lags_by_name.get(ae_name)
@@ -1363,10 +1369,15 @@ def _apply_interfaces(  # noqa: C901
     ):
         ae_name = name
         mode = tokens[3]
-        if mode not in ("active", "passive"):
-            mode = "active"
-        entry = lag_state.setdefault(ae_name, {"members": [], "mode": "active"})
-        entry["mode"] = mode
+        entry = lag_state.setdefault(ae_name, {"members": [], "mode": "static"})
+        # Only an explicit ``lacp active`` / ``lacp passive`` sets the mode.
+        # Other ``aggregated-ether-options lacp <sub>`` lines — notably
+        # ``lacp periodic <interval>`` — do NOT enable/disable LACP and must
+        # NOT clobber an already-seen ``passive`` (nor promote a static bundle
+        # to active).  The prior code coerced ``periodic`` → ``active`` and
+        # overwrote, corrupting a real ``lacp passive`` that preceded it.
+        if mode in ("active", "passive"):
+            entry["mode"] = mode
         return
 
     # --- Phase 4 rank-4: LAG member binding ---
@@ -1378,7 +1389,11 @@ def _apply_interfaces(  # noqa: C901
     ):
         ae_name = tokens[3]
         state["lag_member_of"] = ae_name
-        entry = lag_state.setdefault(ae_name, {"members": [], "mode": "active"})
+        # Members join via ``ether-options 802.3ad ae<N>`` with no mode of
+        # their own — a bundle seen ONLY through its members (no lacp line) is
+        # static, so seed the default ``static`` (an explicit lacp line, if
+        # present, overwrites it above).
+        entry = lag_state.setdefault(ae_name, {"members": [], "mode": "static"})
         if name not in entry["members"]:
             entry["members"].append(name)
         return

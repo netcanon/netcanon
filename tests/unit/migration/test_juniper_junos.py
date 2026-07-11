@@ -19,6 +19,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalIPv6Address,
+    CanonicalLAG,
     CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalStaticRoute,
@@ -257,6 +258,52 @@ class TestParseStaticRoutes:
         )
         intent = JunosCodec().parse(raw)
         assert len(intent.static_routes) == 2
+
+
+# ---------------------------------------------------------------------------
+# Parse — LAG mode (promotion #5)
+# ---------------------------------------------------------------------------
+
+
+class TestParseLagMode:
+    def test_static_bundle_is_static_not_active(self):
+        """A bundle seen only through its members (no ``lacp active|passive``
+        line) is STATIC — not active.  Defaulting to active invented
+        ``lacp active`` on re-render, which downs a static-bonded peer."""
+        raw = (
+            "set interfaces ge-0/0/0 ether-options 802.3ad ae0\n"
+            "set interfaces ge-0/0/1 ether-options 802.3ad ae0\n"
+        )
+        lags = JunosCodec().parse(raw).lags
+        assert [(lag.name, lag.mode) for lag in lags] == [("ae0", "static")]
+
+    def test_lacp_periodic_does_not_clobber_passive(self):
+        """``lacp periodic <interval>`` does not enable/disable LACP and must
+        not overwrite an explicit ``lacp passive`` that precedes it."""
+        raw = (
+            "set interfaces ge-0/0/0 ether-options 802.3ad ae1\n"
+            "set interfaces ae1 aggregated-ether-options lacp passive\n"
+            "set interfaces ae1 aggregated-ether-options lacp periodic fast\n"
+        )
+        lags = JunosCodec().parse(raw).lags
+        assert lags[0].mode == "passive"
+
+    @pytest.mark.parametrize("mode", ["active", "passive", "static"])
+    def test_lag_mode_round_trips(self, mode):
+        """render→reparse preserves every mode; active/passive emit a ``lacp``
+        line, static emits none (and re-parses as static)."""
+        codec = JunosCodec()
+        tree = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="ge-0/0/0", lag_member_of="ae0")],
+            lags=[CanonicalLAG(name="ae0", members=["ge-0/0/0"], mode=mode)],
+        )
+        rendered = codec.render(tree)
+        assert ("lacp" in rendered) == (mode in ("active", "passive"))
+        reparsed = codec.parse(rendered)
+        assert reparsed.lags[0].mode == mode
+
+    def test_lag_mode_classified_supported(self):
+        assert JunosCodec().capabilities.classify("/lags/lag/mode") == "supported"
 
 
 # ---------------------------------------------------------------------------
