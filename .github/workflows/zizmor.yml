@@ -8,8 +8,8 @@ name: zizmor — GHA workflow security scan
 #
 # Findings land in Security → Code scanning alongside CodeQL alerts.
 # A red CI run here is informational, not blocking — review the
-# Security tab.  Bump `advisory-level` to `low` or add an explicit
-# `exit-code` if you want hard CI gating later.
+# Security tab.  Loosen `min-severity` (e.g. to `low`) to surface the
+# long-tail style findings once the current wave is triaged.
 
 on:
   pull_request:
@@ -63,7 +63,14 @@ jobs:
         # ecosystem).
         uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa  # v0.5.7
         with:
-          # `medium` is the conservative starting baseline.  Drop to
+          # `medium` is the conservative starting baseline.  Loosen to
           # `low` once the initial finding wave is triaged to surface
           # the long-tail style issues.
-          advisory-level: medium
+          #
+          # NOTE: the input is `min-severity`, NOT `advisory-level`.  The
+          # action defines no `advisory-level` input (verified against
+          # v0.5.7's action.yml), so the old key was silently ignored —
+          # meaning zizmor ran with its default (no severity floor,
+          # reporting everything) rather than the intended medium baseline.
+          # This makes the config actually take effect.
+          min-severity: medium

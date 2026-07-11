@@ -272,8 +272,17 @@ jobs:
           # excluded from the Docker context per .dockerignore).
           build-args: |
             SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON=${{ steps.meta.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # No build cache on the release path (deliberately no cache-from /
+          # cache-to).  `type=gha` is a mutable, cross-run-writable scope;
+          # importing it into the image we then sign (cosign), SBOM-attest
+          # (syft) and push as :latest would let a poisoned cache layer
+          # launder into a signed, attested release (GHA cache-poisoning).
+          # This workflow only ever runs on a version tag — the "Refuse a
+          # non-tag ref" guard above rejects every other ref — so there is no
+          # PR-build cache to preserve here; the release simply builds clean
+          # from source.  zizmor does not model cache-poisoning, so this is a
+          # human-review invariant, not a tool-enforced one: do not re-add a
+          # `type=gha` (or any writable shared) cache to this build step.
           provenance: true
           sbom: false   # we generate via syft below for richer SPDX output
 
@@ -365,13 +374,24 @@ jobs:
       - name: Verify signature (post-publish smoke test)
         env:
           IMAGE_DIGEST: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          # The keyless signer identity (Fulcio cert SAN) is fully
+          # deterministic for a tag-triggered run of THIS workflow: the
+          # workflow file path at the exact triggering ref.  github.ref is
+          # refs/tags/vX.Y.Z here, so the SAN is
+          # https://github.com/<repo>/.github/workflows/docker-publish.yml@refs/tags/vX.Y.Z.
+          # Both github.repository and github.ref are trusted contexts mapped
+          # into env (never `${{ }}` in the run: block) so there is no
+          # template-injection surface.
+          EXPECTED_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/docker-publish.yml@${{ github.ref }}
         run: |
-          # The identity regexp is passed to Go's regexp (substring match,
-          # NO implicit anchors), so it MUST be anchored + dot-escaped +
-          # fully qualified to this workflow file — otherwise a SAN like
-          # https://github.com/netcanon/netcanon-attacker/... would also
-          # match (run3).  The keyless signer identity for a tag-triggered
-          # run is .../.github/workflows/docker-publish.yml@refs/tags/vX.Y.Z.
+          # Pin the signer identity EXACTLY (not a regexp).  The prior
+          # --certificate-identity-regexp was head-anchored but had NO tail
+          # anchor ("...@refs/tags/v"), so it accepted a signature minted by
+          # ANY version tag's run of this workflow — a cross-version
+          # substitution hole (verify vX.Y.Z's digest against v0.0.1's
+          # signature).  The identity is fully known at run time, so match it
+          # verbatim: this closes both the different-repo-suffix case the old
+          # regexp guarded and the different-version case it did not.
           cosign verify "${IMAGE_DIGEST}" \
-            --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/\.github/workflows/docker-publish\.yml@refs/tags/v" \
+            --certificate-identity "${EXPECTED_IDENTITY}" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
