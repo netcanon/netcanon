@@ -101,18 +101,42 @@ class TestParseScalars:
         assert intent.static_routes[0].destination == "0.0.0.0/0"
         assert intent.static_routes[0].gateway == "10.0.0.1"
 
-    def test_interface_form_next_hop_ignored(self):
-        """``ip route 10.0.0.0/8 Null0`` — interface-form next hops
-        aren't IPs; parser drops them rather than store 'Null0' as a
-        gateway."""
+    def test_interface_form_next_hop_harvested(self):
+        """``ip route 10.0.0.0/8 Null0`` — an interface-form next hop lands
+        on ``route.interface`` (gateway empty), not dropped (promotion #18).
+        EOS ``ip route <dest> Null0`` is ubiquitous as a BGP aggregate anchor.
+        """
         raw = (
             "hostname sw1\n"
             "ip route 10.0.0.0/8 Null0\n"
             "ip route 0.0.0.0/0 10.0.0.1\n"
+            "ip route 172.16.0.0/12 Ethernet1\n"
         )
-        intent = AristaEOSCodec().parse(raw)
-        assert len(intent.static_routes) == 1
-        assert intent.static_routes[0].gateway == "10.0.0.1"
+        routes = {r.destination: r for r in AristaEOSCodec().parse(raw).static_routes}
+        assert len(routes) == 3
+        assert routes["10.0.0.0/8"].interface == "Null0"
+        assert routes["10.0.0.0/8"].gateway == ""
+        assert routes["0.0.0.0/0"].gateway == "10.0.0.1"
+        assert routes["172.16.0.0/12"].interface == "Ethernet1"
+
+    def test_interface_form_next_hop_round_trips(self):
+        """render emits ``ip route <dest> <iface>``; reparse preserves it."""
+        raw = (
+            "ip route 10.99.0.0/16 Null0\n"
+            "ipv6 route 2001:db8::/48 Null0\n"
+        )
+        codec = AristaEOSCodec()
+        intent = codec.parse(raw)
+        rendered = codec.render(intent)
+        assert "ip route 10.99.0.0/16 Null0" in rendered
+        assert "ipv6 route 2001:db8::/48 Null0" in rendered
+        reparsed = codec.parse(rendered)
+        assert [(r.destination, r.interface) for r in reparsed.static_routes] == \
+               [(r.destination, r.interface) for r in intent.static_routes]
+
+    def test_static_route_interface_classified_supported(self):
+        assert AristaEOSCodec().capabilities.classify(
+            "/routing/static-route/interface") == "supported"
 
     def test_ipv6_static_route_parsed(self):
         """EOS keys the AF off the keyword: ``ipv6 route <prefix> <nh>``."""

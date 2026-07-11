@@ -120,6 +120,7 @@ class AristaEOSCodec(CodecBase):
             "/vlans/vlan/name",
             "/routing/static-route",
             "/routing/static-route/vrf",   # per-VRF ``ip route vrf X ...`` (donor: cisco_iosxe_cli #24)
+            "/routing/static-route/interface",   # interface next-hop ``ip route <dest> Null0`` (donor: cisco_iosxe_cli)
             "/snmp/community",
             "/snmp/location",
             "/snmp/contact",
@@ -336,13 +337,6 @@ class AristaEOSCodec(CodecBase):
                     "This codec does not model EOS per-port voice VLAN "
                     "(``switchport phone``); dropped on render (blind-audit "
                     "65f9c01 #11)."
-                ),
-            ),
-            UnsupportedPath(
-                path="/routing/static-route/interface",
-                reason=(
-                    "No interface-nexthop (connected) static-route form; a "
-                    "gateway-less / interface-only route is dropped (run3)."
                 ),
             ),
             # ── Tier-1 surfaces this codec drops on render — declared so the

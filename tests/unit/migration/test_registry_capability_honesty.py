@@ -670,13 +670,18 @@ def test_static_route_subfield_and_secondary_drops_are_declared(name: str):
     )
 
 
-@pytest.mark.parametrize("name", ["arista_eos", "juniper_junos", "opnsense"])
+@pytest.mark.parametrize("name", ["juniper_junos", "opnsense"])
 def test_connected_route_loss_blocks_on_vanishing_codecs(name: str):
     """A gateway-less (interface-only / connected) static route is dropped
     ENTIRELY by these codecs — its destination vanishes from the render, a
     real reachability loss.  The live validation report must surface that as
     a block via the ``/routing/static-route/interface`` unsupported
-    declaration, not a silent ``severity: ok`` (run3)."""
+    declaration, not a silent ``severity: ok`` (run3).
+
+    ``arista_eos`` was in this list until it graduated interface next-hop
+    routes (``ip route <dest> Null0``, promotion #18) — it now PRESERVES the
+    interface form, so it is covered by the round-trip test in
+    ``test_arista_eos.py`` instead."""
     src = get_codec("cisco_iosxe_cli")
     tree = CanonicalIntent(
         hostname="r1",

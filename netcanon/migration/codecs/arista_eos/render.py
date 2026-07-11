@@ -934,7 +934,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.static_routes:
         has_v4 = has_v6 = False
         for route in tree.static_routes:
-            if not route.gateway:
+            # The next hop is a gateway IP OR an interface (``Null0`` /
+            # ``Ethernet1`` — an interface/connected route).  EOS emits both
+            # as ``ip route <dest> <next-hop>``.  Skip only when NEITHER is
+            # populated (never emit a dangling ``ip route <dest>``).
+            target = route.gateway or route.interface
+            if not target:
                 continue
             # Per-VRF routes carry the ``vrf <name>`` qualifier between the
             # ``ip route`` / ``ipv6 route`` keyword and the destination.
@@ -946,12 +951,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # use ``ipv6 route`` (emitting ``ip route <v6>`` is invalid CLI).
             if ":" in (route.destination or ""):
                 out.append(
-                    f"ipv6 route {vrf_prefix}{route.destination} {route.gateway}"
+                    f"ipv6 route {vrf_prefix}{route.destination} {target}"
                 )
                 has_v6 = True
             else:
                 out.append(
-                    f"ip route {vrf_prefix}{route.destination} {route.gateway}"
+                    f"ip route {vrf_prefix}{route.destination} {target}"
                 )
                 has_v4 = True
         out.append("!")
