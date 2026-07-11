@@ -69,11 +69,13 @@ _EXPECTED: dict[str, dict[str, str]] = {
         )
     ),
     # scope: codecs that re-infer link-local from the fe80::/10 prefix on parse
-    # round-trip the scope and stay supported; FortiGate / VyOS hardcode
-    # scope=global on parse and the NETCONF stub emits no scope -> lossy (the
-    # IPv6 address itself still renders, so this is a downgrade, not unsupported).
+    # round-trip the scope and stay supported (cisco_iosxe_cli, aruba_aoscx, and
+    # now VyOS via the shared ``_is_link_local_v6`` helper — promotion #10);
+    # FortiGate still hardcodes scope=global on parse and the NETCONF stub emits
+    # no scope -> lossy (the IPv6 address itself still renders, so this is a
+    # downgrade, not unsupported).
     _V6 + "scope": dict.fromkeys(
-        ("cisco_iosxe", "fortigate_cli", "vyos"), "lossy",
+        ("cisco_iosxe", "fortigate_cli"), "lossy",
     ),
 }
 

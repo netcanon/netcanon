@@ -135,6 +135,7 @@ class VyOSCodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",
             "/interfaces/interface/ipv6/address/prefix-length",
+            "/interfaces/interface/ipv6/address/scope",   # re-inferred from the fe80::/10 prefix on parse
             "/interfaces/interface/dhcp-client",
             "/interfaces/interface/dhcp-client-v6",
             # Static routes (default VRF)
@@ -174,17 +175,6 @@ class VyOSCodec(CodecBase):
                     "so the mac-vrf vs vrf instance-type discriminator downgrades "
                     "to vrf on render. Declared lossy so validate_against surfaces "
                     "the loss instead of reporting severity:ok (audit e5b77d7, PR-2c)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
-                path="/interfaces/interface/ipv6/address/scope",
-                reason=(
-                    "Renders the IPv6 address but parse hardcodes scope=global "
-                    "(never re-infers link-local from the fe80::/10 prefix), so the "
-                    "link-local vs global discriminator is lost. Declared lossy so "
-                    "validate_against surfaces the loss instead of reporting "
-                    "severity:ok (audit e5b77d7, PR-2c)."
                 ),
                 severity="warn",
             ),

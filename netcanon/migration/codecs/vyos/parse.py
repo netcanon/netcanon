@@ -103,6 +103,7 @@ from ...canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVxlan,
 )
+from .._helpers import _is_link_local_v6
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -883,7 +884,6 @@ def _apply_iface_leaf(sc: dict, key: str, value: str) -> None:
 
 def _build_iface(sc: dict) -> CanonicalInterface:
     """Convert an interface scratch dict into a CanonicalInterface."""
-    scope_v6 = "global"
     return CanonicalInterface(
         name=sc["name"],
         description=sc.get("description", ""),
@@ -894,8 +894,18 @@ def _build_iface(sc: dict) -> CanonicalInterface:
             for a in sc.get("ipv4", [])
         ],
         ipv6_addresses=[
+            # Scope is a pure function of the address bytes: VyOS has no
+            # ``link-local`` keyword (the ``address fe80::.../64`` line is
+            # identical to a global one), so re-infer it from the fe80::/10
+            # prefix (RFC 4291 §2.4) rather than hardcoding ``global``.
+            # Without this a cross-vendor target (cisco/arista/nxos) renders
+            # the fe80 address WITHOUT the mandatory ``link-local`` keyword —
+            # invalid CLI on the target.  Same inference already shipped for
+            # cisco_iosxe_cli + aruba_aoscx.
             CanonicalIPv6Address(
-                ip=a["ip"], prefix_length=a["prefix_length"], scope=scope_v6,
+                ip=a["ip"],
+                prefix_length=a["prefix_length"],
+                scope="link-local" if _is_link_local_v6(a["ip"]) else "global",
             )
             for a in sc.get("ipv6", [])
         ],
