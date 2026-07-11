@@ -355,6 +355,41 @@ def test_parse_loopback_dual_stack(codec: VyOSCodec) -> None:
     assert lo.ipv6_addresses[0].ip == "2001:db8::1"
 
 
+def test_ipv6_link_local_scope_inferred(codec: VyOSCodec) -> None:
+    """VyOS has no ``link-local`` keyword, so scope is re-inferred from the
+    fe80::/10 prefix (promotion #6-batch, was declared lossy). Pre-fix parse
+    hardcoded scope='global', so a cross-vendor target rendered the fe80
+    address WITHOUT the mandatory ``link-local`` keyword — invalid CLI."""
+    cfg = (
+        "interfaces {\n"
+        "    ethernet eth0 {\n"
+        "        address 2001:db8::1/64\n"
+        "        address fe80::1/64\n"
+        "    }\n"
+        "}\n"
+    )
+    eth0 = next(i for i in codec.parse(cfg).interfaces if i.name == "eth0")
+    by_ip = {a.ip: a.scope for a in eth0.ipv6_addresses}
+    assert by_ip == {"2001:db8::1": "global", "fe80::1": "link-local"}
+
+
+def test_ipv6_link_local_round_trips_and_cross_renders(codec: VyOSCodec) -> None:
+    """Same-vendor round-trip re-infers the scope; a cisco target emits the
+    ``link-local`` keyword the scope now carries."""
+    cfg = (
+        "interfaces {\n"
+        "    ethernet eth0 {\n"
+        "        address fe80::1/64\n"
+        "    }\n"
+        "}\n"
+    )
+    intent = codec.parse(cfg)
+    rp = codec.parse(codec.render(intent))
+    assert next(a.scope for i in rp.interfaces for a in i.ipv6_addresses) == "link-local"
+    cisco = get_codec("cisco_iosxe_cli").render(intent)
+    assert "ipv6 address fe80::1/64 link-local" in cisco
+
+
 def test_parse_disable_sets_admin_down(codec: VyOSCodec) -> None:
     dum0 = next(i for i in codec.parse(_SAMPLE).interfaces if i.name == "dum0")
     assert dum0.enabled is False
