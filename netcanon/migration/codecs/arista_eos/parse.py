@@ -476,14 +476,18 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         intent.ntp_servers.append(ntp_m.group(1))
     for route_m in _IP_ROUTE_RE.finditer(raw):
         vrf, ip, prefix, next_hop = route_m.groups()
-        # Skip interface-form next hops (``Null0``, ``Ethernet1``) —
-        # treat as non-routable for canonical; parse-ignore keeps
-        # the canonical tree clean while preserving round-trip for
-        # IP-form routes.
+        # A next hop is either an IP literal (gateway) or an interface name
+        # (``Null0``, ``Ethernet1`` — an interface/connected route, ubiquitous
+        # as a BGP aggregate anchor ``ip route <agg> Null0``).  Route it to the
+        # right canonical field instead of dropping the interface form (donor:
+        # the identical cisco_iosxe_cli branch).
+        gateway = ""
+        interface = ""
         try:
             ipaddress.IPv4Address(next_hop)
+            gateway = next_hop
         except ipaddress.AddressValueError:
-            continue
+            interface = next_hop
         # The optional ``vrf <name>`` infix lands on ``route.vrf`` — NOT a
         # routing-instance.  Harvesting a per-VRF route must never conjure a
         # phantom ``CanonicalRoutingInstance`` (that surface comes only from
@@ -491,22 +495,24 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         # global-table routes byte-identical.
         intent.static_routes.append(CanonicalStaticRoute(
             destination=f"{ip}/{prefix}",
-            gateway=next_hop,
-            interface="",
+            gateway=gateway,
+            interface=interface,
             vrf=vrf or "",
         ))
     for route_m in _IPV6_ROUTE_RE.finditer(raw):
         vrf, dest, next_hop = route_m.groups()
-        # Same interface-form skip as the v4 branch: only IP next hops
-        # round-trip cleanly onto the canonical gateway.
+        # Same gateway-or-interface split as the v4 branch.
+        gateway = ""
+        interface = ""
         try:
             ipaddress.IPv6Address(next_hop)
+            gateway = next_hop
         except ipaddress.AddressValueError:
-            continue
+            interface = next_hop
         intent.static_routes.append(CanonicalStaticRoute(
             destination=dest,
-            gateway=next_hop,
-            interface="",
+            gateway=gateway,
+            interface=interface,
             vrf=vrf or "",
         ))
 
