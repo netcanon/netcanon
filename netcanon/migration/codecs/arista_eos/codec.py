@@ -119,6 +119,7 @@ class AristaEOSCodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
+            "/routing/static-route/vrf",   # per-VRF ``ip route vrf X ...`` (donor: cisco_iosxe_cli #24)
             "/snmp/community",
             "/snmp/location",
             "/snmp/contact",
@@ -395,18 +396,10 @@ class AristaEOSCodec(CodecBase):
                     "are Tier 3 — see `/access-list/extended`."
                 ),
             ),
-            # -- Ship-before-wire (v0.2.0) -- per-VRF static routes --
-            # (VRRP + anycast-gateway flipped to ``supported`` in
-            # Wave B/C — see the supported list above.)
-            UnsupportedPath(
-                path="/routing/static-route/vrf",
-                reason=(
-                    "Per-VRF static-route binding parses-and-ignores in "
-                    "v1.  Schema exists on CanonicalStaticRoute.vrf; "
-                    "wire-up scheduled for v0.2.0 (closes existing "
-                    "per-VRF static-route lossy declaration)."
-                ),
-            ),
+            # (Per-VRF static routes flipped to ``supported`` — see the
+            # supported list above — alongside VRRP + anycast-gateway in
+            # Wave B/C.  ``ip route vrf X ...`` now parses onto
+            # CanonicalStaticRoute.vrf and renders the ``vrf`` qualifier.)
         ],
     )
 

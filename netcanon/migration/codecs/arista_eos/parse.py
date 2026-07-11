@@ -86,14 +86,19 @@ _NTP_SERVER_RE = re.compile(
     re.MULTILINE,
 )
 _IP_ROUTE_RE = re.compile(
-    # ``ip route 0.0.0.0/0 10.0.0.1`` or ``ip route 10.0.0.0/8 Null0``.
-    r"^ip route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)",
+    # ``ip route 0.0.0.0/0 10.0.0.1`` or ``ip route 10.0.0.0/8 Null0``,
+    # plus the per-VRF form ``ip route vrf MGMT 0.0.0.0/0 192.168.2.1``.
+    # The optional ``vrf <name>`` infix (group 1) lands on
+    # ``CanonicalStaticRoute.vrf`` and round-trips through render
+    # (mirrors the cisco_iosxe_cli graduation, PR #24).
+    r"^ip route\s+(?:vrf\s+(\S+)\s+)?(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)",
     re.MULTILINE,
 )
 _IPV6_ROUTE_RE = re.compile(
     # ``ipv6 route 2001:db8::/48 2001:db8::1`` — v6 uses the ``ipv6 route``
     # keyword with the prefix form (does not overlap ``^ip route``).
-    r"^ipv6 route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)",
+    # The optional ``vrf <name>`` infix mirrors the v4 form above.
+    r"^ipv6 route\s+(?:vrf\s+(\S+)\s+)?([0-9A-Fa-f:]+/\d+)\s+(\S+)",
     re.MULTILINE,
 )
 _SNMP_COMMUNITY_RE = re.compile(
@@ -470,7 +475,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     for ntp_m in _NTP_SERVER_RE.finditer(raw):
         intent.ntp_servers.append(ntp_m.group(1))
     for route_m in _IP_ROUTE_RE.finditer(raw):
-        ip, prefix, next_hop = route_m.groups()
+        vrf, ip, prefix, next_hop = route_m.groups()
         # Skip interface-form next hops (``Null0``, ``Ethernet1``) —
         # treat as non-routable for canonical; parse-ignore keeps
         # the canonical tree clean while preserving round-trip for
@@ -479,13 +484,19 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             ipaddress.IPv4Address(next_hop)
         except ipaddress.AddressValueError:
             continue
+        # The optional ``vrf <name>`` infix lands on ``route.vrf`` — NOT a
+        # routing-instance.  Harvesting a per-VRF route must never conjure a
+        # phantom ``CanonicalRoutingInstance`` (that surface comes only from
+        # ``vrf instance|definition`` stanzas); the empty-string default keeps
+        # global-table routes byte-identical.
         intent.static_routes.append(CanonicalStaticRoute(
             destination=f"{ip}/{prefix}",
             gateway=next_hop,
             interface="",
+            vrf=vrf or "",
         ))
     for route_m in _IPV6_ROUTE_RE.finditer(raw):
-        dest, next_hop = route_m.groups()
+        vrf, dest, next_hop = route_m.groups()
         # Same interface-form skip as the v4 branch: only IP next hops
         # round-trip cleanly onto the canonical gateway.
         try:
@@ -496,6 +507,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             destination=dest,
             gateway=next_hop,
             interface="",
+            vrf=vrf or "",
         ))
 
     # --- VARP system-wide MAC (Wave C) -------------------------------
