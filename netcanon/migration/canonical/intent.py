@@ -856,8 +856,9 @@ class CanonicalIntent(BaseModel):
             (parse harvest + render emit + declared-``supported``) on
             ``juniper_junos`` (``set system syslog host <ip>``),
             ``cisco_iosxe_cli`` and ``arista_eos`` (``logging host <ip>``,
-            promotions #1/#11), and ``cisco_nxos`` (``logging server
-            <ip>``, promotion #4).  Other codecs still drop it — the ones
+            promotions #1/#11), ``cisco_nxos`` (``logging server <ip>``,
+            #4) and ``cisco_iosxr`` (bare ``logging <ip>``, #13).  Other
+            codecs still drop it — the ones
             that declare it ``unsupported`` surface the cross-vendor
             banner; the rest fall through to an implicit drop.  Not yet a
             universal round-trip guarantee — see docs/CAPABILITIES.md.

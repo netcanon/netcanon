@@ -72,6 +72,22 @@ _CANON_TO_IOSXR_BUNDLE_MODE = {
 _FALLBACK_BGP_ASN = "65000"
 
 
+def _render_ntp_syslog(tree: CanonicalIntent) -> list[str]:
+    """NTP block + syslog lines (promotion #13).  XR render-dropped these
+    until the wire-up; the NTP block mirrors the real fixture (``ntp`` /
+    indented ``server <ip>``), syslog is the bare ``logging <ip>`` form.
+    (DNS ``domain name-server`` is emitted inline with the domain line.)"""
+    out: list[str] = []
+    if tree.ntp_servers:
+        out.append("ntp")
+        out.extend(f" server {srv}" for srv in tree.ntp_servers)
+        out.append("!")
+    if tree.syslog_servers:
+        out.extend(f"logging {srv}" for srv in tree.syslog_servers)
+        out.append("!")
+    return out
+
+
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Cisco IOS-XR config text."""
     hostname = tree.hostname or "Router"
@@ -83,7 +99,9 @@ def render_intent(tree: CanonicalIntent) -> str:
     lines.append(f"hostname {hostname}")
     if tree.domain:
         lines.append(f"domain name {tree.domain}")
+    lines.extend(f"domain name-server {srv}" for srv in tree.dns_servers)
     lines.append("!")
+    lines.extend(_render_ntp_syslog(tree))
 
     # ── Local users (Phase 2) ──
     for user in tree.local_users:
