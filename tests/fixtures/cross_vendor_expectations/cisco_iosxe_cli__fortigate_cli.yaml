@@ -290,11 +290,10 @@ per_field_expectation:
   vxlan_vnis:
     disposition: unsupported
     reason: >
-      Cisco IOS-XE codec capability matrix lists ``/vxlan-vnis/vni``
-      as unsupported.  FortiGate codec capability matrix lists
-      ``/vxlan-vnis/vni`` as unsupported with rationale "VXLAN not
-      modelled - FortiGate is a firewall codec".  Both codecs
-      parse-and-ignore VXLAN intent on this cross-pair.
+      cisco_iosxe_cli now parses + renders VXLAN-EVPN (promotion #16),
+      but the FortiGate codec lists ``/vxlan-vnis/vni`` as unsupported
+      ("VXLAN not modelled - FortiGate is a firewall codec"), so the
+      overlay drops on the FortiGate render.  Target-driven unsupported.
     references: [vrf]
 
   evpn_type5_routes:

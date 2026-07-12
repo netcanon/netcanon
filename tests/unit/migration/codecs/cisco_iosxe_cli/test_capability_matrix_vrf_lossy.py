@@ -111,25 +111,37 @@ class TestRoutingInstancesDeclaredLossy:
                 break
 
 
-class TestVxlanStillUnsupported:
-    """VXLAN remains genuinely unsupported (no parse + no render in
-    `cisco_iosxe_cli`).  Pin that the W11-A-era declarations stay
-    in the `unsupported` set — they're correct, unlike the VRF one
-    that was stale."""
+class TestVxlanNveSupported:
+    """VXLAN-EVPN nve1 is genuinely supported (promotion #16).
 
-    def test_vxlan_paths_still_unsupported(self):
+    ``cisco_iosxe_cli`` now intercepts ``interface nve1`` on parse (mirrors
+    cisco_nxos), correlates the ``vlan configuration N / member
+    [evpn-instance M] vni V`` bindings, and re-emits the VTEP on render.  The
+    W11-A-era "still unsupported" pins were correct at the time but are now
+    stale — this class pins the graduated dispositions instead."""
+
+    def test_vni_and_source_interface_supported(self):
         codec = _build_codec()
-        unsupported_paths = {
-            entry.path for entry in codec.capabilities.unsupported
-        }
-        for path in (
-            "/vxlan-vnis/vni",
-            "/vxlan-vnis/source-interface",
-            "/vxlan-vnis/udp-port",
-        ):
-            assert path in unsupported_paths, (
-                f"{path} should remain unsupported — no VXLAN parse "
-                f"or render code exists in `cisco_iosxe_cli` "
-                f"(verified absence at commit `170a2c2` validation "
-                f"audit)."
+        supported = set(codec.capabilities.supported)
+        unsupported = {e.path for e in codec.capabilities.unsupported}
+        for path in ("/vxlan-vnis/vni", "/vxlan-vnis/source-interface",
+                     "/vxlan-vnis/mcast-group",
+                     "/routing-instances/instance/l3-vni"):
+            assert path in supported, (
+                f"{path} should be supported — promotion #16 wired "
+                f"parse (interface nve1 interception) + render (VTEP emit)."
             )
+            assert path not in unsupported, f"{path} must not be unsupported"
+
+    def test_udp_port_and_flood_list_lossy(self):
+        codec = _build_codec()
+        lossy = {e.path for e in codec.capabilities.lossy}
+        unsupported = {e.path for e in codec.capabilities.unsupported}
+        # udp-port: render emits no `vxlan udp-port` override (re-parses as
+        # 4789).  flood-list: no per-VNI static ingress-replication grammar.
+        for path in ("/vxlan-vnis/udp-port", "/vxlan-vnis/flood-list"):
+            assert path in lossy, (
+                f"{path} should be lossy — the NVE render keeps the VNI "
+                f"identity but drops this sub-detail (mirrors cisco_nxos)."
+            )
+            assert path not in unsupported, f"{path} must not be unsupported"

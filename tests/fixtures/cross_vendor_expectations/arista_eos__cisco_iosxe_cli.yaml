@@ -307,22 +307,35 @@ per_field_expectation:
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
 
   vxlan_vnis:
-    disposition: unsupported
-    reason: >
-      Arista EOS codec capability matrix lists ``/vxlan-vnis/vni``,
-      ``/vxlan-vnis/source-interface``, and ``/vxlan-vnis/udp-port``
-      as supported (parses interface Vxlan1 + vxlan source-interface
-      + vxlan udp-port + vxlan vlan N vni X mappings into
-      CanonicalVxlan records).  Cisco IOS-XE codec capability
-      matrix lists the same xpaths under unsupported with rationale
-      "IOS-XE VXLAN mappings (interface nve1 / member vni <N>
-      associate vrf <name>) parse-and-ignore in v1.  CanonicalVxlan
-      schema exists; wire-up deferred until demand arrives for
-      Catalyst-to-Arista migrations."  This direction is
-      asymmetrically lossy: Arista source carries the data, Cisco
-      target silently drops it on render (no NVE / VLAN-config /
-      l2vpn-evpn render block in cisco_iosxe_cli/render.py).
+    disposition: good
+    note: >
+      Promotion #16 wired the IOS-XE target render: cisco_iosxe_cli now
+      emits the ``vlan configuration N / member evpn-instance 1 vni V``
+      bindings + the ``interface nve1`` VTEP (source-interface, per-VNI
+      ``member vni N mcast-group``), so an Arista source's VLAN↔VNI
+      mappings + VTEP source + multicast group survive to IOS-XE.  Only
+      head-end static ingress-replication + a custom UDP port drop (see
+      the flood_list / udp_port sub-cells).
     references: [vxlan]
+
+  vxlan_vnis[].vlan_id:
+    disposition: good
+
+  vxlan_vnis[].vni:
+    disposition: good
+
+  vxlan_vnis[].mcast_group:
+    disposition: good
+
+  vxlan_vnis[].source_interface:
+    disposition: good
+
+  vxlan_vnis[].flood_list:
+    disposition: lossy
+    reason: >
+      The IOS-XE NVE render has no per-VNI static ingress-replication
+      peer-list grammar (declared lossy on the codec), so an Arista
+      ``vxlan flood vtep`` head-end peer list drops on the IOS-XE render.
 
   evpn_type5_routes:
     disposition: unsupported

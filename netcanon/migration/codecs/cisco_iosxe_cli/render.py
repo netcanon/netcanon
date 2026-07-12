@@ -546,6 +546,42 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.vlans:
         out.append("!")
 
+    # --- VXLAN / EVPN overlay (promotion #16) ---
+    # L2 VLAN↔VNI bindings render as ``vlan configuration <vlan_id> /
+    # member evpn-instance 1 vni <vni>`` (the ``evpn-instance`` number is
+    # not carried canonically — 1 matches the single ``l2vpn evpn instance
+    # 1`` most IOS-XE EVPN leaves declare, and re-parse maps it back to the
+    # same vlan_id).  The VTEP source-interface, per-VNI multicast group,
+    # and L3VNI→VRF bindings render under ``interface nve1`` — the same
+    # stanza the parser intercepts.  Mirrors the cisco_nxos VTEP emitter.
+    l3vnis = sorted(
+        (ri.l3_vni, ri.name)
+        for ri in tree.routing_instances
+        if ri.l3_vni is not None and ri.name
+    )
+    ordered_vx = sorted(tree.vxlan_vnis, key=lambda x: x.vni)
+    if ordered_vx or l3vnis:
+        for vx in ordered_vx:
+            out.append(f"vlan configuration {vx.vlan_id}")
+            out.append(f" member evpn-instance 1 vni {vx.vni}")
+        if ordered_vx:
+            out.append("!")
+        source_iface = next(
+            (x.source_interface for x in ordered_vx if x.source_interface), "",
+        ) or "Loopback0"
+        out.append("interface nve1")
+        out.append(" no ip address")
+        out.append(f" source-interface {source_iface}")
+        out.append(" host-reachability protocol bgp")
+        for vx in ordered_vx:
+            if vx.mcast_group:
+                out.append(f" member vni {vx.vni} mcast-group {vx.mcast_group}")
+            else:
+                out.append(f" member vni {vx.vni}")
+        for l3vni, vrf_name in l3vnis:
+            out.append(f" member vni {l3vni} vrf {vrf_name}")
+        out.append("!")
+
     # --- static routes ---
     for route in tree.static_routes:
         tail = ""

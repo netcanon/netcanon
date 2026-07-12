@@ -152,6 +152,18 @@ class CiscoIOSXECLICodec(CodecBase):
             # anycast MAC.  Round-trips between Cisco dotted-triplet
             # wire form and canonical colon-hex.
             "/anycast-gateway-mac",
+            # VXLAN-EVPN (promotion #16) — L2 VLAN↔VNI + VTEP source +
+            # per-VNI multicast group.  Parse intercepts ``interface nve1``
+            # (mirrors cisco_nxos) and correlates the ``vlan configuration N
+            # / member [evpn-instance M] vni V`` bindings; render re-emits
+            # both.  The L3VNI→VRF binding (``member vni V vrf <name>``) rides
+            # /routing-instances/instance/l3-vni.  Head-end static ingress-
+            # replication (/vxlan-vnis/flood-list) + a custom VXLAN UDP port
+            # (/vxlan-vnis/udp-port) are declared lossy below.
+            "/vxlan-vnis/vni",
+            "/vxlan-vnis/source-interface",
+            "/vxlan-vnis/mcast-group",
+            "/routing-instances/instance/l3-vni",
         ],
         lossy=[
             LossyPath(
@@ -271,6 +283,35 @@ class CiscoIOSXECLICodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # VXLAN-EVPN sub-field losses (promotion #16).  The NVE render
+            # emits the VTEP + per-VNI ``member vni`` bindings, so the VNI
+            # identity + multicast group survive; these two sub-details do
+            # not (mirrors the cisco_nxos declarations).
+            LossyPath(
+                path="/vxlan-vnis/udp-port",
+                reason=(
+                    "The IOS-XE NVE render emits the VTEP source-interface + "
+                    "per-VNI `member vni` bindings but no `vxlan udp-port` "
+                    "override, so a non-default VXLAN UDP port (e.g. the "
+                    "legacy 8472) is dropped on render and re-parses as the "
+                    "IANA default 4789.  The VNI binding survives; only the "
+                    "custom port is lost (mirrors cisco_nxos MTX-1)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vxlan-vnis/flood-list",
+                reason=(
+                    "IOS-XE EVPN relies on BGP-EVPN head-end auto-discovery "
+                    "(`host-reachability protocol bgp`); the NVE render emits "
+                    "multicast flood-and-learn (`member vni N mcast-group`) "
+                    "when set, but has no per-VNI static ingress-replication "
+                    "peer-list grammar, so an explicit flood_list of VTEP peer "
+                    "IPs is dropped on render while the VNI identity survives "
+                    "(promotion #16)."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/address-family",
                 reason=(
@@ -332,33 +373,6 @@ class CiscoIOSXECLICodec(CodecBase):
             UnsupportedPath(
                 path="/interfaces/interface/subinterfaces/subinterface/ipv6",
                 reason="Phase 0.5 scope — IPv4 only.",
-            ),
-            UnsupportedPath(
-                path="/vxlan-vnis/vni",
-                reason=(
-                    "IOS-XE VXLAN mappings (`interface nve1 / member "
-                    "vni <N> associate vrf <name>`) parse-and-ignore "
-                    "in v1.  CanonicalVxlan schema exists; wire-up "
-                    "deferred until demand arrives for Catalyst-to-"
-                    "Arista migrations."
-                ),
-            ),
-            UnsupportedPath(
-                path="/vxlan-vnis/source-interface",
-                reason=(
-                    "IOS-XE VXLAN source-interface (`interface nve1 / "
-                    "source-interface Loopback<N>`) parse-and-ignore "
-                    "in v1.  Same scope as /vxlan-vnis/vni — both "
-                    "land when Catalyst VXLAN demand arrives."
-                ),
-            ),
-            UnsupportedPath(
-                path="/vxlan-vnis/udp-port",
-                reason=(
-                    "IOS-XE VXLAN UDP port (`interface nve1 / vxlan "
-                    "udp-port <N>`) parse-and-ignore in v1.  Same "
-                    "scope as /vxlan-vnis/vni."
-                ),
             ),
             # ── ACL / firewall / NAT (Tier 3 — not auto-translatable) ──
             UnsupportedPath(

@@ -258,16 +258,39 @@ per_field_expectation:
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
 
   vxlan_vnis:
-    disposition: unsupported
+    disposition: lossy
     reason: >
-      Cisco IOS-XE codec capability matrix lists
-      ``/vxlan-vnis/vni`` as unsupported with rationale "IOS-XE
-      VXLAN mappings (``interface nve1 / member vni <N> associate
-      vrf <name>``) parse-and-ignore in v1.  CanonicalVxlan schema
-      exists; wire-up deferred until demand arrives for Catalyst-
-      to-Arista migrations."  Arista EOS codec advertises
-      ``/vxlan-vnis/vni`` as supported but Cisco-side parse is
-      empty, so the cross-pair drops to unsupported.
+      Promotion #16 wired IOS-XE VXLAN-EVPN: the codec now intercepts
+      ``interface nve1`` and correlates the ``vlan configuration N /
+      member [evpn-instance M] vni V`` bindings, so the L2 VLAN↔VNI
+      mapping + VTEP source-interface survive to Arista ``vlan N vxlan
+      vni X`` inside ``interface Vxlan1``.  The one sub-detail that drops
+      on this direction is the per-VNI multicast group (dropped by the
+      Arista render), so the field is lossy overall (see
+      vxlan_vnis[].mcast_group).
+
+  vxlan_vnis[].vlan_id:
+    disposition: good
+
+  vxlan_vnis[].vni:
+    disposition: good
+
+  vxlan_vnis[].source_interface:
+    disposition: good
+
+  vxlan_vnis[].mcast_group:
+    disposition: lossy
+    reason: >
+      IOS-XE ``member vni N mcast-group <addr>`` maps to Arista ``vlan N
+      multicast-group <addr>``, but the Arista render currently drops the
+      per-VNI multicast group, so it does not survive the cross-pair.
+
+  vxlan_vnis[].flood_list:
+    disposition: lossy
+    reason: >
+      Head-end static ingress-replication peer IPs have no per-VNI nve1
+      grammar on the IOS-XE side (declared lossy on the codec), so an
+      explicit flood_list drops on the IOS-XE source render.
 
   evpn_type5_routes:
     disposition: unsupported

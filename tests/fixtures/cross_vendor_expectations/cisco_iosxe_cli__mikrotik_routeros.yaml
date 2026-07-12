@@ -305,15 +305,11 @@ per_field_expectation:
   vxlan_vnis:
     disposition: unsupported
     reason: >
-      Cisco IOS-XE codec capability matrix lists ``/vxlan-vnis/vni``
-      as unsupported with rationale "IOS-XE VXLAN mappings (`interface
-      nve1 / member vni <N> associate vrf <name>`) parse-and-ignore in
-      v1.  CanonicalVxlan schema exists; wire-up deferred until demand
-      arrives for Catalyst-to-Arista migrations."  The MikroTik codec
-      capability matrix also lists ``/vxlan-vnis/vni`` as unsupported
-      ("RouterOS VXLAN exists but is rare in canonical scope and not
-      modelled in v1.").  Cross-pair drops to unsupported on both
-      sides.
+      cisco_iosxe_cli now parses + renders VXLAN-EVPN (promotion #16 —
+      ``interface nve1`` interception), but the MikroTik codec lists
+      ``/vxlan-vnis/vni`` as unsupported ("RouterOS VXLAN exists but is
+      rare in canonical scope and not modelled in v1."), so the overlay
+      drops on the RouterOS render.  Target-driven unsupported.
 
   evpn_type5_routes:
     disposition: unsupported
