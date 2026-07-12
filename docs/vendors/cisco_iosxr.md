@@ -43,12 +43,13 @@ translatable with caveats:
 - Local users — `username` block (group → role + secret hash),
   form-preserving
 
-> **Management-plane caveat.**  When IOS-XR is the **target**, the
-> codec renders no `clock timezone` / `domain name-server` / `ntp` /
-> `logging` / `dhcp` / `radius-server` / SNMP config — those surfaces
-> are declared `unsupported` (the live validation report flags the
-> loss rather than reporting `severity: ok`).  See
-> [What we don't do](#what-we-dont-do).
+> **Management-plane caveat.**  When IOS-XR is the **target**, the codec
+> now renders `domain name-server` / `ntp` / `logging <ip>` (promotion
+> #13 — DNS / NTP / syslog round-trip, alongside the pre-existing
+> `domain name`), but still emits no `clock timezone` / `dhcp` /
+> `radius-server` / SNMP config — those surfaces stay declared
+> `unsupported` (the live validation report flags the loss rather than
+> reporting `severity: ok`).  See [What we don't do](#what-we-dont-do).
 
 ## Lossy paths
 
@@ -87,8 +88,9 @@ is visible, not silent):
 - **L2 switchport** — IOS-XR has no Cisco-style access/trunk model
   (VLANs are dot1q sub-interfaces); switchport mode / access-VLAN /
   trunk allowed-list / native VLAN / voice-VLAN all drop on render
-- **Management plane** — `timezone`, DNS / NTP / syslog servers, DHCP
-  server pools, RADIUS servers (host + secret)
+- **Management plane** — `timezone`, DHCP server pools, RADIUS servers
+  (host + secret).  (DNS / NTP / syslog servers now round-trip —
+  promotion #13.)
 - **SNMP** — parse + render is out of the v1 XR scope
 
 Deliberately deferred to [Tier

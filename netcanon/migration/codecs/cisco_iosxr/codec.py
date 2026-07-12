@@ -122,6 +122,12 @@ class CiscoIOSXRCodec(CodecBase):
         supported=[
             # System
             "/system/hostname",
+            # Management plane — DNS / NTP / syslog (promotion #13): parse
+            # harvest + render (`domain name-server` / `ntp` block / `logging
+            # <ip>`).  `/system/domain` was already wired (classify-default).
+            "/system/dns-server",
+            "/system/ntp-server",
+            "/system/syslog-server",
             # Interfaces — name + basic L3
             "/interfaces/interface/name",
             "/interfaces/interface/config/description",
@@ -402,18 +408,6 @@ class CiscoIOSXRCodec(CodecBase):
             UnsupportedPath(
                 path="/system/timezone",
                 reason="Render emits no clock/timezone stanza; intent.timezone is dropped on migration.",
-            ),
-            UnsupportedPath(
-                path="/system/dns-server",
-                reason="Render emits no name-server config; intent.dns_servers are dropped on migration.",
-            ),
-            UnsupportedPath(
-                path="/system/ntp-server",
-                reason="Render emits no NTP config; intent.ntp_servers are dropped on migration.",
-            ),
-            UnsupportedPath(
-                path="/system/syslog-server",
-                reason="Render emits no logging/syslog config; intent.syslog_servers are dropped on migration.",
             ),
             UnsupportedPath(
                 path="/dhcp-servers/pool",

@@ -103,6 +103,31 @@ _DOMAIN_RE = re.compile(
     r"^domain\s+name\s+(\S+)", re.IGNORECASE | re.MULTILINE,
 )
 
+# ── Management-plane globals (promotion #13) — XR render-dropped DNS / NTP /
+#    syslog until this wire-up (``/system/domain`` was already wired). ──
+#: ``domain name-server <ip>`` — disjoint from ``domain name <fqdn>`` above
+#: (``name-server`` has no whitespace after ``name``, so ``_DOMAIN_RE`` can't
+#: match it, and vice-versa).
+_NAMESERVER_RE = re.compile(
+    r"^domain\s+name-server\s+(\S+)", re.IGNORECASE | re.MULTILINE,
+)
+#: NTP is a block: ``ntp`` on its own line, then indented ``server <ip>
+#: [maxpoll N] [prefer]`` / ``source <iface>`` / ``update-calendar`` leaves.
+#: Capture the indented body, then pull ``server`` leaves from it (the
+#: ``source`` / ``update-calendar`` tails carry no ``server`` keyword).
+_NTP_BLOCK_RE = re.compile(
+    r"^ntp[ \t]*\r?\n((?:[ \t]+.*\r?\n)+)", re.IGNORECASE | re.MULTILINE,
+)
+_NTP_SERVER_LINE_RE = re.compile(
+    r"^[ \t]+server\s+(\S+)", re.IGNORECASE | re.MULTILINE,
+)
+#: Syslog destinations — XR spells them bare ``logging <ip>``, but ``logging``
+#: also fronts non-destination sub-commands (``logging console debugging``,
+#: ``logging monitor``, ``logging trap``).  Harvest the first IP-literal token
+#: per ``logging`` line, validated with :mod:`ipaddress` (mirrors the sibling
+#: Cisco codecs' ``_SYSLOG_LINE_RE``).
+_SYSLOG_LINE_RE = re.compile(r"^\s*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
+
 _IFACE_RE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
@@ -264,6 +289,9 @@ def parse_intent(raw: str) -> CanonicalIntent:
     intent.domain = _extract_domain(raw)
     intent.source_version = _extract_version(raw)
 
+    # Management-plane globals (DNS / NTP / syslog) — promotion #13.
+    _parse_globals(raw, intent)
+
     intent.interfaces = _parse_interfaces(raw)
 
     # VRF declarations (top-level ``vrf <name>`` stanzas: description +
@@ -305,6 +333,30 @@ def _extract_hostname(raw: str) -> str:
 def _extract_domain(raw: str) -> str:
     m = _DOMAIN_RE.search(raw)
     return m.group(1) if m else ""
+
+
+def _parse_globals(raw: str, intent: CanonicalIntent) -> None:
+    """Harvest the XR management-plane globals DNS / NTP / syslog (promotion
+    #13) that the codec render-dropped until this wire-up (``domain`` is
+    handled by :func:`_extract_domain`).  Mutates *intent* in place."""
+    for m in _NAMESERVER_RE.finditer(raw):
+        intent.dns_servers.append(m.group(1))
+    for block in _NTP_BLOCK_RE.finditer(raw):
+        # ``server <ip>`` leaves inside the ``ntp`` block; drop the
+        # ``maxpoll`` / ``prefer`` tails and the ``source`` / ``update-
+        # calendar`` sibling lines (no ``server`` keyword).
+        intent.ntp_servers.extend(_NTP_SERVER_LINE_RE.findall(block.group(1)))
+    for m in _SYSLOG_LINE_RE.finditer(raw):
+        # First IP-literal token on a ``logging`` line is the syslog host;
+        # non-destination sub-commands carry no IP token.  De-dup, first-seen.
+        for token in m.group(1).split():
+            try:
+                ipaddress.ip_address(token)
+            except ValueError:
+                continue
+            if token not in intent.syslog_servers:
+                intent.syslog_servers.append(token)
+            break
 
 
 def _extract_version(raw: str) -> str:
