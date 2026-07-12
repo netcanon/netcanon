@@ -643,9 +643,11 @@ def test_matrix_supported(codec: ArubaAOSCXCodec, path: str) -> None:
 
 @pytest.mark.parametrize("path", [
     "/interfaces/interface/config/type",
-    # audit bb47f21 T0-1: AOS-CX renders the LAG `lacp mode` but a `passive`
-    # bundle re-parses as `static`, so the mode is lossy (was wrongly listed
-    # supported — the value-corruption the LAG-mode fidelity guard now pins).
+    # audit bb47f21 T0-1: AOS-CX emits the LAG `lacp mode` only for a
+    # kind-`lag` interface, so a same-vendor bundle round-trips clean, but a
+    # cross-vendor LAG (living only in tree.lags under a foreign name) renders
+    # no `interface lag N` stanza and the mode re-parses as `static` — declared
+    # lossy, pinned by the LAG-mode fidelity guard.
     "/lags/lag/mode",
     "/local-users/user/privilege-level",
     "/snmp/v3-user/auth-passphrase",
