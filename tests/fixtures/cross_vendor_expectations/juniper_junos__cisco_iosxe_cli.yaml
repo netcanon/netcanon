@@ -267,11 +267,14 @@ per_field_expectation:
     references: [junos-initial-config, cisco-fundamentals]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Address list round-trips.  Per-server options (``prefer``,
-      ``iburst``, ``key``, ``boot-server``, ``source``) are not
-      modelled canonically and drop on cross-vendor round-trip.
+    disposition: good
+    note: >
+      The address list round-trips cleanly (verified across the
+      corpus, including a 12-server Junos fixture).  Per-server
+      options (``prefer``, ``iburst``, ``key``, ``boot-server``,
+      ``source``) are not modelled canonically, so they are
+      pre-canonical loss the canonical-vs-canonical comparator never
+      observes rather than a cross-vendor drop it can score.
     references: [junos-initial-config, cisco-fundamentals]
 
   timezone:
@@ -485,16 +488,23 @@ per_field_expectation:
   # ── Tier 1 — static routes ──
 
   static_routes:
-    disposition: lossy
-    reason: >
-      Default-VRF static routes round-trip cleanly.  Per-VRF
-      static routes (``set routing-instances X routing-options
-      static route ...``) are parse-and-ignore in v1
-      (CanonicalStaticRoute lacks a ``vrf`` field).  Junos's
-      ``preference`` and Cisco's "AD" are vendor-specific scalars
-      not 1:1; canonical metric is the operator-visible metric.
-      Junos's ``qualified-next-hop`` flattens to multiple canonical
-      entries on Cisco render.
+    disposition: good
+    note: >
+      Default-VRF AND per-VRF static routes round-trip cleanly.
+      CanonicalStaticRoute carries a ``vrf`` field (since v0.2.0)
+      that Junos parse harvests (``set routing-instances X
+      routing-options static route ...``, without materialising a
+      phantom routing-instance) and Cisco render emits (``ip route
+      vrf X ...`` / ``ipv6 route vrf X ...``).  Verified across the
+      full corpus: 8/8 Junos fixtures with static routes are
+      byte-model-preserved through iosxe_cli, three of them carrying
+      VRF-bound routes.  Two residuals stay comparator-invisible —
+      they never enter the canonical model, so the harness cannot
+      observe them and both codecs are honest about the on-device
+      loss: Junos ``preference`` is parse-and-ignored (canonical
+      ``metric`` stays 0), and ``qualified-next-hop`` floating
+      routes are parse-and-ignored (Junos parse handles only
+      ``next-hop``).
     references: [junos-static-routing, cisco-static-routes]
 
   # ── Tier 2 — DHCP server ──
@@ -784,9 +794,6 @@ per_field_expectation:
 #     families.  Lossy with confidence.
 #
 # Deferred items:
-#
-#   * Per-VRF static routes — schema gap on CanonicalStaticRoute
-#     (no vrf field).  Lands alongside Cisco VRF wire-up.
 #
 #   * NTP per-server options / qualified-next-hop preservation —
 #     canonical model is host-list-only / single-NH-only.

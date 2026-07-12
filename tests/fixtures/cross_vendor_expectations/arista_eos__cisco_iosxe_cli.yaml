@@ -164,15 +164,17 @@ per_field_expectation:
     references: [system_services]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Canonical model stores ``ntp_servers: list[str]`` (bare
-      addresses only).  Per-server options (``prefer``, ``iburst``,
-      ``key``, ``source``) are not modelled and drop on round-trip.
-      Address list itself is preserved.  Notable on this direction:
-      Arista's default-on ``iburst`` is silently dropped on the
-      Cisco target, which means the migrated device takes longer to
-      converge time after a reboot until an operator re-adds it.
+    disposition: good
+    note: >
+      The address list is preserved cleanly.  Canonical model stores
+      ``ntp_servers: list[str]`` (bare addresses only), so per-server
+      options (``prefer``, ``iburst``, ``key``, ``source``) are
+      pre-canonical loss the comparator never observes rather than a
+      cross-vendor drop.  Behavioural nuance on this direction
+      (invisible to the canonical comparator): Arista's default-on
+      ``iburst`` is dropped on the Cisco target, so the migrated
+      device takes longer to converge time after a reboot until an
+      operator re-adds it.
     references: [system_services]
 
   timezone:

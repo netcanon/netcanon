@@ -155,7 +155,8 @@ class ArubaAOSCXCodec(CodecBase):
             "/lags/lag/name",
             "/lags/lag/members",
             # /lags/lag/mode is LOSSY, not supported — see the lossy list
-            # below (passive re-parses as static; audit bb47f21 T0-1).
+            # below (cross-vendor render gap: a foreign-named LAG with no
+            # kind-`lag` interface re-parses as static; audit bb47f21 T0-1).
             # ── Phase 2: local users (`user X group G password ciphertext`) ──
             "/local-users/user/name",
             "/local-users/user/role",
@@ -178,10 +179,14 @@ class ArubaAOSCXCodec(CodecBase):
             LossyPath(
                 path="/lags/lag/mode",
                 reason=(
-                    "AOS-CX renders the LAG `lacp mode`, but a `passive` LACP "
-                    "bundle re-parses as `static` -- the passive mode is not "
-                    "preserved (audit bb47f21 T0-1, verified by round-trip "
-                    "probe)."
+                    "AOS-CX emits the LAG `lacp mode` only for a kind-`lag` "
+                    "interface present in the tree, so a same-vendor bundle "
+                    "round-trips cleanly. The loss is cross-vendor: a source "
+                    "whose LAG lives only in `tree.lags` under a foreign name "
+                    "(e.g. `Port-Channel1`) has no matching AOS-CX `interface "
+                    "lag N` stanza, so no `lacp mode` line is rendered and the "
+                    "mode re-parses as `static` from the surviving member "
+                    "`lag N` reference (audit bb47f21 T0-1)."
                 ),
                 severity="warn",
             ),

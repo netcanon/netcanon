@@ -162,15 +162,16 @@ per_field_expectation:
     references: [system_services, system_services_fortios]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Address list itself is preserved, but Arista's per-server
-      ``prefer`` / ``iburst`` / ``key <id>`` / ``source <iface>``
-      modifiers are not modelled in canonical and drop on round-
-      trip.  FortiGate emits the list under ``config system ntp /
-      config ntpserver`` with sequential edit IDs.  FortiOS
-      additionally requires ``set ntpsync enable`` and ``set type
-      custom`` outside the per-server table; these are codec
+    disposition: good
+    note: >
+      The address list is preserved cleanly — FortiGate emits every
+      server under ``config system ntp / config ntpserver`` with
+      sequential edit IDs (no cap).  Arista's per-server ``prefer`` /
+      ``iburst`` / ``key <id>`` / ``source <iface>`` modifiers are
+      not modelled in canonical, so they are pre-canonical loss the
+      comparator never observes rather than a cross-vendor drop.
+      FortiOS additionally requires ``set ntpsync enable`` and ``set
+      type custom`` outside the per-server table; these are codec
       defaults rather than canonical-tree fields.
     references: [system_services, system_services_fortios]
 

@@ -285,14 +285,19 @@ per_field_expectation:
     references: [junos-initial-config, mikrotik-identity]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Bare-address list round-trips cleanly (Junos ``set system ntp
       server X`` -> RouterOS ``/system ntp client / set servers=X,...``).
-      Junos per-server modifiers (``prefer`` / ``key`` / ``iburst``
-      / ``source``) drop on canonical round-trip — canonical model
+      A juniper_junos source always renders the unbounded RouterOS-7
+      comma-separated form — the truncating RouterOS-6 two-slot
+      ``primary-ntp``/``secondary-ntp`` dialect gates on
+      ``source_vendor == 'mikrotik_routeros'`` and never fires
+      cross-vendor.  Junos per-server modifiers (``prefer`` /
+      ``key`` / ``iburst`` / ``source``) are not modelled (canonical
       stores ``list[str]`` only, and RouterOS exposes no per-server
-      options.
+      options), so they are pre-canonical loss the comparator never
+      observes.
     references: [junos-initial-config, mikrotik-identity]
 
   timezone:

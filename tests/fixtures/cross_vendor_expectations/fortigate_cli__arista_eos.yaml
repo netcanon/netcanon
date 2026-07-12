@@ -258,20 +258,21 @@ per_field_expectation:
   # ── Tier 2 — auto-translate with review ──
 
   dhcp_servers:
-    disposition: unsupported
-    reason: >
-      FortiGate-source ``config system dhcp server`` populates
-      CanonicalDHCPPool records cleanly on parse.  The arista_eos
-      codec does NOT advertise ``/dhcp/pool`` in its supported
-      set — Arista DC leafs typically don't host DHCP servers
-      (DHCP is a relay-only role on Arista DC deployments via
-      ``ip helper-address``).  Cross-vendor render therefore
-      drops the pool config entirely; operators migrating a
-      FortiGate edge to an Arista DC role must redirect DHCP-
-      server duties to a separate appliance.  Promote to ``lossy``
-      when the arista_eos codec wires DHCP-pool render (uncommon
-      in practice).
-    references: [interfaces]
+    disposition: good
+    note: >
+      The arista_eos codec now advertises ``/dhcp-servers/pool`` in
+      its supported set (Cluster E.1-A wire-up: render emits ``ip
+      dhcp pool <name>`` with network / range / default-router /
+      dns-server / domain-name / lease, and parse harvests them
+      back).  FortiGate-source ``config system dhcp server`` pools
+      therefore round-trip cleanly — verified byte-model-equal on
+      the 6-pool ``user_contrib_fg100e`` fixture (interface /
+      network / start_ip / end_ip / gateway / dns_servers /
+      lease_time / domain_name all preserved).  FortiGate-only
+      advanced pool options (vci-match, ntp-service) never enter
+      CanonicalDHCPPool, so they are pre-canonical loss the
+      comparator cannot observe rather than a cross-vendor drop.
+    references: [system_services]
 
   snmp:
     disposition: lossy
@@ -492,11 +493,6 @@ per_field_expectation:
 #     pass when canonical schema gains vendor-id translation
 #     tables.  Even when wired, integer-VRF -> Arista named-VRF
 #     migration will require operator-curated mappings.
-#
-#   * Arista codec wire-up for ``/dhcp/pool`` render — currently
-#     unsupported; would promote dhcp_servers to ``lossy`` (with
-#     model-divergence caveats around Arista's typical relay-
-#     only DC role).
 #
 #   * IPv6 static routes — not currently wired through the
 #     canonical static_routes list on FortiOS source side
