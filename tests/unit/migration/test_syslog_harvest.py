@@ -105,7 +105,7 @@ class TestAristaSyslogHarvest:
 class TestCrossVendorSyslogPreserve:
     """A syslog host survives across each wired pair."""
 
-    @pytest.mark.parametrize("target", ["cisco_iosxe_cli", "arista_eos", "juniper_junos"])
+    @pytest.mark.parametrize("target", ["cisco_iosxe_cli", "arista_eos", "juniper_junos", "cisco_nxos"])
     def test_arista_source_preserves_to_wired_target(self, target: str) -> None:
         arista = get_codec("arista_eos")
         tgt = get_codec(target)

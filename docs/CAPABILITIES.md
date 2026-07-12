@@ -90,11 +90,12 @@ names the canonical surface, not a blanket guarantee.
   `description`; plus per-VRF `vrf` discriminator (v0.2.0 Wave A —
   see Tier 2 ship-before-wire note below)
 * `dns_servers`, `ntp_servers` — wired on most codecs (not all: e.g.
-  cisco_nxos / cisco_iosxr render-drop the management plane); plus
-  `syslog_servers` and `timezone`, which are wired on only a
-  **subset** of codecs: `timezone` on none as of this release;
-  `syslog_servers` on juniper_junos, cisco_iosxe_cli, and arista_eos
-  (`logging host <ip>` harvest + render, promotions #1/#11).  These are
+  cisco_iosxr still render-drops the management plane; cisco_nxos now
+  wires it — promotion #4); plus `syslog_servers` and `timezone`, which
+  are wired on only a **subset** of codecs: `timezone` on none as of
+  this release; `syslog_servers` on juniper_junos, cisco_iosxe_cli,
+  arista_eos (`logging host <ip>`, promotions #1/#11) and cisco_nxos
+  (`logging server <ip>`, promotion #4).  These are
   Tier-1 by data shape but NOT yet a cross-vendor guarantee — the §A
   per-codec panels are authoritative, and an unwired field is dropped
   on parse (with a banner where the codec declares it unsupported,
