@@ -211,6 +211,18 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     # SNMPv3 is intentionally absent — config.xml doesn't store it.
     assert intent.snmp.v3_users == []
 
+    # ── Tier 1 — static routes (promotion #15: parse harvests; render drops) ──
+    # <staticroutes> carries two <route> entries: one via a literal
+    # next-hop IP (harvested) and one via the gateway NAME ``WAN_GW`` that
+    # is defined nowhere in this fixture (no <gateways> block), so the
+    # resolved-next-hop guard drops it rather than emitting a bogus literal
+    # next-hop.  There is no defaultgw gateway_item here, so no default
+    # route is synthesised.
+    routes = {r.destination: r for r in intent.static_routes}
+    assert list(routes) == ["172.16.0.0/12"]
+    assert routes["172.16.0.0/12"].gateway == "10.0.0.254"
+    assert routes["172.16.0.0/12"].description == "Corporate transit"
+
 
 # ---------------------------------------------------------------------------
 # Test 3 — within-vendor round-trip stability.

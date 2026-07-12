@@ -274,11 +274,13 @@ class OPNsenseCodec(CodecBase):
                 # block below.)
                 path="/routing/static-route",
                 reason=(
-                    "OPNsense's config.xml renderer emits no "
-                    "<staticroutes>/<route> block, so the entire static route "
-                    "(destination + next-hop) is dropped on render. Declared "
-                    "lossy so validate_against surfaces the loss instead of "
-                    "reporting severity:ok (audit f92e97a T0-1)."
+                    "Parse harvests routes (the <gateways> default route + "
+                    "<staticroutes>/<route> entries, resolving named gateways "
+                    "to their IP; promotion #15), but the config.xml renderer "
+                    "emits no <staticroutes>/<route> block, so the route is "
+                    "dropped on render. Declared lossy so validate_against "
+                    "surfaces the render loss instead of reporting severity:ok "
+                    "(audit f92e97a T0-1)."
                 ),
                 severity="warn",
             ),

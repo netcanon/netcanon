@@ -466,15 +466,16 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      OPNsense codec does not currently parse ``<staticroutes>`` /
-      ``<gateways>`` blocks into the canonical static_routes list;
-      structural mapping IS sound (each ``<staticroutes>/<route>``
-      becomes one Junos ``set routing-options static route X/N
-      next-hop Y`` once wire-up lands), but currently the cross-pair
-      delivers an empty list.  Default route synthesis: OPNsense's
-      WAN-gateway default-flag has no direct Junos analogue; the
-      canonical model would need to synthesise ``0.0.0.0/0 →
-      wan_gw_ip`` to round-trip.
+      OPNsense parse now harvests ``<staticroutes>`` / ``<gateways>``
+      into the canonical static_routes list (#15): each
+      ``<staticroutes>/<route>`` becomes one Junos ``set
+      routing-options static route X/N next-hop Y``, and a
+      ``<gateway_item defaultgw=1>`` synthesises ``0.0.0.0/0 →
+      wan_gw_ip``.  Destination + next-hop round-trip.  Kept lossy:
+      Junos render drops the per-route description, so a route
+      carrying ``<descr>`` drifts on the round-trip.  An unresolvable
+      / dynamic-DHCP gateway is dropped on parse rather than emitted
+      as a bogus next-hop.
     references: [opnsense-gateways, junos-static-routing]
 
   # ── Tier 2 — DHCP server ──

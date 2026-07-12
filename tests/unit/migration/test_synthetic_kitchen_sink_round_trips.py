@@ -111,6 +111,15 @@ _KNOWN_ROUNDTRIP_GAPS: dict[str, tuple[str, frozenset[str]]] = {
         "TODO on mikrotik_routeros codec",
         frozenset({"interfaces[0].description", "interfaces[1].description"}),
     ),
+    # opnsense: parse now harvests <staticroutes>/<gateways> (#15) but the
+    # renderer emits no <staticroutes> block (declared lossy on the
+    # opnsense codec), so the single harvested route (172.16.0.0/12) is
+    # dropped on render and the re-parse sees an empty list.
+    "opnsense::kitchen_sink.xml": (
+        "static routes harvested on parse but not re-emitted on render — "
+        "declared lossy on the opnsense codec (render half pending)",
+        frozenset({"static_routes"}),
+    ),
 }
 
 

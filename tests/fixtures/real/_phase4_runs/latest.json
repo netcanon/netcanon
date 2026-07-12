@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-12T08:55:54+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260712T085547Z.json",
-  "mesh_run_started_utc": "2026-07-12T08:55:41+00:00",
+  "started_utc": "2026-07-12T10:08:08+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260712T100358Z.json",
+  "mesh_run_started_utc": "2026-07-12T10:03:52+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4136,17 +4136,17 @@
   "aggregate": {
     "ALIGNED": 1620,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 1224,
+    "EXPECTED_LOSSY": 1231,
     "EXPECTED_UNSUPPORTED": 729,
-    "METHODOLOGY_ISSUE_under": 908,
+    "METHODOLOGY_ISSUE_under": 922,
     "METHODOLOGY_ISSUE_over": 25,
     "STRUCTURAL_ONLY": 1194,
-    "TRIVIAL_EMPTY": 9515,
+    "TRIVIAL_EMPTY": 9494,
     "fields_total": 15220,
     "severity_high": 5,
     "severity_medium": 107,
-    "severity_low": 2020,
-    "severity_ok": 13088
+    "severity_low": 2034,
+    "severity_ok": 13074
   },
   "severity_matrix": {
     "arista_eos": {
@@ -4541,27 +4541,27 @@
     {
       "source_codec": "opnsense",
       "target_codec": "aruba_aoscx",
-      "drifted_total": 34
+      "drifted_total": 35
     },
     {
       "source_codec": "opnsense",
       "target_codec": "cisco_iosxr",
-      "drifted_total": 31
+      "drifted_total": 32
     },
     {
       "source_codec": "opnsense",
       "target_codec": "cisco_nxos",
-      "drifted_total": 33
+      "drifted_total": 34
     },
     {
       "source_codec": "opnsense",
       "target_codec": "opnsense",
-      "drifted_total": 0
+      "drifted_total": 3
     },
     {
       "source_codec": "opnsense",
       "target_codec": "vyos",
-      "drifted_total": 20
+      "drifted_total": 21
     },
     {
       "source_codec": "vyos",

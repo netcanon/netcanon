@@ -418,17 +418,15 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      OPNsense's two-block model (``<gateways>/<gateway_item>`` +
-      ``<staticroutes>/<route>``) requires a JOIN to resolve named
-      gateway references to bare next-hop IPs.  The opnsense
-      codec capability matrix lists ``/staticroutes/route`` as
-      supported in the kitchen-sink XML but parser wire-up is
-      incomplete; cross-pair render emits nothing on the Arista
-      target until parse lands.  The OPNsense default-route idiom
-      (implicit ``<gateway>`` on the WAN zone) requires
-      synthesising a ``0.0.0.0/0`` canonical record on parse —
-      currently not done.  Arista target accepts ``ip route
-      0.0.0.0/0 <gw>`` natively when canonical surfaces it.
+      OPNsense parse now resolves the two-block model — the default
+      route from ``<gateway_item defaultgw=1>`` and each
+      ``<staticroutes>/<route>`` with its named gateway JOINed to a
+      next-hop IP (#15) — so Arista renders ``ip route 0.0.0.0/0
+      <gw>`` and the destination + next-hop round-trip.  Kept lossy:
+      Arista drops the per-route description (declared lossy on the
+      Arista codec), so a route carrying ``<descr>`` drifts on the
+      round-trip.  An unresolvable / dynamic-DHCP gateway is dropped
+      on parse rather than emitted as a bogus next-hop.
     references: [opnsense-gateways, arista-routing-cg]
 
   # ── Tier 2 — auto-translate with review ──
