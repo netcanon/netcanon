@@ -71,6 +71,23 @@ _CANON_TO_NXOS_PRIV = {
 }
 
 
+def _render_management_plane(tree: CanonicalIntent) -> list[str]:
+    """Domain / DNS / NTP / syslog lines (promotion #4).  NX-OS render-dropped
+    these until the wire-up; grammar mirrors the codec's own real fixtures
+    (``ip domain-name`` / ``ip name-server`` / ``ntp server`` / ``logging
+    server``).  Parse harvests each back (see ``_parse_globals``).  Returns a
+    trailing ``""`` separator only when at least one line was emitted."""
+    out: list[str] = []
+    if tree.domain:
+        out.append(f"ip domain-name {tree.domain}")
+    out.extend(f"ip name-server {srv}" for srv in tree.dns_servers)
+    out.extend(f"ntp server {srv}" for srv in tree.ntp_servers)
+    out.extend(f"logging server {srv}" for srv in tree.syslog_servers)
+    if out:
+        out.append("")
+    return out
+
+
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Cisco NX-OS config text."""
     hostname = tree.hostname or "switch"
@@ -83,6 +100,9 @@ def render_intent(tree: CanonicalIntent) -> str:
     lines.append(f"hostname {hostname}")
     lines.append(f"vdc {hostname} id 1")
     lines.append("")
+
+    # ── Management plane — domain / DNS / NTP / syslog (promotion #4) ──
+    lines.extend(_render_management_plane(tree))
 
     # ── Render-derived feature block ──
     features = _derive_features(tree)

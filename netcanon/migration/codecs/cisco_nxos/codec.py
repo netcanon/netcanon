@@ -119,6 +119,14 @@ class CiscoNXOSCodec(CodecBase):
         supported=[
             # System
             "/system/hostname",
+            # Management plane — domain / DNS / NTP / syslog (promotion #4):
+            # parse harvest + render (`ip domain-name` / `ip name-server` /
+            # `ntp server` / `logging server`), grammar from the codec's own
+            # real fixtures.
+            "/system/domain",
+            "/system/dns-server",
+            "/system/ntp-server",
+            "/system/syslog-server",
             # Interfaces — name + basic L3
             "/interfaces/interface/name",
             "/interfaces/interface/config/description",
@@ -492,24 +500,8 @@ class CiscoNXOSCodec(CodecBase):
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──
             UnsupportedPath(
-                path="/system/domain",
-                reason="Render emits no system domain-name; intent.domain is dropped on migration.",
-            ),
-            UnsupportedPath(
                 path="/system/timezone",
                 reason="Render emits no clock/timezone stanza; intent.timezone is dropped on migration.",
-            ),
-            UnsupportedPath(
-                path="/system/dns-server",
-                reason="Render emits no name-server config; intent.dns_servers are dropped on migration.",
-            ),
-            UnsupportedPath(
-                path="/system/ntp-server",
-                reason="Render emits no NTP config; intent.ntp_servers are dropped on migration.",
-            ),
-            UnsupportedPath(
-                path="/system/syslog-server",
-                reason="Render emits no logging/syslog config; intent.syslog_servers are dropped on migration.",
             ),
             UnsupportedPath(
                 path="/dhcp-servers/pool",

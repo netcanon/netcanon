@@ -61,8 +61,11 @@ def test_timezone_declared_unsupported_on_every_codec() -> None:
 # Codecs that genuinely round-trip syslog (parse harvest + render emit) and
 # therefore list `/system/syslog-server` in their EXPLICIT ``supported`` set.
 # juniper_junos: ``set system syslog host <ip>``.  cisco_iosxe_cli + arista_eos:
-# ``logging host <ip>`` (promotions #1/#11).
-_SYSLOG_WIRED = {"arista_eos", "cisco_iosxe_cli", "juniper_junos"}
+# ``logging host <ip>`` (promotions #1/#11).  cisco_nxos: ``logging server
+# <ip>`` (promotion #4 — part of the NX-OS management-plane wire-up).
+_SYSLOG_WIRED = {
+    "arista_eos", "cisco_iosxe_cli", "cisco_nxos", "juniper_junos",
+}
 
 
 def test_syslog_declared_supported_matches_wired_roster() -> None:

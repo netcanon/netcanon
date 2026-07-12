@@ -194,8 +194,9 @@ and the codec's `CapabilityMatrix` declarations:
   bug, not a gap.  `dns_servers` / `ntp_servers` are wired on most
   codecs; `timezone` and `syslog_servers` are wired on only a subset
   (`timezone` on none as of this release; `syslog_servers` on
-  `juniper_junos`, `cisco_iosxe_cli`, and `arista_eos` — `logging host
-  <ip>` / `set system syslog host <ip>`, promotions #1/#11) — for these
+  `juniper_junos`, `cisco_iosxe_cli`, `arista_eos` — `logging host
+  <ip>` / `set system syslog host <ip>`, promotions #1/#11 — and
+  `cisco_nxos` `logging server <ip>`, promotion #4) — for these
   two, an unwired codec is a known gap (declared `unsupported` in its
   `CapabilityMatrix` where the drop should raise the cross-vendor
   banner, otherwise dropped silently on parse), not a bug.  Per-codec

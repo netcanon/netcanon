@@ -90,6 +90,27 @@ _HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 #: after ``version`` is the NX-OS release string.
 _VERSION_RE = re.compile(r"^version\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 
+# ── Management-plane globals (promotion #4) — NX-OS render-dropped these
+#    until this wire-up.  Grammar attested in the codec's own real fixtures:
+#    ``ip domain-name lab.karneliuk.com``, ``ntp server 10.1.1.1 use-vrf
+#    default`` / ``ntp server 10.2.2.2 prefer use-vrf default``,
+#    ``logging server 10.125.1.171 6 port 7008``. ──
+#: ``ip domain-name <fqdn>`` — NX-OS keeps the ``ip`` prefix (unlike IOS-XR).
+_DOMAIN_RE = re.compile(r"^ip\s+domain-name\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
+#: ``ip name-server [vrf <name>] <ip> [<ip> ...]`` — multiple resolvers per line.
+_NAME_SERVER_RE = re.compile(
+    r"^ip\s+name-server\s+(?:vrf\s+\S+\s+)?(.+)$", re.IGNORECASE | re.MULTILINE,
+)
+#: ``ntp server <ip> [prefer] [use-vrf <name>]`` — the address is the first
+#: token; the ``prefer`` / ``use-vrf`` tails follow and are dropped.
+_NTP_SERVER_RE = re.compile(r"^ntp\s+server\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+#: Syslog destinations — NX-OS spells them ``logging server <ip> [severity]
+#: [port N] [use-vrf X]``, but ``logging`` also fronts non-destination
+#: sub-commands (``logging console``, ``logging monitor``, ``logging level``).
+#: Harvest the first IP-literal token per ``logging`` line and validate with
+#: :mod:`ipaddress` (mirrors cisco_iosxe_cli / arista_eos ``_SYSLOG_LINE_RE``).
+_SYSLOG_LINE_RE = re.compile(r"^\s*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
+
 _IFACE_RE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
@@ -408,6 +429,9 @@ def parse_intent(raw: str) -> CanonicalIntent:
     intent.hostname = _extract_hostname(raw)
     intent.source_version = _extract_version(raw)
 
+    # Management-plane globals (domain / DNS / NTP / syslog) — promotion #4.
+    _parse_globals(raw, intent)
+
     # Distributed Anycast Gateway: the chassis-wide MAC (`fabric
     # forwarding anycast-gateway-mac`).  Per-SVI anycast-mode markers are
     # harvested in :func:`_parse_interfaces`.
@@ -484,6 +508,34 @@ def parse_intent(raw: str) -> CanonicalIntent:
 def _extract_hostname(raw: str) -> str:
     m = _HOSTNAME_RE.search(raw)
     return m.group(1) if m else ""
+
+
+def _parse_globals(raw: str, intent: CanonicalIntent) -> None:
+    """Harvest the NX-OS management-plane globals (promotion #4) that the
+    codec render-dropped until this wire-up: ``ip domain-name`` → domain,
+    ``ip name-server`` → dns_servers, ``ntp server`` → ntp_servers,
+    ``logging server``/``logging <ip>`` → syslog_servers.  Mutates *intent*
+    in place (keeps :func:`parse_intent` a flat sequence of phase calls)."""
+    m = _DOMAIN_RE.search(raw)
+    if m:
+        intent.domain = m.group(1)
+    for m in _NAME_SERVER_RE.finditer(raw):
+        # ``ip name-server 1.1.1.1 8.8.8.8`` is two resolvers on one line.
+        for token in m.group(1).split():
+            intent.dns_servers.append(token)
+    for m in _NTP_SERVER_RE.finditer(raw):
+        intent.ntp_servers.append(m.group(1))
+    for m in _SYSLOG_LINE_RE.finditer(raw):
+        # First IP-literal token on the ``logging`` line is the syslog host;
+        # non-destination sub-commands carry no IP token.  De-dup, first-seen.
+        for token in m.group(1).split():
+            try:
+                ipaddress.ip_address(token)
+            except ValueError:
+                continue
+            if token not in intent.syslog_servers:
+                intent.syslog_servers.append(token)
+            break
 
 
 def _extract_version(raw: str) -> str:

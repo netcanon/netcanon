@@ -44,12 +44,13 @@ translatable with caveats:
   VTEP (source-interface, UDP port, multicast group, flood list), and
   the symmetric-IRB **L3VNI** (`vrf context X / vni N`)
 
-> **Management-plane caveat.**  When NX-OS is the **target**, the
-> codec renders no `ip domain-name` / `ip name-server` / `ntp server`
-> / `logging server` / `ip dhcp` / `radius-server` config — those
-> Tier-1/2 surfaces are declared `unsupported` (the live validation
-> report flags the loss rather than reporting `severity: ok`).  See
-> [What we don't do](#what-we-dont-do).
+> **Management-plane caveat.**  When NX-OS is the **target**, the codec
+> now renders `ip domain-name` / `ip name-server` / `ntp server` /
+> `logging server` (promotion #4 — domain / DNS / NTP / syslog
+> round-trip), but still emits no `ip dhcp` / `radius-server` / `clock
+> timezone` config — those surfaces stay declared `unsupported` (the
+> live validation report flags the loss rather than reporting
+> `severity: ok`).  See [What we don't do](#what-we-dont-do).
 
 ## L3 redundancy: HSRP + IPv4 Distributed Anycast Gateway
 
@@ -136,7 +137,8 @@ identical IPv6-anycast deferral).
 **Management-plane Tier-1/2 surfaces NX-OS render drops** (declared
 `unsupported` so the loss is visible, not silent):
 
-- `domain`, `timezone`, DNS / NTP / syslog servers
+- `timezone` (`domain`, DNS, NTP and syslog servers now round-trip —
+  promotion #4)
 - DHCP server pools
 - RADIUS servers (host + shared secret)
 - IPv6 anycast-gateway
@@ -187,9 +189,10 @@ source are the highest-value contributions — see
 - **`nve1` is the VTEP, not a routed port.**  The codec intercepts
   `interface nve1` as the VXLAN tunnel-endpoint container (`tunnel`
   kind), not an L3 interface.
-- **Management services don't carry.**  DNS / NTP / syslog / DHCP /
-  RADIUS / domain / timezone are render-dropped on an NX-OS target —
-  re-apply them on the device.  The validation panel flags each.
+- **Some management services don't carry.**  DHCP / RADIUS / timezone
+  are render-dropped on an NX-OS target — re-apply them on the device.
+  The validation panel flags each.  (DNS / NTP / syslog / domain now
+  round-trip — promotion #4.)
 - **`feature` lines are regenerated.**  The renderer derives `feature
   interface-vlan` / `feature lacp` / `feature hsrp` etc. from the
   canonical shape; it does not preserve arbitrary source `feature`
