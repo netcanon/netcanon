@@ -495,11 +495,10 @@ per_field_expectation:
   vxlan_vnis:
     disposition: unsupported
     reason: >
-      OPNsense codec capability matrix lists ``/vxlan-vnis/vni``
-      under unsupported with rationale "VXLAN not modelled —
-      OPNsense is a firewall codec."  Cisco IOS-XE codec also
-      lists ``/vxlan-vnis/vni`` as unsupported pending Catalyst
-      VXLAN demand.  Cross-pair drops VXLAN entirely.
+      cisco_iosxe_cli now parses + renders VXLAN-EVPN (promotion #16),
+      but the OPNsense codec lists ``/vxlan-vnis/vni`` under unsupported
+      ("VXLAN not modelled — OPNsense is a firewall codec"), so the
+      overlay drops on the OPNsense render.  Target-driven unsupported.
 
   evpn_type5_routes:
     disposition: unsupported

@@ -58,6 +58,7 @@ from ...canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVlan,
     CanonicalVRRPGroup,
+    CanonicalVxlan,
 )
 from .._helpers import (
     _is_link_local_v6,
@@ -268,6 +269,33 @@ _HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _VERSION_RE = re.compile(r"^version\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _VLAN_RE = re.compile(r"^vlan\s+(\d+)", re.IGNORECASE)
 _VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
+
+# ── VXLAN / EVPN overlay (promotion #16) ──
+#: ``vlan configuration <N>`` opens the L2/L3 VNI binding block (distinct
+#: from the ``vlan <N>`` VLAN-database stanza — ``_VLAN_RE`` deliberately
+#: won't match it because ``configuration`` is not a digit).
+_VLAN_CONFIG_RE = re.compile(r"^vlan\s+configuration\s+(\d+)\s*$", re.IGNORECASE)
+#: ``member [evpn-instance <M>] vni <V>`` inside ``vlan configuration`` →
+#: the VLAN↔VNI binding.  The optional ``evpn-instance <M>`` marks an L2
+#: VNI; a bare ``member vni <V>`` marks the L3VNI core VLAN.  Both spellings
+#: carry the same canonical ``vlan_id → vni`` mapping; the L2-vs-L3VNI
+#: distinction is taken from the ``interface nve1`` member line instead.
+_VLAN_CONFIG_MEMBER_RE = re.compile(
+    r"^\s+member\s+(?:evpn-instance\s+\d+\s+)?vni\s+(\d+)\s*$", re.IGNORECASE,
+)
+#: ``source-interface <name>`` inside ``interface nve1`` → the switch-level
+#: VTEP source, broadcast onto every L2 CanonicalVxlan record.
+_NVE_SOURCE_IF_RE = re.compile(r"^\s+source-interface\s+(\S+)\s*$", re.IGNORECASE)
+#: ``member vni <V> [mcast-group <ip>] | [vrf <name>]`` inside ``interface
+#: nve1``.  Group 2 (mcast-group) marks an L2 VNI's flood-and-learn group;
+#: group 3 (vrf) marks an L3VNI bound to a VRF (harvested onto
+#: CanonicalRoutingInstance.l3_vni).  A bare ``member vni <V>`` is an L2 VNI
+#: with head-end (BGP-EVPN) replication.
+_NVE_MEMBER_VNI_RE = re.compile(
+    r"^\s+member\s+vni\s+(\d+)"
+    r"(?:\s+mcast-group\s+(\d+\.\d+\.\d+\.\d+)|\s+vrf\s+(\S+))?\s*$",
+    re.IGNORECASE,
+)
 _STATIC_ROUTE_RE = re.compile(
     r"^ip\s+route\s+(?:vrf\s+(\S+)\s+)?"
     r"(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)"
@@ -519,6 +547,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # "KNOWN DATA-LOSS BUGS / BUG 1".
     _synthesize_vlans_from_svis(intent)
 
+    # VXLAN-EVPN overlay (promotion #16).  ``interface nve1`` was
+    # intercepted by _parse_interfaces (no generic CanonicalInterface);
+    # its overlay body + the ``vlan configuration`` VLAN↔VNI bindings are
+    # harvested here.  L3VNIs land on the matching routing_instance's
+    # l3_vni (parsed just above), so this must run after routing_instances.
+    intent.vxlan_vnis, _l3vni_by_vrf = _parse_vxlan(raw)
+    for ri in intent.routing_instances:
+        if ri.name in _l3vni_by_vrf:
+            ri.l3_vni = _l3vni_by_vrf[ri.name]
+
     # Static routes
     intent.static_routes = _parse_static_routes(raw)
 
@@ -709,10 +747,95 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
     )
 
 
+def _parse_vxlan(raw: str) -> tuple[list[CanonicalVxlan], dict[str, int]]:
+    """Harvest the IOS-XE EVPN-VXLAN overlay (promotion #16).
+
+    Returns ``(l2_records, l3vni_by_vrf)``:
+
+    * ``l2_records`` — one :class:`CanonicalVxlan` per L2 VLAN↔VNI binding.
+      The ``vlan_id → vni`` mapping comes from ``vlan configuration <N> /
+      member [evpn-instance <M>] vni <V>``; the VTEP ``source-interface``
+      and per-VNI ``mcast-group`` come from ``interface nve1``.
+    * ``l3vni_by_vrf`` — ``{vrf_name: l3vni}`` from the ``interface nve1``
+      ``member vni <V> vrf <name>`` lines (the L3VNI→VRF binding, wired onto
+      :attr:`CanonicalRoutingInstance.l3_vni` by the caller).
+
+    ``interface nve1`` itself is intercepted in :func:`_parse_interfaces`
+    (``_open`` returns ``None``) so it never materialises as a generic
+    interface; this function is the sole consumer of its overlay body.
+    """
+    # Pass 1: vni → vlan_id from ``vlan configuration <N> / member ... vni``.
+    vlan_by_vni: dict[int, int] = {}
+    current_vlan: int | None = None
+    for line in raw.splitlines():
+        cm = _VLAN_CONFIG_RE.match(line)
+        if cm:
+            current_vlan = int(cm.group(1))
+            continue
+        if current_vlan is not None:
+            mm = _VLAN_CONFIG_MEMBER_RE.match(line)
+            if mm:
+                vlan_by_vni[int(mm.group(1))] = current_vlan
+                continue
+            if line and not line[0].isspace():
+                current_vlan = None
+
+    # Pass 2: ``interface nve1`` — VTEP source, L2 mcast, L3VNI→VRF.
+    source_iface = ""
+    l2_vnis: list[int] = []
+    mcast_by_vni: dict[int, str] = {}
+    l3vni_by_vrf: dict[str, int] = {}
+    in_nve = False
+    for line in raw.splitlines():
+        im = _IFACE_RE.match(line)
+        if im:
+            in_nve = im.group(1).lower().startswith("nve")
+            continue
+        if line and not line[0].isspace():
+            in_nve = False
+            continue
+        if not in_nve:
+            continue
+        sm = _NVE_SOURCE_IF_RE.match(line)
+        if sm:
+            source_iface = sm.group(1)
+            continue
+        vm = _NVE_MEMBER_VNI_RE.match(line)
+        if vm:
+            vni = int(vm.group(1))
+            if vm.group(3):  # ``member vni N vrf <name>`` → L3VNI binding
+                l3vni_by_vrf[vm.group(3)] = vni
+            else:            # L2 member (bare or inline ``mcast-group``)
+                l2_vnis.append(vni)
+                if vm.group(2):
+                    mcast_by_vni[vni] = vm.group(2)
+
+    records = [
+        CanonicalVxlan(
+            vlan_id=vlan_by_vni[vni],
+            vni=vni,
+            source_interface=source_iface,
+            mcast_group=mcast_by_vni.get(vni, ""),
+        )
+        for vni in l2_vnis
+        if vni in vlan_by_vni
+    ]
+    return records, l3vni_by_vrf
+
+
 def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     """Extract interface stanzas from IOS config text."""
-    def _open(m: re.Match[str]) -> dict[str, Any]:
+    def _open(m: re.Match[str]) -> dict[str, Any] | None:
         iface_name = m.group(1)
+        # VTEP (``interface nve1``) is a VXLAN-EVPN overlay container, not a
+        # routed/switched port: its source-interface + member-vni sub-commands
+        # are harvested by :func:`_parse_vxlan`.  Returning None leaves the
+        # stanza open-but-unmaterialised (``scan_stanzas`` skips its indented
+        # body while ``current is None``) so it does NOT become a generic
+        # CanonicalInterface — mirrors cisco_nxos's nve1 interception
+        # (promotion #16).
+        if iface_name.lower().startswith("nve"):
+            return None
         return {
             "name": iface_name,
             "description": "",

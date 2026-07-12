@@ -106,11 +106,14 @@ class TestExistingDeclarationsPreserved:
         # invariant.
         caps = CiscoIOSXECLICodec().capabilities
         unsupported_paths = {up.path for up in caps.unsupported}
+        # NB: the three ``/vxlan-vnis/*`` paths were historically pinned here
+        # but graduated in promotion #16 — the codec now parses ``interface
+        # nve1`` + renders the VTEP, so /vxlan-vnis/{vni,source-interface} are
+        # supported and /vxlan-vnis/udp-port is lossy.  See
+        # ``test_capability_matrix_vrf_lossy.py::TestVxlanNveSupported`` for the
+        # corrected invariant.  This test now only pins the ACL-era survivor.
         for required in (
             "/interfaces/interface/subinterfaces/subinterface/ipv6",
-            "/vxlan-vnis/vni",
-            "/vxlan-vnis/source-interface",
-            "/vxlan-vnis/udp-port",
         ):
             assert required in unsupported_paths, (
                 f"existing UnsupportedPath {required!r} dropped — "

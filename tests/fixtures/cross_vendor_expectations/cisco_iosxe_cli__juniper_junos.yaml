@@ -583,47 +583,41 @@ per_field_expectation:
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN ──
 
   vxlan_vnis:
-    disposition: unsupported
+    disposition: lossy
     reason: >
-      Cisco IOS-XE codec capability matrix lists
-      ``/vxlan-vnis/vni`` under unsupported with rationale "IOS-XE
-      VXLAN mappings (``interface nve1 / member vni <N>``) parse-
-      and-ignore in v1.  CanonicalVxlan schema exists; wire-up
-      deferred until demand arrives for Catalyst-to-Arista (or
-      Catalyst-to-Junos) migrations."  Junos codec advertises
-      ``/vxlan-vnis/vni`` as supported, so the cross-pair drops to
-      unsupported.
+      Promotion #16 wired IOS-XE VXLAN-EVPN: the codec now intercepts
+      ``interface nve1`` and correlates the ``vlan configuration N /
+      member [evpn-instance M] vni V`` bindings, so the L2 VLAN↔VNI
+      mapping + VTEP source-interface survive to Junos ``set vlans <name>
+      vxlan vni X`` + ``vtep-source-interface``.  The one sub-detail that
+      drops on this direction is the per-VNI multicast group — Junos uses
+      BGP-EVPN ingress replication — so the field is lossy overall (see
+      vxlan_vnis[].mcast_group).  Mirrors arista_eos__juniper_junos.
     references: [cisco-evpn-vxlan-cg, junos-evpn-overview, junos-evpn-irb-example]
 
   vxlan_vnis[].vlan_id:
-    disposition: unsupported
-    reason: "Same as vxlan_vnis (Cisco parse-and-ignore in v1)."
+    disposition: good
 
   vxlan_vnis[].vni:
-    disposition: unsupported
-    reason: "Same as vxlan_vnis (Cisco parse-and-ignore in v1)."
+    disposition: good
 
   vxlan_vnis[].mcast_group:
-    disposition: unsupported
-    reason: "Same as vxlan_vnis (Cisco parse-and-ignore in v1)."
+    disposition: lossy
+    reason: >
+      IOS-XE ``member vni N mcast-group <addr>`` has no direct Junos
+      EVPN-VXLAN data-plane equivalent (Junos uses BGP-EVPN signalled
+      ingress replication by default), so the canonical mcast_group is
+      dropped on the Junos render.  Mirrors arista_eos__juniper_junos.
 
   vxlan_vnis[].flood_list:
-    disposition: unsupported
-    reason: "Same as vxlan_vnis (Cisco parse-and-ignore in v1)."
+    disposition: lossy
+    reason: >
+      Head-end static ingress-replication peer IPs have no per-VNI nve1
+      grammar on the IOS-XE side (declared lossy on the codec) and Junos
+      derives them from BGP-EVPN — the explicit flood_list drops.
 
   vxlan_vnis[].source_interface:
-    disposition: unsupported
-    reason: >
-      Cisco IOS-XE codec capability matrix lists
-      ``/vxlan-vnis/source-interface`` under unsupported.  Same
-      scope as ``/vxlan-vnis/vni`` — both land when Catalyst VXLAN
-      demand arrives.
-
-  vxlan_vnis[].udp_port:
-    disposition: unsupported
-    reason: >
-      Cisco IOS-XE codec capability matrix lists
-      ``/vxlan-vnis/udp-port`` under unsupported.
+    disposition: good
 
   evpn_type5_routes:
     disposition: unsupported
@@ -687,12 +681,11 @@ per_field_expectation:
   routing_instances[].l3_vni:
     disposition: good
     note: >
-      Same as routing_instances — Wave 10β re-flip.  l3_vni is None
-      on every populated fixture; the field round-trips by being
-      uniformly absent.  Flips back to ``lossy`` if a future fixture
-      exercises a populated L3 VNI on a Cisco source against the
-      Junos render path (which currently doesn't emit
-      ``vrf-target ... l3vni``).
+      Promotion #16 wired the L3VNI both ways: the IOS-XE source now
+      harvests ``member vni N vrf <name>`` under nve1 onto
+      CanonicalRoutingInstance.l3_vni, and the Junos render carries it.
+      The ciscolive EVPN-leaf fixture exercises a populated L3 VNI
+      (cml_demo → 100200) and it round-trips on this pair.
 
   # ── Tier 3 — informational only ──
 

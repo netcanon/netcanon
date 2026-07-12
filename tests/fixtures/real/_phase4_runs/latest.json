@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-12T10:08:08+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260712T100358Z.json",
-  "mesh_run_started_utc": "2026-07-12T10:03:52+00:00",
+  "started_utc": "2026-07-12T17:00:43+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260712T164327Z.json",
+  "mesh_run_started_utc": "2026-07-12T16:43:21+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4134,19 +4134,19 @@
     }
   ],
   "aggregate": {
-    "ALIGNED": 1620,
+    "ALIGNED": 1658,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 1231,
-    "EXPECTED_UNSUPPORTED": 729,
-    "METHODOLOGY_ISSUE_under": 922,
+    "EXPECTED_LOSSY": 1229,
+    "EXPECTED_UNSUPPORTED": 724,
+    "METHODOLOGY_ISSUE_under": 925,
     "METHODOLOGY_ISSUE_over": 25,
-    "STRUCTURAL_ONLY": 1194,
-    "TRIVIAL_EMPTY": 9494,
-    "fields_total": 15220,
+    "STRUCTURAL_ONLY": 1179,
+    "TRIVIAL_EMPTY": 9554,
+    "fields_total": 15299,
     "severity_high": 5,
     "severity_medium": 107,
-    "severity_low": 2034,
-    "severity_ok": 13074
+    "severity_low": 2022,
+    "severity_ok": 13165
   },
   "severity_matrix": {
     "arista_eos": {
@@ -4331,12 +4331,12 @@
     {
       "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_iosxr",
-      "drifted_total": 31
+      "drifted_total": 32
     },
     {
       "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_nxos",
-      "drifted_total": 31
+      "drifted_total": 30
     },
     {
       "source_codec": "cisco_iosxe_cli",
@@ -4426,7 +4426,7 @@
     {
       "source_codec": "cisco_nxos",
       "target_codec": "cisco_iosxe_cli",
-      "drifted_total": 39
+      "drifted_total": 33
     },
     {
       "source_codec": "cisco_nxos",
@@ -4586,7 +4586,7 @@
     {
       "source_codec": "vyos",
       "target_codec": "cisco_iosxe_cli",
-      "drifted_total": 18
+      "drifted_total": 21
     },
     {
       "source_codec": "vyos",
@@ -5274,43 +5274,40 @@
           "severity": "ok"
         },
         "vxlan_vnis": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "EXPECTED_UNSUPPORTED",
-          "severity": "ok",
-          "drift_detail": {
-            "source": [
-              {
-                "vlan_id": 110,
-                "vni": 10110,
-                "mcast_group": "",
-                "flood_list": [],
-                "source_interface": "Loopback1",
-                "udp_port": 4789
-              },
-              {
-                "vlan_id": 111,
-                "vni": 10111,
-                "mcast_group": "",
-                "flood_list": [],
-                "source_interface": "Loopback1",
-                "udp_port": 4789
-              },
-              {
-                "vlan_id": 210,
-                "vni": 10210,
-                "mcast_group": "",
-                "flood_list": [],
-                "source_interface": "Loopback1",
-                "udp_port": 4789
-              },
-              "... and 3 more"
-            ],
-            "target": [],
-            "drift": "all 6 vxlan_vnis dropped",
-            "source_count": 6,
-            "target_count": 0
-          }
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].vlan_id": {
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].vni": {
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].mcast_group": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].source_interface": {
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].flood_list": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
         },
         "evpn_type5_routes": {
           "actual": "trivially_preserved",
@@ -5383,7 +5380,7 @@
                   "50101:50101"
                 ],
                 "description": "",
-                "l3_vni": null
+                "l3_vni": 50101
               },
               {
                 "name": "Tenant_A_OPZone_1",
@@ -5401,12 +5398,6 @@
               "... and 7 more"
             ],
             "drift": {
-              "routing_instances[1] {'name': 'Tenant_A_OPZone'}": {
-                "l3_vni": {
-                  "source": 50101,
-                  "target": null
-                }
-              },
               "routing_instances[2] {'name': 'Tenant_A_OPZone_1'}": {
                 "instance_type": {
                   "source": "mac-vrf",
@@ -5419,12 +5410,6 @@
                   "target": "vrf"
                 }
               },
-              "routing_instances[4] {'name': 'Tenant_B_OPZone'}": {
-                "l3_vni": {
-                  "source": 50201,
-                  "target": null
-                }
-              },
               "routing_instances[5] {'name': 'Tenant_B_OPZone_1'}": {
                 "instance_type": {
                   "source": "mac-vrf",
@@ -5435,12 +5420,6 @@
                 "instance_type": {
                   "source": "mac-vrf",
                   "target": "vrf"
-                }
-              },
-              "routing_instances[7] {'name': 'Tenant_C_OPZone'}": {
-                "l3_vni": {
-                  "source": 50301,
-                  "target": null
                 }
               },
               "routing_instances[8] {'name': 'Tenant_C_OPZone_1'}": {
@@ -5498,20 +5477,20 @@
         }
       },
       "summary": {
-        "ALIGNED": 3,
+        "ALIGNED": 7,
         "CODEC_BUG": 1,
         "EXPECTED_LOSSY": 4,
-        "EXPECTED_UNSUPPORTED": 1,
+        "EXPECTED_UNSUPPORTED": 0,
         "METHODOLOGY_ISSUE_under": 1,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
-        "TRIVIAL_EMPTY": 10,
-        "fields_total": 20,
+        "TRIVIAL_EMPTY": 12,
+        "fields_total": 25,
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
         "severity_low": 1,
-        "severity_ok": 18
+        "severity_ok": 23
       }
     },
     {
@@ -6256,43 +6235,40 @@
           "severity": "ok"
         },
         "vxlan_vnis": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "EXPECTED_UNSUPPORTED",
-          "severity": "ok",
-          "drift_detail": {
-            "source": [
-              {
-                "vlan_id": 110,
-                "vni": 10110,
-                "mcast_group": "",
-                "flood_list": [],
-                "source_interface": "Loopback1",
-                "udp_port": 4789
-              },
-              {
-                "vlan_id": 111,
-                "vni": 10111,
-                "mcast_group": "",
-                "flood_list": [],
-                "source_interface": "Loopback1",
-                "udp_port": 4789
-              },
-              {
-                "vlan_id": 120,
-                "vni": 10120,
-                "mcast_group": "",
-                "flood_list": [],
-                "source_interface": "Loopback1",
-                "udp_port": 4789
-              },
-              "... and 6 more"
-            ],
-            "target": [],
-            "drift": "all 9 vxlan_vnis dropped",
-            "source_count": 9,
-            "target_count": 0
-          }
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].vlan_id": {
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].vni": {
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].mcast_group": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].source_interface": {
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].flood_list": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
         },
         "evpn_type5_routes": {
           "actual": "trivially_preserved",
@@ -6301,116 +6277,10 @@
           "severity": "ok"
         },
         "routing_instances": {
-          "actual": "drifted",
+          "actual": "preserved",
           "expected": "lossy",
-          "variance": "EXPECTED_LOSSY",
-          "severity": "ok",
-          "drift_detail": {
-            "source": [
-              {
-                "name": "MGMT",
-                "instance_type": "vrf",
-                "route_distinguisher": "",
-                "rt_imports": [],
-                "rt_exports": [],
-                "description": "",
-                "l3_vni": null
-              },
-              {
-                "name": "Tenant_A_APP_Zone",
-                "instance_type": "vrf",
-                "route_distinguisher": "192.168.255.4:15003",
-                "rt_imports": [
-                  "15003:15003"
-                ],
-                "rt_exports": [
-                  "15003:15003"
-                ],
-                "description": "",
-                "l3_vni": 15003
-              },
-              {
-                "name": "Tenant_A_DB_Zone",
-                "instance_type": "vrf",
-                "route_distinguisher": "192.168.255.4:15004",
-                "rt_imports": [
-                  "15004:15004"
-                ],
-                "rt_exports": [
-                  "15004:15004"
-                ],
-                "description": "",
-                "l3_vni": 15004
-              },
-              "... and 2 more"
-            ],
-            "target": [
-              {
-                "name": "MGMT",
-                "instance_type": "vrf",
-                "route_distinguisher": "",
-                "rt_imports": [],
-                "rt_exports": [],
-                "description": "",
-                "l3_vni": null
-              },
-              {
-                "name": "Tenant_A_APP_Zone",
-                "instance_type": "vrf",
-                "route_distinguisher": "192.168.255.4:15003",
-                "rt_imports": [
-                  "15003:15003"
-                ],
-                "rt_exports": [
-                  "15003:15003"
-                ],
-                "description": "",
-                "l3_vni": null
-              },
-              {
-                "name": "Tenant_A_DB_Zone",
-                "instance_type": "vrf",
-                "route_distinguisher": "192.168.255.4:15004",
-                "rt_imports": [
-                  "15004:15004"
-                ],
-                "rt_exports": [
-                  "15004:15004"
-                ],
-                "description": "",
-                "l3_vni": null
-              },
-              "... and 2 more"
-            ],
-            "drift": {
-              "routing_instances[1] {'name': 'Tenant_A_APP_Zone'}": {
-                "l3_vni": {
-                  "source": 15003,
-                  "target": null
-                }
-              },
-              "routing_instances[2] {'name': 'Tenant_A_DB_Zone'}": {
-                "l3_vni": {
-                  "source": 15004,
-                  "target": null
-                }
-              },
-              "routing_instances[3] {'name': 'Tenant_A_OP_Zone'}": {
-                "l3_vni": {
-                  "source": 15001,
-                  "target": null
-                }
-              },
-              "routing_instances[4] {'name': 'Tenant_A_WEB_Zone'}": {
-                "l3_vni": {
-                  "source": 15002,
-                  "target": null
-                }
-              }
-            },
-            "source_count": 5,
-            "target_count": 5
-          }
+          "variance": "METHODOLOGY_ISSUE_under",
+          "severity": "low"
         },
         "raw_sections": {
           "actual": "trivially_preserved",
@@ -6450,20 +6320,20 @@
         }
       },
       "summary": {
-        "ALIGNED": 3,
+        "ALIGNED": 7,
         "CODEC_BUG": 1,
-        "EXPECTED_LOSSY": 4,
-        "EXPECTED_UNSUPPORTED": 1,
-        "METHODOLOGY_ISSUE_under": 1,
+        "EXPECTED_LOSSY": 3,
+        "EXPECTED_UNSUPPORTED": 0,
+        "METHODOLOGY_ISSUE_under": 2,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
-        "TRIVIAL_EMPTY": 10,
-        "fields_total": 20,
+        "TRIVIAL_EMPTY": 12,
+        "fields_total": 25,
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 1,
-        "severity_ok": 18
+        "severity_low": 2,
+        "severity_ok": 22
       }
     },
     {
@@ -6817,43 +6687,37 @@
         },
         "vxlan_vnis": {
           "actual": "trivially_preserved",
-          "expected": "unsupported",
+          "expected": "good",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
         "vxlan_vnis[].vlan_id": {
           "actual": "trivially_preserved",
-          "expected": "unsupported",
+          "expected": "good",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
         "vxlan_vnis[].vni": {
           "actual": "trivially_preserved",
-          "expected": "unsupported",
+          "expected": "good",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
         "vxlan_vnis[].mcast_group": {
           "actual": "trivially_preserved",
-          "expected": "unsupported",
+          "expected": "good",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
         "vxlan_vnis[].flood_list": {
           "actual": "trivially_preserved",
-          "expected": "unsupported",
+          "expected": "lossy",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
         "vxlan_vnis[].source_interface": {
           "actual": "trivially_preserved",
-          "expected": "unsupported",
-          "variance": "TRIVIAL_EMPTY",
-          "severity": "ok"
-        },
-        "vxlan_vnis[].udp_port": {
-          "actual": "trivially_preserved",
-          "expected": "unsupported",
+          "expected": "good",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
@@ -7018,7 +6882,7 @@
         },
         "routing_instances[].l3_vni": {
           "actual": "trivially_preserved",
-          "expected": "lossy",
+          "expected": "good",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
@@ -7246,13 +7110,13 @@
         "METHODOLOGY_ISSUE_under": 5,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
-        "TRIVIAL_EMPTY": 40,
-        "fields_total": 56,
+        "TRIVIAL_EMPTY": 39,
+        "fields_total": 55,
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
         "severity_low": 5,
-        "severity_ok": 50
+        "severity_ok": 49
       }
     },
     {

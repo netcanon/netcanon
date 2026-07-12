@@ -481,12 +481,12 @@ per_field_expectation:
   vxlan_vnis:
     disposition: unsupported
     reason: >
-      Both codecs declare every `/vxlan-vnis/*` path as `unsupported`
-      in their capability matrices: "VXLAN not modelled in this
-      NETCONF/OpenConfig stub codec.  CLI sibling defers VXLAN wire-
-      up until Catalyst demand arrives; NETCONF stays in lockstep."
-      CanonicalVxlan schema exists; cross-pair drops vxlan_vnis
-      entirely.
+      The CLI sibling (cisco_iosxe_cli) now parses + renders VXLAN-EVPN
+      (promotion #16 — ``interface nve1`` interception), but the
+      cisco_iosxe NETCONF/OpenConfig stub target still declares every
+      `/vxlan-vnis/*` path `unsupported` ("VXLAN not modelled in this
+      stub codec"), so the overlay drops on the NETCONF render.  Target-
+      driven unsupported.
     references: [iosxe-vxlan-cg, oc-evpn]
 
   evpn_type5_routes:

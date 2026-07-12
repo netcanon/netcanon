@@ -608,42 +608,34 @@ per_field_expectation:
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN ──
 
   vxlan_vnis:
-    disposition: unsupported
-    reason: >
-      Junos codec capability matrix lists ``/vxlan-vnis/vni``,
-      ``/vxlan-vnis/source-interface``, and ``/vxlan-vnis/udp-port``
-      under supported (GAP 6 + GAP-EVPN-2).  Cisco IOS-XE codec
-      capability matrix lists the same paths under unsupported
-      with rationale "IOS-XE VXLAN mappings (``interface nve1 /
-      member vni <N> associate vrf <name>``) parse-and-ignore in
-      v1.  CanonicalVxlan schema exists; wire-up deferred."
-      Cross-pair therefore emits no ``interface nve1`` blocks on
-      the Cisco target.
+    disposition: good
+    note: >
+      Promotion #16 wired the IOS-XE target render: cisco_iosxe_cli now
+      emits the ``vlan configuration N / member evpn-instance 1 vni V``
+      bindings + the ``interface nve1`` VTEP, so a Junos source's
+      ``set vlans <name> vxlan vni X`` + ``vtep-source-interface`` VLAN↔VNI
+      mappings survive to IOS-XE.  Only head-end static ingress-replication
+      + a custom UDP port drop (see the flood_list / udp_port sub-cells).
     references: [junos-evpn-overview, junos-evpn-irb-example, cisco-evpn-vxlan-cg]
 
   vxlan_vnis[].vlan_id:
-    disposition: unsupported
-    reason: "Same as vxlan_vnis (Cisco render-side wire-up deferred)."
+    disposition: good
 
   vxlan_vnis[].vni:
-    disposition: unsupported
-    reason: "Same as vxlan_vnis (Cisco render-side wire-up deferred)."
+    disposition: good
 
   vxlan_vnis[].mcast_group:
-    disposition: unsupported
-    reason: "Same as vxlan_vnis (Cisco render-side wire-up deferred)."
+    disposition: good
 
   vxlan_vnis[].flood_list:
-    disposition: unsupported
-    reason: "Same as vxlan_vnis (Cisco render-side wire-up deferred)."
+    disposition: lossy
+    reason: >
+      The IOS-XE NVE render has no per-VNI static ingress-replication
+      peer-list grammar (declared lossy on the codec), so an explicit
+      head-end flood_list drops on the IOS-XE render.
 
   vxlan_vnis[].source_interface:
-    disposition: unsupported
-    reason: "Same as vxlan_vnis (Cisco render-side wire-up deferred)."
-
-  vxlan_vnis[].udp_port:
-    disposition: unsupported
-    reason: "Same as vxlan_vnis (Cisco render-side wire-up deferred)."
+    disposition: good
 
   evpn_type5_routes:
     disposition: unsupported
@@ -711,13 +703,13 @@ per_field_expectation:
     reason: "Same as routing_instances (Cisco render-side wire-up deferred)."
 
   routing_instances[].l3_vni:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Junos's ``protocols evpn ip-prefix-routes vni N`` under the
       routing-instance maps to canonical
-      ``CanonicalRoutingInstance.l3_vni``.  Cisco's equivalent
-      (``member vni N vrf X`` under nve1) is parse-and-ignore in
-      v1; cross-pair render drops the L3 VNI.
+      ``CanonicalRoutingInstance.l3_vni``.  Promotion #16 wired the
+      IOS-XE render (``member vni N vrf X`` under nve1), so the L3 VNI
+      now round-trips on this cross-pair.
     references: [junos-evpn-irb-example, cisco-evpn-vxlan-cg]
 
   # ── Tier 3 — informational only ──

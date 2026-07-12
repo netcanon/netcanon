@@ -285,11 +285,11 @@ per_field_expectation:
   vxlan_vnis:
     disposition: unsupported
     reason: >
-      cisco_iosxe_cli capability matrix lists /vxlan-vnis/vni
-      under unsupported ("IOS-XE VXLAN mappings parse-and-ignore in
-      v1") and aruba_aoss capability matrix also lists the path
-      under unsupported ("VXLAN not modelled — AOS-S is a campus
-      L2/L3 codec").  Both ends explicitly absent.
+      cisco_iosxe_cli now parses + renders VXLAN-EVPN (promotion #16 —
+      ``interface nve1`` interception + ``vlan configuration`` binding),
+      but aruba_aoss lists /vxlan-vnis/vni under unsupported ("VXLAN not
+      modelled — AOS-S is a campus L2/L3 codec"), so the overlay drops on
+      the AOS-S render.  Target-driven unsupported.
 
   evpn_type5_routes:
     disposition: unsupported
