@@ -205,6 +205,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for ntp in tree.ntp_servers:
             out.append(f"ntp server {ntp}")
         out.append("!")
+    if tree.syslog_servers:
+        for syslog in tree.syslog_servers:
+            out.append(f"logging host {syslog}")
+        out.append("!")
 
     if tree.snmp is not None:
         if tree.snmp.community:

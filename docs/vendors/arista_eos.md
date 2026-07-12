@@ -19,9 +19,10 @@ corpus yet — operator captures from EOS 4.27+ are welcome (see
 
 [Tier 1](../CAPABILITIES.md#tier-1--auto-translatable-cross-vendor-stable):
 
-- `hostname`, `domain`, DNS / NTP servers (`syslog_servers` and
-  `timezone` are declared **unsupported** on this codec — see the
-  capability matrix; they do not round-trip)
+- `hostname`, `domain`, DNS / NTP / `syslog_servers` (`logging host
+  <ip>` harvest + render, promotion #11).  `timezone` is declared
+  **unsupported** on this codec — see the capability matrix; it does
+  not round-trip.
 - Interfaces — `Ethernet<N>` and QSFP-breakout `Ethernet<N>/<M>`,
   Loopback, Management1; descriptions, IPv4 + IPv6, VRF binding
 - VLANs — ID, name, tagged/untagged member lists

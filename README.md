@@ -286,8 +286,10 @@ across vendors.  Full per-codec matrix is in
   VRF binding), VLANs, static routes.  Every shipped codec parses +
   renders these fully (the experimental `cisco_iosxe` NETCONF stub
   excepted — it renders interfaces only).  DNS / NTP servers translate
-  on most codecs; `syslog` servers and `timezone` are wired on only a
-  subset — check the per-codec matrices in
+  on most codecs; `syslog` servers translate on `juniper_junos`,
+  `cisco_iosxe_cli`, and `arista_eos` (`logging host <ip>` /
+  `set system syslog host <ip>`), while `timezone` is wired on no codec
+  — check the per-codec matrices in
   [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md), and note that where a
   codec doesn't wire a field the source-side value is currently dropped
   without a banner.

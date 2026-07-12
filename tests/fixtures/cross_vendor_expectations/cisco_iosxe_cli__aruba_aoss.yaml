@@ -157,12 +157,11 @@ per_field_expectation:
     references: [system_services]
 
   syslog_servers:
-    disposition: good
-    note: >
-      Cisco ``logging host <addr>`` -> Aruba ``logging <addr>``.
-      Both vendors round-trip the host list cleanly.  Severity /
-      facility tokens (``logging trap informational``, ``logging
-      facility local6``) are not modelled — drop on round-trip.
+    disposition: unsupported
+    reason: >
+      aruba_aoss declares ``/system/syslog-server`` unsupported and its
+      render emits no logging/syslog stanza, so the source host list
+      drops on migration and the cross-vendor unsupported banner fires.
     references: [system_services]
 
   interfaces:

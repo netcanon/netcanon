@@ -121,6 +121,9 @@ class JunosCodec(CodecBase):
         device_classes=[DeviceClass.switch, DeviceClass.router],
         supported=[
             "/system/hostname",
+            # `set system syslog host <ip>` — parse+render; was implicit-
+            # supported, declared explicit alongside promotions #1/#11.
+            "/system/syslog-server",
             "/interfaces/interface/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
