@@ -1287,6 +1287,11 @@ def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
         if not dest:
             continue
         gateway_raw = kv.get("gateway", "")
+        # RouterOS admin distance (``distance=<n>``, default 1).  Landed on
+        # CanonicalStaticRoute.metric so a floating static (e.g.
+        # ``distance=250``) round-trips instead of silently reparsing to 0.
+        distance_raw = kv.get("distance", "")
+        metric = int(distance_raw) if distance_raw.isdigit() else 0
         # (#9) RouterOS combines an IP next-hop and an egress interface
         # into one ``gateway=<ip>%<iface>`` argument (also the shape of an
         # IPv6 link-local scoped next-hop, ``fe80::1%ether1``).  render.py
@@ -1301,6 +1306,7 @@ def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
                 destination=dest,
                 gateway=gw,
                 interface=egress,
+                metric=metric,
                 description=kv.get("comment", ""),
             )
         else:
@@ -1309,6 +1315,7 @@ def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
             route = CanonicalStaticRoute(
                 destination=dest,
                 gateway=gateway_raw,
+                metric=metric,
                 description=kv.get("comment", ""),
             )
         intent.static_routes.append(route)

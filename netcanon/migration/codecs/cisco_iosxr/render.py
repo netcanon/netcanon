@@ -212,13 +212,20 @@ def _render_bgp_rd(instances: list[CanonicalRoutingInstance]) -> list[str]:
 
 
 def _static_route_line(route) -> str:
-    """Format one static-route leaf: ``<dest> [<interface>] [<gateway>]``.
+    """Format one static-route leaf: ``<dest> [<interface>] [<gateway>] [<distance>]``.
 
     Empty components drop out (interface-only for ``Null0`` / blackhole;
-    gateway-only for a plain next-hop).
+    gateway-only for a plain next-hop).  The administrative distance
+    (metric) trails the next-hop and is emitted only when set; it is
+    clamped to 254 (IOS-XR's maximum installable distance — 255 marks a
+    route unreachable) so a donor-carried out-of-range value stays valid
+    CLI.
     """
-    nexthop = " ".join(t for t in (route.interface, route.gateway) if t)
-    return f"{route.destination} {nexthop}".rstrip()
+    parts = [route.destination]
+    parts.extend(t for t in (route.interface, route.gateway) if t)
+    if route.metric:
+        parts.append(str(min(route.metric, 254)))
+    return " ".join(parts).rstrip()
 
 
 def _render_router_static(routes: list) -> list[str]:

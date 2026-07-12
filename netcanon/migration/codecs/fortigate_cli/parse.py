@@ -728,10 +728,15 @@ def _apply_router_static(
         # FortiGate -> FortiGate (or any source -> FortiGate) pipe.
         # Ref: https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/522620/config-router-static
         comment_tokens = edit.settings.get("comment") or [""]
+        # FortiOS ``set distance <n>`` (admin distance, default 10).  Landed
+        # on CanonicalStaticRoute.metric so a floating static round-trips.
+        distance_tokens = edit.settings.get("distance") or [""]
+        metric = int(distance_tokens[0]) if distance_tokens[0].isdigit() else 0
         intent.static_routes.append(CanonicalStaticRoute(
             destination=destination,
             gateway=gateway_tokens[0],
             interface=device_tokens[0],
+            metric=metric,
             description=comment_tokens[0],
         ))
 
@@ -753,10 +758,13 @@ def _apply_router_static6(
         gateway_tokens = edit.settings.get("gateway") or [""]
         device_tokens = edit.settings.get("device") or [""]
         comment_tokens = edit.settings.get("comment") or [""]
+        distance_tokens = edit.settings.get("distance") or [""]
+        metric = int(distance_tokens[0]) if distance_tokens[0].isdigit() else 0
         intent.static_routes.append(CanonicalStaticRoute(
             destination=destination,
             gateway=gateway_tokens[0],
             interface=device_tokens[0],
+            metric=metric,
             description=comment_tokens[0],
         ))
 

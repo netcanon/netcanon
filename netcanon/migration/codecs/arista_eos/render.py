@@ -947,16 +947,22 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # ``ip route vrf MGMT ...`` source) rendered into the GLOBAL
             # table — a wrong-VRF emission, worse than a drop.
             vrf_prefix = f"vrf {route.vrf} " if route.vrf else ""
+            # The administrative distance trails the next-hop (``ip route
+            # <dest> <next-hop> <distance>``).  Emitted only when the
+            # canonical metric is set, so distance-less routes stay clean.
+            metric_suffix = f" {route.metric}" if route.metric else ""
             # EOS keys the address family off the keyword: IPv6 destinations
             # use ``ipv6 route`` (emitting ``ip route <v6>`` is invalid CLI).
             if ":" in (route.destination or ""):
                 out.append(
-                    f"ipv6 route {vrf_prefix}{route.destination} {target}"
+                    f"ipv6 route {vrf_prefix}{route.destination} "
+                    f"{target}{metric_suffix}"
                 )
                 has_v6 = True
             else:
                 out.append(
-                    f"ip route {vrf_prefix}{route.destination} {target}"
+                    f"ip route {vrf_prefix}{route.destination} "
+                    f"{target}{metric_suffix}"
                 )
                 has_v4 = True
         out.append("!")

@@ -628,6 +628,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 parts.append(f"gateway={route.gateway}")
             elif route.interface:
                 parts.append(f"gateway={route.interface}")
+            if route.metric:
+                # RouterOS admin distance (default 1); emit only when the
+                # canonical metric is set so ordinary routes stay clean.
+                parts.append(f"distance={route.metric}")
             lines.append(" ".join(parts))
         lines.append("")
 

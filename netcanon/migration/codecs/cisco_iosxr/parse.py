@@ -658,15 +658,24 @@ def _parse_static_leaf(
     dest = m.group(1)
     gateway = ""
     iface = ""
+    metric = 0
     for tok in m.group(2).split():
         try:
             ipaddress.ip_address(tok)  # IPv4 or IPv6 next-hop
             gateway = tok
         except ValueError:
-            if not iface:
+            if tok.isdigit():
+                # A bare integer trailing the next-hop is the administrative
+                # distance (metric).  IOS-XR interface names are never bare
+                # digits, so this is unambiguous — without it the distance
+                # was mis-filed as the egress interface and re-rendered as
+                # ``<dest> <distance> <gw>`` (invalid CLI).
+                metric = int(tok)
+            elif not iface:
                 iface = tok
     return CanonicalStaticRoute(
-        destination=dest, gateway=gateway, interface=iface, vrf=vrf,
+        destination=dest, gateway=gateway, interface=iface,
+        metric=metric, vrf=vrf,
     )
 
 
