@@ -992,6 +992,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append(f"        set gateway {route.gateway}")
         if route.interface:
             out.append(f'        set device "{route.interface}"')
+        if route.metric:
+            # FortiOS admin distance (default 10); emit only when the
+            # canonical metric is set so ordinary routes stay clean.
+            out.append(f"        set distance {route.metric}")
         if route.description:
             # FortiOS uses ``set comment`` (singular) on static-route
             # entries; max 255 chars.

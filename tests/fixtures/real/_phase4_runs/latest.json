@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-11T20:01:10+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260711T200109Z.json",
-  "mesh_run_started_utc": "2026-07-11T20:01:03+00:00",
+  "started_utc": "2026-07-12T08:55:54+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260712T085547Z.json",
+  "mesh_run_started_utc": "2026-07-12T08:55:41+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4134,19 +4134,19 @@
     }
   ],
   "aggregate": {
-    "ALIGNED": 1581,
+    "ALIGNED": 1620,
     "CODEC_BUG": 5,
     "EXPECTED_LOSSY": 1224,
     "EXPECTED_UNSUPPORTED": 729,
-    "METHODOLOGY_ISSUE_under": 947,
+    "METHODOLOGY_ISSUE_under": 908,
     "METHODOLOGY_ISSUE_over": 25,
     "STRUCTURAL_ONLY": 1194,
     "TRIVIAL_EMPTY": 9515,
     "fields_total": 15220,
     "severity_high": 5,
-    "severity_medium": 111,
-    "severity_low": 2055,
-    "severity_ok": 13049
+    "severity_medium": 107,
+    "severity_low": 2020,
+    "severity_ok": 13088
   },
   "severity_matrix": {
     "arista_eos": {
@@ -4211,7 +4211,7 @@
     {
       "source_codec": "aruba_aoscx",
       "target_codec": "arista_eos",
-      "drifted_total": 30
+      "drifted_total": 29
     },
     {
       "source_codec": "aruba_aoscx",
@@ -4236,7 +4236,7 @@
     {
       "source_codec": "aruba_aoscx",
       "target_codec": "cisco_iosxr",
-      "drifted_total": 37
+      "drifted_total": 36
     },
     {
       "source_codec": "aruba_aoscx",
@@ -4246,7 +4246,7 @@
     {
       "source_codec": "aruba_aoscx",
       "target_codec": "fortigate_cli",
-      "drifted_total": 28
+      "drifted_total": 27
     },
     {
       "source_codec": "aruba_aoscx",
@@ -4256,7 +4256,7 @@
     {
       "source_codec": "aruba_aoscx",
       "target_codec": "mikrotik_routeros",
-      "drifted_total": 27
+      "drifted_total": 26
     },
     {
       "source_codec": "aruba_aoscx",
@@ -4406,7 +4406,7 @@
     {
       "source_codec": "cisco_nxos",
       "target_codec": "arista_eos",
-      "drifted_total": 41
+      "drifted_total": 40
     },
     {
       "source_codec": "cisco_nxos",
@@ -4431,7 +4431,7 @@
     {
       "source_codec": "cisco_nxos",
       "target_codec": "cisco_iosxr",
-      "drifted_total": 65
+      "drifted_total": 64
     },
     {
       "source_codec": "cisco_nxos",
@@ -4471,7 +4471,7 @@
     {
       "source_codec": "fortigate_cli",
       "target_codec": "cisco_iosxr",
-      "drifted_total": 30
+      "drifted_total": 28
     },
     {
       "source_codec": "fortigate_cli",
@@ -4566,7 +4566,7 @@
     {
       "source_codec": "vyos",
       "target_codec": "arista_eos",
-      "drifted_total": 27
+      "drifted_total": 26
     },
     {
       "source_codec": "vyos",
@@ -4591,7 +4591,7 @@
     {
       "source_codec": "vyos",
       "target_codec": "cisco_iosxr",
-      "drifted_total": 46
+      "drifted_total": 45
     },
     {
       "source_codec": "vyos",
@@ -4601,7 +4601,7 @@
     {
       "source_codec": "vyos",
       "target_codec": "fortigate_cli",
-      "drifted_total": 31
+      "drifted_total": 30
     },
     {
       "source_codec": "vyos",
@@ -4611,7 +4611,7 @@
     {
       "source_codec": "vyos",
       "target_codec": "mikrotik_routeros",
-      "drifted_total": 24
+      "drifted_total": 23
     },
     {
       "source_codec": "vyos",
@@ -4654,9 +4654,9 @@
         },
         "ntp_servers": {
           "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
         },
         "timezone": {
           "actual": "trivially_preserved",
@@ -5498,11 +5498,11 @@
         }
       },
       "summary": {
-        "ALIGNED": 2,
+        "ALIGNED": 3,
         "CODEC_BUG": 1,
         "EXPECTED_LOSSY": 4,
         "EXPECTED_UNSUPPORTED": 1,
-        "METHODOLOGY_ISSUE_under": 2,
+        "METHODOLOGY_ISSUE_under": 1,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 10,
@@ -5510,8 +5510,8 @@
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 2,
-        "severity_ok": 17
+        "severity_low": 1,
+        "severity_ok": 18
       }
     },
     {
@@ -5543,9 +5543,9 @@
         },
         "ntp_servers": {
           "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
         },
         "timezone": {
           "actual": "trivially_preserved",
@@ -6450,11 +6450,11 @@
         }
       },
       "summary": {
-        "ALIGNED": 2,
+        "ALIGNED": 3,
         "CODEC_BUG": 1,
         "EXPECTED_LOSSY": 4,
         "EXPECTED_UNSUPPORTED": 1,
-        "METHODOLOGY_ISSUE_under": 2,
+        "METHODOLOGY_ISSUE_under": 1,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 10,
@@ -6462,8 +6462,8 @@
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 2,
-        "severity_ok": 17
+        "severity_low": 1,
+        "severity_ok": 18
       }
     },
     {
@@ -6495,7 +6495,7 @@
         },
         "ntp_servers": {
           "actual": "trivially_preserved",
-          "expected": "lossy",
+          "expected": "good",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
@@ -6757,9 +6757,9 @@
         },
         "static_routes": {
           "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
         },
         "dhcp_servers": {
           "actual": "preserved",
@@ -7239,11 +7239,11 @@
         }
       },
       "summary": {
-        "ALIGNED": 4,
+        "ALIGNED": 5,
         "CODEC_BUG": 1,
         "EXPECTED_LOSSY": 3,
         "EXPECTED_UNSUPPORTED": 2,
-        "METHODOLOGY_ISSUE_under": 6,
+        "METHODOLOGY_ISSUE_under": 5,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 40,
@@ -7251,8 +7251,8 @@
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 6,
-        "severity_ok": 49
+        "severity_low": 5,
+        "severity_ok": 50
       }
     },
     {

@@ -91,14 +91,18 @@ _IP_ROUTE_RE = re.compile(
     # The optional ``vrf <name>`` infix (group 1) lands on
     # ``CanonicalStaticRoute.vrf`` and round-trips through render
     # (mirrors the cisco_iosxe_cli graduation, PR #24).
-    r"^ip route\s+(?:vrf\s+(\S+)\s+)?(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)",
+    # A trailing integer (group 5) is the administrative distance
+    # (``ip route <prefix> <next-hop> <distance>``, 1-255) — lands on
+    # ``CanonicalStaticRoute.metric``; the optional group keeps distance-
+    # less routes byte-identical.
+    r"^ip route\s+(?:vrf\s+(\S+)\s+)?(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
     re.MULTILINE,
 )
 _IPV6_ROUTE_RE = re.compile(
     # ``ipv6 route 2001:db8::/48 2001:db8::1`` — v6 uses the ``ipv6 route``
     # keyword with the prefix form (does not overlap ``^ip route``).
     # The optional ``vrf <name>`` infix mirrors the v4 form above.
-    r"^ipv6 route\s+(?:vrf\s+(\S+)\s+)?([0-9A-Fa-f:]+/\d+)\s+(\S+)",
+    r"^ipv6 route\s+(?:vrf\s+(\S+)\s+)?([0-9A-Fa-f:]+/\d+)\s+(\S+)(?:\s+(\d+))?",
     re.MULTILINE,
 )
 _SNMP_COMMUNITY_RE = re.compile(
@@ -475,7 +479,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     for ntp_m in _NTP_SERVER_RE.finditer(raw):
         intent.ntp_servers.append(ntp_m.group(1))
     for route_m in _IP_ROUTE_RE.finditer(raw):
-        vrf, ip, prefix, next_hop = route_m.groups()
+        vrf, ip, prefix, next_hop, distance = route_m.groups()
         # A next hop is either an IP literal (gateway) or an interface name
         # (``Null0``, ``Ethernet1`` — an interface/connected route, ubiquitous
         # as a BGP aggregate anchor ``ip route <agg> Null0``).  Route it to the
@@ -497,10 +501,11 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             destination=f"{ip}/{prefix}",
             gateway=gateway,
             interface=interface,
+            metric=int(distance) if distance else 0,
             vrf=vrf or "",
         ))
     for route_m in _IPV6_ROUTE_RE.finditer(raw):
-        vrf, dest, next_hop = route_m.groups()
+        vrf, dest, next_hop, distance = route_m.groups()
         # Same gateway-or-interface split as the v4 branch.
         gateway = ""
         interface = ""
@@ -513,6 +518,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             destination=dest,
             gateway=gateway,
             interface=interface,
+            metric=int(distance) if distance else 0,
             vrf=vrf or "",
         ))
 

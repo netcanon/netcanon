@@ -142,6 +142,7 @@ class MikroTikRouterOSCodec(CodecBase):
             "/routing/static-route",
             "/routing/static-route/gateway",      # audit e5b77d7 — next-hop round-trips
             "/routing/static-route/description",  # run3 — `comment=...`
+            "/routing/static-route/metric",       # #7 — `distance=<n>` admin distance
             # Tier 2 — SNMP
             "/snmp/community",
             "/snmp/location",
@@ -279,15 +280,6 @@ class MikroTikRouterOSCodec(CodecBase):
                     "renders, so a non-default lease_time is not emitted and "
                     "re-parses as the 86400 default — a 2h lease policy "
                     "silently becomes 1 day.  Declared lossy (#24)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
-                path="/routing/static-route/metric",
-                reason=(
-                    "Render emits destination + gateway + comment only; the "
-                    "static-route administrative distance (metric) is "
-                    "dropped (run3)."
                 ),
                 severity="warn",
             ),
