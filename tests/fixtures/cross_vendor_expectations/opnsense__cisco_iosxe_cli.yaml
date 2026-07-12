@@ -363,14 +363,15 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      OPNsense splits static-route declaration into ``<gateways>``
-      (named gateways with bound interface) and ``<staticroutes>``
-      (routes referencing named gateways).  The OPNsense codec does
-      not currently parse either block into the canonical
-      ``static_routes`` list; Cisco target therefore emits no
-      ``ip route`` lines from an OPNsense source.  Lands when
-      OPNsense parse wire-up completes and the gateway-name
-      indirection is resolved to bare next-hop IPs.
+      OPNsense parse now resolves the two-block model
+      (``<gateways>`` named gateways JOINed to ``<staticroutes>``
+      routes, plus the ``<gateway_item defaultgw=1>`` default route)
+      into the canonical ``static_routes`` list (#15), so the Cisco
+      target emits ``ip route`` lines and the destination + next-hop
+      round-trip.  Kept lossy: IOS drops the per-route description,
+      so a route carrying ``<descr>`` drifts on the round-trip.  An
+      unresolvable / dynamic-DHCP gateway is dropped on parse rather
+      than emitted as a bogus next-hop.
     references: [opnsense-gateways]
 
   # ── Tier 2 — auto-translate with review ──

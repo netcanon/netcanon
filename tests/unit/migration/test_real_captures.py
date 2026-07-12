@@ -345,6 +345,15 @@ def test_real_capture_round_trips_stable(
         # version are excluded — both are metadata about the input,
         # not canonical config data.
         d.pop("dropped_tier3_sections", None)
+        # A codec that declares /routing/static-route non-supported (e.g.
+        # opnsense: parse harvests the <gateways> default route +
+        # <staticroutes> entries (#15) but render emits no <staticroutes>
+        # block — declared lossy) cannot round-trip the field: the first
+        # parse yields routes, render drops them, the re-parse yields none.
+        # Exclude it so the round-trip stability check still covers every
+        # field the codec CAN render.
+        if codec.capabilities.classify("/routing/static-route") != "supported":
+            d.pop("static_routes", None)
         # Sort collections by natural identity key.
         for key, id_key in [
             ("interfaces", "name"),

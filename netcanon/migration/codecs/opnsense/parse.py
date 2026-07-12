@@ -64,6 +64,7 @@ swallow XML errors silently.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 from typing import Any
 from xml.etree import ElementTree as ET
@@ -90,6 +91,7 @@ from ...canonical.intent import (
     CanonicalLocalUser,
     CanonicalRADIUSServer,
     CanonicalSNMP,
+    CanonicalStaticRoute,
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
@@ -490,6 +492,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 or snmp.trap_hosts):
             intent.snmp = snmp
 
+    # ----- static routes (<gateways> default route + <staticroutes>) -----
+    _parse_static_routes(root, intent)
+
     logger.debug(
         "opnsense parsed: hostname=%r ifaces=%d vlans=%d "
         "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",
@@ -503,6 +508,118 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         len(raw),
     )
     return intent
+
+
+# ---------------------------------------------------------------------------
+# Static-route harvest (default route + <staticroutes>)
+# ---------------------------------------------------------------------------
+
+
+def _is_ip(value: str) -> bool:
+    """Is *value* a parseable IPv4/IPv6 literal (not a name / empty)?"""
+    try:
+        ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _iter_by_tag(root: ET.Element, name: str):
+    """Yield every element whose tag matches *name* case-insensitively.
+
+    OPNsense 25+ relocates several config sections from the historical
+    lowercase root elements (``<gateways>``) into a capitalised
+    model-plugin container nested under ``<OPNsense>``
+    (``<OPNsense><Gateways>…``).  A case-insensitive whole-tree walk finds
+    both shapes; without it a lowercase-only lookup misses a
+    ``<Gateways>``-model config's default gateway entirely.
+    """
+    target = name.lower()
+    for el in root.iter():
+        if el.tag.lower() == target:
+            yield el
+
+
+def _gateway_name_to_ip(root: ET.Element) -> dict[str, str]:
+    """Map each named ``<gateway_item>`` to its literal next-hop IP.
+
+    Only items whose ``<gateway>`` is an IP literal are recorded — a
+    dynamic/DHCP gateway (empty ``<gateway/>``) is omitted so a named
+    static route pointing at it resolves to nothing rather than a bogus
+    literal next-hop.
+    """
+    name_to_ip: dict[str, str] = {}
+    for item in _iter_by_tag(root, "gateway_item"):
+        if (item.findtext("disabled") or "").strip() == "1":
+            continue
+        name = (item.findtext("name") or "").strip()
+        gw = (item.findtext("gateway") or "").strip()
+        if name and _is_ip(gw):
+            name_to_ip[name] = gw
+    return name_to_ip
+
+
+def _parse_static_routes(root: ET.Element, intent: CanonicalIntent) -> None:
+    """Harvest the box default route + explicit static routes.
+
+    Two sources feed :class:`CanonicalStaticRoute`.  OPNsense render still
+    emits no ``<staticroutes>`` block (declared lossy), so this closes a
+    *source* silent-loss — opnsense-as-source previously dropped its
+    default route entirely — rather than delivering a round-trip.
+
+      * ``<gateway_item defaultgw=1>`` synthesises the default route
+        (``0.0.0.0/0`` / ``::/0`` keyed off the gateway's address family),
+        which lives nowhere in the parsed tree today.
+      * ``<staticroutes><route>`` carries a ``<network>`` destination and a
+        ``<gateway>`` that is EITHER a literal IP OR a gateway_item name.
+
+    Guards: skip disabled items and routes missing network/gateway; and —
+    the load-bearing one — apply the IP check to the RESOLVED next-hop, so
+    an unresolvable gateway name or a dynamic/DHCP gateway is dropped
+    rather than emitted as an invalid literal next-hop that would
+    round-trip as a stable-but-invalid string past every fidelity guard.
+    """
+    name_to_ip = _gateway_name_to_ip(root)
+    seen: set[tuple[str, str]] = set()
+
+    def _add(destination: str, gateway: str, description: str = "") -> None:
+        key = (destination, gateway)
+        if key in seen:
+            return
+        seen.add(key)
+        intent.static_routes.append(CanonicalStaticRoute(
+            destination=destination, gateway=gateway, description=description,
+        ))
+
+    # Default route(s): one per enabled defaultgw gateway_item with a real IP.
+    for item in _iter_by_tag(root, "gateway_item"):
+        if (item.findtext("disabled") or "").strip() == "1":
+            continue
+        if (item.findtext("defaultgw") or "").strip() != "1":
+            continue
+        gw = (item.findtext("gateway") or "").strip()
+        if not _is_ip(gw):
+            continue  # dynamic / DHCP-assigned default gateway — nothing to emit
+        destination = (
+            "::/0" if ipaddress.ip_address(gw).version == 6 else "0.0.0.0/0"
+        )
+        _add(destination, gw)
+
+    # Explicit <staticroutes><route> entries (a named gateway is resolved).
+    for container in _iter_by_tag(root, "staticroutes"):
+        for route_el in container:
+            if route_el.tag.lower() != "route":
+                continue
+            if (route_el.findtext("disabled") or "").strip() == "1":
+                continue
+            network = (route_el.findtext("network") or "").strip()
+            gw_raw = (route_el.findtext("gateway") or "").strip()
+            if not network or not gw_raw:
+                continue
+            next_hop = gw_raw if _is_ip(gw_raw) else name_to_ip.get(gw_raw, "")
+            if not _is_ip(next_hop):
+                continue  # unresolvable name / dynamic gateway — skip
+            _add(network, next_hop, (route_el.findtext("descr") or "").strip())
 
 
 # ---------------------------------------------------------------------------

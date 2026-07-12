@@ -394,14 +394,16 @@ per_field_expectation:
     references: [opnsense-vlans]
 
   static_routes:
-    disposition: not_applicable
-    note: >
-      OPNsense parser doesn't currently parse `<gateways>` or
-      `<staticroutes>` into intent.static_routes — the codec
-      hasn't wired the two-block model into canonical.  cisco_iosxe
-      target render also doesn't walk
-      `<network-instances>/<protocols>/<protocol identifier=STATIC>`
-      regardless.  Doubly gated.
+    disposition: lossy
+    reason: >
+      OPNsense parse now harvests the default route (from
+      `<gateway_item defaultgw=1>`) and `<staticroutes>/<route>`
+      entries, resolving named gateways to next-hop IPs (#15).  The
+      cisco_iosxe (structured/OpenConfig) target render does not walk
+      `<network-instances>/<protocols>/<protocol identifier=STATIC>`,
+      so the harvested route is dropped on render.  Declared lossy so
+      validate_against surfaces the render loss (was not_applicable
+      when parse produced nothing).
     references: [oc-network-instance]
 
   # ── Tier 2 — auto-translate with review ──

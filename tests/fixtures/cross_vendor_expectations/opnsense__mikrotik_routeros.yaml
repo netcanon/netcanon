@@ -427,17 +427,16 @@ per_field_expectation:
   static_routes:
     disposition: lossy
     reason: >
-      OPNsense splits static-route declaration into ``<gateways>``
-      (named gateways with bound interface) and ``<staticroutes>``
-      (routes referencing named gateways).  The OPNsense codec does
-      not currently parse either block into the canonical
-      ``static_routes`` list; RouterOS target therefore emits no
-      ``/ip route add`` lines from an OPNsense source.  Lands when
-      OPNsense parse wire-up resolves the gateway-name indirection
-      to bare next-hop IPs.  Default route (``0.0.0.0/0``) on
-      OPNsense is the WAN-zone ``<gateway>`` attribute, not a
-      ``<staticroutes>`` entry — operator-curated mapping to
-      RouterOS's ``dst-address=0.0.0.0/0`` form.
+      OPNsense parse now resolves the two-block model into the
+      canonical ``static_routes`` list (#15): the gateway-name
+      indirection in ``<staticroutes>`` is JOINed to bare next-hop
+      IPs, and the ``<gateway_item defaultgw=1>`` default route
+      synthesises ``0.0.0.0/0`` — so RouterOS emits ``/ip route add
+      dst-address=... gateway=...`` and destination + next-hop +
+      comment round-trip (RouterOS ``comment=`` preserves the route
+      description).  Kept lossy as safe pessimism pending the
+      OPNsense render half.  An unresolvable / dynamic-DHCP gateway
+      is dropped on parse rather than emitted as a bogus next-hop.
     references: [opnsense-gateways, mikrotik_ip_routing]
 
   # ── Tier 2 — auto-translate with review ──
