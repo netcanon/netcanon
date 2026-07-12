@@ -185,7 +185,7 @@ def _maximal_intent() -> CanonicalIntent:
     return CanonicalIntent(
         hostname="h", domain="d.test", dns_servers=["10.0.0.53"],
         ntp_servers=["10.0.0.123"], timezone="UTC",
-        syslog_servers=["10.0.0.514"],
+        syslog_servers=["10.0.5.14"],  # valid IPv4 (octets <=255); iosxe_cli/arista IP-guard reparse it
         interfaces=[iface, iface2],
         vlans=[CanonicalVlan(
             id=10, name="V", description="desc",

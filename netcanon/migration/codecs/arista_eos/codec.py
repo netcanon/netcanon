@@ -105,6 +105,7 @@ class AristaEOSCodec(CodecBase):
             "/system/hostname",
             "/system/dns-server",
             "/system/ntp-server",
+            "/system/syslog-server",   # promotion #11 — `logging host <ip>` harvest + render
             "/interfaces/interface/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
@@ -337,10 +338,6 @@ class AristaEOSCodec(CodecBase):
             UnsupportedPath(
                 path="/system/timezone",
                 reason="Render emits no clock/timezone stanza; intent.timezone is dropped on migration.",
-            ),
-            UnsupportedPath(
-                path="/system/syslog-server",
-                reason="Render emits no logging/syslog config; intent.syslog_servers are dropped on migration.",
             ),
             UnsupportedPath(
                 path="/routing/bgp",

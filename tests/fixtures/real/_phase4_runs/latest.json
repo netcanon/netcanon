@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-12T17:00:43+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260712T164327Z.json",
-  "mesh_run_started_utc": "2026-07-12T16:43:21+00:00",
+  "started_utc": "2026-07-12T20:03:47+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260712T195055Z.json",
+  "mesh_run_started_utc": "2026-07-12T19:50:49+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4134,14 +4134,14 @@
     }
   ],
   "aggregate": {
-    "ALIGNED": 1658,
+    "ALIGNED": 1678,
     "CODEC_BUG": 5,
     "EXPECTED_LOSSY": 1229,
-    "EXPECTED_UNSUPPORTED": 724,
+    "EXPECTED_UNSUPPORTED": 732,
     "METHODOLOGY_ISSUE_under": 925,
     "METHODOLOGY_ISSUE_over": 25,
     "STRUCTURAL_ONLY": 1179,
-    "TRIVIAL_EMPTY": 9554,
+    "TRIVIAL_EMPTY": 9526,
     "fields_total": 15299,
     "severity_high": 5,
     "severity_medium": 107,
@@ -4191,22 +4191,22 @@
     {
       "source_codec": "arista_eos",
       "target_codec": "aruba_aoscx",
-      "drifted_total": 30
+      "drifted_total": 31
     },
     {
       "source_codec": "arista_eos",
       "target_codec": "cisco_iosxr",
-      "drifted_total": 34
+      "drifted_total": 35
     },
     {
       "source_codec": "arista_eos",
       "target_codec": "cisco_nxos",
-      "drifted_total": 30
+      "drifted_total": 31
     },
     {
       "source_codec": "arista_eos",
       "target_codec": "vyos",
-      "drifted_total": 25
+      "drifted_total": 26
     },
     {
       "source_codec": "aruba_aoscx",
@@ -4321,7 +4321,7 @@
     {
       "source_codec": "cisco_iosxe_cli",
       "target_codec": "aruba_aoscx",
-      "drifted_total": 37
+      "drifted_total": 40
     },
     {
       "source_codec": "cisco_iosxe_cli",
@@ -4331,17 +4331,17 @@
     {
       "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_iosxr",
-      "drifted_total": 32
+      "drifted_total": 35
     },
     {
       "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_nxos",
-      "drifted_total": 30
+      "drifted_total": 33
     },
     {
       "source_codec": "cisco_iosxe_cli",
       "target_codec": "vyos",
-      "drifted_total": 30
+      "drifted_total": 33
     },
     {
       "source_codec": "cisco_iosxr",
@@ -6377,7 +6377,7 @@
         },
         "syslog_servers": {
           "actual": "trivially_preserved",
-          "expected": "lossy",
+          "expected": "good",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },

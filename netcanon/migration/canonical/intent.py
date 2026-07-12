@@ -852,10 +852,14 @@ class CanonicalIntent(BaseModel):
             ``/system/timezone`` unsupported); a source-side value is
             currently dropped on parse.  Kept Tier-1 by data shape, not
             a cross-vendor round-trip guarantee — see docs/CAPABILITIES.md.
-        syslog_servers: Tier 1 *schema slot* — syslog destination IPs /
-            hostnames.  NOTE: wired on ``juniper_junos`` only as of this
-            release; other codecs declare it unsupported and drop it on
-            parse.  Tier-1 by data shape, not a universal guarantee.
+        syslog_servers: Tier 1 — syslog destination IPs.  Wired
+            (parse harvest + render emit + declared-``supported``) on
+            ``juniper_junos`` (``set system syslog host <ip>``),
+            ``cisco_iosxe_cli`` and ``arista_eos`` (``logging host <ip>``,
+            promotions #1/#11).  Other codecs still drop it — the ones
+            that declare it ``unsupported`` surface the cross-vendor
+            banner; the rest fall through to an implicit drop.  Not yet a
+            universal round-trip guarantee — see docs/CAPABILITIES.md.
         interfaces: Tier 1 — per-interface configuration records.
         vlans: Tier 1 — VLAN definitions with port membership.
         static_routes: Tier 1 — static route entries.

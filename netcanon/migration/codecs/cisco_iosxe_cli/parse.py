@@ -407,6 +407,20 @@ _TOP_NTP_SERVER_RE = re.compile(
     r"^ntp\s+server\s+(?:vrf\s+\S+\s+)?(\S+)",
     re.IGNORECASE | re.MULTILINE,
 )
+# Syslog destinations.  The IOS / IOS-XE / IOS-XR / NX-OS families all spell
+# the target host differently — ``logging <ip>`` (classic / IOS-XR),
+# ``logging host <ip>``, ``logging host {ipv4|ipv6|<vrf>} <ip>``,
+# ``logging vrf <name> host <ip>``, ``logging server <ip>`` (NX-OS) — and the
+# very same ``logging`` keyword introduces a large family of NON-destination
+# sub-commands (``logging buffered 5000``, ``logging trap 6``, ``logging
+# console 3``, ``logging facility local0``, ``logging message 1222444`` …).
+# Rather than enumerate every sub-command, harvest the FIRST IP-literal token
+# on any ``logging`` line and validate it with :mod:`ipaddress` (see
+# :func:`_parse_globals`): a numeric sub-command argument (buffer size,
+# severity level, message id, UDP port) is never a valid IPv4/IPv6 literal, so
+# the guard rejects the noise structurally.  Mirrors the opnsense resolved-
+# next-hop IP guard.
+_SYSLOG_LINE_RE = re.compile(r"^\s*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
 
 # ``vrf definition <name>`` opens a VRF stanza; sub-commands include
 # ``description X``, ``rd <rd>``, ``route-target {import|export|both}
@@ -663,6 +677,12 @@ def _parse_globals(raw: str, intent: CanonicalIntent) -> None:
     * ``ntp server [vrf <name>] <ip>`` →
       :attr:`CanonicalIntent.ntp_servers`.  One server per line
       (unlike name-server).  Mirrors arista_eos prior art.
+    * ``logging <ip>`` / ``logging host [ipv4|ipv6|<vrf>] <ip>`` /
+      ``logging vrf <name> host <ip>`` / ``logging server <ip>`` →
+      :attr:`CanonicalIntent.syslog_servers`.  See :data:`_SYSLOG_LINE_RE`
+      for why the harvest is an IP-literal guard rather than a keyword
+      grammar — the ``logging`` keyword also introduces dozens of non-
+      destination sub-commands.  De-duplicated, first-seen order preserved.
 
     The helper mutates ``intent`` in place — keeps :func:`parse_intent`
     a flat sequence of phase calls.
@@ -677,6 +697,19 @@ def _parse_globals(raw: str, intent: CanonicalIntent) -> None:
         intent.domain = m.group(1)
     for m in _TOP_NTP_SERVER_RE.finditer(raw):
         intent.ntp_servers.append(m.group(1))
+    for m in _SYSLOG_LINE_RE.finditer(raw):
+        # Harvest the first token on the ``logging`` line that is a valid
+        # IPv4/IPv6 literal — that is the destination host.  Non-destination
+        # sub-commands (buffer sizes, severities, message ids) carry no IP
+        # token, so they contribute nothing.  De-dup, first-seen order.
+        for token in m.group(1).split():
+            try:
+                ipaddress.ip_address(token)
+            except ValueError:
+                continue
+            if token not in intent.syslog_servers:
+                intent.syslog_servers.append(token)
+            break
 
 
 def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:

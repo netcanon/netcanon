@@ -53,7 +53,7 @@ def _kitchen_sink() -> CanonicalIntent:
         dns_servers=["10.0.0.53"],
         ntp_servers=["10.0.0.123"],
         timezone="UTC",
-        syslog_servers=["10.0.0.514"],
+        syslog_servers=["10.0.5.14"],
         interfaces=[
             CanonicalInterface(
                 name="GigabitEthernet1/0/1",

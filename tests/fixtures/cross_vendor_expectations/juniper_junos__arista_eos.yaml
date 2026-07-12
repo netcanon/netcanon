@@ -234,8 +234,14 @@ per_field_expectation:
     references: [junos-initial-config, arista-system-management]
 
   syslog_servers:
-    disposition: lossy
-    reason: "Junos's 'set system syslog host X any info' carries per-host facility / severity filters; Arista's 'logging host X' has implicit any-any with severity gating at the device-global 'logging trap' level. Host list survives; per-host facility map drops on canonical layer."
+    disposition: good
+    reason: >
+      Both endpoints carry the syslog destination host LIST -- the only
+      syslog surface the canonical model represents -- so it round-trips
+      cleanly (promotions #1/#11).  Per-host severity/facility filters
+      (Junos ``any info`` vs the Cisco/Arista device-global ``logging
+      trap`` level) are NOT modelled canonically; that nuance is out of
+      scope for this cell, not a loss of the modelled surface.
     references: [junos-syslog-overview, arista-system-management]
 
   # ── Tier 1 — interfaces ──

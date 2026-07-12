@@ -192,12 +192,14 @@ and the codec's `CapabilityMatrix` declarations:
   `domain`, `interfaces`, `vlans`, `static_routes` — are wired on every
   bidirectional codec, and a codec that fails to wire one of these is a
   bug, not a gap.  `dns_servers` / `ntp_servers` are wired on most
-  codecs; `timezone` and `syslog_servers` are Tier-1 *schema slots* that
-  are wired on only a subset (`timezone` on none as of this release;
-  `syslog_servers` on `juniper_junos`) — for these two, an unwired codec
-  is a known gap declared `unsupported` in its `CapabilityMatrix`, not a
-  bug, and the source-side value is currently dropped on parse without a
-  banner.  Per-codec truth lives in the `CapabilityMatrix` tables.
+  codecs; `timezone` and `syslog_servers` are wired on only a subset
+  (`timezone` on none as of this release; `syslog_servers` on
+  `juniper_junos`, `cisco_iosxe_cli`, and `arista_eos` — `logging host
+  <ip>` / `set system syslog host <ip>`, promotions #1/#11) — for these
+  two, an unwired codec is a known gap (declared `unsupported` in its
+  `CapabilityMatrix` where the drop should raise the cross-vendor
+  banner, otherwise dropped silently on parse), not a bug.  Per-codec
+  truth lives in the `CapabilityMatrix` tables.
 * **Tier 2 — auto-translate with review.**  Common enough to model;
   vendor mappings are partially lossy.  Fields: `dhcp_servers`,
   `snmp` (community + v3 users), `lags`, `local_users`,

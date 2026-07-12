@@ -109,8 +109,14 @@ per_field_expectation:
     reason: "Both vendors accept Olson timezone names but Arista accepts both abbreviations (PST/EST) and Olson IDs while Junos requires Olson IDs (America/Los_Angeles). Round-trip of operator-typed PST -> Junos requires translation; canonical model preserves the source string verbatim so operator may need to adjust."
 
   syslog_servers:
-    disposition: lossy
-    reason: "Junos requires explicit per-host facility/severity filters via 'set system syslog host X any info'; Arista's 'logging host X' has implicit any-any. Basic mapping works; per-severity filters drift."
+    disposition: good
+    reason: >
+      Both endpoints carry the syslog destination host LIST -- the only
+      syslog surface the canonical model represents -- so it round-trips
+      cleanly (promotions #1/#11).  Per-host severity/facility filters
+      (Junos ``any info`` vs the Cisco/Arista device-global ``logging
+      trap`` level) are NOT modelled canonically; that nuance is out of
+      scope for this cell, not a loss of the modelled surface.
     references: [junos-iface-fundamentals]
 
   # ── Tier 1 — interfaces ──

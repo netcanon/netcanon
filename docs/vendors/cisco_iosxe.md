@@ -24,10 +24,11 @@ vendors (or vice versa), use `cisco_iosxe_cli`.
 [Tier 1](../CAPABILITIES.md#tier-1--auto-translatable-cross-vendor-stable)
 — auto-translatable:
 
-- `hostname`, `domain`, DNS / NTP servers (`syslog_servers` and
-  `timezone` are declared **unsupported** in the capability matrix and
-  do not round-trip; the NETCONF `cisco_iosxe` stub renders interfaces
-  only, so the rest of this list applies to `cisco_iosxe_cli`)
+- `hostname`, `domain`, DNS / NTP / `syslog_servers` (`logging host
+  <ip>` harvest + render, promotion #1 — applies to `cisco_iosxe_cli`).
+  `timezone` is declared **unsupported** in the capability matrix and
+  does not round-trip; the NETCONF `cisco_iosxe` stub renders interfaces
+  only, so the rest of this list applies to `cisco_iosxe_cli`.
 - Interfaces — name, description, enabled state, IPv4 + IPv6
   addresses, MTU, VRF binding, `kind` override
 - VLANs — ID, name, tagged/untagged port lists, SVI L3 (via

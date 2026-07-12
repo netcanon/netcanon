@@ -85,6 +85,14 @@ _NTP_SERVER_RE = re.compile(
     r"^ntp server\s+(?:vrf\s+\S+\s+)?(\S+)",
     re.MULTILINE,
 )
+# Syslog destinations.  EOS spells these ``logging host <ip>`` /
+# ``logging vrf <name> host <ip>``, but ``logging`` also fronts a large family
+# of NON-destination sub-commands (``logging buffered``, ``logging trap``,
+# ``logging level``, ``logging format`` …).  Harvest the FIRST IP-literal token
+# on any ``logging`` line and validate it with :mod:`ipaddress` — a numeric
+# sub-command argument is never a valid IPv4/IPv6 literal, so the guard rejects
+# the noise structurally (mirrors cisco_iosxe_cli ``_SYSLOG_LINE_RE``).
+_SYSLOG_LINE_RE = re.compile(r"^\s*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
 _IP_ROUTE_RE = re.compile(
     # ``ip route 0.0.0.0/0 10.0.0.1`` or ``ip route 10.0.0.0/8 Null0``,
     # plus the per-VRF form ``ip route vrf MGMT 0.0.0.0/0 192.168.2.1``.
@@ -478,6 +486,17 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         intent.domain = m.group(1)
     for ntp_m in _NTP_SERVER_RE.finditer(raw):
         intent.ntp_servers.append(ntp_m.group(1))
+    for syslog_m in _SYSLOG_LINE_RE.finditer(raw):
+        # First IP-literal token on the ``logging`` line is the syslog host;
+        # non-destination sub-commands carry no IP token.  De-dup, first-seen.
+        for token in syslog_m.group(1).split():
+            try:
+                ipaddress.ip_address(token)
+            except ValueError:
+                continue
+            if token not in intent.syslog_servers:
+                intent.syslog_servers.append(token)
+            break
     for route_m in _IP_ROUTE_RE.finditer(raw):
         vrf, ip, prefix, next_hop, distance = route_m.groups()
         # A next hop is either an IP literal (gateway) or an interface name
