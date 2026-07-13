@@ -212,9 +212,10 @@ per_field_expectation:
       interface-as-gateway form (``ip route X Y GigabitEthernet0/0/2``)
       maps to RouterOS's ``gateway=ether2`` form.  The lossy bit
       is per-VRF: Cisco ``ip route vrf X ...`` drops to the global
-      table on render because the canonical model lacks a vrf field
-      on CanonicalStaticRoute (deferred — lands alongside VRF
-      wire-up).
+      table on render because the mikrotik_routeros codec emits no
+      per-route ``routing-table=<vrf>`` binding — the
+      ``CanonicalStaticRoute.vrf`` field is harvested from Cisco
+      but unrendered on RouterOS.
     references: [mikrotik_ip_routing]
 
   # ── Tier 2 — auto-translate with review banner ──

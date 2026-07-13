@@ -416,8 +416,9 @@ per_field_expectation:
       gateways).  The OPNsense codec does not currently parse
       OR emit either block; canonical static_routes from a Cisco
       source therefore drop on render.  Per-VRF static routes
-      (Cisco ``ip route vrf X ...``) are unsupported (canonical
-      lacks a VRF field on CanonicalStaticRoute).
+      (Cisco ``ip route vrf X ...``) carry a populated
+      ``CanonicalStaticRoute.vrf`` but drop on this cross-pair
+      because OPNsense has no VRF model.
     references: [opnsense-gateways]
 
   # ── Tier 2 — auto-translate with review ──

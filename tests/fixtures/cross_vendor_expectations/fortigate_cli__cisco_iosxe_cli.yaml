@@ -217,8 +217,8 @@ per_field_expectation:
       per-static-comparator) so the integer preserves but its
       meaning differs.  Description (FortiGate ``set comment``) is
       not currently parsed.  Per-VRF static routes (FortiGate ``set
-      vrf <id>``) are unsupported — canonical model lacks a vrf
-      field on CanonicalStaticRoute.
+      vrf <id>``) are unsupported — the fortigate_cli codec does not
+      parse ``set vrf`` into ``CanonicalStaticRoute.vrf``.
     references: [static_routes]
 
   # ── Tier 2 — auto-translate with review ──

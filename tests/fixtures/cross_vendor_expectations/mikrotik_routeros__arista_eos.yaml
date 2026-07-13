@@ -290,10 +290,11 @@ per_field_expectation:
       ``gateway=ether2`` interface form maps to Arista's
       interface-as-gateway form.  IPv6 routes round-trip via
       ``/ipv6 route`` -> ``ipv6 route ::/0 ...``.  Lossy bits: (1)
-      per-VRF routes (``routing-table=TENANT-A``) drop to default
-      VRF on render because the canonical model lacks a vrf field
-      on CanonicalStaticRoute (deferred — lands alongside VRF
-      wire-up); (2) RouterOS's ``blackhole=yes`` flag has no
+      per-VRF routes (``routing-table=TENANT-A``) drop to the
+      global table because the mikrotik_routeros codec
+      parses-and-ignores the ``routing-table=`` binding, so
+      ``CanonicalStaticRoute.vrf`` is never populated on the
+      RouterOS source; (2) RouterOS's ``blackhole=yes`` flag has no
       canonical surface — render encodes it via the ``Null0``
       next-hop on Arista side, which is semantic-equivalent but
       not byte-identical; (3) RouterOS's per-route ``distance=N``

@@ -558,8 +558,9 @@ per_field_expectation:
       semantics differ from Junos preference, so the integer
       preserves but its meaning differs.  Per-VRF static routes
       (``set routing-instances X routing-options static route
-      ...``) are parse-and-ignore in v1 (CanonicalStaticRoute
-      lacks a vrf field).  ``description`` field not rendered
+      ...``) are harvested onto ``CanonicalStaticRoute.vrf`` but
+      drop on render because the fortigate_cli codec has no
+      per-route VRF/VDOM binding.  ``description`` field not rendered
       (FortiGate has no comment surface on ``edit N`` static
       routes in v1 codec).
     references: [junos-static-routing, fortios-static-routes]

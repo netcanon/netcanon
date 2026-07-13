@@ -273,8 +273,9 @@ per_field_expectation:
       meaning differs.  Description / comment (FortiGate ``set
       comment``) is not currently parsed.  Per-VRF static routes
       (FortiGate ``set vrf <id>``) are unsupported on this pair —
-      canonical model lacks a vrf field on CanonicalStaticRoute
-      AND Aruba has no VRF concept.  Aruba's legacy
+      the fortigate_cli codec does not parse ``set vrf`` into
+      ``CanonicalStaticRoute.vrf``, AND Aruba has no VRF concept.
+      Aruba's legacy
       ``ip default-gateway`` form synthesises from a 0.0.0.0/0
       canonical record on render.
     references: [static_routes]

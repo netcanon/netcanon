@@ -215,9 +215,10 @@ per_field_expectation:
       add dst-address=X/N gateway=Y`` -> Aruba ``ip route X/N
       Y``.  Aruba accepts both CIDR and dotted-mask destinations;
       codec emits CIDR by default.  Lossy bits: (1) per-VRF
-      routes (``routing-table=TENANT-A``) drop to default VRF
-      because the canonical model lacks a vrf field on
-      CanonicalStaticRoute, AND Aruba target structurally has no
+      routes (``routing-table=TENANT-A``) drop to the global
+      table because the mikrotik_routeros codec parses-and-ignores
+      the ``routing-table=`` binding (``CanonicalStaticRoute.vrf``
+      never populated), AND the Aruba target structurally has no
       VRF concept anyway; (2) ``blackhole=yes`` flag has no
       canonical equivalent — drops on render with banner;
       (3) interface-as-gateway (``gateway=ether2``) populates

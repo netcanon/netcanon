@@ -234,12 +234,14 @@ per_field_expectation:
       Default-VRF IPv4 static routes round-trip cleanly (both
       vendors emit CIDR; no dotted-mask conversion noise).
       Per-VRF static routes (``ip route vrf X ...``) are
-      currently parse-and-ignore at the canonical layer
-      (CanonicalStaticRoute lacks a ``vrf`` field), so the data
-      never reaches the Aruba target.  IPv6 default routes
+      harvested from the Arista source onto
+      ``CanonicalStaticRoute.vrf``, but the aruba_aoss target
+      has no VRF / routing-instance model and renders every
+      route into the global table, dropping the per-VRF
+      binding.  IPv6 default routes
       (``ipv6 route ::/0 <gw>``) are not reliably parsed on the
       Aruba side either, so cross-vendor IPv6 routes also drop.
-      Known canonical-model gap.
+      Known target-side gap (aruba_aoss has no VRF model).
     references: [static_routes]
 
   # ── Tier 2 — auto-translate with review ──
