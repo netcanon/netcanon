@@ -258,6 +258,25 @@ _COSMETIC_LIST_SUBFIELDS: dict[str, dict[str, tuple[str, ...]]] = {
     },
 }
 
+#: The ``snmp`` dict carries a ``v3_users`` USM list whose ``auth_passphrase``
+#: / ``priv_passphrase`` are OPAQUE pre-hashed secrets — each vendor localises
+#: the credential into its own on-box digest / encryption envelope (Cisco
+#: ``ENC``-prefixed, AOS-CX SHA-1, MikroTik AES, …), so the SAME logical
+#: passphrase never ports byte-for-byte cross-vendor even when both codecs
+#: fully support v3.  Comparing the opaque hash false-flags drift on a
+#: credential the operator did not change — exactly the ``is_secondary``
+#: situation (a target-determined rendering artifact, not operator intent).
+#: The mesh only compares cross-vendor pairs, so the hash is never the carrier
+#: of real intent here.  Blanked on BOTH sides before the snmp-dict compare so
+#: a passphrase-only difference reads as preserved; any OTHER snmp drift
+#: (community / contact / location / trap_hosts / v3 group / protocols) still
+#: surfaces.  (Scoped subset of promotion #20 — the whole-``snmp``-dict flip
+#: stays blocked on those other, matrix-undeclared surfaces.)
+_COSMETIC_SNMP_V3_SUBFIELDS: tuple[str, ...] = (
+    "auth_passphrase",
+    "priv_passphrase",
+)
+
 
 def _strip_cosmetic_subfields(field: str, records: list[Any]) -> list[Any]:
     """Return a copy of *records* with target-determined cosmetic
@@ -283,6 +302,27 @@ def _strip_cosmetic_subfields(field: str, records: list[Any]) -> list[Any]:
                     for item in nested
                 ]
         out.append(rec)
+    return out
+
+
+def _strip_cosmetic_snmp(field: str, snmp: Any) -> Any:
+    """Return a copy of the ``snmp`` dict with each ``v3_users`` record's
+    opaque auth/priv passphrase hashes blanked (see
+    :data:`_COSMETIC_SNMP_V3_SUBFIELDS`).  No-op for any other field or a
+    non-dict value, so the caller can apply it unconditionally in the
+    dict-comparison branch."""
+    if field != "snmp" or not isinstance(snmp, dict):
+        return snmp
+    users = snmp.get("v3_users")
+    if not isinstance(users, list):
+        return snmp
+    out = dict(snmp)
+    out["v3_users"] = [
+        {k: ("" if k in _COSMETIC_SNMP_V3_SUBFIELDS else v)
+         for k, v in u.items()}
+        if isinstance(u, dict) else u
+        for u in users
+    ]
     return out
 
 
@@ -407,7 +447,12 @@ def compute_field_disposition(
                 record["source"] = _scalar_summary(src_disp)
                 record["target"] = _scalar_summary(tgt_disp)
         elif isinstance(src_val, dict) and isinstance(tgt_val, dict):
-            preserved = src_val == tgt_val
+            # Blank cosmetic opaque-hash subfields (snmp v3 passphrases) on
+            # both sides so a credential-hash-only difference reads preserved;
+            # real snmp drift still surfaces.  See _COSMETIC_SNMP_V3_SUBFIELDS.
+            cmp_src = _strip_cosmetic_snmp(field, src_val)
+            cmp_tgt = _strip_cosmetic_snmp(field, tgt_val)
+            preserved = cmp_src == cmp_tgt
             record["preserved"] = preserved
             record["source_count"] = len(src_val)
             record["target_count"] = len(tgt_val)
@@ -416,7 +461,11 @@ def compute_field_disposition(
                 # case above.  See Wave 10α.
                 record["trivially_preserved"] = True
             if not preserved:
-                record["drift"] = _dict_drift_summary(src_val, tgt_val)
+                # Use the cosmetic-normalised dicts (opaque v3 passphrase
+                # hashes blanked) so the drift summary + Phase 4's
+                # ``_subfield_drift_in_dict`` reflect real drift, not the
+                # per-vendor hash artifact.
+                record["drift"] = _dict_drift_summary(cmp_src, cmp_tgt)
                 # Store the FULL source/target dicts (not key-lists) so
                 # the Phase 4 reconciler's ``_subfield_drift_in_dict``
                 # can resolve per-attribute drift instead of bailing
@@ -429,8 +478,8 @@ def compute_field_disposition(
                 # (``_md_inline``) JSON-serialises and truncates dicts
                 # to 200 chars, so size impact on the matrix .md is
                 # bounded.
-                record["source"] = src_val
-                record["target"] = tgt_val
+                record["source"] = cmp_src
+                record["target"] = cmp_tgt
         else:
             # Scalar or None vs structured.  None-vs-empty is treated
             # as preserved (the canonical model uses None for "snmp

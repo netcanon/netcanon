@@ -23,6 +23,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalIPv4Address,
     CanonicalLAG,
     CanonicalSNMP,
+    CanonicalSNMPv3User,
     CanonicalStaticRoute,
     CanonicalVlan,
     CanonicalVxlan,
@@ -230,6 +231,63 @@ def test_dropped_secondary_address_is_still_drift() -> None:
     )
     out = compute_field_disposition(src, tgt)
     assert out["interfaces"]["preserved"] is False
+
+
+def test_snmp_v3_passphrase_hash_is_cosmetic_cross_vendor() -> None:
+    """An ``snmp`` dict identical except for the v3 auth/priv PASSPHRASE
+    hashes must compare PRESERVED.
+
+    The passphrase is an opaque pre-hashed secret each vendor localises
+    into its own on-box digest / encryption envelope (Cisco ``ENC``-
+    prefixed, AOS-CX SHA-1, …), so the SAME logical credential never
+    ports byte-for-byte cross-vendor even when both codecs fully support
+    v3 — exactly the ``is_secondary`` situation (a rendering artifact,
+    not operator intent).  See ``_COSMETIC_SNMP_V3_SUBFIELDS`` (scoped
+    subset of promotion #20)."""
+    src = CanonicalIntent(snmp=CanonicalSNMP(
+        community="public",
+        v3_users=[CanonicalSNMPv3User(
+            name="admin", auth_protocol="sha", auth_passphrase="abc123hash",
+            priv_protocol="aes", priv_passphrase="def456hash",
+        )],
+    ))
+    tgt = CanonicalIntent(snmp=CanonicalSNMP(
+        community="public",
+        v3_users=[CanonicalSNMPv3User(
+            name="admin", auth_protocol="sha", auth_passphrase="ENC xyz789",
+            priv_protocol="aes", priv_passphrase="ENC uvw321",
+        )],
+    ))
+    out = compute_field_disposition(src, tgt)
+    assert out["snmp"]["preserved"], (
+        "snmp differing only in the opaque v3 passphrase hashes must "
+        "compare preserved (a per-vendor rendering artifact, not intent)"
+    )
+
+
+def test_snmp_non_passphrase_drift_is_still_detected() -> None:
+    """The passphrase-hash stripping must NOT hide real snmp drift: a
+    changed v3 ``group`` or a dropped ``trap_hosts`` entry must still
+    compare DRIFTED.  Guards against the cosmetic normalisation over-
+    reaching beyond the two passphrase fields."""
+    base_user = {
+        "name": "admin", "auth_protocol": "sha", "auth_passphrase": "h",
+        "priv_protocol": "aes", "priv_passphrase": "h",
+    }
+    # (a) v3 group drift
+    src = CanonicalIntent(snmp=CanonicalSNMP(
+        v3_users=[CanonicalSNMPv3User(group="netadmin", **base_user)],
+    ))
+    tgt = CanonicalIntent(snmp=CanonicalSNMP(
+        v3_users=[CanonicalSNMPv3User(group="", **base_user)],
+    ))
+    assert compute_field_disposition(src, tgt)["snmp"]["preserved"] is False
+    # (b) trap_hosts drop
+    src2 = CanonicalIntent(snmp=CanonicalSNMP(
+        community="public", trap_hosts=["10.0.0.1"],
+    ))
+    tgt2 = CanonicalIntent(snmp=CanonicalSNMP(community="public", trap_hosts=[]))
+    assert compute_field_disposition(src2, tgt2)["snmp"]["preserved"] is False
 
 
 def test_list_order_change_does_not_register_as_drift() -> None:
