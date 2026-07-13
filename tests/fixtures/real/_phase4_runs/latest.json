@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-12T20:48:43+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260712T204824Z.json",
-  "mesh_run_started_utc": "2026-07-12T20:48:18+00:00",
+  "started_utc": "2026-07-12T22:04:44+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260712T215945Z.json",
+  "mesh_run_started_utc": "2026-07-12T21:59:32+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4136,17 +4136,17 @@
   "aggregate": {
     "ALIGNED": 1678,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 1229,
+    "EXPECTED_LOSSY": 1228,
     "EXPECTED_UNSUPPORTED": 732,
-    "METHODOLOGY_ISSUE_under": 925,
+    "METHODOLOGY_ISSUE_under": 926,
     "METHODOLOGY_ISSUE_over": 25,
     "STRUCTURAL_ONLY": 1179,
     "TRIVIAL_EMPTY": 9526,
     "fields_total": 15299,
     "severity_high": 5,
     "severity_medium": 107,
-    "severity_low": 2022,
-    "severity_ok": 13165
+    "severity_low": 2023,
+    "severity_ok": 13164
   },
   "severity_matrix": {
     "arista_eos": {
@@ -4246,7 +4246,7 @@
     {
       "source_codec": "aruba_aoscx",
       "target_codec": "fortigate_cli",
-      "drifted_total": 27
+      "drifted_total": 26
     },
     {
       "source_codec": "aruba_aoscx",
@@ -4406,7 +4406,7 @@
     {
       "source_codec": "cisco_nxos",
       "target_codec": "arista_eos",
-      "drifted_total": 40
+      "drifted_total": 37
     },
     {
       "source_codec": "cisco_nxos",
@@ -4416,7 +4416,7 @@
     {
       "source_codec": "cisco_nxos",
       "target_codec": "aruba_aoss",
-      "drifted_total": 52
+      "drifted_total": 49
     },
     {
       "source_codec": "cisco_nxos",
@@ -4426,7 +4426,7 @@
     {
       "source_codec": "cisco_nxos",
       "target_codec": "cisco_iosxe_cli",
-      "drifted_total": 33
+      "drifted_total": 30
     },
     {
       "source_codec": "cisco_nxos",
@@ -4446,7 +4446,7 @@
     {
       "source_codec": "cisco_nxos",
       "target_codec": "juniper_junos",
-      "drifted_total": 57
+      "drifted_total": 54
     },
     {
       "source_codec": "cisco_nxos",
@@ -4461,7 +4461,7 @@
     {
       "source_codec": "cisco_nxos",
       "target_codec": "vyos",
-      "drifted_total": 62
+      "drifted_total": 56
     },
     {
       "source_codec": "fortigate_cli",
