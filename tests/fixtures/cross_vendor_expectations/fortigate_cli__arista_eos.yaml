@@ -247,9 +247,9 @@ per_field_expectation:
       preserves but its meaning shifts on the target.  Description
       / comment (FortiGate ``set comment``) parse coverage may be
       inconsistent in v1.  Per-VRF static routes (FortiGate ``set
-      vrf <id>``) are unsupported on this pair — canonical model
-      lacks a vrf field on CanonicalStaticRoute AND the FortiGate
-      codec does not currently parse ``set vrf``.  IPv6 static
+      vrf <id>``) are unsupported on this pair — the fortigate_cli
+      codec does not currently parse ``set vrf`` into
+      ``CanonicalStaticRoute.vrf``.  IPv6 static
       routes live under ``config router static6`` on FortiOS
       (separate edit-table; not currently wired through the
       canonical static_routes list).

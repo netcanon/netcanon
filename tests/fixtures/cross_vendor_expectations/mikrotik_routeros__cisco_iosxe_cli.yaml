@@ -212,9 +212,11 @@ per_field_expectation:
       Codec converts CIDR <-> dotted-mask transparently.
       RouterOS's ``gateway=ether2`` interface form maps to Cisco's
       interface-as-gateway form.  Lossy bits: (1) per-VRF routes
-      (``routing-table=TENANT-A``) drop to default VRF on render
-      because the canonical model lacks a vrf field on
-      CanonicalStaticRoute; (2) ``blackhole=yes`` has no canonical
+      (``routing-table=TENANT-A``) drop to the global table
+      because the mikrotik_routeros codec parses-and-ignores the
+      ``routing-table=`` binding, so ``CanonicalStaticRoute.vrf``
+      is never populated on the RouterOS source; (2)
+      ``blackhole=yes`` has no canonical
       flag — render encodes it via the ``Null0`` interface name on
       Cisco side, which is semantic-equivalent but not byte-
       identical.

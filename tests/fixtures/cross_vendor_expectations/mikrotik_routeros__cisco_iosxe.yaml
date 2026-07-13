@@ -382,9 +382,12 @@ per_field_expectation:
       walk <network-instances> / <protocols><protocol identifier=
       "STATIC"> on emit.  Render-side wire-up gap; the matrix
       declares /routing/static-route "supported" aspirationally.
-      Flips to lossy once wired (per-VRF routes drop to default VRF
-      because canonical CanonicalStaticRoute lacks a vrf field;
-      blackhole=yes maps to Null0 interface name on Cisco side which
+      Flips to lossy once wired (per-VRF routes drop to the global
+      table because the mikrotik_routeros codec parses-and-ignores
+      the ``routing-table=<vrf>`` binding, so
+      ``CanonicalStaticRoute.vrf`` is never populated on the
+      RouterOS source; blackhole=yes maps to Null0 interface name
+      on Cisco side which
       is semantic-equivalent but not byte-identical).
     references: [oc-network-instance, scope-summary]
 

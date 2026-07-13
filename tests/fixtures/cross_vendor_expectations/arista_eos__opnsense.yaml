@@ -475,10 +475,10 @@ per_field_expectation:
       gateways).  The OPNsense codec does not currently render
       either block on cross-vendor; canonical static_routes from
       an Arista source therefore drop pending wire-up.  Per-VRF
-      static routes (Arista ``ip route vrf X ...``) are
-      unsupported on the cross-pair (canonical lacks a VRF field
-      on CanonicalStaticRoute, and OPNsense has no VRF model
-      anyway).  Arista's ``0.0.0.0/0`` form would also need
+      static routes (Arista ``ip route vrf X ...``) carry a
+      populated ``CanonicalStaticRoute.vrf`` but drop on this
+      cross-pair because OPNsense has no VRF model.  Arista's
+      ``0.0.0.0/0`` form would also need
       remapping to the OPNsense default-gateway idiom (set via
       the WAN zone interface).
     references: [opnsense-gateways, arista-routing-cg]

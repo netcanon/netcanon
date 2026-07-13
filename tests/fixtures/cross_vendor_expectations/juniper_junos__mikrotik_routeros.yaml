@@ -550,7 +550,9 @@ per_field_expectation:
       multiple canonical entries and expands to multiple RouterOS
       records; (3) per-VRF static routes (`routing-instances X
       routing-options static`) flatten to the global table because
-      ``CanonicalStaticRoute`` lacks a ``vrf`` field (deferred).
+      the mikrotik_routeros codec emits no per-route
+      ``routing-table=<vrf>`` binding (``CanonicalStaticRoute.vrf``
+      is harvested from Junos but unrendered on RouterOS).
     references: [junos-static-routing, mikrotik-ip-routing]
 
   # ── Tier 2 — DHCP server ──

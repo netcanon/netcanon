@@ -533,9 +533,10 @@ per_field_expectation:
       OPNsense codec does not currently parse OR emit either block;
       canonical static_routes from a Junos source therefore drop on
       render.  Per-VRF static routes (Junos ``set routing-instances
-      <vrf> routing-options static``) are unsupported (canonical
-      lacks a VRF field on CanonicalStaticRoute, and OPNsense has
-      no VRF anyway).  Junos's ``qualified-next-hop`` flattens to
+      <vrf> routing-options static``) carry a populated
+      ``CanonicalStaticRoute.vrf`` from the Junos source but drop
+      on this cross-pair because OPNsense has no VRF model.
+      Junos's ``qualified-next-hop`` flattens to
       multiple canonical entries.
     references: [junos-static-routing, opnsense-gateways]
 

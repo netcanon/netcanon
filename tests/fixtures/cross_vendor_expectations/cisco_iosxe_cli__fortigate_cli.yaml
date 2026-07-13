@@ -208,8 +208,9 @@ per_field_expectation:
       Default-VRF static routes round-trip cleanly via
       ``_mask_to_prefix`` / ``_prefix_to_mask`` conversions.
       Per-VRF static routes (Cisco ``ip route vrf X ...``) are
-      parse-and-ignore (canonical model lacks a vrf field on
-      CanonicalStaticRoute).  Metric semantics differ (Cisco
+      harvested onto ``CanonicalStaticRoute.vrf`` but drop on
+      render because the fortigate_cli codec has no per-route
+      VRF/VDOM binding.  Metric semantics differ (Cisco
       per-static-comparator vs FortiGate distance / AD-ordering)
       so the integer preserves but its meaning differs.
       Description (Cisco ``name <desc>``) is FortiGate-unwired.

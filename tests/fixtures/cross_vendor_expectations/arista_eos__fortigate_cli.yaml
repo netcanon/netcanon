@@ -253,8 +253,9 @@ per_field_expectation:
       CIDR ``ip route 10.50.0.0/16 10.0.0.2`` -> FortiOS ``set dst
       10.50.0.0 255.255.0.0 / set gateway 10.0.0.2``.  Per-VRF
       static routes (Arista ``ip route vrf X ...``) are
-      parse-and-ignore (canonical model lacks a vrf field on
-      CanonicalStaticRoute).  Outgoing-interface field requires
+      harvested onto ``CanonicalStaticRoute.vrf`` but drop on
+      render because the fortigate_cli codec has no per-route
+      VRF/VDOM binding.  Outgoing-interface field requires
       the port-rename mesh to map ``Ethernet1`` -> ``port1``.
       Metric semantics differ (Arista default 1 / per-static
       comparator vs FortiGate default 10 / AD-ordering) so the

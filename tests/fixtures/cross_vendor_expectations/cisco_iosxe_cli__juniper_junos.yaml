@@ -474,8 +474,9 @@ per_field_expectation:
       Default-VRF static routes round-trip cleanly (Cisco's
       dotted-mask form converts to/from Junos's CIDR via codec
       parsers).  Per-VRF static routes (``ip route vrf X ...``)
-      are parse-and-ignore in v1 (CanonicalStaticRoute lacks a
-      ``vrf`` field).  Cisco's "administrative distance" and
+      now round-trip via ``CanonicalStaticRoute.vrf`` (Cisco
+      ``ip route vrf X`` -> Junos ``set routing-instances X
+      routing-options static``).  Cisco's "administrative distance" and
       Junos's "preference" are vendor-specific scalars not 1:1;
       ``CanonicalStaticRoute.metric`` is the operator-visible
       metric, not preference/AD.  Junos's ``qualified-next-hop``

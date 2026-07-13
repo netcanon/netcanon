@@ -530,7 +530,9 @@ per_field_expectation:
       Junos ``preference`` are vendor-specific AD scalars not 1:1
       with canonical ``metric``; (2) per-VRF static routes
       (RouterOS ``routing-table=<name>``) flatten to global because
-      ``CanonicalStaticRoute`` lacks a ``vrf`` field (deferred);
+      the mikrotik_routeros codec parses-and-ignores the
+      ``routing-table=`` binding (``CanonicalStaticRoute.vrf`` is
+      never populated on the RouterOS source);
       (3) RouterOS ``type=blackhole`` semantics not modelled
       canonically — drops to a destination-only record.
     references: [mikrotik-ip-routing, junos-static-routing]

@@ -179,10 +179,13 @@ per_field_expectation:
     reason: >
       Default-VRF static routes round-trip cleanly (Cisco's dotted-
       mask form converts to / from Arista's CIDR form via the
-      codecs).  However, per-VRF static routes (``ip route vrf X
-      ...``) are currently parse-and-ignore on the Cisco codec
-      (CanonicalStaticRoute lacks a ``vrf`` field).  This is a
-      known gap that lands alongside VRF wire-up.
+      codecs).  Per-VRF static routes (``ip route vrf X ...``)
+      now round-trip too: both codecs harvest and render the
+      per-VRF form via ``CanonicalStaticRoute.vrf`` (Cisco
+      ``ip route vrf X`` <-> Arista ``ip route vrf X``).  The
+      ``lossy`` disposition is a conservative holdover from
+      before the v0.2.0 vrf wire-up; a candidate for promotion
+      to ``good``.
     references: [static_routes, vrf]
 
   # ── Tier 2 — auto-translate with review ──
@@ -390,8 +393,9 @@ per_field_expectation:
 # Deferred items (not researched in depth this pass):
 #
 #   * Per-VRF static routes (``ip route vrf X ...``) — Cisco parses
-#     and emits them, Arista same; canonical model lacks a vrf field
-#     on CanonicalStaticRoute.  Lands alongside VRF wire-up.
+#     and emits them, Arista same, now bound to
+#     ``CanonicalStaticRoute.vrf`` (v0.2.0); round-trips cleanly.
+#     The static_routes cell above is conservatively still lossy.
 #
 #   * NTP per-server options (prefer / iburst / key / source) —
 #     canonical model is host-list-only.  Lossy by design;
