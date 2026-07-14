@@ -271,11 +271,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scheduler.shutdown(wait=False)
         logger.info("Scheduler stopped")
         # Release the dedicated backup-job executor's threads (#27).  Let
-        # already-queued runs drain (cancel_futures=False) but don't block
-        # server shutdown behind an in-flight backup (wait=False).  Dropping
-        # the module-level singleton also lets a subsequent create_app() in
-        # the same process — every test builds a fresh app — rebuild a live
-        # executor instead of reusing a shut-down one.
+        # already-queued runs drain (cancel_futures=False) and return from the
+        # lifespan without waiting on an in-flight backup (wait=False).
+        # Dropping the module-level singleton also lets a subsequent
+        # create_app() in the same process — every test builds a fresh app —
+        # rebuild a live executor instead of reusing a shut-down one.
+        #
+        # Honest caveat (HEAD-review F6): this call returns fast, but PROCESS
+        # exit still blocks on the executor's atexit join (concurrent.futures'
+        # _python_exit joins every worker at interpreter teardown), and with
+        # cancel_futures=False those workers drain the ENTIRE queued backlog
+        # first — so a Ctrl-C / desktop Quit with a large queued backlog
+        # lingers until it has all run.  Drain-on-exit is deliberate (a queued
+        # backup shouldn't be silently dropped); flipping to
+        # cancel_futures=True would need the deferred startup stuck-pending
+        # reconciliation (CONC-16) as its companion so cancelled-queued jobs
+        # don't read `pending` forever.
         from .services.backup_runner import reset_job_executor
         reset_job_executor(wait=False, cancel_futures=False)
 

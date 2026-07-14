@@ -187,11 +187,16 @@ def reset_job_executor(*, wait: bool = False, cancel_futures: bool = True) -> No
 
     Args:
         wait: Passed to ``ThreadPoolExecutor.shutdown``.  Defaults to
-            ``False`` so neither server shutdown nor a test teardown blocks
-            behind an in-flight (possibly minutes-long) backup.
+            ``False`` so the ``shutdown`` *call* returns without blocking
+            behind an in-flight (possibly minutes-long) backup.  Note this
+            does NOT make PROCESS exit non-blocking: concurrent.futures'
+            atexit join still waits on every worker at interpreter teardown
+            (HEAD-review F6).
         cancel_futures: Passed to ``shutdown``.  Defaults to ``True`` so
             queued-but-not-started jobs are dropped on reset; the lifespan
-            passes ``cancel_futures=False`` to let already-queued runs drain.
+            passes ``cancel_futures=False`` to let already-queued runs drain
+            (so the atexit join above then blocks on the whole backlog until
+            it has run).
     """
     global _JOB_EXECUTOR
     with _JOB_EXECUTOR_LOCK:
@@ -224,9 +229,13 @@ def finalize_crashed_job(
     if job.status not in _TERMINAL_JOB_STATUSES:
         for r in job.results:
             if r.status not in ("success", "failed"):
-                r.status = "failed"
+                # Error BEFORE status (HEAD-review F8) — see run_backup_job's
+                # safety net: a concurrent GET keys on the terminal status, so
+                # the error text must land first or a poll can serialize a
+                # failed device with `error: null`.
                 if not r.error:
                     r.error = f"{r.host}: backup worker crashed ({exc})."
+                r.status = "failed"
         job.completed_at = datetime.now(UTC)
         job.status = JobStatus.failed
     if job_store is not None:
@@ -283,7 +292,16 @@ def submit_backup_job(*args, **kwargs) -> Future:
     ``pending`` and callers must poll ``GET /backups/{id}`` for the terminal
     state (see AGENTS.md "Hard Rules").
     """
-    fut = _job_executor().submit(run_backup_job, *args, **kwargs)
+    try:
+        fut = _job_executor().submit(run_backup_job, *args, **kwargs)
+    except RuntimeError:
+        # Submit-vs-reset race (HEAD-review F7): reset_job_executor cleared the
+        # singleton and shut the old pool down between our _job_executor() read
+        # and the .submit, so we hit "cannot schedule new futures after
+        # shutdown".  reset_ guarantees the next _job_executor() rebuilds a
+        # fresh pool — retry once.  If it still fails the process is genuinely
+        # tearing down; let it propagate as shutdown noise.
+        fut = _job_executor().submit(run_backup_job, *args, **kwargs)
     # (HEAD-review F3) Attach a done-callback that finalizes a crashed job.
     # Recover the job + its store from the runner args by NAME (robust to
     # positional/keyword; ``run_backup_job`` is resolved at call time so a
@@ -703,12 +721,16 @@ def run_backup_job(
     # audit 81d9740 T0-2).
     for r in job.results:
         if r.status not in ("success", "failed"):
-            r.status = "failed"
+            # Error BEFORE status (HEAD-review F8): a concurrent GET keys on the
+            # terminal status, so writing `failed` before its `error` text lets
+            # a poll serialize a failed device with `error: null`.  This matches
+            # the error-then-status order of every other terminal write path.
             if not r.error:
                 r.error = (
                     f"{r.host}: backup did not run to completion "
                     "(the worker did not reach a terminal state)."
                 )
+            r.status = "failed"
 
     job.completed_at = datetime.now(UTC)
     success = sum(1 for r in job.results if r.status == "success")
