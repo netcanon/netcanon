@@ -857,10 +857,10 @@ class CanonicalIntent(BaseModel):
             ``juniper_junos`` (``set system syslog host <ip>``),
             ``cisco_iosxe_cli`` and ``arista_eos`` (``logging host <ip>``,
             promotions #1/#11), ``cisco_nxos`` (``logging server <ip>``,
-            #4) and ``cisco_iosxr`` (bare ``logging <ip>``, #13).  Other
-            codecs still drop it — the ones
-            that declare it ``unsupported`` surface the cross-vendor
-            banner; the rest fall through to an implicit drop.  Not yet a
+            #4) and ``cisco_iosxr`` (bare ``logging <ip>``, #13).  The other
+            seven codecs all declare it ``unsupported`` and surface the
+            cross-vendor banner on a source-side value (there is no
+            implicit-drop "rest" — every codec declares this path).  Not yet a
             universal round-trip guarantee — see docs/CAPABILITIES.md.
         interfaces: Tier 1 — per-interface configuration records.
         vlans: Tier 1 — VLAN definitions with port membership.
