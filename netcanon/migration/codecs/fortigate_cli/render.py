@@ -600,20 +600,27 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     out.append(f"        set vlanid {vid}")
                     if parent:
                         out.append(f'        set interface "{parent}"')
-            if iface.ipv4_addresses:
-                addr = iface.ipv4_addresses[0]
+            # Only rows with a real IP can render as FortiOS ``set ip`` — a
+            # VARP virtual-gateway anycast row carries ip='' +
+            # virtual_gateway_address, and emitting ``set ip  <mask>`` is
+            # invalid CLI.  The primary ``set ip`` line was previously taken
+            # from ``ipv4_addresses[0]`` UNGUARDED, so an SVI whose first (or
+            # only) address was VARP-only rendered the broken empty-IP line
+            # (HEAD-review L1-6); apply the same predicate as the secondary
+            # rows below and pick the first real address as the primary.
+            real_addrs = [
+                a for a in iface.ipv4_addresses
+                if a.ip and not a.virtual_gateway_address
+            ]
+            if real_addrs:
+                addr = real_addrs[0]
                 mask = _prefix_to_mask(addr.prefix_length)
                 out.append(f"        set ip {addr.ip} {mask}")
                 out.append("        set mode static")
                 # Additional interface IPs → FortiOS ``config secondaryip``
                 # table (whole-subnet reachability that used to vanish —
-                # promotion #3).  Skip rows with no real IP: a VARP virtual-
-                # gateway anycast row carries ip='' + virtual_gateway_address,
-                # and emitting ``set ip  <mask>`` would be invalid CLI.
-                secondaries = [
-                    a for a in iface.ipv4_addresses[1:]
-                    if a.ip and not a.virtual_gateway_address
-                ]
+                # promotion #3).
+                secondaries = real_addrs[1:]
                 if secondaries:
                     out.append("        set secondary-IP enable")
                     out.append("        config secondaryip")

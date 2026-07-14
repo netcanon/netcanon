@@ -79,6 +79,27 @@ def test_real_fixture_round_trip_stable():
     assert len(a.interfaces) == len(b.interfaces)
 
 
+def test_nve_member_vni_tolerates_ingress_replication_tail():
+    # HEAD-review L1-5: ``member vni <V> ingress-replication`` (the explicit
+    # BGP-EVPN head-end spelling) under ``interface nve1``.  The ``$``-anchored
+    # regex previously rejected the whole line, so the VLAN<->VNI binding
+    # silently vanished (vxlan_vnis == []).  The tail is tolerated (not
+    # modelled) and the binding survives on this supported path.
+    raw = (
+        "hostname leaf1\n"
+        "vlan configuration 100\n"
+        " member evpn-instance 1 vni 10100\n"
+        "interface nve1\n"
+        " no ip address\n"
+        " source-interface Loopback0\n"
+        " host-reachability protocol bgp\n"
+        " member vni 10100 ingress-replication\n"
+    )
+    intent = _codec().parse(raw)
+    assert [(v.vlan_id, v.vni, v.mcast_group) for v in intent.vxlan_vnis] == \
+           [(100, 10100, "")]
+
+
 # ---------------------------------------------------------------------------
 # Synthetic round-trips (canonical -> render -> parse)
 # ---------------------------------------------------------------------------
