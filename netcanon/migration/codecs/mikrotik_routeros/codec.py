@@ -138,7 +138,6 @@ class MikroTikRouterOSCodec(CodecBase):
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/interfaces/interface/tunnel-type",             # /interface gre vs eoip vs ipip discriminator
             "/vlans/vlan/id",
-            "/vlans/vlan/name",
             "/routing/static-route",
             "/routing/static-route/gateway",      # audit e5b77d7 — next-hop round-trips
             "/routing/static-route/description",  # run3 — `comment=...`

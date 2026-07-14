@@ -114,7 +114,6 @@ class ArubaAOSSCodec(CodecBase):
             "/interfaces/interface/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
-            "/interfaces/interface/config/type",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3

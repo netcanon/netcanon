@@ -135,7 +135,6 @@ class OPNsenseCodec(CodecBase):
             "/system/domain",
             "/system/dns-server",
             "/interfaces/interface/name",
-            "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
@@ -159,11 +158,11 @@ class OPNsenseCodec(CodecBase):
             "/local-users/user/hashed-password",
             "/local-users/user/role",
             # Wave B (v0.2.0) — CARP groups on /virtualip/vip.
-            # OPNsense's BSD-CARP HA primitive parses + renders
-            # round-trip through CanonicalVRRPGroup with
-            # ``mode="carp"``.  See LossyPath below for the mode-
-            # restriction caveat (non-CARP modes drop on render).
-            "/interfaces/interface/vrrp-groups/group",
+            # OPNsense's BSD-CARP HA primitive parses + renders round-trip
+            # through CanonicalVRRPGroup with ``mode="carp"``, but the path
+            # is declared lossy below (non-CARP modes drop on render — the
+            # mode-restriction caveat), so it classifies lossy and is
+            # intentionally NOT listed supported.
         ],
         lossy=[
             LossyPath(

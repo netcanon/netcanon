@@ -116,9 +116,7 @@ class FortiGateCLICodec(CodecBase):
             "/system/dns-server",
             "/system/ntp-server",
             "/interfaces/interface/name",
-            "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
-            "/interfaces/interface/config/type",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
             # Additional interface IPs via ``config secondaryip`` (promotion #3).

@@ -265,8 +265,14 @@ def _set_equal_lists(a: list[Any], b: list[Any]) -> bool:
 #: address SET round-trips losslessly across vendors — only the flag
 #: differs — so comparing it false-flagged CODEC_BUG (a junos 3-address
 #: loopback → IOS-XE renders 1 primary + 2 secondary; every IP survives).
-#: The mesh only ever compares cross-vendor pairs (intra-vendor self-pairs
-#: are skipped), so the flag is never the carrier of real intent here.
+#: This strip targets CROSS-vendor comparison, where the flag is a
+#: target-determined artifact, not intent.  Caveat: the mesh ALSO computes the
+#: 12 intra-vendor diagonals (they feed ``pair_drift_yaml_less`` — 12 of the 88
+#: ratcheted yaml-less pairs), and the strip applies there too, so a same-vendor
+#: round-trip that corrupted ``is_secondary`` would not surface on the mesh
+#: diagonal.  That case is covered separately by dedicated unit tests
+#: (test_is_secondary_fidelity.py pins arista + cisco_iosxe_cli same-vendor
+#: flag fidelity).
 _COSMETIC_LIST_SUBFIELDS: dict[str, dict[str, tuple[str, ...]]] = {
     "interfaces": {
         "ipv4_addresses": ("is_secondary",),
@@ -282,8 +288,11 @@ _COSMETIC_LIST_SUBFIELDS: dict[str, dict[str, tuple[str, ...]]] = {
 #: fully support v3.  Comparing the opaque hash false-flags drift on a
 #: credential the operator did not change — exactly the ``is_secondary``
 #: situation (a target-determined rendering artifact, not operator intent).
-#: The mesh only compares cross-vendor pairs, so the hash is never the carrier
-#: of real intent here.  Blanked on BOTH sides before the snmp-dict compare so
+#: This strip targets cross-vendor comparison; caveat, it also runs on the 12
+#: intra-vendor diagonals in ``pair_drift_yaml_less``, so a same-vendor
+#: passphrase corruption would not surface on the mesh diagonal — the snmpv3
+#: sub-field walk unit tests pin that per-codec.  Blanked on BOTH sides before
+#: the snmp-dict compare so
 #: a passphrase-only difference reads as preserved; any OTHER snmp drift
 #: (community / contact / location / trap_hosts / v3 group / protocols) still
 #: surfaces.  (Scoped subset of promotion #20 — the whole-``snmp``-dict flip
