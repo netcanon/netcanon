@@ -144,7 +144,11 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
 
     from ...models.device import BackupRequest, DeviceCredentials, DeviceTarget
     from ...models.device_profile import DeviceProfile
-    from ...services.backup_runner import _job_executor, run_backup_job
+    from ...services.backup_runner import (
+        _job_executor,
+        finalize_crashed_job,
+        run_backup_job,
+    )
     from ...storage.device_profile_store import DEVICE_PROFILE_REGISTRY_LOCK
 
     schedules = app.state.schedules
@@ -279,27 +283,34 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
     # changes.  Args are passed positionally — ``run_in_executor`` takes no
     # kwargs, which matches ``run_backup_job``'s positional call here.
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(
-        _job_executor(),
-        run_backup_job,
-        job,
-        request,
-        app.state.definitions,
-        app.state.storage,
-        job_store,
-        max_workers,
-        # P1C3 layered-definition + probe wiring — schedule-triggered
-        # backups get the same overlay resolution + detected_facts
-        # persistence as interactive ones.
-        getattr(app.state, "definition_loader", None),
-        getattr(app.state, "device_profiles", None),
-        getattr(app.state, "device_profile_store", None),
-        # (HEAD-review F5) app's live Settings as the 10th positional arg
-        # (``run_in_executor`` takes no kwargs) so the scheduled job's
-        # collectors use the app-configured data dir / TOFU known_hosts store
-        # rather than a worker-resolved ``Settings()`` from env.
-        getattr(app.state, "settings", None),
-    )
+    try:
+        await loop.run_in_executor(
+            _job_executor(),
+            run_backup_job,
+            job,
+            request,
+            app.state.definitions,
+            app.state.storage,
+            job_store,
+            max_workers,
+            # P1C3 layered-definition + probe wiring — schedule-triggered
+            # backups get the same overlay resolution + detected_facts
+            # persistence as interactive ones.
+            getattr(app.state, "definition_loader", None),
+            getattr(app.state, "device_profiles", None),
+            getattr(app.state, "device_profile_store", None),
+            # (HEAD-review F5) app's live Settings as the 10th positional arg
+            # (``run_in_executor`` takes no kwargs) so the scheduled job's
+            # collectors use the app-configured data dir / TOFU known_hosts
+            # store rather than a worker-resolved ``Settings()`` from env.
+            getattr(app.state, "settings", None),
+        )
+    except Exception as exc:
+        # (HEAD-review F3) The runner raised before its own terminal logic;
+        # finalize the job so it can't strand non-terminal, then re-raise so
+        # the outer ``_run_scheduled_backup`` wrapper logs it.
+        finalize_crashed_job(job, job_store, exc)
+        raise
 
     # A minutes-long backup ran above; the operator may have deleted this
     # schedule in the meantime.  Re-check existence under the registry lock

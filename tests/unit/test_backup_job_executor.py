@@ -165,6 +165,60 @@ def test_submit_backup_job_runs_run_backup_job_on_the_dedicated_pool(monkeypatch
         backup_runner.reset_job_executor()
 
 
+def test_submit_backup_job_finalizes_a_crashed_runner(monkeypatch, tmp_path, caplog):
+    """(HEAD-review F3) A ``run_backup_job`` body exception lands on the
+    fire-and-forget Future — and, unlike ``asyncio``, ``concurrent.futures``
+    never surfaces an unretrieved exception, so pre-fix it vanished with the job
+    stranded non-terminal (eviction-protected) and ZERO log lines.  The
+    done-callback must log it and force-fail + persist the job."""
+    import logging as _logging
+    import time
+    from datetime import UTC, datetime
+
+    from netcanon.models.backup import BackupJob, BackupResult, JobStatus
+    from netcanon.storage.job_store import FileJobStore
+
+    backup_runner.reset_job_executor()
+    store = FileJobStore(tmp_path / "jobs")
+    job = BackupJob(
+        id="crash-1", status=JobStatus.running, created_at=datetime.now(UTC),
+        total_devices=1,
+        results=[BackupResult(
+            host="10.0.0.1", device_type="Cisco", status="running",
+            duration_seconds=0.0,
+        )],
+    )
+    store.save(job)  # pending/running on disk before the crash
+
+    def crash_run(
+        job, request=None, definitions=None, storage=None, job_store=None,
+        *a, **k,
+    ):
+        # Same leading param names as run_backup_job so the callback's
+        # signature-bind recovers job + job_store.
+        raise RuntimeError("kaboom in the worker body")
+
+    monkeypatch.setattr(backup_runner, "run_backup_job", crash_run)
+    try:
+        with caplog.at_level(
+            _logging.ERROR, logger="netcanon.services.backup_runner"
+        ):
+            backup_runner.submit_backup_job(job, None, {}, None, store, 1)
+            deadline = time.monotonic() + 10
+            while (
+                job.status not in backup_runner._TERMINAL_JOB_STATUSES
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+    finally:
+        backup_runner.reset_job_executor()
+
+    assert job.status is JobStatus.failed  # not stranded non-terminal
+    assert store.load_one("crash-1").status is JobStatus.failed  # persisted
+    assert job.results[0].status == "failed"
+    assert "crashed in the worker" in caplog.text  # no longer silent
+
+
 # ---------------------------------------------------------------------------
 # Config resolution: default / env override / floor / garbage fallback
 # ---------------------------------------------------------------------------
