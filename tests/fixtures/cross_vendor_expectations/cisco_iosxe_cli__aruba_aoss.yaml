@@ -201,11 +201,11 @@ per_field_expectation:
       Default-VRF static routes round-trip cleanly: Cisco's dotted-
       mask ``ip route DEST MASK GW`` converts to Aruba's CIDR
       ``ip route DEST/N GW`` via the codec helpers.  Per-VRF static
-      routes (``ip route vrf X ...``) are lossy on this direction:
-      (a) the cisco_iosxe_cli codec parse-and-ignores VRF entirely
-      (capability matrix lists /routing-instances/instance under
-      unsupported), so per-VRF routes drop on parse; (b) Aruba has
-      no VRF concept so the per-VRF semantic has no target anyway.
+      routes (``ip route vrf X ...``) are lossy on this direction
+      because Aruba has no VRF concept, so the per-VRF semantic has
+      no target: cisco_iosxe_cli DOES harvest per-VRF routes on
+      parse (``/routing/static-route/vrf`` is a supported surface),
+      but the vrf binding drops on the AOS-S render.
     references: [static_routes]
 
   # ── Tier 2 — auto-translate with review ──
@@ -303,11 +303,13 @@ per_field_expectation:
   routing_instances:
     disposition: unsupported
     reason: >
-      cisco_iosxe_cli capability matrix lists /routing-instances/
-      instance under unsupported ("VRF declarations parse-and-ignore
-      in v1").  Aruba AOS-S has no VRF concept at all — the
-      platform is a campus L2/L3 switch with a single global
-      routing table.  Both ends absent.
+      cisco_iosxe_cli parses VRF declarations (``vrf definition`` +
+      per-interface ``vrf forwarding``) into
+      ``CanonicalIntent.routing_instances`` — its own matrix lists
+      /routing-instances/instance as lossy, not absent.  Aruba
+      AOS-S has no VRF concept at all — the platform is a campus
+      L2/L3 switch with a single global routing table.  Target-
+      driven unsupported.
     references: [vrf_unsupported]
 
   # ── Tier 3 — informational only (never auto-rendered) ──

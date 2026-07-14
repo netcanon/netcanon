@@ -306,11 +306,13 @@ per_field_expectation:
     reason: >
       MikroTik codec capability matrix lists ``/vxlan-vnis/vni`` as
       unsupported ("RouterOS VXLAN exists but is rare in canonical
-      scope and not modelled in v1.").  Cisco IOS-XE codec same:
-      ``/vxlan-vnis/vni`` parse-and-ignore in v1 ("IOS-XE VXLAN
-      mappings parse-and-ignore... wire-up deferred until demand
-      arrives for Catalyst-to-Arista migrations.").  Cross-pair
-      surface unsupported regardless of structural compatibility.
+      scope and not modelled in v1.").  The MikroTik SOURCE parses
+      no VXLAN, so the canonical ``vxlan_vnis`` list is empty after
+      parsing — that empty source drives the cross-pair disposition.
+      (Cisco IOS-XE supports ``/vxlan-vnis/vni`` on parse and render
+      as of #351, so the target no longer constrains this pair.)
+      Cross-pair surface unsupported regardless of structural
+      compatibility.
 
   evpn_type5_routes:
     disposition: unsupported
@@ -325,10 +327,11 @@ per_field_expectation:
     reason: >
       The MikroTik codec does not yet wire up ``/ip vrf`` parsing
       — the canonical ``routing_instances`` list is empty after
-      parsing.  Cisco IOS-XE codec capability matrix lists
-      ``/routing-instances/instance`` as unsupported (parse-and-
-      ignores ``vrf definition`` blocks in v1).  Cross-pair
-      empty regardless of structural compatibility.  When wire-up
+      parsing, which drives the cross-pair disposition.  (Cisco
+      IOS-XE actually parses ``vrf definition`` blocks into
+      ``routing_instances`` and renders them back — declared lossy,
+      not unsupported — so the target does not constrain this pair.)
+      Cross-pair empty regardless of structural compatibility.  When wire-up
       lands on the MikroTik side, the cross-pair surface will
       upgrade to lossy: RouterOS keeps RD/RT under BGP rather
       than the VRF block, so even when both sides parse VRFs the

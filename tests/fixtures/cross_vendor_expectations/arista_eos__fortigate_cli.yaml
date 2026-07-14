@@ -488,9 +488,10 @@ per_field_expectation:
 # Deferred items (not researched in depth this pass):
 #
 #   * Per-VRF static routes (``ip route vrf X ...``) — the
-#     CanonicalStaticRoute model has no VRF field; data drops at
-#     parse on the Arista source.  Lands alongside richer VRF
-#     wire-up.
+#     CanonicalStaticRoute.vrf field carries the binding fine, but
+#     FortiGate has no per-VRF static-route render target (renders
+#     no VRF/routing-instance construct), so the VRF binding drops
+#     on the FortiGate side.  Lands alongside richer VRF wire-up.
 #
 #   * IPv6 static routes — not currently rendered through the
 #     canonical static_routes list on FortiOS; cross-vendor IPv6

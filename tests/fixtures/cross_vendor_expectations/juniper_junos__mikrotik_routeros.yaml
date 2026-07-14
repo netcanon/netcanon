@@ -869,8 +869,10 @@ per_field_expectation:
 #
 # Deferred items:
 #
-#   * Per-VRF static routes — schema gap on CanonicalStaticRoute
-#     (no vrf field).  Lands alongside VRF wire-up.
+#   * Per-VRF static routes — the RouterOS render ignores
+#     ``CanonicalStaticRoute.vrf`` (the schema field exists), so
+#     non-global routes flatten into the global table on the
+#     mikrotik_routeros target.  Lands alongside VRF wire-up.
 #
 #   * Junos `qualified-next-hop` weighted multi-NH preservation —
 #     canonical model is single-NH-only; flattens to multiple

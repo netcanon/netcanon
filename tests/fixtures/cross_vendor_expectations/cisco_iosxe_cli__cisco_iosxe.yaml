@@ -357,11 +357,12 @@ per_field_expectation:
   "interfaces[].vrf":
     disposition: unsupported
     reason: >
-      The CLI codec parse-and-ignores `vrf forwarding <name>` on
-      interfaces (its `/routing-instances/instance` capability path
-      is declared `unsupported`); even if it parsed, the NETCONF
-      codec does not render `<network-instance><interfaces>` mappings.
-      Cross-pair drops VRF membership entirely today.
+      The CLI codec parses `vrf forwarding <name>` on interfaces
+      onto `iface.vrf` (its `/routing-instances/instance` capability
+      path is declared `lossy`, not `unsupported`).  The disposition
+      is `unsupported` because the NETCONF stub target renders only
+      `<interfaces>` and no `<network-instance><interfaces>` mappings,
+      so cross-pair drops VRF membership entirely today.
     references: [oc-network-instance, iosxe-multivrf]
 
   vlans:
@@ -381,10 +382,11 @@ per_field_expectation:
       The CLI codec parses `ip route ...` lines into
       `intent.static_routes`, but the NETCONF codec does not render
       `<network-instances><protocols><protocol identifier=STATIC>` XML.
-      Routes are dropped on render.  Per-VRF routes also have a
-      canonical-model gap (`CanonicalStaticRoute` lacks a `vrf`
-      field).  Flips to good for default-VRF on wire-up; per-VRF
-      stays lossy.
+      Routes are dropped on render because the Phase-0.5 NETCONF stub
+      target emits only `<interfaces>`, no `<network-instances>`.
+      `CanonicalStaticRoute` carries a `vrf` field, so per-VRF routes
+      survive parse — they drop here for the same target-render
+      reason, not a canonical-model gap.  Flips to good on wire-up.
     references: [oc-network-instance, iosxe-routing-cg]
 
   # ── Tier 2 — auto-translate with review ──

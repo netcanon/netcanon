@@ -20,9 +20,10 @@
 #     declarations (vrf instance) AND the per-VRF RD + RT under
 #     router-bgp / vrf <name>; the Cisco IOS-XE RENDER path emits
 #     vrf definition blocks with the canonical RD + RTs under
-#     address-family ipv4.  This is the better direction for L3 VRF
-#     fidelity (the Cisco PARSE side is parse-and-ignore but parse
-#     direction is irrelevant on a one-way migration).
+#     address-family ipv4.  Good L3 VRF fidelity here; the Cisco
+#     IOS-XE PARSE side also harvests vrf definition blocks into
+#     routing_instances (parse._parse_routing_instances), so the
+#     VRF surface round-trips both ways, not just Arista -> Cisco.
 #
 #   * Going Arista -> Cisco IOS-XE, EVPN MAC-VRF (router bgp / vlan N
 #     / rd ... / route-target ...) is asymmetrically lossy: the
@@ -34,10 +35,11 @@
 #     required.
 #
 #   * Going Arista -> Cisco IOS-XE, VXLAN data (interface Vxlan1
-#     with vlan/vrf VNI mappings + source-interface + udp-port) is
-#     unsupported: Arista parses, Cisco IOS-XE renders nothing on the
-#     /vxlan-vnis/* xpaths (capability matrix lists them all under
-#     unsupported).
+#     with vlan VNI mappings + source-interface + mcast-group)
+#     round-trips: Arista parses, Cisco IOS-XE renders the vlan
+#     configuration VNI bindings + interface nve1 VTEP (promotion
+#     #16).  Only the head-end flood-list + a custom udp-port drop
+#     (declared lossy).
 #
 #   * Going Arista -> Cisco IOS-XE, the speed-hint loss runs the
 #     "wrong way": Arista source has no speed token in interface
@@ -451,18 +453,20 @@ per_field_expectation:
 #     GigabitEthernet) and the sha512 -> Cisco-secret-5 emission
 #     produces a hash Cisco's parser will reject.
 #
-#   * The VRF surface is the noteworthy ASYMMETRIC win on this
-#     direction: Arista parses richly (vrf instance + router-bgp /
-#     vrf RD + RT), Cisco renders cleanly (vrf definition with
-#     address-family + route-target).  This is the better direction
-#     than Cisco -> Arista (where Cisco PARSE is parse-and-ignore
-#     and the data never reaches the canonical tree at all).
+#   * The VRF surface round-trips well on this direction: Arista
+#     parses richly (vrf instance + router-bgp / vrf RD + RT),
+#     Cisco renders cleanly (vrf definition with address-family +
+#     route-target).  Cisco IOS-XE parse also harvests vrf
+#     definition blocks into routing_instances
+#     (parse._parse_routing_instances), so the surface is symmetric
+#     rather than a one-way win.
 #
-#   * MAC-VRF (router bgp / vlan N) and VXLAN (interface Vxlan1)
-#     are confidently lossy / unsupported: Arista parses, Cisco
-#     IOS-XE render has no emission path for either (would need
-#     l2vpn-evpn instance ... or interface NVE ... which are not
-#     wired in the codec render today).
+#   * MAC-VRF (router bgp / vlan N) stays lossy: Arista parses
+#     instance_type="mac-vrf" but Cisco IOS-XE has no l2vpn-evpn
+#     emit path, so those records re-parse as plain vrf.  VXLAN
+#     (interface Vxlan1) now round-trips via interface nve1
+#     (promotion #16); only the head-end flood-list + custom
+#     udp-port drop lossy.
 #
 #   * Spanning-tree, BGP, OSPF, EIGRP are explicitly out of canonical
 #     scope on both vendors and confidently marked unsupported.

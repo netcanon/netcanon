@@ -272,10 +272,10 @@ per_field_expectation:
     reason: >
       Junos ``set system name-server`` lines map to OPNsense
       repeated ``<system>/<dnsserver>`` elements.  The OPNsense codec
-      does not currently parse ``<dnsserver>`` into the canonical
-      ``dns_servers`` list (declared supported in capability matrix,
-      wire-up incomplete), and does not currently emit ``<dnsserver>``
-      on render.  Cross-pair drops the resolver list pending wire-up.
+      parses those ``<system>/<dnsserver>`` children into the canonical
+      ``dns_servers`` list (parse.py:232) and re-emits one
+      ``<dnsserver>`` per entry on render (render.py:104), so the
+      resolver list round-trips junos→opnsense (preserved, not dropped).
     references: [junos-initial-config, opnsense-system]
 
   ntp_servers:

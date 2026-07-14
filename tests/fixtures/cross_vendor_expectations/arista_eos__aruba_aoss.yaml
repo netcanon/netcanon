@@ -450,9 +450,10 @@ per_field_expectation:
 # Deferred items:
 #
 #   * Per-VRF static routes (``ip route vrf X ...``) — the
-#     CanonicalStaticRoute model has no VRF field; data drops at
-#     parse on the Arista source.  Lands alongside richer VRF
-#     wire-up.
+#     CanonicalStaticRoute.vrf field exists, but aruba_aoss has
+#     no per-VRF static-route render form (its render emits only
+#     global-table ``ip route``), so per-VRF routes drop on
+#     render to aoss.  Lands alongside richer VRF wire-up.
 #
 #   * IPv6 static routes — not reliably parsed on the Aruba
 #     codec; cross-vendor IPv6 routes drop.

@@ -300,10 +300,9 @@ per_field_expectation:
     reason: >
       FortiGate codec capability matrix lists ``/vxlan-vnis/vni``
       as unsupported (rationale: "VXLAN not modelled — FortiGate
-      is a firewall codec").  Cisco IOS-XE codec also lists VXLAN
-      as unsupported in v1.  Both codecs parse-and-ignore VXLAN
-      intent on this cross-pair; FortiGate as a firewall has no
-      EVPN data plane.
+      is a firewall codec").  As the FortiGate source parses no
+      VXLAN intent, nothing populates on this cross-pair;
+      FortiGate as a firewall has no EVPN data plane.
     references: [vrf]
 
   evpn_type5_routes:
@@ -318,10 +317,9 @@ per_field_expectation:
     reason: >
       FortiGate codec does not parse ``set vrf <id>`` (per-interface
       integer VRF, FortiOS 7.0+) into canonical
-      CanonicalRoutingInstance records in v1.  Cisco IOS-XE codec
-      capability matrix lists ``/routing-instances/instance`` as
-      unsupported.  More fundamentally, FortiGate's per-interface
-      integer VRF model (no name, no RD, no RT) cannot be expressed
+      CanonicalRoutingInstance records in v1.  More fundamentally,
+      FortiGate's per-interface integer VRF model (no name, no RD,
+      no RT) cannot be expressed
       as Cisco's named-VRF + RD + RT model without operator-curated
       lookup tables.  VDOMs are a heavier multi-tenancy primitive
       that requires per-VDOM canonical-tree splitting (out of v1

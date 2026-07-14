@@ -487,11 +487,11 @@ per_field_expectation:
       OPNsense splits static-route declaration into two blocks:
       ``<gateways>/<gateway_item>`` (named gateways) and
       ``<staticroutes>/<route>`` (routes referencing named
-      gateways).  The OPNsense codec does not currently parse OR
-      emit either block; canonical static_routes from a RouterOS
-      source therefore drop on render.  Per-VRF routes (RouterOS
-      ``routing-table=TENANT-A``) are unsupported (canonical lacks a
-      VRF field on CanonicalStaticRoute and the MikroTik codec does
+      gateways).  The OPNsense codec parses both blocks, but its
+      render path emits neither; canonical static_routes from a
+      RouterOS source therefore drop on render.  Per-VRF routes
+      (RouterOS ``routing-table=TENANT-A``) are unsupported (they
+      have no OPNsense render target and the MikroTik codec does
       not yet parse VRF context).  Default route (``0.0.0.0/0``)
       maps to OPNsense's WAN-zone gateway pattern, not a
       ``<staticroutes>`` entry — operator-curated.

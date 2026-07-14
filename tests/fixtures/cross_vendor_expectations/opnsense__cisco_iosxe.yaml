@@ -157,12 +157,13 @@ per_field_expectation:
   dns_servers:
     disposition: not_applicable
     note: >
-      OPNsense parser doesn't currently wire `<system>/<dnsserver>`
-      into canonical intent.dns_servers; the canonical list is
-      empty from this source.  Doubly empty: source doesn't
-      populate AND target render doesn't emit `/system/dns-server`
-      anyway.  Flips to lossy on the source side once OPNsense
-      parse wire-up completes; still gated by target render side.
+      OPNsense parse DOES harvest `<system>/<dnsserver>` into
+      canonical intent.dns_servers (opnsense parse.py:232), so the
+      source list is populated.  The drop is entirely target-side:
+      the cisco_iosxe NETCONF/OpenConfig Phase-0.5 stub render emits
+      no `<system><dns>` element, so intent.dns_servers is dropped on
+      render.  Flips to lossy once the target render side grows a
+      `/system/dns-server` wire-up.
     references: [oc-system]
 
   ntp_servers:

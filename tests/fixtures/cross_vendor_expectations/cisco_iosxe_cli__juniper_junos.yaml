@@ -753,9 +753,6 @@ per_field_expectation:
 #
 # Deferred items:
 #
-#   * Per-VRF static routes — schema gap on CanonicalStaticRoute
-#     (no vrf field).  Lands alongside VRF wire-up.
-#
 #   * NTP per-server options / qualified-next-hop preservation —
 #     canonical model is host-list-only / single-NH-only.
 #

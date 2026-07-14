@@ -786,8 +786,9 @@ per_field_expectation:
 #   * IPv6 static routes — CanonicalStaticRoute is IPv4-shaped
 #     today; Junos's ``rib inet6.0 static`` parses-and-ignores.
 #
-#   * Per-VRF static routes — schema gap (no vrf field on
-#     CanonicalStaticRoute) AND structurally absent on Aruba.
+#   * Per-VRF static routes — aruba_aoss has no VRF / routing-instance
+#     concept, so per-VRF routes are structurally absent on the Aruba
+#     target.  (CanonicalStaticRoute.vrf exists; the gap is Aruba-side.)
 #
 #   * SSH public-key authentication on Junos — does not fit the
 #     hash-shaped CanonicalLocalUser.hashed_password field.

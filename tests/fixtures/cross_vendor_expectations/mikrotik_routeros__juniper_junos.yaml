@@ -845,8 +845,10 @@ per_field_expectation:
 #     surface (lossy for syslog due to per-severity / per-facility
 #     filter loss).
 #
-#   * Per-VRF static routes — schema gap on CanonicalStaticRoute
-#     (no vrf field).  Lands alongside VRF wire-up.
+#   * Per-VRF static routes — CanonicalStaticRoute.vrf already
+#     exists; the RouterOS static-route parse ignores the VRF
+#     binding in v1 (parses-and-ignores).  Lands alongside VRF
+#     wire-up.
 #
 #   * RouterOS firewall / NAT / queues / scripts / hotspot /
 #     wireless / WireGuard / OVPN-server — Tier-3 by design;

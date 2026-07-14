@@ -920,8 +920,9 @@ per_field_expectation:
 #
 # Deferred items (not researched in depth this pass):
 #
-#   * Per-VRF static routes — schema gap on CanonicalStaticRoute
-#     (no vrf field).  Lands alongside FortiGate VRF wire-up.
+#   * Per-VRF static routes — FortiGate codec parse ignores
+#     ``set vrf`` on ``config router static`` entries (no VRF-route
+#     target).  Lands alongside FortiGate VRF wire-up.
 #
 #   * Junos policy-statement plumbing for asymmetric VRF
 #     import/export RTs — flattens to single rt_imports/rt_exports

@@ -184,10 +184,11 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Aruba ``ip dns server-address priority N <addr>`` collapses
-      to a bare list on canonical (sorted by priority).  OPNsense
-      capability matrix declares ``/system/dns-server`` supported
-      but render wire-up does not currently emit ``<dnsserver>``
-      elements.  Cross-pair drops the resolver list pending wire-up.
+      to a bare list on canonical: the parser captures only the
+      resolver address and drops the per-server ``priority N``
+      value.  OPNsense render does emit one ``<system>/<dnsserver>``
+      element per resolver, so the addresses themselves round-trip;
+      the loss is the per-server priority ordering metadata.
     references: [opnsense-system, aruba-system-services]
 
   ntp_servers:
