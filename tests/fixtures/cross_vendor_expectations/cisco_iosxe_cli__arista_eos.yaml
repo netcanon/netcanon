@@ -308,15 +308,20 @@ per_field_expectation:
   routing_instances:
     disposition: unsupported
     reason: >
-      Cisco IOS-XE codec capability matrix lists
-      ``/routing-instances/instance`` as unsupported: "VRF
-      declarations (``vrf definition <name>`` with ``rd`` +
-      ``address-family ipv4`` + ``route-target import/export``) and
-      per-interface ``vrf forwarding <name>`` parse-and-ignore in
-      v1."  Arista EOS codec advertises the path as supported but
-      Cisco-side parse drops to empty, so the cross-pair migration
-      emits no ``vrf instance`` blocks on the Arista target.
-      Deferred to GAP-6 wire-up.
+      Cisco IOS-XE CLI codec capability matrix lists
+      ``/routing-instances/instance`` as LOSSY (not unsupported):
+      ``vrf definition <name>`` blocks (``rd`` + ``address-family
+      ipv4`` + ``route-target import/export``) parse into
+      ``CanonicalIntent.routing_instances`` via
+      ``parse._parse_routing_instances``, and Arista EOS advertises
+      the path as supported — its render emits each L3 VRF as ``vrf
+      instance <name>`` (GAP-6 landed; ``arista_eos/render.py``) with
+      RD + route-targets under ``router bgp / vrf``.  So VRF name, RD
+      and route-targets DO cross iosxe_cli -> arista.  The round-trip
+      is not lossless: the IOS-XE parse ignores per-VRF
+      ``address-family ipv6`` / EVPN ``l2vpn evpn`` sub-stanzas, and
+      the Arista render has no ``vrf instance / description`` emit path
+      so a parsed VRF description is dropped.
     references: [vrf]
 
   # ── Tier 3 — informational only (never auto-rendered) ──
@@ -380,8 +385,9 @@ per_field_expectation:
 #   * The interface-naming / VRF / hash-format / routing-protocol
 #     surfaces are medium-confidence: the vendor docs are clear on
 #     syntax but the codec wire-up is partial (e.g. Cisco IOS-XE
-#     parse-and-ignores VRF declarations entirely; Arista EOS
-#     advertises VRF support but the cross-pair degrades).
+#     parses VRF declarations but drops per-VRF address-family-ipv6 /
+#     EVPN sub-stanzas; Arista EOS renders `vrf instance` but drops
+#     the VRF description).
 #
 #   * Spanning-tree, BGP, OSPF, EIGRP are explicitly out of canonical
 #     scope on both vendors and confidently marked unsupported.

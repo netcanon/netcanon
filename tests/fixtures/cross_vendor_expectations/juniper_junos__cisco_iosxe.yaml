@@ -461,11 +461,12 @@ per_field_expectation:
     reason: >
       Junos source populates intent.static_routes from
       `set routing-options static route X next-hop Y` (default-VRF
-      routes; per-VRF static routes parse-and-ignore until
-      CanonicalStaticRoute gains a vrf field).  cisco_iosxe render
-      does not walk `<network-instances>` /
-      `<protocols><protocol identifier=STATIC>` on emit.
-      Render-side wire-up gap; the matrix declares
+      routes; per-VRF `routing-instances` static routes harvest onto
+      CanonicalStaticRoute.vrf, a field present since v0.2.0).  The
+      cisco_iosxe NETCONF/OpenConfig Phase-0.5 stub renders only the
+      `<interfaces>` subtree, so it never walks `<network-instances>` /
+      `<protocols><protocol identifier=STATIC>` on emit and every route
+      drops.  Render-side wire-up gap; the matrix declares
       /routing/static-route `supported` aspirationally.
     references: [oc-network-instance]
 

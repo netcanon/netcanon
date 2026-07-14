@@ -516,8 +516,10 @@ per_field_expectation:
       integer preserves but its meaning differs.  FortiGate
       ``set comment "<text>"`` now parses into canonical
       ``description``.  Per-VRF static routes (FortiGate
-      ``set vrf <id>``) are unsupported — canonical model lacks a
-      vrf field on CanonicalStaticRoute.
+      ``set vrf <id>``) are unsupported — the fortigate_cli parser
+      does not harvest ``set vrf``, so the VRF binding drops on the
+      source (parse) side (``CanonicalStaticRoute.vrf`` exists but
+      stays empty).
     references: [fortios-static-routes, junos-static-routing]
 
   # ── Tier 2 — DHCP server ──

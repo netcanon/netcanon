@@ -202,12 +202,10 @@ per_field_expectation:
     reason: >
       Arista ``ip name-server vrf default <addr>`` lines (one per
       resolver) map to OPNsense repeated ``<system>/<dnsserver>``
-      elements.  The OPNsense codec does not currently emit
-      ``<dnsserver>`` on cross-vendor render (capability matrix
-      declares ``/system/dns-server`` supported but render
-      wire-up is incomplete).  Cross-pair drops the resolver list
-      pending wire-up.  Arista's per-resolver VRF qualifier
-      collapses to global on canonical anyway.
+      elements.  The OPNsense render emits one ``<dnsserver>`` per
+      canonical resolver (render.py:104-105) so the address list
+      round-trips; the residual loss is Arista's per-resolver VRF
+      qualifier, which collapses to global on canonical.
     references: [opnsense-system, arista-system-cg]
 
   ntp_servers:
