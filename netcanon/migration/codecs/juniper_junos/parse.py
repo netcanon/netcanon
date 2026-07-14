@@ -611,11 +611,18 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 continue
             # (#8) Each member may be a name, a numeric VID, or a numeric
             # range (``100-110``) — resolve/expand all three.
+            # Set-guard the dedup (perf review P1): a ``members 1-4094`` token
+            # expands to 4094 VIDs, each previously deduped by ``not in`` over
+            # a list that grows to 4094 -> ~16.7M compares/line (O(range x
+            # list)).  A ``seen`` set makes it O(1) per VID; order preserved
+            # (VID-ascending within a range, first-seen across ranges).
+            seen_vids = set(iface.trunk_allowed_vlans)
             for vname in names_list:
                 for vid in _resolve_vlan_member_to_vids(
                     vname, vid_by_vlan_name
                 ):
-                    if vid not in iface.trunk_allowed_vlans:
+                    if vid not in seen_vids:
+                        seen_vids.add(vid)
                         iface.trunk_allowed_vlans.append(vid)
 
     # 3. Attach IRB SVI L3 addresses to the matching CanonicalVlan
@@ -876,6 +883,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         len(applied_groups),
         len(raw),
     )
+    # De-dup the additive management-plane server lists once, first-seen order
+    # preserved -- the per-line appends above are O(1); a per-line ``not in``
+    # scan would be O(N^2) in the count of distinct servers (perf review P2).
+    intent.dns_servers = list(dict.fromkeys(intent.dns_servers))
+    intent.ntp_servers = list(dict.fromkeys(intent.ntp_servers))
+    intent.syslog_servers = list(dict.fromkeys(intent.syslog_servers))
     return intent
 
 
@@ -1241,9 +1254,10 @@ def _apply_system(
         intent.domain = tokens[1]
         return
     if tokens[0] == "name-server" and len(tokens) >= 2:
-        # ``set system name-server <ip>`` — additive list.
-        if tokens[1] not in intent.dns_servers:
-            intent.dns_servers.append(tokens[1])
+        # ``set system name-server <ip>`` — additive; deduped once at the end
+        # of parse_intent (O(1) append here vs an O(N^2) per-line ``not in``
+        # scan — perf review P2).
+        intent.dns_servers.append(tokens[1])
         return
     if (
         tokens[0] == "ntp"
@@ -1251,20 +1265,18 @@ def _apply_system(
         and tokens[1] == "server"
     ):
         # ``set system ntp server <ip> [prefer]`` — additive; ignore
-        # trailing ``prefer`` / ``key`` / ``version`` options.
-        server = tokens[2]
-        if server not in intent.ntp_servers:
-            intent.ntp_servers.append(server)
+        # trailing ``prefer`` / ``key`` / ``version`` options.  Deduped once
+        # at the end of parse_intent (perf review P2).
+        intent.ntp_servers.append(tokens[2])
         return
     if (
         tokens[0] == "syslog"
         and len(tokens) >= 3
         and tokens[1] == "host"
     ):
-        # ``set system syslog host <ip> [any ...]`` — additive list.
-        host = tokens[2]
-        if host not in intent.syslog_servers:
-            intent.syslog_servers.append(host)
+        # ``set system syslog host <ip> [any ...]`` — additive; deduped once
+        # at the end of parse_intent (perf review P2).
+        intent.syslog_servers.append(tokens[2])
         return
     if tokens[0] == "login" and len(tokens) >= 3 and tokens[1] == "user":
         # ``set system login user <name> class <class>``
