@@ -476,6 +476,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             return sc
         return None  # deeper nesting we don't model in v1
 
+    # ``system name-server`` dedup (perf review P2): a ``seen`` set keeps the
+    # per-line membership test O(1) instead of an O(N^2) growing-list scan.
+    seen_dns_servers = set(intent.dns_servers)
     for raw_line in raw.splitlines():
         line = raw_line.strip()
         if (
@@ -622,7 +625,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 ipaddress.ip_address(value)
             except ValueError:
                 continue
-            if value not in intent.dns_servers:
+            if value not in seen_dns_servers:
+                seen_dns_servers.add(value)
                 intent.dns_servers.append(value)
             continue
 

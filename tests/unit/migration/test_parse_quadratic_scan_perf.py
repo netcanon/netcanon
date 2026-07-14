@@ -207,3 +207,94 @@ class TestDiffAutojunkLinear:
         compute_diff(_rec(), left, _rec(), right)
         elapsed = time.perf_counter() - start
         assert elapsed < 3.0, f"compute_diff is quadratic on repeated lines ({elapsed:.2f}s)"
+
+
+# ── HEAD-review P1: junos trunk ``members`` range x growing-list dedup ──
+# The #8 numeric-range spelling (in-range since the last review) made the junos
+# trunk dedup O(range x list): ``members 1-4094`` expands to 4094 VIDs, each
+# previously ``not in``-tested over a list that grows to 4094 (~16.7M compares
+# per line).  Set-guarded, mirroring #11.  Un-hardened sibling of that fix.
+
+_JUNOS_TRUNK_BASE = (
+    "set interfaces xe-0/0/0 unit 0 family ethernet-switching interface-mode trunk\n"
+)
+_JUNOS_TRUNK_FULL_RANGE = (
+    "set interfaces xe-0/0/0 unit 0 family ethernet-switching vlan members 1-4094\n"
+)
+
+
+class TestJunosTrunkMembersLinear:
+    def test_repeated_full_range_dedup_unchanged(self) -> None:
+        # A second full-range line must not duplicate: set-guarded dedup keeps
+        # first-seen (VID-ascending) order -> the union is exactly 1..4094.
+        intent = JunosCodec().parse(
+            _JUNOS_TRUNK_BASE + _JUNOS_TRUNK_FULL_RANGE * 2
+        )
+        trunk = next(
+            i.trunk_allowed_vlans for i in intent.interfaces if i.trunk_allowed_vlans
+        )
+        assert trunk == list(range(1, 4095))
+
+    def test_repeated_full_range_is_linear(self) -> None:
+        # Pre-fix (O(range x list)): 32 full-range lines ~1.1 s.  Post-fix
+        # (set-guard): ~5 ms.  The ~265x separation makes an absolute ceiling a
+        # clean, machine-tolerant negative control.
+        cfg = _JUNOS_TRUNK_BASE + _JUNOS_TRUNK_FULL_RANGE * 32
+        start = time.perf_counter()
+        intent = JunosCodec().parse(cfg)
+        elapsed = time.perf_counter() - start
+        trunk = next(
+            i.trunk_allowed_vlans for i in intent.interfaces if i.trunk_allowed_vlans
+        )
+        assert len(trunk) == 4094
+        assert elapsed < 0.5, f"junos trunk range dedup is quadratic ({elapsed:.2f}s)"
+
+
+# ── HEAD-review P2: mgmt-plane server-list dedup via list membership ────
+# The #347/#352-#354 DNS/NTP/syslog wire-ups deduped additive server lists with
+# ``token not in intent.<list>`` -> O(N**2) in the count of DISTINCT servers.
+# Fixed with a per-list ``set`` seen-guard (finditer sites) or append-then-
+# dedup-once-at-parse-end (junos per-stanza).  Both preserve first-seen order.
+
+
+class TestMgmtPlaneServerDedupLinear:
+    def test_arista_syslog_dedup_first_seen_unchanged(self) -> None:
+        cfg = (
+            "hostname r\nlogging host 10.0.0.1\nlogging host 10.0.0.2\n"
+            "logging host 10.0.0.1\n"
+        )
+        assert AristaEOSCodec().parse(cfg).syslog_servers == ["10.0.0.1", "10.0.0.2"]
+
+    def test_junos_server_lists_dedup_at_end_unchanged(self) -> None:
+        # Append-then-dedup-once: duplicates removed, first-seen order kept.
+        cfg = (
+            "set system name-server 10.0.0.1\nset system name-server 10.0.0.1\n"
+            "set system name-server 10.0.0.2\n"
+            "set system ntp server 10.1.0.1\nset system ntp server 10.1.0.1\n"
+            "set system syslog host 10.2.0.1\nset system syslog host 10.2.0.1\n"
+        )
+        intent = JunosCodec().parse(cfg)
+        assert intent.dns_servers == ["10.0.0.1", "10.0.0.2"]
+        assert intent.ntp_servers == ["10.1.0.1"]
+        assert intent.syslog_servers == ["10.2.0.1"]
+
+    def test_arista_syslog_dedup_is_linear(self) -> None:
+        # Pre-fix O(N**2) in distinct servers; post-fix set-guarded linear.
+        # 4x the server count -> ~4x time when linear, ~16x when quadratic;
+        # assert well under the quadratic line (machine-independent ratio).
+        def parse_n(n: int) -> None:
+            lines = ["hostname r"]
+            lines += [f"logging host 10.{i // 256 % 256}.{i % 256}.1" for i in range(n)]
+            AristaEOSCodec().parse("\n".join(lines) + "\n")
+
+        def best(n: int) -> float:
+            times = []
+            for _ in range(3):
+                start = time.perf_counter()
+                parse_n(n)
+                times.append(time.perf_counter() - start)
+            return min(times)
+
+        best(4000)  # warm up import/JIT caches
+        ratio = best(16000) / best(4000)
+        assert ratio < 8.0, f"arista syslog dedup scales quadratically (4x count -> {ratio:.1f}x time)"

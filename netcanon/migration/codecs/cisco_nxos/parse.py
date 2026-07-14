@@ -525,15 +525,18 @@ def _parse_globals(raw: str, intent: CanonicalIntent) -> None:
             intent.dns_servers.append(token)
     for m in _NTP_SERVER_RE.finditer(raw):
         intent.ntp_servers.append(m.group(1))
+    seen_syslog = set(intent.syslog_servers)
     for m in _SYSLOG_LINE_RE.finditer(raw):
         # First IP-literal token on the ``logging`` line is the syslog host;
-        # non-destination sub-commands carry no IP token.  De-dup, first-seen.
+        # non-destination sub-commands carry no IP token.  De-dup, first-seen
+        # (``seen_syslog`` set-guard keeps it O(1) per line -- perf review P2).
         for token in m.group(1).split():
             try:
                 ipaddress.ip_address(token)
             except ValueError:
                 continue
-            if token not in intent.syslog_servers:
+            if token not in seen_syslog:
+                seen_syslog.add(token)
                 intent.syslog_servers.append(token)
             break
 
