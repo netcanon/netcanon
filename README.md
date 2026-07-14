@@ -283,9 +283,13 @@ across vendors.  Full per-codec matrix is in
 
 * **Tier 1 — auto-translatable.**  hostname, interfaces (name /
   description / enabled state / IPv4 + IPv6 addresses / per-interface
-  VRF binding), VLANs, static routes.  Every shipped codec parses +
-  renders these fully (the experimental `cisco_iosxe` NETCONF stub
-  excepted — it renders interfaces only).  DNS / NTP servers translate
+  VRF binding), VLANs, static routes.  Nearly every shipped codec
+  parses + renders these — the per-codec §A tables in
+  [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) are authoritative for
+  the exceptions (OPNsense renders no static routes, VyOS has no
+  top-level VLAN database, per-interface VRF binding is wired on 6 of
+  the 12 codecs, and the experimental `cisco_iosxe` NETCONF stub
+  renders interfaces only).  DNS / NTP servers translate
   on most codecs; `syslog` servers translate on `juniper_junos`,
   `cisco_iosxe_cli`, `arista_eos` (`logging host <ip>` /
   `set system syslog host <ip>`), `cisco_nxos` (`logging server <ip>`)

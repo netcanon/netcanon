@@ -52,11 +52,11 @@ translatable with caveats:
   VNI, source, multicast group / flood list, UDP port)
 
 > **Management-plane caveat.**  When VyOS is the **target**, the codec
-> renders no `system domain-name` / `system name-server` / `system
-> syslog` / DHCP-server / `radius-server` / `time-zone` config — those
-> surfaces are declared `unsupported` (the live validation report
-> flags the loss rather than reporting `severity: ok`).  **NTP is the
-> exception** — it IS translated.  See
+> renders no `system syslog` / DHCP-server / `radius-server` /
+> `time-zone` config — those surfaces are declared `unsupported` (the
+> live validation report flags the loss rather than reporting
+> `severity: ok`).  **NTP, `system domain-name`, and `system
+> name-server` (DNS) ARE translated** (#347).  See
 > [What we don't do](#what-we-dont-do).
 
 ## Lossy paths
@@ -101,9 +101,9 @@ visible, not silent):
 - **L2 switchport** — VyOS has no access/trunk model (L2 via
   `bridge` / `vif`); switchport mode / access-VLAN / trunk
   allowed-list / native VLAN / voice-VLAN all drop on render
-- **Management plane** — `domain`, `timezone`, DNS / syslog servers,
-  DHCP server pools, RADIUS servers (host + secret).  *(NTP IS
-  supported.)*
+- **Management plane** — `timezone`, syslog servers, DHCP server
+  pools, RADIUS servers (host + secret).  *(NTP, `domain`, and DNS
+  name-servers ARE supported — #347.)*
 - **Top-level VLAN database** — VyOS has none; 802.1Q VLANs are `vif`
   sub-interfaces (which ARE supported)
 - **Per-VRF static routes** — the `vrf name <X>` instances + the

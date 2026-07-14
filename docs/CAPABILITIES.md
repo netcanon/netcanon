@@ -125,14 +125,17 @@ lossy where vendors disagree on representation.
   a plaintext fallback
 * `radius_servers`
 * `dhcp_servers` (per-pool — network, gateway, range, options)
-* `vxlan_vnis`, `evpn_type5_routes` (ship-before-wire — schema
-  shipped ahead of wire-up; declared `unsupported` on each codec
-  until the per-vendor wiring lands)
+* `vxlan_vnis`, `evpn_type5_routes` (shipped schema-first; `vxlan_vnis`
+  is now wired `supported` on `arista_eos`, `cisco_nxos`,
+  `aruba_aoscx`, `vyos`, `cisco_iosxe_cli` — the per-codec §A tables
+  are authoritative; `evpn_type5_routes` stays lossy-by-default on
+  every codec)
 * `routing_instances` + per-interface `vrf` (cross-vendor VRF
-  primitive — same ship-before-wire pattern)
+  primitive — schema-first, now wired on multiple codecs; see the
+  per-codec §A tables)
 * `static_routes[].vrf` (v0.2.0 Wave A — per-VRF route
-  discriminator; wired as `lossy` on Junos, `unsupported`
-  elsewhere pending dispatch-side widening)
+  discriminator; wired `supported` on `juniper_junos`, `arista_eos`,
+  `cisco_iosxe_cli`, `cisco_nxos`, `cisco_iosxr`)
 * `interfaces[].ipv4_addresses[].virtual_gateway_address` /
   `virtual_gateway_mac` / `is_secondary` and the matching IPv6
   fields (v0.2.0 Wave C — anycast-gateway companion to the primary
@@ -209,11 +212,12 @@ in `netcanon/migration/codecs/<vendor>/codec.py`.
 | `/anycast-gateway-mac` | Supported (Wave C) | Top-level `fabric forwarding anycast-gateway-mac <MAC>` round-trips between Cisco dotted-triplet wire form (`0001.c73a.0000`) and canonical colon-hex. |
 | `/interfaces/interface/vrrp-groups/group/address-family` | Lossy (Wave B) | IOS-XE 17.12+ modern multi-line `vrrp <VRID> address-family ipv4` nested block is detected (so lossiness is visible) but not deep-populated; render always emits the classic single-line form (accepted by every IOS-XE 15.x+).  A config that uses ONLY the modern AF form round-trips as an empty group shell — the lossiness is intentional and operator-visible. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | IPv6 SD-Access anycast parses-and-ignores in v1.  Corpus has zero fixtures exercising it; wire-up deferred until demand arrives.  IPv4 SD-Access anycast IS supported (row above). |
-| `/routing/static-route/vrf` | Supported (v0.2.0) | Per-VRF static routes: `ip route vrf <NAME> <dest> <mask> <gw>` round-trips through parse + render onto `CanonicalStaticRoute.vrf`.  Trailing route-leak / administrative-distance / `name` tokens (e.g. the `global` next-hop-leak keyword) are not modelled and parse-and-ignore. |
+| `/routing/static-route/vrf` | Supported (v0.2.0) | Per-VRF static routes: `ip route vrf <NAME> <dest> <mask> <gw>` round-trips through parse + render onto `CanonicalStaticRoute.vrf`.  Administrative-distance is harvested onto `metric` (and re-emitted) and a trailing `name <X>` onto `description`; only the `global` route-leak / `tag` / `track` tokens are not modelled and parse-and-ignore. |
 | `/interfaces/interface/config/type` | Lossy | CLI parser infers IANA type from name prefix (GigabitEthernet → ethernetCsmacd, Loopback → softwareLoopback) but cannot detect all IANA types. |
 | `/evpn-type5-routes/route` | Lossy | Per-prefix EVPN Type-5 records are a VRF property; no codec populates them today (lossy-by-default extension point). |
 | `/interfaces/interface/subinterfaces/subinterface/ipv6` | Unsupported | Phase 0.5 scope — IPv4 only. |
-| `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | IOS-XE VXLAN (`interface nve1 / member vni …`) parse-and-ignore in v1; wire-up deferred until Catalyst-to-Arista migration demand arrives. |
+| `/vxlan-vnis/{vni,source-interface,mcast-group}` | Supported (#351) | IOS-XE VXLAN-EVPN L2 VNI: `interface nve1` VTEP + `member vni <V>` + `vlan configuration` VLAN↔VNI binding round-trips through parse + render; `/routing-instances/instance/l3-vni` is supported too. |
+| `/vxlan-vnis/{udp-port,flood-list}` | Lossy | The nve1 render keeps the VNI identity but normalizes the UDP port and drops head-end static ingress-replication flood peers (no IOS-XE grammar in v1). |
 | `/routing-instances/instance` | Lossy | VRF declarations parse and render bidirectionally (`parse._parse_routing_instances` → `vrf definition` emit loop; cross-vendor confirmed via Wave 10β-B / commit `40de39c`).  Lossy because `address-family ipv6` / EVPN `l2vpn evpn` sub-stanzas inside `vrf definition` are parse-and-ignore in v1.  (Per-VRF static-route membership now round-trips via the supported `/routing/static-route/vrf` surface above.) |
 | `/access-list/{extended,standard,ipv6}` | Unsupported | Tier 3 — auto-translating ACL semantics across vendors risks shipping subtly-permissive rules. |
 | `/firewall` | Unsupported | Zone-based firewall (zone-pair / policy-map type inspect) is Tier 3. |
@@ -262,7 +266,7 @@ output.
 | `/anycast-gateway-mac` | Supported (Wave C) | Chassis-wide `ip virtual-router mac-address <MAC>` round-trips to `CanonicalIntent.anycast_gateway_mac`. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-mac` | Lossy (Wave C) | EOS only supports one chassis-wide virtual-router MAC; per-IP MAC overrides (Junos `virtual-gateway-v4-mac`) drop on render — cross-vendor sources carrying per-IP MACs surface a review banner so the operator can either consolidate to a single system-wide MAC or pick a vendor target that preserves per-IP overrides. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-mac` | Lossy (Wave C) | Mirror of the IPv4 case — EOS shares one system-wide MAC across IPv4 and IPv6 anycast. |
-| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1; schema exists on `CanonicalStaticRoute.vrf`. |
+| `/routing/static-route/vrf` | Supported (#340) | Per-VRF static routes (`ip route vrf <NAME> …`) round-trip onto `CanonicalStaticRoute.vrf`; interface-nexthop (`… <iface>`, e.g. `Null0`) is supported too (#342). |
 | `/interfaces/interface/config/type` | Lossy | EOS interface names don't encode speed; parser defaults `Ethernet<N>` to a `gig` speed-hint and target codecs that care about speed (e.g. Cisco's GigabitEthernet vs TenGigabitEthernet distinction) may emit less-specific prefixes. |
 | `/evpn-type5-routes/route` | Lossy | Per-prefix records are a lossy-by-default extension point — no codec populates them today (would require route-map / policy-statement parsing). |
 | `/routing/bgp` | Unsupported | BGP neighbour tables / redistribution / address-families parse-and-ignore in v1. |
