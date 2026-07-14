@@ -98,19 +98,10 @@ _FIXTURE_EXTENSIONS = {".txt", ".cfg", ".xml", ".conf", ".rsc", ".set"}
 # diff equals this set precisely — a WIDER diff is a new regression, a NARROWER
 # one means the gap was fixed and this entry must be deleted (rot detection).
 _KNOWN_ROUNDTRIP_GAPS: dict[str, tuple[str, frozenset[str]]] = {
-    # mikrotik_routeros: bond-interface ``description`` round-trip drop
-    # — surfaced by the kitchen-sink's "LACP bond to upstream core"
-    # description on a synthetic bonding interface.  The render path
-    # emits the bond stanza without re-emitting its description, so
-    # the second parse sees an empty description.  Real-capture
-    # coverage doesn't hit this because none of the committed real
-    # RouterOS exports describe a bond with a description string.
-    # bond1 / bond2 sort to interfaces[0] / [1] (``_compare`` sorts by name).
-    "mikrotik_routeros::kitchen_sink.rsc": (
-        "bond-interface description not preserved through render — "
-        "TODO on mikrotik_routeros codec",
-        frozenset({"interfaces[0].description", "interfaces[1].description"}),
-    ),
+    # NB: mikrotik_routeros::kitchen_sink.rsc bond-``description`` gap was
+    # CLOSED in HEAD-review Fid-F3 — the render ``/interface bonding`` block
+    # now re-emits ``comment=`` so bond1/bond2 descriptions round-trip; the
+    # entry was deleted per this dict's rot-detection contract.
     # opnsense: parse now harvests <staticroutes>/<gateways> (#15) but the
     # renderer emits no <staticroutes> block (declared lossy on the
     # opnsense codec), so the single harvested route (172.16.0.0/12) is
