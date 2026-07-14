@@ -283,6 +283,20 @@ def delete_device_profile(
                 profile_id[:8],
                 referencing,
             )
+        profile = device_profiles[profile_id]
         del device_profiles[profile_id]
-        device_profile_store.delete(profile_id)
+        try:
+            device_profile_store.delete(profile_id)
+        except OSError as exc:
+            # The unlink can fail (a Windows AV / indexer file lock raises
+            # PermissionError).  Without a rollback the profile is gone from
+            # memory but survives on disk and RESURRECTS at next startup via
+            # load_all — mirror #47b's create/update rollback on the delete
+            # half (C3): re-insert and 500 so memory + disk stay in step.
+            device_profiles[profile_id] = profile
+            logger.error("Failed to delete device profile from disk: %s", exc)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to delete device profile from disk.",
+            ) from exc
     logger.info("Deleted device profile %s", profile_id[:8])

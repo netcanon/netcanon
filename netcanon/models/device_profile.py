@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .validators import validate_host as _validate_host
 
@@ -158,6 +158,12 @@ class DeviceProfileUpdate(BaseModel):
             (reverts to family-base lookup).
         model: New model pin; pass ``None`` to clear.
     """
+
+    # PATCH semantics: "only what you sent is applied".  Reject unknown fields
+    # so a typo'd field name (``"nots"`` for ``"notes"``) 422s with the bad loc
+    # instead of silently no-op'ing with 200 — the whole contract is that the
+    # caller can trust an accepted key was applied (C7).
+    model_config = ConfigDict(extra="forbid")
 
     name: str | None = None
     type_key: str | None = None

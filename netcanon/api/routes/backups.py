@@ -316,6 +316,20 @@ def list_jobs(
     "/{job_id}",
     response_model=BackupJob,
     summary="Get a backup job by ID",
+    responses={
+        404: {
+            "description": (
+                "No job with this id exists (or its on-disk snapshot is "
+                "corrupt/empty)."
+            )
+        },
+        422: {
+            "description": (
+                "`job_id` is not a well-formed UUID — rejected by the path "
+                "pattern guard (SEC-3) before the lookup (C5)."
+            )
+        },
+    },
 )
 def get_job(
     job_id: str = Path(
@@ -338,8 +352,18 @@ def get_job(
         job_id: UUID returned by ``POST /api/v1/backups``.
 
     Raises:
-        HTTPException 404: If no job with *job_id* exists.
+        HTTPException 404: If no job with *job_id* exists, OR its on-disk
+            snapshot is corrupt/empty (a power-loss / hand-edit artifact).
+        HTTPException 422: If *job_id* is not a well-formed UUID — the path
+            ``pattern`` guard rejects it before this handler runs (SEC-3).
     """
-    if job_id not in jobs:
+    # Use ``.get()`` rather than ``in`` + ``[]``: ``__contains__`` answers via a
+    # cheap ``path.exists()`` (no JSON parse) while ``__getitem__`` raises
+    # ``KeyError`` when ``load_one`` yields ``None`` for a corrupt file — so the
+    # two disagreed for a truncated/zero-byte ``jobs/{uuid}.json`` and the read
+    # 500'd after passing the membership guard (C2).  ``.get()`` lazy-loads and
+    # returns ``None`` on both "missing" and "corrupt", so both map to 404.
+    job = jobs.get(job_id)
+    if job is None:
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id!r}")
-    return jobs[job_id]
+    return job

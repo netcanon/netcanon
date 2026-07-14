@@ -377,15 +377,30 @@ def create_schedule(
             )
         schedule = BackupSchedule(**body.model_dump())
         schedules[schedule.id] = schedule
-        schedule_store.save(schedule)
-
-        register_schedule_job(scheduler, schedule, request.app)
-
-        # Capture the first calculated next_run_at
-        ap_job = scheduler.get_job(schedule.id)
-        if ap_job and ap_job.next_run_time:
-            schedule.next_run_at = ap_job.next_run_time
+        try:
             schedule_store.save(schedule)
+
+            register_schedule_job(scheduler, schedule, request.app)
+
+            # Capture the first calculated next_run_at
+            ap_job = scheduler.get_job(schedule.id)
+            if ap_job and ap_job.next_run_time:
+                schedule.next_run_at = ap_job.next_run_time
+                schedule_store.save(schedule)
+        except OSError as exc:
+            # Sole persistence — roll back the in-memory insert (and any
+            # APScheduler job registered before the failing save) so a
+            # disk-full / permission error can't leave a schedule that is
+            # listed by GET, never fires, and vanishes on restart (C3, the
+            # #47b create-half sibling).
+            schedules.pop(schedule.id, None)
+            if scheduler.get_job(schedule.id):
+                scheduler.remove_job(schedule.id)
+            logger.error("Failed to persist new schedule: %s", exc)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to persist schedule to disk.",
+            ) from exc
 
     logger.info(
         "Created schedule '%s' (every %d min, id=%s)",
@@ -417,8 +432,23 @@ def delete_schedule(
             raise HTTPException(
                 status_code=404, detail=f"Schedule not found: {schedule_id!r}"
             )
+        schedule = schedules[schedule_id]
         del schedules[schedule_id]
-        schedule_store.delete(schedule_id)
+        try:
+            schedule_store.delete(schedule_id)
+        except OSError as exc:
+            # unlink can fail (a Windows AV / indexer file lock raises
+            # PermissionError).  Without a rollback the schedule is gone from
+            # memory but its JSON survives and RESURRECTS at next startup via
+            # load_all — re-insert and 500 (C3, the #47b delete-half sibling).
+            # The APScheduler job is still registered (we roll back BEFORE
+            # removing it below), so nothing is orphaned.
+            schedules[schedule_id] = schedule
+            logger.error("Failed to delete schedule from disk: %s", exc)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to delete schedule from disk.",
+            ) from exc
         if scheduler.get_job(schedule_id):
             scheduler.remove_job(schedule_id)
     logger.info("Deleted schedule %s", schedule_id)
@@ -445,6 +475,8 @@ def toggle_schedule(
                 status_code=404, detail=f"Schedule not found: {schedule_id!r}"
             )
         schedule = schedules[schedule_id]
+        was_enabled = schedule.enabled
+        prev_next_run = schedule.next_run_at
         schedule.enabled = not schedule.enabled
 
         if schedule.enabled:
@@ -457,7 +489,25 @@ def toggle_schedule(
                 scheduler.remove_job(schedule_id)
             schedule.next_run_at = None
 
-        schedule_store.save(schedule)
+        try:
+            schedule_store.save(schedule)
+        except OSError as exc:
+            # Roll BOTH the in-memory flag AND the APScheduler job set back to
+            # the pre-toggle state so a failed persist can't leave memory +
+            # scheduler ahead of disk (a restart would silently revert to the
+            # old enabled value) (C3, the #47b toggle sibling).  Reconcile the
+            # job set to match was_enabled rather than reversing the action.
+            schedule.enabled = was_enabled
+            schedule.next_run_at = prev_next_run
+            if was_enabled:
+                register_schedule_job(scheduler, schedule, request.app)
+            elif scheduler.get_job(schedule_id):
+                scheduler.remove_job(schedule_id)
+            logger.error("Failed to persist schedule toggle: %s", exc)
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to persist schedule to disk.",
+            ) from exc
     logger.info(
         "Schedule '%s' %s", schedule.name, "enabled" if schedule.enabled else "disabled"
     )

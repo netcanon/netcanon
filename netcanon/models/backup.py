@@ -89,8 +89,11 @@ class BackupResult(BaseModel):
 class BackupJob(BaseModel):
     """An in-progress or completed backup job.
 
-    Jobs are created synchronously by the ``POST /api/v1/backups`` endpoint
-    and run to completion in a FastAPI ``BackgroundTask``.
+    Jobs are created by the ``POST /api/v1/backups`` endpoint, which returns
+    ``202`` immediately with ``status='pending'`` and submits the work to a
+    dedicated bounded ``ThreadPoolExecutor`` (``submit_backup_job``, #27) — NOT
+    a FastAPI ``BackgroundTask``.  Poll ``GET /api/v1/backups/{id}`` for the
+    live state.
 
     Attributes:
         id: UUID4 string, generated at job creation.
