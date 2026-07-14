@@ -63,3 +63,32 @@ class TestNonTerminalEvictionProtection:
         reg[c.id] = c
         assert a.id not in list(reg)  # oldest terminal evicted
         assert b.id in list(reg) and c.id in list(reg)
+
+    def test_stale_pending_disk_load_not_promoted_then_heals(self, registry):
+        # (HEAD-review F1) The runner flips a job terminal IN MEMORY before its
+        # terminal DISK save.  If an eviction lands in that window and a poll
+        # disk-loads the stale ``pending`` snapshot, PROMOTING it would pin it
+        # non-terminal forever (eviction-protected, #25) and answer the wrong
+        # status until restart.  __getitem__ must NOT cache a non-terminal disk
+        # load -> the next poll re-reads disk and HEALS once the terminal save
+        # lands.  (Also covers the swallowed terminal-save OSError sibling.)
+        reg = registry(2)
+        store = reg._store
+        a = _job(JobStatus.pending)
+        reg[a.id] = a
+        store.save(a)  # creation snapshot on disk: pending
+        filler = _job(JobStatus.completed)
+        reg[filler.id] = filler  # cache at cap: {a(pending), filler(done)}
+        a.status = JobStatus.completed  # in-memory terminal flip, NOT saved yet
+        overflow = _job(JobStatus.completed)
+        reg[overflow.id] = overflow  # over cap -> evicts A (LRU-most terminal)
+        assert a.id not in list(reg)  # A evicted in the window
+
+        # Poll while disk still says pending: returns pending but must NOT cache
+        # it (pre-fix: promoted -> pinned pending forever).
+        assert reg[a.id].status is JobStatus.pending
+        assert a.id not in list(reg), "stale pending must not be promoted (F1)"
+
+        # Terminal save lands -> the next poll re-reads disk and heals.
+        store.save(a)
+        assert reg[a.id].status is JobStatus.completed

@@ -55,10 +55,11 @@ route-module home):
 
 from __future__ import annotations
 
+import inspect
 import logging
 import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor, wait
 from datetime import UTC, datetime
 
 from ..config import (
@@ -200,6 +201,70 @@ def reset_job_executor(*, wait: bool = False, cancel_futures: bool = True) -> No
         executor.shutdown(wait=wait, cancel_futures=cancel_futures)
 
 
+_TERMINAL_JOB_STATUSES = frozenset(
+    {JobStatus.completed, JobStatus.partial, JobStatus.failed}
+)
+
+
+def finalize_crashed_job(
+    job: BackupJob,
+    job_store: FileJobStore | None,
+    exc: BaseException,
+) -> None:
+    """Force a job whose runner raised *before* its own terminal logic to a
+    terminal ``failed`` state and persist it (HEAD-review F3).
+
+    ``run_backup_job``'s body can raise before the safety net inside it
+    (``Settings()`` re-resolution, per-job pool construction under thread
+    exhaustion).  Without finalizing, the job is stranded non-terminal forever —
+    eviction-protected (#25) and, on the manual path, with no log line at all.
+    Idempotent: an already-terminal job is left untouched (only re-persisted).
+    Shared by the manual-path Future done-callback and the scheduled wrapper.
+    """
+    if job.status not in _TERMINAL_JOB_STATUSES:
+        for r in job.results:
+            if r.status not in ("success", "failed"):
+                r.status = "failed"
+                if not r.error:
+                    r.error = f"{r.host}: backup worker crashed ({exc})."
+        job.completed_at = datetime.now(UTC)
+        job.status = JobStatus.failed
+    if job_store is not None:
+        try:
+            job_store.save(job)
+        except OSError as save_exc:
+            logger.error(
+                "Failed to persist crashed job %s: %s", job.id, save_exc
+            )
+
+
+def _on_job_future_done(
+    fut: Future,
+    job: BackupJob | None,
+    job_store: FileJobStore | None,
+) -> None:
+    """Done-callback for the manual-path fire-and-forget Future.
+
+    ``concurrent.futures`` (unlike ``asyncio``) never surfaces an unretrieved
+    exception, so an escape from ``run_backup_job`` would otherwise vanish
+    silently.  Log it and force-fail the job so it can't strand non-terminal.
+    """
+    try:
+        exc = fut.exception()
+    except CancelledError:
+        return  # cancelled at shutdown (F6 territory) — nothing to finalize
+    if exc is None:
+        return  # normal completion — run_backup_job persisted its terminal state
+    logger.error(
+        "Backup job %s crashed in the worker: %s",
+        getattr(job, "id", "<unknown>"),
+        exc,
+        exc_info=exc,
+    )
+    if job is not None:
+        finalize_crashed_job(job, job_store, exc)
+
+
 def submit_backup_job(*args, **kwargs) -> Future:
     """Submit :func:`run_backup_job` to the dedicated backup-job executor.
 
@@ -218,7 +283,19 @@ def submit_backup_job(*args, **kwargs) -> Future:
     ``pending`` and callers must poll ``GET /backups/{id}`` for the terminal
     state (see AGENTS.md "Hard Rules").
     """
-    return _job_executor().submit(run_backup_job, *args, **kwargs)
+    fut = _job_executor().submit(run_backup_job, *args, **kwargs)
+    # (HEAD-review F3) Attach a done-callback that finalizes a crashed job.
+    # Recover the job + its store from the runner args by NAME (robust to
+    # positional/keyword; ``run_backup_job`` is resolved at call time so a
+    # monkeypatched stub with a different signature just yields ``None``).
+    try:
+        bound = inspect.signature(run_backup_job).bind_partial(*args, **kwargs)
+        job = bound.arguments.get("job")
+        job_store = bound.arguments.get("job_store")
+    except TypeError:
+        job = job_store = None
+    fut.add_done_callback(lambda f: _on_job_future_done(f, job, job_store))
+    return fut
 
 
 def _process_one_device_limited(*args, **kwargs) -> None:

@@ -219,8 +219,18 @@ class BackupJobRegistry:
         job = self._store.load_one(job_id)
         if job is None:
             raise KeyError(job_id)
-        # Promote to cache (may evict).
-        self[job_id] = job
+        # Promote to cache (may evict) — but ONLY if the disk snapshot is
+        # TERMINAL (HEAD-review F1).  A non-terminal disk load means the job was
+        # evicted in the window between the runner's in-memory terminal flip and
+        # its terminal disk save, OR is a crash leftover (CONC-16).  Caching the
+        # stale non-terminal copy would PIN it (non-terminal jobs are
+        # eviction-protected, #25) and answer the wrong status until restart.
+        # Returning it WITHOUT promotion lets the next poll re-read disk and
+        # HEAL the instant the terminal save lands — this also covers the
+        # swallowed terminal-save ``OSError`` sibling, which has no timing
+        # window at all.
+        if job.status in _TERMINAL_STATUSES:
+            self[job_id] = job
         return job
 
     def __contains__(self, job_id: object) -> bool:
