@@ -249,6 +249,11 @@ def _render_static_route(route) -> str:
     ``ipv6 route`` (``ip route <v6>`` is invalid and rejected on commit).
     """
     nexthop = route.gateway or route.interface
+    # Two-token next-hop ``<iface> <gateway>``: emit BOTH, interface first, per
+    # the ``ip route <dest> <iface> <gateway>`` grammar — else a route carrying
+    # both fields drops the interface (HEAD-review L1-9 render half).
+    if route.interface and route.gateway:
+        nexthop = f"{route.interface} {route.gateway}"
     keyword = "ipv6 route" if ":" in (route.destination or "") else "ip route"
     out = f"{keyword} {route.destination} {nexthop}".rstrip()
     if route.metric:

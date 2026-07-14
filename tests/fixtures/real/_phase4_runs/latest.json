@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-12T22:04:44+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260712T215945Z.json",
-  "mesh_run_started_utc": "2026-07-12T21:59:32+00:00",
+  "started_utc": "2026-07-14T04:37:07+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260714T043652Z.json",
+  "mesh_run_started_utc": "2026-07-14T04:36:45+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4136,17 +4136,17 @@
   "aggregate": {
     "ALIGNED": 1678,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 1228,
+    "EXPECTED_LOSSY": 1224,
     "EXPECTED_UNSUPPORTED": 732,
-    "METHODOLOGY_ISSUE_under": 926,
+    "METHODOLOGY_ISSUE_under": 930,
     "METHODOLOGY_ISSUE_over": 25,
     "STRUCTURAL_ONLY": 1179,
     "TRIVIAL_EMPTY": 9526,
     "fields_total": 15299,
     "severity_high": 5,
     "severity_medium": 107,
-    "severity_low": 2023,
-    "severity_ok": 13164
+    "severity_low": 2027,
+    "severity_ok": 13160
   },
   "severity_matrix": {
     "arista_eos": {
@@ -4346,7 +4346,7 @@
     {
       "source_codec": "cisco_iosxr",
       "target_codec": "arista_eos",
-      "drifted_total": 28
+      "drifted_total": 26
     },
     {
       "source_codec": "cisco_iosxr",
@@ -4366,7 +4366,7 @@
     {
       "source_codec": "cisco_iosxr",
       "target_codec": "cisco_iosxe_cli",
-      "drifted_total": 25
+      "drifted_total": 23
     },
     {
       "source_codec": "cisco_iosxr",
@@ -4376,7 +4376,7 @@
     {
       "source_codec": "cisco_iosxr",
       "target_codec": "cisco_nxos",
-      "drifted_total": 27
+      "drifted_total": 25
     },
     {
       "source_codec": "cisco_iosxr",
@@ -4466,7 +4466,7 @@
     {
       "source_codec": "fortigate_cli",
       "target_codec": "aruba_aoscx",
-      "drifted_total": 29
+      "drifted_total": 28
     },
     {
       "source_codec": "fortigate_cli",
@@ -4476,7 +4476,7 @@
     {
       "source_codec": "fortigate_cli",
       "target_codec": "cisco_nxos",
-      "drifted_total": 22
+      "drifted_total": 21
     },
     {
       "source_codec": "fortigate_cli",

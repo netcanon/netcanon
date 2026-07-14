@@ -264,13 +264,20 @@ _VLAN_DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 #: ``ip route <dest>/<prefix> <gw> [<dist>]`` — top-level (default VRF)
 #: static route.  AOS-CX uses CIDR destinations.
 _STATIC_ROUTE_RE = re.compile(
-    r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
+    # Optional group 4 = two-token gateway (``ip route <dest> <iface> <gw>``);
+    # group 5 = admin distance.  ``(?=\s|$)`` boundary stops the distance group
+    # from biting a partial digit run off the gateway (HEAD-review L1-9).
+    r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)"
+    r"(?:\s+(\d+\.\d+\.\d+\.\d+))?(?:\s+(\d+))?(?=\s|$)",
     re.IGNORECASE,
 )
 #: ``ipv6 route <prefix>/<len> <nh> [<dist>]`` — the IPv6 form uses the
 #: ``ipv6 route`` keyword (does not overlap ``^ip route``).
 _STATIC_ROUTE_V6_RE = re.compile(
-    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)(?:\s+(\d+))?",
+    # Optional group 3 = two-token IPv6 gateway (must contain a colon so a bare
+    # distance integer in group 4 is not mistaken for it).
+    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)"
+    r"(?:\s+([0-9A-Fa-f]*:[0-9A-Fa-f:]*))?(?:\s+(\d+))?(?=\s|$)",
     re.IGNORECASE,
 )
 
@@ -884,15 +891,20 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     for line in raw.splitlines():
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
-            dest, gw_or_iface, metric_str = m6.groups()
+            dest, gw_or_iface, gw2, metric_str = m6.groups()
             metric = int(metric_str) if metric_str else 0
             gateway = ""
             iface = ""
-            try:
-                ipaddress.IPv6Address(gw_or_iface)
-                gateway = gw_or_iface
-            except ipaddress.AddressValueError:
+            if gw2:
+                # Two-token ``<iface> <v6-gateway>`` (HEAD-review L1-9).
                 iface = gw_or_iface
+                gateway = gw2
+            else:
+                try:
+                    ipaddress.IPv6Address(gw_or_iface)
+                    gateway = gw_or_iface
+                except ipaddress.AddressValueError:
+                    iface = gw_or_iface
             routes.append(CanonicalStaticRoute(
                 destination=dest,  # already <prefix>/<len>
                 gateway=gateway,
@@ -903,15 +915,21 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
         m = _STATIC_ROUTE_RE.match(line)
         if not m:
             continue
-        dest_ip, prefix, gw_or_iface, metric_str = m.groups()
+        dest_ip, prefix, gw_or_iface, gw2, metric_str = m.groups()
         metric = int(metric_str) if metric_str else 0
         gateway = ""
         iface = ""
-        try:
-            ipaddress.IPv4Address(gw_or_iface)
-            gateway = gw_or_iface
-        except ipaddress.AddressValueError:
+        if gw2:
+            # Two-token ``<iface> <gateway>``: gw_or_iface is the egress
+            # interface, gw2 the forwarding address (HEAD-review L1-9).
             iface = gw_or_iface
+            gateway = gw2
+        else:
+            try:
+                ipaddress.IPv4Address(gw_or_iface)
+                gateway = gw_or_iface
+            except ipaddress.AddressValueError:
+                iface = gw_or_iface
         routes.append(CanonicalStaticRoute(
             destination=f"{dest_ip}/{prefix}",
             gateway=gateway,

@@ -945,6 +945,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             target = route.gateway or route.interface
             if not target:
                 continue
+            # Two-token next-hop ``<iface> <gateway>`` (egress interface plus
+            # an explicit forwarding address): emit BOTH, interface first, per
+            # the ``ip route <prefix> <iface> <gateway>`` grammar — else a
+            # route carrying both fields drops the interface (HEAD-review
+            # L1-1 render half).
+            if route.interface and route.gateway:
+                target = f"{route.interface} {route.gateway}"
             # Per-VRF routes carry the ``vrf <name>`` qualifier between the
             # ``ip route`` / ``ipv6 route`` keyword and the destination.
             # Without this, a donor-carried ``route.vrf`` (e.g. a cisco

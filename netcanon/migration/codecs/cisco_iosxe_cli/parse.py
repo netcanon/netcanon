@@ -299,6 +299,28 @@ _NVE_MEMBER_VNI_RE = re.compile(
     r"(?:\s+mcast-group\s+(\d+\.\d+\.\d+\.\d+)|\s+vrf\s+(\S+))?\s*$",
     re.IGNORECASE,
 )
+def _is_ipv4_literal(token: str) -> bool:
+    """True if ``token`` parses as a bare IPv4 address (a static-route
+    next-hop gateway).  Disambiguates the two-token ``ip route <dest> <mask>
+    <iface> <gateway>`` form — a trailing dotted-quad after an egress
+    interface is the gateway, not an admin distance."""
+    try:
+        ipaddress.IPv4Address(token)
+        return True
+    except ipaddress.AddressValueError:
+        return False
+
+
+def _is_ipv6_literal(token: str) -> bool:
+    """True if ``token`` parses as a bare IPv6 address (the ``ipv6 route``
+    two-token next-hop gateway)."""
+    try:
+        ipaddress.IPv6Address(token)
+        return True
+    except ipaddress.AddressValueError:
+        return False
+
+
 _STATIC_ROUTE_RE = re.compile(
     r"^ip\s+route\s+(?:vrf\s+(\S+)\s+)?"
     r"(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)"
@@ -1532,6 +1554,13 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
                     t += 2
                 elif tok in ("tag", "track") and t + 1 < len(tail):
                     t += 2  # keyword + its value — not modelled
+                elif gateway == "" and _is_ipv6_literal(tail[t]):
+                    # Two-token next-hop ``<iface> <gateway>``: group(3) was
+                    # the egress interface, so this trailing IPv6 literal is
+                    # the gateway.  Pre-fix it hit the ``else`` arm and the
+                    # next-hop was silently discarded (HEAD-review L1-8).
+                    gateway = tail[t]
+                    t += 1
                 elif tail[t].isdigit() and metric == 0:
                     metric = int(tail[t])
                     t += 1
@@ -1582,6 +1611,13 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
                     t += 2
                 elif tok in ("tag", "track") and t + 1 < len(tail):
                     t += 2  # keyword + its value — not modelled
+                elif gateway == "" and _is_ipv4_literal(tail[t]):
+                    # Two-token next-hop ``<iface> <gateway>``: group(4) was
+                    # the egress interface, so this trailing dotted-quad is the
+                    # gateway.  Pre-fix it hit the ``else`` arm and the next-hop
+                    # was silently discarded (HEAD-review L1-8).
+                    gateway = tail[t]
+                    t += 1
                 elif tail[t].isdigit() and metric == 0:
                     metric = int(tail[t])
                     t += 1
