@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-14T04:37:07+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260714T043652Z.json",
-  "mesh_run_started_utc": "2026-07-14T04:36:45+00:00",
+  "started_utc": "2026-07-14T16:21:57+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260714T162156Z.json",
+  "mesh_run_started_utc": "2026-07-14T16:21:49+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4531,7 +4531,7 @@
     {
       "source_codec": "mikrotik_routeros",
       "target_codec": "mikrotik_routeros",
-      "drifted_total": 1
+      "drifted_total": 0
     },
     {
       "source_codec": "mikrotik_routeros",
