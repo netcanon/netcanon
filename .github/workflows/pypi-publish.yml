@@ -9,7 +9,10 @@ on:
 
 permissions:
   contents: read
-  actions: read    # read the CI run conclusion for the "require CI success" gate
+  # `actions: read` (for the CI-success + PII-guard run-conclusion polls) is
+  # scoped to the `build` job below — NOT here at the workflow level — so the
+  # `test` gate job doesn't carry a scope it never uses (PKG-4 symmetry with
+  # docker-publish.yml / desktop-msi-publish.yml) (P11).
 
 # Serialise release runs for a given ref so a re-pushed tag (or a
 # workflow_dispatch racing the tag push) can't double-publish.  Never
@@ -68,6 +71,9 @@ jobs:
     name: Build sdist + wheel
     needs: [test]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read    # read the CI + pii-guard run conclusions for the gate polls
 
     steps:
       # Refuse to publish from anything but a version tag.  A bare

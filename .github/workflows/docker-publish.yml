@@ -6,6 +6,16 @@ on:
       - 'v*.*.*'
       - 'v*.*.*-*'    # rc / alpha / beta pre-release tags
   workflow_dispatch:
+    inputs:
+      move_latest:
+        description: >-
+          Move the :latest tag onto this build.  IGNORED on a tag-push run (a
+          stable push always moves :latest).  Only consulted on a manual
+          re-dispatch, where it defaults to false so re-running an OLDER stable
+          tag's publish cannot repoint :latest backwards onto old bytes (P2).
+        type: boolean
+        default: false
+        required: false
 
 # Least-privilege default: at the workflow level only the pytest `test`
 # gate's checkout runs, so read is all it needs.  The registry-push,
@@ -95,6 +105,17 @@ jobs:
         run: |
           if [[ "${GITHUB_REF}" != refs/tags/v* ]]; then
             echo "::error::Refusing to publish from '${GITHUB_REF}' — the image publish must run from a version tag (refs/tags/v*), not a branch. A branch run would move :latest onto a .devN build."
+            exit 1
+          fi
+          # Reject a stable-looking but non-semver tag (P10): a PEP 440 spelling
+          # slip like `v0.6.0rc1` (no dash) or a 4-part `v0.6.0.1` matches the
+          # `v*.*.*` trigger, but `type=semver` emits nothing so
+          # `steps.meta.outputs.version` falls back to the raw `latest` and the
+          # SETUPTOOLS_SCM_PRETEND_VERSION=latest build-arg fails PEP 440 parsing
+          # deep in the builder with a confusing "invalid version 'latest'".
+          # Name the real problem here instead.
+          if [[ ! "${GITHUB_REF}" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "::error::Tag '${GITHUB_REF#refs/tags/}' is not a valid semver release tag (expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-PRERELEASE — e.g. v0.6.0 or v0.6.0-rc1). A PEP 440 spelling like v0.6.0rc1 (no dash) or a 4-part v0.6.0.1 fails version derivation deep in the build; respell the tag."
             exit 1
           fi
           echo "OK: publishing from tag '${GITHUB_REF}'."
@@ -254,7 +275,14 @@ jobs:
             # pushes publish their versioned image without touching
             # `:latest`, while a stable tag updates the documented quickstart
             # tag.  `{{major}}.{{minor}}` above is already prerelease-aware.
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            #
+            # AND require a push trigger OR an explicit move_latest input (P2):
+            # a `workflow_dispatch` rebuild of an OLDER stable tag (a legitimate
+            # "refresh a corrupted artifact" use) otherwise passes every guard
+            # and repoints `:latest` BACKWARD onto the old release's bytes.  On
+            # a tag push `:latest` moves for a stable tag as before; on a manual
+            # re-dispatch it moves only when the maintainer sets move_latest=true.
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') && (github.event_name != 'workflow_dispatch' || inputs.move_latest) }}
 
       - name: Build and push
         id: build
@@ -350,7 +378,7 @@ jobs:
           done
 
       - name: Generate SBOM (SPDX JSON) via syft
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: spdx-json

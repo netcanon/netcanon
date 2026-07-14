@@ -6,13 +6,13 @@
 # ===========================================================================
 # Stage 1 — wheel builder
 # ===========================================================================
-# Base image pinned by digest (the multi-arch index for 3.14.5-slim-bookworm)
+# Base image pinned by digest (the multi-arch index for 3.14.6-slim-bookworm)
 # so the build is reproducible and not silently re-tagged upstream.  Dependabot's
 # docker ecosystem bumps both the tag and this digest together.
 FROM python:3.14.6-slim-bookworm@sha256:4ff4b92a68355dbdb52584ab3391dff8d371a61d4e063468bfd0130e3189c6d9 AS builder
 
 # build-essential lets cryptography / paramiko / pyyaml fall back to source
-# if the wheel index lacks a Python 3.13 / linux/amd64 prebuilt.  The runtime
+# if the wheel index lacks a Python 3.14 / linux/amd64 prebuilt.  The runtime
 # stage doesn't carry these.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
