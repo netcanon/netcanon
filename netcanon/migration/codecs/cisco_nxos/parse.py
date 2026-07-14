@@ -531,8 +531,15 @@ def _parse_globals(raw: str, intent: CanonicalIntent) -> None:
     if m:
         intent.domain = m.group(1)
     for m in _NAME_SERVER_RE.finditer(raw):
-        # ``ip name-server 1.1.1.1 8.8.8.8`` is two resolvers on one line.
+        # ``ip name-server 1.1.1.1 8.8.8.8`` is two resolvers on one line; a
+        # trailing ``use-vrf <name>`` modifier must NOT be harvested as a
+        # resolver.  IP-guard each token (mirrors the syslog loop below) so
+        # ``use-vrf`` / ``management`` are skipped (HEAD-review L1-2).
         for token in m.group(1).split():
+            try:
+                ipaddress.ip_address(token)
+            except ValueError:
+                continue
             intent.dns_servers.append(token)
     for m in _NTP_SERVER_RE.finditer(raw):
         intent.ntp_servers.append(m.group(1))

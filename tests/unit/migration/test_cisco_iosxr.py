@@ -210,6 +210,35 @@ class TestParse:
         assert by_dest["10.99.0.0/16"].vrf == "CUSTOMER-A"
         assert by_dest["10.99.0.0/16"].gateway == "203.0.113.2"
 
+    def test_static_route_keyword_tails_not_misfiled(self, codec):
+        # HEAD-review L1-4: trailing ``tag`` / ``description`` / ``bfd`` route
+        # attributes must be consumed, not mis-filed into metric / interface
+        # (which re-rendered invalid CLI like ``<dest> description <gw>``).
+        raw = (
+            "router static\n"
+            " address-family ipv4 unicast\n"
+            "  10.0.0.0/8 GigabitEthernet0/0/0/2 11.1.1.2 tag 100\n"
+            "  0.0.0.0/0 1.2.3.4 description CORP-UPLINK\n"
+            "  192.0.2.0/24 5.6.7.8 bfd fast-detect\n"
+            "  172.16.0.0/12 9.9.9.9 200\n"
+        )
+        by_dest = {r.destination: r for r in codec.parse(raw).static_routes}
+        # ``tag 100`` must NOT become the admin distance.
+        assert by_dest["10.0.0.0/8"].gateway == "11.1.1.2"
+        assert by_dest["10.0.0.0/8"].interface == "GigabitEthernet0/0/0/2"
+        assert by_dest["10.0.0.0/8"].metric == 0
+        # ``description`` / ``bfd`` must NOT become the egress interface.
+        assert by_dest["0.0.0.0/0"].gateway == "1.2.3.4"
+        assert by_dest["0.0.0.0/0"].interface == ""
+        assert by_dest["192.0.2.0/24"].gateway == "5.6.7.8"
+        assert by_dest["192.0.2.0/24"].interface == ""
+        # A bare trailing integer IS still the admin distance (control).
+        assert by_dest["172.16.0.0/12"].metric == 200
+        # Render is valid CLI — the keyword never leaks back onto the line.
+        out = codec.render(codec.parse(raw))
+        assert "0.0.0.0/0 1.2.3.4" in out
+        assert "description" not in out and "bfd" not in out
+
     def test_parse_ipv6_static_routes_under_ipv6_af(self, codec):
         # Capstone: routes under ``address-family ipv6 unicast`` (default +
         # per-VRF) now parse — gateway, interface-only, and per-VRF forms.
