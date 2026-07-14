@@ -941,19 +941,20 @@ class TestCARPGroups:
     # ------------------------------------------------------------------
 
     def test_capability_matrix_vrrp_now_supported(self):
-        """Wave B promotes /interfaces/interface/vrrp-groups/group
-        from unsupported to supported.  The classify() resolution
-        still flags it as lossy (mode-restriction LossyPath wins
-        over the supported entry per the matrix's strictest-wins
-        rule)."""
+        """Wave B promotes /interfaces/interface/vrrp-groups/group out of
+        ``unsupported``.  Its effective disposition is ``lossy`` (the
+        mode-restriction LossyPath — non-CARP modes drop on render), so it is
+        declared ONLY in ``lossy`` and NOT also listed ``supported``: a path
+        may not appear in both (HEAD-review Fid-F4; classify() makes lossy win
+        over supported anyway, making a dual ``supported`` entry dead)."""
         caps = OPNsenseCodec().capabilities
         path = "/interfaces/interface/vrrp-groups/group"
         # Not in unsupported anymore.
         assert path not in [up.path for up in caps.unsupported]
-        # And IS in supported.
-        assert path in caps.supported
-        # The classify() rule returns "lossy" because the LossyPath
-        # entry has the same path and lossy beats supported.
+        # And NOT double-listed in supported (Fid-F4 — lossy is the honest,
+        # effective disposition, so the dead supported entry was removed).
+        assert path not in caps.supported
+        # classify() returns "lossy" from the LossyPath entry.
         assert caps.classify(path) == "lossy"
 
     def test_capability_matrix_lossy_explains_carp_only(self):

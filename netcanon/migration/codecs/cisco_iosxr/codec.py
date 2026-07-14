@@ -150,11 +150,11 @@ class CiscoIOSXRCodec(CodecBase):
             # Static routes — default VRF + per-VRF (`router static / vrf`)
             "/routing/static-route",
             "/routing/static-route/vrf",
-            # Phase 2 — VRF declarations.  Also declared lossy below (the
-            # route-distinguisher must be read from / rendered to the
-            # `router bgp` block) → the path classifies lossy.  Name /
-            # description / route-target import+export round-trip cleanly.
-            "/routing-instances/instance",
+            # Phase 2 — VRF.  Name / description / route-target import+export
+            # round-trip cleanly (implicit-supported).  The container
+            # `/routing-instances/instance` classifies lossy (declared below —
+            # the route-distinguisher must be read from / rendered to the
+            # `router bgp` block), so it is intentionally NOT listed supported.
             # Phase 2 — Bundle-Ether LAGs (`bundle id <N> mode <m>`)
             "/lags/lag/name",
             "/lags/lag/members",

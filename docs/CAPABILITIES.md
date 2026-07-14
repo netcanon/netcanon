@@ -342,8 +342,7 @@ output.
 
 | Path | Class | Reason |
 |---|---|---|
-| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B, CARP variant) | Hosts CARP-only HA groups via `<virtualip><vip><mode>carp</mode><vhid>N</vhid>…</vip></virtualip>` with `mode="carp"` discriminator on the canonical record. |
-| `/interfaces/interface/vrrp-groups/group` | Lossy (Wave B) | OPNsense `<virtualip>` hosts CARP-only HA groups in the v1 wire-up.  `CanonicalVRRPGroup` records with `mode="vrrp"` or `mode="hsrp"` are SKIPPED on render — OPNsense has no native HSRP wire protocol, and its pure-VRRP mode under `<virtualip>` is rarely deployed and not yet emitted.  Only `mode="carp"` round-trips.  Additionally, the `advskew`↔`priority` mapping (`priority = 254 - advskew`) preserves relative HA-pair ordering but not exact election timing. |
+| `/interfaces/interface/vrrp-groups/group` | Lossy (Wave B, CARP variant) | Hosts CARP-only HA groups via `<virtualip><vip><mode>carp</mode><vhid>N</vhid>…</vip></virtualip>` with a `mode="carp"` discriminator on the canonical record.  Lossy because `CanonicalVRRPGroup` records with `mode="vrrp"` or `mode="hsrp"` are SKIPPED on render — OPNsense has no native HSRP wire protocol, and its pure-VRRP mode under `<virtualip>` is rarely deployed and not yet emitted; only `mode="carp"` round-trips.  Additionally, the `advskew`↔`priority` mapping (`priority = 254 - advskew`) preserves relative HA-pair ordering but not exact election timing. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | OPNsense uses CARP for HA (distinct semantics); no anycast-gateway grammar. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
 | `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |

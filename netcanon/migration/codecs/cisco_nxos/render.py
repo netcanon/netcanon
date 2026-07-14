@@ -216,11 +216,21 @@ def _derive_features(tree: CanonicalIntent) -> list[str]:
     features: set[str] = set()
     if any(_is_svi(i.name) for i in tree.interfaces):
         features.add("interface-vlan")
-    # A bare ``interface Tunnel<N>`` is invalid on a real Nexus without
-    # ``feature tunnel``.  Gate on the ``Tunnel`` name prefix — NOT
-    # interface_type=="ianaift:tunnel", which also covers ``nve1`` (a VXLAN
-    # VTEP gated by ``feature nv overlay``, not ``feature tunnel``).
-    if any(i.name.lower().startswith("tunnel") for i in tree.interfaces):
+    # A tunnel interface is invalid on a real Nexus without ``feature
+    # tunnel``.  Fire on EITHER the ``Tunnel`` name prefix (a bare ``interface
+    # TunnelN`` whose canonical carries no tunnel_type) OR a GRE/IP-in-IP encap
+    # (``tunnel_type`` set on an ``ianaift:tunnel`` interface).  The second arm
+    # matches the same predicate the ``tunnel mode`` emitter uses, so a tunnel
+    # whose canonical NAME does not start with "tunnel" (e.g. MikroTik
+    # ``gre-tunnel1``) no longer emits ``tunnel mode gre ip`` without its
+    # feature gate (HEAD-review Fid-F9).  It deliberately does NOT match
+    # ``nve1`` — a VXLAN VTEP is ``interface_type=="ianaift:tunnel"`` but
+    # carries no ``tunnel_type`` and is gated by ``feature nv overlay``.
+    if any(
+        i.name.lower().startswith("tunnel")
+        or (i.tunnel_type and i.interface_type == "ianaift:tunnel")
+        for i in tree.interfaces
+    ):
         features.add("tunnel")
     if tree.lags:
         features.add("lacp")

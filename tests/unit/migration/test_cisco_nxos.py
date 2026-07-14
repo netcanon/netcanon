@@ -1493,3 +1493,44 @@ class TestSameVendorBannerEcho:
         assert "version 9.3(11) Bios:version" in codec.render(cross)
         empty = CanonicalIntent(hostname="sw1", source_vendor="cisco_nxos")
         assert "version 9.3(11) Bios:version" in codec.render(empty)
+
+
+class TestFeatureTunnelGate:
+    """``feature tunnel`` must be emitted whenever a ``tunnel mode`` encap
+    line is rendered, and must NOT be emitted for an ``nve1`` VXLAN VTEP
+    (gated by ``feature nv overlay``).  Regression for HEAD-review Fid-F9:
+    the gate keyed on the ``Tunnel`` name prefix alone, so a GRE tunnel whose
+    canonical name did not start with "tunnel" (e.g. MikroTik ``gre-tunnel1``)
+    rendered ``tunnel mode gre ip`` with no ``feature tunnel`` — unbootable."""
+
+    def _render(self, name, **kw):
+        tree = CanonicalIntent(
+            hostname="r1",
+            interfaces=[CanonicalInterface(name=name, enabled=True, **kw)],
+        )
+        return CiscoNXOSCodec().render(tree)
+
+    def test_non_tunnel_named_gre_gets_feature_tunnel(self):
+        # The Fid-F9 shape: name does not start with "tunnel" but the encap is
+        # a real GRE tunnel — both the mode line AND its feature gate emit.
+        out = self._render(
+            "gre-tunnel1", interface_type="ianaift:tunnel", tunnel_type="gre"
+        )
+        assert "  tunnel mode gre ip" in out
+        assert "feature tunnel" in out
+
+    def test_tunnel_named_without_type_still_gated(self):
+        # A bare ``interface TunnelN`` with no tunnel_type still needs the gate
+        # (name-prefix arm) — no regression from the pre-Fid-F9 behaviour.
+        out = self._render("Tunnel0", interface_type="ianaift:tunnel")
+        assert "feature tunnel" in out
+
+    def test_nve_vtep_does_not_get_feature_tunnel(self):
+        # ``nve1`` is interface_type=="ianaift:tunnel" but carries no
+        # tunnel_type; it is a VXLAN VTEP gated by ``feature nv overlay``.
+        out = self._render("nve1", interface_type="ianaift:tunnel")
+        assert "feature tunnel" not in out
+
+    def test_plain_interface_no_feature_tunnel(self):
+        out = self._render("Ethernet1/1")
+        assert "feature tunnel" not in out

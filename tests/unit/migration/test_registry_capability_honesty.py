@@ -538,6 +538,24 @@ def test_no_supported_unsupported_overlap(name: str):
     assert not overlap, f"{name}: xpath(s) both supported AND unsupported: {overlap}"
 
 
+@pytest.mark.parametrize("name", _CODEC_NAMES)
+def test_no_supported_lossy_overlap(name: str):
+    """No xpath may appear in BOTH supported and lossy.  ``classify()``
+    resolves lossy > supported, so a dual-listed path is *dead weight* in
+    ``supported`` — the effective disposition is lossy, and anyone reading
+    ``caps.supported`` (contributor or tooling) is misled into believing the
+    path round-trips cleanly.  The class docstring itself calls double-listing
+    "a configuration bug".  Sibling of the supported∩unsupported guard above
+    (HEAD-review Fid-F4)."""
+    caps = get_codec(name).capabilities
+    overlap = set(caps.supported) & {lp.path for lp in caps.lossy}
+    assert not overlap, (
+        f"{name}: xpath(s) listed as BOTH supported AND lossy: {overlap}.  "
+        f"classify() makes lossy win, so the supported entry is dead — remove "
+        f"it (the lossy declaration is the honest disposition)."
+    )
+
+
 #: Top-level CanonicalIntent fields that are Tier-3 / metadata / provenance —
 #: carried through but never a translatable capability surface, so they need
 #: no honesty marker.  Everything else MUST have a marker entry.

@@ -277,6 +277,23 @@ def test_no_yaml_less_pair_drift_regressed(mesh_and_recon, baseline):
 
     live = _by_pair(result["pair_drift_yaml_less"])
     base = _by_pair(baseline["pair_drift_yaml_less"])
+    # The ``<=`` ratchet below iterates the BASELINE pairs, so a pair that is
+    # YAML-less in LIVE but ABSENT from the baseline would never be checked
+    # (HEAD-review Fid-F5).  Reaching that state needs an expectation-YAML
+    # rename/swap that keeps the coverage counts equal (so
+    # test_expectation_yaml_coverage_not_reduced stays green) yet moves a pair
+    # into the unpinned yaml-less bucket.  Pin the pair SET so any such shuffle
+    # turns red and forces a conscious re-baseline.  (88 == 88 at HEAD.)
+    assert set(live) == set(base), (
+        "YAML-less cross-mesh pair SET changed vs the baseline "
+        f"(added: {sorted(set(live) - set(base))}; "
+        f"removed: {sorted(set(base) - set(live))}).\nAn expectation-YAML "
+        "rename/swap moved a (source, target) pair into (or out of) the "
+        "unpinned yaml-less bucket without tripping the coverage guard — the "
+        "moved pair's drift is no longer ratcheted.  Re-author the expectation "
+        "coverage or regenerate the baseline consciously "
+        "(tools/run_phase4_reconciliation.py --write-baseline)."
+    )
     regressed = {
         pair: (base[pair], live.get(pair, 0))
         for pair in base

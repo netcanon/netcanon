@@ -163,17 +163,19 @@ class CiscoNXOSCodec(CodecBase):
             "/local-users/user/name",
             "/local-users/user/role",
             "/local-users/user/hashed-password",
-            # VRF (name + description + Phase-3 RD / route-target)
+            # VRF (name + description + rt-exports).  route-distinguisher and
+            # rt-imports classify lossy (declared below), so they are
+            # intentionally NOT listed supported.
             "/routing-instances/instance/name",
             "/routing-instances/instance/description",
-            "/routing-instances/instance/route-distinguisher",
-            "/routing-instances/instance/rt-imports",
             "/routing-instances/instance/rt-exports",
             # Static routes (default VRF + Phase-3 per-VRF)
             "/routing/static-route",
             "/routing/static-route/vrf",
-            # VXLAN-EVPN (Phase 4) — L2 VLAN↔VNI + VTEP + L3VNI
-            "/vxlan-vnis/vni",
+            # VXLAN-EVPN (Phase 4) — L2 VLAN↔VNI + VTEP + L3VNI.  The `vni`
+            # identity classifies lossy (declared below — per-VNI sub-flags
+            # normalise to BGP-EVPN defaults), so it is intentionally NOT
+            # listed supported.
             "/vxlan-vnis/source-interface",
             "/vxlan-vnis/mcast-group",
             "/vxlan-vnis/flood-list",
