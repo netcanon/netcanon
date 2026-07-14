@@ -130,7 +130,8 @@ Canonical mapping:
 - See per-codec `CapabilityMatrix.lossy` declarations.  Most fields
   parse + render cleanly within the documented surface; lossy paths
   surface only when translating to vendors with sub-field drift
-  (e.g. Arista → Cisco IOS-XE per-VRF static-route discriminator).
+  (e.g. per-IP virtual-MAC overrides collapsing onto EOS's single
+  chassis-wide virtual-router MAC).
 
 ## What we don't do
 

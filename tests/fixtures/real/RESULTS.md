@@ -348,7 +348,7 @@ one real-deployment capture (the highest-signal class of fixture).
 
 **Codec:** `netcanon.migration.codecs.mikrotik_routeros.MikroTikRouterOSCodec`
 **Direction:** `bidirectional`
-**Certainty:** `best_effort` *(unchanged)*
+**Certainty:** `certified`
 
 ### Coverage matrix
 

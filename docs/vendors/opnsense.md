@@ -27,7 +27,6 @@ Netcanon translates the shared-network-function subset.
   IPv6 (`<ipaddrv6>`); track-interface forms
 - VLANs — `<vlans><vlan>` block (tagged form with parent interface
   binding)
-- Static routes (`<staticroutes>`)
 - DHCP server pools — `<dhcpd>` with per-zone configuration
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats):
@@ -135,6 +134,12 @@ XML element mapping:
 - See per-codec `CapabilityMatrix.lossy` declarations in the codec
   source.  Most fields parse + render cleanly within the
   documented surface.
+- **Static routes are source-side only.**  The parser harvests
+  `<staticroutes>` + `<gateways>` into `CanonicalStaticRoute` (since
+  #350), so OPNsense-*as-source* routes translate outward — but the
+  `config.xml` renderer emits **no** `<staticroutes>`/`<route>` block,
+  so an X→OPNsense migration drops every static route on render.  The
+  loss is declared (`opnsense/codec.py` LossyPath), not silent.
 
 ## What we don't do
 
