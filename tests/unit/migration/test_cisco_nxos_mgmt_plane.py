@@ -61,6 +61,15 @@ class TestNxosManagementPlaneHarvest:
         assert intent.dns_servers == ["8.8.8.8", "1.1.1.1"]
         assert codec.parse(codec.render(intent)).dns_servers == ["8.8.8.8", "1.1.1.1"]
 
+    def test_name_server_use_vrf_tail_not_harvested(self) -> None:
+        # HEAD-review L1-2: ``ip name-server <ip> use-vrf <name>`` — the
+        # trailing ``use-vrf management`` modifier must NOT be minted as fake
+        # resolvers (pre-fix: dns_servers == ["10.0.80.10", "use-vrf",
+        # "management"]).  IP-guard drops the non-address tokens.
+        codec = get_codec("cisco_nxos")
+        intent = codec.parse("ip name-server 10.0.80.10 use-vrf management\n")
+        assert intent.dns_servers == ["10.0.80.10"]
+
     def test_no_mgmt_config_renders_nothing(self) -> None:
         codec = get_codec("cisco_nxos")
         intent = codec.parse("hostname bare\n")

@@ -118,8 +118,12 @@ _NAMESERVER_RE = re.compile(
 _NTP_BLOCK_RE = re.compile(
     r"^ntp[ \t]*\r?\n((?:[ \t]+.*\r?\n)+)", re.IGNORECASE | re.MULTILINE,
 )
+#: The optional ``vrf <name>`` infix precedes the address on IOS-XR
+#: (``server vrf MGMT 10.11.23.7``); without it the ``vrf`` keyword was
+#: captured as the server and the real IP lost (HEAD-review L1-3; the
+#: arista_eos ``_NTP_SERVER_RE`` twin already carries this infix).
 _NTP_SERVER_LINE_RE = re.compile(
-    r"^[ \t]+server\s+(\S+)", re.IGNORECASE | re.MULTILINE,
+    r"^[ \t]+server\s+(?:vrf\s+\S+\s+)?(\S+)", re.IGNORECASE | re.MULTILINE,
 )
 #: Syslog destinations — XR spells them bare ``logging <ip>``, but ``logging``
 #: also fronts non-destination sub-commands (``logging console debugging``,
@@ -714,7 +718,27 @@ def _parse_static_leaf(
     gateway = ""
     iface = ""
     metric = 0
-    for tok in m.group(2).split():
+    tokens = m.group(2).split()
+    t = 0
+    while t < len(tokens):
+        tok = tokens[t]
+        low = tok.lower()
+        # Trailing route attributes carry no canonical home (``description`` is
+        # declared lossy; ``tag`` / ``track`` are dropped).  Consume the keyword
+        # AND its value so it never leaks into gateway / interface / metric.
+        # Pre-fix ``tag 100`` mis-filed 100 as the admin distance, and
+        # ``description CORP`` / ``bfd fast-detect`` mis-filed the keyword as
+        # the egress interface — re-rendering invalid CLI (HEAD-review L1-4).
+        if low in ("tag", "track") and t + 1 < len(tokens):
+            t += 2
+            continue
+        if low in ("description", "bfd"):
+            # Free-text ``description`` / multi-token ``bfd fast-detect ...``
+            # run to end of line — consume the remainder.
+            break
+        if low == "permanent":
+            t += 1
+            continue
         try:
             ipaddress.ip_address(tok)  # IPv4 or IPv6 next-hop
             gateway = tok
@@ -728,6 +752,7 @@ def _parse_static_leaf(
                 metric = int(tok)
             elif not iface:
                 iface = tok
+        t += 1
     return CanonicalStaticRoute(
         destination=dest, gateway=gateway, interface=iface,
         metric=metric, vrf=vrf,

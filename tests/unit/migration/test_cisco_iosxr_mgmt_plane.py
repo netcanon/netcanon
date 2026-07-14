@@ -36,6 +36,15 @@ class TestXrNtpBlockHarvest:
         )
         assert intent.ntp_servers == ["10.0.0.1"]
 
+    def test_ntp_server_vrf_infix_keeps_the_address(self) -> None:
+        # HEAD-review L1-3: ``server vrf MGMT <ip>`` — the vrf infix precedes
+        # the address on IOS-XR; pre-fix ``vrf`` was captured as the server and
+        # the real IP lost (ntp_servers == ["vrf"]).
+        intent = get_codec("cisco_iosxr").parse(
+            "ntp\n server vrf MGMT 10.11.23.7\n"
+        )
+        assert intent.ntp_servers == ["10.11.23.7"]
+
 
 class TestXrSyslogHarvest:
     def test_ignores_non_destination_logging(self) -> None:
