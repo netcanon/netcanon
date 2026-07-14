@@ -669,8 +669,15 @@ def test_every_mapped_fixture_dir_yields_at_least_one_capture() -> None:
     failing the build.  Assert every mapped vendor directory that exists
     on disk contributes at least one discovered fixture.
     """
-    if not REAL_FIXTURES_ROOT.is_dir():
-        pytest.skip(f"{REAL_FIXTURES_ROOT} does not exist")
+    # The fixture root is a committed directory — its ABSENCE is the exact
+    # failure this canary exists to catch (relocated/renamed root → discovery
+    # returns [] → the parametrized suites skip to green).  Skipping here too
+    # would let that failure pass silently, so assert instead of skip (T8).
+    assert REAL_FIXTURES_ROOT.is_dir(), (
+        f"{REAL_FIXTURES_ROOT} is missing — the real-capture corpus root "
+        "vanished, so ~300 parametrized tests silently skipped to green. "
+        "Restore the fixture root / fix _DIR_TO_CODEC_NAME."
+    )
     covered = {codec_key for codec_key, _ in _FIXTURE_PARAMS}
     expected = {
         vendor_dir
