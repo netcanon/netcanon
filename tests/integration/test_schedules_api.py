@@ -374,3 +374,30 @@ class TestScheduledJobCreationPersist:
         # #26: on disk from the creation-time persist even though the stubbed
         # runner wrote nothing.  Pre-fix the scheduled path never saved -> None.
         assert app.state.job_store.load_one(job.id) is not None
+
+    async def test_scheduled_backup_passes_app_settings(
+        self, client, monkeypatch,
+    ):
+        """(HEAD-review F5) the scheduled path must pass ``app.state.settings``
+        as the final positional arg (``run_in_executor`` takes no kwargs) so the
+        job's collectors use the app data dir / TOFU ``known_hosts`` store rather
+        than a worker-resolved ``Settings()`` from env — the sibling of the
+        manual POST call site that was also left ``None``."""
+        from netcanon.api.routes.schedules import _run_scheduled_backup_inner
+        from netcanon.services import backup_runner
+
+        app = client.app
+        self._cisco_profile(app)
+        sid = _create_schedule(client)["id"]
+
+        captured: list = []
+
+        def _capture(job, *a, **k):
+            captured.append(a)
+
+        monkeypatch.setattr(backup_runner, "run_backup_job", _capture)
+        await _run_scheduled_backup_inner(sid, app)
+
+        assert captured, "runner never dispatched (no resolvable target?)"
+        # ``settings`` is the last positional arg after ``job``.
+        assert captured[0][-1] is app.state.settings
