@@ -213,6 +213,10 @@ _VRF_RD_RE = re.compile(r"^\s+rd\s+(\S+)\s*$")
 # ``\S`` are disjoint classes so there is exactly one split; the ``.strip()``
 # on the captured group still trims any trailing whitespace ``.*`` absorbed.
 _VRF_DESC_RE = re.compile(r"^\s+description\s+(\S.*)$")
+#: ``vrrp <gid> description <text>`` (operator-supplied).  Module-level so the
+#: ReDoS-hardening guard can pin it; ``(\S.*)`` not ``(.+?)\s*$`` for the same
+#: reason as ``_VRF_DESC_RE`` above (the consumer ``.strip()``s the capture).
+_VRRP_DESCRIPTION_RE = re.compile(r"^vrrp\s+(\d+)\s+description\s+(\S.*)$")
 _VRF_RT_RE = re.compile(
     r"^\s+route-target\s+(import|export|both)\s+(?:evpn\s+)?(\S+)\s*$"
 )
@@ -1406,10 +1410,9 @@ def _apply_iface_subcommand(  # noqa: C901
             g = _vrrp_group_for(iface, int(m.group(2)), mode="vrrp")
             g.preempt = not bool(m.group(1))
             return
-        # ``vrrp <gid> description <text>`` (operator-supplied).
-        m = re.match(
-            r'^vrrp\s+(\d+)\s+description\s+(.+?)\s*$', line,
-        )
+        # ``vrrp <gid> description <text>`` (operator-supplied); pattern is
+        # ``_VRRP_DESCRIPTION_RE`` (module-level, ReDoS-hardened + guard-pinned).
+        m = _VRRP_DESCRIPTION_RE.match(line)
         if m:
             g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
             text = m.group(2).strip()

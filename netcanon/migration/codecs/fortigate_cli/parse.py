@@ -148,8 +148,13 @@ class _EditBlock:
         self.sub_blocks: list[_ConfigBlock] = []
 
 
-_CONFIG_HEADER_RE = re.compile(r"^config\s+(.+?)\s*$", re.IGNORECASE)
-_EDIT_HEADER_RE = re.compile(r"^edit\s+(.+?)\s*$", re.IGNORECASE)
+#: ``(\S.*)`` (greedy-to-EOL, anchored on a non-space) NOT ``(.+?)\s*$``:
+#: a lazy body whose class overlaps the trailing ``\s*$`` backtracks O(n^2)
+#: on ``config <x><run of spaces><non-space>`` (the #337 ReDoS shape).  The
+#: consumers ``.strip()`` the capture, so dropping the trailing trim from the
+#: pattern is behaviour-identical.
+_CONFIG_HEADER_RE = re.compile(r"^config\s+(\S.*)$", re.IGNORECASE)
+_EDIT_HEADER_RE = re.compile(r"^edit\s+(\S.*)$", re.IGNORECASE)
 _SET_RE = re.compile(r"^set\s+(\S+)\s*(.*)$", re.IGNORECASE)
 _COMMENT_RE = re.compile(r"^\s*#")
 #: FortiOS release from the ``#config-version`` header, e.g.

@@ -152,8 +152,11 @@ _VRRP_PREEMPT_RE = re.compile(
     r"^\s+(?P<no>no\s+)?vrrp\s+(?P<group>\d+)\s+preempt\b.*$",
     re.IGNORECASE,
 )
+# ``(?P<text>\S.*)`` NOT ``(?P<text>.+?)\s*$``: the lazy body overlapping the
+# trailing ``\s*$`` backtracks O(n^2) on a space-padded line (the #337 ReDoS
+# shape); the consumer ``.strip()``s so the trailing trim is redundant here.
 _VRRP_DESCRIPTION_RE = re.compile(
-    r"^\s+vrrp\s+(?P<group>\d+)\s+description\s+(?P<text>.+?)\s*$",
+    r"^\s+vrrp\s+(?P<group>\d+)\s+description\s+(?P<text>\S.*)$",
     re.IGNORECASE,
 )
 _VRRP_AUTH_MD5_RE = re.compile(
