@@ -408,8 +408,15 @@ def test_corpus_covers_every_round_trippable_codec() -> None:
     internal ``mock`` test codec is the sole exemption (it ships no
     synthetic fixture).
     """
-    if not SYNTHETIC_FIXTURES_ROOT.is_dir():
-        pytest.skip(f"{SYNTHETIC_FIXTURES_ROOT} does not exist")
+    # The fixture root is a committed directory — its ABSENCE is the exact
+    # failure this canary exists to catch (relocated/renamed root → discovery
+    # returns [] → the parametrized suites skip to green).  Skipping here too
+    # would let that failure pass silently, so assert instead of skip (T8).
+    assert SYNTHETIC_FIXTURES_ROOT.is_dir(), (
+        f"{SYNTHETIC_FIXTURES_ROOT} is missing — the synthetic kitchen-sink "
+        "corpus root vanished, so the parametrized round-trip suites silently "
+        "skipped to green. Restore the fixture root."
+    )
     expected = {n for n in list_codecs() if n != "mock"}
     covered = {codec_name for codec_name, _ in _FIXTURE_PARAMS}
     missing = expected - covered

@@ -8,9 +8,11 @@ claimed ``best_effort`` while ``codec.py`` declared ``certified``.  This
 test mechanically enforces header↔code agreement for every codec that
 declares a ``Certainty:`` line, so the contradiction can't recur.
 
-Codecs whose header omits a ``Certainty:`` line are skipped (header
-uniformity across all codecs is a separate, lower-priority item) — the
-guard checks consistency *where the claim is made*, not presence.
+Every real codec declares a ``Certainty:`` line; only the internal ``mock``
+test codec omits one and is skipped.  A real codec with no header now FAILS
+(HEAD-review T10) so a codec can't dodge the guard by deleting its header line
+instead of updating it — the guard checks consistency where the claim is made
+AND that every real codec makes the claim.
 """
 
 from __future__ import annotations
@@ -39,7 +41,17 @@ def test_header_certainty_matches_classvar(name):
 
     m = _CERTAINTY_RE.search(doc)
     if m is None:
-        pytest.skip(f"{name}: package header declares no 'Certainty:' line")
+        # Only the internal `mock` test codec omits a Certainty header; every
+        # real codec declares one (verified at HEAD).  Fail — not skip — for a
+        # real codec so a codec can't dodge this header↔code guard by DELETING
+        # its header line instead of updating it when demoted (T10).
+        if name == "mock":
+            pytest.skip(f"{name}: internal test codec declares no 'Certainty:' line")
+        pytest.fail(
+            f"{name}: package header ({pkg_name}) declares no 'Certainty:' line "
+            "— every real codec must declare one (a demoted codec must UPDATE "
+            "its header, not delete the line)."
+        )
 
     header_value = m.group(1)
     assert header_value == codec.certainty, (

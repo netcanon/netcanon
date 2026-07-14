@@ -14,6 +14,7 @@ from __future__ import annotations
 import textwrap
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -168,7 +169,12 @@ class AutoWaitTestClient(TestClient):
         # Only a successful create against the backups *collection* endpoint
         # spawns a job to wait on (not GET /{id}, not a 422/400 rejection,
         # not a POST to some other resource).
-        if resp.status_code == 202 and url.rstrip("/").endswith("/api/v1/backups"):
+        # Match on the URL PATH only (T9): a POST carrying a query string
+        # (`/api/v1/backups?x=1`) or a full URL would otherwise fail the
+        # endswith and silently skip the wait, leaving tests reading a frozen
+        # `pending` snapshot.  No current caller does either, but the path-parse
+        # makes the trigger robust to one.
+        if resp.status_code == 202 and urlsplit(url).path.rstrip("/").endswith("/api/v1/backups"):
             try:
                 job_id = resp.json().get("id")
             except Exception:  # non-JSON / unexpected body — nothing to wait on
