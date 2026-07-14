@@ -98,9 +98,11 @@ names the canonical surface, not a blanket guarantee.
   promotions #1/#11), cisco_nxos (`logging server <ip>`, #4) and
   cisco_iosxr (bare `logging <ip>`, #13).  These are
   Tier-1 by data shape but NOT yet a cross-vendor guarantee — the §A
-  per-codec panels are authoritative, and an unwired field is dropped
-  on parse (with a banner where the codec declares it unsupported,
-  silently otherwise).
+  per-codec panels are authoritative.  An unwired field is dropped on
+  parse and surfaces the cross-vendor banner where the codec declares it
+  unsupported; for `syslog_servers` and `timezone` every codec declares
+  the path (`syslog_servers` 5 supported + 7 unsupported, `timezone`
+  unsupported on all 12), so those drops are always bannered, never silent.
 * `interfaces[].vrrp_groups` (v0.2.0 Wave B — classic FHRP
   redundancy, mode discriminator `vrrp` / `hsrp` / `carp`) — wired
   across the bidirectional codecs.  See

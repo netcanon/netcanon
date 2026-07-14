@@ -2092,12 +2092,11 @@
           '<div style="flex:1">'
           + '<strong>\u26A0 Target codec doesn\'t render '
           + escapeHtml(label) + '.</strong> '
-          + escapeHtml(vendorLabel) + ' parses + renders interfaces '
-          + 'and VLANs but ' + escapeHtml(label) + ' are currently '
-          + 'kept as an opaque Tier-3 pass-through, not translated.  Rename overrides '
-          + 'will apply to the canonical tree but won\'t appear in '
-          + 'the rendered output until the codec wires full '
-          + 'round-trip support for this category.'
+          + escapeHtml(vendorLabel) + ' renders only a limited surface; '
+          + escapeHtml(label) + ' do not appear in the rendered output '
+          + '(they are dropped on render, not preserved).  Rename overrides '
+          + 'will apply to the canonical tree but won\'t be emitted until '
+          + 'the codec wires full round-trip support for this category.'
           + '</div>';
       } else {
         el.style.display = 'none';

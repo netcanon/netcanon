@@ -189,9 +189,11 @@ and the codec's `CapabilityMatrix` declarations:
 
 * **Tier 1 — auto-translatable.**  Every vendor models the concept;
   cross-vendor semantics are stable.  Core fields — `hostname`,
-  `domain`, `interfaces`, `vlans`, `static_routes` — are wired on every
-  bidirectional codec, and a codec that fails to wire one of these is a
-  bug, not a gap.  `dns_servers` / `ntp_servers` are wired on most
+  `domain`, `interfaces`, `vlans`, `static_routes` — are wired on
+  nearly every bidirectional codec; the few declared exceptions (e.g.
+  VyOS exposes no VLAN-database surface, OPNsense renders no static
+  routes) live in the per-codec matrices as gaps, not bugs.
+  `dns_servers` / `ntp_servers` are wired on most
   codecs; `timezone` and `syslog_servers` are wired on only a subset
   (`timezone` on none as of this release; `syslog_servers` on
   `juniper_junos`, `cisco_iosxe_cli`, `arista_eos` — `logging host

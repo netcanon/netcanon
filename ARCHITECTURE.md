@@ -926,7 +926,10 @@ What's queued:
 - Per-pane overrides for **NTP servers**, **DNS servers**,
   **syslog servers**, **SNMP trap-hosts**, and **RADIUS** — all
   list-oriented cross-vendor-stable management-plane surfaces with
-  per-codec parse+render already in place.  Following the same
+  per-codec parse+render already in place **on the codecs that wire
+  them** (e.g. syslog on 5 of 12; RADIUS and trap-hosts are declared
+  unsupported on some, such as vyos RADIUS and aoscx trap-hosts).
+  Following the same
   three-step recipe (orchestrator → pipeline → pane) as ports /
   VLANs / local_users / SNMP-community / SNMPv3-users.  See
   [`translator-plans.txt`](translator-plans.txt) for viability

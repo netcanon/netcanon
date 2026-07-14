@@ -7,6 +7,11 @@ an anycast-**unsupported** target as `EXPECTED_UNSUPPORTED` rather than
 `CODEC_BUG` — the 424-cell / 45-real-fixture mesh leaves **5 residual
 `CODEC_BUG` cells**.
 
+> **Cell/fixture counts are as-of this 2026-06-13 triage.**  The mesh has since
+> grown (1224 cells at HEAD); the live totals + the current residual cell list
+> are in [`PHASE4_RECONCILIATION.md`](PHASE4_RECONCILIATION.md).  The 5-cell
+> triage below still matches HEAD's 5 `CODEC_BUG` cells.
+
 All 5 were triaged and are **benign methodology / modelling artifacts — not
 codec defects.**  Documented here (per the Phase 4b convention) so the count
 in `PHASE4_RECONCILIATION.md` reads as *explained* rather than as open
