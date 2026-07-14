@@ -545,6 +545,54 @@ class TestSecondaryIp:
         assert "config secondaryip" not in rendered
         assert "set ip  " not in rendered
 
+    def test_varp_only_primary_not_emitted_as_invalid_set_ip(self):
+        """HEAD-review L1-6: a VARP anycast row at index 0 (ip='' +
+        virtual_gateway_address) must NOT render the invalid ``set ip <mask>``
+        PRIMARY line — the secondary predicate now guards the primary too, so a
+        real IP is promoted and a VARP-only SVI emits no ``set ip`` at all."""
+        # VARP-only SVI (no real IP): no ``set ip`` line, not the invalid one.
+        varp_only = CanonicalIntent(interfaces=[CanonicalInterface(
+            name="vlan10",
+            ipv4_addresses=[CanonicalIPv4Address(
+                ip="", prefix_length=24, virtual_gateway_address="10.0.10.1",
+            )],
+        )])
+        out = FortiGateCLICodec().render(varp_only)
+        assert "set ip  " not in out  # pre-fix: ``set ip  255.255.255.0``
+        # VARP row FIRST, real IP second: the real IP is promoted to primary.
+        varp_then_real = CanonicalIntent(interfaces=[CanonicalInterface(
+            name="vlan20",
+            ipv4_addresses=[
+                CanonicalIPv4Address(
+                    ip="", prefix_length=24,
+                    virtual_gateway_address="10.0.20.1",
+                ),
+                CanonicalIPv4Address(ip="10.0.20.2", prefix_length=24),
+            ],
+        )])
+        out2 = FortiGateCLICodec().render(varp_then_real)
+        assert "set ip 10.0.20.2 255.255.255.0" in out2
+        assert "set ip  " not in out2
+
+    def test_nested_config_ipv6_ip6_mode_dhcp_harvested(self):
+        """HEAD-review L1-7: FortiOS 7.x nests ``set ip6-mode`` under
+        ``config ipv6``.  The direct-then-nested fallback (the sibling of the
+        #345 ``ip6-address`` harvest) must read it — pre-fix a nested DHCPv6
+        client was silently dropped though ``dhcp-client-v6`` is supported."""
+        raw = (
+            "config system interface\n"
+            '    edit "port1"\n'
+            "        set ip 10.0.0.1 255.255.255.0\n"
+            "        config ipv6\n"
+            "            set ip6-mode dhcp\n"
+            "        end\n"
+            "    next\n"
+            "end\n"
+        )
+        intent = FortiGateCLICodec().parse(raw)
+        port1 = next(i for i in intent.interfaces if i.name == "port1")
+        assert port1.dhcp_client_v6 == "dhcp6"
+
     def test_interface_v4_secondary_supported_twins_stay_unsupported(self):
         caps = FortiGateCLICodec().capabilities
         assert caps.classify("/interfaces/interface/ipv4/address/secondary-ip") == "supported"

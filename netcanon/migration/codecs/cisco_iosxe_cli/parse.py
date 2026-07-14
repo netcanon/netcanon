@@ -293,10 +293,14 @@ _NVE_SOURCE_IF_RE = re.compile(r"^\s+source-interface\s+(\S+)\s*$", re.IGNORECAS
 #: nve1``.  Group 2 (mcast-group) marks an L2 VNI's flood-and-learn group;
 #: group 3 (vrf) marks an L3VNI bound to a VRF (harvested onto
 #: CanonicalRoutingInstance.l3_vni).  A bare ``member vni <V>`` is an L2 VNI
-#: with head-end (BGP-EVPN) replication.
+#: with head-end (BGP-EVPN) replication.  A trailing ``ingress-replication
+#: [protocol bgp]`` marker (the explicit BGP-EVPN head-end spelling) is
+#: tolerated but not modelled — pre-fix the ``\s*$`` anchor rejected the whole
+#: line and the VLAN↔VNI binding silently vanished (HEAD-review L1-5).
 _NVE_MEMBER_VNI_RE = re.compile(
     r"^\s+member\s+vni\s+(\d+)"
-    r"(?:\s+mcast-group\s+(\d+\.\d+\.\d+\.\d+)|\s+vrf\s+(\S+))?\s*$",
+    r"(?:\s+mcast-group\s+(\d+\.\d+\.\d+\.\d+)|\s+vrf\s+(\S+))?"
+    r"(?:\s+\S.*)?$",
     re.IGNORECASE,
 )
 def _is_ipv4_literal(token: str) -> bool:

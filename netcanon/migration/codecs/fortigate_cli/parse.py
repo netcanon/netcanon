@@ -379,7 +379,19 @@ def _apply_system_interface(  # noqa: C901
         # are intentionally not surfaced here.  ``static`` is the
         # FortiOS default and means "no DHCPv6"; we don't populate
         # the field.
+        # FortiOS 6.x puts ``set ip6-mode`` directly on the interface edit;
+        # 7.x nests it under a ``config ipv6`` sub-block (same as
+        # ``ip6-address`` below).  Read the direct form first, then the nested
+        # block — without the nested fallback a 7.x DHCPv6 client was silently
+        # dropped even though ``dhcp-client-v6`` is declared supported
+        # (HEAD-review L1-7, the un-hardened sibling of the #345 ip6-address
+        # nested harvest).
         ip6_mode_tokens = edit.settings.get("ip6-mode")
+        if not (ip6_mode_tokens and ip6_mode_tokens[0]):
+            for sub in edit.sub_blocks:
+                if sub.config_path == "ipv6":
+                    ip6_mode_tokens = sub.settings.get("ip6-mode")
+                    break
         if ip6_mode_tokens and ip6_mode_tokens[0]:
             mode_value = ip6_mode_tokens[0].lower().strip('"')
             if mode_value == "dhcp":
@@ -397,9 +409,8 @@ def _apply_system_interface(  # noqa: C901
         # form was absent — a real config carries the address in exactly
         # one place, so this never double-appends (promotion #2: the path
         # is declared supported, so a dropped nested address was a
-        # fail-open silent loss).  Only ``ip6-address`` is harvested from
-        # the nested block; nested ``ip6-mode`` is a separate surface left
-        # untouched here.
+        # fail-open silent loss).  Nested ``ip6-mode`` gets the identical
+        # direct-then-nested treatment above (HEAD-review L1-7).
         ip6_tokens = edit.settings.get("ip6-address")
         if not (ip6_tokens and ip6_tokens[0]):
             for sub in edit.sub_blocks:
