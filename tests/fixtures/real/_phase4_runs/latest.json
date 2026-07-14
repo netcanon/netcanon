@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-14T16:21:57+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260714T162156Z.json",
-  "mesh_run_started_utc": "2026-07-14T16:21:49+00:00",
+  "started_utc": "2026-07-14T16:36:22+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260714T163621Z.json",
+  "mesh_run_started_utc": "2026-07-14T16:36:14+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4191,7 +4191,7 @@
     {
       "source_codec": "arista_eos",
       "target_codec": "aruba_aoscx",
-      "drifted_total": 31
+      "drifted_total": 39
     },
     {
       "source_codec": "arista_eos",
@@ -4206,7 +4206,7 @@
     {
       "source_codec": "arista_eos",
       "target_codec": "vyos",
-      "drifted_total": 26
+      "drifted_total": 33
     },
     {
       "source_codec": "aruba_aoscx",
@@ -4266,7 +4266,7 @@
     {
       "source_codec": "aruba_aoscx",
       "target_codec": "vyos",
-      "drifted_total": 32
+      "drifted_total": 33
     },
     {
       "source_codec": "aruba_aoss",
@@ -4321,7 +4321,7 @@
     {
       "source_codec": "cisco_iosxe_cli",
       "target_codec": "aruba_aoscx",
-      "drifted_total": 40
+      "drifted_total": 43
     },
     {
       "source_codec": "cisco_iosxe_cli",
@@ -4341,7 +4341,7 @@
     {
       "source_codec": "cisco_iosxe_cli",
       "target_codec": "vyos",
-      "drifted_total": 33
+      "drifted_total": 36
     },
     {
       "source_codec": "cisco_iosxr",
@@ -4351,7 +4351,7 @@
     {
       "source_codec": "cisco_iosxr",
       "target_codec": "aruba_aoscx",
-      "drifted_total": 37
+      "drifted_total": 45
     },
     {
       "source_codec": "cisco_iosxr",
@@ -4401,7 +4401,7 @@
     {
       "source_codec": "cisco_iosxr",
       "target_codec": "vyos",
-      "drifted_total": 35
+      "drifted_total": 43
     },
     {
       "source_codec": "cisco_nxos",
@@ -4411,7 +4411,7 @@
     {
       "source_codec": "cisco_nxos",
       "target_codec": "aruba_aoscx",
-      "drifted_total": 57
+      "drifted_total": 71
     },
     {
       "source_codec": "cisco_nxos",
@@ -4461,7 +4461,7 @@
     {
       "source_codec": "cisco_nxos",
       "target_codec": "vyos",
-      "drifted_total": 56
+      "drifted_total": 70
     },
     {
       "source_codec": "fortigate_cli",
@@ -4491,7 +4491,7 @@
     {
       "source_codec": "juniper_junos",
       "target_codec": "aruba_aoscx",
-      "drifted_total": 71
+      "drifted_total": 80
     },
     {
       "source_codec": "juniper_junos",
@@ -4511,7 +4511,7 @@
     {
       "source_codec": "juniper_junos",
       "target_codec": "vyos",
-      "drifted_total": 58
+      "drifted_total": 67
     },
     {
       "source_codec": "mikrotik_routeros",
@@ -4571,7 +4571,7 @@
     {
       "source_codec": "vyos",
       "target_codec": "aruba_aoscx",
-      "drifted_total": 43
+      "drifted_total": 46
     },
     {
       "source_codec": "vyos",

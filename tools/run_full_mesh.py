@@ -161,25 +161,41 @@ _AUDITED_FIELDS: tuple[str, ...] = (
 )
 
 
-# Mapping from canonical field name → the prefix used by the codec's
-# CapabilityMatrix.unsupported xpaths.  When EVERY xpath under that
-# prefix is declared unsupported, the field is considered "unsupported
-# by design" for the target — drift on it is expected, not a defect.
+# Mapping from canonical field name → the IDENTITY xpath(s) that make a
+# record of that field exist at all.  A field is "unsupported by design"
+# for a target ONLY when the target declares that identity leaf
+# unsupported — i.e. the record itself cannot be represented, so drift on
+# it is expected, not a defect.  If merely a SUB-detail is unsupported
+# (e.g. ``/vxlan-vnis/udp-port`` while ``/vxlan-vnis/vni`` is supported),
+# the record still renders and any drift on it is a REAL loss the ratchet
+# must SEE, not mask.
 #
-# Matches the existing xpath shapes in the codec capability matrices
-# (see e.g. aruba_aoss declaring ``/vxlan-vnis/vni`` +
-# ``/vxlan-vnis/source-interface`` + ``/vxlan-vnis/udp-port``).
-_FIELD_TO_XPATH_PREFIX: dict[str, str] = {
-    "vxlan_vnis": "/vxlan-vnis/",
-    # NB: the EVPN prefix must include the ``-routes`` segment — every
-    # codec declares ``/evpn-type5-routes/route`` (the canonical
-    # vocabulary), so the old ``/evpn-type5/`` prefix matched nothing
-    # and the field fell through to the exact ``/evpn_type5_routes``
-    # field-marker fallback.  Normalised in the 2026-06 vocab pass
-    # (review #8) so the prefix actually catches the granular shape.
-    "evpn_type5_routes": "/evpn-type5-routes/",
-    "routing_instances": "/routing-instances/",
-    # Other fields don't have a stable xpath-prefix convention in the
+# (HEAD-review Fid-F2) The previous rule matched ``any(startswith(prefix))``
+# over the whole ``/<field>/`` prefix, so a single unsupported sub-leaf
+# (aruba_aoscx/vyos declare only ``/vxlan-vnis/l2vni-route-target`` +
+# ``/routing-instances/instance/{description,route-distinguisher,rt-*,
+# l3-vni}`` while their identity ``/vxlan-vnis/vni`` +
+# ``/routing-instances/instance/name`` are SUPPORTED) flagged the WHOLE
+# field unsupported-by-design and structurally blinded the drift ratchet —
+# the only mesh guard for those two YAML-less codecs — to VXLAN /
+# routing-instance regressions.  Keying on the identity leaf restores
+# visibility; codecs that genuinely cannot hold the record still declare
+# the identity leaf unsupported (aoss/iosxe/iosxr/fortigate/mikrotik/
+# opnsense) and stay flagged.
+_FIELD_TO_IDENTITY_XPATHS: dict[str, tuple[str, ...]] = {
+    "vxlan_vnis": ("/vxlan-vnis/vni",),
+    # Every codec declares the granular ``/evpn-type5-routes/route``
+    # identity (the canonical vocabulary; normalised in the 2026-06 vocab
+    # pass, review #8).
+    "evpn_type5_routes": ("/evpn-type5-routes/route",),
+    # A routing-instance's identity is the instance itself: some codecs
+    # declare the bare ``/routing-instances/instance`` unsupported, others
+    # the ``.../name`` leaf — either makes the record unrepresentable.
+    "routing_instances": (
+        "/routing-instances/instance",
+        "/routing-instances/instance/name",
+    ),
+    # Other fields don't have a stable xpath-identity convention in the
     # current matrix — leave them keyed only by direct equality below.
 }
 
@@ -385,10 +401,13 @@ def compute_field_disposition(
         # field names AND prefix-match against the documented prefix
         # convention for the schema-extension fields.
         unsupported = False
-        prefix = _FIELD_TO_XPATH_PREFIX.get(field)
-        if prefix:
+        identity_xpaths = _FIELD_TO_IDENTITY_XPATHS.get(field)
+        if identity_xpaths:
+            # (Fid-F2) Unsupported-by-design only when the record's
+            # IDENTITY leaf is declared unsupported — NOT when merely a
+            # sub-detail is (that would mask a real, visible loss).
             unsupported = any(
-                xp.startswith(prefix) for xp in unsupported_xpaths
+                idx in unsupported_xpaths for idx in identity_xpaths
             )
         # Also accept exact xpath ``/<field>`` — some codecs declare at
         # field level rather than per-leaf.

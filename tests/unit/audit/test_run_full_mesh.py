@@ -22,6 +22,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalLAG,
+    CanonicalRoutingInstance,
     CanonicalSNMP,
     CanonicalSNMPv3User,
     CanonicalStaticRoute,
@@ -343,6 +344,68 @@ def test_unsupported_xpath_does_not_apply_to_other_fields() -> None:
         target_unsupported_xpaths=["/vxlan-vnis/vni"],
     )
     assert out["hostname"]["unsupported_in_target"] is False
+
+
+def test_sub_leaf_only_unsupported_does_not_mask_field() -> None:
+    """(Fid-F2) When only a SUB-detail is declared unsupported while the
+    record IDENTITY leaf is supported, the field is NOT
+    ``unsupported_in_target`` — the record still renders, so drift on it
+    must stay visible to the drift ratchet.  Mirrors aruba_aoscx/vyos,
+    which declare ``/vxlan-vnis/udp-port`` / ``…/l2vni-route-target``
+    unsupported while ``/vxlan-vnis/vni`` is supported.  FAILS pre-fix:
+    the old ``any(startswith('/vxlan-vnis/'))`` rule masked the whole
+    field, hiding the source-interface drop below."""
+    src = CanonicalIntent(
+        vxlan_vnis=[CanonicalVxlan(vlan_id=100, vni=10100,
+                                   source_interface="Loopback1")],
+    )
+    tgt = CanonicalIntent(  # identity (vlan_id/vni) held; source-iface dropped
+        vxlan_vnis=[CanonicalVxlan(vlan_id=100, vni=10100)],
+    )
+    out = compute_field_disposition(
+        src, tgt,
+        target_unsupported_xpaths=[
+            "/vxlan-vnis/udp-port",
+            "/vxlan-vnis/l2vni-route-target",
+        ],
+    )
+    rec = out["vxlan_vnis"]
+    assert rec["unsupported_in_target"] is False
+    assert rec["preserved"] is False  # the source-interface drift IS visible
+
+
+def test_routing_instance_sub_leaf_only_unsupported_does_not_mask_field() -> None:
+    """(Fid-F2) routing_instances counterpart: a target declaring only
+    ``/routing-instances/instance/l3-vni`` unsupported (identity
+    ``…/name`` supported) must not have the whole field masked."""
+    src = CanonicalIntent(
+        routing_instances=[CanonicalRoutingInstance(name="T1", l3_vni=5000)],
+    )
+    tgt = CanonicalIntent(  # name held; l3_vni dropped
+        routing_instances=[CanonicalRoutingInstance(name="T1")],
+    )
+    out = compute_field_disposition(
+        src, tgt,
+        target_unsupported_xpaths=["/routing-instances/instance/l3-vni"],
+    )
+    rec = out["routing_instances"]
+    assert rec["unsupported_in_target"] is False
+    assert rec["preserved"] is False
+
+
+def test_routing_instance_identity_leaf_unsupported_masks_field() -> None:
+    """(Fid-F2) positive control: a target declaring the routing-instance
+    IDENTITY unsupported (bare ``/routing-instances/instance`` — the
+    mikrotik/opnsense/aoss shape) IS ``unsupported_in_target``."""
+    src = CanonicalIntent(
+        routing_instances=[CanonicalRoutingInstance(name="T1")],
+    )
+    tgt = CanonicalIntent()
+    out = compute_field_disposition(
+        src, tgt,
+        target_unsupported_xpaths=["/routing-instances/instance"],
+    )
+    assert out["routing_instances"]["unsupported_in_target"] is True
 
 
 # ---------------------------------------------------------------------------
