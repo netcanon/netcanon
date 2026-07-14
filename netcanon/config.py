@@ -109,9 +109,12 @@ def _resolve_max_concurrent_backup_jobs() -> int:
         return _DEFAULT_MAX_CONCURRENT_BACKUP_JOBS
 
 
-#: Resolved at import; the backup executor in
-#: :mod:`netcanon.services.backup_runner` reads
-#: ``config.MAX_CONCURRENT_BACKUP_JOBS`` when it lazily builds its pool.
+#: Resolved at import.  ``netcanon.services.backup_runner`` binds this value
+#: via ``from ..config import MAX_CONCURRENT_BACKUP_JOBS`` at ITS import time
+#: and reads that module-level binding when it lazily builds its pool — so a
+#: test must monkeypatch ``backup_runner.MAX_CONCURRENT_BACKUP_JOBS`` (not
+#: ``config.MAX_CONCURRENT_BACKUP_JOBS``, which the runner never re-reads) for
+#: a new size to take effect (HEAD-review F9).
 MAX_CONCURRENT_BACKUP_JOBS: int = _resolve_max_concurrent_backup_jobs()
 
 

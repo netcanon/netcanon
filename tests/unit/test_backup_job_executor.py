@@ -250,3 +250,25 @@ def test_env_override_garbage_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("NETCANON_MAX_CONCURRENT_BACKUP_JOBS", "not-a-number")
     with pytest.warns(UserWarning):
         assert config._resolve_max_concurrent_backup_jobs() == 8
+
+
+def test_submit_retries_once_after_pool_shutdown(monkeypatch):
+    """Submit-vs-reset race (HEAD-review F7): if ``_job_executor()`` hands back
+    a pool that was shut down between resolution and ``.submit`` (``RuntimeError:
+    cannot schedule new futures after shutdown``), ``submit_backup_job`` retries
+    once via a fresh ``_job_executor()`` rather than 500ing the POST.  Pre-fix
+    the RuntimeError escaped uncaught."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    dead = ThreadPoolExecutor(max_workers=1)
+    dead.shutdown()  # first _job_executor() hands this back → .submit raises
+    live = ThreadPoolExecutor(max_workers=1)
+    seq = iter([dead, live])
+    monkeypatch.setattr(backup_runner, "_job_executor", lambda: next(seq))
+    # Stub the runner so the submit doesn't actually collect a backup.
+    monkeypatch.setattr(backup_runner, "run_backup_job", lambda *a, **k: "ok")
+    try:
+        fut = backup_runner.submit_backup_job()
+        assert fut.result(timeout=5) == "ok"
+    finally:
+        live.shutdown()

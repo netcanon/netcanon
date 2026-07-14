@@ -151,6 +151,29 @@ class TestBoundedMemory:
         assert len(registry) == 1
         assert registry[j.id].status is JobStatus.completed
 
+    def test_overshoot_reclaims_to_cap_after_terminalise(
+        self, store: FileJobStore,
+    ):
+        """HEAD-review F2: an overshoot built while every resident was
+        non-terminal (the #25 escape) must be reclaimed down to cap once those
+        jobs terminalise.  A single-eviction-per-insert only holds the size
+        steady (evict one, add one = net zero) so the cache would stabilise at
+        the peak forever; the while-loop eviction reclaims it."""
+        reg = BackupJobRegistry(store, max_memory_jobs=2, warm_cache=False)
+        # Overshoot to 5 while all resident jobs are non-terminal — allowed.
+        running = [_make_job(status=JobStatus.running) for _ in range(5)]
+        for j in running:
+            reg[j.id] = j
+        assert len(reg) == 5  # overshoot tolerated (no live job evicted)
+        # They terminalise in place (the cache holds the same objects).
+        for j in running:
+            j.status = JobStatus.completed
+        # Further terminal inserts must reclaim the overshoot back to cap.
+        for _ in range(5):
+            j = _make_job(status=JobStatus.completed)
+            reg[j.id] = j
+        assert len(reg) == 2  # pre-fix: stuck at 5
+
 
 # ---------------------------------------------------------------------------
 # LRU ordering — accessed jobs move to MRU
