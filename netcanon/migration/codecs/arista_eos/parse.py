@@ -99,18 +99,28 @@ _IP_ROUTE_RE = re.compile(
     # The optional ``vrf <name>`` infix (group 1) lands on
     # ``CanonicalStaticRoute.vrf`` and round-trips through render
     # (mirrors the cisco_iosxe_cli graduation, PR #24).
-    # A trailing integer (group 5) is the administrative distance
-    # (``ip route <prefix> <next-hop> <distance>``, 1-255) — lands on
-    # ``CanonicalStaticRoute.metric``; the optional group keeps distance-
-    # less routes byte-identical.
-    r"^ip route\s+(?:vrf\s+(\S+)\s+)?(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
+    # Next-hop group 4 is an IP literal (gateway) OR an egress interface.  The
+    # two-token ``ip route <prefix> <iface> <gateway>`` form adds an optional
+    # dotted-quad gateway (group 5) after the interface; without it EOS's
+    # ``ip route <agg> Null0 10.1.1.1`` lost the gateway (its leading octet was
+    # mis-harvested as the admin distance — HEAD-review L1-1).  A trailing
+    # integer (group 6) is the administrative distance (1-255) → ``metric``.
+    # The ``(?=\s|$)`` boundary stops the distance group from biting a partial
+    # digit run off a following token; every optional group keeps the plain
+    # ``ip route <prefix> <next-hop>`` form byte-identical.
+    r"^ip route\s+(?:vrf\s+(\S+)\s+)?(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)"
+    r"(?:\s+(\d+\.\d+\.\d+\.\d+))?(?:\s+(\d+))?(?=\s|$)",
     re.MULTILINE,
 )
 _IPV6_ROUTE_RE = re.compile(
     # ``ipv6 route 2001:db8::/48 2001:db8::1`` — v6 uses the ``ipv6 route``
     # keyword with the prefix form (does not overlap ``^ip route``).
-    # The optional ``vrf <name>`` infix mirrors the v4 form above.
-    r"^ipv6 route\s+(?:vrf\s+(\S+)\s+)?([0-9A-Fa-f:]+/\d+)\s+(\S+)(?:\s+(\d+))?",
+    # The optional ``vrf <name>`` infix mirrors the v4 form above.  Group 4 is
+    # the optional two-token gateway (``ipv6 route <prefix> <iface> <v6-gw>``);
+    # it must contain a colon so a bare admin-distance integer (group 5) is not
+    # mistaken for a gateway.  ``(?=\s|$)`` boundary as in the v4 form.
+    r"^ipv6 route\s+(?:vrf\s+(\S+)\s+)?([0-9A-Fa-f:]+/\d+)\s+(\S+)"
+    r"(?:\s+([0-9A-Fa-f]*:[0-9A-Fa-f:]*))?(?:\s+(\d+))?(?=\s|$)",
     re.MULTILINE,
 )
 _SNMP_COMMUNITY_RE = re.compile(
@@ -505,7 +515,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 intent.syslog_servers.append(token)
             break
     for route_m in _IP_ROUTE_RE.finditer(raw):
-        vrf, ip, prefix, next_hop, distance = route_m.groups()
+        vrf, ip, prefix, next_hop, gw2, distance = route_m.groups()
         # A next hop is either an IP literal (gateway) or an interface name
         # (``Null0``, ``Ethernet1`` — an interface/connected route, ubiquitous
         # as a BGP aggregate anchor ``ip route <agg> Null0``).  Route it to the
@@ -513,11 +523,17 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         # the identical cisco_iosxe_cli branch).
         gateway = ""
         interface = ""
-        try:
-            ipaddress.IPv4Address(next_hop)
-            gateway = next_hop
-        except ipaddress.AddressValueError:
+        if gw2:
+            # Two-token ``<iface> <gateway>``: next_hop is the egress
+            # interface, gw2 the forwarding address (HEAD-review L1-1).
             interface = next_hop
+            gateway = gw2
+        else:
+            try:
+                ipaddress.IPv4Address(next_hop)
+                gateway = next_hop
+            except ipaddress.AddressValueError:
+                interface = next_hop
         # The optional ``vrf <name>`` infix lands on ``route.vrf`` — NOT a
         # routing-instance.  Harvesting a per-VRF route must never conjure a
         # phantom ``CanonicalRoutingInstance`` (that surface comes only from
@@ -531,15 +547,20 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             vrf=vrf or "",
         ))
     for route_m in _IPV6_ROUTE_RE.finditer(raw):
-        vrf, dest, next_hop, distance = route_m.groups()
+        vrf, dest, next_hop, gw2, distance = route_m.groups()
         # Same gateway-or-interface split as the v4 branch.
         gateway = ""
         interface = ""
-        try:
-            ipaddress.IPv6Address(next_hop)
-            gateway = next_hop
-        except ipaddress.AddressValueError:
+        if gw2:
+            # Two-token ``<iface> <v6-gateway>`` (HEAD-review L1-1).
             interface = next_hop
+            gateway = gw2
+        else:
+            try:
+                ipaddress.IPv6Address(next_hop)
+                gateway = next_hop
+            except ipaddress.AddressValueError:
+                interface = next_hop
         intent.static_routes.append(CanonicalStaticRoute(
             destination=dest,
             gateway=gateway,

@@ -496,6 +496,38 @@ class TestRender:
         # on switches with no routing).
         assert "ip route 0.0.0.0 0.0.0.0 10.0.0.1" in out
 
+    def test_two_token_next_hop_iface_and_gateway_round_trip(self):
+        # HEAD-review L1-8: ``ip route <dest> <mask> <iface> <gateway>`` — a
+        # directly-attached-egress route with an explicit forwarding address
+        # (2 shipped fixtures carry it).  Pre-fix the tail-walk ``else`` arm
+        # discarded the trailing gateway and render emitted a broken
+        # single-token route.  Both fields must survive parse → render → parse.
+        codec = CiscoIOSXECLICodec()
+        intent = codec.parse(
+            "ip route 0.0.0.0 0.0.0.0 GigabitEthernet1 10.10.20.254\n"
+        )
+        route = intent.static_routes[0]
+        assert route.interface == "GigabitEthernet1"
+        assert route.gateway == "10.10.20.254"  # pre-fix: "" (silently lost)
+        out = codec.render(intent)
+        assert "ip route 0.0.0.0 0.0.0.0 GigabitEthernet1 10.10.20.254" in out
+        reparsed = codec.parse(out).static_routes[0]
+        assert (reparsed.interface, reparsed.gateway) == (
+            "GigabitEthernet1", "10.10.20.254",
+        )
+
+    def test_two_token_ipv6_next_hop_iface_and_gateway_round_trip(self):
+        # The ``ipv6 route`` sibling of the L1-8 two-token form.
+        codec = CiscoIOSXECLICodec()
+        intent = codec.parse(
+            "ipv6 route 2001:db8::/48 GigabitEthernet1 2001:db8::1\n"
+        )
+        route = intent.static_routes[0]
+        assert route.interface == "GigabitEthernet1"
+        assert route.gateway == "2001:db8::1"  # pre-fix: "" (silently lost)
+        out = codec.render(intent)
+        assert "ipv6 route 2001:db8::/48 GigabitEthernet1 2001:db8::1" in out
+
     def test_per_vrf_ip_route_parse_sets_vrf(self):
         # v0.2.0 — ``ip route vrf <NAME> <dest> <mask> <gw>`` populates
         # CanonicalStaticRoute.vrf (previously parse-and-ignored).

@@ -302,13 +302,20 @@ _VRF_AF_RE = re.compile(r"^\s+address-family\s+\S+", re.IGNORECASE)
 #: (the ``vrf context`` header created it), so the harvest can never
 #: conjure a phantom routing-instance (see the per-VRF harvest memory).
 _VRF_IP_ROUTE_RE = re.compile(
-    r"^\s+ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
+    # Optional group 4 = two-token gateway (``ip route <dest> <iface> <gw>``);
+    # group 5 = admin distance.  ``(?=\s|$)`` boundary keeps the distance group
+    # from biting a partial digit run (HEAD-review L1-9).
+    r"^\s+ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)"
+    r"(?:\s+(\d+\.\d+\.\d+\.\d+))?(?:\s+(\d+))?(?=\s|$)",
     re.IGNORECASE,
 )
 #: ``  ipv6 route <prefix>/<len> <nh> [<pref>]`` nested in a ``vrf context``
 #: block (does not overlap the v4 form; ``ipv6`` != ``ip``).
 _VRF_IPV6_ROUTE_RE = re.compile(
-    r"^\s+ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)(?:\s+(\d+))?",
+    # Optional group 3 = two-token IPv6 gateway (must contain a colon so a
+    # bare distance integer in group 4 is not mistaken for it).
+    r"^\s+ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)"
+    r"(?:\s+([0-9A-Fa-f]*:[0-9A-Fa-f:]*))?(?:\s+(\d+))?(?=\s|$)",
     re.IGNORECASE,
 )
 # ── VXLAN-EVPN (Phase 4) ──
@@ -357,13 +364,17 @@ _VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
 #: static route.  Per-VRF routes (indented inside ``vrf context``) do
 #: NOT match this top-level anchor and are deferred to Phase 3.
 _STATIC_ROUTE_RE = re.compile(
-    r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
+    # Optional group 4 = two-token gateway (``ip route <dest> <iface> <gw>``);
+    # group 5 = admin distance.  ``(?=\s|$)`` boundary as in the per-VRF form.
+    r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)"
+    r"(?:\s+(\d+\.\d+\.\d+\.\d+))?(?:\s+(\d+))?(?=\s|$)",
     re.IGNORECASE,
 )
 #: ``ipv6 route <prefix>/<len> <nh> [<pref>]`` — top-level (default VRF)
 #: IPv6 static route (does not overlap the v4 anchor above).
 _STATIC_ROUTE_V6_RE = re.compile(
-    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)(?:\s+(\d+))?",
+    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)"
+    r"(?:\s+([0-9A-Fa-f]*:[0-9A-Fa-f:]*))?(?:\s+(\d+))?(?=\s|$)",
     re.IGNORECASE,
 )
 _SVI_NAME_RE = re.compile(r"^Vlan(\d+)$", re.IGNORECASE)
@@ -608,16 +619,16 @@ def _parse_routing_instances(
         route6_m = _VRF_IPV6_ROUTE_RE.match(line)
         if route6_m:
             per_vrf_routes.append(_make_static_route_v6(
-                route6_m.group(1), route6_m.group(2), route6_m.group(3),
-                vrf=current.name,
+                route6_m.group(1), route6_m.group(2), route6_m.group(4),
+                vrf=current.name, second_hop=route6_m.group(3),
             ))
             return
         route_m = _VRF_IP_ROUTE_RE.match(line)
         if route_m:
             per_vrf_routes.append(_make_static_route(
                 route_m.group(1), route_m.group(2),
-                route_m.group(3), route_m.group(4),
-                vrf=current.name,
+                route_m.group(3), route_m.group(5),
+                vrf=current.name, second_hop=route_m.group(4),
             ))
             return
         vnim = _VRF_VNI_RE.match(line)
@@ -1136,6 +1147,7 @@ def _make_static_route(
     gw_or_iface: str,
     metric_str: str | None,
     vrf: str = "",
+    second_hop: str | None = None,
 ) -> CanonicalStaticRoute:
     """Build a :class:`CanonicalStaticRoute` from matched NX-OS tokens.
 
@@ -1143,17 +1155,24 @@ def _make_static_route(
     and the per-VRF harvest inside ``vrf context`` blocks
     (:func:`_parse_routing_instances`).  A next-hop that parses as an
     IPv4 address becomes ``gateway``; otherwise it's an egress
-    ``interface`` (directly-attached next-hop).  The trailing integer
-    (if any) is the route preference / administrative distance → ``metric``.
+    ``interface`` (directly-attached next-hop).  In the two-token
+    ``ip route <dest> <iface> <gateway>`` form ``second_hop`` carries the
+    trailing dotted-quad gateway and ``gw_or_iface`` is the egress interface
+    (HEAD-review L1-9).  The trailing integer (if any) is the route
+    preference / administrative distance → ``metric``.
     """
     metric = int(metric_str) if metric_str else 0
     gateway = ""
     iface = ""
-    try:
-        ipaddress.IPv4Address(gw_or_iface)
-        gateway = gw_or_iface
-    except ipaddress.AddressValueError:
+    if second_hop:
         iface = gw_or_iface
+        gateway = second_hop
+    else:
+        try:
+            ipaddress.IPv4Address(gw_or_iface)
+            gateway = gw_or_iface
+        except ipaddress.AddressValueError:
+            iface = gw_or_iface
     return CanonicalStaticRoute(
         destination=f"{dest_ip}/{prefix}",
         gateway=gateway,
@@ -1168,19 +1187,27 @@ def _make_static_route_v6(
     gw_or_iface: str,
     metric_str: str | None,
     vrf: str = "",
+    second_hop: str | None = None,
 ) -> CanonicalStaticRoute:
     """Build a :class:`CanonicalStaticRoute` from matched ``ipv6 route``
     tokens.  ``dest`` is already ``<prefix>/<len>`` form; a next-hop that
     parses as an IPv6 address becomes ``gateway``, otherwise an egress
-    ``interface`` (directly-attached next-hop)."""
+    ``interface`` (directly-attached next-hop).  In the two-token
+    ``ipv6 route <dest> <iface> <gateway>`` form ``second_hop`` carries the
+    trailing IPv6 gateway and ``gw_or_iface`` is the egress interface
+    (HEAD-review L1-9)."""
     metric = int(metric_str) if metric_str else 0
     gateway = ""
     iface = ""
-    try:
-        ipaddress.IPv6Address(gw_or_iface)
-        gateway = gw_or_iface
-    except ipaddress.AddressValueError:
+    if second_hop:
         iface = gw_or_iface
+        gateway = second_hop
+    else:
+        try:
+            ipaddress.IPv6Address(gw_or_iface)
+            gateway = gw_or_iface
+        except ipaddress.AddressValueError:
+            iface = gw_or_iface
     return CanonicalStaticRoute(
         destination=dest,
         gateway=gateway,
@@ -1208,14 +1235,16 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
             routes.append(_make_static_route_v6(
-                m6.group(1), m6.group(2), m6.group(3),
+                m6.group(1), m6.group(2), m6.group(4),
+                second_hop=m6.group(3),
             ))
             continue
         m = _STATIC_ROUTE_RE.match(line)
         if not m:
             continue
         routes.append(_make_static_route(
-            m.group(1), m.group(2), m.group(3), m.group(4),
+            m.group(1), m.group(2), m.group(3), m.group(5),
+            second_hop=m.group(4),
         ))
     return routes
 

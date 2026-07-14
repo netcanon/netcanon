@@ -261,6 +261,34 @@ class TestParse:
         # Exactly one instance — no phantom duplicate from the route harvest.
         assert [r.name for r in intent.routing_instances] == ["TENANT"]
 
+    def test_two_token_next_hop_iface_and_gateway_round_trip(self, codec):
+        # HEAD-review L1-9: ``ip route <dest> <iface> <gateway>`` two-token
+        # form — top-level AND nested per-VRF, v4 AND v6.  Pre-fix the distance
+        # group bit the gateway's leading octet (``metric=10``) and the gateway
+        # was lost; render emitted ``ip route ... Ethernet1/1 10``.
+        raw = (
+            "!Command: show running-config\n"
+            "hostname R1\n"
+            "vrf context TENANT\n"
+            "  ip route 10.50.0.0/16 Ethernet1/2 172.16.0.2\n"
+            "  ipv6 route 2001:db8:a::/48 Ethernet1/2 2001:db8:a::2\n"
+            "ip route 10.99.0.0/16 Ethernet1/1 10.1.1.1\n"
+            "ipv6 route 2001:db8::/48 Ethernet1/1 2001:db8::1\n"
+        )
+        by_dest = {r.destination: r for r in codec.parse(raw).static_routes}
+        assert (by_dest["10.99.0.0/16"].interface,
+                by_dest["10.99.0.0/16"].gateway,
+                by_dest["10.99.0.0/16"].metric) == ("Ethernet1/1", "10.1.1.1", 0)
+        assert (by_dest["2001:db8::/48"].interface,
+                by_dest["2001:db8::/48"].gateway) == ("Ethernet1/1", "2001:db8::1")
+        assert (by_dest["10.50.0.0/16"].interface,
+                by_dest["10.50.0.0/16"].gateway,
+                by_dest["10.50.0.0/16"].vrf) == (
+                    "Ethernet1/2", "172.16.0.2", "TENANT")
+        out = codec.render(codec.parse(raw))
+        assert "ip route 10.99.0.0/16 Ethernet1/1 10.1.1.1" in out
+        assert "ipv6 route 2001:db8::/48 Ethernet1/1 2001:db8::1" in out
+
     def test_render_ipv6_static_route_uses_ipv6_keyword(self, codec):
         # NX-OS keys the AF off the keyword: an IPv6 destination must render
         # ``ipv6 route`` (``ip route <v6>`` is invalid CLI).  Covers both the

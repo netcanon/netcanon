@@ -223,6 +223,27 @@ def test_ipv6_static_route_render_and_round_trip(codec: ArubaAOSCXCodec) -> None
     )
 
 
+def test_two_token_next_hop_iface_and_gateway_round_trip(
+    codec: ArubaAOSCXCodec,
+) -> None:
+    # HEAD-review L1-9: ``ip route <dest> <iface> <gateway>`` two-token form.
+    # Pre-fix the distance group bit the gateway's leading octet (``metric=10``)
+    # and the gateway was lost; render dropped it.  Both must round-trip.
+    raw = (
+        "ip route 10.99.0.0/16 1/1/1 10.1.1.1\n"
+        "ipv6 route 2001:db8::/48 1/1/1 2001:db8::1\n"
+    )
+    by_dest = {r.destination: r for r in codec.parse(raw).static_routes}
+    assert (by_dest["10.99.0.0/16"].interface,
+            by_dest["10.99.0.0/16"].gateway,
+            by_dest["10.99.0.0/16"].metric) == ("1/1/1", "10.1.1.1", 0)
+    assert (by_dest["2001:db8::/48"].interface,
+            by_dest["2001:db8::/48"].gateway) == ("1/1/1", "2001:db8::1")
+    out = codec.render(codec.parse(raw))
+    assert "ip route 10.99.0.0/16 1/1/1 10.1.1.1" in out
+    assert "ipv6 route 2001:db8::/48 1/1/1 2001:db8::1" in out
+
+
 # ---------------------------------------------------------------------------
 # Multi-token interface names + stanza interception
 # ---------------------------------------------------------------------------

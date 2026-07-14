@@ -590,6 +590,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         target = route.gateway or route.interface
         if not target:
             continue
+        # Two-token next-hop ``<iface> <gateway>`` (directly-attached egress
+        # with an explicit forwarding address): emit BOTH, interface first, to
+        # match the ``ip route <dest> <mask> <iface> <gateway>`` grammar.
+        # Without this a route carrying both fields drops the interface — the
+        # render half of the two-token round-trip (HEAD-review L1-8).
+        if route.interface and route.gateway:
+            target = f"{route.interface} {route.gateway}"
         # ``name <NAME>`` route label (run3): IOS-XE route names are a
         # single whitespace-free token, so emit it only when the
         # description has no spaces — a multi-word description (e.g. a

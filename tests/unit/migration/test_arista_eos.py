@@ -134,6 +134,28 @@ class TestParseScalars:
         assert [(r.destination, r.interface) for r in reparsed.static_routes] == \
                [(r.destination, r.interface) for r in intent.static_routes]
 
+    def test_two_token_next_hop_iface_and_gateway_round_trip(self):
+        """HEAD-review L1-1: ``ip route <prefix> <iface> <gateway>`` — the
+        two-token next-hop.  Pre-fix the distance group bit the gateway's
+        leading octet (``metric=10``, v6 ``metric=2001``) and the gateway was
+        lost; render emitted ``ip route ... Ethernet1 10``.  Both fields must
+        survive the round-trip."""
+        raw = (
+            "ip route 10.99.0.0/16 Ethernet1 10.1.1.1\n"
+            "ipv6 route 2001:db8::/48 Ethernet1 2001:db8::1\n"
+        )
+        codec = AristaEOSCodec()
+        intent = codec.parse(raw)
+        by_dest = {r.destination: r for r in intent.static_routes}
+        assert (by_dest["10.99.0.0/16"].interface,
+                by_dest["10.99.0.0/16"].gateway,
+                by_dest["10.99.0.0/16"].metric) == ("Ethernet1", "10.1.1.1", 0)
+        assert (by_dest["2001:db8::/48"].interface,
+                by_dest["2001:db8::/48"].gateway) == ("Ethernet1", "2001:db8::1")
+        rendered = codec.render(intent)
+        assert "ip route 10.99.0.0/16 Ethernet1 10.1.1.1" in rendered
+        assert "ipv6 route 2001:db8::/48 Ethernet1 2001:db8::1" in rendered
+
     def test_static_route_interface_classified_supported(self):
         assert AristaEOSCodec().capabilities.classify(
             "/routing/static-route/interface") == "supported"
