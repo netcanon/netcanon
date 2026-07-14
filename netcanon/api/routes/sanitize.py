@@ -124,6 +124,25 @@ async def post_sanitize(
             status_code=422,
             detail=f"Failed to render sanitized {source_vendor!r}: {e}",
         ) from e
+    except Exception as e:  # un-hardened-sibling net (C1)
+        # Any OTHER crash from the parse→redact→render pipeline (a raw
+        # IndexError / AttributeError codec bug — the crash-on-input class this
+        # project has repeatedly found) must be a clean 4xx, not an uncaught
+        # 500.  This is the sibling of run_plan's broad-except
+        # (services/migration_pipeline.py) and /detect's per-probe net — the
+        # same untrusted config text reaches a codec here.  Keep the full
+        # traceback server-side; hand the caller only the exception type.
+        logger.exception(
+            "sanitize pipeline crashed on %r input", source_vendor
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Sanitize pipeline failed unexpectedly "
+                f"({type(e).__name__}) on {source_vendor!r} input — please "
+                "report this with the config snippet that triggered it."
+            ),
+        ) from e
 
     if dry_run:
         return JSONResponse({
