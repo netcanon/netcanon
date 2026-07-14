@@ -133,7 +133,22 @@ jobs:
             echo "::error::Ref '${TAG_RAW}' is not a tag — refusing to build/publish an MSI from a non-tag ref."
             exit 1
           fi
-          echo "OK: '${tag}' is a tag."
+          # Guard against `actions/checkout` resolving an ambiguous short ref
+          # as a BRANCH tip that merely shares a name with the tag (P4b):
+          # require the checked-out HEAD to BE the tag's own commit, else the
+          # MSI and the tag point at different commits (the residual crack in
+          # the exact hole #55 closed).
+          head_sha="$(git rev-parse HEAD)"
+          tag_sha="$(git rev-parse "refs/tags/${tag}^{commit}")"
+          if [ "${head_sha}" != "${tag_sha}" ]; then
+            echo "::error::Checked-out HEAD ${head_sha} is not tag '${tag}' commit ${tag_sha} — refusing (an ambiguous ref resolved to a branch tip)."
+            exit 1
+          fi
+          # Normalize the tag ONCE so the release-attach step's tag_name can't
+          # be a full ref (P4a): a raw `refs/tags/vX.Y.Z` dispatch input made
+          # softprops create a junk `refs/tags/refs/tags/vX.Y.Z` tag at HEAD.
+          echo "RELEASE_TAG=${tag}" >> "$GITHUB_ENV"
+          echo "OK: '${tag}' is a tag at the checked-out commit ${head_sha}."
 
       # Refuse to build/attach an MSI for a tag that isn't on main (see
       # pypi-publish.yml for rationale).  Covers both tag-push and the
@@ -292,16 +307,20 @@ jobs:
         # softprops/action-gh-release creates the release page if it
         # doesn't yet exist (handy for tags pushed before this workflow
         # existed) and otherwise appends the MSI to the existing one.
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
+          # Normalized tag (never a full ref) from the "Refuse a non-tag ref"
+          # step so softprops can't mint a junk `refs/tags/refs/tags/…` tag (P4a).
+          tag_name: ${{ env.RELEASE_TAG }}
           files: dist/*.msi
           fail_on_unmatched_files: true
           # When the release page is auto-created here (e.g. backfill
           # via workflow_dispatch on a tag with no release page yet),
           # populate it with the auto-generated PR / commit changelog.
           generate_release_notes: true
-          # Mark pre-release tags (e.g. v0.1.0-rc7) as "Pre-release" so
-          # the GitHub Releases page sorts them correctly and the
-          # "latest release" link skips over them.
-          prerelease: ${{ contains(inputs.tag || github.ref_name, '-rc') || contains(inputs.tag || github.ref_name, '-alpha') || contains(inputs.tag || github.ref_name, '-beta') }}
+          # Mark ANY pre-release tag (a `-` suffix — rc / alpha / beta / pre /
+          # dev) as "Pre-release" so the "Latest release" badge + /releases/
+          # latest skip over it.  Unified with the Docker `:latest` predicate
+          # (any `-`); the old `-rc|-alpha|-beta`-only form let a `v0.6.0-pre1`
+          # / `-dev1` tag take the "Latest release" slot (P3).
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}

@@ -19,6 +19,7 @@ replace.  These guards assert:
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -114,6 +115,18 @@ def test_every_release_tag_has_changelog_entry() -> None:
     unavailable; the CI test job fetches full history + tags."""
     tags = _git_stable_tags()
     if not tags:
+        # In CI the test job checks out with fetch-depth: 0 (full history +
+        # tags), so a tag-less checkout THERE means that fetch regressed and
+        # the release guard is silently disarmed — setuptools_scm would then
+        # guess a `.devN` version and nothing else goes red.  Fail loudly in CI
+        # rather than skip (P7); the skip stays for legitimate tarball / shallow
+        # local checkouts.
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            pytest.fail(
+                "no git tags visible in CI — the test checkout lost its "
+                "full-history+tags fetch (fetch-depth: 0). The tag↔CHANGELOG "
+                "release guard is silently disarmed; restore the deep fetch."
+            )
         pytest.skip("no git tags available (shallow / tarball checkout) — tag↔changelog check skipped")
     headers = {".".join(map(str, v)) for v in _versions(_ANY_VERSION)}
     missing = sorted(t for t in tags if t not in headers)

@@ -29,6 +29,11 @@ pytestmark = pytest.mark.unit
 _ROOT = Path(__file__).resolve().parents[2]
 _PYPROJECT = _ROOT / "pyproject.toml"
 _LOCK = _ROOT / "requirements.lock"
+_DOCKERFILE = _ROOT / "Dockerfile"
+_LOCK_SCRIPT = _ROOT / "tools" / "gen_requirements_lock.sh"
+
+#: ``python:<tag>@sha256:<64-hex>`` — the base-image digest pin.
+_BASE_DIGEST_RE = re.compile(r"python:[^@\s\"']+@sha256:([0-9a-f]{64})")
 
 #: A pinned line: ``name==version \`` (extras stripped by --strip-extras).
 _PIN_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==(\S+?)\s*\\?\s*$")
@@ -85,4 +90,25 @@ def test_lock_targets_the_runtime_python() -> None:
     assert "with Python 3.14" in header, (
         "requirements.lock header does not show 'with Python 3.14' -- it must be regenerated "
         "inside the digest-pinned 3.14 base image (tools/gen_requirements_lock.sh), not on another Python"
+    )
+
+
+def test_lock_script_base_digest_matches_dockerfile() -> None:
+    """``tools/gen_requirements_lock.sh``'s ``BASE=`` image digest must equal
+    the ``FROM`` digest in the Dockerfile (P9c).  The script comment requires
+    keeping them "in lock-step" BY HAND; a Dependabot base bump that touches the
+    Dockerfile but not the script would regenerate the lock inside the OLD image
+    (wrong-platform wheels), surfacing only as a ``--require-hashes`` failure at
+    the next image build.  This guards the manual invariant the same greppable
+    way test_requirements_lock does for the lock itself."""
+    df = _BASE_DIGEST_RE.search(_DOCKERFILE.read_text(encoding="utf-8"))
+    sh = _BASE_DIGEST_RE.search(_LOCK_SCRIPT.read_text(encoding="utf-8"))
+    assert df is not None, "no `python:...@sha256:` FROM digest found in Dockerfile"
+    assert sh is not None, "no `BASE=python:...@sha256:` digest found in gen_requirements_lock.sh"
+    assert df.group(1) == sh.group(1), (
+        "base-image digest drift: Dockerfile FROM pins sha256:"
+        f"{df.group(1)} but tools/gen_requirements_lock.sh BASE= pins sha256:"
+        f"{sh.group(1)}.  A Dependabot base bump updated one but not the other; "
+        "sync gen_requirements_lock.sh's BASE= to the Dockerfile and regenerate "
+        "the lock inside the new image."
     )

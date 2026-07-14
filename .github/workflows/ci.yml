@@ -243,7 +243,13 @@ jobs:
           set -euo pipefail
           sdist="$(ls "${GITHUB_WORKSPACE}"/dist/*.tar.gz)"
           echo "Inspecting sdist: ${sdist}"
-          leaked="$(tar tzf "${sdist}" | grep -E '/tests/' || true)"
+          # Capture the listing UNGUARDED first (P8): the `|| true` below is
+          # needed for grep's exit-1-on-no-match, but on `tar … | grep … || true`
+          # it ALSO swallows a `tar` failure (corrupt / unreadable sdist) under
+          # `set -euo pipefail`, vacuous-passing the licensing gate.  Splitting
+          # the steps makes a tar failure fail the step.
+          listing="$(tar tzf "${sdist}")"
+          leaked="$(grep -E '/tests/' <<<"${listing}" || true)"
           if [ -n "${leaked}" ]; then
             echo "FAIL: the source distribution ships test-suite files that must be excluded"
             echo "(blind audit f92e97a, T0-5 — see MANIFEST.in 'prune tests'):"
