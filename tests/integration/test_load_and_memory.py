@@ -423,3 +423,36 @@ class TestMemoryBound:
                 )
         finally:
             tracemalloc.stop()
+
+
+# ---------------------------------------------------------------------------
+# HEAD-review F5 — the settings snapshot must reach the job
+# ---------------------------------------------------------------------------
+
+
+def test_create_backup_passes_app_settings_to_the_job(test_app):
+    """``POST /backups`` must hand the app's live ``Settings`` to the job so its
+    collectors use the app-configured data dir (the TOFU ``known_hosts`` store),
+    not a worker-resolved ``Settings()`` from env.  Both dispatch call sites left
+    the ``settings`` param ``None`` pre-fix -> on the desktop (Settings built
+    programmatically, no env bridge) the worker fell back to
+    ``configs_dir=Path("configs")`` -> a CWD-relative ``known_hosts`` that
+    silently broke changed-key (MITM) detection."""
+    captured: dict = {}
+
+    def _spy(*args, **kwargs):
+        # Stub the dispatch seam: capture what create_backup forwarded; the job
+        # never runs (plain client, so no auto-wait poll to hang).
+        captured["kwargs"] = kwargs
+
+    with (
+        patch("netcanon.api.routes.backups.submit_backup_job", _spy),
+        _PlainTestClient(test_app) as c,
+    ):
+        resp = c.post(
+            "/api/v1/backups",
+            json={"devices": [_device_payload(host="10.0.0.1")]},
+        )
+    assert resp.status_code == 202, resp.text
+    # create_backup forwards it by keyword; identity, not just equality.
+    assert captured["kwargs"].get("settings") is test_app.state.settings

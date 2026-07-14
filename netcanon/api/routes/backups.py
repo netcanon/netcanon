@@ -276,6 +276,13 @@ def create_backup(
         definition_loader,
         device_profiles,
         device_profile_store,
+        # (HEAD-review F5) Pass the app's live Settings so the job's collectors
+        # use the app-configured data dir (and thus the TOFU known_hosts store)
+        # instead of the worker re-resolving ``Settings()`` from env.  On the
+        # desktop the app builds Settings programmatically with no env bridge,
+        # so the fallback resolved ``configs_dir=Path("configs")`` -> a
+        # CWD-relative known_hosts that silently broke changed-key detection.
+        settings=request.app.state.settings,
     )
     logger.info(
         "Created backup job %s for %d device(s) (max_workers=%d)",

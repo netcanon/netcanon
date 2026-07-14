@@ -294,6 +294,11 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
         getattr(app.state, "definition_loader", None),
         getattr(app.state, "device_profiles", None),
         getattr(app.state, "device_profile_store", None),
+        # (HEAD-review F5) app's live Settings as the 10th positional arg
+        # (``run_in_executor`` takes no kwargs) so the scheduled job's
+        # collectors use the app-configured data dir / TOFU known_hosts store
+        # rather than a worker-resolved ``Settings()`` from env.
+        getattr(app.state, "settings", None),
     )
 
     # A minutes-long backup ran above; the operator may have deleted this
