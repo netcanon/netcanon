@@ -1369,7 +1369,7 @@ def _slim_for_commit(result: dict[str, Any]) -> dict[str, Any]:
     return slim
 
 
-def write_json(result: dict[str, Any]) -> Path:
+def write_json(result: dict[str, Any], *, write_baseline: bool = False) -> Path:
     """Write the reconciliation result to two files:
 
     * ``<timestamp>.json`` — the FULL per-run archive: every cell,
@@ -1386,8 +1386,12 @@ def write_json(result: dict[str, Any]) -> Path:
       fixture-corpus regen.  Self-documents its filter under
       ``latest_json_slimmed``.
 
-    Returns the timestamped path (the canonical "this run" identifier);
-    ``latest.json`` is the slim committed mirror.
+    Returns the timestamped path (the canonical "this run" identifier).
+    ``latest.json`` is the SLIM committed baseline mirror; it is rewritten
+    ONLY when ``write_baseline=True`` (CLI ``--write-baseline``).  By
+    default it is left untouched so a contributor running this tool to
+    inspect drift does not silently move the committed fidelity ratchet the
+    cross-mesh CI guard pins against (Tests-T1).
     """
     PHASE4_RUNS_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -1395,15 +1399,22 @@ def write_json(result: dict[str, Any]) -> Path:
     out_path.write_text(
         json.dumps(result, indent=2, default=str), encoding="utf-8",
     )
-    latest_path = PHASE4_RUNS_DIR / "latest.json"
-    latest_path.write_text(
-        json.dumps(_slim_for_commit(result), indent=2, default=str),
-        encoding="utf-8",
-    )
+    if write_baseline:
+        latest_path = PHASE4_RUNS_DIR / "latest.json"
+        latest_path.write_text(
+            json.dumps(_slim_for_commit(result), indent=2, default=str),
+            encoding="utf-8",
+        )
     return out_path
 
 
-def write_skeleton(body: str) -> Path:
+def write_skeleton(body: str, *, write_baseline: bool = False) -> Path | None:
+    """Write the committed ``PHASE4_RECONCILIATION.md`` skeleton — ONLY when
+    ``write_baseline=True``.  Like ``latest.json`` it is a committed
+    artifact, so a default (inspect-only) run leaves it untouched and this
+    returns ``None`` (Tests-T1)."""
+    if not write_baseline:
+        return None
     PHASE4_REPORT_PATH.write_text(body, encoding="utf-8")
     return PHASE4_REPORT_PATH
 
@@ -1435,6 +1446,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Suppress progress prints; only emit the final JSON path.",
     )
+    parser.add_argument(
+        "--write-baseline",
+        action="store_true",
+        help=(
+            "Overwrite the COMMITTED baseline artifacts "
+            "(tests/fixtures/real/_phase4_runs/latest.json and "
+            "tests/fixtures/real/PHASE4_RECONCILIATION.md).  Default: leave "
+            "them untouched and write only the gitignored timestamped run, "
+            "so inspecting drift never silently moves the fidelity ratchet "
+            "the cross-mesh CI guard pins against."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.mesh_json is None:
@@ -1455,9 +1478,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     result = run_reconciliation(mesh_json_path)
-    json_path = write_json(result)
+    json_path = write_json(result, write_baseline=args.write_baseline)
     body = render_skeleton_md(result)
-    md_path = write_skeleton(body)
+    md_path = write_skeleton(body, write_baseline=args.write_baseline)
 
     if not args.quiet:
         agg = result["aggregate"]
@@ -1469,7 +1492,14 @@ def main(argv: list[str] | None = None) -> int:
         for v in ALL_VARIANCES:
             print(f"  {v:30s} {agg.get(v, 0)}", file=sys.stderr)
         print(f"Wrote JSON to {json_path}", file=sys.stderr)
-        print(f"Wrote skeleton to {md_path}", file=sys.stderr)
+        if md_path is not None:
+            print(f"Wrote skeleton to {md_path}", file=sys.stderr)
+        else:
+            print(
+                "Baseline artifacts (latest.json + PHASE4_RECONCILIATION.md) "
+                "left untouched; pass --write-baseline to refresh them.",
+                file=sys.stderr,
+            )
 
     print(json_path)
     return 0

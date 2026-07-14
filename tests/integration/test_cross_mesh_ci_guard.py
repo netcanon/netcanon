@@ -21,8 +21,12 @@ This turns the manual ``python tools/run_full_mesh.py`` +
 ``run_phase4_reconciliation.py`` dogfood loop into a permanent CI
 invariant.  When a codec bug is legitimately fixed (``CODEC_BUG`` drops)
 or the fixture corpus changes, regenerate ``latest.json`` to ratchet the
-baseline (``python tools/run_phase4_reconciliation.py`` writes a fresh
-run; copy its aggregate into ``latest.json``).
+baseline: ``python tools/run_phase4_reconciliation.py --write-baseline``
+overwrites the committed ``latest.json`` (a bare run leaves it untouched
+so inspecting drift never silently moves the baseline — Tests-T1).  The
+absolute ceiling in :data:`_ABSOLUTE_CODEC_BUG_CEILING` below is the
+non-self-referential backstop: raising the committed baseline still
+cannot lift ``CODEC_BUG`` past that hard literal without editing it here.
 
 Runtime: the mesh is ~1200 cells / ~7s in-process — heavier than a unit
 test, hence ``integration``.  It writes NO timestamped JSON (calls the
@@ -142,6 +146,31 @@ def test_codec_bug_count_within_baseline(mesh_and_recon, baseline):
         f"live pairs: {result['pair_codec_bug_counts']}\n"
         "A previously-good field now drifts on the committed corpus — "
         "investigate the new pair before re-baselining."
+    )
+
+
+# The absolute, human-audited ceiling on cross-vendor CODEC_BUG cells.
+# UNLIKE test_codec_bug_count_within_baseline (which compares against the
+# committed latest.json — a file run_phase4_reconciliation.py rewrites when
+# passed --write-baseline), this is a hard literal the reconciliation tool
+# cannot move.  Together they close the self-referential loop: regenerating
+# the baseline can never lift CODEC_BUG past this line without a human
+# editing it here.  Lower it (never raise) as the residual tail is triaged
+# down; it stands at 5 as of HEAD-review Fid-F2.
+_ABSOLUTE_CODEC_BUG_CEILING = 5
+
+
+def test_codec_bug_count_within_absolute_ceiling(mesh_and_recon):
+    """(Tests-T1) A CONSTANT-pinned ceiling, independent of the committed
+    latest.json baseline, so regenerating the baseline can never silently
+    ratchet CODEC_BUG upward — only a human edit to the literal can."""
+    _, result = mesh_and_recon
+    live = result["aggregate"]["CODEC_BUG"]
+    assert live <= _ABSOLUTE_CODEC_BUG_CEILING, (
+        f"cross-vendor CODEC_BUG count {live} exceeds the absolute ceiling "
+        f"{_ABSOLUTE_CODEC_BUG_CEILING}.  Either a real regression, or the "
+        f"residual tail genuinely grew — raise the literal here ONLY after "
+        f"triaging each pair.\nlive pairs: {result['pair_codec_bug_counts']}"
     )
 
 
