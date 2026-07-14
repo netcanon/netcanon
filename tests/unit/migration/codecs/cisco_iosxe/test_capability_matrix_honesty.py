@@ -277,27 +277,30 @@ class TestRenderCoverageHonesty:
         caps = CiscoIOSXECodec().capabilities
         unsupported_paths = {up.path for up in caps.unsupported}
 
-        # Mirrors tools/run_full_mesh.py::_FIELD_TO_XPATH_PREFIX.
-        # Fields covered by a prefix get `unsupported_in_target` from
-        # any xpath under the prefix; other fields need exact
-        # `/<field>`.
-        prefix_covered = {
-            "vxlan_vnis": "/vxlan-vnis/",
-            "evpn_type5_routes": "/evpn-type5-routes/",
-            "routing_instances": "/routing-instances/",
+        # Mirrors tools/run_full_mesh.py::_FIELD_TO_IDENTITY_XPATHS.
+        # (Fid-F2) A field gets `unsupported_in_target` only when its
+        # record IDENTITY leaf is declared unsupported (not merely a
+        # sub-detail); other fields need exact `/<field>`.
+        identity_covered = {
+            "vxlan_vnis": ("/vxlan-vnis/vni",),
+            "evpn_type5_routes": ("/evpn-type5-routes/route",),
+            "routing_instances": (
+                "/routing-instances/instance",
+                "/routing-instances/instance/name",
+            ),
         }
 
         for field in _DROPPED_TOP_LEVEL_FIELDS:
-            prefix = prefix_covered.get(field)
-            if prefix:
-                # Either prefix-match OR exact `/<field>` works.
+            identity = identity_covered.get(field)
+            if identity:
+                # Either an identity-leaf match OR exact `/<field>` works.
                 ok = (
-                    any(p.startswith(prefix) for p in unsupported_paths)
+                    any(idx in unsupported_paths for idx in identity)
                     or f"/{field}" in unsupported_paths
                 )
                 assert ok, (
-                    f"render drops intent.{field} but no /{field}-family "
-                    f"xpath (prefix {prefix!r} or exact /{field}) is "
+                    f"render drops intent.{field} but no identity xpath "
+                    f"({' / '.join(identity)} or exact /{field}) is "
                     f"declared unsupported.  Add an UnsupportedPath."
                 )
             else:
