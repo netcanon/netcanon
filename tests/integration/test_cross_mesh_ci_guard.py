@@ -174,6 +174,32 @@ def test_codec_bug_count_within_absolute_ceiling(mesh_and_recon):
     )
 
 
+def test_cross_mesh_results_md_reproduces(mesh_and_recon):
+    """(Fid-F1) The committed ``CROSS_MESH_RESULTS.md`` must byte-reproduce
+    from the current tree.  The file's own header promises this ("a
+    non-empty ``git diff`` here means real drift, not a new run time"), yet
+    it silently went stale for the entire #224..#356 promotion wave because
+    render-side codec changes skipped the ``--matrix`` regen (the review's
+    Fid-F1).  This pins the contract: ``render_matrix_md`` over the same
+    in-process mesh the other guards use must equal the committed file.
+    Regenerate + commit with ``python tools/run_full_mesh.py --matrix``."""
+    rfm = _load_tool("run_full_mesh_ciguard", "tools/run_full_mesh.py")
+    mesh, _ = mesh_and_recon
+    rendered = rfm.render_matrix_md(mesh)
+    committed = (
+        _REPO_ROOT / "tests" / "fixtures" / "real" / "CROSS_MESH_RESULTS.md"
+    ).read_text(encoding="utf-8")
+    # ``splitlines()`` normalises the committed file's CRLF against the
+    # renderer's ``\n`` joins, so the assert catches content drift, not the
+    # git-checkout line-ending policy.
+    assert rendered.splitlines() == committed.splitlines(), (
+        "CROSS_MESH_RESULTS.md is stale vs the current mesh render — "
+        "regenerate with `python tools/run_full_mesh.py --matrix` and commit "
+        "(doc-only).  A non-empty diff here means real render drift the "
+        "committed matrix no longer reflects."
+    )
+
+
 def test_no_new_codec_bug_pairs(mesh_and_recon, baseline):
     """No NEW codec-bug (source, target) pair appears vs the baseline —
     catches a regression even if the total count is coincidentally equal."""
