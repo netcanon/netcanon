@@ -315,8 +315,13 @@ _VRRP_PRIORITY_RE = re.compile(
 #   authentication mode plaintext-password "X"
 # Captured verbatim; stored as ``"plain:X"`` per the
 # :class:`CanonicalVRRPGroup.authentication` opaque-token convention.
+# ``(\S.*)`` NOT ``"?([^"\n]+?)"?\s*$``: the lazy body + trailing ``\s*$``
+# backtrack O(n^2) on a space-padded line (the #337 ReDoS shape).  The value
+# is now captured verbatim (incl. any surrounding quotes) and the consumer
+# ``.strip().strip('"')``s it — behaviour-identical to the old inline quote/
+# whitespace trimming, but linear.
 _VRRP_AUTH_PLAINTEXT_RE = re.compile(
-    r'^authentication\s+mode\s+plaintext-password\s+"?([^"\n]+?)"?\s*$',
+    r'^authentication\s+mode\s+plaintext-password\s+(\S.*)$',
     re.IGNORECASE,
 )
 
@@ -770,7 +775,8 @@ def _parse_vrrp_group_stanza(
 
         auth = _VRRP_AUTH_PLAINTEXT_RE.match(stripped)
         if auth:
-            group.authentication = f"plain:{auth.group(1)}"
+            secret = auth.group(1).strip().strip('"')
+            group.authentication = f"plain:{secret}"
             i += 1
             continue
 
