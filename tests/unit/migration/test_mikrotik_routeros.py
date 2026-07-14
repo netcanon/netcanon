@@ -1040,6 +1040,43 @@ class TestInterfaceTypeInferenceRoundTrip:
         intent = MikroTikRouterOSCodec().parse(raw)
         assert intent.interfaces[0].interface_type == "ianaift:ieee8023adLag"
 
+    def test_bond_comment_round_trips(self):
+        """HEAD-review Fid-F3: a bond's ``comment=`` (harvested onto the
+        synthetic LAG CanonicalInterface's ``description``) must survive
+        parse -> render -> parse.  The render ``/interface bonding`` block
+        previously emitted only slaves/mode/name, silently dropping the
+        description on this *supported* path.  Fails pre-fix (comment == '')."""
+        codec = MikroTikRouterOSCodec()
+        raw = (
+            "/interface bonding\n"
+            'add comment="LACP bond to core" name=bond1 slaves=ether1,ether2 mode=802.3ad\n'
+        )
+        first = codec.parse(raw)
+        bond1 = next(i for i in first.interfaces if i.name == "bond1")
+        assert bond1.description == "LACP bond to core"
+
+        # The description survives the render round-trip.
+        second = codec.parse(codec.render(first))
+        bond1b = next(i for i in second.interfaces if i.name == "bond1")
+        assert bond1b.description == "LACP bond to core"
+        # ...and the LAG identity is otherwise unchanged.
+        assert [(l.name, l.members, l.mode) for l in first.lags] == \
+               [(l.name, l.members, l.mode) for l in second.lags]
+
+    def test_bond_without_comment_emits_no_comment_kv(self):
+        """Negative control — a bond with no description must NOT emit a
+        stray ``comment=`` token."""
+        codec = MikroTikRouterOSCodec()
+        out = codec.render(CanonicalIntent(
+            hostname="r1",
+            lags=[CanonicalLAG(name="bond1", members=["ether1", "ether2"])],
+        ))
+        bond_line = next(
+            l for l in out.splitlines()
+            if l.startswith("add") and "name=bond1" in l
+        )
+        assert "comment=" not in bond_line
+
 
 # ---------------------------------------------------------------------------
 # VRRP groups (v0.2.0 Wave B wire-up)

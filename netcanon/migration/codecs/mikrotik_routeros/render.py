@@ -412,6 +412,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 
     # ----- /interface bonding (Tier 2 LAGs) -----
     if tree.lags:
+        # The bond's human-readable comment is carried on the synthetic
+        # CanonicalInterface the parse path materialises (parse.py
+        # ``_parse_interface_bonding``), not on CanonicalLAG itself — look
+        # it up by name so a bond's ``comment=`` round-trips (it otherwise
+        # silently dropped on this supported path).
+        _lag_desc = {
+            i.name: i.description for i in tree.interfaces if i.description
+        }
         lines.append("/interface bonding")
         for lag in tree.lags:
             parts = ["add"]
@@ -421,6 +429,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f"mode={_CANONICAL_MODE_TO_ROUTEROS_BONDING.get(lag.mode, '802.3ad')}"
             )
             parts.append(f"name={_quote_if_needed(lag.name)}")
+            desc = _lag_desc.get(lag.name)
+            if desc:
+                parts.append(f'comment="{_escape(desc)}"')
             lines.append(" ".join(parts))
         lines.append("")
 
