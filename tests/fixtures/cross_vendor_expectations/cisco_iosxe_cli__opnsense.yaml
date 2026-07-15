@@ -413,12 +413,15 @@ per_field_expectation:
       OPNsense splits static-route declaration into two blocks:
       ``<gateways>/<gateway_item>`` (named gateways) and
       ``<staticroutes>/<route>`` (routes referencing named
-      gateways).  The OPNsense codec does not currently parse
-      OR emit either block; canonical static_routes from a Cisco
-      source therefore drop on render.  Per-VRF static routes
-      (Cisco ``ip route vrf X ...``) carry a populated
-      ``CanonicalStaticRoute.vrf`` but drop on this cross-pair
-      because OPNsense has no VRF model.
+      gateways).  The OPNsense codec now PARSES both blocks
+      (``parse.py`` ``_parse_static_routes`` harvests the
+      ``<gateway_item>`` default route + ``<staticroutes>/<route>``
+      entries, resolving named gateways to their IP; promotion #15),
+      but the config.xml renderer still emits neither block, so
+      canonical static_routes from a Cisco source drop on render.
+      Per-VRF static routes (Cisco ``ip route vrf X ...``) carry a
+      populated ``CanonicalStaticRoute.vrf`` but drop on this
+      cross-pair because OPNsense has no VRF model.
     references: [opnsense-gateways]
 
   # ── Tier 2 — auto-translate with review ──
