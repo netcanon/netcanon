@@ -118,6 +118,50 @@ def _resolve_max_concurrent_backup_jobs() -> int:
 MAX_CONCURRENT_BACKUP_JOBS: int = _resolve_max_concurrent_backup_jobs()
 
 
+#: Intake cap on the number of *in-flight* (pending / running) backup jobs —
+#: the ceiling for POST /api/v1/backups (HEAD-review Conc-F4).  The per-job /
+#: global limiters above bound device fan-out and concurrent whole jobs, but
+#: nothing bounded the NUMBER of jobs a client could enqueue: a runaway retry
+#: loop could pile up an unbounded executor queue (each entry pinning decrypted
+#: credentials in memory), unbounded non-terminal registry entries, and
+#: unbounded ``pending`` JSON files.  Sized generously — comfortably above the
+#: 200-schedule cap plus manual headroom, at the registry's own 1000-job
+#: memory sizing (~5 MB of BackupJob) — so legitimate bursts never trip it;
+#: only a flood is shed with a 429 + Retry-After.  Queueing UNDER the cap is
+#: still never a failure (#333/#334).  Override via
+#: ``NETCANON_MAX_PENDING_BACKUP_JOBS``.
+_DEFAULT_MAX_PENDING_BACKUP_JOBS: int = 1000
+
+
+def _resolve_max_pending_backup_jobs() -> int:
+    """Read the in-flight backup-job intake cap from the environment.
+
+    Reads ``NETCANON_MAX_PENDING_BACKUP_JOBS``, falling back to
+    :data:`_DEFAULT_MAX_PENDING_BACKUP_JOBS` when unset or unparseable; floored
+    at 1 so at least one job can always be enqueued.
+    """
+    raw = os.environ.get("NETCANON_MAX_PENDING_BACKUP_JOBS")
+    if raw is None:
+        return _DEFAULT_MAX_PENDING_BACKUP_JOBS
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        warnings.warn(
+            f"NETCANON_MAX_PENDING_BACKUP_JOBS={raw!r} is not an integer; "
+            f"falling back to {_DEFAULT_MAX_PENDING_BACKUP_JOBS}",
+            stacklevel=2,
+        )
+        return _DEFAULT_MAX_PENDING_BACKUP_JOBS
+
+
+#: Resolved at import.  The POST /backups route binds this via
+#: ``from ...config import MAX_PENDING_BACKUP_JOBS`` at ITS import time, so a
+#: test overriding the cap must monkeypatch the ROUTE module's binding
+#: (``netcanon.api.routes.backups.MAX_PENDING_BACKUP_JOBS``), not this one
+#: (mirrors the MAX_CONCURRENT_BACKUP_JOBS note above).
+MAX_PENDING_BACKUP_JOBS: int = _resolve_max_pending_backup_jobs()
+
+
 #: Default ceiling on a single ``POST /api/v1/sanitize`` upload (16 MiB).
 #: Network configs are well under a megabyte even for large chassis, so 16 MiB
 #: is generous headroom while still bounding the work an unauthenticated /

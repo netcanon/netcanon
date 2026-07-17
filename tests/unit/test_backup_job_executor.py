@@ -252,6 +252,37 @@ def test_env_override_garbage_falls_back_to_default(monkeypatch):
         assert config._resolve_max_concurrent_backup_jobs() == 8
 
 
+# ── Conc-F4 intake cap (NETCANON_MAX_PENDING_BACKUP_JOBS) ──
+
+
+def test_default_pending_jobs_cap_is_1000():
+    from netcanon import config
+
+    assert config.MAX_PENDING_BACKUP_JOBS == 1000
+
+
+def test_pending_env_override_sets_cap(monkeypatch):
+    from netcanon import config
+
+    monkeypatch.setenv("NETCANON_MAX_PENDING_BACKUP_JOBS", "250")
+    assert config._resolve_max_pending_backup_jobs() == 250
+
+
+def test_pending_env_override_floors_at_one(monkeypatch):
+    from netcanon import config
+
+    monkeypatch.setenv("NETCANON_MAX_PENDING_BACKUP_JOBS", "0")
+    assert config._resolve_max_pending_backup_jobs() == 1
+
+
+def test_pending_env_override_garbage_falls_back_to_default(monkeypatch):
+    from netcanon import config
+
+    monkeypatch.setenv("NETCANON_MAX_PENDING_BACKUP_JOBS", "not-a-number")
+    with pytest.warns(UserWarning):
+        assert config._resolve_max_pending_backup_jobs() == 1000
+
+
 def test_submit_retries_once_after_pool_shutdown(monkeypatch):
     """Submit-vs-reset race (HEAD-review F7): if ``_job_executor()`` hands back
     a pool that was shut down between resolution and ``.submit`` (``RuntimeError:

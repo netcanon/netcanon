@@ -68,7 +68,7 @@ from pydantic import SecretStr
 # The backup engine in :mod:`netcanon.services.backup_runner` calls it
 # back through this module, so tests still patch it at this import site.
 from ...collectors.base import get_collector  # noqa: F401  (mock-point seam)
-from ...config import MAX_BACKUP_CONCURRENCY
+from ...config import MAX_BACKUP_CONCURRENCY, MAX_PENDING_BACKUP_JOBS
 from ...definitions.loader import DefinitionLoader
 from ...definitions.schema import DeviceDefinition
 from ...models.backup import BackupJob, JobStatus
@@ -164,6 +164,13 @@ def _resolve_credentials(
                 "(NETCANON_BLOCK_PRIVATE_EGRESS)."
             )
         },
+        429: {
+            "description": (
+                "The in-flight backup-job intake cap "
+                "(NETCANON_MAX_PENDING_BACKUP_JOBS) is reached; retry once "
+                "running jobs complete (carries a Retry-After header)."
+            )
+        },
     },
 )
 def create_backup(
@@ -195,6 +202,10 @@ def create_backup(
 
     Raises:
         HTTPException 422: If any device ``type_key`` is not loaded.
+        HTTPException 429: If the in-flight job intake cap
+            (``NETCANON_MAX_PENDING_BACKUP_JOBS``) is reached.
+        HTTPException 400: If a device address is blocked by the egress
+            allow-list (only when ``block_private_egress`` is enabled).
     """
     unknown = [
         d.type_key for d in request_body.devices if d.type_key not in definitions
@@ -206,6 +217,32 @@ def create_backup(
                 f"Unknown type_key(s): {unknown}. "
                 f"Loaded definitions: {sorted(definitions.keys())}"
             ),
+        )
+
+    # Intake cap (HEAD-review Conc-F4): bound the number of in-flight
+    # (pending / running) jobs so a runaway client / retry loop can't pile up
+    # an unbounded executor queue — each entry pinning decrypted credentials
+    # in memory — plus unbounded non-terminal registry entries and pending
+    # JSON files.  Checked BEFORE credential resolution / egress DNS so a flood
+    # is shed cheaply.  Queueing UNDER the cap is still never a failure
+    # (#333/#334); only the flood beyond it gets back-pressure the caller can
+    # see and act on (429 + Retry-After).
+    active = jobs.active_job_count()
+    if active >= MAX_PENDING_BACKUP_JOBS:
+        logger.warning(
+            "Backup intake cap reached (%d in-flight >= %d); rejecting POST "
+            "/backups with 429",
+            active,
+            MAX_PENDING_BACKUP_JOBS,
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Too many backup jobs in flight ({active} pending/running, "
+                f"cap {MAX_PENDING_BACKUP_JOBS}).  Retry once running jobs "
+                "complete, or raise NETCANON_MAX_PENDING_BACKUP_JOBS."
+            ),
+            headers={"Retry-After": "30"},
         )
 
     # Resolve any omitted credentials from the linked device profile,

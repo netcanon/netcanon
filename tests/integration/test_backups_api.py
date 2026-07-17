@@ -11,7 +11,12 @@ state without an explicit ``wait_for_job`` call.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from unittest.mock import patch
+
 import pytest
+
+from netcanon.models.backup import BackupJob, JobStatus
 
 pytestmark = pytest.mark.integration
 
@@ -55,9 +60,61 @@ def _post_and_get(client, devices: list[dict] | None = None) -> dict:
     return client.get(f"/api/v1/backups/{job_id}").json()
 
 
+def _inject_jobs(client, count: int, status: JobStatus) -> None:
+    """Insert *count* jobs of *status* directly into the app's registry."""
+    for i in range(count):
+        job_id = f"conc-f4-{status.value}-{i}"
+        client.app.state.jobs[job_id] = BackupJob(
+            id=job_id,
+            status=status,
+            created_at=datetime.now(UTC),
+            total_devices=1,
+        )
+
+
 # ---------------------------------------------------------------------------
 # POST /api/v1/backups
 # ---------------------------------------------------------------------------
+
+
+class TestIntakeCap:
+    """HEAD-review Conc-F4: POST /backups sheds a runaway intake flood with a
+    429 once the in-flight (pending/running) job count hits the cap."""
+
+    def test_rejects_with_429_at_cap(self, client):
+        with patch(
+            "netcanon.api.routes.backups.MAX_PENDING_BACKUP_JOBS", 2
+        ):
+            _inject_jobs(client, 2, JobStatus.pending)
+            resp = _post_backup(client)
+        assert resp.status_code == 429
+
+    def test_429_carries_retry_after_header(self, client):
+        with patch(
+            "netcanon.api.routes.backups.MAX_PENDING_BACKUP_JOBS", 2
+        ):
+            _inject_jobs(client, 2, JobStatus.running)
+            resp = _post_backup(client)
+        assert resp.status_code == 429
+        assert "retry-after" in {k.lower() for k in resp.headers}
+
+    def test_under_cap_still_accepts(self, client):
+        # 1 in-flight, cap 3 → the new job (making 2) is under the cap.
+        with patch(
+            "netcanon.api.routes.backups.MAX_PENDING_BACKUP_JOBS", 3
+        ):
+            _inject_jobs(client, 1, JobStatus.pending)
+            resp = _post_backup(client)
+        assert resp.status_code == 202
+
+    def test_terminal_jobs_do_not_count_toward_cap(self, client):
+        # 5 COMPLETED jobs resident, cap 2 → active count is 0, POST accepted.
+        with patch(
+            "netcanon.api.routes.backups.MAX_PENDING_BACKUP_JOBS", 2
+        ):
+            _inject_jobs(client, 5, JobStatus.completed)
+            resp = _post_backup(client)
+        assert resp.status_code == 202
 
 
 class TestCreateBackup:
