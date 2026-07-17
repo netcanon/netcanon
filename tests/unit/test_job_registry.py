@@ -473,3 +473,39 @@ class TestEdgeCases:
         path.write_text("not valid JSON")
         with pytest.raises(KeyError):
             _ = registry[job_id]
+
+
+class TestActiveJobCount:
+    """``active_job_count`` (Conc-F4) counts only NON-terminal residents."""
+
+    def test_counts_only_non_terminal(self, store: FileJobStore):
+        reg = BackupJobRegistry(store, max_memory_jobs=100, warm_cache=False)
+        for st in (JobStatus.pending, JobStatus.running):
+            j = _make_job(status=st)
+            reg[j.id] = j
+        for st in (
+            JobStatus.completed,
+            JobStatus.partial,
+            JobStatus.failed,
+        ):
+            j = _make_job(status=st)
+            reg[j.id] = j
+        # 2 non-terminal (pending + running) out of 5 resident.
+        assert reg.active_job_count() == 2
+
+    def test_zero_when_all_terminal(self, store: FileJobStore):
+        reg = BackupJobRegistry(store, max_memory_jobs=100, warm_cache=False)
+        j = _make_job(status=JobStatus.completed)
+        reg[j.id] = j
+        assert reg.active_job_count() == 0
+
+    def test_non_terminal_survive_cap_so_count_is_exact(
+        self, store: FileJobStore,
+    ):
+        """Non-terminal jobs are eviction-protected, so even over a tiny cap
+        every in-flight job stays resident and the count is exact."""
+        reg = BackupJobRegistry(store, max_memory_jobs=2, warm_cache=False)
+        for _ in range(5):
+            j = _make_job(status=JobStatus.running)
+            reg[j.id] = j
+        assert reg.active_job_count() == 5

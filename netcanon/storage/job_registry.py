@@ -301,6 +301,22 @@ class BackupJobRegistry:
 
     # ── Registry-specific surface ───────────────────────────────────
 
+    def active_job_count(self) -> int:
+        """Number of memory-resident NON-terminal (pending / running) jobs.
+
+        Non-terminal jobs are eviction-protected (they never leave the cache
+        until they terminalise — see ``_TERMINAL_STATUSES``), so every
+        in-flight job is always memory-resident: this is the EXACT in-flight
+        count, not a sample.  It is the basis for the POST /backups intake cap
+        (HEAD-review Conc-F4).  Counted under the lock so it is consistent
+        against concurrent create / status-update writes."""
+        with self._lock:
+            return sum(
+                1
+                for j in self._cache.values()
+                if j.status not in _TERMINAL_STATUSES
+            )
+
     def total_disk_count(self) -> int:
         """Total number of jobs persisted to disk.
 
