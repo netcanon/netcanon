@@ -40,6 +40,26 @@ def test_loopback_and_link_local_are_blocked(host: str) -> None:
 @pytest.mark.parametrize(
     "host",
     [
+        "64:ff9b::a9fe:a9fe",     # NAT64 (RFC 6052) -> 169.254.169.254 metadata
+        "64:ff9b:1::a9fe:a9fe",   # NAT64 local-use (RFC 8215) -> metadata
+        "2002:7f00:0001::",       # 6to4 -> 127.0.0.1 loopback
+        "2002:a9fe:a9fe::",       # 6to4 -> 169.254.169.254 metadata
+        "::127.0.0.1",            # deprecated IPv4-compatible -> loopback
+    ],
+)
+def test_ipv6_transition_formats_to_blocked_ipv4_are_blocked(host: str) -> None:
+    """SEC-3 / #42: NAT64, 6to4 and the deprecated IPv4-compatible literals
+    smuggle an IPv4 in their low bits and classify as reserved/private at the
+    v6 layer, so a v6-only check let them reach loopback / the metadata
+    endpoint.  The embedded IPv4 is now unwrapped and re-checked (the same
+    transition-format extraction the sanitizer uses)."""
+    with pytest.raises(EgressBlocked):
+        assert_egress_allowed(host)
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
         "8.8.8.8",
         "1.1.1.1",
         "192.168.1.1",   # RFC-1918 — real managed devices live here
@@ -47,6 +67,8 @@ def test_loopback_and_link_local_are_blocked(host: str) -> None:
         "172.16.0.1",
         "100.64.0.1",    # CGNAT
         "2001:db8::1",
+        "2002:0808:0808::",   # 6to4 embedding PUBLIC 8.8.8.8 — allowed
+        "64:ff9b::0808:0808",  # NAT64 embedding PUBLIC 8.8.8.8 — allowed
     ],
 )
 def test_public_and_private_ranges_are_allowed(host: str) -> None:

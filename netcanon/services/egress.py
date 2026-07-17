@@ -28,6 +28,8 @@ import ipaddress
 import logging
 import socket
 
+from ..ip_transition import embedded_ipv4s
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,17 +47,23 @@ def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     connect to the unspecified address routes to loopback, so without this
     check the allow-list could be bypassed to reach a loopback service.
 
-    IPv4-mapped IPv6 literals (``::ffff:127.0.0.1``) parse as IPv6 and would
-    otherwise sidestep the IPv4 loopback/link-local checks, so the embedded
-    IPv4 address is unwrapped and re-checked.
+    IPv6 *transition* literals (IPv4-mapped ``::ffff:127.0.0.1``, 6to4
+    ``2002:7f00:1::``, NAT64 ``64:ff9b::a9fe:a9fe``, Teredo, and the
+    deprecated IPv4-compatible ``::a.b.c.d``) parse as IPv6 and classify as
+    ``reserved`` / ``private`` at the v6 layer, so they would otherwise
+    sidestep the IPv4 loopback/link-local checks and reach the metadata
+    endpoint (``64:ff9b::169.254.169.254`` routes to ``169.254.169.254``).
+    Every embedded IPv4 is unwrapped and re-checked — the same
+    transition-format extraction the sanitizer uses (SEC-3 / #42).
     """
     if ip.is_loopback or ip.is_link_local or ip.is_unspecified:
         return True
-    mapped = getattr(ip, "ipv4_mapped", None)
-    return bool(
-        mapped is not None
-        and (mapped.is_loopback or mapped.is_link_local or mapped.is_unspecified)
-    )
+    if isinstance(ip, ipaddress.IPv6Address):
+        return any(
+            v4.is_loopback or v4.is_link_local or v4.is_unspecified
+            for v4 in embedded_ipv4s(ip)
+        )
+    return False
 
 
 def assert_egress_allowed(host: str) -> None:
