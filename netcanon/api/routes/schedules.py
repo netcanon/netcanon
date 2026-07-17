@@ -34,6 +34,25 @@ from ..deps import get_schedule_store, get_scheduler, get_schedules
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/schedules", tags=["schedules"])
 
+#: Shared OpenAPI error declarations (API-C4) so the generated schema and
+#: clients see the full non-2xx surface, not just the auto ``[2xx, 422]``.
+#: Mirrors the ``_JOB_STATUS_RESPONSES`` template in migration.py.
+_SCHEDULE_404: dict[int | str, dict] = {
+    404: {"description": "No schedule with this id exists."}
+}
+_CAPACITY_409: dict[int | str, dict] = {
+    409: {"description": "The schedule capacity limit (200) is reached."}
+}
+_PERSIST_500: dict[int | str, dict] = {
+    500: {
+        "description": (
+            "Persisting the schedule to disk failed (OSError); the in-memory "
+            "registry and the APScheduler job were rolled back so the listed "
+            "state stays consistent with disk (C3, the #47b sibling)."
+        )
+    }
+}
+
 
 # ---------------------------------------------------------------------------
 # Scheduler helpers (also called from main.py lifespan)
@@ -357,6 +376,7 @@ def list_schedules(
     status_code=201,
     response_model=BackupSchedulePublic,
     summary="Create a backup schedule",
+    responses={**_CAPACITY_409, **_PERSIST_500},
 )
 def create_schedule(
     body: ScheduleCreate,
@@ -415,6 +435,7 @@ def create_schedule(
     "/{schedule_id}",
     status_code=204,
     summary="Delete a backup schedule",
+    responses={**_SCHEDULE_404, **_PERSIST_500},
 )
 def delete_schedule(
     schedule_id: str,
@@ -458,6 +479,7 @@ def delete_schedule(
     "/{schedule_id}/toggle",
     response_model=BackupSchedulePublic,
     summary="Enable or disable a schedule",
+    responses={**_SCHEDULE_404, **_PERSIST_500},
 )
 def toggle_schedule(
     schedule_id: str,
