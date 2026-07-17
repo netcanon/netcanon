@@ -26,6 +26,99 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-16
+
+Two threads land together here: the **codec promotion wave** (#344–#356) that
+graduated a batch of proven-clean matrix cells into real round-tripping
+capability, and the **complete remediation of the 2026-07-12 HEAD-review** — a
+12-agent adversarial review of all `main` since v0.5.3 (verdict
+*GO-WITH-FIXES*).  All six remediation waves plus the deferred tail shipped;
+the cross-vendor CODEC_BUG count held at 5 / 1224 cells throughout.  Two new
+operator env knobs (`NETCANON_MAX_PENDING_BACKUP_JOBS`; the egress guard now
+also sees IPv6 transition formats); **no breaking API changes**.
+
+### Added
+
+- **Management-plane wiring across four codecs** — `cisco_nxos` and
+  `cisco_iosxr` now render + parse their whole Tier-1 management plane
+  (domain / DNS / NTP / syslog), and `cisco_iosxe_cli` + `arista_eos` grew
+  syslog harvest, so these surfaces round-trip instead of dropping on render.
+  (#352, #353, #354)
+- **VXLAN-EVPN `nve1` on `cisco_iosxe_cli`** — the NVE interface (VLAN↔VNI
+  bindings, multicast group, source-interface, L3VNI) now parses + renders.
+  (#351)
+- **Static-route fidelity** — admin distance (metric) wires through on
+  arista / mikrotik / fortigate / iosxr; OPNsense harvests its two-block static
+  routes on parse; the two-token `<dest> <iface> <gateway>` form is preserved.
+  (#348, #349, #350, #362)
+- **FortiGate secondary interface IPs + nested IPv6** — `config secondaryip`
+  and the FortiOS 7.x nested `config ipv6` interface address now round-trip.
+  (#344, #345)
+- **VyOS system domain-name + name-server; NX-OS GRE / IPIP tunnel encap.**
+  (#347, #346)
+- **`NETCANON_MAX_PENDING_BACKUP_JOBS`** (default 1000) — `POST /api/v1/backups`
+  now bounds the number of in-flight jobs; a runaway intake flood is shed with
+  `429 Too Many Requests` + `Retry-After` instead of piling up an unbounded
+  executor queue (each entry pinning decrypted credentials), registry rows and
+  pending files.  Queueing under the cap is unchanged (#333/#334).  (#384)
+
+### Fixed
+
+- **Security — ReDoS (polynomial parse-time DoS)** — five un-hardened siblings
+  of the #337 fix (the `\s+…(<lazy>)\s*$` shape) across fortigate / arista /
+  iosxe_cli / aoss, all reachable via an unauthenticated 10 MB
+  `POST /plan raw_text`, anchored to linear time.  (#358)
+- **Security — egress allow-list transition formats (SEC-3)** — the
+  `block_private_egress` guard only unwrapped IPv4-mapped IPv6, so NAT64
+  (`64:ff9b::/96`), 6to4 and the deprecated IPv4-compatible literals embedding
+  a loopback / metadata IPv4 slipped through; every embedded IPv4 is now
+  unwrapped and re-checked (shared with the sanitizer's leak guard).  (#383)
+- **Codec data-loss** — management-plane parsers no longer swallow trailing
+  keyword tokens (NX-OS `use-vrf`, IOS-XR `vrf`, static-route tag / bfd); the
+  NVE VLAN-VNI binding tolerates an `ingress-replication` tail; FortiGate
+  VARP-only SVIs stop emitting an invalid `set ip`.  (#363, #364)
+- **Backup subsystem** — desktop TOFU host-keys persist again (the job
+  `settings` snapshot was dead, silently degrading changed-key MITM detection);
+  a live job can no longer vanish through a stale-pending eviction window; a
+  crashed runner is finalized (was stranded non-terminal with no log line); LRU
+  overshoot is reclaimed to cap; a submit-vs-shutdown race retries instead of
+  500; a concurrent poll can't observe `failed` with a null error.  (#360,
+  #361, #375)
+- **API robustness** — hardened the un-hardened error / persistence siblings:
+  `/sanitize` and the CRUD routes return a `4xx` instead of `500` on
+  corrupt-input / missing-id / disk-full, with in-memory (and APScheduler)
+  rollback on a failed persist so a listed resource can't resurrect on restart;
+  `DeviceProfileUpdate` rejects unknown fields.  (#374)
+- **Performance** — the junos trunk-member dedup (O(range×list), ~265× faster
+  on a 32-line stanza) and six O(N²) mgmt-plane server-list scans are
+  set-guarded.  (#359)
+
+### Changed
+
+- **Fidelity ratchet** — the cross-vendor mesh now pins an absolute CODEC_BUG
+  ceiling and the METHODOLOGY over- / under-declaration buckets against the
+  committed baseline (a wire-up that lands without flipping its disposition YAML
+  turns CI red), baseline writes are gated behind `--write-baseline`, and
+  `CROSS_MESH_RESULTS.md` byte-reproducibility is guarded.  Over-declared-lossy
+  cells with no drifting fixture were audited and the genuinely-stale ones
+  promoted to `good`.  (#365, #366, #367, #368, #369, #373, #381)
+- **OpenAPI response surface** — the CRUD routers now declare their full
+  non-2xx response space (400 / 403 / 404 / 409 / 500 / 501), verified by an
+  AST guard that pins every inline-raised status.  (#382)
+- **Honesty corrections** — SNMP v3 passphrase hashes are treated as cosmetic in
+  the mesh comparator; an `opnsense → cisco_iosxe` dns disposition was corrected
+  from `not_applicable` to `unsupported`; stale VRF / DNS / VXLAN reason text
+  across the expectation YAMLs and operator docs was swept to match the HEAD
+  codecs.  (#355, #380, #371, #372, #376)
+- **Packaging / release** — closed a batch of release-path footguns (the
+  `:latest` gate, the MSI prerelease predicate + tag normalization, floating
+  action SHAs, the changelog-guard skip, the sdist-leak gate), pinned the cosign
+  verify recipe to the exact per-version identity, and added a
+  Dockerfile ↔ lockfile digest lockstep guard.  (#370, #377)
+- **Test guards** — un-skipped vacuous canaries, fixed a query-string POST
+  bypass in the auto-wait test client, and made the certainty-header guard fail
+  (not skip) for real codecs.  (#378)
+
 ## [0.5.5] - 2026-07-07
 
 Post-review hardening release: the complete remediation of the 2026-07-06
