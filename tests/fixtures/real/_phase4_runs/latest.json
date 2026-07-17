@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-17T03:30:50+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260717T033049Z.json",
-  "mesh_run_started_utc": "2026-07-17T03:30:37+00:00",
+  "started_utc": "2026-07-17T05:47:23+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260717T054519Z.json",
+  "mesh_run_started_utc": "2026-07-17T05:45:13+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4221,7 +4221,7 @@
     {
       "source_codec": "aruba_aoscx",
       "target_codec": "aruba_aoss",
-      "drifted_total": 34
+      "drifted_total": 33
     },
     {
       "source_codec": "aruba_aoscx",
@@ -4576,7 +4576,7 @@
     {
       "source_codec": "vyos",
       "target_codec": "aruba_aoss",
-      "drifted_total": 32
+      "drifted_total": 31
     },
     {
       "source_codec": "vyos",
