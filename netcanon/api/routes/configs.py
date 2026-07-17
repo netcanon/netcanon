@@ -47,6 +47,12 @@ router = APIRouter(prefix="/configs", tags=["configs"])
 # Extensions permitted for the open-in-editor feature.
 _OPEN_ALLOWED_EXTENSIONS = frozenset({".cfg", ".conf", ".txt", ".xml", ".log"})
 
+#: Shared OpenAPI error declaration (API-C4) so the generated schema and
+#: clients see the 404 surface, not just the auto ``[2xx, 422]``.
+_CONFIG_404: dict[int | str, dict] = {
+    404: {"description": "The named config file does not exist."}
+}
+
 
 @router.get(
     "/",
@@ -66,6 +72,7 @@ def list_configs(
     "/{filename}",
     response_class=PlainTextResponse,
     summary="Retrieve the text of a stored configuration",
+    responses=_CONFIG_404,
 )
 def get_config(
     filename: str,
@@ -95,6 +102,7 @@ def get_config(
     "/{filename}",
     status_code=204,
     summary="Delete a stored configuration file",
+    responses=_CONFIG_404,
 )
 def delete_config(
     filename: str,
@@ -122,6 +130,21 @@ def delete_config(
     "/{filename}/open",
     status_code=204,
     summary="Open a stored configuration in the OS default text editor",
+    responses={
+        400: {
+            "description": (
+                "The file's extension is not on the open-in-editor allow-list."
+            )
+        },
+        403: {"description": "Open-in-editor is disabled on this server."},
+        **_CONFIG_404,
+        500: {"description": "The OS refused to open the file."},
+        501: {
+            "description": (
+                "This platform has no OS default-editor helper available."
+            )
+        },
+    },
 )
 def open_config(
     filename: str,
@@ -138,6 +161,7 @@ def open_config(
         filename: Bare filename as returned by the list endpoint.
 
     Raises:
+        HTTPException 400: If the file's extension is not on the allow-list.
         HTTPException 403: If ``open_in_editor`` is disabled in settings.
         HTTPException 404: If the file does not exist.
         HTTPException 501: If the platform does not support ``os.startfile``.

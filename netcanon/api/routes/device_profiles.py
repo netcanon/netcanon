@@ -34,6 +34,25 @@ from ..deps import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/devices", tags=["device-profiles"])
 
+#: Shared OpenAPI error declarations (API-C4) so the generated schema and
+#: clients see the full non-2xx surface, not just the auto ``[2xx, 422]``.
+#: Mirrors the ``_JOB_STATUS_RESPONSES`` template in migration.py.
+_PROFILE_404: dict[int | str, dict] = {
+    404: {"description": "No device profile with this id exists."}
+}
+_CAPACITY_409: dict[int | str, dict] = {
+    409: {"description": "The device-profile capacity limit (1000) is reached."}
+}
+_PERSIST_500: dict[int | str, dict] = {
+    500: {
+        "description": (
+            "Persisting the change to disk failed (OSError); the in-memory "
+            "registry was rolled back so the listed state stays consistent "
+            "with disk (review #47b)."
+        )
+    }
+}
+
 #: DeviceProfile fields whose annotation admits ``None`` — the only fields a
 #: PUT may explicitly clear (``enable_password``, ``notes``, ``os_version``,
 #: ``model``; plus the API-read-only ``detected_facts``).  Derived from the
@@ -86,6 +105,7 @@ def list_device_profiles(
     "/{profile_id}",
     response_model=DeviceProfilePublic,
     summary="Get a device profile by ID",
+    responses=_PROFILE_404,
 )
 def get_device_profile(
     profile_id: str,
@@ -111,6 +131,7 @@ def get_device_profile(
     status_code=201,
     response_model=DeviceProfilePublic,
     summary="Create a device profile",
+    responses={**_CAPACITY_409, **_PERSIST_500},
 )
 def create_device_profile(
     body: DeviceProfileCreate,
@@ -165,6 +186,7 @@ def create_device_profile(
     "/{profile_id}",
     response_model=DeviceProfilePublic,
     summary="Update a device profile",
+    responses={**_PROFILE_404, **_PERSIST_500},
 )
 def update_device_profile(
     profile_id: str,
@@ -241,6 +263,7 @@ def update_device_profile(
     "/{profile_id}",
     status_code=204,
     summary="Delete a device profile",
+    responses={**_PROFILE_404, **_PERSIST_500},
 )
 def delete_device_profile(
     profile_id: str,

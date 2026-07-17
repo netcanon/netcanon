@@ -157,6 +157,14 @@ def _resolve_credentials(
     status_code=202,
     response_model=BackupJob,
     summary="Create a backup job",
+    responses={
+        400: {
+            "description": (
+                "A device address is blocked by the egress allow-list "
+                "(NETCANON_BLOCK_PRIVATE_EGRESS)."
+            )
+        },
+    },
 )
 def create_backup(
     request_body: BackupRequest,

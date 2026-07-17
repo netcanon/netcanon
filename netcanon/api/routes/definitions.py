@@ -39,6 +39,9 @@ def list_definitions(
     "/{type_key}",
     response_model=DeviceDefinition,
     summary="Get a single device definition by type_key",
+    responses={
+        404: {"description": "No definition with this `type_key` is loaded."}
+    },
 )
 def get_definition(
     type_key: str,
