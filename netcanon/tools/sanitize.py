@@ -133,6 +133,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from ..ip_transition import embedded_ipv4s
 from ..migration.canonical.intent import CanonicalIntent
 from ..migration.codecs.base import ParseError
 from ..migration.codecs.registry import get_codec
@@ -987,16 +988,6 @@ def sanitize_intent(  # noqa: C901
 # Substitution-table — counter-per-session for cross-reference stability
 # ---------------------------------------------------------------------------
 
-# NAT64 carries the IPv4 in its low 32 bits but — unlike 6to4 / IPv4-mapped /
-# Teredo — has no ``ipaddress`` accessor, so we recognise the prefixes and
-# slice the bits ourselves.  Both the well-known prefix (RFC 6052) and the
-# RFC 8215 local-use prefix are in play.
-_NAT64_NETWORKS = (
-    ipaddress.ip_network("64:ff9b::/96"),
-    ipaddress.ip_network("64:ff9b:1::/48"),
-)
-
-
 def _ipv4_is_public(addr: ipaddress.IPv4Address) -> bool:
     """True iff *addr* is a globally-routable IPv4 the sanitizer must
     redact — the exact inverse of :meth:`_SubstitutionTable.redact_ipv4`'s
@@ -1030,24 +1021,11 @@ def _embedded_public_ipv4(
     preserve branch emitted them verbatim — leaking the embedded public
     IPv4 (audit 276eaeb T0-4).  Returns ``None`` when no transition IPv4
     is present, or the embedded IPv4 is itself private / docs / reserved
-    (nothing to leak — e.g. ``2002:c0a8:0101::`` embeds 192.168.1.1)."""
-    candidates: list[ipaddress.IPv4Address] = []
-    if addr.sixtofour is not None:
-        candidates.append(addr.sixtofour)
-    if addr.ipv4_mapped is not None:
-        candidates.append(addr.ipv4_mapped)
-    if addr.teredo is not None:
-        # (server, client): both are clear-text routable IPv4s.
-        candidates.extend(addr.teredo)
-    if any(addr in net for net in _NAT64_NETWORKS):
-        candidates.append(ipaddress.IPv4Address(int(addr) & 0xFFFFFFFF))
-    if not candidates:
-        # IPv4-compatible (deprecated): ``::a.b.c.d`` — all high bits zero
-        # with a non-trivial low word (exclude ``::`` and ``::1``).
-        low = int(addr) & 0xFFFFFFFF
-        if (int(addr) >> 32) == 0 and low > 1:
-            candidates.append(ipaddress.IPv4Address(low))
-    for v4 in candidates:
+    (nothing to leak — e.g. ``2002:c0a8:0101::`` embeds 192.168.1.1).
+
+    The transition-format extraction is shared with the egress allow-list
+    via :func:`netcanon.ip_transition.embedded_ipv4s` (SEC-3 / #42)."""
+    for v4 in embedded_ipv4s(addr):
         if _ipv4_is_public(v4):
             return v4
     return None
