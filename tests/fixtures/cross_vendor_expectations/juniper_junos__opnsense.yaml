@@ -268,14 +268,18 @@ per_field_expectation:
     references: [junos-initial-config, opnsense-system]
 
   dns_servers:
-    disposition: lossy
-    reason: >
-      Junos ``set system name-server`` lines map to OPNsense
-      repeated ``<system>/<dnsserver>`` elements.  The OPNsense codec
-      parses those ``<system>/<dnsserver>`` children into the canonical
-      ``dns_servers`` list (parse.py:232) and re-emits one
-      ``<dnsserver>`` per entry on render (render.py:104), so the
-      resolver list round-trips junos→opnsense (preserved, not dropped).
+    disposition: good
+    note: >
+      Junos ``set system name-server`` lines parse to the canonical
+      ``dns_servers`` list (parse.py:1260, deduped first-seen at
+      parse.py:889).  The OPNsense codec re-emits one
+      ``<system>/<dnsserver>`` per entry on render (render.py:104) with
+      no count cap, comma-join, or normalization, and re-parses each
+      child back one-per-entry (parse.py:232).  The bare-address
+      resolver list round-trips junos→opnsense losslessly (Fid-F7:
+      promoted from a conservative lossy holdover — the mesh reads this
+      cell as preserved and no sub-canonical nuance is dropped for this
+      direction).
     references: [junos-initial-config, opnsense-system]
 
   ntp_servers:

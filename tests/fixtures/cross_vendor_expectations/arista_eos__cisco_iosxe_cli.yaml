@@ -228,17 +228,19 @@ per_field_expectation:
     references: [vlans, switchport]
 
   static_routes:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Default-VRF static routes round-trip cleanly (Arista's CIDR
       form converts to / from Cisco's dotted-mask form via the
       codecs).  Per-VRF static routes (``ip route vrf X ...``)
-      now round-trip too: both codecs harvest and render the
-      per-VRF form via ``CanonicalStaticRoute.vrf`` (Arista
-      ``ip route vrf X`` <-> Cisco ``ip route vrf X``).  The
-      ``lossy`` disposition is a conservative holdover from
-      before the v0.2.0 vrf wire-up (the mesh reads this cell as
-      preserved); a candidate for promotion to ``good``.
+      round-trip through ``CanonicalStaticRoute.vrf`` (v0.2.0 wire-up
+      on both codecs); the two-token ``<iface> <gateway>`` form, admin
+      distance, and IPv6 (``ipv6 route``) all render and re-parse.
+      Every field the Arista parser populates (destination, gateway,
+      interface, metric, vrf) is emitted by the Cisco IOS-XE render;
+      interface next-hop names track the rename mesh.  (Fid-F7:
+      promoted from a conservative lossy holdover that predated the
+      v0.2.0 vrf wire-up.)
     references: [static_routes, vrf]
 
   # ── Tier 2 — auto-translate with review ──

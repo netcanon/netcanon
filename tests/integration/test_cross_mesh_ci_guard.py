@@ -149,6 +149,38 @@ def test_codec_bug_count_within_baseline(mesh_and_recon, baseline):
     )
 
 
+def test_methodology_issue_buckets_within_baseline(mesh_and_recon, baseline):
+    """The honesty-debt buckets must not exceed the committed baseline (Fid-F7).
+
+    ``METHODOLOGY_ISSUE_under`` = (preserved, lossy/unsupported): the
+    expectation over-declares a loss the render doesn't actually incur on the
+    corpus.  ``METHODOLOGY_ISSUE_over`` = (drifted, not_applicable): the
+    expectation under-declares — a field the source populates and the target
+    drops is mislabelled 'structurally absent'.  Both are honesty debt that
+    should only SHRINK: a promotion sweep (Fid-F7) or a
+    ``not_applicable``→``unsupported`` fix lowers them, and ``<=`` lets that
+    pass.  A new wire-up that lands a parse/render half WITHOUT flipping the
+    source-side disposition YAML grows ``METHODOLOGY_under`` (the exact
+    unpinned drift Fid-F7 flagged — 908→922→926 across the promotion wave)
+    and turns this red, forcing the honesty flip to ship WITH the wire-up
+    rather than accrete as silent, unaudited debt.  When a bucket legitimately
+    moves, regenerate the baseline consciously
+    (``tools/run_phase4_reconciliation.py --write-baseline``)."""
+    _, result = mesh_and_recon
+    for bucket in ("METHODOLOGY_ISSUE_under", "METHODOLOGY_ISSUE_over"):
+        live = result["aggregate"][bucket]
+        base = baseline["aggregate"][bucket]
+        assert live <= base, (
+            f"{bucket} regressed: live={live} > baseline={base}.\n"
+            "The expectation-vs-reality mismatch debt grew — a wire-up likely "
+            "landed a parse/render half without flipping the source-side "
+            "disposition YAML (METHODOLOGY_under), or a not_applicable "
+            "disposition now hides a real drop (METHODOLOGY_over).  Flip the "
+            "stale disposition(s) in the same change, or re-baseline "
+            "consciously (tools/run_phase4_reconciliation.py --write-baseline)."
+        )
+
+
 # The absolute, human-audited ceiling on cross-vendor CODEC_BUG cells.
 # UNLIKE test_codec_bug_count_within_baseline (which compares against the
 # committed latest.json — a file run_phase4_reconciliation.py rewrites when

@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-07-17T00:54:16+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260717T005406Z.json",
-  "mesh_run_started_utc": "2026-07-17T00:53:53+00:00",
+  "started_utc": "2026-07-17T03:30:50+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260717T033049Z.json",
+  "mesh_run_started_utc": "2026-07-17T03:30:37+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -4134,19 +4134,19 @@
     }
   ],
   "aggregate": {
-    "ALIGNED": 1678,
+    "ALIGNED": 1689,
     "CODEC_BUG": 5,
     "EXPECTED_LOSSY": 1224,
     "EXPECTED_UNSUPPORTED": 736,
-    "METHODOLOGY_ISSUE_under": 930,
+    "METHODOLOGY_ISSUE_under": 919,
     "METHODOLOGY_ISSUE_over": 21,
     "STRUCTURAL_ONLY": 1179,
     "TRIVIAL_EMPTY": 9526,
     "fields_total": 15299,
     "severity_high": 5,
     "severity_medium": 107,
-    "severity_low": 2023,
-    "severity_ok": 13164
+    "severity_low": 2012,
+    "severity_ok": 13175
   },
   "severity_matrix": {
     "arista_eos": {
@@ -5153,9 +5153,9 @@
         },
         "static_routes": {
           "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
         },
         "dhcp_servers": {
           "actual": "trivially_preserved",
@@ -5477,11 +5477,11 @@
         }
       },
       "summary": {
-        "ALIGNED": 7,
+        "ALIGNED": 8,
         "CODEC_BUG": 1,
         "EXPECTED_LOSSY": 4,
         "EXPECTED_UNSUPPORTED": 0,
-        "METHODOLOGY_ISSUE_under": 1,
+        "METHODOLOGY_ISSUE_under": 0,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 12,
@@ -5489,8 +5489,8 @@
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 1,
-        "severity_ok": 23
+        "severity_low": 0,
+        "severity_ok": 24
       }
     },
     {
@@ -6100,9 +6100,9 @@
         },
         "static_routes": {
           "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
         },
         "dhcp_servers": {
           "actual": "trivially_preserved",
@@ -6320,11 +6320,11 @@
         }
       },
       "summary": {
-        "ALIGNED": 7,
+        "ALIGNED": 8,
         "CODEC_BUG": 1,
         "EXPECTED_LOSSY": 3,
         "EXPECTED_UNSUPPORTED": 0,
-        "METHODOLOGY_ISSUE_under": 2,
+        "METHODOLOGY_ISSUE_under": 1,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 12,
@@ -6332,8 +6332,8 @@
         "missing_in_phase1": 3,
         "severity_high": 1,
         "severity_medium": 0,
-        "severity_low": 2,
-        "severity_ok": 22
+        "severity_low": 1,
+        "severity_ok": 23
       }
     },
     {
