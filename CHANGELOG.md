@@ -77,6 +77,11 @@ also sees IPv6 transition formats); **no breaking API changes**.
   keyword tokens (NX-OS `use-vrf`, IOS-XR `vrf`, static-route tag / bfd); the
   NVE VLAN-VNI binding tolerates an `ingress-replication` tail; FortiGate
   VARP-only SVIs stop emitting an invalid `set ip`.  (#363, #364)
+- **Aruba AOS-S static-route admin distance** — a static route carrying a
+  trailing ``distance N`` / bare-metric token was silently dropped WHOLE by
+  the end-anchored route regex; the distance is now parsed into the canonical
+  ``metric`` and emitted on render, so it round-trips (and Aruba preserves
+  route metric as a render target too).  (#386)
 - **Backup subsystem** — desktop TOFU host-keys persist again (the job
   `settings` snapshot was dead, silently degrading changed-key MITM detection);
   a live job can no longer vanish through a stale-pending eviction window; a

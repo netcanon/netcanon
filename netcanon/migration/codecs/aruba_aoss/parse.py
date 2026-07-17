@@ -123,22 +123,31 @@ _DEFAULT_GW_RE = re.compile(
     r"^ip\s+default-gateway\s+(\d+\.\d+\.\d+\.\d+)", re.IGNORECASE,
 )
 _IP_ROUTE_RE = re.compile(
-    # Two accepted Aruba forms (regex handles both via optional gw):
-    #   ip route DEST/PREFIX GATEWAY
-    #   ip route DEST MASK GATEWAY
+    # Accepted Aruba forms (regex handles all via optional mask + distance):
+    #   ip route DEST/PREFIX GATEWAY [distance D]
+    #   ip route DEST MASK GATEWAY [distance D]
     # Group 1: destination (bare IP or CIDR).  Group 2: optional
-    # dotted-decimal mask (legacy form).  Group 3: gateway IP.  When
-    # group 2 is present, group 1 is a bare IP and the mask drives
-    # the canonical prefix length; when absent, group 1 is CIDR.
+    # dotted-decimal mask (legacy form).  Group 3: gateway IP.  Group 4:
+    # optional administrative distance (canonical ``metric``) — the
+    # ``distance N`` keyword form or a bare trailing integer (AOS-S accepts
+    # both).  Without group 4 the route used to FAIL the end-anchor and be
+    # silently dropped whole (HEAD-review Fid-F7 aruba distance-drop).  When
+    # group 2 is present, group 1 is a bare IP and the mask drives the
+    # canonical prefix length; when absent, group 1 is CIDR.
     r"^ip\s+route\s+(\S+)"
     r"(?:\s+(\d+\.\d+\.\d+\.\d+))?"
-    r"\s+(\d+\.\d+\.\d+\.\d+)\s*$",
+    r"\s+(\d+\.\d+\.\d+\.\d+)"
+    r"(?:\s+(?:distance\s+)?(\d+))?"
+    r"\s*$",
     re.IGNORECASE,
 )
 _IPV6_ROUTE_RE = re.compile(
-    # ``ipv6 route <prefix>/<len> <next-hop>`` — the IPv6 form (does not
-    # overlap ``^ip route``; ``ipv6`` != ``ip``).
-    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)\s*$",
+    # ``ipv6 route <prefix>/<len> <next-hop> [distance D]`` — the IPv6 form
+    # (does not overlap ``^ip route``; ``ipv6`` != ``ip``).  Group 3 is the
+    # optional administrative distance (canonical ``metric``).
+    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)"
+    r"(?:\s+(?:distance\s+)?(\d+))?"
+    r"\s*$",
     re.IGNORECASE,
 )
 _VLAN_HEADER_RE = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
@@ -1050,6 +1059,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             intent.static_routes.append(CanonicalStaticRoute(
                 destination=rt6.group(1),  # already <prefix>/<len>
                 gateway=rt6.group(2),
+                metric=int(rt6.group(3)) if rt6.group(3) else 0,
             ))
             i += 1
             continue
@@ -1076,6 +1086,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             intent.static_routes.append(CanonicalStaticRoute(
                 destination=canonical_dest,
                 gateway=gateway,
+                metric=int(rt.group(4)) if rt.group(4) else 0,
             ))
             i += 1
             continue

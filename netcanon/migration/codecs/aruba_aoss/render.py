@@ -876,13 +876,22 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # a v6 default is just ``ipv6 route ::/0 <gw>``).  Emitting ``ip route``
     # for a v6 destination is invalid CLI.
     for route in tree.static_routes:
+        # Administrative distance → the ``distance N`` suffix (canonical
+        # ``metric``; 0 = unset, emit nothing so the device default applies).
+        dist = f" distance {route.metric}" if route.metric else ""
         if ":" in (route.destination or ""):
-            lines.append(f"ipv6 route {route.destination} {route.gateway}")
-        elif route.destination in ("0.0.0.0/0", "default"):
+            lines.append(
+                f"ipv6 route {route.destination} {route.gateway}{dist}"
+            )
+        elif route.destination in ("0.0.0.0/0", "default") and not route.metric:
+            # AOS-S convention for the default route.  ``ip default-gateway``
+            # has no admin-distance form, so a default route WITH a metric
+            # falls through to the explicit ``ip route 0.0.0.0/0 <gw>
+            # distance N`` form below instead.
             lines.append(f"ip default-gateway {route.gateway}")
         else:
             lines.append(
-                f"ip route {route.destination} {route.gateway}"
+                f"ip route {route.destination} {route.gateway}{dist}"
             )
 
     return "\n".join(lines) + "\n"
