@@ -80,7 +80,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v6.3.0
         with:
           python-version: "3.13"
       - name: Install dependencies
@@ -227,7 +227,7 @@ jobs:
           exit 1
 
       - name: Set up Python
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v6.3.0
         with:
           python-version: "3.13"
           # No `cache: "pip"` -- this is a single-shot publish job
@@ -307,7 +307,7 @@ jobs:
         # softprops/action-gh-release creates the release page if it
         # doesn't yet exist (handy for tags pushed before this workflow
         # existed) and otherwise appends the MSI to the existing one.
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           # Normalized tag (never a full ref) from the "Refuse a non-tag ref"
           # step so softprops can't mint a junk `refs/tags/refs/tags/…` tag (P4a).
