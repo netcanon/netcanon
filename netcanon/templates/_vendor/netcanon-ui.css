@@ -1,0 +1,674 @@
+/* netcanon-ui.css — GENERATED from tokens/ by tools/build_css.py. DO NOT EDIT BY HAND.
+   Source of truth: netcanon-dev/ui-design-spec tokens/*.json (pin a tagged version).
+   Usage: <html data-nc-theme="ocean" data-nc-mode="dark|light">  (omit data-nc-mode for auto).
+   Attributes are nc-namespaced so existing apps' own data-theme usage cannot collide. */
+
+:root {
+  --nc-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --nc-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --nc-fs-xs: 11px;
+  --nc-fs-sm: 12px;
+  --nc-fs-base: 14px;
+  --nc-fs-md: 15px;
+  --nc-fs-lg: 18px;
+  --nc-fs-xl: 22px;
+  --nc-fs-2xl: 28px;
+  --nc-fw-regular: 400;
+  --nc-fw-medium: 500;
+  --nc-fw-semibold: 600;
+  --nc-fw-bold: 700;
+  --nc-lh-tight: 1.2;
+  --nc-lh-base: 1.5;
+  --nc-lh-relaxed: 1.7;
+  --nc-space-0: 0px;
+  --nc-space-1: 2px;
+  --nc-space-2: 4px;
+  --nc-space-3: 8px;
+  --nc-space-4: 12px;
+  --nc-space-5: 16px;
+  --nc-space-6: 20px;
+  --nc-space-7: 24px;
+  --nc-space-8: 32px;
+  --nc-space-9: 40px;
+  --nc-space-10: 48px;
+  --nc-space-11: 64px;
+  --nc-r-xs: 3px;
+  --nc-r-sm: 4px;
+  --nc-r-md: 6px;
+  --nc-r-lg: 8px;
+  --nc-r-xl: 12px;
+  --nc-r-full: 9999px;
+  --nc-dur-fast: 120ms;
+  --nc-dur-base: 200ms;
+  --nc-dur-slow: 320ms;
+  --nc-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --nc-ease-decelerate: cubic-bezier(0, 0, 0, 1);
+  --nc-ease-accelerate: cubic-bezier(0.3, 0, 1, 1);
+  --nc-gradient: linear-gradient(135deg, var(--nc-grad-a), var(--nc-grad-b));
+  --nc-focus: var(--nc-accent);
+  --nc-bg: #ffffff;
+  --nc-surface: #f6f8fa;
+  --nc-surface-2: #ebeff3;
+  --nc-bg-inverse: #0d1117;
+  --nc-scrim: rgba(15,23,42,.35);
+  --nc-text: #1f2328;
+  --nc-text-muted: #656d76;
+  --nc-text-faint: #6e6e6e;
+  --nc-text-inverse: #ffffff;
+  --nc-border: #d0d7de;
+  --nc-border-strong: #afb8c1;
+  --nc-ok: #1a7f37;
+  --nc-warn: #9a6700;
+  --nc-danger: #cf222e;
+  --nc-ok-emphasis: #1a7f37;
+  --nc-warn-emphasis: #9a6700;
+  --nc-danger-emphasis: #cf222e;
+  --nc-ok-rgb: 26,127,55;
+  --nc-warn-rgb: 154,103,0;
+  --nc-danger-rgb: 207,34,46;
+  --nc-muted-rgb: 101,109,118;
+  --nc-shadow-sm: 0 1px 3px rgba(0,0,0,.1);
+  --nc-shadow-md: 0 4px 18px rgba(15,23,42,.08);
+  --nc-shadow-lg: 0 20px 50px rgba(15,23,42,.18);
+  --nc-accent: #0969da;
+  --nc-accent-emphasis: #0969da;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #0860ca;
+  --nc-accent-rgb: 9,105,218;
+  --nc-grad-a: #0969da;
+  --nc-grad-b: #1b7c83;
+  --nc-grad-a-rgb: 9,105,218;
+  --nc-grad-b-rgb: 27,124,131;
+}
+
+[data-nc-mode="dark"] {
+  --nc-bg: #0d1117;
+  --nc-surface: #161b22;
+  --nc-surface-2: #1c2330;
+  --nc-bg-inverse: #e6edf3;
+  --nc-scrim: rgba(0,0,0,.6);
+  --nc-text: #e6edf3;
+  --nc-text-muted: #8b949e;
+  --nc-text-faint: #7d8590;
+  --nc-text-inverse: #0d1117;
+  --nc-border: #30363d;
+  --nc-border-strong: #444c56;
+  --nc-ok: #3fb950;
+  --nc-warn: #d29922;
+  --nc-danger: #f85149;
+  --nc-ok-emphasis: #238636;
+  --nc-warn-emphasis: #9e6a03;
+  --nc-danger-emphasis: #da3633;
+  --nc-ok-rgb: 63,185,80;
+  --nc-warn-rgb: 210,153,34;
+  --nc-danger-rgb: 248,81,73;
+  --nc-muted-rgb: 139,148,158;
+  --nc-shadow-sm: 0 1px 3px rgba(0,0,0,.4);
+  --nc-shadow-md: 0 4px 20px rgba(0,0,0,.3);
+  --nc-shadow-lg: 0 20px 60px rgba(0,0,0,.5);
+  --nc-accent: #4493f8;
+  --nc-accent-emphasis: #1f6feb;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #1a5fd0;
+  --nc-accent-rgb: 68,147,248;
+  --nc-grad-a: #1f6feb;
+  --nc-grad-b: #39c5cf;
+  --nc-grad-a-rgb: 31,111,235;
+  --nc-grad-b-rgb: 57,197,207;
+}
+
+[data-nc-theme="ocean"] {
+  --nc-accent: #0969da;
+  --nc-accent-emphasis: #0969da;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #0860ca;
+  --nc-accent-rgb: 9,105,218;
+  --nc-grad-a: #0969da;
+  --nc-grad-b: #1b7c83;
+  --nc-grad-a-rgb: 9,105,218;
+  --nc-grad-b-rgb: 27,124,131;
+}
+[data-nc-mode="dark"][data-nc-theme="ocean"] {
+  --nc-accent: #4493f8;
+  --nc-accent-emphasis: #1f6feb;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #1a5fd0;
+  --nc-accent-rgb: 68,147,248;
+  --nc-grad-a: #1f6feb;
+  --nc-grad-b: #39c5cf;
+  --nc-grad-a-rgb: 31,111,235;
+  --nc-grad-b-rgb: 57,197,207;
+}
+
+[data-nc-theme="indigo"] {
+  --nc-accent: #4f46e5;
+  --nc-accent-emphasis: #4f46e5;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #4338ca;
+  --nc-accent-rgb: 79,70,229;
+  --nc-grad-a: #4f46e5;
+  --nc-grad-b: #7c3aed;
+  --nc-grad-a-rgb: 79,70,229;
+  --nc-grad-b-rgb: 124,58,237;
+}
+[data-nc-mode="dark"][data-nc-theme="indigo"] {
+  --nc-accent: #818cf8;
+  --nc-accent-emphasis: #4f46e5;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #4338ca;
+  --nc-accent-rgb: 129,140,248;
+  --nc-grad-a: #6366f1;
+  --nc-grad-b: #a78bfa;
+  --nc-grad-a-rgb: 99,102,241;
+  --nc-grad-b-rgb: 167,139,250;
+}
+
+[data-nc-theme="lagoon"] {
+  --nc-accent: #1b7c83;
+  --nc-accent-emphasis: #1b7c83;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #136c72;
+  --nc-accent-rgb: 27,124,131;
+  --nc-grad-a: #1b7c83;
+  --nc-grad-b: #0969da;
+  --nc-grad-a-rgb: 27,124,131;
+  --nc-grad-b-rgb: 9,105,218;
+}
+[data-nc-mode="dark"][data-nc-theme="lagoon"] {
+  --nc-accent: #39c5cf;
+  --nc-accent-emphasis: #1b7c83;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #14646a;
+  --nc-accent-rgb: 57,197,207;
+  --nc-grad-a: #39c5cf;
+  --nc-grad-b: #2f81f7;
+  --nc-grad-a-rgb: 57,197,207;
+  --nc-grad-b-rgb: 47,129,247;
+}
+
+[data-nc-theme="verdant"] {
+  --nc-accent: #047857;
+  --nc-accent-emphasis: #047857;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #065f46;
+  --nc-accent-rgb: 4,120,87;
+  --nc-grad-a: #047857;
+  --nc-grad-b: #0369a1;
+  --nc-grad-a-rgb: 4,120,87;
+  --nc-grad-b-rgb: 3,105,161;
+}
+[data-nc-mode="dark"][data-nc-theme="verdant"] {
+  --nc-accent: #00e5a0;
+  --nc-accent-emphasis: #00e5a0;
+  --nc-on-accent: #06121f;
+  --nc-accent-hover: #2df0b2;
+  --nc-accent-rgb: 0,229,160;
+  --nc-grad-a: #00e5a0;
+  --nc-grad-b: #0ea5e9;
+  --nc-grad-a-rgb: 0,229,160;
+  --nc-grad-b-rgb: 14,165,233;
+}
+
+[data-nc-theme="violet"] {
+  --nc-accent: #8250df;
+  --nc-accent-emphasis: #8250df;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #6639ba;
+  --nc-accent-rgb: 130,80,223;
+  --nc-grad-a: #8250df;
+  --nc-grad-b: #bf3989;
+  --nc-grad-a-rgb: 130,80,223;
+  --nc-grad-b-rgb: 191,57,137;
+}
+[data-nc-mode="dark"][data-nc-theme="violet"] {
+  --nc-accent: #a371f7;
+  --nc-accent-emphasis: #8957e5;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #7645d3;
+  --nc-accent-rgb: 163,113,247;
+  --nc-grad-a: #a371f7;
+  --nc-grad-b: #f778ba;
+  --nc-grad-a-rgb: 163,113,247;
+  --nc-grad-b-rgb: 247,120,186;
+}
+
+[data-nc-theme="rose"] {
+  --nc-accent: #bf3989;
+  --nc-accent-emphasis: #bf3989;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #99286e;
+  --nc-accent-rgb: 191,57,137;
+  --nc-grad-a: #bf3989;
+  --nc-grad-b: #8250df;
+  --nc-grad-a-rgb: 191,57,137;
+  --nc-grad-b-rgb: 130,80,223;
+}
+[data-nc-mode="dark"][data-nc-theme="rose"] {
+  --nc-accent: #f778ba;
+  --nc-accent-emphasis: #bf3989;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #a63180;
+  --nc-accent-rgb: 247,120,186;
+  --nc-grad-a: #f778ba;
+  --nc-grad-b: #a371f7;
+  --nc-grad-a-rgb: 247,120,186;
+  --nc-grad-b-rgb: 163,113,247;
+}
+
+[data-nc-theme="ember"] {
+  --nc-accent: #bc4c00;
+  --nc-accent-emphasis: #bc4c00;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #9b3d00;
+  --nc-accent-rgb: 188,76,0;
+  --nc-grad-a: #bc4c00;
+  --nc-grad-b: #bf3989;
+  --nc-grad-a-rgb: 188,76,0;
+  --nc-grad-b-rgb: 191,57,137;
+}
+[data-nc-mode="dark"][data-nc-theme="ember"] {
+  --nc-accent: #f0883e;
+  --nc-accent-emphasis: #bc4c00;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #a04100;
+  --nc-accent-rgb: 240,136,62;
+  --nc-grad-a: #f0883e;
+  --nc-grad-b: #f778ba;
+  --nc-grad-a-rgb: 240,136,62;
+  --nc-grad-b-rgb: 247,120,186;
+}
+
+[data-nc-theme="gold"] {
+  --nc-accent: #9a6700;
+  --nc-accent-emphasis: #9a6700;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #7d5300;
+  --nc-accent-rgb: 154,103,0;
+  --nc-grad-a: #9a6700;
+  --nc-grad-b: #bc4c00;
+  --nc-grad-a-rgb: 154,103,0;
+  --nc-grad-b-rgb: 188,76,0;
+}
+[data-nc-mode="dark"][data-nc-theme="gold"] {
+  --nc-accent: #e3b341;
+  --nc-accent-emphasis: #e3b341;
+  --nc-on-accent: #231b00;
+  --nc-accent-hover: #eac55f;
+  --nc-accent-rgb: 227,179,65;
+  --nc-grad-a: #e3b341;
+  --nc-grad-b: #f0883e;
+  --nc-grad-a-rgb: 227,179,65;
+  --nc-grad-b-rgb: 240,136,62;
+}
+
+[data-nc-theme="graphite"] {
+  --nc-accent: #57606a;
+  --nc-accent-emphasis: #57606a;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #424a53;
+  --nc-accent-rgb: 87,96,106;
+  --nc-grad-a: #57606a;
+  --nc-grad-b: #768390;
+  --nc-grad-a-rgb: 87,96,106;
+  --nc-grad-b-rgb: 118,131,144;
+}
+[data-nc-mode="dark"][data-nc-theme="graphite"] {
+  --nc-accent: #9ea7b3;
+  --nc-accent-emphasis: #5d6773;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #4d545e;
+  --nc-accent-rgb: 158,167,179;
+  --nc-grad-a: #768390;
+  --nc-grad-b: #9ea7b3;
+  --nc-grad-a-rgb: 118,131,144;
+  --nc-grad-b-rgb: 158,167,179;
+}
+
+[data-nc-theme="aurora"] {
+  --nc-accent: #6741d9;
+  --nc-accent-emphasis: #6741d9;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #5330b0;
+  --nc-accent-rgb: 103,65,217;
+  --nc-grad-a: #6741d9;
+  --nc-grad-b: #047857;
+  --nc-grad-a-rgb: 103,65,217;
+  --nc-grad-b-rgb: 4,120,87;
+}
+[data-nc-mode="dark"][data-nc-theme="aurora"] {
+  --nc-accent: #a78bfa;
+  --nc-accent-emphasis: #7452e0;
+  --nc-on-accent: #ffffff;
+  --nc-accent-hover: #6039cc;
+  --nc-accent-rgb: 167,139,250;
+  --nc-grad-a: #7c5cf0;
+  --nc-grad-b: #00e5a0;
+  --nc-grad-a-rgb: 124,92,240;
+  --nc-grad-b-rgb: 0,229,160;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-nc-mode="light"]) {
+    --nc-bg: #0d1117;
+    --nc-surface: #161b22;
+    --nc-surface-2: #1c2330;
+    --nc-bg-inverse: #e6edf3;
+    --nc-scrim: rgba(0,0,0,.6);
+    --nc-text: #e6edf3;
+    --nc-text-muted: #8b949e;
+    --nc-text-faint: #7d8590;
+    --nc-text-inverse: #0d1117;
+    --nc-border: #30363d;
+    --nc-border-strong: #444c56;
+    --nc-ok: #3fb950;
+    --nc-warn: #d29922;
+    --nc-danger: #f85149;
+    --nc-ok-emphasis: #238636;
+    --nc-warn-emphasis: #9e6a03;
+    --nc-danger-emphasis: #da3633;
+    --nc-ok-rgb: 63,185,80;
+    --nc-warn-rgb: 210,153,34;
+    --nc-danger-rgb: 248,81,73;
+    --nc-muted-rgb: 139,148,158;
+    --nc-shadow-sm: 0 1px 3px rgba(0,0,0,.4);
+    --nc-shadow-md: 0 4px 20px rgba(0,0,0,.3);
+    --nc-shadow-lg: 0 20px 60px rgba(0,0,0,.5);
+    --nc-accent: #4493f8;
+    --nc-accent-emphasis: #1f6feb;
+    --nc-on-accent: #ffffff;
+    --nc-accent-hover: #1a5fd0;
+    --nc-accent-rgb: 68,147,248;
+    --nc-grad-a: #1f6feb;
+    --nc-grad-b: #39c5cf;
+    --nc-grad-a-rgb: 31,111,235;
+    --nc-grad-b-rgb: 57,197,207;
+  }
+  :root:not([data-nc-mode="light"])[data-nc-theme="ocean"] {
+    --nc-accent: #4493f8;
+    --nc-accent-emphasis: #1f6feb;
+    --nc-on-accent: #ffffff;
+    --nc-accent-hover: #1a5fd0;
+    --nc-accent-rgb: 68,147,248;
+    --nc-grad-a: #1f6feb;
+    --nc-grad-b: #39c5cf;
+    --nc-grad-a-rgb: 31,111,235;
+    --nc-grad-b-rgb: 57,197,207;
+  }
+  :root:not([data-nc-mode="light"])[data-nc-theme="indigo"] {
+    --nc-accent: #818cf8;
+    --nc-accent-emphasis: #4f46e5;
+    --nc-on-accent: #ffffff;
+    --nc-accent-hover: #4338ca;
+    --nc-accent-rgb: 129,140,248;
+    --nc-grad-a: #6366f1;
+    --nc-grad-b: #a78bfa;
+    --nc-grad-a-rgb: 99,102,241;
+    --nc-grad-b-rgb: 167,139,250;
+  }
+  :root:not([data-nc-mode="light"])[data-nc-theme="lagoon"] {
+    --nc-accent: #39c5cf;
+    --nc-accent-emphasis: #1b7c83;
+    --nc-on-accent: #ffffff;
+    --nc-accent-hover: #14646a;
+    --nc-accent-rgb: 57,197,207;
+    --nc-grad-a: #39c5cf;
+    --nc-grad-b: #2f81f7;
+    --nc-grad-a-rgb: 57,197,207;
+    --nc-grad-b-rgb: 47,129,247;
+  }
+  :root:not([data-nc-mode="light"])[data-nc-theme="verdant"] {
+    --nc-accent: #00e5a0;
+    --nc-accent-emphasis: #00e5a0;
+    --nc-on-accent: #06121f;
+    --nc-accent-hover: #2df0b2;
+    --nc-accent-rgb: 0,229,160;
+    --nc-grad-a: #00e5a0;
+    --nc-grad-b: #0ea5e9;
+    --nc-grad-a-rgb: 0,229,160;
+    --nc-grad-b-rgb: 14,165,233;
+  }
+  :root:not([data-nc-mode="light"])[data-nc-theme="violet"] {
+    --nc-accent: #a371f7;
+    --nc-accent-emphasis: #8957e5;
+    --nc-on-accent: #ffffff;
+    --nc-accent-hover: #7645d3;
+    --nc-accent-rgb: 163,113,247;
+    --nc-grad-a: #a371f7;
+    --nc-grad-b: #f778ba;
+    --nc-grad-a-rgb: 163,113,247;
+    --nc-grad-b-rgb: 247,120,186;
+  }
+  :root:not([data-nc-mode="light"])[data-nc-theme="rose"] {
+    --nc-accent: #f778ba;
+    --nc-accent-emphasis: #bf3989;
+    --nc-on-accent: #ffffff;
+    --nc-accent-hover: #a63180;
+    --nc-accent-rgb: 247,120,186;
+    --nc-grad-a: #f778ba;
+    --nc-grad-b: #a371f7;
+    --nc-grad-a-rgb: 247,120,186;
+    --nc-grad-b-rgb: 163,113,247;
+  }
+  :root:not([data-nc-mode="light"])[data-nc-theme="ember"] {
+    --nc-accent: #f0883e;
+    --nc-accent-emphasis: #bc4c00;
+    --nc-on-accent: #ffffff;
+    --nc-accent-hover: #a04100;
+    --nc-accent-rgb: 240,136,62;
+    --nc-grad-a: #f0883e;
+    --nc-grad-b: #f778ba;
+    --nc-grad-a-rgb: 240,136,62;
+    --nc-grad-b-rgb: 247,120,186;
+  }
+  :root:not([data-nc-mode="light"])[data-nc-theme="gold"] {
+    --nc-accent: #e3b341;
+    --nc-accent-emphasis: #e3b341;
+    --nc-on-accent: #231b00;
+    --nc-accent-hover: #eac55f;
+    --nc-accent-rgb: 227,179,65;
+    --nc-grad-a: #e3b341;
+    --nc-grad-b: #f0883e;
+    --nc-grad-a-rgb: 227,179,65;
+    --nc-grad-b-rgb: 240,136,62;
+  }
+  :root:not([data-nc-mode="light"])[data-nc-theme="graphite"] {
+    --nc-accent: #9ea7b3;
+    --nc-accent-emphasis: #5d6773;
+    --nc-on-accent: #ffffff;
+    --nc-accent-hover: #4d545e;
+    --nc-accent-rgb: 158,167,179;
+    --nc-grad-a: #768390;
+    --nc-grad-b: #9ea7b3;
+    --nc-grad-a-rgb: 118,131,144;
+    --nc-grad-b-rgb: 158,167,179;
+  }
+  :root:not([data-nc-mode="light"])[data-nc-theme="aurora"] {
+    --nc-accent: #a78bfa;
+    --nc-accent-emphasis: #7452e0;
+    --nc-on-accent: #ffffff;
+    --nc-accent-hover: #6039cc;
+    --nc-accent-rgb: 167,139,250;
+    --nc-grad-a: #7c5cf0;
+    --nc-grad-b: #00e5a0;
+    --nc-grad-a-rgb: 124,92,240;
+    --nc-grad-b-rgb: 0,229,160;
+  }
+}
+
+/* ---- skeleton: the shared netcanon-dev body plan ------------------------------------
+   Opt-in .nc-* classes so nothing collides with a project's existing CSS. The layout
+   language is distilled from the baselines: app bar + brand, ~1140px content column,
+   auto-fill card grid, 1px-border depth, uppercase micro-headers, mono for values. */
+
+/* base element defaults — deliberately minimal, safe over existing app CSS */
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font: var(--nc-fw-regular) var(--nc-fs-base)/var(--nc-lh-base) var(--nc-font);
+  background: var(--nc-bg);
+  color: var(--nc-text);
+  transition: background-color var(--nc-dur-base) var(--nc-ease-standard),
+              color var(--nc-dur-base) var(--nc-ease-standard);
+}
+a { color: var(--nc-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+::selection { background: rgba(var(--nc-accent-rgb), .30); }
+:focus-visible { outline: 2px solid var(--nc-focus); outline-offset: 2px; border-radius: 2px; }
+code, kbd, pre, samp { font-family: var(--nc-mono); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
+/* set by theme-picker.js for ~80ms around a theme/mode swap: the swap must be atomic,
+   never a crossfade (fills and on-colors would fade out of step and turn illegible) */
+[data-nc-switching], [data-nc-switching] *,
+[data-nc-switching] *::before, [data-nc-switching] *::after { transition: none !important; }
+
+/* layout */
+.nc-container { max-width: 1140px; margin: 0 auto; padding: 0 var(--nc-space-7); }
+.nc-main { padding: var(--nc-space-7) 0 var(--nc-space-9); }
+
+/* app bar — the shared silhouette; the 2px gradient strip is the family signature */
+.nc-header {
+  position: relative;
+  display: flex; align-items: center; gap: var(--nc-space-5);
+  padding: var(--nc-space-4) var(--nc-space-7);
+  background: var(--nc-surface);
+  border-bottom: 1px solid var(--nc-border);
+}
+.nc-header::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+  background: var(--nc-gradient);
+}
+.nc-brand {
+  display: flex; align-items: center; gap: var(--nc-space-3);
+  font-weight: var(--nc-fw-semibold); font-size: var(--nc-fs-lg); color: var(--nc-text);
+}
+.nc-brand-dot {
+  width: 14px; height: 14px; border-radius: var(--nc-r-sm);
+  background: var(--nc-gradient); flex: none;
+}
+.nc-nav { display: flex; gap: var(--nc-space-5); margin-left: auto; align-items: center; }
+.nc-nav a {
+  color: var(--nc-text-muted); font-weight: var(--nc-fw-medium); font-size: var(--nc-fs-sm);
+  padding: var(--nc-space-2) 0; border-bottom: 2px solid transparent;
+}
+.nc-nav a:hover { color: var(--nc-text); text-decoration: none; }
+.nc-nav a.active { color: var(--nc-text); border-image: var(--nc-gradient) 1; border-bottom: 2px solid; }
+
+/* cards */
+.nc-grid {
+  display: grid; gap: var(--nc-space-4);
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.nc-card {
+  background: var(--nc-surface);
+  border: 1px solid var(--nc-border);
+  border-radius: var(--nc-r-lg);
+  padding: var(--nc-space-5);
+}
+.nc-card h3 { margin: 0 0 var(--nc-space-3); font-size: var(--nc-fs-md); font-weight: var(--nc-fw-semibold); }
+.nc-card .nc-meta { color: var(--nc-text-muted); font-size: var(--nc-fs-sm); }
+.nc-stat { font: var(--nc-fw-bold) var(--nc-fs-2xl)/var(--nc-lh-tight) var(--nc-mono); }
+
+/* buttons — min-height spacing.10 (48px) clears the 44px touch-target floor the button
+   spec mandates; border-box so the height is identical on <button> and <a>/<div> */
+.nc-btn {
+  box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--nc-space-3);
+  padding: var(--nc-space-3) var(--nc-space-5);
+  min-height: var(--nc-space-10);
+  font: var(--nc-fw-medium) var(--nc-fs-base)/1 var(--nc-font);
+  border-radius: var(--nc-r-md);
+  border: 1px solid var(--nc-border-strong);
+  background: var(--nc-surface-2); color: var(--nc-text);
+  cursor: pointer;
+  transition: background-color var(--nc-dur-fast) var(--nc-ease-standard),
+              border-color var(--nc-dur-fast) var(--nc-ease-standard);
+}
+.nc-btn:hover { background: var(--nc-surface); }
+.nc-btn.primary {
+  background: var(--nc-accent-emphasis); color: var(--nc-on-accent);
+  border-color: transparent;
+}
+.nc-btn.primary:hover { background: var(--nc-accent-hover); }
+.nc-btn.ghost { background: transparent; border-color: transparent; color: var(--nc-accent); }
+.nc-btn.ghost:hover { background: rgba(var(--nc-accent-rgb), .12); }
+.nc-btn.danger { background: var(--nc-danger-emphasis); color: #ffffff; border-color: transparent; }
+.nc-btn[disabled] { opacity: .55; cursor: not-allowed; }
+
+/* forms */
+.nc-field { display: flex; flex-direction: column; gap: var(--nc-space-2); margin-bottom: var(--nc-space-4); }
+.nc-label {
+  font-size: var(--nc-fs-sm); font-weight: var(--nc-fw-semibold);
+  color: var(--nc-text-muted); text-transform: uppercase; letter-spacing: .04em;
+}
+.nc-input, .nc-select, .nc-textarea {
+  font: var(--nc-fw-regular) var(--nc-fs-base)/var(--nc-lh-base) var(--nc-font);
+  color: var(--nc-text);
+  background: var(--nc-surface-2);
+  border: 1px solid var(--nc-border-strong);
+  border-radius: var(--nc-r-md);
+  padding: var(--nc-space-3) var(--nc-space-4);
+}
+.nc-input:focus, .nc-select:focus, .nc-textarea:focus {
+  outline: none; border-color: var(--nc-focus);
+  box-shadow: 0 0 0 3px rgba(var(--nc-accent-rgb), .25);
+}
+
+/* tables — the shared infra-console look */
+.nc-table { width: 100%; border-collapse: collapse; font-size: var(--nc-fs-base); }
+.nc-table th {
+  text-align: left; padding: var(--nc-space-3) var(--nc-space-4);
+  font-size: var(--nc-fs-xs); font-weight: var(--nc-fw-semibold);
+  color: var(--nc-text-muted); text-transform: uppercase; letter-spacing: .05em;
+  border-bottom: 1px solid var(--nc-border-strong);
+  background: var(--nc-surface-2);
+}
+.nc-table td { padding: var(--nc-space-3) var(--nc-space-4); border-bottom: 1px solid var(--nc-border); }
+.nc-table tbody tr:hover { background: var(--nc-surface-2); }
+.nc-table .nc-mono { font-family: var(--nc-mono); font-size: var(--nc-fs-sm); }
+
+/* badges & alerts — feedback hues are theme-invariant so state never changes meaning */
+.nc-badge {
+  display: inline-block; padding: 2px var(--nc-space-3);
+  border-radius: var(--nc-r-full);
+  font-size: var(--nc-fs-sm); font-weight: var(--nc-fw-semibold); line-height: 1.6;
+}
+.nc-badge.ok     { color: var(--nc-ok);     background: rgba(var(--nc-ok-rgb), .15); }
+.nc-badge.warn   { color: var(--nc-warn);   background: rgba(var(--nc-warn-rgb), .15); }
+.nc-badge.danger { color: var(--nc-danger); background: rgba(var(--nc-danger-rgb), .15); }
+.nc-badge.accent { color: var(--nc-accent); background: rgba(var(--nc-accent-rgb), .15); }
+.nc-badge.neutral{ color: var(--nc-text-muted); background: rgba(var(--nc-muted-rgb), .15); }
+.nc-alert {
+  padding: var(--nc-space-4) var(--nc-space-5);
+  border: 1px solid; border-radius: var(--nc-r-md);
+  font-size: var(--nc-fs-base); margin-bottom: var(--nc-space-4);
+}
+.nc-alert.ok     { color: var(--nc-ok);     border-color: rgba(var(--nc-ok-rgb), .4);     background: rgba(var(--nc-ok-rgb), .08); }
+.nc-alert.warn   { color: var(--nc-warn);   border-color: rgba(var(--nc-warn-rgb), .4);   background: rgba(var(--nc-warn-rgb), .08); }
+.nc-alert.danger { color: var(--nc-danger); border-color: rgba(var(--nc-danger-rgb), .4); background: rgba(var(--nc-danger-rgb), .08); }
+.nc-alert.info   { color: var(--nc-accent); border-color: rgba(var(--nc-accent-rgb), .4); background: rgba(var(--nc-accent-rgb), .08); }
+
+/* misc chrome */
+.nc-kbd {
+  font: var(--nc-fw-semibold) var(--nc-fs-sm)/1.4 var(--nc-mono);
+  background: var(--nc-surface-2); border: 1px solid var(--nc-border-strong);
+  border-bottom-width: 2px; border-radius: var(--nc-r-xs); padding: 1px var(--nc-space-2);
+}
+.nc-pre {
+  font: var(--nc-fw-regular) var(--nc-fs-sm)/var(--nc-lh-base) var(--nc-mono);
+  background: var(--nc-surface-2); color: var(--nc-text);
+  border: 1px solid var(--nc-border); border-radius: var(--nc-r-md);
+  padding: var(--nc-space-4) var(--nc-space-5); overflow-x: auto;
+}
+.nc-divider { border: 0; border-top: 1px solid var(--nc-border); margin: var(--nc-space-6) 0; }
+.nc-progress {
+  height: 6px; border-radius: var(--nc-r-full);
+  background: var(--nc-surface-2); overflow: hidden;
+}
+.nc-progress > span { display: block; height: 100%; background: var(--nc-gradient); border-radius: inherit; }
+.nc-gradient-text {
+  background: var(--nc-gradient);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}

@@ -163,6 +163,13 @@ include = ["netcanon*", "netcanon_desktop*"]
 netcanon = [
     "templates/*.html",
     "templates/_partials/*.js",
+    # Vendored unified-UI deliverable (netcanon-dev/ui-design-spec
+    # v0.2.1; see templates/_vendor/README.md).  Jinja-inlined by
+    # base.html exactly like the _partials above, so the same
+    # wheel-packaging trap applies: a missing glob here 500s every
+    # HTML page on a `pip install netcanon` install.
+    "templates/_vendor/*.css",
+    "templates/_vendor/*.js",
     # Device-definition library (per-vendor `*.yaml` + Tier-3
     # `target_profiles/`).  These MUST ship in the wheel: the app loads
     # them at startup via DefinitionLoader, and the default

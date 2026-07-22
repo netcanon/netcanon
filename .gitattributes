@@ -5,3 +5,7 @@
 # handling (CHANGELOG.md is intentionally CRLF).
 requirements.lock text eol=lf
 /tools/gen_requirements_lock.sh text eol=lf
+# Vendored unified-UI files are byte-pinned to a spec-repo tag by sha256
+# (see netcanon/templates/_vendor/README.md).  Any EOL rewrite breaks the
+# pin, so exempt them from text normalization entirely.
+/netcanon/templates/_vendor/* -text
