@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-22
+
 ### Changed
 
 - **Unified design language adopted** (netcanon-dev/ui-design-spec tag
@@ -55,6 +57,23 @@ timestamp if your timezone matters for an audit.
   ARCHITECTURE.md/the migration plan): delete the now-inert legacy
   var blocks, var-ize the `tok-*` syntax palette, migrate `/docs` and
   `migrate.html`'s hardcoded chrome, surface `<nc-theme-picker>`.
+
+### Fixed
+
+- **Switchport-only VLANs now translate** (#389).  A Cisco IOS-XE
+  `show running-config` keeps its VLAN database in `vlan.dat`, so a VLAN
+  used only via `switchport access vlan N` (or trunk `native`) has no
+  `vlan <N>` stanza and no SVI in the text.  The five port-centric
+  parsers (`cisco_iosxe_cli`, `arista_eos`, `cisco_nxos`,
+  `juniper_junos`, `aruba_aoscx`) pruned those real access/native VLANs
+  as phantoms, so e.g. a Catalyst 9300 with VLANs 10/20/100/150 on
+  access ports translated to Arista/Junos with the VLAN database missing
+  all four — leaving ports that reference undeclared VLANs.  A new shared
+  `access_and_native_vlan_ids` transform keeps every access + native VID
+  (single, operator-declared) while still pruning a VID that appears
+  solely in a wide `trunk allowed vlan` range as possible phantom
+  inflation.  Round-trip stays stable, so the cross-vendor CODEC_BUG
+  count is unchanged (5).
 
 ## [0.6.0] - 2026-07-16
 
