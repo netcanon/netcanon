@@ -41,6 +41,12 @@ Public surface:
   record for every ``Vlan<N>`` SVI interface that lacks one,
   bridging the gap between OpenConfig's "SVI is just an interface"
   model and the canonical's explicit VLAN list.
+* :func:`access_and_native_vlan_ids` — the set of VIDs an operator
+  unambiguously declared by binding a port to them as an ``access``
+  or trunk ``native`` VLAN.  Port-centric codecs union this into the
+  "legitimate" set their phantom-VLAN prune keeps, so a switchport-
+  only VLAN (no ``vlan <N>`` stanza / SVI) survives while a wide
+  ``trunk_allowed`` phantom range is still dropped.
 
 Internal helper:
 
@@ -86,6 +92,33 @@ def _natural_port_sort_key(name: str) -> tuple:
         else:
             out.append(int(p))         # digit chunk → int for numeric ordering
     return tuple(out)
+
+
+def access_and_native_vlan_ids(intent: CanonicalIntent) -> set[int]:
+    """VIDs a per-port switchport config *unambiguously* declares as real.
+
+    Returns every ``access_vlan`` and ``trunk_native_vlan`` referenced by
+    any interface.  Both are single VIDs an operator explicitly bound a
+    port to, so — unlike a wide ``trunk_allowed_vlans`` range that can span
+    thousands of VIDs — they are never phantom-range inflation.
+
+    The port-centric codecs (Cisco IOS-XE CLI, Arista EOS, NX-OS, Junos,
+    Aruba AOS-CX) use this to decide which VLANs synthesised by
+    :func:`project_switchport_to_vlan` to KEEP through their phantom-VLAN
+    prune.  A VLAN that exists only because a port is an access or native
+    member of it — with no ``vlan <N>`` stanza and no SVI (the exact shape
+    of a Cisco ``show running-config`` whose VLAN database lives in
+    ``vlan.dat``) — is a real VLAN and must survive; only a VID appearing
+    *solely* in a (potentially wide) ``trunk_allowed_vlans`` list is pruned
+    as a possible phantom.
+    """
+    vids: set[int] = set()
+    for iface in intent.interfaces:
+        if iface.access_vlan is not None:
+            vids.add(iface.access_vlan)
+        if iface.trunk_native_vlan is not None:
+            vids.add(iface.trunk_native_vlan)
+    return vids
 
 
 def project_switchport_to_vlan(intent: CanonicalIntent) -> None:

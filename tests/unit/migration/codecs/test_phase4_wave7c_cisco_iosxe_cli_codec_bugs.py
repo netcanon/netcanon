@@ -15,18 +15,20 @@ two root causes:
    render+parse of ``switchport trunk native vlan <N>`` (mirrors
    Cisco IOS-XE / EOS User Manual "Switchport Configuration").
 
-2. Arista EOS and Juniper Junos parsers did not apply the phantom-
-   VLAN guard around ``project_switchport_to_vlan``.  When a Cisco
-   IOS-XE source declared two explicit ``vlan N`` stanzas (1, 11)
-   plus a per-port ``switchport trunk allowed vlan 10,20,100,150``,
-   the source's own phantom-guard pruned VLANs 10/20/100/150 from
-   the canonical tree (only the explicit two survive).  But on the
-   round-trip parse, the rendered ``switchport trunk allowed vlan
-   10,20,100,150`` lines re-inflated the canonical VLAN table to 6
-   records on Arista and 3 on Junos, surfacing as ``vlans`` count
-   drift in Phase 4.  Fix: snapshot legitimate VLAN ids BEFORE
-   ``project_switchport_to_vlan`` and prune phantoms AFTER, mirroring
-   the established cisco_iosxe_cli pattern.
+2. Arista EOS and Juniper Junos parsers apply the same phantom-VLAN
+   guard around ``project_switchport_to_vlan`` as cisco_iosxe_cli, so a
+   cross-vendor round-trip re-derives the SAME canonical VLAN set the
+   source produced (no ``vlans`` count drift in Phase 4).  The guard
+   keeps every VLAN a port is bound to as an ``access`` or trunk
+   ``native`` member — single, operator-declared VIDs (e.g. a
+   ``switchport access vlan 20`` whose VLAN lives in ``vlan.dat`` with
+   no ``vlan 20`` stanza and no SVI) — and prunes only a VID appearing
+   SOLELY in a wide ``switchport trunk allowed`` range as a possible
+   phantom.  (The blanket "keep only explicit stanzas + SVIs" prune
+   this file originally pinned silently dropped those real access
+   VLANs — the exact user-reported ``user_contrib_cat9300`` symptom;
+   see ``transforms.access_and_native_vlan_ids``.)  The tests below
+   verify the round-trip stays stable at that corrected full set.
 """
 
 from __future__ import annotations
@@ -73,11 +75,12 @@ def _load(rel: str) -> str:
 
 
 def test_cisco_to_arista_no_phantom_vlan_inflation_real() -> None:
-    """``user_contrib_cat9300`` declares only ``vlan 1`` + ``vlan 11``
-    explicitly; the trunks reference VIDs 10, 20, 100, 150 that have
-    no top-level ``vlan N`` stanza.  Pre-Wave-7c-C the arista parse
-    re-inflated the canonical to 6 VLANs on round-trip; the phantom-
-    VLAN guard prunes them back to the explicit two."""
+    """``user_contrib_cat9300`` declares ``vlan 1`` + ``vlan 11`` via
+    SVIs; VIDs 10/20/100/150 have no ``vlan N`` stanza but ARE bound to
+    ports as access / trunk-native VLANs, so they are real and must
+    survive.  The arista round-trip must reproduce the SAME full VLAN
+    set the cisco source parsed — stable, no drift and no phantom
+    inflation of any wide trunk range."""
     src = _load(
         "tests/fixtures/real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt"
     )
@@ -86,9 +89,10 @@ def test_cisco_to_arista_no_phantom_vlan_inflation_real() -> None:
     intent_rt = arista_parse(rendered)
     src_ids = sorted(v.id for v in intent_src.vlans)
     rt_ids = sorted(v.id for v in intent_rt.vlans)
-    assert src_ids == rt_ids == [1, 11], (
-        f"Arista round-trip must preserve the cisco source's "
-        f"explicit VLAN id set; got src={src_ids!r}, rt={rt_ids!r}"
+    assert src_ids == rt_ids == [1, 10, 11, 20, 100, 150], (
+        f"Arista round-trip must preserve the cisco source's real VLAN "
+        f"id set (access/native VLANs included); "
+        f"got src={src_ids!r}, rt={rt_ids!r}"
     )
 
 
@@ -137,9 +141,10 @@ def test_cisco_to_arista_kitchen_sink_vlan_set_stable() -> None:
 
 
 def test_cisco_to_junos_no_phantom_vlan_inflation_real() -> None:
-    """``user_contrib_cat9300`` round-trips through Junos must not
-    re-introduce VID 100 (referenced via ``switchport access vlan
-    100`` but never declared as ``vlan 100``)."""
+    """``user_contrib_cat9300`` round-trips through Junos must reproduce
+    the same full VLAN set — VIDs 10/20/100/150 are real access/native
+    VLANs bound to ports (not phantoms), so they survive and the
+    round-trip stays stable."""
     src = _load(
         "tests/fixtures/real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt"
     )
@@ -148,17 +153,20 @@ def test_cisco_to_junos_no_phantom_vlan_inflation_real() -> None:
     intent_rt = junos_parse(rendered)
     src_ids = sorted(v.id for v in intent_src.vlans)
     rt_ids = sorted(v.id for v in intent_rt.vlans)
-    assert src_ids == rt_ids == [1, 11], (
-        f"Junos round-trip must preserve the cisco source's "
-        f"explicit VLAN id set; got src={src_ids!r}, rt={rt_ids!r}"
+    assert src_ids == rt_ids == [1, 10, 11, 20, 100, 150], (
+        f"Junos round-trip must preserve the cisco source's real VLAN "
+        f"id set (access/native VLANs included); "
+        f"got src={src_ids!r}, rt={rt_ids!r}"
     )
 
 
-def test_cisco_to_junos_no_phantom_vlan_native_only() -> None:
+def test_cisco_to_junos_native_vlan_preserved() -> None:
     """``batfish_cisco_interface`` declares vlan ids 1, 2, 3, 111,
     1005, 1006, 1234, 4094.  An interface carries ``switchport trunk
-    native vlan 6`` for VID 6 which was never declared.  Round-trip
-    through Junos must not re-introduce VID 6."""
+    native vlan 6`` for VID 6 which has no ``vlan 6`` stanza.  A
+    native-VLAN binding is a real VLAN (it must exist for the trunk to
+    pass untagged traffic), so VID 6 is kept and the Junos round-trip
+    stays stable at the full set."""
     src = _load(
         "tests/fixtures/real/cisco_iosxe/batfish_cisco_interface.txt"
     )
@@ -171,9 +179,9 @@ def test_cisco_to_junos_no_phantom_vlan_native_only() -> None:
         f"Junos round-trip must preserve the source's VLAN ids; "
         f"got src={src_ids!r}, rt={rt_ids!r}"
     )
-    assert 6 not in rt_ids, (
-        "Phantom vlan 6 (referenced as ``trunk native vlan`` but "
-        "never declared) must not survive round-trip"
+    assert 6 in rt_ids, (
+        "Native VLAN 6 (bound via ``switchport trunk native vlan 6``) "
+        "is a real VLAN and must survive round-trip"
     )
 
 

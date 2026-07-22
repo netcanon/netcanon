@@ -184,3 +184,74 @@ def test_cisco_partial_wide_range_does_not_inflate() -> None:
     tree = parse_intent(cfg)
     assert len(tree.vlans) == 1
     assert tree.vlans[0].id == 10
+
+
+# ---------------------------------------------------------------------------
+# Access / native VLANs are REAL and must survive the phantom prune.
+# The original blanket "keep only explicit stanzas + SVIs" prune dropped
+# them — the user-reported C9300 symptom (VLANs used only via
+# ``switchport access vlan N`` with the VLAN database in ``vlan.dat``).
+# See ``canonical.transforms.access_and_native_vlan_ids``.
+# ---------------------------------------------------------------------------
+
+
+def test_cisco_access_vlan_without_stanza_survives() -> None:
+    """A VLAN used ONLY via ``switchport access vlan 20`` (no ``vlan 20``
+    stanza, no SVI) is a real VLAN an operator bound a port to — it must
+    appear in ``tree.vlans``, not be pruned as a phantom."""
+    cfg = (
+        "hostname sw\n"
+        "!\n"
+        "interface TenGigabitEthernet1/0/5\n"
+        " switchport access vlan 20\n"
+        " switchport mode access\n"
+        "!\n"
+        "end\n"
+    )
+    tree = parse_intent(cfg)
+    assert 20 in {v.id for v in tree.vlans}
+
+
+def test_cisco_trunk_native_vlan_without_stanza_survives() -> None:
+    """``switchport trunk native vlan 11`` (no ``vlan 11`` stanza): the
+    native VLAN must exist for the trunk to carry untagged traffic, so
+    VID 11 is real and kept.  VID 20 — appearing ONLY in
+    ``trunk_allowed`` — is still pruned as a possible phantom."""
+    cfg = (
+        "hostname sw\n"
+        "!\n"
+        "interface TenGigabitEthernet1/0/1\n"
+        " switchport trunk native vlan 11\n"
+        " switchport trunk allowed vlan 11,20\n"
+        " switchport mode trunk\n"
+        "!\n"
+        "end\n"
+    )
+    ids = {v.id for v in parse_intent(cfg).vlans}
+    assert 11 in ids
+    assert 20 not in ids
+
+
+def test_cisco_access_kept_but_trunk_allowed_only_range_pruned() -> None:
+    """Discrimination guard: in one config VID 20 is an access VLAN
+    (kept) while VIDs 500-999 appear only in a wide trunk-allowed range
+    (pruned).  Confirms recovering real access VLANs does NOT re-open the
+    phantom-inflation hole the wide-range guard closes."""
+    cfg = (
+        "hostname sw\n"
+        "!\n"
+        "interface TenGigabitEthernet1/0/5\n"
+        " switchport access vlan 20\n"
+        " switchport mode access\n"
+        "!\n"
+        "interface TenGigabitEthernet1/0/1\n"
+        " switchport mode trunk\n"
+        " switchport trunk allowed vlan 500-999\n"
+        "!\n"
+        "end\n"
+    )
+    tree = parse_intent(cfg)
+    ids = {v.id for v in tree.vlans}
+    assert 20 in ids            # access VLAN -> real, kept
+    assert 999 not in ids       # trunk-allowed-only wide range -> phantom
+    assert len(tree.vlans) < 100, "500-999 range must not inflate tree.vlans"

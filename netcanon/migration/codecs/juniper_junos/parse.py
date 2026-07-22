@@ -797,8 +797,17 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # inflates the canonical VLAN table.  Snapshot legitimate VLAN
     # ids BEFORE projection, prune phantoms AFTER.  Trunk-allowed
     # / access-vlan attributes on each iface stay untouched.
-    from ...canonical.transforms import project_switchport_to_vlan
-    legitimate_vlan_ids = {v.id for v in intent.vlans}
+    from ...canonical.transforms import (
+        access_and_native_vlan_ids,
+        project_switchport_to_vlan,
+    )
+    # Keep access/native VLANs (single, operator-declared VIDs — a Junos
+    # ``vlan members 20`` access port / ``native-vlan-id``) through the
+    # prune; only VIDs appearing solely in a wide trunk ``vlan members``
+    # range are dropped as possible phantoms.
+    legitimate_vlan_ids = (
+        {v.id for v in intent.vlans} | access_and_native_vlan_ids(intent)
+    )
     project_switchport_to_vlan(intent)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 

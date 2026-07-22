@@ -723,6 +723,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # folded name -> routing_instances drifted + collapsed (20->18 on
     # the AVD kitchen-sink capture).
     from ...canonical.transforms import (
+        access_and_native_vlan_ids,
         project_svi_to_vlan,
         project_switchport_to_vlan,
     )
@@ -764,7 +765,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # whose id wasn't in the snapshot AFTER.  ``trunk_allowed_vlans``
     # on the per-interface side is not touched; the L2 attribute
     # round-trips back out unchanged.
-    legitimate_vlan_ids = {v.id for v in intent.vlans}
+    # Keep access/native VLANs (single, operator-declared VIDs — an EOS
+    # ``switchport access vlan 20`` whose VLAN has no ``vlan 20`` stanza)
+    # through the prune; only VIDs appearing solely in a wide
+    # ``switchport trunk allowed`` range are dropped as possible phantoms.
+    legitimate_vlan_ids = (
+        {v.id for v in intent.vlans} | access_and_native_vlan_ids(intent)
+    )
     project_switchport_to_vlan(intent)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
