@@ -646,8 +646,21 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # introduced by the projection get dropped.  ``trunk_allowed_vlans``
     # on the per-interface side is not touched by this guard, so the
     # full L2 attribute round-trips back out unchanged.
-    legitimate_vlan_ids = {v.id for v in intent.vlans}
-    from ...canonical.transforms import project_switchport_to_vlan
+    # "Legitimate" = explicit ``vlan <N>`` stanzas + SVIs (already in
+    # ``intent.vlans``) PLUS every VID a port is bound to as an ``access``
+    # or trunk ``native`` VLAN.  Those access/native VIDs are single,
+    # operator-declared VLANs (the C9300 running-config case: VLANs used
+    # only via ``switchport access vlan 20`` with the database in
+    # ``vlan.dat`` and no SVI) — keeping them recovers the real VLANs while
+    # still pruning VIDs that appear solely in a wide ``trunk allowed``
+    # range as possible phantoms.
+    from ...canonical.transforms import (
+        access_and_native_vlan_ids,
+        project_switchport_to_vlan,
+    )
+    legitimate_vlan_ids = (
+        {v.id for v in intent.vlans} | access_and_native_vlan_ids(intent)
+    )
     project_switchport_to_vlan(intent)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 

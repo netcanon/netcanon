@@ -498,8 +498,17 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # (snapshot legitimate VLAN ids before, prune after) mirrors
     # iosxe_cli — a wide ``switchport trunk allowed`` range must not
     # inflate tree.vlans with thousands of phantom records.
-    legitimate_vlan_ids = {v.id for v in intent.vlans}
-    from ...canonical.transforms import project_switchport_to_vlan
+    from ...canonical.transforms import (
+        access_and_native_vlan_ids,
+        project_switchport_to_vlan,
+    )
+    # Keep access/native VLANs (single, operator-declared VIDs — e.g. a
+    # ``switchport access vlan 20`` whose VLAN has no ``vlan 20`` stanza)
+    # through the prune; only VIDs appearing solely in a wide
+    # ``switchport trunk allowed`` range are dropped as possible phantoms.
+    legitimate_vlan_ids = (
+        {v.id for v in intent.vlans} | access_and_native_vlan_ids(intent)
+    )
     project_switchport_to_vlan(intent)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
