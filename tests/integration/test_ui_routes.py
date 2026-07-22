@@ -215,13 +215,15 @@ class TestJobScheduleFields:
 
 
 class TestThemeToggleRendered:
-    """Dark-mode wiring is in base.html, so EVERY page that extends
-    it should carry:
+    """Theme wiring is in base.html, so EVERY page that extends it
+    should carry:
 
-    * ``<html data-theme="light">`` default on the root element
-      (boot script overrides on the client before CSS paints).
-    * Inline boot script reading ``localStorage`` + prefers-color-
-      scheme.
+    * ``<html data-nc-theme="indigo">`` on the root element, with NO
+      hardcoded ``data-nc-mode`` (light + dark + follow-the-OS all
+      stay reachable; the vendored boot applies saved prefs on the
+      client before CSS paints).
+    * The inlined unified runtime (``NcTheme``) + the one-time
+      ``netcanon.theme.v1`` -> ``nc-mode`` migration snippet.
     * The ``nav-theme-toggle`` button with sun + moon glyphs.
     * The theme-toggle partial inclusion.
 
@@ -231,24 +233,26 @@ class TestThemeToggleRendered:
 
     _PAGES = ["/", "/jobs", "/schedules", "/configs", "/definitions"]
 
-    def test_html_has_data_theme_attribute(self, client: TestClient) -> None:
+    def test_html_has_data_nc_theme_attribute(self, client: TestClient) -> None:
         for path in self._PAGES:
             resp = client.get(path)
             assert resp.status_code == 200, path
-            assert 'data-theme="light"' in resp.text, (
-                f"{path} missing default data-theme on <html>"
+            # Full-tag assertion: pins the indigo default AND the
+            # absence of a hardcoded data-nc-mode / legacy data-theme.
+            assert '<html lang="en" data-nc-theme="indigo">' in resp.text, (
+                f"{path} missing/altered unified theme root attributes"
             )
 
     def test_boot_script_present(self, client: TestClient) -> None:
-        """FOUC-prevention: the boot script MUST be inline in <head>
-        (not an external <script src>) so it runs synchronously
-        before CSS parses."""
+        """FOUC-prevention: the theme runtime MUST be inline in <head>
+        (not an external <script src>) so NcTheme.boot() runs
+        synchronously before CSS parses."""
         resp = client.get("/")
-        assert "netcanon.theme.v1" in resp.text
+        assert "NcTheme.boot();" in resp.text
         assert "prefers-color-scheme" in resp.text
-        # Boot script references documentElement (not body/DOM) —
-        # required so the attribute is set before the body renders.
-        assert "document.documentElement.setAttribute" in resp.text
+        # One-time legacy-key migration snippet precedes the runtime.
+        assert "netcanon.theme.v1" in resp.text
+        assert "localStorage.setItem('nc-mode', legacy)" in resp.text
 
     def test_nav_theme_toggle_button_present(
         self, client: TestClient,
@@ -263,8 +267,9 @@ class TestThemeToggleRendered:
         self, client: TestClient,
     ) -> None:
         """The glyph swap happens via CSS, not DOM mutation — both
-        spans are in the markup, one hidden by the data-theme
-        selector rules."""
+        spans are in the markup, one hidden by the data-nc-mode
+        selector rules (plus a prefers-color-scheme pair for the
+        no-attribute "auto" state)."""
         resp = client.get("/")
         # Sun (U+2600) + moon (U+263D) — HTML entities, mixed case
         # tolerated (the template uses lowercase hex).
@@ -279,13 +284,20 @@ class TestThemeToggleRendered:
         assert "_updateThemeToggleAriaLabel" in resp.text
 
     def test_css_variables_declared(self, client: TestClient) -> None:
-        """Dark-mode CSS tokens must be present (regression guard
-        against someone accidentally removing the :root or
-        [data-theme=\"dark\"] block)."""
+        """Both CSS layers must be present: the vendored unified
+        tokens + compat shim (regression guard against someone
+        removing the _vendor includes), and the legacy :root /
+        [data-theme=\"dark\"] blocks the shim remaps (dead but
+        deliberately kept until the deletion follow-up)."""
         resp = client.get("/")
+        # Unified layer (vendored).
+        assert "--nc-bg:" in resp.text
+        assert '[data-nc-theme="indigo"]' in resp.text
+        assert ":root[data-nc-theme]" in resp.text
+        assert "--page-bg: var(--nc-bg);" in resp.text
+        # Legacy layer (inert; shim outranks it).
         assert "--page-bg:" in resp.text
         assert '[data-theme="dark"]' in resp.text
-        # Spot-check a few tokens; no need to enumerate all.
         assert "--surface:" in resp.text
         assert "--text-primary:" in resp.text
         assert "--nav-bg:" in resp.text

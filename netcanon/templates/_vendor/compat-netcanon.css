@@ -1,0 +1,70 @@
+/* compat/netcanon.css — remaps netcanon's ~40 base.html vars onto the unified nc-* tokens.
+   Include AFTER netcanon-ui.css. `:root[data-nc-theme]` outranks netcanon's `:root` AND its
+   `[data-theme="dark|light"]` overrides, so both of its hand-rolled themes are superseded.
+   Notes:
+   - netcanon's own theming writes data-theme="dark|light" on <html>; the unified system uses
+     the NAMESPACED data-nc-theme / data-nc-mode, so nothing collides. Its old toggle now flips
+     dead vars — rewire it to NcTheme.set(null, "light"|"dark"|"auto") or replace it with
+     <nc-theme-picker>, and remove its boot script when convenient.
+   - The navy inverse nav becomes a unified surface-toned app bar in both modes (this is the
+     shared silhouette; delete netcanon's own dark-mode nav overrides when convenient).
+   - The eight Bootstrap badge bg/fg pairs collapse into feedback-tint rules.
+   - The <pre> code wells stay the fixed VS Code Dark+ palette in BOTH modes: netcanon's
+     syntax-highlight .tok-* colors (#569cd6, #ce9178, …) are hardcoded for a dark well and
+     would be illegible on a light background. Migrate the tok-* palette to vars before
+     making the wells mode-aware.
+   Source var inventory: netcanon/templates/base.html (baselines/netcanon.md). */
+:root[data-nc-theme] {
+  --page-bg: var(--nc-bg);
+  --surface: var(--nc-surface);
+  --surface-alt: var(--nc-surface);
+  --surface-elev: var(--nc-surface-2);
+  --surface-hover: var(--nc-surface-2);
+  --text-primary: var(--nc-text);
+  --text-muted: var(--nc-text-muted);
+  --text-faint: var(--nc-text-faint);
+  --border: var(--nc-border);
+  --border-strong: var(--nc-border-strong);
+
+  --nav-bg: var(--nc-surface);
+  --nav-fg: var(--nc-text-muted);
+  --nav-fg-hover: var(--nc-text);
+  --nav-accent: var(--nc-accent);
+  --nav-accent-hov: var(--nc-accent);
+
+  --accent: var(--nc-accent);
+  --focus-ring: var(--nc-focus);
+
+  --btn-primary-bg: var(--nc-accent-emphasis);
+  --btn-primary-fg: var(--nc-on-accent);
+  --btn-primary-bg-hover: var(--nc-accent-hover);
+  --btn-secondary-bg: var(--nc-surface-2);
+  --btn-secondary-fg: var(--nc-text);
+  --btn-secondary-bg-hover: var(--nc-border);
+  --btn-danger-bg: var(--nc-danger-emphasis);
+  --btn-danger-bg-hover: color-mix(in srgb, var(--nc-danger-emphasis) 85%, #000);
+  /* missed by the original baseline capture (2026-07-12 re-audit): white is AA on both
+     unified danger fills (5.36:1 light / 4.61:1 dark) */
+  --btn-danger-fg: #ffffff;
+
+  --badge-pending-bg: rgba(var(--nc-muted-rgb), .15);
+  --badge-pending-fg: var(--nc-text-muted);
+  --badge-failed-bg: rgba(var(--nc-danger-rgb), .15);
+  --badge-failed-fg: var(--nc-danger);
+  --badge-running-bg: rgba(var(--nc-warn-rgb), .15);
+  --badge-running-fg: var(--nc-warn);
+  --badge-completed-bg: rgba(var(--nc-ok-rgb), .15);
+  --badge-completed-fg: var(--nc-ok);
+  --badge-partial-bg: rgba(var(--nc-warn-rgb), .22);
+  --badge-partial-fg: var(--nc-warn);
+  --alert-info-bg: rgba(var(--nc-accent-rgb), .12);
+  --alert-info-fg: var(--nc-accent);
+
+  /* fixed dark well (netcanon's original values) — see header note on the tok-* palette */
+  --pre-bg: #1e1e1e;
+  --pre-fg: #d4d4d4;
+
+  --shadow-card: var(--nc-shadow-sm);
+  --shadow-lift: var(--nc-shadow-md);
+  --shadow-modal: var(--nc-shadow-lg);
+}

@@ -703,13 +703,16 @@ the source of truth):
   follow the renamed record.  Collisions merge on first-wins
   (auth/priv keys are NEVER combined across users).
 * **theme-toggle.js** — global light/dark mode toggle wired to
-  the `nav-theme-toggle` button.  Flips `<html data-theme>`
-  between `light`/`dark`, persists to
-  `localStorage["netcanon.theme.v1"]`, updates `aria-label` +
-  `aria-pressed` to reflect the next-action.  The inline boot
-  script in `base.html`'s `<head>` (NOT this partial) sets the
-  initial theme synchronously before CSS parses — required for
-  FOUC prevention.
+  the `nav-theme-toggle` button.  Calls `NcTheme.set(null, mode)`
+  (from the vendored `_vendor/theme-picker.js`), which flips
+  `<html data-nc-mode>` between `light`/`dark` and persists to
+  `localStorage["nc-mode"]`; also mirrors the value one-way into
+  the legacy `localStorage["netcanon.theme.v1"]` key so the
+  self-contained `/docs` theme copy follows.  Updates `aria-label`
+  + `aria-pressed` to reflect the next-action.  The vendored
+  theme-picker include in `base.html`'s `<head>` (NOT this
+  partial) applies the persisted theme synchronously before CSS
+  parses — required for FOUC prevention.
 
 **Why include-splice rather than ES-modules?** The templates embed
 inline `<script>` blocks that share lexical scope with the rest of the
@@ -725,43 +728,55 @@ element in every template — including content generated inside
 partials — carries a `data-testid` attribute.  The full inventory
 lives in [`tests/testid_reference.md`](tests/testid_reference.md).
 
-**Theming (dark mode).**  The app supports light + dark modes via
-CSS custom properties toggled on `<html data-theme>`.  One source
-of truth: the `:root` block in `base.html` defines light-mode
-tokens; the `[data-theme="dark"]` selector overrides the same
-names with dark-mode values.  All themed CSS declarations use
-`var(--token)` — never raw hex.  Tokens are curated for the
-80/20 high-visibility surfaces (page / surface / text / border /
-badges / buttons / nav); incremental migration of edge-case
-declarations is tolerated.
+**Theming (unified design language).**  The app's palette + mode
+ship from the vendored netcanon-dev/ui-design-spec deliverable
+(pinned tag + checksums in `netcanon/templates/_vendor/README.md`).
+Three layers, all Jinja-inlined by `base.html`:
 
-Three rules keep the pattern robust:
+1. `_vendor/netcanon-ui.css` — the unified `--nc-*` tokens: ten
+   palettes selected by `<html data-nc-theme>` (netcanon defaults
+   to `indigo`), light/dark forced by `<html data-nc-mode>`, and
+   an absent `data-nc-mode` = follow the OS via
+   `prefers-color-scheme`.
+2. `_vendor/compat-netcanon.css` — the compat shim: remaps the
+   legacy `--page-bg`/`--surface`/… var names onto `--nc-*` under
+   `:root[data-nc-theme]`, which outranks the legacy `:root` and
+   `[data-theme="dark"]` blocks still present (inert) in
+   `base.html`.  Every themed declaration keeps using
+   `var(--token)` — never raw hex — and re-themes through the
+   shim without a rewrite.
+3. `_vendor/theme-picker.js` — the `NcTheme` runtime.  Its boot
+   applies persisted `localStorage["nc-theme"]`/`["nc-mode"]`
+   prefs to `<html>` synchronously in `<head>` before CSS parses
+   (FOUC prevention — do NOT move it to an external
+   `<script src=>`; it must block).  A tiny inline snippet just
+   before it migrates a pre-unification
+   `localStorage["netcanon.theme.v1"]` value into `nc-mode` once.
 
-1. **Inline boot script, blocking, in `<head>`.**  The tiny IIFE
-   in `base.html`'s `<head>` reads `localStorage["netcanon.theme.v1"]`
-   (user override) then falls back to `prefers-color-scheme` and
-   sets the `data-theme` attribute on `documentElement`
-   *synchronously* before any CSS parses.  This prevents FOUC
-   (flash of unstyled content) on reload.  Do NOT move the boot
-   script to an external `<script src=>`; it must block.
-2. **JS-driven theme apply, not `@media (prefers-color-scheme)`.**
-   One `[data-theme]` selector is the sole theme gate; the media
-   query is read ONCE by the boot script, not by CSS.  This
-   lets localStorage cleanly override the system preference
-   without duplicated rule blocks or cascade-order headaches.
+Rules that keep the pattern robust:
+
+1. **Never edit `_vendor/` files by hand** — they are byte-pinned
+   to a spec-repo tag by sha256 (`_vendor/README.md`); re-vendor
+   at a newer tag to change them.
+2. **New CSS uses `var(--token)`** — legacy names still resolve
+   through the shim; new code may reference `--nc-*` directly.
 3. **Theme-aware toast/alert colour pairs via CSS class, never
    inline style.**  `showToast()` assigns a CSS class
    (`.toast-info` / `.toast-error` / `.toast-success`) instead
    of writing `element.style.background = '#...'` — the class
    resolves to `var(--badge-*-bg)` / `var(--badge-*-fg)` so
    dark mode inherits the semantic pair automatically.
+4. **The `<pre>` code wells stay fixed-dark in both modes** — the
+   `tok-*` syntax-highlight palette is hardcoded for a dark well;
+   var-izing it is a follow-up (see the shim's header comment).
 
 The global toggle is a single icon button
 (`data-testid="nav-theme-toggle"`) right-aligned on the nav; sun
-glyph in dark mode, moon glyph in light mode, swap via CSS
-attribute-selectors so JS never mutates the button content.  See
-`_partials/theme-toggle.js` for the toggle function +
-`aria-label` updater.
+glyph in dark mode, moon glyph in light mode, swap via CSS keyed
+on `data-nc-mode` (plus a `prefers-color-scheme` fallback pair
+for the no-attribute "auto" state) so JS never mutates the button
+content.  See `_partials/theme-toggle.js` for the toggle function
++ `aria-label` updater.
 
 ---
 

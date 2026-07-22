@@ -1,34 +1,40 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-nc-theme="indigo">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Netcanon{% endblock %}</title>
-  <!-- Theme boot: runs BEFORE the <style> block parses so the
-       document paints in the correct theme without a flash of
-       light content (FOUC).  Reads localStorage first (user
-       override), then falls back to `prefers-color-scheme` for
-       first-visit users.  Mutates `document.documentElement`
-       synchronously before any CSS applies. -->
+  <!-- Unified theme boot: runs BEFORE the <style> blocks parse so
+       the document paints in the correct palette + mode without a
+       flash of wrong theme (FOUC).  Two stages:
+       1. One-time migration — a previously persisted
+          localStorage["netcanon.theme.v1"] ("light"|"dark", written
+          by the pre-unification toggle) is copied into the unified
+          "nc-mode" key, only while "nc-mode" is still unset so the
+          user's newer choice always wins.  The legacy key is left
+          in place: the self-contained /docs page still reads it.
+       2. The vendored theme-picker.js (netcanon-dev/ui-design-spec
+          v0.2.1 — see _vendor/README.md) then runs NcTheme.boot():
+          applies saved "nc-theme"/"nc-mode" prefs to <html>
+          synchronously before any CSS applies.  No stored mode =
+          data-nc-mode absent = follow the OS. -->
   <script>
     (function() {
       try {
-        var stored = localStorage.getItem('netcanon.theme.v1');
-        var theme;
-        if (stored === 'dark' || stored === 'light') {
-          theme = stored;
-        } else if (window.matchMedia &&
-                   window.matchMedia('(prefers-color-scheme: dark)').matches) {
-          theme = 'dark';
-        } else {
-          theme = 'light';
+        if (localStorage.getItem('nc-mode') === null) {
+          var legacy = localStorage.getItem('netcanon.theme.v1');
+          if (legacy === 'dark' || legacy === 'light') {
+            localStorage.setItem('nc-mode', legacy);
+          }
         }
-        document.documentElement.setAttribute('data-theme', theme);
       } catch (_) {
         /* localStorage access can fail in sandboxed iframes; fall
-           through to the default (light) already on the root. */
+           through to the vendored boot's defaults. */
       }
     })();
+  </script>
+  <script>
+  {% include "_vendor/theme-picker.js" %}
   </script>
   <style>
     /* ── Theme tokens ──
@@ -238,17 +244,28 @@
       border-color: rgba(255,255,255,.18);
       outline: none;
     }
-    /* Icon swap: light theme shows moon (click to go dark);
-       dark theme shows sun (click to go light).  Using CSS
+    /* Icon swap: light mode shows moon (click to go dark);
+       dark mode shows sun (click to go light).  Using CSS
        attribute-state + content swap means no DOM mutation on
        toggle — the button's aria-label is updated by JS for
-       screen-reader accuracy but the glyph flips via CSS alone. */
+       screen-reader accuracy but the glyph flips via CSS alone.
+       Mode source is the unified <html data-nc-mode> attribute
+       (vendored theme-picker.js).  Absent attribute = "auto":
+       the html:not([data-nc-mode]) pair below resolves the glyph
+       from the OS scheme, mirroring how the vendored CSS resolves
+       auto mode.  The :not() rules and the forced-mode rules are
+       mutually exclusive by attribute presence. */
     #nav-theme-toggle .moon,
     #nav-theme-toggle .sun {
       display: none;
     }
-    [data-theme="light"] #nav-theme-toggle .moon { display: inline; }
-    [data-theme="dark"]  #nav-theme-toggle .sun  { display: inline; }
+    [data-nc-mode="light"] #nav-theme-toggle .moon { display: inline; }
+    [data-nc-mode="dark"]  #nav-theme-toggle .sun  { display: inline; }
+    html:not([data-nc-mode]) #nav-theme-toggle .moon { display: inline; }
+    @media (prefers-color-scheme: dark) {
+      html:not([data-nc-mode]) #nav-theme-toggle .moon { display: none; }
+      html:not([data-nc-mode]) #nav-theme-toggle .sun  { display: inline; }
+    }
 
     main { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
     h1 { margin-bottom: 1.25rem; font-size: 1.5rem; }
@@ -372,6 +389,21 @@
       border:2px solid var(--focus-ring); border-radius:4px;
       text-decoration:none; font-weight:600;
     }
+  </style>
+  <!-- Unified design language (vendored from netcanon-dev/ui-design-spec
+       v0.2.1 — see _vendor/README.md; never edit the included files).
+       Order is load-bearing: netcanon-ui.css defines the --nc-* tokens
+       (+ .nc-* skeleton for future pages); compat-netcanon.css then
+       remaps the legacy --page-bg/--surface/... vars above onto them.
+       Both sit AFTER the inline <style> block so the shim also wins
+       source-order ties against the legacy :root definitions (its
+       :root[data-nc-theme] selector already outranks them on
+       specificity). -->
+  <style>
+  {% include "_vendor/netcanon-ui.css" %}
+  </style>
+  <style>
+  {% include "_vendor/compat-netcanon.css" %}
   </style>
 </head>
 <body>

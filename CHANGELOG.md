@@ -26,6 +26,36 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Changed
+
+- **Unified design language adopted** (netcanon-dev/ui-design-spec tag
+  `v0.2.1`, commit `1c4af329`).  Why: netcanon's hand-rolled two-theme
+  var set drifts from the org look with every tweak; vendoring the
+  spec's drop-in deliverable makes the palette/mode a runtime user
+  setting shared across netcanon-dev projects while leaving every
+  template's `var(--…)` reference untouched.  Three files are
+  byte-pinned (sha256) under `netcanon/templates/_vendor/` and
+  Jinja-inlined by `base.html` exactly like the `_partials`:
+  `netcanon-ui.css` (the `--nc-*` tokens — ten palettes ×
+  light/dark/auto via `data-nc-theme`/`data-nc-mode`),
+  `theme-picker.js` (the `NcTheme` runtime; owns persistence in
+  `localStorage["nc-mode"]`/`["nc-theme"]`), and
+  `compat-netcanon.css` (remaps the legacy `--page-bg`/`--surface`/…
+  vars onto `--nc-*`).  Default palette: `indigo`; light + dark +
+  follow-the-OS all remain available.  The nav sun/moon toggle now
+  drives `NcTheme.set(null, mode)` (`<html data-nc-mode>`) instead of
+  the old plain `data-theme` attribute; a one-time boot snippet
+  migrates a previously persisted `localStorage["netcanon.theme.v1"]`
+  into `nc-mode`, and the toggle still mirrors its choice one-way
+  into the legacy key so the self-contained `/docs` theme copy stays
+  in step.  Visible changes: the nav is now the unified surface-toned
+  app bar (no longer fixed navy), accents/badges/focus rings take
+  unified values, and the `<pre>` code wells deliberately keep the
+  fixed VS Code Dark+ palette in both modes.  Follow-ups (tracked in
+  ARCHITECTURE.md/the migration plan): delete the now-inert legacy
+  var blocks, var-ize the `tok-*` syntax palette, migrate `/docs` and
+  `migrate.html`'s hardcoded chrome, surface `<nc-theme-picker>`.
+
 ## [0.6.0] - 2026-07-16
 
 Two threads land together here: the **codec promotion wave** (#344–#356) that

@@ -18,7 +18,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `nav-definitions`  | `<a>`   | Link to `/definitions`; active on Definitions page |
 | `nav-api-docs`     | `<a>`   | Link to `/docs` |
 | `kbd-cheatsheet-open-btn` | `<button>` | Right-rail `?` nav button; opens the keyboard-shortcut cheatsheet modal.  Sits immediately before `nav-theme-toggle` |
-| `nav-theme-toggle` | `<button>` | Right-aligned sun/moon toggle; flips `<html data-theme>` between `light`/`dark`, persists to `localStorage["netcanon.theme.v1"]`.  `aria-label` and `aria-pressed` live-update to reflect the ACTION (next-state), not the current state |
+| `nav-theme-toggle` | `<button>` | Right-aligned sun/moon toggle; calls `NcTheme.set(null, mode)` (vendored `_vendor/theme-picker.js`) to flip `<html data-nc-mode>` between `light`/`dark`, persisted to `localStorage["nc-mode"]` and mirrored one-way into the legacy `localStorage["netcanon.theme.v1"]` for the self-contained `/docs` page.  `aria-label` and `aria-pressed` live-update to reflect the ACTION (next-state), not the current state |
 | `toast`            | `<div>` | Fixed-position toast notification; hidden by default |
 
 ### Keyboard shortcut cheatsheet modal (`base.html`)
