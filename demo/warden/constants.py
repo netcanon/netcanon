@@ -47,6 +47,7 @@ PER_IP_MINT_WINDOW = 600  # sliding window for the per-IP mint rate limit
 PER_IP_MINT_MAX = 30  # <= 30 mints / window / IP
 PER_IP_TTL = 600  # evict a per-IP record this long after its last request
 RECLAIM_MIN_AGE = 120  # never reclaim a session younger than this at cap
+MAX_IP_RECORDS = 20000  # hard cap on the in-RAM per-IP table (unique-IP flood backstop)
 
 # ── Occupancy-driven idle-TTL hysteresis ────────────────────────────────────
 OCCUPANCY_TIGHTEN = 0.80  # occupancy > this -> IDLE_TTL_TIGHT

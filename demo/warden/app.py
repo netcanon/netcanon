@@ -51,10 +51,17 @@ _bg_tasks: set[asyncio.Task] = set()
 
 
 def _spawn(coro) -> None:
-    """Fire-and-forget a coroutine, keeping a reference so it is not GC'd (RUF006)."""
+    """Fire-and-forget a coroutine, keeping a reference so it is not GC'd (RUF006)
+    and surfacing any exception (an unretrieved task exception is otherwise silent)."""
     task = asyncio.create_task(coro)
     _bg_tasks.add(task)
-    task.add_done_callback(_bg_tasks.discard)
+    task.add_done_callback(_on_bg_done)
+
+
+def _on_bg_done(task: asyncio.Task) -> None:
+    _bg_tasks.discard(task)
+    if not task.cancelled() and task.exception() is not None:
+        log.error("background task failed", exc_info=task.exception())
 
 
 @dataclass
@@ -158,7 +165,7 @@ async def _refill_pool() -> None:
             except Exception as exc:
                 _counters["pool_refill_failures"] += 1
                 log.warning("pool refill failed: %s", exc)
-                break
+                continue  # fill what we can; don't abandon the batch on one failure
             async with _lock:
                 _pool.append(inst)
     finally:
@@ -224,6 +231,12 @@ async def _reaper_tick() -> None:
         # evict stale per-IP records
         for ip in [ip for ip, r in _per_ip.items() if now - r.last_seen > C.PER_IP_TTL and r.active <= 0]:
             _per_ip.pop(ip, None)
+        # hard cap: under a unique-IP flood, drop the least-recently-seen idle
+        # records so _per_ip can't grow without bound between stale sweeps.
+        if len(_per_ip) > C.MAX_IP_RECORDS:
+            idle = sorted((r.last_seen, ip) for ip, r in _per_ip.items() if r.active <= 0)
+            for _, ip in idle[: len(_per_ip) - C.MAX_IP_RECORDS]:
+                _per_ip.pop(ip, None)
     for token, reason in expired:
         await _destroy(token, reason)
     for inst in recycle:

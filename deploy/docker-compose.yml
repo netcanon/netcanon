@@ -112,6 +112,8 @@ services:
       INFO: 0
     networks: [warden-sock]
     volumes:
+      # :ro is NOT a security control (the socket is a read/write API); the real
+      # boundary is the verb allowlist above + the authz-shim's create-body gate.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     read_only: true
     tmpfs: ["/run"]
