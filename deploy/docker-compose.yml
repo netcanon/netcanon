@@ -1,0 +1,122 @@
+# netcanon ephemeral demo — production stack (demo.netcanon.net).
+#
+# Image refs are env-interpolated (deploy/demo.env, gitignored) so this file
+# stays digest-free and its in-repo hash IS the published hash (invariant I6).
+# `make verify` prints the resolved digests + this file's sha256.
+#
+# Privilege chain:  caddy -> warden -> authz-shim -> socket-proxy -> docker.sock
+# Networks:  demo-int (instances + warden, no egress) | warden-sock (warden +
+# shim + socket-proxy) | caddy-net (caddy + warden).  Peer/warden-ward isolation
+# on demo-int is enforced by nftables (deploy/nftables/demo-int.nft), NOT
+# enable_icc:false (which would also cut warden->instance).
+#
+# ⚠️ Draft — not yet Gate-1 verified (docs/demo-plan/08-testing-verification.md).
+
+networks:
+  demo-int:
+    name: demo-int            # fixed name (no <project>_ prefix) so the warden's
+                              # network="demo-int" create matches this network
+    internal: true            # I5: no outbound internet for instances
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: demo-int   # stable name for the nftables rules
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+  warden-sock:
+    internal: true            # the Docker control plane is never internet-facing
+    driver: bridge
+  caddy-net:
+    driver: bridge
+
+volumes:
+  caddy-data:                 # ACME account + issued certs (TLS privkey lives here, host-only)
+  caddy-config:
+
+services:
+  caddy:
+    image: ${CADDY_IMAGE:?set in demo.env}
+    restart: unless-stopped
+    ports:
+      - "80:80"               # ACME HTTP-01 redirect only
+      - "443:443"
+    networks: [caddy-net]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../frontend:/srv/frontend:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    logging: { driver: local, options: { max-size: "10m" } }
+
+  warden:
+    image: ${WARDEN_IMAGE:?set in demo.env}
+    restart: unless-stopped
+    environment:
+      DOCKER_HOST: tcp://authz-shim:2375        # never the raw socket
+      NETCANON_INSTANCE_IMAGE: ${NETCANON_INSTANCE_IMAGE:?set in demo.env}
+      NETCANON_INSTANCE_NETWORK: demo-int
+    networks:
+      caddy-net: {}
+      warden-sock: {}
+      demo-int:
+        ipv4_address: 172.31.0.2                # the static addr the nftables ALLOW rule trusts
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on: [authz-shim]
+    logging: { driver: local, options: { max-size: "10m" } }
+
+  authz-shim:
+    image: ${WARDEN_SHIM_IMAGE:?set in demo.env}
+    restart: unless-stopped
+    environment:
+      DOCKER_SOCKET_PROXY: http://socket-proxy:2375
+      # The shim validates create bodies against constants.INSTANCE_SPEC, so it
+      # needs the SAME image digest + network as the warden or it refuses every create.
+      NETCANON_INSTANCE_IMAGE: ${NETCANON_INSTANCE_IMAGE:?set in demo.env}
+      NETCANON_INSTANCE_NETWORK: demo-int
+    networks: [warden-sock]                     # NOT on demo-int: instances can never reach it
+    read_only: true
+    tmpfs: ["/tmp"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on: [socket-proxy]
+    logging: { driver: local, options: { max-size: "10m" } }
+
+  socket-proxy:
+    image: ${SOCKET_PROXY_IMAGE:?set in demo.env}
+    restart: unless-stopped
+    environment:
+      # Verb/section allowlist — GET on enabled sections; POST only with POST=1.
+      # The authz-shim is the fine-grained create-BODY gate; this is the coarse
+      # verb boundary. Everything not listed defaults to 0 (deny). ⚠️ Gate-1:
+      # confirm container DELETE (remove) passes and exec/build/commit are denied.
+      CONTAINERS: 1           # list / inspect / create / start / remove
+      IMAGES: 1               # images.get (the pinned-image presence check)
+      POST: 1                 # create + start
+      VERSION: 1              # docker-py negotiates GET /version on connect (else warden won't start)
+      PING: 1                 # docker-py GET /_ping on connect
+      ALLOW_START: 1
+      ALLOW_STOP: 1
+      EXEC: 0                 # explicit deny (default, listed for auditability)
+      BUILD: 0
+      COMMIT: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      SWARM: 0
+      SYSTEM: 0
+      INFO: 0
+    networks: [warden-sock]
+    volumes:
+      # :ro is NOT a security control (the socket is a read/write API); the real
+      # boundary is the verb allowlist above + the authz-shim's create-body gate.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    read_only: true
+    tmpfs: ["/run", "/tmp"]     # tecnativa proxy (haproxy) writes /tmp/haproxy.cfg
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: { driver: local, options: { max-size: "10m" } }

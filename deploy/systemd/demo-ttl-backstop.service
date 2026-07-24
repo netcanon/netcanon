@@ -1,0 +1,8 @@
+[Unit]
+Description=netcanon demo — hard-TTL backstop (force-remove demo containers older than 1200s)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/demo-ttl-backstop.sh

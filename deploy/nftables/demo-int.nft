@@ -1,0 +1,24 @@
+#!/usr/sbin/nft -f
+# Idempotent demo-int isolation (invariant I4). The rules live in a dedicated
+# regular chain 'demo_isolation' that we (re)create + FLUSH on every apply, so
+# re-running never stacks duplicates. demo-firewall.service adds a SINGLE jump
+# from Docker's DOCKER-USER chain into it after docker starts.
+#
+#   warden -> instance : ALLOW (the proxy path)
+#   instance-> warden  : DENY  (can't reach the control plane / socket-proxy)
+#   instance-> instance: DENY  (can't reach a peer)
+#
+# Subnet-matched (172.31.0.0/24) so the bridge name is irrelevant; warden static
+# addr = 172.31.0.2. Instances run cap_drop:[ALL] (no CAP_NET_RAW), so they
+# cannot source-spoof 172.31.0.2.
+#
+# ⚠️ Gate-1/Gate-3: assumes the iptables-nft backend so DOCKER-USER is nft-visible
+# (assert with `nft list chain ip filter DOCKER-USER`); re-run demo-firewall.sh
+# after any dockerd reload that recreates DOCKER-USER.
+add table ip filter
+add chain ip filter demo_isolation
+flush chain ip filter demo_isolation
+add rule ip filter demo_isolation ct state established,related accept
+add rule ip filter demo_isolation ip saddr 172.31.0.2 tcp dport 8000 accept
+add rule ip filter demo_isolation ip daddr 172.31.0.2 ip saddr 172.31.0.0/24 drop
+add rule ip filter demo_isolation ip saddr 172.31.0.0/24 ip daddr 172.31.0.0/24 drop

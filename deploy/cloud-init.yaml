@@ -1,0 +1,95 @@
+#cloud-config
+# netcanon demo host — hardened Ubuntu 24.04 (docs/demo-plan/02-deployment.md).
+# No-retention controls (I2): swap off, core dumps discarded, journald volatile.
+# ⚠️ Draft — Gate 3 verifies swap empty, no core files, 443-only, HTTPS green.
+# EDIT before use: pin the SSH source (admin IPs / VPN) in the nftables filter.
+
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - fail2ban            # SSH brute-force protection (see jail below)
+  - unattended-upgrades # automatic security patches
+  - nftables            # host firewall + the demo-int isolation rules
+  - chrony              # time sync (TTL enforcement + audit timestamps depend on it)
+
+write_files:
+  # I2: swap-off is not the only RAM->disk path — discard core dumps too.
+  - path: /etc/sysctl.d/99-demo-hardening.conf
+    content: |
+      kernel.core_pattern=|/bin/false
+      vm.swappiness=0
+      net.bridge.bridge-nf-call-iptables=1
+  - path: /etc/modules-load.d/demo.conf
+    content: |
+      br_netfilter
+  - path: /etc/systemd/coredump.conf.d/demo.conf
+    content: |
+      [Coredump]
+      Storage=none
+      ProcessSizeMax=0
+  # Host logs live in RAM and rotate hard; nothing session-derived is in them.
+  - path: /etc/systemd/journald.conf.d/demo.conf
+    content: |
+      [Journal]
+      Storage=volatile
+      RuntimeMaxUse=64M
+  # fail2ban: SSH jail (the demo HTTP paths are intentionally unlogged, so the
+  # warden's in-RAM per-IP rate limit is the L7 abuse control, not fail2ban).
+  - path: /etc/fail2ban/jail.d/demo.conf
+    content: |
+      [sshd]
+      enabled  = true
+      maxretry = 4
+      findtime = 10m
+      bantime  = 1h
+  # Under memory pressure the OOM killer must hit an INSTANCE, never dockerd.
+  - path: /etc/systemd/system/docker.service.d/demo.conf
+    content: |
+      [Service]
+      LimitCORE=0
+      OOMScoreAdjust=-500
+  - path: /etc/docker/daemon.json
+    content: |
+      {"log-driver": "local", "log-opts": {"max-size": "10m"}, "live-restore": true}
+  # Host firewall: 443 + 80(ACME) inbound, SSH from admin only, default-deny.
+  # ⚠️ Replace 203.0.113.0/24 with your real admin source (IP / VPN subnet).
+  - path: /etc/nftables.conf
+    content: |
+      #!/usr/sbin/nft -f
+      # Host firewall in its OWN table so a reload never `flush ruleset`-wipes
+      # Docker's ip nat/filter tables (DOCKER-USER + the internal:true egress
+      # rules). Only host INPUT is managed here; Docker owns forward/isolation
+      # (see deploy/nftables/demo-int.nft applied by demo-firewall.service).
+      add table inet host_fw
+      delete table inet host_fw
+      table inet host_fw {
+        chain input {
+          type filter hook input priority 0; policy drop;
+          ct state established,related accept
+          iif "lo" accept
+          ip protocol icmp accept
+          tcp dport { 80, 443 } accept
+          ip saddr 203.0.113.0/24 tcp dport 22 accept   # SSH: admin source only
+        }
+      }
+
+runcmd:
+  - swapoff -a
+  - sed -i.bak '/\sswap\s/d' /etc/fstab
+  - modprobe br_netfilter || true
+  - sysctl --system
+  - systemctl restart systemd-journald
+  - systemctl enable --now chrony fail2ban nftables docker
+  # Install the warden-independent hard-TTL backstop (I3): removes any demo.*
+  # container older than 1200s every 60s, even if the warden is dead.
+  - install -m 0755 /opt/demo/deploy/systemd/demo-ttl-backstop.sh /usr/local/bin/demo-ttl-backstop.sh
+  - install -m 0644 /opt/demo/deploy/systemd/demo-ttl-backstop.service /etc/systemd/system/
+  - install -m 0644 /opt/demo/deploy/systemd/demo-ttl-backstop.timer /etc/systemd/system/
+  # demo-int isolation (I4): apply the nftables rules into DOCKER-USER after docker.
+  - install -m 0755 /opt/demo/deploy/systemd/demo-firewall.sh /usr/local/bin/demo-firewall.sh
+  - install -m 0644 /opt/demo/deploy/systemd/demo-firewall.service /etc/systemd/system/
+  - systemctl daemon-reload
+  - systemctl enable --now demo-ttl-backstop.timer
+  - systemctl enable --now demo-firewall.service

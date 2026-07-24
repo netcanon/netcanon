@@ -9,3 +9,12 @@ requirements.lock text eol=lf
 # (see netcanon/templates/_vendor/README.md).  Any EOL rewrite breaks the
 # pin, so exempt them from text normalization entirely.
 /netcanon/templates/_vendor/* -text
+# Demo host artifacts run on Linux — force LF so a Windows checkout can't commit
+# CRLF into a shell script (bad interpreter), nft/systemd unit, Makefile, or Caddyfile.
+/deploy/**/*.sh text eol=lf
+/deploy/systemd/*.service text eol=lf
+/deploy/systemd/*.timer text eol=lf
+/deploy/nftables/*.nft text eol=lf
+/deploy/Makefile text eol=lf
+/deploy/Caddyfile text eol=lf
+/deploy/cloud-init.yaml text eol=lf

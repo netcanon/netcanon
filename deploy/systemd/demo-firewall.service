@@ -1,0 +1,12 @@
+[Unit]
+Description=netcanon demo — apply demo-int isolation rules into DOCKER-USER (I4)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/demo-firewall.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

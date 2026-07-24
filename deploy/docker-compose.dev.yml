@@ -1,0 +1,18 @@
+# Local Gate-1 override — build the warden + shim from source instead of pulling
+# pinned images. The instance/caddy/socket-proxy images still come from demo.env
+# (use plain tags there for local dev, e.g. caddy:2, tecnativa/docker-socket-proxy).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# ⚠️ Local dev only — never the deploy path (the deploy stack pulls signed digests).
+services:
+  warden:
+    build:
+      context: ../demo/warden
+      target: warden
+    image: netcanon-demo-warden:dev
+  authz-shim:
+    build:
+      context: ../demo/warden
+      target: shim
+    image: netcanon-demo-warden-shim:dev
