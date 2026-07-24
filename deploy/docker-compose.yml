@@ -14,6 +14,8 @@
 
 networks:
   demo-int:
+    name: demo-int            # fixed name (no <project>_ prefix) so the warden's
+                              # network="demo-int" create matches this network
     internal: true            # I5: no outbound internet for instances
     driver: bridge
     driver_opts:
@@ -73,6 +75,10 @@ services:
     restart: unless-stopped
     environment:
       DOCKER_SOCKET_PROXY: http://socket-proxy:2375
+      # The shim validates create bodies against constants.INSTANCE_SPEC, so it
+      # needs the SAME image digest + network as the warden or it refuses every create.
+      NETCANON_INSTANCE_IMAGE: ${NETCANON_INSTANCE_IMAGE:?set in demo.env}
+      NETCANON_INSTANCE_NETWORK: demo-int
     networks: [warden-sock]                     # NOT on demo-int: instances can never reach it
     read_only: true
     tmpfs: ["/tmp"]
@@ -92,6 +98,8 @@ services:
       CONTAINERS: 1           # list / inspect / create / start / remove
       IMAGES: 1               # images.get (the pinned-image presence check)
       POST: 1                 # create + start
+      VERSION: 1              # docker-py negotiates GET /version on connect (else warden won't start)
+      PING: 1                 # docker-py GET /_ping on connect
       ALLOW_START: 1
       ALLOW_STOP: 1
       EXEC: 0                 # explicit deny (default, listed for auditability)

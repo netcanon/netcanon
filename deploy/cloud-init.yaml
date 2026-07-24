@@ -20,6 +20,10 @@ write_files:
     content: |
       kernel.core_pattern=|/bin/false
       vm.swappiness=0
+      net.bridge.bridge-nf-call-iptables=1
+  - path: /etc/modules-load.d/demo.conf
+    content: |
+      br_netfilter
   - path: /etc/systemd/coredump.conf.d/demo.conf
     content: |
       [Coredump]
@@ -54,8 +58,13 @@ write_files:
   - path: /etc/nftables.conf
     content: |
       #!/usr/sbin/nft -f
-      flush ruleset
-      table inet filter {
+      # Host firewall in its OWN table so a reload never `flush ruleset`-wipes
+      # Docker's ip nat/filter tables (DOCKER-USER + the internal:true egress
+      # rules). Only host INPUT is managed here; Docker owns forward/isolation
+      # (see deploy/nftables/demo-int.nft applied by demo-firewall.service).
+      add table inet host_fw
+      delete table inet host_fw
+      table inet host_fw {
         chain input {
           type filter hook input priority 0; policy drop;
           ct state established,related accept
@@ -64,13 +73,12 @@ write_files:
           tcp dport { 80, 443 } accept
           ip saddr 203.0.113.0/24 tcp dport 22 accept   # SSH: admin source only
         }
-        chain forward { type filter hook forward priority 0; policy accept; }
-        chain output  { type filter hook output priority 0; policy accept; }
       }
 
 runcmd:
   - swapoff -a
   - sed -i.bak '/\sswap\s/d' /etc/fstab
+  - modprobe br_netfilter || true
   - sysctl --system
   - systemctl restart systemd-journald
   - systemctl enable --now chrony fail2ban nftables docker
@@ -79,7 +87,9 @@ runcmd:
   - install -m 0755 /opt/demo/deploy/systemd/demo-ttl-backstop.sh /usr/local/bin/demo-ttl-backstop.sh
   - install -m 0644 /opt/demo/deploy/systemd/demo-ttl-backstop.service /etc/systemd/system/
   - install -m 0644 /opt/demo/deploy/systemd/demo-ttl-backstop.timer /etc/systemd/system/
+  # demo-int isolation (I4): apply the nftables rules into DOCKER-USER after docker.
+  - install -m 0755 /opt/demo/deploy/systemd/demo-firewall.sh /usr/local/bin/demo-firewall.sh
+  - install -m 0644 /opt/demo/deploy/systemd/demo-firewall.service /etc/systemd/system/
   - systemctl daemon-reload
   - systemctl enable --now demo-ttl-backstop.timer
-  # demo-int isolation rules are (re)applied after docker creates the bridge —
-  # see deploy/nftables/demo-int.nft + deploy/README.md (Gate-1/Gate-3).
+  - systemctl enable --now demo-firewall.service

@@ -15,8 +15,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import secrets
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
 import docker
@@ -35,6 +37,7 @@ _per_ip: dict[str, IpRecord] = {}  # source IP -> rate/concurrency record
 _lock = asyncio.Lock()  # guards _pool/_active/_per_ip — O(1) mutations only
 _idle_ttl = C.IDLE_TTL  # current idle TTL (hysteresis, see _adjust_idle_ttl)
 _refilling = False  # single-flight pool-refill guard
+_reserving = 0  # instances popped/created for an in-flight mint, not yet in _active
 _docker: docker.DockerClient | None = None
 _http: httpx.AsyncClient | None = None
 _counters = {
@@ -143,7 +146,7 @@ async def _refill_pool() -> None:
             return
         need = C.POOL_SIZE - len(_pool)
         # respect the global cap: pool + active must stay <= MAX_ACTIVE
-        room = C.MAX_ACTIVE - (len(_pool) + len(_active))
+        room = C.MAX_ACTIVE - (len(_pool) + len(_active) + _reserving)
         need = max(0, min(need, room))
         if need <= 0:
             return
@@ -197,39 +200,48 @@ async def _destroy(token: str, reason: str) -> None:
     log.info("session_destroyed reason=%s", reason)
 
 
+async def _reaper_tick() -> None:
+    now = time.monotonic()
+    expired: list[tuple[str, str]] = []
+    recycle: list[Instance] = []
+    async with _lock:
+        _adjust_idle_ttl()
+        for token, s in _active.items():
+            if now > s.deadline:
+                expired.append((token, "hard-ttl"))
+            elif now - s.last_activity > _idle_ttl:
+                expired.append((token, "idle"))
+            elif now - s.last_heartbeat > _stale_threshold(s.hidden):
+                expired.append((token, "hb"))
+        # recycle unassigned pool instances older than POOL_RECYCLE_AGE
+        keep: list[Instance] = []
+        for inst in _pool:
+            if now - inst.created_mono > C.POOL_RECYCLE_AGE:
+                recycle.append(inst)
+            else:
+                keep.append(inst)
+        _pool[:] = keep
+        # evict stale per-IP records
+        for ip in [ip for ip, r in _per_ip.items() if now - r.last_seen > C.PER_IP_TTL and r.active <= 0]:
+            _per_ip.pop(ip, None)
+    for token, reason in expired:
+        await _destroy(token, reason)
+    for inst in recycle:
+        await asyncio.to_thread(_docker_remove, inst.container_id)
+        _counters["pool_recycled"] += 1
+    await _refill_pool()
+
+
 async def _reaper() -> None:
-    """Every REAPER_PERIOD: expire sessions, recycle aged pool instances, refill."""
+    """Every REAPER_PERIOD: expire sessions, recycle aged pool instances, refill.
+    The tick is exception-guarded: one failure must not permanently kill TTL
+    enforcement (the whole live-side of I3 rides on this loop staying alive)."""
     while True:
         await asyncio.sleep(C.REAPER_PERIOD)
-        now = time.monotonic()
-        expired: list[tuple[str, str]] = []
-        recycle: list[Instance] = []
-        async with _lock:
-            _adjust_idle_ttl()
-            for token, s in _active.items():
-                if now > s.deadline:
-                    expired.append((token, "hard-ttl"))
-                elif now - s.last_activity > _idle_ttl:
-                    expired.append((token, "idle"))
-                elif now - s.last_heartbeat > _stale_threshold(s.hidden):
-                    expired.append((token, "hb"))
-            # recycle unassigned pool instances older than POOL_RECYCLE_AGE
-            keep: list[Instance] = []
-            for inst in _pool:
-                if now - inst.created_mono > C.POOL_RECYCLE_AGE:
-                    recycle.append(inst)
-                else:
-                    keep.append(inst)
-            _pool[:] = keep
-            # evict stale per-IP records
-            for ip in [ip for ip, r in _per_ip.items() if now - r.last_seen > C.PER_IP_TTL and r.active <= 0]:
-                _per_ip.pop(ip, None)
-        for token, reason in expired:
-            await _destroy(token, reason)
-        for inst in recycle:
-            await asyncio.to_thread(_docker_remove, inst.container_id)
-            _counters["pool_recycled"] += 1
-        await _refill_pool()
+        try:
+            await _reaper_tick()
+        except Exception:
+            log.exception("reaper tick failed; continuing")
 
 
 # ── Proxy helpers ───────────────────────────────────────────────────────────
@@ -248,7 +260,7 @@ def _fix_response_headers(headers: httpx.Headers) -> list[tuple[str, str]]:
         if kl in _HOP_BY_HOP or kl == "x-frame-options":
             continue
         if kl == "content-security-policy":
-            v = v.replace("frame-ancestors 'none'", "frame-ancestors 'self'")
+            v = re.sub(r"frame-ancestors\s+'none'", "frame-ancestors 'self'", v, flags=re.IGNORECASE)
         out.append((k, v))
     return out
 
@@ -261,7 +273,7 @@ async def _proxy(request: Request, inst: Instance, path: str, token: str) -> Res
         url += f"?{request.url.query}"
     fwd_headers = {
         k: v for k, v in request.headers.items()
-        if k.lower() not in _HOP_BY_HOP and k.lower() != "host"
+        if k.lower() not in _HOP_BY_HOP and k.lower() not in ("host", "authorization")
     }
     fwd_headers["X-Forwarded-For"] = request.client.host if request.client else ""
     # Inject the per-instance API key on /api/v1 calls (kept out of the browser).
@@ -281,9 +293,9 @@ async def _proxy(request: Request, inst: Instance, path: str, token: str) -> Res
         finally:
             await upstream.aclose()
 
-    resp = StreamingResponse(
-        _body(), status_code=upstream.status_code, headers=dict(resp_headers)
-    )
+    resp = StreamingResponse(_body(), status_code=upstream.status_code)
+    # Preserve duplicate headers (multiple Set-Cookie / CSP) — dict() would collapse them.
+    resp.raw_headers = [(k.encode("latin-1"), v.encode("latin-1")) for k, v in resp_headers]
     # (Re)stamp the routing cookie so absolute-path requests reach this instance.
     resp.set_cookie(
         C.ROUTE_COOKIE, token, max_age=C.HARD_TTL, path="/",
@@ -300,14 +312,14 @@ def _refresh_activity(sess: Session, method: str, path: str) -> None:
 
 
 # ── App ─────────────────────────────────────────────────────────────────────
-app = FastAPI(title="netcanon-demo-warden", docs_url=None, redoc_url=None, openapi_url=None)
-
-
-@app.on_event("startup")
-async def _startup() -> None:
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
     global _docker, _http
     _docker = docker.from_env()
-    _http = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0))
+    _http = httpx.AsyncClient(
+        timeout=httpx.Timeout(30.0, connect=5.0),
+        limits=httpx.Limits(max_connections=256, max_keepalive_connections=64),
+    )
     if not C.INSTANCE_IMAGE:
         raise RuntimeError("NETCANON_INSTANCE_IMAGE is not set (must be digest-pinned)")
     if not await asyncio.to_thread(_docker_image_present):
@@ -317,20 +329,30 @@ async def _startup() -> None:
         await asyncio.to_thread(_docker_remove, cid)
     await _refill_pool()
     _spawn(_reaper())
-
-
-@app.on_event("shutdown")
-async def _shutdown() -> None:
+    yield
     if _http is not None:
         await _http.aclose()
 
 
+app = FastAPI(
+    title="netcanon-demo-warden", docs_url=None, redoc_url=None,
+    openapi_url=None, lifespan=_lifespan,
+)
+
+
 def _client_ip(request: Request) -> str:
+    # Behind Caddy, request.client.host is Caddy's IP; the visitor's IP is the
+    # first hop of X-Forwarded-For (Caddy sets it). Trusted because only Caddy can
+    # reach the warden (caddy-net) — instances on demo-int are denied the warden.
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
     return request.client.host if request.client else "?"
 
 
 @app.post("/session/new")
 async def session_new(request: Request) -> Response:
+    global _reserving
     ip = _client_ip(request)
     now = time.monotonic()
     # If this browser already has a live session, destroy-and-replace it.
@@ -345,19 +367,29 @@ async def session_new(request: Request) -> Response:
             _counters["503_count"] += 1
             return JSONResponse({"reason": "rate_limited"}, status_code=429)
         inst = _pool.pop(0) if _pool else None
+        if inst is not None:
+            _reserving += 1  # hold the popped instance against the cap until it lands in _active
     if inst is None:
-        # at cap: reclaim the longest-idle session older than the floor, else 503
+        # Pool empty at cap. Reclaim the longest-idle session (frees a MAX_ACTIVE
+        # slot), then create a fresh instance INLINE for this request — the pool is
+        # empty, so re-popping it would 503 and the victim would have died for nothing.
         victim = await _reclaim_one(now)
         if victim is None:
             _counters["503_count"] += 1
             return JSONResponse({"reason": "capacity"}, status_code=503)
         async with _lock:
-            inst = _pool.pop(0) if _pool else None
-        if inst is None:
+            _reserving += 1
+        try:
+            inst = await asyncio.to_thread(_docker_create_and_start)
+        except Exception as exc:
+            async with _lock:
+                _reserving -= 1
+            log.warning("inline create after reclaim failed: %s", exc)
             _counters["503_count"] += 1
             return JSONResponse({"reason": "capacity"}, status_code=503)
     token = secrets.token_urlsafe(C.TOKEN_NBYTES)
     async with _lock:
+        _reserving -= 1
         rec = _per_ip.setdefault(ip, IpRecord())
         rec.mints.append(now)
         rec.active += 1
@@ -432,7 +464,7 @@ async def healthz() -> Response:
 async def iframe_route(token: str, path: str, request: Request) -> Response:
     sess = _active.get(token)
     full = "/" + path
-    if sess is None or not C.route_allowed(request.method, full):
+    if sess is None or time.monotonic() > sess.deadline or not C.route_allowed(request.method, full):
         return Response(status_code=404)
     _refresh_activity(sess, request.method, full)
     return await _proxy(request, sess.instance, full, token)
@@ -443,7 +475,7 @@ async def cookie_route(full_path: str, request: Request) -> Response:
     token = request.cookies.get(C.ROUTE_COOKIE)
     sess = _active.get(token) if token else None
     full = "/" + full_path
-    if sess is None or not C.route_allowed(request.method, full):
+    if sess is None or time.monotonic() > sess.deadline or not C.route_allowed(request.method, full):
         return Response(status_code=404)
     _refresh_activity(sess, request.method, full)
     return await _proxy(request, sess.instance, full, token)

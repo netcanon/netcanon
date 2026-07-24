@@ -28,9 +28,11 @@ REAPER_PERIOD = 10  # reaper loop tick
 # instance is ever assigned older than POOL_MAX_AGE.
 POOL_RECYCLE_AGE = POOL_MAX_AGE - REAPER_PERIOD  # 290
 # Creation-age ceiling for the warden-startup sweep + the independent host
-# systemd backstop.  Provably looser than any live session's 900s
-# assignment-relative deadline, so it can never fire early.
-HARD_TTL_BACKSTOP = HARD_TTL + POOL_MAX_AGE  # 1200
+# systemd backstop.  Adds slack over HARD_TTL + POOL_MAX_AGE for reaper jitter +
+# the create-duration gap between the created_at LABEL (stamped pre-create) and
+# the monotonic assignment deadline, so it can never fire before a live session's
+# 900s assignment-relative deadline.
+HARD_TTL_BACKSTOP = HARD_TTL + POOL_MAX_AGE + 120  # 1320 (~22 min worst case)
 
 # ── Heartbeat / no-beacon reclaim ───────────────────────────────────────────
 HB_INTERVAL = 30  # frontend heartbeat cadence
