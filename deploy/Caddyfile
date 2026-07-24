@@ -1,0 +1,38 @@
+# netcanon demo — TLS termination + static landing + warden reverse proxy.
+# TLS terminates HERE (DNS-only Cloudflare → Caddy is the sole terminator; no
+# third party sees plaintext, so the whitepaper TCB stays our own stack).
+{
+	email {env.ACME_EMAIL}
+}
+
+demo.netcanon.net {
+	request_body {
+		max_size 2MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	# I2: no request logging on any demo path (the warden never logs bodies either).
+	log {
+		output discard
+	}
+
+	# Static landing page + whitepaper, served by Caddy directly.
+	@static path / /index.html /whitepaper /whitepaper.html /favicon.ico
+	handle @static {
+		root * /srv/frontend
+		try_files {path} {path}.html /index.html
+		file_server
+	}
+
+	# Everything else → the warden: session API (/session/*), the iframe (/i/*),
+	# and the cookie-routed absolute app paths (/migrate, /api/v1/migration/*, …).
+	handle {
+		reverse_proxy warden:8080
+	}
+}

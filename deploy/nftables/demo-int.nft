@@ -1,0 +1,20 @@
+#!/usr/sbin/nft -f
+# demo-int isolation (invariant I4). Insert the three-way policy at the TOP of
+# Docker's DOCKER-USER chain (dockerd creates DOCKER-USER; do NOT redefine it as
+# a base chain). `insert` prepends, so these are listed bottom-up to land in the
+# right order: established/related first, then warden->instance ALLOW, then the
+# two DENYs. Subnet-matched (172.31.0.0/24) so the bridge name is irrelevant;
+# warden static addr = 172.31.0.2. Instances run cap_drop:[ALL] (no CAP_NET_RAW),
+# so they cannot source-spoof 172.31.0.2.
+#
+#   warden  -> instance : ALLOW (the proxy path)
+#   instance-> warden   : DENY  (can't reach the control plane / socket-proxy)
+#   instance-> instance : DENY  (can't reach a peer)
+#
+# ⚠️ Gate-1/Gate-3: run AFTER docker.service (a systemd oneshot), confirm ordering
+# survives a daemon reload, and make re-application idempotent (flush the demo
+# rules by handle before re-inserting) so repeated runs don't stack duplicates.
+insert rule ip filter DOCKER-USER ip saddr 172.31.0.0/24 ip daddr 172.31.0.0/24 drop
+insert rule ip filter DOCKER-USER ip daddr 172.31.0.2 ip saddr 172.31.0.0/24 drop
+insert rule ip filter DOCKER-USER ip saddr 172.31.0.2 tcp dport 8000 accept
+insert rule ip filter DOCKER-USER ct state established,related accept
