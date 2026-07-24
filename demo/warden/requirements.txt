@@ -1,0 +1,7 @@
+# Warden + authz-shim runtime deps. Pinned; a hash-locked requirements.lock
+# (per docs/demo-plan/02-deployment.md image-supply-chain) is a follow-up before
+# the warden image is signed/attested for deploy.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+httpx==0.28.1
+docker==7.1.0
