@@ -40,8 +40,9 @@ UPSTREAM = os.environ.get("DOCKER_SOCKET_PROXY", "http://socket-proxy:2375").rst
 _CREATE_RE = re.compile(r"^/(v[0-9.]+/)?containers/create$")
 _START_RE = re.compile(r"^/(v[0-9.]+/)?containers/[^/]+/start$")
 
-# Top-level create-body keys docker-py legitimately sends. EXCLUDES
-# networkingconfig on purpose (attaching an extra network = isolation breach).
+# Top-level create-body keys docker-py legitimately sends. networkingconfig IS
+# sent (its EndpointsConfig is validated below to attach ONLY the demo network —
+# an extra-network attach would breach isolation).
 # Any unlisted key (in any case) is rejected; a false-reject fails CLOSED (the
 # demo won't launch) and is caught by the Gate-1 positive-path test.
 _ALLOWED_TOP = frozenset(
@@ -50,7 +51,7 @@ _ALLOWED_TOP = frozenset(
         "attachstdin", "attachstdout", "attachstderr", "tty", "openstdin",
         "stdinonce", "cmd", "entrypoint", "workingdir", "volumes", "exposedports",
         "stopsignal", "stoptimeout", "healthcheck", "networkdisabled",
-        "macaddress", "onbuild", "shell", "argsescaped",
+        "macaddress", "onbuild", "shell", "argsescaped", "networkingconfig",
     }
 )
 _ALLOWED_HOSTCONFIG = frozenset(
@@ -104,6 +105,11 @@ def validate_create_body(body: object) -> str | None:
         return "HostConfig.SecurityOpt must be exactly [no-new-privileges:true]"
     if _fold(hc.get("logconfig") or {}).get("type") not in (None, "none"):
         return "HostConfig.LogConfig.Type must be none"
+    nc = _fold(top.get("networkingconfig") or {})
+    if nc:
+        stray = set(_fold(nc.get("endpointsconfig") or {})) - {C.INSTANCE_NETWORK}
+        if stray:
+            return f"NetworkingConfig attaches non-demo network(s): {sorted(stray)}"
     return None
 
 

@@ -38,6 +38,9 @@ CANON = {
         "SecurityOpt": ["no-new-privileges:true"],
         "LogConfig": {"Type": "none"},
     },
+    # docker-py DOES send a top-level NetworkingConfig (Gate-1 finding) — allowed
+    # but validated to attach only the demo network.
+    "NetworkingConfig": {"EndpointsConfig": {"demo-int": {}}},
 }
 
 
@@ -85,9 +88,16 @@ def test_forbidden_hostconfig_keys_rejected(key, val):
     assert authz_shim.validate_create_body(_mutate(**{key: val})) is not None
 
 
-def test_top_level_networkingconfig_rejected():
+def test_networkingconfig_non_demo_network_rejected():
     b = copy.deepcopy(CANON)
     b["NetworkingConfig"] = {"EndpointsConfig": {"caddy-net": {}}}
+    assert authz_shim.validate_create_body(b) is not None
+
+
+def test_networkingconfig_extra_network_alongside_demo_rejected():
+    # attaching caddy-net *in addition* to the demo network = isolation breach
+    b = copy.deepcopy(CANON)
+    b["NetworkingConfig"] = {"EndpointsConfig": {"demo-int": {}, "caddy-net": {}}}
     assert authz_shim.validate_create_body(b) is not None
 
 

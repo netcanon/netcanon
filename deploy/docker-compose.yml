@@ -116,7 +116,7 @@ services:
       # boundary is the verb allowlist above + the authz-shim's create-body gate.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     read_only: true
-    tmpfs: ["/run"]
+    tmpfs: ["/run", "/tmp"]     # tecnativa proxy (haproxy) writes /tmp/haproxy.cfg
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     logging: { driver: local, options: { max-size: "10m" } }

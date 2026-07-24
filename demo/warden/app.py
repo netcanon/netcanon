@@ -14,6 +14,7 @@ This is Trusted Computing Base — keep it small and auditable (<=500 lines).
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import re
 import secrets
@@ -99,7 +100,7 @@ def _client() -> docker.DockerClient:
 def _docker_create_and_start() -> Instance:
     """Create + start one hardened instance and return it (blocking)."""
     api_key = secrets.token_urlsafe(24)
-    fernet_key = secrets.token_urlsafe(32)
+    fernet_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()  # valid Fernet key
     created_wall = int(time.time())
     instance_id = secrets.token_hex(6)
     kwargs = C.build_instance_create_kwargs(api_key, fernet_key, created_wall, instance_id)

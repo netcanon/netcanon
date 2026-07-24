@@ -72,10 +72,14 @@ INSTANCE_NETWORK = os.environ.get("NETCANON_INSTANCE_NETWORK", "demo-int")
 # Every writable path in RAM (I1/I2).  BOTH declared VOLUME paths
 # (/app/data AND /app/configs) must be tmpfs or Docker creates a persistent
 # anonymous host-disk volume that falsifies "zero volumes".
+# mode=1777 (world-writable + sticky) is REQUIRED: a Docker tmpfs shadows the
+# image dir with a fresh ROOT-owned mount, but netcanon runs as uid 1000 (USER
+# app) and must mkdir /app/data/jobs etc. Without it the instance exits(3) on a
+# PermissionError (found at Gate-1). Ephemeral single-process container -> safe.
 INSTANCE_TMPFS = {
-    "/tmp": "rw,noexec,nosuid,size=64m",  # Starlette spools >~1MB multipart here
-    "/app/data": "rw,noexec,nosuid,size=32m",
-    "/app/configs": "rw,noexec,nosuid,size=8m",
+    "/tmp": "rw,noexec,nosuid,size=64m,mode=1777",  # Starlette spools >~1MB multipart here
+    "/app/data": "rw,noexec,nosuid,size=32m,mode=1777",
+    "/app/configs": "rw,noexec,nosuid,size=8m,mode=1777",
 }
 INSTANCE_MEM_LIMIT = "256m"  # fail-closed OOM guardrail, NOT the sizing basis
 INSTANCE_NANO_CPUS = 500_000_000  # 0.5 CPU
