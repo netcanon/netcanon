@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>netcanon demo — privacy &amp; ephemerality</title>
+<style>
+:root {
+  --nc-indigo: #4f46e5; --nc-indigo-hover: #4338ca; --nc-indigo-fg: #ffffff;
+  --nc-amber: #b45309; --nc-amber-bg: #fffbeb; --nc-amber-border: #fcd34d;
+  --nc-green: #15803d; --nc-red: #dc2626; --nc-red-hover: #b91c1c;
+  --nc-bg: #ffffff; --nc-surface: #f8fafc; --nc-surface-2: #f1f5f9;
+  --nc-text: #0f172a; --nc-muted: #64748b; --nc-border: #e2e8f0;
+  --nc-radius: 10px; --nc-shadow: 0 1px 3px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.04);
+  --nc-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --nc-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --nc-indigo: #818cf8; --nc-indigo-hover: #a5b4fc; --nc-indigo-fg: #1e1b4b;
+    --nc-amber: #fbbf24; --nc-amber-bg: #2a2410; --nc-amber-border: #a16207;
+    --nc-green: #4ade80; --nc-red: #f87171; --nc-red-hover: #fca5a5;
+    --nc-bg: #0f172a; --nc-surface: #1e293b; --nc-surface-2: #334155;
+    --nc-text: #e2e8f0; --nc-muted: #94a3b8; --nc-border: #334155;
+    --nc-shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+}
+* { box-sizing: border-box; }
+body {
+  font-family: var(--nc-sans); color: var(--nc-text); background: var(--nc-bg);
+  line-height: 1.6; margin: 0;
+}
+.topnav {
+  background: var(--nc-surface); border-bottom: 1px solid var(--nc-border);
+  padding: .75rem 1.25rem;
+}
+.topnav a { color: var(--nc-indigo); text-decoration: none; font-weight: 600; }
+.topnav a:hover { color: var(--nc-indigo-hover); text-decoration: underline; }
+.prose { max-width: 760px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+.prose a { color: var(--nc-indigo); }
+.prose a:hover { color: var(--nc-indigo-hover); }
+h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 2rem 0 .75rem; }
+h1 { font-size: 2rem; margin-top: .5rem; }
+h2 { font-size: 1.5rem; border-bottom: 1px solid var(--nc-border); padding-bottom: .3rem; }
+h3 { font-size: 1.2rem; }
+p, ul, ol, blockquote { margin: 0 0 1rem; }
+ul, ol { padding-left: 1.5rem; }
+li { margin: .25rem 0; }
+code {
+  font-family: var(--nc-mono); font-size: .9em; background: var(--nc-surface-2);
+  padding: .1rem .35rem; border-radius: 6px;
+}
+pre {
+  font-family: var(--nc-mono); font-size: .85rem; background: var(--nc-surface-2);
+  border: 1px solid var(--nc-border); border-radius: var(--nc-radius);
+  padding: 1rem; overflow-x: auto; margin: 0 0 1rem;
+}
+pre code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+blockquote {
+  border-left: 3px solid var(--nc-indigo); padding: .25rem 0 .25rem 1rem;
+  color: var(--nc-muted); background: var(--nc-surface);
+  border-radius: 0 var(--nc-radius) var(--nc-radius) 0;
+}
+blockquote p:last-child { margin-bottom: 0; }
+hr { border: none; border-top: 1px solid var(--nc-border); margin: 2.5rem 0; }
+.table-wrap { overflow-x: auto; margin: 0 0 1rem; }
+table { border-collapse: collapse; width: 100%; font-size: .875rem; }
+th, td {
+  padding: .5rem .75rem; border-bottom: 1px solid var(--nc-border);
+  text-align: left; vertical-align: top;
+}
+th { background: var(--nc-surface-2); font-weight: 600; white-space: nowrap; }
+mark.ph {
+  background: var(--nc-amber-bg); color: var(--nc-amber);
+  border: 1px solid var(--nc-amber-border); border-radius: 4px;
+  padding: 0 .3rem; font-family: var(--nc-mono); font-size: .9em;
+}
+.template-banner {
+  max-width: 760px; margin: 1.5rem auto 0; padding: .9rem 1.1rem;
+  background: var(--nc-amber-bg); color: var(--nc-amber);
+  border: 1px solid var(--nc-amber-border); border-radius: var(--nc-radius);
+  box-shadow: var(--nc-shadow); font-size: .95rem;
+}
+.btn {
+  display: inline-block; background: var(--nc-indigo); color: var(--nc-indigo-fg);
+  border: none; border-radius: var(--nc-radius); padding: .6rem 1.1rem;
+  cursor: pointer; font: inherit; text-decoration: none;
+}
+.btn:hover { background: var(--nc-indigo-hover); }
+.btn-danger { background: var(--nc-red); color: #ffffff; }
+.btn-danger:hover { background: var(--nc-red-hover); }
+.footer {
+  border-top: 1px solid var(--nc-border); color: var(--nc-muted);
+  text-align: center; padding: 1.5rem 1.25rem 2.5rem; font-size: .875rem;
+}
+.footer a { color: var(--nc-indigo); }
+</style>
+</head>
+<body>
+<nav class="topnav"><a href="/">← Back to the demo</a></nav>
+<div class="template-banner"><strong>Template copy.</strong> This is the in-repo TEMPLATE copy of the whitepaper. The live demo fills the reproducibility block (image digests, hashes, deploy date) at deploy time. The live site may run an older published bundle than the newest repo commit — the block on the live site describes the running system.</div>
+<main class="prose">
+<h1 id="the-netcanon-demo-never-keeps-your-config-here-s-the-proof">The netcanon demo never keeps your config — here's the proof</h1>
+<p>Network configs are sensitive. A running-config can contain your addressing plan, SNMP strings, usernames, and topology. So the netcanon demo runs your session in a throwaway instance that <strong>self-destructs within 15 minutes</strong>, built so that retaining your data is not just against policy — it is <strong>architecturally unavailable</strong>. This page maps every claim to the exact control that enforces it and a procedure anyone can use to verify it.</p>
+<p>The entire deployment is open source: <a href="https://github.com/netcanon/netcanon">github.com/netcanon/netcanon</a>. The running system is reproducible from that repo, and its image digests, lockfile hash, and compose-file hash are published in the reproducibility block below.</p>
+<blockquote>
+<p>This document is the in-repo <strong>template</strong>. The reproducibility block carries placeholders that the deploy step fills with the exact digests, hashes, and date of the running bundle. The live copy at <code>/whitepaper</code> describes the running system; this repo copy describes the mechanism. Every procedure below is a copy-paste command in the repo's <a href="../deploy/VERIFY.md"><code>VERIFY.md</code></a>.</p>
+</blockquote>
+<h2 id="threat-model">Threat model</h2>
+<p>We defend the visitor's pasted data against: (a) operator retention (us, by design), (b) cross-visitor leakage, (c) post-session forensic recovery from the host, (d) log-based leakage at any layer, (e) a compromised or buggy demo application instance. Out of scope: a fully compromised host kernel/hypervisor (no hosted demo can defend that — if your config is that sensitive, run netcanon locally: <code>docker run --rm -p 8000:8000 ghcr.io/netcanon/netcanon</code>; we make that path one click away).</p>
+<h3 id="trusted-computing-base">Trusted Computing Base</h3>
+<p>Every claim below rests on a small set of components we ask you to trust: the <strong>warden</strong> (session manager + reverse proxy), the <strong>socket-proxy + create-body authz shim</strong> (the capability filter that fronts the Docker socket), <strong>Caddy</strong> (TLS termination), <strong>dockerd</strong> (the container runtime), and the <strong>host kernel/OS</strong>. These are the TCB. A compromise of any of them — most sharply the warden, which reaches the Docker socket — is <strong>host root</strong>, and host root voids <strong>all ten claims</strong> below. We do not pretend otherwise; we make the TCB as small and as auditable as we can:</p>
+<ul>
+<li><strong>The warden is ≤ 500 lines</strong> you can read end to end</li>
+</ul>
+<p>(<code>demo/warden/app.py</code>, source: <a href="https://github.com/netcanon/netcanon">github.com/netcanon/netcanon</a>).</p>
+<ul>
+<li>It runs as a <strong>non-root, read-only container</strong> and reaches Docker only through</li>
+</ul>
+<p>a <strong>socket-proxy / authz filter</strong> that permits just <strong>create, start, list (<code>GET /containers/json</code>, including label filters), inspect, and remove</strong> — denying everything else (<code>exec</code>, <code>commit</code>, <code>build</code>, <code>images</code>, <code>networks</code>, <code>volumes</code>, …), not the arbitrary, root-equivalent Docker API. Because the socket proxy cannot inspect a create <em>body</em>, a <strong>small create-body authz shim</strong> (<code>demo/warden/authz_shim.py</code>) in front of it enforces a <strong>whole-body default-deny allowlist</strong> on every <code>POST /containers/create</code>: the raw wire body may contain <strong>only</strong> the fields of the canonical create-body template (the spec in <code>demo/warden/constants.py</code> serialized through the pinned Docker SDK), each pinned to that template (image digest, read-only rootfs, the tmpfs set, no bind mount, network mode, memory/pids/cpu caps, <code>CapDrop: [ALL]</code> with no <code>CapAdd</code>, security-opts) — <strong>any other field, in any letter case, is rejected</strong>, so an added <code>Privileged</code>, <code>CapAdd</code>, bind mount, or <code>NetworkMode: host</code> cannot slip through. Only the <code>demo.*</code> labels and the two per-instance random env keys may differ. This shim is <strong>counted in the Trusted Computing Base</strong> alongside the ≤ 500-line warden. (The case-fold is load-bearing: Docker's Go JSON decoder matches struct fields case-insensitively, so the allowlist folds every key to lower case before checking — a lowercase <code>binds</code> cannot smuggle a host mount past it.)</p>
+<ul>
+<li>It <strong>never <code>exec</code>s into an instance</strong> and never reads instance memory or</li>
+</ul>
+<p>tmpfs; its only contact with your instance is proxying HTTP to it.</p>
+<ul>
+<li>Caddy and dockerd are stock, pinned by digest (below); the host is a single</li>
+</ul>
+<p>small VPS whose configuration lives in the same public repo.</p>
+<p>If you cannot extend that trust, the honest answer is the one on the front page: run netcanon locally with <code>docker run …</code> and trust nothing of ours.</p>
+<h2 id="claims-controls-proofs">Claims, controls, proofs</h2>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Claim</th>
+<th>Control</th>
+<th>Proof (abridged; full: <a href="../deploy/VERIFY.md"><code>VERIFY.md</code></a>)</th>
+<th>Tier</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>1</td><td>Your session runs in its own isolated instance</td><td>Warden creates one container per session; routing is by the <strong>HttpOnly <code>nc_route</code> cookie</strong> — a bearer credential valid for the life of the session, not a single-use token; instances unreachable except via the warden</td><td>Two browser profiles: each header shows a <strong>distinct instance-id chip</strong> (<code>instance_id</code>, a display id — not the routing token); end session A → A's now-dead cookie 404s every request while B is unaffected</td><td>V·O</td></tr>
+<tr><td>2</td><td>The instance cannot write to disk</td><td><code>read_only: true</code> rootfs; <strong>both</strong> declared VOLUME paths (<code>/app/data</code> <em>and</em> <code>/app/configs</code>) backed by tmpfs (RAM), so no anonymous host-disk volume is ever created; <strong>zero named or anonymous volumes</strong></td><td><code>docker inspect</code> shows ReadonlyRootfs=true and Mounts = tmpfs only; <code>docker diff</code> clean outside tmpfs; <code>docker volume ls</code> empty after teardown</td><td>O</td></tr>
+<tr><td>3</td><td>Nothing survives the session</td><td>Teardown = <code>container.remove(v=True, force=True)</code> (container <strong>and</strong> any anonymous volume); tmpfs freed by kernel; the hard TTL is enforced across <strong>two independent enforcement domains (the warden and host systemd), three mechanisms</strong> — (1) the warden's in-RAM reaper at <code>deadline = assignment_time + HARD_TTL</code> (900 s from assignment), (2) the warden's startup label-sweep, and (3) an independent host <strong>systemd timer</strong> (swept every 60 s) that force-removes any <code>demo.*</code>-labeled container older than <code>HARD_TTL + POOL_MAX_AGE = 1200 s</code> even if the warden is dead; sooner in practice via the 10-min idle reclaim (sooner under heavy load), <code>pagehide</code> <code>sendBeacon</code>, and heartbeat timeout (<strong>≤ 2 min for a closed foreground tab, ≤ ~4 min for a throttled background tab</strong>)</td><td>Destroy → <code>docker ps -a</code> and <code>docker volume ls</code> empty of it; kill the warden mid-session → the systemd timer still removes it within ~20 min of creation; canary paste + host-wide grep finds nothing post-teardown</td><td>O</td></tr>
+<tr><td>4</td><td>Your paste appears in no log, anywhere</td><td>Instance log driver <code>none</code>; warden logs metadata-only (schema enumerated) and <strong>never interpolates a request body — including in exception handlers / error paths</strong>; Caddy access logging disabled for the whole demo vhost (<code>log { output discard }</code>); journald volatile (RAM)</td><td>Canary-string grep across journald + filesystems; warden log-schema test asserts no body field on any path, error paths included</td><td>O</td></tr>
+<tr><td>5</td><td>RAM contents can't leak to disk (swap <strong>or</strong> core dump)</td><td>Swap disabled host-wide; <code>memswap_limit == mem_limit</code>; <strong>core dumps disabled host-wide</strong> — <code>kernel.core_pattern</code> set to discard, <code>systemd-coredump</code> <code>Storage=none</code> + <code>ProcessSizeMax=0</code>, apport neutered, <code>docker.service LimitCORE=0</code></td><td><code>swapon --show</code> empty; inspect shows limits equal; <code>cat /proc/sys/kernel/core_pattern</code> shows the discard sink; force a crash → no core file written</td><td>O</td></tr>
+<tr><td>6</td><td>The instance can't phone anywhere</td><td>Instances on an <code>internal: true</code> network (no egress); ICC is all-or-nothing, so isolation is enforced by <strong>explicit nftables rules</strong>: warden→instance ALLOW, instance→instance DENY, instance→warden DENY</td><td>From inside an instance: every outbound connect fails; instance→instance fails; instance→warden fails</td><td>O</td></tr>
+<tr><td>7</td><td>Even netcanon's encryption key is never written to disk</td><td>The warden injects a <strong>per-instance random <code>NETCANON_FERNET_KEY</code></strong> (Tier-1 of netcanon's key resolution), so the file fallback at <code>data/.fernet_key</code> is never reached — <strong>no Fernet key file is ever created</strong>; the key lives only in the instance's RAM</td><td>From the host via the <strong>raw host Docker socket</strong> (not the warden's path — its allowlist forbids <code>exec</code>), <code>docker exec</code>/<code>docker inspect</code> shows the env key set and no <code>.fernet_key</code> on disk (<code>/app/data</code> is tmpfs regardless); gone with the instance</td><td>O</td></tr>
+<tr><td>8</td><td>The demo can't silently degrade isolation under load</td><td>Hard instance cap (<code>MAX_ACTIVE</code> = 32); per-IP concurrent-session cap (<code>PER_IP_MAX_CONCURRENT</code> = 2); above 80% occupancy the <strong>idle</strong> TTL tightens (600 s → 300 s, applied retroactively within ~10–20 s of the crossing, loosening back below 70% — hysteresis), reclaiming untouched tabs faster while the 15-min hard ceiling is left intact; the longest-idle (never-translated) session is reclaimed before anyone is refused — but <strong>never one younger than 120 s</strong> (a mid-paste session is protected; if every session is under that floor the demo returns 503 rather than reclaiming one); at the cap the demo returns <strong>503</strong> rather than sharing an instance</td><td>Saturate the cap; observe 503 + busy UI, never a shared instance (<strong>the third concurrent session from your IP is refused — that you can see</strong>)</td><td>O</td></tr>
+<tr><td>9</td><td>The published deployment is exactly reproducible (and the live host is operator-attested to match)</td><td>Images pinned by digest; <code>requirements.lock</code> hash-locked; compose SHA-256 published</td><td>Digests + hashes below; <code>make verify</code> reproduces them <strong>from the repo</strong> — it attests the published artifact, <strong>not this live host</strong> (no hosted demo can remotely prove its own runtime; that is what the local <code>docker run</code> path is for)</td><td>O</td></tr>
+<tr><td>10</td><td>No tracking on the demo page</td><td>The <strong>page</strong> sets no cookies, no <code>localStorage</code>, no analytics, no third-party requests; the <em>only</em> cookie in play is the warden's <strong>HttpOnly, SameSite=Strict, Secure</strong> session-routing cookie — a bare instance binding, not an identifier (disclosed under "What we do see")</td><td>View source (self-contained, all CSS/JS inline); devtools <strong>Network</strong> shows no third-party requests and <strong>Application → Cookies</strong> shows only the routing cookie</td><td>V</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Tier — how far you have to trust us.</strong> <strong>V</strong> = <em>visitor-verifiable now</em>: you can confirm it from your own browser, on the live site, trusting nothing of ours. <strong>O</strong> = <em>operator-attested + locally reproducible</em>: confirming it needs host access, so we commit the exact command output in <a href="../deploy/VERIFY.md"><code>VERIFY.md</code></a> — and, because no hosted demo can remotely prove its own runtime, you can reproduce every <strong>O</strong> row yourself by running the identical stack locally with <code>docker run …</code>. <code>make verify</code> attests the <strong>published repo/artifact, not this live host</strong>. A row marked <strong>V·O</strong> carries both components: claim 1 is the case — you can watch the instance-id chip differ and the dead-cookie 404 from your own browser (<strong>V</strong>), while "never a <em>shared</em> instance" is attested at the container boundary (<strong>O</strong>).</p>
+<h2 id="what-we-do-see">What we do see</h2>
+<p>Honesty section — required. We (the operator) can observe: standard host operational metadata (session count, lifecycle timestamps, destroy reasons, status codes), our host provider's infrastructure-level traffic metadata, and whatever a TLS-terminating proxy inherently sees <strong>in memory while streaming</strong> your request. Two more things, stated outright:</p>
+<ul>
+<li><strong>A warden-set routing cookie.</strong> netcanon's UI uses absolute URLs</li>
+</ul>
+<p>(<code>fetch('/api/v1/migration/plan')</code>, <code>href="/migrate"</code>) and has no root-path support, so the warden routes you to your one instance <strong>by session, not by path</strong>. To do that it sets a single cookie — <code>Set-Cookie: nc_route=&lt;token&gt;; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900</code> — carrying only the opaque session token. That token is a <strong>bearer credential valid for the life of the session</strong> (not single-use), which is exactly why the cookie is HttpOnly, Secure, and SameSite=Strict — JS cannot read or forge it. It is not an analytics identifier and it dies with your session. Because the cookie is browser-global, a browser holds <strong>exactly one live session</strong> (a fresh mint replaces the previous one); the <strong>≤ 2-concurrent-sessions-per-IP</strong> cap is a separate guardrail bounding distinct devices behind one IP. The demo page itself still sets nothing (claim 10).</p>
+<ul>
+<li><strong>Per-IP session state, in RAM only.</strong> To enforce the per-IP</li>
+</ul>
+<p>concurrent-session cap (<strong>≤ 2 concurrent sessions per IP</strong>) and a sliding-window mint rate limit (<strong>≤ 30 mints / 600 s per IP</strong>), the warden keeps a small per-IP record <strong>in memory only</strong> — never logged, <strong>held in memory for up to 10 minutes after your last request, never written to disk, gone on warden restart</strong>. A rate limiter must outlive any single session, so the record is evicted 10 min after your last request rather than on session end.</p>
+<p>We keep none of the in-memory transit category — the controls above are what make that checkable rather than a promise. If you cannot accept in-memory transit through our proxy, run netcanon locally; that path is on the demo's front page.</p>
+<h2 id="reproducibility-block">Reproducibility block</h2>
+<p>The deploy step fills these tokens for the running bundle. In this repo template they are placeholders; the live <code>/whitepaper</code> shows the real values, and <code>make verify</code> (run from <code>deploy/</code>) prints the same digests + compose hash for you to compare.</p>
+<pre><code>netcanon image    : ghcr.io/netcanon/netcanon@sha256:<mark class="ph">&lt;NETCANON_IMAGE_DIGEST&gt;</mark>   (base python:3.14-slim-bookworm)
+requirements.lock : sha256:<mark class="ph">&lt;REQUIREMENTS_LOCK_SHA&gt;</mark>   (hash-locked; glibc/manylinux wheels — not Alpine/musl)
+warden image      : <mark class="ph">&lt;WARDEN_IMAGE_REF&gt;</mark>@sha256:<mark class="ph">&lt;WARDEN_IMAGE_DIGEST&gt;</mark>
+socket-proxy image: <mark class="ph">&lt;SOCKET_PROXY_IMAGE_REF&gt;</mark>@sha256:<mark class="ph">&lt;SOCKET_PROXY_IMAGE_DIGEST&gt;</mark>   (TCB component — the capability filter fronting docker.sock)
+caddy image       : <mark class="ph">&lt;CADDY_IMAGE_REF&gt;</mark>@sha256:<mark class="ph">&lt;CADDY_IMAGE_DIGEST&gt;</mark>
+compose sha256    : <mark class="ph">&lt;COMPOSE_SHA256&gt;</mark>
+deployed          : <mark class="ph">&lt;DEPLOY_DATE&gt;</mark>   hard TTL: 900s (15 min)   idle TTL: 600s (10 min)   instance cap (MAX_ACTIVE): 32</code></pre>
+<h2 id="residual-risks-stated-plainly">Residual risks, stated plainly</h2>
+<h3 id="trusted-computing-base-the-honest-worst-case">Trusted Computing Base — the honest worst case</h3>
+<p>The sharpest residual risk is not exotic: it is us. The warden, the socket-proxy + authz shim, Caddy, dockerd, and the host are <strong>trusted</strong> (see the threat model's TCB subsection). A compromise of the warden — which holds the Docker socket — is <strong>host root</strong>, and host root <strong>voids all ten claims</strong> above: it could snapshot RAM, disable the reaper, or read into any instance. We <em>bound</em> (not eliminate) this by keeping the warden tiny (≤ 500 auditable lines), non-root, read-only, reachable to Docker only through a capability-filtered socket proxy <strong>plus a small create-body authz shim that whole-body default-deny-validates every <code>POST /containers/create</code> against the canonical instance spec (both counted in the TCB), so create is not the arbitrary, root-equivalent Docker API</strong> — and never <code>exec</code>ing into instances — all of it in the public repo. If that residual is unacceptable for your data, run netcanon locally and trust none of it.</p>
+<ul>
+<li>A kernel- or hypervisor-level compromise of the host likewise defeats all</li>
+</ul>
+<p>guarantees (out of scope in the threat model).</p>
+<ul>
+<li><code>sendBeacon</code> on <code>pagehide</code> is best-effort; when it doesn't fire, the</li>
+</ul>
+<p>heartbeat-timeout path reclaims your instance in <strong>≤ 2 min for a closed foreground tab, ≤ ~4 min for a throttled background tab</strong>, and a tab left open but untouched is reclaimed at the <strong>10-minute idle TTL</strong> (sooner under heavy load). Both of those only ever <em>shorten</em> the session. The guarantee that requires <strong>nothing</strong> from your browser — no beacon, no heartbeat, no activity — is the hard TTL, enforced across <strong>two independent enforcement domains (the warden and host systemd), three mechanisms</strong>, with two honest bounds: while the warden is live it destroys your instance <strong>≤ 15 minutes after it was assigned to you</strong>; and <strong>even if the warden crashes</strong>, an independent host systemd timer (swept every 60 s) force-removes any <code>demo.*</code>-labeled container <strong>≤ ~20 minutes after it was created</strong> (older than <code>HARD_TTL + POOL_MAX_AGE = 1200 s</code>). A crash can therefore widen the ceiling from 15 to at most ~20 minutes — it can never <em>lift</em> it; nothing keeps your instance alive indefinitely.</p>
+<ul>
+<li>We can change this deployment. That's why the digests and hash are published:</li>
+</ul>
+<p>trust the artifact you can verify today, not us.</p>
+</main>
+<footer class="footer">netcanon is open source: <a href="https://github.com/netcanon/netcanon">github.com/netcanon/netcanon</a></footer>
+</body>
+</html>

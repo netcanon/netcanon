@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>netcanon — ephemeral demo</title>
+<link rel="icon" href="data:,">
+<style>
+/* ============ theme ============ */
+:root {
+  --nc-indigo: #4f46e5; --nc-indigo-hover: #4338ca; --nc-indigo-fg: #ffffff;
+  --nc-amber: #b45309; --nc-amber-bg: #fffbeb; --nc-amber-border: #fcd34d;
+  --nc-green: #15803d; --nc-red: #dc2626; --nc-red-hover: #b91c1c;
+  --nc-bg: #ffffff; --nc-surface: #f8fafc; --nc-surface-2: #f1f5f9;
+  --nc-text: #0f172a; --nc-muted: #64748b; --nc-border: #e2e8f0;
+  --nc-radius: 10px; --nc-shadow: 0 1px 3px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.04);
+  --nc-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --nc-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --nc-indigo: #818cf8; --nc-indigo-hover: #a5b4fc; --nc-indigo-fg: #1e1b4b;
+    --nc-amber: #fbbf24; --nc-amber-bg: #2a2410; --nc-amber-border: #a16207;
+    --nc-green: #4ade80; --nc-red: #f87171; --nc-red-hover: #fca5a5;
+    --nc-bg: #0f172a; --nc-surface: #1e293b; --nc-surface-2: #334155;
+    --nc-text: #e2e8f0; --nc-muted: #94a3b8; --nc-border: #334155;
+    --nc-shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { font-family: var(--nc-sans); color: var(--nc-text); background: var(--nc-bg);
+       line-height: 1.6; margin: 0; }
+
+/* ============ layout primitives ============ */
+.wrap { max-width: 760px; margin: 0 auto; padding: 2.5rem 1.25rem; }
+.center { text-align: center; }
+h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 .75rem; }
+h2 { font-size: 1.3rem; margin: 0 0 .5rem; }
+p  { margin: 0 0 1rem; }
+.muted { color: var(--nc-muted); }
+a { color: var(--nc-indigo); }
+a:hover { color: var(--nc-indigo-hover); }
+[hidden] { display: none !important; }
+
+/* ============ buttons ============ */
+button { font: inherit; }
+.btn {
+  display: inline-block; background: var(--nc-indigo); color: var(--nc-indigo-fg);
+  border: none; border-radius: var(--nc-radius); padding: .6rem 1.1rem;
+  cursor: pointer; font-weight: 600; box-shadow: var(--nc-shadow);
+}
+.btn:hover { background: var(--nc-indigo-hover); }
+.btn:focus-visible { outline: 3px solid var(--nc-indigo); outline-offset: 2px; }
+.btn-red { background: var(--nc-red); color: #fff; }
+.btn-red:hover { background: var(--nc-red-hover); }
+.btn-ghost {
+  background: var(--nc-surface-2); color: var(--nc-text);
+  border: 1px solid var(--nc-border); box-shadow: none;
+}
+.btn-ghost:hover { background: var(--nc-surface); }
+.btn-sm { padding: .35rem .75rem; font-size: .85rem; }
+
+/* ============ chips / code ============ */
+code, .chip {
+  font-family: var(--nc-mono); font-size: .85em;
+  background: var(--nc-surface-2); border: 1px solid var(--nc-border);
+  border-radius: 6px; padding: .15em .45em;
+}
+.docker-line {
+  display: inline-flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  justify-content: center; max-width: 100%;
+}
+.docker-line code { overflow-x: auto; max-width: 100%; white-space: nowrap; padding: .4em .6em; }
+
+/* ============ promise card ============ */
+.promise {
+  background: var(--nc-surface); border: 1px solid var(--nc-border);
+  border-left: 4px solid var(--nc-indigo); border-radius: var(--nc-radius);
+  padding: 1rem 1.25rem; margin: 1.5rem 0; box-shadow: var(--nc-shadow);
+}
+.promise p { margin: 0 0 .5rem; }
+.promise p:last-child { margin: 0; }
+
+/* ============ spinner ============ */
+.spinner {
+  width: 42px; height: 42px; margin: 0 auto 1rem;
+  border: 4px solid var(--nc-surface-2); border-top-color: var(--nc-indigo);
+  border-radius: 50%; animation: nc-spin .9s linear infinite;
+}
+@keyframes nc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.5s; } }
+
+/* ============ active view ============ */
+#s-active { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+#s-active[hidden] { display: none !important; }
+.toolbar {
+  display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  padding: .5rem .75rem; border-bottom: 1px solid var(--nc-border);
+  background: var(--nc-surface); font-size: .85rem;
+}
+.toolbar .spacer { flex: 1; }
+#countdown { font-family: var(--nc-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+#countdown.low { color: var(--nc-red); }
+#idle-hint {
+  color: var(--nc-muted);
+}
+#idle-hint.warn {
+  color: var(--nc-amber); background: var(--nc-amber-bg);
+  border: 1px solid var(--nc-amber-border); border-radius: 6px;
+  padding: .1rem .5rem; font-weight: 600;
+}
+#frame { flex: 1; width: 100%; border: 0; background: var(--nc-bg); min-height: 200px; }
+
+/* ============ footer ============ */
+footer { border-top: 1px solid var(--nc-border); margin-top: 2rem; }
+footer .wrap { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; }
+
+/* ============ status screens ============ */
+.status-card { padding-top: 4rem; }
+@media (max-width: 480px) {
+  .wrap { padding: 1.75rem 1rem; }
+  h1 { font-size: 1.55rem; }
+  .toolbar { font-size: .8rem; gap: .45rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ================= 1) LANDING ================= -->
+<section id="s-landing" aria-labelledby="landing-h">
+  <div class="wrap">
+    <h1 id="landing-h">netcanon &mdash; translate network configs across vendors</h1>
+    <p>netcanon is an open-source tool that translates device configurations between network
+       vendors &mdash; Cisco, Juniper, Arista, and more &mdash; and backs up configs over SSH.
+       Paste a config, pick a target platform, and see exactly what carries over and what
+       doesn&rsquo;t.</p>
+
+    <div class="promise">
+      <p>Your session runs in an isolated instance that <strong>self-destructs within 15 minutes</strong> &mdash; usually the moment you leave. A tab left open but untouched is reclaimed after about 10 minutes of inactivity (<strong>sooner under heavy load</strong>), so keep translating to hold your session to the full 15. Nothing you paste is stored.</p>
+      <p><a href="/whitepaper">Read how we prove that &rarr;</a></p>
+    </div>
+
+    <p class="center" style="margin-top:2rem">
+      <button id="btn-start" class="btn" type="button">Start demo</button>
+    </p>
+    <noscript>
+      <p class="promise"><strong>JavaScript is off</strong> &mdash; the live demo needs it, but
+         everything else about netcanon doesn&rsquo;t. Grab it from
+         <a href="https://github.com/netcanon/netcanon">GitHub</a> or
+         <a href="https://pypi.org/project/netcanon/">PyPI</a> and run it locally.</p>
+    </noscript>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <nav aria-label="Project links">
+        <a href="https://github.com/netcanon/netcanon">GitHub</a>
+        <a href="https://pypi.org/project/netcanon/">PyPI</a>
+        <a href="/whitepaper">Whitepaper</a>
+      </nav>
+      <p class="muted" style="margin-bottom:.5rem">Prefer to run it yourself? One line, no sign-up:</p>
+      <div class="docker-line" style="justify-content:flex-start">
+        <code id="docker-cmd">docker run --rm -p 8000:8000 ghcr.io/netcanon/netcanon</code>
+        <button class="btn btn-ghost btn-sm copy-btn" type="button" data-copy="docker-cmd">Copy</button>
+      </div>
+      <p class="muted" style="margin-top:.5rem;font-size:.85rem">&hellip;then open <code>http://localhost:8000</code>.</p>
+    </div>
+  </footer>
+</section>
+
+<!-- ================= 2) PROVISIONING ================= -->
+<section id="s-provisioning" hidden aria-labelledby="prov-h">
+  <div class="wrap center status-card" role="status">
+    <div class="spinner" aria-hidden="true"></div>
+    <h2 id="prov-h">Spinning up your private instance&hellip;</h2>
+    <p class="muted">A fresh, isolated container just for you.</p>
+  </div>
+</section>
+
+<!-- 2a) rate-limited sub-state -->
+<section id="s-ratelimited" hidden aria-labelledby="rl-h">
+  <div class="wrap center status-card">
+    <h2 id="rl-h">Hold on a second</h2>
+    <p>You already have the max sessions open from your network, or you&rsquo;re starting too
+       fast &mdash; close another tab or wait ~30&nbsp;seconds and try again.</p>
+    <p><button id="btn-retry-rl" class="btn" type="button">Retry</button></p>
+  </div>
+</section>
+
+<!-- 2b) network-error sub-state -->
+<section id="s-error" hidden aria-labelledby="err-h">
+  <div class="wrap center status-card">
+    <h2 id="err-h">Couldn&rsquo;t reach the demo</h2>
+    <p class="muted">Something went wrong on the way to the server. It happens.</p>
+    <p><button id="btn-retry-err" class="btn" type="button">Retry</button></p>
+  </div>
+</section>
+
+<!-- ================= 3) ACTIVE ================= -->
+<section id="s-active" hidden aria-label="Live demo instance">
+  <div class="toolbar">
+    <span class="chip" id="instance-chip">instance &mdash;</span>
+    <span aria-live="polite">
+      <span class="muted">self-destructs in</span>
+      <span id="countdown">15:00</span>
+    </span>
+    <span id="idle-hint" aria-live="polite"></span>
+    <span class="spacer"></span>
+    <button id="btn-sample" class="btn btn-sm" type="button">Try this sample</button>
+    <button id="btn-destroy" class="btn btn-red btn-sm" type="button">Destroy now</button>
+    <a href="/whitepaper" style="font-size:.85rem">How we prove this &rarr;</a>
+  </div>
+  <iframe id="frame" title="Your private netcanon translator instance"></iframe>
+</section>
+
+<!-- ================= 4) AT-CAPACITY ================= -->
+<section id="s-capacity" hidden aria-labelledby="cap-h">
+  <div class="wrap status-card">
+    <h2 id="cap-h">The demo is at capacity right now.</h2>
+    <p>Every visitor gets a genuinely isolated instance, and there are only so many to go
+       around. Under heavy load, an untouched session may be reclaimed early to make room.
+       That the demo fails closed instead of quietly sharing instances is kind of the point.</p>
+    <p aria-live="polite"><span class="muted">Retrying automatically in</span>
+       <strong id="cap-countdown">10</strong><span class="muted">s&hellip;</span></p>
+    <p><button id="btn-retry-cap" class="btn" type="button">Try again</button></p>
+    <p class="muted" style="margin-top:2rem">No need to wait &mdash; run it locally instead:</p>
+    <div class="docker-line" style="justify-content:flex-start">
+      <code id="docker-cmd-cap">docker run --rm -p 8000:8000 ghcr.io/netcanon/netcanon</code>
+      <button class="btn btn-ghost btn-sm copy-btn" type="button" data-copy="docker-cmd-cap">Copy</button>
+    </div>
+    <p style="margin-top:1rem"><a href="https://github.com/netcanon/netcanon">netcanon on GitHub &rarr;</a></p>
+  </div>
+</section>
+
+<!-- ================= 5) DESTROYED ================= -->
+<section id="s-destroyed" hidden aria-labelledby="dead-h">
+  <div class="wrap center status-card">
+    <h2 id="dead-h">Instance destroyed &#128165; &mdash; everything it held is gone.</h2>
+    <p class="muted">That&rsquo;s the whole idea. Refreshing gets you a fresh instance.</p>
+    <p><button id="btn-again" class="btn" type="button">Start again</button></p>
+  </div>
+</section>
+
+<script>
+"use strict";
+/* ======================================================================
+ * netcanon ephemeral demo — state machine.
+ * NO cookies, NO localStorage, NO sessionStorage: all state lives in
+ * the variables below and dies with the tab. (View-source proves it.)
+ * ==================================================================== */
+
+/* ---------- sample config injected by "Try this sample" ---------- */
+/* Source option: value containing "iosxe" AND "cli", else first "iosxe".
+ * Target option: first value containing "junos". */
+var SAMPLE_CONFIG =
+"hostname edge-sw1\n" +
+"!\n" +
+"vlan 10\n" +
+" name USERS\n" +
+"vlan 20\n" +
+" name VOICE\n" +
+"!\n" +
+"interface GigabitEthernet1/0/1\n" +
+" description uplink-to-core\n" +
+" switchport mode trunk\n" +
+" switchport trunk allowed vlan 10,20\n" +
+"!\n" +
+"interface GigabitEthernet1/0/2\n" +
+" description user-access\n" +
+" switchport mode access\n" +
+" switchport access vlan 10\n" +
+"!\n" +
+"interface Vlan10\n" +
+" ip address 10.10.10.1 255.255.255.0\n" +
+"!\n" +
+"ip route 0.0.0.0 0.0.0.0 10.10.10.254\n" +
+"!\n" +
+"ip access-list extended BLOCK-GUEST\n" +
+" deny   ip 10.20.0.0 0.0.255.255 10.10.0.0 0.0.255.255\n" +
+" permit ip any any\n" +
+"!\n" +
+"snmp-server community public RO\n" +
+"!\n";
+
+/* ---------- session state (JS variables only) ---------- */
+var token = null;         // current session token
+var instanceId = null;    // display id (never the token)
+var deadlineMs = 0;       // receiptMs + ttl_seconds*1000, computed client-side
+var hbTimer = null;       // 30s heartbeat interval
+var tickTimer = null;     // 1s countdown interval
+var capTimer = null;      // at-capacity auto-retry interval
+var capDelay = 10;        // backoff seconds: 10 -> 20 -> 30 (cap 30)
+var capLeft = 0;
+var isHidden = (document.visibilityState === "hidden");
+
+var $ = function (id) { return document.getElementById(id); };
+var SECTIONS = ["s-landing","s-provisioning","s-ratelimited","s-error",
+                "s-active","s-capacity","s-destroyed"];
+
+/* Show exactly one top-level section. */
+function show(id) {
+  SECTIONS.forEach(function (s) { $(s).hidden = (s !== id); });
+}
+
+function clearTimers() {
+  if (hbTimer)   { clearInterval(hbTimer);   hbTimer = null; }
+  if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+  if (capTimer)  { clearInterval(capTimer);  capTimer = null; }
+}
+
+/* ---------- 2) PROVISIONING: mint a session ---------- */
+function startDemo() {
+  clearTimers();
+  show("s-provisioning");
+  fetch("/session/new", { method: "POST" })
+    .then(function (res) {
+      var receiptMs = Date.now(); // countdown anchor = when the 200 arrived
+      if (res.status === 200) {
+        return res.json().then(function (j) { goActive(j, receiptMs); });
+      }
+      if (res.status === 429) { show("s-ratelimited"); return; }
+      if (res.status === 503) { enterCapacity(); return; }
+      show("s-error");
+    })
+    .catch(function () { show("s-error"); });
+}
+
+/* ---------- 3) ACTIVE ---------- */
+function goActive(j, receiptMs) {
+  token = j.token;
+  instanceId = j.instance_id;
+  deadlineMs = receiptMs + j.ttl_seconds * 1000;
+
+  $("instance-chip").textContent = "instance " + instanceId;
+  $("idle-hint").textContent = "";
+  $("idle-hint").className = "";
+  $("frame").src = "/i/" + encodeURIComponent(token) + "/migrate";
+
+  show("s-active");
+  tick();
+  tickTimer = setInterval(tick, 1000);
+  hbTimer = setInterval(heartbeat, 30000);
+}
+
+/* Hard-TTL countdown, ticking every second. */
+function tick() {
+  var left = Math.max(0, Math.floor((deadlineMs - Date.now()) / 1000));
+  var mm = String(Math.floor(left / 60)).padStart(2, "0");
+  var ss = String(left % 60).padStart(2, "0");
+  var el = $("countdown");
+  el.textContent = mm + ":" + ss;
+  el.className = (left < 60) ? "low" : "";
+  if (left <= 0) destroyed();
+}
+
+/* Heartbeat every 30s — keeps running while hidden, just reports it. */
+function heartbeat() {
+  if (!token) return;
+  var t = token;
+  fetch("/session/" + encodeURIComponent(t) + "/hb", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hidden: isHidden })
+  }).then(function (res) {
+    if (t !== token) return; // stale response from a previous session
+    if (res.status === 404) { destroyed(); return; }
+    if (res.status === 200) {
+      res.json().then(function (j) {
+        if (t !== token) return;
+        var hint = $("idle-hint");
+        if (j.idle_remaining_seconds < 60) {
+          hint.textContent = "idle — translate to keep your session";
+          hint.className = "warn";
+        } else {
+          hint.textContent = "";
+          hint.className = "";
+        }
+      }).catch(function () {});
+    }
+  }).catch(function () { /* transient network blip: keep going */ });
+}
+
+/* Track hidden-ness for the heartbeat body (never pauses the heartbeat). */
+document.addEventListener("visibilitychange", function () {
+  isHidden = (document.visibilityState === "hidden");
+});
+
+/* Teardown beacon on pagehide ONLY (not on visibilitychange — a tab switch
+ * must not kill the session; the copy-from-another-tab flow depends on it). */
+window.addEventListener("pagehide", function () {
+  if (token) {
+    try { navigator.sendBeacon("/session/" + encodeURIComponent(token) + "/end"); }
+    catch (e) {}
+  }
+  clearTimers();
+});
+
+/* "Destroy now" */
+function destroyNow() {
+  if (token) {
+    fetch("/session/" + encodeURIComponent(token) + "/end", { method: "POST" })
+      .catch(function () {});
+  }
+  destroyed();
+}
+
+/* ---------- 5) DESTROYED ---------- */
+function destroyed() {
+  clearTimers();
+  token = null;
+  instanceId = null;
+  $("frame").src = "about:blank";
+  show("s-destroyed");
+}
+
+/* ---------- 4) AT-CAPACITY: auto-retry with backoff ---------- */
+function enterCapacity() {
+  show("s-capacity");
+  capLeft = capDelay;
+  $("cap-countdown").textContent = String(capLeft);
+  if (capTimer) clearInterval(capTimer);
+  capTimer = setInterval(function () {
+    capLeft--;
+    $("cap-countdown").textContent = String(Math.max(0, capLeft));
+    if (capLeft <= 0) {
+      clearInterval(capTimer); capTimer = null;
+      capDelay = Math.min(30, capDelay + 10); // 10 -> 20 -> 30, capped
+      startDemo();
+    }
+  }, 1000);
+}
+
+/* ---------- TRY-THIS-SAMPLE: drive the same-origin migrate iframe ---------- */
+function trySample() {
+  var iframe = $("frame");
+  var tries = 0, MAX_TRIES = 40; // 40 * 150ms = ~6s
+
+  var poll = setInterval(function () {
+    tries++;
+    try {
+      var doc = iframe.contentWindow.document;
+      var src = doc.querySelector('[data-testid="migrate-source-select"]');
+      // selects are populated async — wait until options exist
+      if (!src || src.options.length === 0) {
+        if (tries >= MAX_TRIES) {
+          clearInterval(poll);
+          console.warn("netcanon demo: migrate page not ready, sample not injected");
+        }
+        return;
+      }
+      clearInterval(poll);
+      injectSample(doc);
+    } catch (e) {
+      clearInterval(poll);
+      console.warn("netcanon demo: cannot reach migrate DOM", e);
+    }
+  }, 150);
+}
+
+function injectSample(doc) {
+  try {
+    var src = doc.querySelector('[data-testid="migrate-source-select"]');
+    var tgt = doc.querySelector('[data-testid="migrate-target-select"]');
+
+    // SOURCE: value containing both "iosxe" and "cli"; fall back to "iosxe"
+    var srcVal = pickOption(src, function (v) { return v.indexOf("iosxe") !== -1 && v.indexOf("cli") !== -1; }) ||
+                 pickOption(src, function (v) { return v.indexOf("iosxe") !== -1; });
+    // TARGET: first value containing "junos"
+    var tgtVal = pickOption(tgt, function (v) { return v.indexOf("junos") !== -1; });
+    if (!srcVal || !tgtVal) {
+      console.warn("netcanon demo: iosxe/junos options not found in migrate selects");
+      return;
+    }
+    src.value = srcVal; src.dispatchEvent(new Event("change", { bubbles: true }));
+    tgt.value = tgtVal; tgt.dispatchEvent(new Event("change", { bubbles: true }));
+
+    // raw-input mode so the textarea is visible
+    var radio = doc.querySelector('[data-testid="migrate-input-mode-raw"]');
+    if (radio) {
+      radio.checked = true;
+      radio.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    var ta = doc.querySelector('[data-testid="migrate-raw-input"]');
+    if (!ta) { console.warn("netcanon demo: raw-input textarea not found"); return; }
+    ta.value = SAMPLE_CONFIG;
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
+
+    var btn = doc.querySelector('[data-testid="migrate-submit-btn"]');
+    if (btn) btn.click();
+  } catch (e) {
+    console.warn("netcanon demo: sample injection failed", e);
+  }
+}
+
+function pickOption(sel, test) {
+  if (!sel) return null;
+  for (var i = 0; i < sel.options.length; i++) {
+    var v = String(sel.options[i].value);
+    if (test(v.toLowerCase())) return v;
+  }
+  return null;
+}
+
+/* ---------- copy-to-clipboard for the docker one-liner ---------- */
+function wireCopyButtons() {
+  var btns = document.querySelectorAll(".copy-btn");
+  Array.prototype.forEach.call(btns, function (btn) {
+    btn.addEventListener("click", function () {
+      var text = $(btn.getAttribute("data-copy")).textContent;
+      var done = function () {
+        btn.textContent = "Copied";
+        setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () {});
+      } else {
+        // very old fallback: select the code element so the user can Ctrl+C
+        var range = document.createRange();
+        range.selectNodeContents($(btn.getAttribute("data-copy")));
+        var s = window.getSelection();
+        s.removeAllRanges(); s.addRange(range);
+      }
+    });
+  });
+}
+
+/* A fresh, user-initiated start resets the at-capacity backoff to its floor. */
+function freshStart() { capDelay = 10; startDemo(); }
+
+/* ---------- wire up ---------- */
+$("btn-start").addEventListener("click", freshStart);
+$("btn-retry-rl").addEventListener("click", startDemo);
+$("btn-retry-err").addEventListener("click", startDemo);
+$("btn-retry-cap").addEventListener("click", function () {
+  if (capTimer) { clearInterval(capTimer); capTimer = null; }
+  startDemo();
+});
+$("btn-sample").addEventListener("click", trySample);
+$("btn-destroy").addEventListener("click", destroyNow);
+$("btn-again").addEventListener("click", function () { show("s-landing"); });
+wireCopyButtons();
+</script>
+</body>
+</html>
