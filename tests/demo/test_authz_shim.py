@@ -7,6 +7,7 @@ smuggle host root past the shim, because Docker's Go decoder matches struct fiel
 case-INSENSITIVELY. The shim is now a case-folded positive allowlist; these tests
 assert the escape stays closed.
 """
+from __future__ import annotations
 
 import copy
 import json
@@ -17,8 +18,8 @@ import pytest
 os.environ.setdefault("NETCANON_INSTANCE_IMAGE", "ghcr.io/netcanon/netcanon@sha256:test")
 os.environ.setdefault("NETCANON_INSTANCE_NETWORK", "demo-int")
 
-from demo.warden import authz_shim  # noqa: E402
-from demo.warden import constants as C  # noqa: E402
+from demo.warden import authz_shim
+from demo.warden import constants as C
 
 IMG = C.INSTANCE_IMAGE
 
@@ -111,6 +112,6 @@ def test_dup_case_last_wins_rejected():
     # Python (_fold last-wins) and Go (duplicate-key last-wins) resolve to the same
     # object; a trailing lowercase hostconfig carrying binds must be rejected.
     b = json.loads(
-        '{"Image":"%s","HostConfig":{"ReadonlyRootfs":true},"hostconfig":{"binds":["/:/h"]}}' % IMG
+        '{"Image":"' + IMG + '","HostConfig":{"ReadonlyRootfs":true},"hostconfig":{"binds":["/:/h"]}}'
     )
     assert authz_shim.validate_create_body(b) is not None
