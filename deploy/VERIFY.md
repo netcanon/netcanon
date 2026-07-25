@@ -282,10 +282,13 @@ docker ps -a --filter label=demo.instance
 # expected: the pre-restart instance is force-removed on warden startup — the warden adopts nothing
 
 # (b) host systemd timer: stop the warden entirely, let a demo.*-labeled container
-#     exceed HARD_TTL + POOL_MAX_AGE = 1200s creation age
+#     exceed the backstop ceiling (HARD_TTL + POOL_MAX_AGE + 120s slack = 1320s).
+#     The slack guarantees this creation-age sweep can never fire inside a live
+#     session's assignment-relative 900s window.
 systemctl list-timers | grep demo-ttl-backstop     # sweep cadence: 60s
 docker ps -a --filter label=demo.instance
-# expected: once creation age exceeds 1200s, the timer force-removes it with the warden still stopped
+# expected: once creation age exceeds 1320s, the timer force-removes it (within one
+#           60s sweep) with the warden still stopped
 ```
 
 ### 12. Core-dump proof — crashes leave no memory image on disk (claim 5) [O]

@@ -110,10 +110,10 @@ No single failure can lift the lifetime ceiling:
 |---|-----------|--------|----------|
 | a | In-RAM reaper | warden | Assignment-relative 900 s deadline, checked every 10 s tick. |
 | b | Startup label-sweep | warden | On (re)start the warden destroys every `demo.*`-labeled container it finds — it **adopts nothing**, so a restart cannot resurrect or extend a session. |
-| c | Host systemd timer | host (independent of the warden) | Every 60 s, force-removes any `demo.*`-labeled container older than `HARD_TTL + POOL_MAX_AGE = 1200 s`, even if the warden is dead. |
+| c | Host systemd timer | host (independent of the warden) | Every 60 s, force-removes any `demo.*`-labeled container older than `HARD_TTL + POOL_MAX_AGE + 120 s slack = 1320 s`, even if the warden is dead. The slack keeps this creation-age sweep from ever firing inside a live session's assignment-relative window. |
 
 A warden crash can therefore widen the effective ceiling from ~15 minutes to at most
-~20 minutes — it can never remove it.
+~23 minutes — it can never remove it.
 
 ## Where the code lives
 
