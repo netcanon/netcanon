@@ -1,0 +1,569 @@
+name: Demo — build & publish bundle
+
+# Builds and signs the ephemeral-demo artifacts for demo.netcanon.net.
+#
+# Fires ONLY on a `demo-v<N>` tag (or a workflow_dispatch naming one). Demo tags
+# are cut deliberately by the maintainer and are decoupled from product semver:
+# the product version the demo pins is read from the tracked file
+# `deploy/PINNED_PRODUCT_TAG`, never from the tag name. So "this release is
+# demo-worthy" is an explicit human signal, not an inferred version comparison
+# (docs/demo-plan/02-deployment.md; every compare-vs-previous-tag rule was
+# refuted by reproduction during design).
+#
+# `demo-v*` cannot collide with the product publish globs (`v*.*.*`) because it
+# does not begin with `v` at all — the namespace criterion. docker-publish.yml,
+# pypi-publish.yml and desktop-msi-publish.yml stay untouched; they are
+# release-critical and already audit-hardened.
+#
+# ⚠️ This workflow BUILDS AND PUBLISHES. It never deploys. The host pulls the
+# signed bundle by hand (`make deploy`) so the Gate-4 proof-freshness invariant
+# holds and zero deploy credentials exist on GitHub.
+
+on:
+  push:
+    tags:
+      - 'demo-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing demo-v* tag to rebuild"
+        required: true
+
+# Least-privilege default. Every elevated scope is declared per job.
+permissions:
+  contents: read
+
+# Serialise demo publishes GLOBALLY (not per-ref): a re-pushed tag or a
+# workflow_dispatch racing a tag push must not double-push or race the bundle
+# attach. Never cancel in flight — a half-signed bundle is worse than a queued
+# second run, which rebuilds idempotently.
+concurrency:
+  group: demo-publish
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  WARDEN_IMAGE_NAME: ${{ github.repository_owner }}/netcanon-demo-warden
+  SHIM_IMAGE_NAME: ${{ github.repository_owner }}/netcanon-demo-warden-shim
+  # Opt-in to Node 24 for JS actions ahead of the forced cutover, matching the
+  # other publish workflows.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  # ── Publish-time test re-run (same doctrine as the product publishes) ──
+  # Gate-at-merge lives in a GitHub ruleset (off-tree, admin-bypassable) and
+  # workflow_dispatch can publish a never-PR'd ref. Re-running the suite inside
+  # the publish run puts the gate in the artifact itself.
+  test:
+    name: Test gate (demo + unit + integration)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run demo tests (warden TCB + docs-truth ratchet)
+        run: pytest tests/demo -q --no-header
+      - name: Run unit tests
+        run: pytest tests/unit -q --no-header
+      - name: Run integration tests
+        run: pytest tests/integration -q --no-header
+
+  # ── Guards: ref shape, on-main ancestry, CI + PII polls ──
+  guards:
+    name: Guards (ref · ancestry · CI · PII)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read          # read CI / PII-guard run conclusions
+    steps:
+      # The `demo-v*` TRIGGER glob is broader than the cosign identity this
+      # workflow signs with (`@refs/tags/demo-v[0-9]+$`). A tag like
+      # `demo-v1-rc1` would fire the build but produce a signature no
+      # documented verify command can ever match. GitHub's tag_name_pattern
+      # ruleset rule is unavailable on this repo's plan, so this regex IS the
+      # enforcement point for the `demo-v<N>`-integers-only convention.
+      # $REF via env: — never `${{ }}` inside run: (template injection).
+      - name: Refuse non-demo-tag refs
+        shell: bash
+        env:
+          REF: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+        run: |
+          if [[ ! "$REF" =~ ^refs/tags/demo-v[0-9]+$ ]]; then
+            echo "::error::demo-publish requires a demo-v<N> tag ref (integers only, e.g. demo-v1), got: $REF"
+            exit 1
+          fi
+          echo "OK: publishing from '$REF'."
+
+      - uses: actions/checkout@v7.0.0
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          # Full history for the merge-base ancestry guard below.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the build commit is on main
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$head_sha" FETCH_HEAD; then
+            echo "::error::Build commit $head_sha is not an ancestor of origin/main — refusing to publish."
+            exit 1
+          fi
+          echo "OK: build commit $head_sha is on origin/main."
+
+      # Ancestry != CI success. Prove the full matrix concluded 'success' for
+      # this exact commit. Fail closed on a missing / non-success / never
+      # completing run.
+      #
+      # NOTE: unlike the product publishes there is no `event=push` filter — a
+      # demo tag is typically cut some commits after the merge that produced the
+      # CI run, and the run recorded for that sha may be a pull_request event.
+      # Taking the latest run for the sha regardless of event keeps the gate
+      # meaningful instead of permanently wedged.
+      - name: Require CI success for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          for attempt in $(seq 1 30); do
+            out="$(gh api \
+              "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$head_sha&per_page=1" \
+              --jq '(.workflow_runs[0].status // "none") + " " + (.workflow_runs[0].conclusion // "none")' \
+              2>/dev/null || true)"
+            status="${out%% *}"; conclusion="${out##* }"
+            if [ "$conclusion" = "success" ]; then
+              echo "CI concluded success for $head_sha."; exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              echo "::error::CI for $head_sha concluded '$conclusion' (not success) — refusing to publish."
+              exit 1
+            fi
+            echo "CI for $head_sha is '${status:-unknown}' (attempt $attempt/30); waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for CI to complete for $head_sha — refusing to publish."
+          exit 1
+
+      # pii-guard is a SEPARATE workflow with no other publish-time backstop,
+      # and it is the one check whose failure already cost a history rewrite.
+      - name: Require PII-guard success for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          for attempt in $(seq 1 30); do
+            out="$(gh api \
+              "repos/$REPO/actions/workflows/pii-guard.yml/runs?head_sha=$head_sha&per_page=1" \
+              --jq '(.workflow_runs[0].status // "none") + " " + (.workflow_runs[0].conclusion // "none")' \
+              2>/dev/null || true)"
+            status="${out%% *}"; conclusion="${out##* }"
+            if [ "$conclusion" = "success" ]; then
+              echo "PII-guard concluded success for $head_sha."; exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              echo "::error::PII-guard for $head_sha concluded '$conclusion' (not success) — refusing to publish."
+              exit 1
+            fi
+            echo "PII-guard for $head_sha is '${status:-unknown}' (attempt $attempt/30); waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for PII-guard to complete for $head_sha — refusing to publish."
+          exit 1
+
+  # ── Warden + authz-shim images (both are Trusted Computing Base) ──
+  warden-image:
+    name: Build, push, sign, attest (warden + shim)
+    needs: [test, guards]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write          # push images + cosign artifacts to GHCR
+      id-token: write          # cosign keyless signing via Sigstore + OIDC
+      security-events: write   # Trivy SARIF upload
+      attestations: write      # actions/attest-build-provenance (SLSA L2)
+    outputs:
+      warden_digest: ${{ steps.build_warden.outputs.digest }}
+      shim_digest: ${{ steps.build_shim.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve the demo tag
+        id: tag
+        shell: bash
+        env:
+          REF: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+        run: echo "name=${REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # No `:latest` on either demo image: the host pins digests, and a mutable
+      # tag on a TCB component is exactly what the digest pin exists to avoid.
+      #
+      # Deliberately NO cache-from / cache-to. `type=gha` is a mutable,
+      # cross-run-writable scope; importing it into an image we then sign and
+      # attest would let a poisoned layer launder into a signed release. zizmor
+      # does not model cache poisoning — this is a human-review invariant. Do
+      # not re-add a shared cache here.
+      - name: Build + push warden
+        id: build_warden
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        with:
+          context: ./demo/warden
+          target: warden
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.WARDEN_IMAGE_NAME }}:${{ steps.tag.outputs.name }}
+          provenance: true
+          sbom: false   # richer SPDX via syft below
+
+      - name: Build + push authz-shim
+        id: build_shim
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        with:
+          context: ./demo/warden
+          target: shim
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.SHIM_IMAGE_NAME }}:${{ steps.tag.outputs.name }}
+          provenance: true
+          sbom: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      - name: Sign both images (keyless via Sigstore + GitHub OIDC)
+        env:
+          WARDEN_REF: ${{ env.REGISTRY }}/${{ env.WARDEN_IMAGE_NAME }}@${{ steps.build_warden.outputs.digest }}
+          SHIM_REF: ${{ env.REGISTRY }}/${{ env.SHIM_IMAGE_NAME }}@${{ steps.build_shim.outputs.digest }}
+        run: |
+          cosign sign --yes "${WARDEN_REF}"
+          cosign sign --yes "${SHIM_REF}"
+
+      - name: Generate warden SBOM (SPDX JSON) via syft
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.WARDEN_IMAGE_NAME }}@${{ steps.build_warden.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-warden.spdx.json
+          upload-artifact: true
+          # Never attach to the Release here: sbom-action auto-attaches when a
+          # Release for the tag exists, which needs contents:write (this job has
+          # read) and would fail the step. The SBOM ships as a cosign
+          # attestation on the image instead.
+          upload-release-assets: false
+
+      - name: Generate shim SBOM (SPDX JSON) via syft
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.SHIM_IMAGE_NAME }}@${{ steps.build_shim.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-shim.spdx.json
+          upload-artifact: true
+          upload-release-assets: false
+
+      - name: Attach SBOMs as cosign attestations
+        env:
+          WARDEN_REF: ${{ env.REGISTRY }}/${{ env.WARDEN_IMAGE_NAME }}@${{ steps.build_warden.outputs.digest }}
+          SHIM_REF: ${{ env.REGISTRY }}/${{ env.SHIM_IMAGE_NAME }}@${{ steps.build_shim.outputs.digest }}
+        run: |
+          cosign attest --yes --predicate sbom-warden.spdx.json --type spdxjson "${WARDEN_REF}"
+          cosign attest --yes --predicate sbom-shim.spdx.json --type spdxjson "${SHIM_REF}"
+
+      - name: Attest build provenance (SLSA)
+        uses: actions/attest-build-provenance@v3.0.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.WARDEN_IMAGE_NAME }}
+          subject-digest: ${{ steps.build_warden.outputs.digest }}
+          push-to-registry: true
+
+      - name: Scan warden image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.WARDEN_IMAGE_NAME }}@${{ steps.build_warden.outputs.digest }}
+          format: sarif
+          output: trivy-demo-warden.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload Trivy SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@v4.36.2
+        if: always()
+        with:
+          sarif_file: trivy-demo-warden.sarif
+          category: trivy-demo-warden
+
+      # Post-publish smoke test: the signer identity is fully deterministic for
+      # a tag-triggered run of THIS workflow. Pin it EXACTLY, never a
+      # tail-unanchored regexp — "…@refs/tags/demo-v" would accept a signature
+      # minted by any other demo tag's run (cross-version substitution).
+      - name: Verify both signatures
+        env:
+          WARDEN_REF: ${{ env.REGISTRY }}/${{ env.WARDEN_IMAGE_NAME }}@${{ steps.build_warden.outputs.digest }}
+          SHIM_REF: ${{ env.REGISTRY }}/${{ env.SHIM_IMAGE_NAME }}@${{ steps.build_shim.outputs.digest }}
+          EXPECTED_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/demo-publish.yml@refs/tags/${{ steps.tag.outputs.name }}
+        run: |
+          for ref in "${WARDEN_REF}" "${SHIM_REF}"; do
+            cosign verify "${ref}" \
+              --certificate-identity "${EXPECTED_IDENTITY}" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+          done
+
+  # ── The deploy bundle: rendered demo.env + whitepaper + SHA256SUMS ──
+  bundle:
+    name: Render, sign, and attach the deploy bundle
+    needs: [warden-image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write     # attach Release assets on the demo tag
+      id-token: write     # cosign sign-blob
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve the demo tag
+        id: tag
+        shell: bash
+        env:
+          REF: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+        run: echo "name=${REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6.2.0
+        with:
+          python-version: "3.13"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
+
+      # Digest resolution uses `docker buildx imagetools inspect` — the method
+      # SECURITY.md already documents — rather than adding another third-party
+      # action to a workflow that signs a Trusted Computing Base component.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+
+      # The product-image digest is resolved PULL-SIDE from the registry, keyed
+      # to the tracked deploy/PINNED_PRODUCT_TAG, then cosign-verified against
+      # the EXACT docker-publish identity for that pinned tag before it is
+      # written into the bundle. This is the coupling between the two release
+      # trains: to the consumed digest, not to a commit sha. (Committing the
+      # digest back to git is impossible — a tagged tree cannot contain the
+      # digest of the image built from that tag.)
+      - name: Resolve + verify the pinned product image
+        id: product
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pinned="$(tr -d ' \t\n\r' < deploy/PINNED_PRODUCT_TAG)"
+          if [[ ! "$pinned" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$ ]]; then
+            echo "::error::deploy/PINNED_PRODUCT_TAG is not a semver release tag: '$pinned'"
+            exit 1
+          fi
+          image="ghcr.io/${REPO}"
+          digest="$(docker buildx imagetools inspect "${image}:${pinned#v}" \
+                     --format '{{json .Manifest}}' | jq -r '.digest')"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::could not resolve a digest for ${image}:${pinned#v} (got '$digest')"
+            exit 1
+          fi
+          echo "Resolved ${image}:${pinned#v} -> ${digest}"
+          cosign verify "${image}@${digest}" \
+            --certificate-identity "https://github.com/${REPO}/.github/workflows/docker-publish.yml@refs/tags/${pinned}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          echo "pinned=$pinned" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      # Third-party images are NOT built here — they are pinned by digest in the
+      # rendered bundle. Resolve them once, fail closed if a tag has vanished,
+      # and reuse the values in the render step below.
+      - name: Resolve third-party image digests
+        id: thirdparty
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolve() {
+            docker buildx imagetools inspect "$1" \
+              --format '{{json .Manifest}}' | jq -r '.digest'
+          }
+          socket_proxy="$(resolve "${SOCKET_PROXY_TAG}")"
+          caddy="$(resolve "${CADDY_TAG}")"
+          for pair in "socket-proxy:$socket_proxy" "caddy:$caddy"; do
+            name="${pair%%:*}"; value="${pair#*:}"
+            if [[ ! "$value" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::could not resolve a digest for $name (got '$value')"
+              exit 1
+            fi
+            echo "$name -> $value"
+          done
+          echo "socket_proxy=$socket_proxy" >> "$GITHUB_OUTPUT"
+          echo "caddy=$caddy" >> "$GITHUB_OUTPUT"
+        env:
+          SOCKET_PROXY_TAG: ghcr.io/tecnativa/docker-socket-proxy:0.3
+          CADDY_TAG: docker.io/library/caddy:2
+
+      - name: Render the deploy bundle
+        id: render
+        shell: bash
+        env:
+          DEMO_TAG: ${{ steps.tag.outputs.name }}
+          PINNED_VERSION: ${{ steps.product.outputs.pinned }}
+          PRODUCT_DIGEST: ${{ steps.product.outputs.digest }}
+          WARDEN_DIGEST: ${{ needs.warden-image.outputs.warden_digest }}
+          SHIM_DIGEST: ${{ needs.warden-image.outputs.shim_digest }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          SOCKET_PROXY_DIGEST: ${{ steps.thirdparty.outputs.socket_proxy }}
+          CADDY_DIGEST: ${{ steps.thirdparty.outputs.caddy }}
+        run: |
+          set -euo pipefail
+          mkdir -p bundle
+
+          socket_proxy="ghcr.io/tecnativa/docker-socket-proxy@${SOCKET_PROXY_DIGEST}"
+          caddy="docker.io/library/caddy@${CADDY_DIGEST}"
+          warden_ref="ghcr.io/${REPO_OWNER}/netcanon-demo-warden@${WARDEN_DIGEST}"
+          shim_ref="ghcr.io/${REPO_OWNER}/netcanon-demo-warden-shim@${SHIM_DIGEST}"
+          product_ref="ghcr.io/${REPO_OWNER}/netcanon@${PRODUCT_DIGEST}"
+          compose_sha="$(sha256sum deploy/docker-compose.yml | cut -d' ' -f1)"
+          lock_sha="$(sha256sum requirements.lock | cut -d' ' -f1)"
+
+          # demo.env — every image a verified digest. ACME_EMAIL stays a
+          # placeholder: it is operator data, not a build output.
+          cat > bundle/demo.env <<ENVEOF
+          # Rendered by demo-publish.yml for ${DEMO_TAG}. Do not hand-edit.
+          # Fill ACME_EMAIL on the host before \`make deploy\`.
+          ACME_EMAIL=REPLACE_WITH_OPERATOR_EMAIL
+          NETCANON_INSTANCE_IMAGE=${product_ref}
+          WARDEN_IMAGE=${warden_ref}
+          WARDEN_SHIM_IMAGE=${shim_ref}
+          SOCKET_PROXY_IMAGE=${socket_proxy}
+          CADDY_IMAGE=${caddy}
+          ENVEOF
+
+          # Whitepaper reproducibility values — every digest CI can know.
+          #
+          # DEPLOY_DATE is deliberately ABSENT, not stubbed: CI cannot know when
+          # the operator will deploy, and a wrong date in a trust document is
+          # worse than a visibly pending one. render_whitepaper.py marks any
+          # unfilled token in amber, so the CI-rendered copy shows the date as
+          # pending; the host fills it at deploy time with `make whitepaper`
+          # (deploy/Makefile), which is what produces the copy served at
+          # /whitepaper.
+          cat > bundle/whitepaper-values.json <<JSONEOF
+          {
+            "NETCANON_IMAGE_DIGEST": "${PRODUCT_DIGEST#sha256:}",
+            "REQUIREMENTS_LOCK_SHA": "${lock_sha}",
+            "WARDEN_IMAGE_REF": "ghcr.io/${REPO_OWNER}/netcanon-demo-warden",
+            "WARDEN_IMAGE_DIGEST": "${WARDEN_DIGEST#sha256:}",
+            "SOCKET_PROXY_IMAGE_REF": "ghcr.io/tecnativa/docker-socket-proxy",
+            "SOCKET_PROXY_IMAGE_DIGEST": "${SOCKET_PROXY_DIGEST#sha256:}",
+            "CADDY_IMAGE_REF": "docker.io/library/caddy",
+            "CADDY_IMAGE_DIGEST": "${CADDY_DIGEST#sha256:}",
+            "COMPOSE_SHA256": "${compose_sha}"
+          }
+          JSONEOF
+          jq empty bundle/whitepaper-values.json   # fail closed on malformed JSON
+
+          python tools/render_whitepaper.py \
+            --in docs/DEMO_WHITEPAPER.md \
+            --out bundle/whitepaper.html \
+            --values bundle/whitepaper-values.json
+
+          cp frontend/index.html bundle/index.html
+          cp frontend/whitepaper.html bundle/whitepaper-template.html
+          cp deploy/docker-compose.yml bundle/docker-compose.yml
+
+          # Explicit file list, never a glob: `sha256sum ./*` would glob the
+          # freshly-created (still empty) SHA256SUMS into its own manifest.
+          ( cd bundle && sha256sum \
+              demo.env \
+              whitepaper.html \
+              whitepaper-template.html \
+              whitepaper-values.json \
+              index.html \
+              docker-compose.yml \
+              > SHA256SUMS )
+          echo "compose_sha=$compose_sha" >> "$GITHUB_OUTPUT"
+          cat bundle/SHA256SUMS
+
+      # SHA256SUMS was the one mutable, unsigned link in the chain. sign-blob
+      # closes it; immutable releases are the second belt.
+      - name: Sign SHA256SUMS (cosign sign-blob, keyless)
+        run: |
+          cosign sign-blob --yes \
+            --bundle bundle/SHA256SUMS.cosign.bundle \
+            bundle/SHA256SUMS
+
+      - name: Upload bundle as an Actions artifact (debugging)
+        uses: actions/upload-artifact@v5.0.0
+        with:
+          name: demo-bundle-${{ steps.tag.outputs.name }}
+          path: bundle/
+          retention-days: 30
+
+      # ONE action-gh-release call attaching EVERY asset. Deliberately atomic:
+      # a second call adding assets to an already-published release is exactly
+      # what GitHub's immutable-releases setting forbids, so a split publish
+      # would make the demo release train and that setting mutually exclusive.
+      - name: Attach the signed bundle to the demo release
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          files: |
+            bundle/demo.env
+            bundle/whitepaper.html
+            bundle/whitepaper-template.html
+            bundle/whitepaper-values.json
+            bundle/index.html
+            bundle/docker-compose.yml
+            bundle/SHA256SUMS
+            bundle/SHA256SUMS.cosign.bundle
+          body: |
+            Deploy bundle for `${{ steps.tag.outputs.name }}`.
+
+            Pins product image **${{ steps.product.outputs.pinned }}**
+            (`${{ steps.product.outputs.digest }}`), cosign-verified against
+            `docker-publish.yml@refs/tags/${{ steps.product.outputs.pinned }}`
+            before it was written into `demo.env`.
+
+            `compose sha256`: `${{ steps.render.outputs.compose_sha }}`
+
+            `SHA256SUMS` is signed with `cosign sign-blob`; verify it with the
+            bundle file before trusting any asset here. Verification commands
+            and the full proof runbook are in
+            [`deploy/VERIFY.md`](https://github.com/${{ github.repository }}/blob/${{ steps.tag.outputs.name }}/deploy/VERIFY.md).
+
+            Nothing here is deployed automatically — the host pulls this bundle
+            by hand (`make deploy`).
+          fail_on_unmatched_files: true

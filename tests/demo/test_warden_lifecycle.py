@@ -51,14 +51,21 @@ async def test_pool_prewarms_to_pool_size(warden):
 
 
 async def test_pool_refill_survives_a_failing_create(warden):
-    """One create failure must not abandon the whole batch (fill what we can)."""
+    """One create failure must not abandon the whole batch (fill what we can).
+
+    Calls ``_refill_pool`` directly rather than the harness's ``fill_pool()``
+    helper: the helper retries, which is right for tests that just need a warm
+    pool but would multiply the failure count asserted here.
+    """
     warden.docker.create_fails = True
-    await warden.fill_pool()
+    await warden.app._refill_pool()
     assert warden.pool == []
-    assert warden.counters["pool_refill_failures"] == C.POOL_SIZE
+    assert warden.counters["pool_refill_failures"] == C.POOL_SIZE, (
+        "each of the POOL_SIZE creates should be attempted and counted once"
+    )
 
     warden.docker.create_fails = False
-    await warden.fill_pool()
+    await warden.app._refill_pool()
     assert len(warden.pool) == C.POOL_SIZE
 
 
