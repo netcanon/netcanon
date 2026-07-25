@@ -13,13 +13,13 @@ Each maps to a claim number in [06](06-privacy-whitepaper.md#claims-controls-pro
 | Header rewrite: proxied instance response has **no `X-Frame-Options`** and CSP `frame-ancestors 'self'` (netcanon stamps XFO:DENY + `frame-ancestors 'none'`; the warden must strip/rewrite them) | 2 |
 | Volume reap: after a full session + destroy, `docker volume ls` shows **zero** anonymous volumes (destroy uses `remove(v=True, force=True)`) | 2 |
 | Hard-TTL immovable: heartbeat **and** translate continuously; assert destroy at the 900 s (`HARD_TTL`) deadline (`deadline = assignment_time + HARD_TTL`) ±10 s — nothing the session does extends it | 3 |
-| Pool epoch (assignment-relative TTL): age a pooled instance to ~289 s (just under the `POOL_MAX_AGE − reaper_period` ~290 s recycle threshold), **then** assign it; assert it survives a full 900 s from **assignment** (creation-age deadline ≈ 1189 s) and that the creation-relative systemd backstop (`HARD_TTL + POOL_MAX_AGE = 1200 s`, fires only *older than* 1200 s) does not kill it early. Companion: a pooled instance aged past ~290 s is **recycled** (destroyed + refilled), so it is never assigned older than `POOL_MAX_AGE` (300 s) | 3 |
+| Pool epoch (assignment-relative TTL): age a pooled instance to ~289 s (just under the `POOL_MAX_AGE − reaper_period` ~290 s recycle threshold), **then** assign it; assert it survives a full 900 s from **assignment** (creation-age deadline ≈ 1189 s) and that the creation-relative systemd backstop (`HARD_TTL + POOL_MAX_AGE + 120 s slack = 1320 s`, fires only *older than* 1320 s) does not kill it early — the 120 s slack is exactly what makes this safe. Companion: a pooled instance aged past ~290 s is **recycled** (destroyed + refilled), so it is never assigned older than `POOL_MAX_AGE` (300 s) | 3 |
 | Idle reclaim: heartbeat continuously but **never** send an allowlisted POST; assert destroy at ~600 s (`IDLE_TTL`), i.e. a heartbeat alone must not keep a session alive | 3, 8 |
 | Idle hysteresis (retroactive, no thrash): occupancy crosses **> 80 %** → sessions idle > 300 s are reaped **one reaper tick after the tightening takes effect (~10–20 s after the crossing)**; occupancy drops **< 70 %** → threshold returns to 600 s; assert no thrash while occupancy sits between 70–80 % | 3, 8 |
 | Idle activity set (`last_activity`): a session driving only `POST /api/v1/migration/detect` + `POST /api/v1/migration/plan/ports` (never the bare `plan`) survives **past** `IDLE_TTL` — sub-plan and detect calls refresh `last_activity`; GETs and `/hb` do not | 3, 8 |
 | No-beacon reclaim, **visible** tab: `/hb` reports `{"hidden": false}` then stops; assert destroy **≤ 2 min for a closed foreground tab** (30 s hb interval + 75 s visible stale threshold + 10 s reaper ≈ 115 s) | 3 |
 | No-beacon reclaim, **hidden** tab: `/hb` reports `{"hidden": true}` then stops; assert destroy **≤ ~4 min for a throttled background tab** (30 s + 180 s hidden stale threshold + 10 s reaper ≈ 220 s) | 3 |
-| TTL independence: create a `demo`-labeled instance, kill+restart the warden; assert it is force-removed within one startup label-sweep; assert the host systemd timer (sweep cadence 60 s) force-removes a `demo.*`-labeled container older than `HARD_TTL + POOL_MAX_AGE = 1200 s` on **creation** age | 3 |
+| TTL independence: create a `demo`-labeled instance, kill+restart the warden; assert it is force-removed within one startup label-sweep; assert the host systemd timer (sweep cadence 60 s) force-removes a `demo.*`-labeled container older than `HARD_TTL + POOL_MAX_AGE + 120 s slack = 1320 s` on **creation** age | 3 |
 | `end` idempotency + sendBeacon content-type accepted | 3 |
 | Warden log schema: run a full session with payload "CANARY-<rand>"; assert canary absent from captured warden/caddy stdout at `NETCANON_LOG_LEVEL=warning` | 4 |
 | Error-path canary: oversized body, malformed body, mid-stream client kill, and a forced 500 — each carrying `CANARY-<rand>`; assert canary absent from all logs (the interesting leaks are on the error paths, not the happy path) | 4 |
@@ -98,7 +98,7 @@ Each maps to a claim number in [06](06-privacy-whitepaper.md#claims-controls-pro
 11. **TTL-independence proof (claim 3).** Create a `demo`-labeled instance; kill
     and restart the warden → the startup label-sweep force-removes it (it adopts
     nothing). Separately, let a `demo.*`-labeled container exceed
-    `HARD_TTL + POOL_MAX_AGE = 1200 s` on creation age with the warden stopped →
+    `HARD_TTL + POOL_MAX_AGE + 120 s slack = 1320 s` on creation age with the warden stopped →
     the host systemd timer (sweep cadence 60 s, `OnUnitActiveSec=60s`) force-removes
     it. Neither relies on the in-memory dict.
 12. **Core-dump proof (claim 5).** Crash a process inside a live instance (e.g.
