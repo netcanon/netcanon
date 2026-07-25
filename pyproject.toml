@@ -208,6 +208,7 @@ markers = [
     "e2e: full browser tests via Playwright against a live server",
     "desktop: marks tests as desktop-shell tests (deselect with '-m \"not desktop\"')",
     "cross_mesh: cross-codec translation matrix tests (category x source x target). Aggregate runtime under this marker must stay under 30s as the matrix grows; if it creeps, add a CI gate or demote the slow case to a layer-A per-codec unit test.",
+    "demo_live: ephemeral-demo proofs that need a RUNNING demo stack + a real Docker daemon (the module-08 '[O]' rows). Skipped unless NETCANON_DEMO_SMOKE=1, so they never run in PR CI — see tests/demo/test_live_stack_smoke.py for the one-command setup.",
 ]
 # -x: stop on first failure; --strict-markers: fail on unknown markers
 addopts = "-x --strict-markers -q"
