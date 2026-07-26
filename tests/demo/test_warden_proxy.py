@@ -158,6 +158,58 @@ def test_get_prefix_rules_do_not_leak_to_post():
     assert C.route_allowed("POST", "/api/v1/migration/adapters/x/capabilities") is False
 
 
+# ── Refusals have to explain themselves ─────────────────────────────────────
+# netcanon's own nav links Dashboard, Devices, Configs, Definitions, Jobs,
+# Schedules and API Docs. None are allowlisted, so all seven answered with a
+# bare `Response(status_code=404)` — a blank white page inside the iframe, which
+# reads as "this product is broken" rather than "this part isn't in the demo".
+BROWSER_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+
+async def test_a_blocked_nav_route_explains_itself_to_a_browser(warden, make_request):
+    await warden.fill_pool()
+    token = json.loads((await warden.mint()).body)["token"]
+
+    response = await warden.app.iframe_route(
+        token, "devices", make_request(method="GET", accept=BROWSER_ACCEPT)
+    )
+    assert response.status_code == 404, "still a 404 — the route genuinely is not here"
+    body = response.body.decode()
+    assert "isn't in the demo" in body
+    assert 'href="migrate"' in body, "relative, so it resolves under /i/{token}/ AND /"
+
+
+async def test_a_blocked_api_call_still_gets_an_empty_404(warden, make_request):
+    """netcanon's own fetch/XHR must keep getting nothing to parse."""
+    await warden.fill_pool()
+    token = json.loads((await warden.mint()).body)["token"]
+
+    response = await warden.app.iframe_route(
+        token, "api/v1/backups", make_request(method="GET", accept="application/json")
+    )
+    assert response.status_code == 404
+    assert response.body == b""
+
+
+async def test_a_dead_token_says_session_ended_not_route_missing(warden, make_request):
+    """Only the warden can tell the two refusals apart; it should say which."""
+    response = await warden.app.iframe_route(
+        "not-a-real-token", "migrate", make_request(method="GET", accept=BROWSER_ACCEPT)
+    )
+    assert response.status_code == 404
+    assert "session has ended" in response.body.decode()
+
+
+def test_the_refusal_pages_are_self_contained():
+    """Claim 10 promises no third-party requests from the demo. A 404 body that
+    pulled a webfont or a CDN script would quietly make that false."""
+    from demo.warden import pages
+
+    for html in (pages.NOT_IN_DEMO, pages.SESSION_GONE):
+        assert "http://" not in html and "https://" not in html
+        assert "<script" not in html.lower()
+
+
 # ── Routing 404s (dead token / blocked path) ────────────────────────────────
 async def test_iframe_route_404s_on_an_unknown_token(warden, make_request):
     response = await warden.app.iframe_route(

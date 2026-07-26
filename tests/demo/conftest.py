@@ -292,8 +292,11 @@ class FakeRequest:
     """The subset of ``starlette.Request`` the warden's session routes touch."""
 
     def __init__(self, ip: str = "203.0.113.10", cookie: str | None = None,
-                 body: dict | None = None, method: str = "GET") -> None:
+                 body: dict | None = None, method: str = "GET",
+                 accept: str | None = None) -> None:
         self.headers = {"x-forwarded-for": ip}
+        if accept is not None:
+            self.headers["accept"] = accept
         self.cookies = {}
         if cookie is not None:
             self.cookies[C.ROUTE_COOKIE] = cookie
