@@ -27,6 +27,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from . import constants as C
+from . import pages as P
 
 log = logging.getLogger("warden")
 
@@ -478,22 +479,21 @@ async def healthz() -> Response:
     })
 
 
-@app.api_route("/i/{token}/{path:path}", methods=["GET", "POST"])
-async def iframe_route(token: str, path: str, request: Request) -> Response:
-    sess = _active.get(token)
-    full = "/" + path
-    if sess is None or time.monotonic() > sess.deadline or not C.route_allowed(request.method, full):
-        return Response(status_code=404)
+async def _routed(sess, request: Request, full: str, token: str | None) -> Response:
+    """Single refusal point for both proxy entry points; lapsed != never-exposed."""
+    dead = sess is None or time.monotonic() > sess.deadline
+    if dead or not C.route_allowed(request.method, full):
+        return P.refuse(request, P.SESSION_GONE if dead else P.NOT_IN_DEMO)
     _refresh_activity(sess, request.method, full)
     return await _proxy(request, sess.instance, full, token)
+
+
+@app.api_route("/i/{token}/{path:path}", methods=["GET", "POST"])
+async def iframe_route(token: str, path: str, request: Request) -> Response:
+    return await _routed(_active.get(token), request, "/" + path, token)
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "POST"])
 async def cookie_route(full_path: str, request: Request) -> Response:
     token = request.cookies.get(C.ROUTE_COOKIE)
-    sess = _active.get(token) if token else None
-    full = "/" + full_path
-    if sess is None or time.monotonic() > sess.deadline or not C.route_allowed(request.method, full):
-        return Response(status_code=404)
-    _refresh_activity(sess, request.method, full)
-    return await _proxy(request, sess.instance, full, token)
+    return await _routed(_active.get(token) if token else None, request, "/" + full_path, token)

@@ -166,6 +166,25 @@ def test_frontend_targets_the_real_warden_endpoints():
     assert "/i/" in text and "/migrate" in text
 
 
+def test_dockerfile_copies_every_warden_module():
+    """The Dockerfile names the warden's modules explicitly, so a new one imports
+    fine from the repo — green suite — and ImportErrors inside the container.
+    That is exactly how pages.py first shipped: every test passed and the warden
+    crash-looped on `cannot import name 'pages'`."""
+    copied: set[str] = set()
+    for line in read("demo/warden/Dockerfile").splitlines():
+        if line.startswith("COPY ") and "/app/warden/" in line:
+            copied.update(part for part in line.split()[1:] if part.endswith(".py"))
+    on_disk = {
+        path.name
+        for path in (REPO_ROOT / "demo" / "warden").glob("*.py")
+        if path.name != "__init__.py"
+    }
+    assert on_disk, "found no warden modules — the glob has rotted"
+    missing = on_disk - copied
+    assert not missing, f"demo/warden modules absent from the Dockerfile COPY: {sorted(missing)}"
+
+
 def test_every_makefile_target_is_phony():
     """A same-line ``.PHONY`` edit is the merge conflict git resolves silently and
     wrongly: #396 and #397 each appended targets, one side won with no textual
@@ -253,6 +272,26 @@ def test_docs_recommend_the_socket_proxy_tag_that_is_published(relpath):
     assert tag in read(relpath), (
         f"{relpath} never mentions socket-proxy {tag!r} — the version it steers "
         "operators toward can drift from the one demo-publish.yml pins"
+    )
+
+
+def test_frontend_refuses_to_start_a_demo_from_inside_a_frame():
+    """netcanon's own nav links Dashboard at "/", which inside the iframe loads
+    this page into the instance frame. Minting from there destroys the cookie's
+    existing session — the very instance hosting the frame — so a mis-click cost
+    the visitor their pasted config with no warning.
+
+    The guard has to live in ``startDemo`` and not only in the boot path, or the
+    three retry buttons still reach the mint.
+    """
+    code = frontend_code()
+    assert "window.self !== window.top" in code, "no frame detection"
+    assert "s-nested" in code, "no dedicated section for the framed case"
+    body = code.split("function startDemo()", 1)
+    assert len(body) == 2, "startDemo() not found — has it been renamed?"
+    assert "isNested()" in body[1][:400], (
+        "startDemo must refuse when framed; guarding only the boot path leaves "
+        "btn-retry-rl / btn-retry-err / btn-retry-cap able to mint"
     )
 
 
