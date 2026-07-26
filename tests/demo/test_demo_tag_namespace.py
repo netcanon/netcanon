@@ -1,6 +1,6 @@
 """The `demo-v*` tag namespace must stay disjoint from the product release train.
 
-The whole demo release design rests on one property: a `demo-v<N>` tag fires
+The whole demo release design rests on one property: a `demo-vX.Y.Z` tag fires
 `demo-publish.yml` and **nothing else**. If a demo tag ever matched a product
 publish glob it would push a PyPI release / move a Docker `:latest`; if it
 matched the changelog regex it would demand a CHANGELOG section that will never
@@ -28,9 +28,20 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO_ROOT / ".github/workflows"
 
 # Representative demo tags, including the ones a slip of the finger produces.
-DEMO_TAGS = ["demo-v1", "demo-v2", "demo-v10", "demo-v99"]
+DEMO_TAGS = ["demo-v0.1.0", "demo-v1.0.0", "demo-v1.2.3", "demo-v10.20.30"]
 # Shapes the ref guard must REFUSE even though they match the trigger glob.
-MALFORMED_DEMO_TAGS = ["demo-v1-rc1", "demo-vfoo", "demo-v", "demo-v1.0", "demo-v01a"]
+# Refusing them matters more than it looks: the `refs/tags/demo-v*` ruleset
+# (deletion + update + non_fast_forward, empty bypass) matches every one of
+# these, so pushing one creates an undeletable tag that publishes nothing.
+MALFORMED_DEMO_TAGS = [
+    "demo-v1",          # the old integers-only shape
+    "demo-v1.0",        # two components
+    "demo-v1.2.3.4",    # four
+    "demo-v1.2.3-rc1",  # pre-release suffix — the identity must stay exact
+    "demo-vfoo",
+    "demo-v",
+    "demo-v01a",
+]
 
 
 def workflow(name: str) -> dict:
@@ -121,21 +132,40 @@ def test_ref_guard_refuses_malformed_demo_tags(tag):
     no documented `cosign verify` command can match — so the guard must stop the
     build before anything is pushed or signed."""
     assert not re.match(ref_guard_regex(), f"refs/tags/{tag}"), (
-        f"{tag!r} would pass the ref guard but is not a demo-v<N> tag"
+        f"{tag!r} would pass the ref guard but is not a demo-v<major>.<minor>.<patch> tag"
     )
 
 
 def test_ref_guard_refuses_branch_and_product_tag_refs():
     guard = ref_guard_regex()
-    for ref in ("refs/heads/main", "refs/tags/v0.6.1", "refs/heads/demo-v1", "refs/pull/1/merge"):
+    for ref in ("refs/heads/main", "refs/tags/v0.6.1", "refs/heads/demo-v0.1.0", "refs/pull/1/merge"):
         assert not re.match(guard, ref), f"ref guard would accept {ref!r}"
 
 
 def test_ref_guard_matches_the_cosign_identity_shape():
     """The guard exists to keep every signed demo tag inside the identity the
-    verify commands are anchored to (`demo-v[0-9]+`). If the two drift, builds
-    succeed but their signatures are unverifiable."""
-    assert "demo-v[0-9]+$" in ref_guard_regex()
+    verify commands are anchored to. If the two drift, builds succeed but their
+    signatures are unverifiable."""
+    assert r"demo-v[0-9]+\.[0-9]+\.[0-9]+$" in ref_guard_regex()
+
+
+def test_the_ruleset_glob_is_wider_than_the_ref_guard():
+    """Why a malformed demo tag is unrecoverable rather than merely annoying.
+
+    The `refs/tags/demo-v*` ruleset carries deletion + update + non_fast_forward
+    with an empty bypass list, and its glob matches every shape the ref guard
+    refuses. Pushing one therefore yields a permanently undeletable tag that
+    publishes nothing. This asserts the asymmetry is understood, so anyone
+    widening the trigger glob has to come here and think about the guard too.
+    """
+    globs = tag_globs("demo-publish.yml")
+    for tag in MALFORMED_DEMO_TAGS:
+        if any(fnmatch.fnmatch(tag, glob) for glob in globs):
+            assert not re.match(ref_guard_regex(), f"refs/tags/{tag}"), (
+                f"{tag!r} matches the trigger glob AND passes the ref guard — if that "
+                "is intended, the cosign verify commands in deploy/VERIFY.md must "
+                "accept its identity shape too"
+            )
 
 
 # ── Signer-identity hygiene ──────────────────────────────────────────────────

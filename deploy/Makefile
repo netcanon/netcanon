@@ -4,7 +4,7 @@ SHELL := /bin/bash
 COMPOSE := docker compose --env-file demo.env
 
 # Gate-4 inputs. BUNDLE is the unpacked release bundle; DEMO_TAG is the exact
-# demo-v<N> tag whose workflow run signed it (the cosign identity is the
+# demo-v<semver> tag whose workflow run signed it (the cosign identity is the
 # workflow file AT that tag, so it cannot be inferred from the bundle).
 BUNDLE  ?= .
 DEMO_TAG ?=
@@ -40,8 +40,8 @@ whitepaper: ## Fill the deploy date + render frontend/whitepaper.html for /white
 # manifest vouch for every other asset. Fails closed — no cosign, no deploy —
 # because a deploy target that silently skips verification is worse than one that
 # never claimed to verify at all.
-verify-bundle: ## Gate-4 — cosign-verify SHA256SUMS, then checksum the bundle (DEMO_TAG=demo-v<N>)
-	@test -n "$(DEMO_TAG)" || { echo "usage: make verify-bundle DEMO_TAG=demo-v1 [BUNDLE=<dir>]"; exit 1; }
+verify-bundle: ## Gate-4 — cosign-verify SHA256SUMS, then checksum the bundle (DEMO_TAG=demo-vX.Y.Z)
+	@test -n "$(DEMO_TAG)" || { echo "usage: make verify-bundle DEMO_TAG=demo-v0.1.0 [BUNDLE=<dir>]"; exit 1; }
 	@command -v cosign >/dev/null || { echo "cosign is not installed — Gate 4 cannot pass. See deploy/README.md."; exit 1; }
 	cd $(BUNDLE) && cosign verify-blob SHA256SUMS \
 		--bundle SHA256SUMS.cosign.bundle \
