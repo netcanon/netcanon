@@ -138,7 +138,7 @@ data rather than a build output). Without it, `deploy` would verify a signed
 bundle and then bring up whatever image refs happened to be sitting in
 `demo.env` — which is exactly what the first real Gate-4 run caught.
 
-Then `make whitepaper` from the unpacked bundle to stamp the deploy date and
+Then `make whitepaper DEMO_TAG=demo-v0.1.0 BUNDLE=./bundle` to stamp the deploy date and
 render the copy Caddy serves at `/whitepaper` (CI deliberately leaves that one
 value blank — it cannot know when you deploy). Until you run it, `/whitepaper`
 serves the committed template, banner and all.

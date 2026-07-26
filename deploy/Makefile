@@ -24,10 +24,13 @@ verify: ## Print pinned digests + compose sha256 (compare against the whitepaper
 # but deliberately NOT the deploy date — CI cannot know when you deploy, and a
 # wrong date in a trust document is worse than a visibly pending one. This target
 # stamps today's date and renders the copy Caddy serves at /whitepaper.
-# Run it from the unpacked bundle directory (needs whitepaper-values.json).
-whitepaper: ## Fill the deploy date + render frontend/whitepaper.html for /whitepaper
-	@test -f whitepaper-values.json || { echo "whitepaper-values.json not found — run from the unpacked bundle dir"; exit 1; }
-	@jq --arg d "$$(date -u +%Y-%m-%d)" '. + {DEPLOY_DATE: $$d}' whitepaper-values.json > .wp-values.filled.json
+# Reads the bundle's values via $(BUNDLE), like verify-bundle and promote: the
+# recipe itself must run from deploy/ (its ../tools, ../docs and ../frontend
+# paths are relative to here), so "run it from the bundle dir" was never a thing
+# that could work.
+whitepaper: ## Fill the deploy date + render frontend/whitepaper.html (BUNDLE=<dir>)
+	@test -f $(BUNDLE)/whitepaper-values.json || { echo "$(BUNDLE)/whitepaper-values.json not found — pass BUNDLE=<unpacked bundle dir>"; exit 1; }
+	@jq --arg d "$$(date -u +%Y-%m-%d)" '. + {DEPLOY_DATE: $$d}' $(BUNDLE)/whitepaper-values.json > .wp-values.filled.json
 	python3 ../tools/render_whitepaper.py \
 		--in ../docs/DEMO_WHITEPAPER.md \
 		--out ../frontend/whitepaper.html \
