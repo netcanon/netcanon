@@ -109,6 +109,46 @@ async def test_mint_budget_recovers_after_the_window_slides(warden):
 
 
 # ── Global cap + reclaim floor ──────────────────────────────────────────────
+async def test_empty_pool_below_the_cap_creates_inline_instead_of_refusing(warden):
+    """An empty pool must NOT be read as saturation.
+
+    Found by ``load_sanity.py``: a burst larger than POOL_SIZE drains the warm
+    pool before the background refill catches up, and the mint path then went
+    straight to reclaim — which correctly refuses when every session is young.
+    Net effect was a 503 "capacity" while most of MAX_ACTIVE sat idle, i.e. the
+    demo would have turned away a launch-day spike at a fraction of capacity.
+    Free headroom must be spent before anyone is refused or reclaimed.
+    """
+    await warden.fill_pool()
+    warden.pool.clear()  # simulate a burst having drained the pool
+    assert len(warden.active) < C.MAX_ACTIVE, "precondition: headroom exists"
+
+    resp = await warden.mint(ip="198.51.100.90")
+
+    assert resp.status_code == 200, (
+        f"refused with headroom free: {body_of(resp)} — an empty pool is not the cap"
+    )
+    assert warden.counters["destroys_by_reason"]["reclaim"] == 0, (
+        "no live session may be sacrificed while slots are free"
+    )
+    assert warden.counters["503_count"] == 0
+
+
+async def test_a_burst_larger_than_the_pool_is_fully_served(warden):
+    """The load-sanity scenario, in-process: POOL_SIZE=4 but a 12-session burst
+    must all be granted while far below MAX_ACTIVE."""
+    await warden.fill_pool()
+
+    responses = await asyncio.gather(
+        *[warden.mint(ip=f"198.51.100.{100 + i}") for i in range(12)]
+    )
+
+    statuses = [r.status_code for r in responses]
+    assert statuses == [200] * 12, f"burst not fully served: {statuses}"
+    assert len(warden.active) == 12
+    assert len({s.instance.container_id for s in warden.active.values()}) == 12
+
+
 async def test_saturation_with_only_young_sessions_returns_503(warden):
     """The 120 s floor protects a seconds-old paste: at true saturation the
     warden refuses rather than killing someone mid-translation."""

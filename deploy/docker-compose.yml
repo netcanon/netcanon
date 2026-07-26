@@ -37,6 +37,13 @@ services:
   caddy:
     image: ${CADDY_IMAGE:?set in demo.env}
     restart: unless-stopped
+    environment:
+      # The Caddyfile reads `{env.ACME_EMAIL}` from the CONTAINER's environment.
+      # `--env-file demo.env` only feeds compose *interpolation*, so without this
+      # passthrough the placeholder evaluates empty and Caddy refuses to load its
+      # config at all — no TLS, no site. `:?` fails the run with a clear message
+      # instead of leaving a crash-looping TLS terminator.
+      ACME_EMAIL: ${ACME_EMAIL:?set in demo.env — Caddy will not start without it}
     ports:
       - "80:80"               # ACME HTTP-01 redirect only
       - "443:443"

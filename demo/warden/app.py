@@ -1,11 +1,10 @@
 """netcanon ephemeral-demo warden — session manager + hardened reverse proxy.
 
-The only stateful service.  Live state is a single in-memory dict, but durable
+The only stateful service.  Live state is one in-memory dict, but durable
 lifecycle enforcement does NOT depend on it (container labels + a startup sweep +
 an independent host systemd timer — see the reaper).  Run single-process
-(``uvicorn --workers 1``); one ``asyncio.Lock`` guards the pool + active map +
-caps, held only for O(1) in-RAM mutations, never across an awaited docker call
-(reserve-then-fill).
+(``uvicorn --workers 1``); one ``asyncio.Lock`` guards pool/active/caps, held only
+for O(1) in-RAM mutations, never across an awaited docker call (reserve-then-fill).
 
 Spec: ``docs/demo-plan/03-warden-spec.md`` + ``04-container-hardening.md``.
 This is Trusted Computing Base — keep it small and auditable (<=500 lines).
@@ -52,8 +51,8 @@ _bg_tasks: set[asyncio.Task] = set()
 
 
 def _spawn(coro) -> None:
-    """Fire-and-forget a coroutine, keeping a reference so it is not GC'd (RUF006)
-    and surfacing any exception (an unretrieved task exception is otherwise silent)."""
+    """Fire-and-forget, keeping a ref so it is not GC'd (RUF006) and surfacing
+    exceptions (an unretrieved task exception is otherwise silent)."""
     task = asyncio.create_task(coro)
     _bg_tasks.add(task)
     task.add_done_callback(_on_bg_done)
@@ -248,8 +247,7 @@ async def _reaper_tick() -> None:
 
 async def _reaper() -> None:
     """Every REAPER_PERIOD: expire sessions, recycle aged pool instances, refill.
-    The tick is exception-guarded: one failure must not permanently kill TTL
-    enforcement (the whole live-side of I3 rides on this loop staying alive)."""
+    Exception-guarded: one failed tick must not kill TTL enforcement for good."""
     while True:
         await asyncio.sleep(C.REAPER_PERIOD)
         try:
@@ -355,9 +353,8 @@ app = FastAPI(
 
 
 def _client_ip(request: Request) -> str:
-    # Behind Caddy, request.client.host is Caddy's IP; the visitor's IP is the
-    # first hop of X-Forwarded-For (Caddy sets it). Trusted because only Caddy can
-    # reach the warden (caddy-net) — instances on demo-int are denied the warden.
+    # request.client.host is Caddy; the visitor is the first X-Forwarded-For hop.
+    # Trusted because only Caddy can reach the warden (instances are denied it).
     xff = request.headers.get("x-forwarded-for", "")
     if xff:
         return xff.split(",")[0].strip()
@@ -380,25 +377,32 @@ async def session_new(request: Request) -> Response:
         if len(rec.mints) >= C.PER_IP_MINT_MAX or rec.active >= C.PER_IP_MAX_CONCURRENT:
             _counters["503_count"] += 1
             return JSONResponse({"reason": "rate_limited"}, status_code=429)
-        inst = _pool.pop(0) if _pool else None
+        # Cap-check the POOL-HIT path too: a refill can land between another
+        # mint's room check and this pop, so a warm instance != a free slot.
+        # At cap `inst` stays None and the block below reclaims instead.
+        at_cap = len(_active) + _reserving >= C.MAX_ACTIVE
+        inst = None if at_cap else (_pool.pop(0) if _pool else None)
         if inst is not None:
-            _reserving += 1  # hold the popped instance against the cap until it lands in _active
+            _reserving += 1  # hold it against the cap until it lands in _active
     if inst is None:
-        # Pool empty at cap. Reclaim the longest-idle session (frees a MAX_ACTIVE
-        # slot), then create a fresh instance INLINE for this request — the pool is
-        # empty, so re-popping it would 503 and the victim would have died for nothing.
-        victim = await _reclaim_one(now)
-        if victim is None:
-            _counters["503_count"] += 1
-            return JSONResponse({"reason": "capacity"}, status_code=503)
+        # An empty pool is NOT the cap: a burst drains it before the background
+        # refill catches up. Spend free headroom before reclaiming or refusing.
         async with _lock:
-            _reserving += 1
+            headroom = C.MAX_ACTIVE - (len(_pool) + len(_active) + _reserving) > 0
+            if headroom:
+                _reserving += 1
+        if not headroom:  # true saturation: reclaim the longest-idle session
+            if await _reclaim_one(now) is None:
+                _counters["503_count"] += 1
+                return JSONResponse({"reason": "capacity"}, status_code=503)
+            async with _lock:
+                _reserving += 1
         try:
             inst = await asyncio.to_thread(_docker_create_and_start)
         except Exception as exc:
             async with _lock:
                 _reserving -= 1
-            log.warning("inline create after reclaim failed: %s", exc)
+            log.warning("inline instance create failed: %s", exc)
             _counters["503_count"] += 1
             return JSONResponse({"reason": "capacity"}, status_code=503)
     token = secrets.token_urlsafe(C.TOKEN_NBYTES)

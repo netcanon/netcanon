@@ -13,3 +13,15 @@ services:
   warden:
     ports:
       - "127.0.0.1:8098:8080"
+
+  # Keep Caddy OUT of the smoke stack. Assigning it to a profile that is never
+  # activated means `up` skips it. Two reasons:
+  #   1. It would try real ACME for demo.netcanon.net from a machine that domain
+  #      does not resolve to — failed challenges burn ACME rate limits for the
+  #      domain you actually need to issue for.
+  #   2. It wants host ports 80/443, which a dev box often already has taken.
+  # The live smoke and load-sanity probes talk to the warden directly, so nothing
+  # here needs the TLS terminator. Bring Caddy up with the plain dev stack when
+  # you specifically want to exercise it.
+  caddy:
+    profiles: ["tls"]
