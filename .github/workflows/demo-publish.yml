@@ -431,7 +431,14 @@ jobs:
           echo "socket_proxy=$socket_proxy" >> "$GITHUB_OUTPUT"
           echo "caddy=$caddy" >> "$GITHUB_OUTPUT"
         env:
-          SOCKET_PROXY_TAG: ghcr.io/tecnativa/docker-socket-proxy:0.3
+          # ⚠️ The socket-proxy tag is load-bearing, not cosmetic. Its entrypoint
+          # renders haproxy.cfg at startup, and the service runs `read_only: true`
+          # with only /run + /tmp as tmpfs. Versions <= 0.3 write the rendered
+          # config to /usr/local/etc/haproxy/ and therefore crash-loop, taking the
+          # whole privilege chain down. v0.4.0+ writes to /tmp. Do not bump this
+          # without adding the new tag to SOCKET_PROXY_TMPFS_SAFE in
+          # tests/demo/test_demo_docs_truth.py (which will fail CI until you do).
+          SOCKET_PROXY_TAG: ghcr.io/tecnativa/docker-socket-proxy:v0.4.2
           CADDY_TAG: docker.io/library/caddy:2
 
       - name: Render the deploy bundle

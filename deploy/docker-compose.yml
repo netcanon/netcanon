@@ -10,7 +10,9 @@
 # on demo-int is enforced by nftables (deploy/nftables/demo-int.nft), NOT
 # enable_icc:false (which would also cut warden->instance).
 #
-# ⚠️ Draft — not yet Gate-1 verified (docs/demo-plan/08-testing-verification.md).
+# Gate-1 (Docker Desktop) and Gate-3 (real Linux host) verified — including the
+# host-nftables I4 rules, which only a bare-metal dockerd can exercise
+# (docs/demo-plan/08-testing-verification.md).
 
 networks:
   demo-int:
@@ -123,7 +125,12 @@ services:
       # boundary is the verb allowlist above + the authz-shim's create-body gate.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     read_only: true
-    tmpfs: ["/run", "/tmp"]     # tecnativa proxy (haproxy) writes /tmp/haproxy.cfg
+    # ⚠️ Pairs with a v0.4.0+ socket-proxy tag and nothing older. The entrypoint
+    # renders haproxy.cfg at startup: v0.4.0+ writes /tmp/haproxy.cfg (covered by
+    # the tmpfs below), <= 0.3 writes /usr/local/etc/haproxy/haproxy.cfg and
+    # crash-loops against read_only. Guarded by SOCKET_PROXY_TMPFS_SAFE in
+    # tests/demo/test_demo_docs_truth.py.
+    tmpfs: ["/run", "/tmp"]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     logging: { driver: local, options: { max-size: "10m" } }

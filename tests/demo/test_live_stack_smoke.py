@@ -102,6 +102,29 @@ def exec_python(container: str, code: str) -> tuple[int, str]:
     return result.returncode, (result.stdout + result.stderr).strip()
 
 
+def mint(source_ip: str | None = None) -> dict:
+    """Mint a session, optionally presenting a distinct simulated visitor address.
+
+    ``PER_IP_MAX_CONCURRENT`` is 2 and the module-scoped ``session`` fixture holds
+    one slot for the whole run, so any test needing two *further* concurrent
+    sessions is already over the cap and gets a 429 on the second mint. Presenting
+    per-visitor addresses is the same shortcut ``load_sanity.visitor_ip`` documents:
+    the warden trusts the first ``X-Forwarded-For`` hop because in production only
+    Caddy can reach it (instances on demo-int are denied the warden's port), and
+    ``load_sanity.check_per_ip_cap`` still proves the cap itself works — so this
+    simulates N visitors rather than defeating a control.
+
+    Asserts on the mint so a refusal surfaces as "mint refused: 429 rate_limited"
+    instead of a ``KeyError: 'token'`` three lines later in a cleanup block.
+    """
+    headers = {"X-Forwarded-For": source_ip} if source_ip else {}
+    response = httpx.post(f"{BASE_URL}/session/new", headers=headers, timeout=60.0)
+    assert response.status_code == 200, (
+        f"mint refused: {response.status_code} {response.text}"
+    )
+    return response.json()
+
+
 # ── fixtures ────────────────────────────────────────────────────────────────
 @pytest.fixture(scope="module")
 def stack() -> dict:
@@ -395,9 +418,15 @@ def test_fernet_key_is_in_env_and_no_key_file_exists(session):
     ),
 )
 def test_instance_cannot_reach_a_sibling_instance(stack):
-    """warden→instance ALLOW, instance→instance DENY (I4)."""
-    first = httpx.post(f"{BASE_URL}/session/new", timeout=60.0).json()
-    second = httpx.post(f"{BASE_URL}/session/new", timeout=60.0).json()
+    """warden→instance ALLOW, instance→instance DENY (I4).
+
+    Two distinct visitor addresses: this test needs two concurrent sessions on top
+    of the module-scoped one, which is three against a per-IP cap of two. Running
+    it from a single address refused the second mint with 429 and surfaced as a
+    KeyError in the cleanup block — see ``mint``.
+    """
+    first = mint("198.51.100.201")
+    second = mint("198.51.100.202")
     try:
         sibling_ip = inspect(container_for_instance(second["instance_id"]))[
             "NetworkSettings"]["Networks"][INSTANCE_NETWORK]["IPAddress"]

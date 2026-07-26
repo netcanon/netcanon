@@ -11,7 +11,7 @@ warden/shim live in [`demo/warden/`](../demo/warden/).
 | `docker-compose.yml` | Production stack: caddy + warden + authz-shim + socket-proxy, 3 networks. Image refs are env-interpolated so the file stays digest-free — its in-repo hash **is** the published hash (**I6**). |
 | `docker-compose.dev.yml` | Local Gate-1 override — builds warden+shim from source. |
 | `Caddyfile` | TLS termination (Let's Encrypt; DNS-only Cloudflare → Caddy is the sole terminator), static landing/whitepaper, reverse-proxy to the warden, 2 MB body cap, no request logs on demo paths. |
-| `cloud-init.yaml` | Hardened Ubuntu 24.04: docker, **key-only SSH**, **swap-off + core-dumps-off + journald-volatile** (I2), **fail2ban (SSH)**, unattended-upgrades, host firewall (443/80 + admin-only SSH, ICMPv6 allowed), chrony, OOM protection. Clones this repo to `/opt/demo` and installs the TTL-backstop + demo-firewall units from it. |
+| `cloud-init.yaml` | Hardened Ubuntu 24.04: docker, **key-only SSH**, **swap-off + core-dumps-off + journald-volatile** (I2), **fail2ban (SSH)**, unattended-upgrades, host firewall (443/80 + admin-only SSH, ICMPv6 allowed), chrony, `make` + `jq` for the deploy runbook, OOM protection. Clones this repo to `/opt/demo` and installs the TTL-backstop + demo-firewall units from it. |
 | `systemd/` | `demo-ttl-backstop.{sh,service,timer}` — the warden-independent hard-TTL backstop (removes any `demo.*` container older than **1320 s** = `HARD_TTL + POOL_MAX_AGE + 120 s slack`, swept every 60 s). |
 | `nftables/demo-int.nft` | The demo-int isolation rules (warden→instance ALLOW, instance→instance DENY, instance→warden DENY). |
 | `Makefile` | `verify` / `whitepaper` / `deploy` / `drain` / `down` + `dev-up` / `dev-down` for local Gate-1. |
@@ -22,8 +22,12 @@ warden/shim live in [`demo/warden/`](../demo/warden/).
 
 ```bash
 cd deploy
-cp demo.env.example demo.env    # edit: CADDY_IMAGE=caddy:2, SOCKET_PROXY_IMAGE=tecnativa/docker-socket-proxy,
-                                #       NETCANON_INSTANCE_IMAGE=ghcr.io/netcanon/netcanon:0.6.1, ACME_EMAIL=...
+cp demo.env.example demo.env    # edit: CADDY_IMAGE=caddy:2, ACME_EMAIL=...
+                                #       SOCKET_PROXY_IMAGE=ghcr.io/tecnativa/docker-socket-proxy:v0.4.2
+                                #       NETCANON_INSTANCE_IMAGE=ghcr.io/netcanon/netcanon:0.6.1
+                                # socket-proxy must be v0.4.0+ — older tags render
+                                # haproxy.cfg outside the tmpfs and crash-loop
+                                # against the service's read-only rootfs.
 docker pull ghcr.io/netcanon/netcanon:0.6.1
 make dev-up
 ```
@@ -116,24 +120,43 @@ value blank — it cannot know when you deploy).
 - **SSH:** fail2ban jail (above).
 - **Volumetric L3/L4:** ⚠️ **not mitigated** — DNS-only Cloudflare exposes the origin IP and adds no scrubbing; only Hetzner's free network-edge protection applies. A conscious residual of the DNS-only trust-model choice (orange-cloud would fix it but adds Cloudflare to the TCB). The no-log privacy design also limits fail2ban-on-HTTP.
 
-## Status — Gate 1 ✅ verified, Gate 3/4 pending a real host
+## Status — Gate 1 ✅, Gate 3 ✅ (real host), Gate 4 pending a release
 
 **Gate 1 passed** on Docker Desktop: the stack runs end to end (mint → iframed
 `/migrate` with XFO stripped and CSP `frame-ancestors` rewritten → allowlist 404s
 → destroy), instance hardening is verified *as applied by dockerd*, and the
 instance network has no egress. `tests/demo/test_live_stack_smoke.py` scripts
-those proofs (28 pass / 2 skip); `tests/demo/load_sanity.py` measures capacity.
+those proofs; `tests/demo/load_sanity.py` measures capacity.
 
-**Still unverified — needs the real Linux host (Gate 3):**
+**Gate 3 passed** on the CPX32 (Ubuntu 24.04, bare dockerd), 2026-07-26 — the
+proofs Docker Desktop structurally cannot run:
 
-- **I4 host nftables** — instance→instance and instance→warden DENY live in the
-  host's `DOCKER-USER` chain and cannot be exercised on Docker Desktop, where
-  dockerd runs inside a VM. Run the smoke there with
-  `NETCANON_DEMO_HOST_NFTABLES=1`.
-- `DOCKER-USER` rule ordering/idempotency and survival across `daemon-reload`.
-- `make deploy`'s signature / `SHA256SUMS` gate (Gate 4).
-- Re-measure capacity on the box: the numbers in
-  [07](../docs/demo-plan/07-budget.md#sizing) came from Docker Desktop, whose
-  accounting differs from bare metal.
+- **I4 host nftables** — instance→instance and instance→warden both blocked, and
+  warden→instance still reachable, so the ALLOW rule is not over-broad. The two
+  denials surface as connect *timeouts* (a silent nftables `drop`), whereas I5
+  egress fails immediately with no-route — different signatures for the two
+  different mechanisms, which is itself corroboration.
+- **I5 no egress** — instances cannot reach `1.1.1.1:443` or `8.8.8.8:53`.
+- **`DOCKER-USER` idempotency and survival** — exactly one jump and four rules
+  after a `demo-firewall` restart *and* after a full `dockerd` restart. The
+  latter matters in production: `unattended-upgrades` bumping `docker.io` would
+  otherwise be able to drop I4 silently.
+- **Capacity re-measured on the box** — 2420 MiB projected at `MAX_ACTIVE = 32`
+  against 7745 MiB total; worked-instance RSS median 72.0 MiB, 28% of the 256 MiB
+  per-instance guardrail; fails closed at saturation; swap still empty. Within 2%
+  of the Docker Desktop estimate in [07](../docs/demo-plan/07-budget.md#sizing).
+  One caveat worth recording: at full saturation `31/32` sessions rendered output
+  — a ~3% shortfall at the cap, not reproduced below it.
+
+Gate 3 also caught a release blocker: `demo-publish.yml` pinned a socket-proxy
+version that crash-loops under the service's read-only rootfs. Gate 1 had passed
+only because it ran an untagged image. See `SOCKET_PROXY_TMPFS_SAFE` in
+`tests/demo/test_demo_docs_truth.py`.
+
+**Still unverified — needs a published release (Gate 4):**
+
+- `make deploy`'s signature / `SHA256SUMS` gate.
+- The digest-pinned production stack end to end. Gate 3 exercised the
+  source-built dev stack, which is the same compose file with `build:` overlaid.
 
 Nothing is deployed. Nothing auto-deploys.
