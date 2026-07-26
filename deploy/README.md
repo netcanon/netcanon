@@ -120,7 +120,7 @@ chmod +x /usr/local/bin/cosign && cosign version
 Unpack the release bundle, then:
 
 ```bash
-make deploy DEMO_TAG=demo-v1 BUNDLE=./bundle
+make deploy DEMO_TAG=demo-v0.1.0 BUNDLE=./bundle
 ```
 
 `deploy` depends on `verify-bundle`, so the Gate-4 check cannot be skipped: it
