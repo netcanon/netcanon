@@ -123,12 +123,20 @@ Unpack the release bundle, then:
 make deploy DEMO_TAG=demo-v0.1.0 BUNDLE=./bundle
 ```
 
-`deploy` depends on `verify-bundle`, so the Gate-4 check cannot be skipped: it
+`deploy` depends on `promote`, which depends on `verify-bundle`, so neither the
+Gate-4 check nor the promotion can be skipped. Verification first: it
 `cosign verify-blob`s `SHA256SUMS` against the **exact** signer identity
 (`demo-publish.yml@refs/tags/<DEMO_TAG>` — which is why the tag has to be passed
 in; it is not recoverable from the bundle), then `sha256sum -c` makes that one
 signed manifest vouch for every other asset. Only then does it pull the
 digest-pinned images and `up -d`.
+
+`promote` is the step that makes the verification mean something: it copies the
+**verified** bundle's digests into `deploy/demo.env`, preserving your
+`ACME_EMAIL` (the one value the bundle deliberately omits, since it is operator
+data rather than a build output). Without it, `deploy` would verify a signed
+bundle and then bring up whatever image refs happened to be sitting in
+`demo.env` — which is exactly what the first real Gate-4 run caught.
 
 Then `make whitepaper` from the unpacked bundle to stamp the deploy date and
 render the copy Caddy serves at `/whitepaper` (CI deliberately leaves that one
