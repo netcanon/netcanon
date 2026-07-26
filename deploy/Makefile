@@ -3,7 +3,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file demo.env
 
-.PHONY: help verify whitepaper deploy drain down dev-up dev-down
+.PHONY: help verify whitepaper deploy drain down dev-up dev-down smoke-up smoke smoke-down
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-11s %s\n",$$1,$$2}'
