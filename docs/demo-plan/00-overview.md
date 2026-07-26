@@ -14,7 +14,7 @@ architecture *is* the marketing claim.
    container. No cross-session data visibility is possible even in the presence
    of an application-level bug, because isolation is at the container boundary.
 2. **Provable ephemerality.** Instance lifetime is capped by a **15-min hard TTL**
-   (`HARD_TTL=900 s`, ≤ ~20 min from creation even if the warden crashes) that
+   (`HARD_TTL=900 s`, ≤ ~23 min from creation even if the warden crashes) that
    nothing the browser does can extend, and is reclaimed sooner in the common
    cases: on browser close, and after **10 min** with no allowlisted proxied POST
    (translate, detect, or sanitize) (`IDLE_TTL=600 s`, tightened under load). All
@@ -57,7 +57,7 @@ These override everything else in this plan.
   (every instance is labeled at creation — `demo.created_at`, `demo.instance` —
   the immutable labels the sweep keys on; the token does not exist at create); and
   (3) an **independent host `systemd` timer** (swept every 60 s) that force-removes
-  any `demo.*`-labeled container older than `HARD_TTL + POOL_MAX_AGE = 1200 s`.
+  any `demo.*`-labeled container older than `HARD_TTL + POOL_MAX_AGE + 120 s slack = 1320 s`.
   Because the reaper recycles any unassigned pool instance older than
   `POOL_MAX_AGE − reaper_period` (~290 s), no instance is ever *assigned* more than
   `POOL_MAX_AGE` (300 s) after creation, so a live session's creation-age deadline

@@ -222,8 +222,36 @@ class Warden:
     def idle_ttl(self) -> float:
         return self.app._idle_ttl
 
+    async def drain_background(self) -> None:
+        """Settle the warden's fire-and-forget tasks.
+
+        ``session_new`` kicks off ``_refill_pool()`` via ``_spawn``. While that
+        task is in flight it holds the single-flight ``_refilling`` flag, so an
+        explicit ``fill_pool()`` would return immediately WITHOUT filling — and
+        the next mint would then correctly 503 on an empty pool. That race is
+        scheduling-dependent, i.e. an intermittent CI failure. Draining first
+        makes the harness deterministic.
+        """
+        # Bounded, and yields explicitly: the done-callback that removes a task
+        # from _bg_tasks runs via call_soon, so a completed-but-not-yet-discarded
+        # task would make gather() return without ever yielding — an unbounded
+        # `while _bg_tasks` spins forever on that.
+        for _ in range(50):
+            pending = [task for task in list(self.app._bg_tasks) if not task.done()]
+            if not pending:
+                self.app._bg_tasks.clear()
+                return
+            await asyncio.gather(*pending, return_exceptions=True)
+            await asyncio.sleep(0)
+
     async def fill_pool(self) -> None:
-        await self.app._refill_pool()
+        """Bring the pool up to POOL_SIZE, deterministically."""
+        await self.drain_background()
+        for _ in range(5):
+            await self.app._refill_pool()
+            if len(self.app._pool) >= C.POOL_SIZE:
+                return
+            await self.drain_background()
 
     async def tick(self) -> None:
         """Run one reaper tick (the loop itself is never started in tests)."""

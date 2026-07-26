@@ -4,15 +4,24 @@
 # ⚠️ Draft — Gate 3 verifies swap empty, no core files, 443-only, HTTPS green.
 # EDIT before use: pin the SSH source (admin IPs / VPN) in the nftables filter.
 
+# Key-only SSH. Hetzner injects the key you select in the console; this makes
+# password auth impossible regardless of image defaults, so the fail2ban jail
+# below is a backstop against noise rather than the only thing standing between
+# the box and a password guess. Deliberately does NOT touch `disable_root` —
+# Hetzner's Ubuntu image expects root+key, and overriding it can lock you out.
+ssh_pwauth: false
+
 package_update: true
 package_upgrade: true
 packages:
   - docker.io
   - docker-compose-v2
+  - git                 # clones this repo to /opt/demo (runcmd installs from it)
   - fail2ban            # SSH brute-force protection (see jail below)
   - unattended-upgrades # automatic security patches
   - nftables            # host firewall + the demo-int isolation rules
   - chrony              # time sync (TTL enforcement + audit timestamps depend on it)
+  - jq                  # `make whitepaper` fills the deploy date with it
 
 write_files:
   # I2: swap-off is not the only RAM->disk path — discard core dumps too.
@@ -70,8 +79,17 @@ write_files:
           ct state established,related accept
           iif "lo" accept
           ip protocol icmp accept
+          # ICMPv6 is NOT optional when the server has an IPv6 address: Neighbour
+          # Discovery and Path-MTU live here, so dropping it breaks IPv6 outright
+          # (apt/registry pulls stall) rather than just blocking pings.
+          meta l4proto ipv6-icmp accept
+          # Family-agnostic in an `inet` table: covers both IPv4 and IPv6.
           tcp dport { 80, 443 } accept
-          ip saddr 203.0.113.0/24 tcp dport 22 accept   # SSH: admin source only
+          # ⚠️ SSH: replace with your real admin source before booting. This rule
+          # is IPv4-only — if you connect over IPv6 you will be locked out until
+          # you add the ip6 line below. Console access via Hetzner is the way back in.
+          ip saddr 203.0.113.0/24 tcp dport 22 accept
+          # ip6 saddr 2001:db8::/64 tcp dport 22 accept   # uncomment for an IPv6 admin source
         }
       }
 
@@ -82,8 +100,15 @@ runcmd:
   - sysctl --system
   - systemctl restart systemd-journald
   - systemctl enable --now chrony fail2ban nftables docker
+  # The systemd units + nftables rules below are installed FROM this repo, so it
+  # has to be on the box first. Public repo, no credentials. `set -e` in the
+  # wrapper makes a clone failure loud: without it the installs below silently
+  # no-op and the host comes up LOOKING fine while missing two of the three
+  # hard-TTL enforcement mechanisms (I3) and the demo-int isolation (I4).
+  - bash -eux -c 'test -d /opt/demo || git clone --depth 1 https://github.com/netcanon/netcanon.git /opt/demo'
+  - bash -eux -c 'test -f /opt/demo/deploy/systemd/demo-ttl-backstop.sh'
   # Install the warden-independent hard-TTL backstop (I3): removes any demo.*
-  # container older than 1200s every 60s, even if the warden is dead.
+  # container older than HARD_TTL_BACKSTOP every 60s, even if the warden is dead.
   - install -m 0755 /opt/demo/deploy/systemd/demo-ttl-backstop.sh /usr/local/bin/demo-ttl-backstop.sh
   - install -m 0644 /opt/demo/deploy/systemd/demo-ttl-backstop.service /etc/systemd/system/
   - install -m 0644 /opt/demo/deploy/systemd/demo-ttl-backstop.timer /etc/systemd/system/
@@ -93,3 +118,7 @@ runcmd:
   - systemctl daemon-reload
   - systemctl enable --now demo-ttl-backstop.timer
   - systemctl enable --now demo-firewall.service
+  # Gate-3 tripwire: prove both units are actually active. cloud-init logs to
+  # /var/log/cloud-init-output.log — check it before trusting the host.
+  - systemctl is-active --quiet demo-ttl-backstop.timer || echo "FATAL demo-ttl-backstop.timer inactive"
+  - systemctl is-enabled --quiet demo-firewall.service || echo "FATAL demo-firewall.service not enabled"

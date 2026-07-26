@@ -3,7 +3,7 @@
 One-shot plan for a public-facing, **provably ephemeral** live demo of
 [netcanon](https://github.com/netcanon/netcanon). Per-visitor instanced
 execution; no demo persists past the **15-minute hard TTL** (`HARD_TTL = 900 s`;
-≤ ~20 min from creation even if the session manager crashes) or browser close; no
+≤ ~23 min from creation even if the session manager crashes) or browser close; no
 demo data is ever retained; architecture claims are backed by a verifiable
 whitepaper.
 

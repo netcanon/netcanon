@@ -27,10 +27,13 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Every document that states the hard-TTL enforcement numbers to a reader.
+# deploy/README.md is in here because it drifted the same way the others did —
+# it kept quoting the pre-remediation 1200 s long after the ceiling moved.
 CLAIM_DOCS = (
     "docs/DEMO_WHITEPAPER.md",
     "deploy/VERIFY.md",
     "docs/demo-architecture.md",
+    "deploy/README.md",
 )
 
 

@@ -2,24 +2,33 @@
 
 ## Host
 
-**Launch default: a CX32-class box** (4 vCPU, 8 GB RAM, 40 GB NVMe) running
-Ubuntu 24.04 LTS. Location is an explicit fork — and because the CX line is
-**EU-only**, the originally-drafted "CX22 + Ashburn" is not a real SKU:
+**Launch default: Hetzner CPX32** (4 shared AMD EPYC vCPU, 8 GB RAM, 160 GB
+NVMe) running **Ubuntu 24.04 LTS**, EU region.
 
-- **EU — Hetzner CX32, Falkenstein** (4 vCPU / 8 GB / 40 GB / 20 TB traffic,
-  ~€6.80/mo). Preferred: EU hosting is itself on-message for a privacy demo, and
-  the 20 TB traffic allowance is generous.
-- **US — Hetzner CPX32, Ashburn or Hillsboro** (4 vCPU / 8 GB, shared-vCPU AMD
-  line, US latency for the primary audience). Must be **re-priced** and its
-  much-lower included-traffic allowance **re-verified** before committing — the
-  CX line does not exist in the US regions.
+The originally-planned CX32 is the same 4 vCPU / 8 GB class at a fraction of the
+price (~€6.80 vs ~€35), but **the CX line was out of stock at provisioning
+time**, so CPX32 is the launch box. Because the CPU/RAM class is identical,
+`MAX_ACTIVE = 32` carries over unchanged — no constant, cap, or whitepaper claim
+moves with this substitution. Swap back to CX32 when stock returns if the cost
+matters; confirm the included-traffic allowance for your location when you do.
+
+Two hard constraints on the box choice:
+
+- ⚠️ **x86 only.** `demo-publish.yml` builds the warden and authz-shim on
+  `ubuntu-latest` with no `platforms:` set — the images are **amd64-only**. CX
+  and CPX are x86; the **CAX line is ARM** and will not run them.
+- **EU region** (Falkenstein / Nuremberg / Helsinki). EU hosting is itself
+  on-message for a privacy demo. CPX — unlike CX — is also offered in US and
+  Singapore regions, so a US move is possible later, but re-verify the
+  included-traffic allowance for the region before committing.
 
 Rationale: fits the operator's existing Hetzner + hardened cloud-init workflow;
-8 GB comfortably holds warden + Caddy + a warm pool + ~32 capped instances, sized
-off *real* held-session RSS rather than the 256 MB hard cap
-([07](07-budget.md#sizing)). Hetzner bills hourly, so the box can be **rescaled
-up same-day** (CX32 → CX42) if the launch lands — a CPU/RAM-only rescale that
-keeps the 40 GB disk, so it stays fully reversible ([07](07-budget.md#sizing)).
+8 GB comfortably holds warden + Caddy + a warm pool + 32 capped instances. That
+is now **measured, not estimated** — a 32-session `load_sanity.py` run projects
+~2.4 GiB at the full cap ([07](07-budget.md#sizing)). Hetzner bills hourly, so
+the box can be **rescaled up same-day** to the next CPX tier if the launch lands
+— a CPU/RAM-only rescale that leaves the disk alone, so it stays fully
+reversible ([07](07-budget.md#sizing)).
 
 ## Provisioning (cloud-init)
 
@@ -52,7 +61,7 @@ items:
 - **Host hard-TTL backstop timer** — a `systemd` timer + oneshot service that
   runs `every 60 s` (`OnUnitActiveSec=60s`, `OnBootSec=60s`) and force-removes
   any `demo.*`-labeled container whose `demo.created_at` is older than
-  `HARD_TTL + POOL_MAX_AGE = 1200 s` (20 min). This is the warden-independent
+  `HARD_TTL + POOL_MAX_AGE + 120 s slack = 1320 s` (22 min). This is the warden-independent
   enforcement domain: it holds the creation-age ceiling even while the warden is
   dead ([03](03-warden-spec.md#lifecycle-rules),
   [04](04-container-hardening.md)).

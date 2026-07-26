@@ -44,10 +44,10 @@ authz shim (see Security posture) — as the Trusted Computing Base.
 ## Lifecycle rules
 
 > Every instance is destroyed **≤ 15 min after assignment** (the warden's in-RAM
-> reaper, `deadline = assignment_time + HARD_TTL`) and **≤ ~20 min after creation
+> reaper, `deadline = assignment_time + HARD_TTL`) and **≤ ~23 min after creation
 > even with the warden dead** (an independent host `systemd` timer that
 > force-removes any `demo.*`-labeled container older than
-> `HARD_TTL + POOL_MAX_AGE = 1200 s`, swept every 60 s). Because the reaper
+> `HARD_TTL + POOL_MAX_AGE + 120 s slack = 1320 s`, swept every 60 s). Because the reaper
 > recycles any unassigned pool instance whose age exceeds
 > `POOL_MAX_AGE − reaper_period` (290 s), no instance is ever *assigned* more than
 > `POOL_MAX_AGE` (300 s) after its creation; a live session's creation-age deadline
@@ -114,7 +114,7 @@ authz shim (see Security posture) — as the Trusted Computing Base.
   `OnUnitActiveSec=60s`/`OnBootSec=60s`) that force-removes any `demo.*`-labeled
   container older than `HARD_TTL + POOL_MAX_AGE` (1200 s), so the creation-age
   ceiling holds even while the warden is down (a crash can widen the effective
-  ceiling from 15 min-after-assignment to ≤ ~20 min-after-creation, never lift
+  ceiling from 15 min-after-assignment to ≤ ~23 min-after-creation, never lift
   it). Idle and heartbeat reclaim are warden-live-only; the systemd backstop is
   what covers a wedged/dead warden.
   - **Epoch note.** Every instance is created with labels
@@ -350,7 +350,7 @@ verification detail in [08](08-testing-verification.md).
   `MAX_ACTIVE = 32`, warm-pool size 4, `PER_IP_MAX_CONCURRENT = 2`, per-IP mint
   rate limit, the 120 s at-cap reclaim floor, container spec / `INSTANCE_SPEC`
 - Host `systemd` timer unit (independent hard-ceiling backstop; force-removes any
-  `demo.*`-labeled container older than `HARD_TTL + POOL_MAX_AGE = 1200 s`, swept
+  `demo.*`-labeled container older than `HARD_TTL + POOL_MAX_AGE + 120 s slack = 1320 s`, swept
   `every 60 s` via `OnUnitActiveSec=60s`/`OnBootSec=60s`) + startup-sweep hook +
   the loopback/sentinel `drain` trigger (SIGTERM = fast shutdown, not drain)
 - Unit tests: lifecycle transitions, **hard-TTL immovability** (an instance aged
