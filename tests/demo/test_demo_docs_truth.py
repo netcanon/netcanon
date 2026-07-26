@@ -66,6 +66,46 @@ def test_docs_do_not_quote_the_superseded_backstop_formula(relpath):
     assert stale not in text, f"{relpath} still quotes the superseded '{stale}'"
 
 
+# Claim 9 is "the published deployment is exactly reproducible". That holds only
+# if EVERY image the stack pins appears in the reproducibility block. For
+# demo-v0.1.0 the authz-shim did not: the workflow computed its digest and wrote
+# it to demo.env, but never emitted it into whitepaper-values.json, and the block
+# had no line for it — while VERIFY.md called it Trusted Computing Base and gave
+# readers a cosign command for it. Five of six digests were verifiable.
+PINNED_IMAGE_TO_WHITEPAPER_TOKEN = {
+    "NETCANON_INSTANCE_IMAGE": "NETCANON_IMAGE_DIGEST",
+    "WARDEN_IMAGE": "WARDEN_IMAGE_DIGEST",
+    "WARDEN_SHIM_IMAGE": "SHIM_IMAGE_DIGEST",
+    "SOCKET_PROXY_IMAGE": "SOCKET_PROXY_IMAGE_DIGEST",
+    "CADDY_IMAGE": "CADDY_IMAGE_DIGEST",
+}
+
+
+def test_every_pinned_image_is_reproducible_from_the_whitepaper():
+    """Three-way: the env template pins it, the whitepaper has a token for it,
+    and the workflow actually emits that token's value."""
+    env_keys = set(
+        re.findall(r"^([A-Z_]*IMAGE)=", read("deploy/demo.env.example"), re.MULTILINE)
+    )
+    assert env_keys == set(PINNED_IMAGE_TO_WHITEPAPER_TOKEN), (
+        "deploy/demo.env.example pins a different set of images than this map "
+        f"knows about: {sorted(env_keys ^ set(PINNED_IMAGE_TO_WHITEPAPER_TOKEN))}. "
+        "A new pinned image must also become publicly verifiable."
+    )
+
+    whitepaper = read("docs/DEMO_WHITEPAPER.md")
+    workflow = read(".github/workflows/demo-publish.yml")
+    for env_key, token in PINNED_IMAGE_TO_WHITEPAPER_TOKEN.items():
+        assert f"<{token}>" in whitepaper, (
+            f"{env_key} is pinned in the stack but <{token}> is absent from the "
+            "whitepaper's reproducibility block — readers cannot verify it"
+        )
+        assert f'"{token}"' in workflow, (
+            f"the whitepaper asks for <{token}> but demo-publish.yml never emits it "
+            "into whitepaper-values.json, so it renders as an unfilled placeholder"
+        )
+
+
 def test_rendered_whitepaper_is_regenerated_from_the_markdown():
     """Every other ratchet in this file reads the MARKDOWN — but Caddy serves
     ``frontend/whitepaper.html``, and demo-publish.yml ships it as
