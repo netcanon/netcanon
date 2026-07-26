@@ -16,6 +16,8 @@ instead of quietly making the published trust argument false.
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -62,6 +64,28 @@ def test_docs_do_not_quote_the_superseded_backstop_formula(relpath):
     stale = f"POOL_MAX_AGE = {C.HARD_TTL + C.POOL_MAX_AGE}"
     text = read(relpath)
     assert stale not in text, f"{relpath} still quotes the superseded '{stale}'"
+
+
+def test_rendered_whitepaper_is_regenerated_from_the_markdown():
+    """Every other ratchet in this file reads the MARKDOWN — but Caddy serves
+    ``frontend/whitepaper.html``, and demo-publish.yml ships it as
+    ``whitepaper-template.html``. That gap is not theoretical: when the backstop
+    ceiling moved to 1320 s the markdown was corrected and this rendered copy was
+    not, so the live demo spent weeks promising ``HARD_TTL + POOL_MAX_AGE =
+    1200 s`` and "~20 min" — a *tighter* guarantee than the code delivers, which
+    is the exact failure the ceiling fix existed to prevent.
+    """
+    result = subprocess.run(
+        [sys.executable, "tools/render_whitepaper.py",
+         "--in", "docs/DEMO_WHITEPAPER.md", "--check"],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, (
+        "frontend/whitepaper.html is stale relative to docs/DEMO_WHITEPAPER.md. "
+        "Regenerate it:\n"
+        "  python tools/render_whitepaper.py --in docs/DEMO_WHITEPAPER.md "
+        "--out frontend/whitepaper.html\n\n" + result.stdout + result.stderr
+    )
 
 
 def test_backstop_ceiling_matches_the_systemd_unit():
