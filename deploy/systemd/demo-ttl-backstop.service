@@ -1,5 +1,5 @@
 [Unit]
-Description=netcanon demo — hard-TTL backstop (force-remove demo containers older than 1200s)
+Description=netcanon demo — hard-TTL backstop (force-remove demo containers older than 1320s)
 After=docker.service
 Requires=docker.service
 

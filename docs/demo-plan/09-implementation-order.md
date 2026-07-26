@@ -93,9 +93,11 @@ idle-reclaim (600 s) destroys each verified once end-to-end.
 
 ## Phase 3 — Host
 
-Cloud-init per [02](02-deployment.md): Hetzner **CX32** (4 vCPU / 8 GB, EU
-Falkenstein — the CX line is EU-only, so "CX22 + Ashburn" is impossible; the US
-alternative is CPX32, re-priced with its lower included traffic). Swap off,
+Cloud-init per [02](02-deployment.md): Hetzner **CPX32** (4 shared AMD EPYC
+vCPU / 8 GB / 160 GB, EU region), **Ubuntu 24.04 LTS**. CPX32 rather than the
+originally-planned CX32 only because the CX line was out of stock — same CPU/RAM
+class, so `MAX_ACTIVE = 32` is unchanged. **x86 only: never a CAX (ARM) box, the
+warden/shim images are amd64-only.** Swap off,
 journald volatile, firewall, DNS, TLS. Also disable **core dumps** host-wide
 (swap-off is not the only RAM→disk path): `kernel.core_pattern` → discard,
 `systemd-coredump` `Storage=none` + `ProcessSizeMax=0`, apport removed/neutered,
@@ -121,14 +123,14 @@ proofs 1–13**); `make verify` output matches the published block.
       launch playbook: HI pitch, Show HN, README badges).
 - [ ] Front-page `docker run` one-liner + sanitize-page pointer (ties into
       BUG_REPORTING flow).
-- [ ] Load sanity: script `MAX_ACTIVE` (32 on CX32) concurrent sessions with
-      translations; confirm no OOM-kill of warden/caddy (size the cap off real
-      held-session RSS ~90–140 MB + shim, not the 256 MB cap), busy-state renders
+- [ ] Load sanity: `tests/demo/load_sanity.py` drives `MAX_ACTIVE` (32 on CPX32) concurrent sessions with
+      translations; confirm no OOM-kill of warden/caddy (size the cap off the
+      MEASURED held-session RSS, ~72 MiB, not the 256 MB cap), busy-state renders
       for #33. Idle TTL + reliable teardown is the primary capacity lever
       (Little's Law `L = λ·W`; idle dwell 600 s, hard ceiling 900 s); box upsize
       is last. If the launch lands, rescale
-      CX32 → CX42 (8/16, `MAX_ACTIVE` 60–80, pool 6) same-day (Hetzner hourly
-      billing; rescale CPU/RAM only, keep the 40 GB disk so it stays reversible).
+      to the next CPX tier (~2x CPU/RAM, `MAX_ACTIVE` 60–80, pool 6) same-day (Hetzner hourly
+      billing; rescale CPU/RAM only, leave the disk untouched so it stays reversible).
 
 **Gate 5 (launch-ready):** capacity behavior observed under synthetic load;
 all links resolve; whitepaper live; VERIFY_RESULTS committed.

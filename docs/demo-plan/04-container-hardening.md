@@ -95,11 +95,11 @@ Notes:
   (~290 s)** (destroy + refill), so no instance is ever *assigned* more than
   `POOL_MAX_AGE` (300 s) after creation. The independent host
   `systemd` timer (sweep cadence `every 60 s`) therefore only needs a
-  creation-age ceiling of `HARD_TTL + POOL_MAX_AGE = 1200 s` (20 min) on
+  creation-age ceiling of `HARD_TTL + POOL_MAX_AGE + 120 s slack = 1320 s` (22 min) on
   `demo.created_at` — provably looser than any live session's 900 s
   assignment-relative deadline, so it can never fire early. Idle and heartbeat
   reclaim are **warden-live-only**; this systemd backstop is what bounds the
-  warden-dead path (≤ ~20 min after creation).
+  warden-dead path (≤ ~23 min after creation).
 - **Network egress + segmentation:** `demo-int` is created with
   `internal: true` → no outbound internet (**I5**); instances receive addresses
   in `172.31.0.0/24` and the **warden holds the static address `172.31.0.2`**.

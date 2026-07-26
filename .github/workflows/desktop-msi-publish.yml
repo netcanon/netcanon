@@ -303,15 +303,28 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Attach MSI to GitHub Release
+      - name: Attach MSI to a DRAFT GitHub Release
         # softprops/action-gh-release creates the release page if it
         # doesn't yet exist (handy for tags pushed before this workflow
         # existed) and otherwise appends the MSI to the existing one.
+        #
+        # `draft: true` + a separate publish step below is GitHub's documented
+        # immutable-releases shape: assets must all be attached BEFORE the
+        # release is published, because publishing under immutability freezes
+        # them. Creating it published and then uploading races that rule.
+        # Harmless while immutability is off; required once it is on.
+        #
+        # ⚠️ The workflow_dispatch backfill path can still only *create* a
+        # release. Once immutability is enabled, appending an MSI to an
+        # already-published release is impossible by design — if an MSI is
+        # missed on a published tag, cut a new patch tag rather than trying to
+        # mutate the published one.
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
           # Normalized tag (never a full ref) from the "Refuse a non-tag ref"
           # step so softprops can't mint a junk `refs/tags/refs/tags/…` tag (P4a).
           tag_name: ${{ env.RELEASE_TAG }}
+          draft: true
           files: dist/*.msi
           fail_on_unmatched_files: true
           # When the release page is auto-created here (e.g. backfill
@@ -324,3 +337,11 @@ jobs:
           # (any `-`); the old `-rc|-alpha|-beta`-only form let a `v0.6.0-pre1`
           # / `-dev1` tag take the "Latest release" slot (P3).
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
+
+      # Publish only after the MSI is attached. `--draft=false` does not touch
+      # the prerelease flag or the generated notes set above.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ env.RELEASE_TAG }}
+        run: gh release edit "$TAG" --draft=false

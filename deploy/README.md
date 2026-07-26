@@ -11,10 +11,10 @@ warden/shim live in [`demo/warden/`](../demo/warden/).
 | `docker-compose.yml` | Production stack: caddy + warden + authz-shim + socket-proxy, 3 networks. Image refs are env-interpolated so the file stays digest-free — its in-repo hash **is** the published hash (**I6**). |
 | `docker-compose.dev.yml` | Local Gate-1 override — builds warden+shim from source. |
 | `Caddyfile` | TLS termination (Let's Encrypt; DNS-only Cloudflare → Caddy is the sole terminator), static landing/whitepaper, reverse-proxy to the warden, 2 MB body cap, no request logs on demo paths. |
-| `cloud-init.yaml` | Hardened Ubuntu 24.04: docker, **swap-off + core-dumps-off + journald-volatile** (I2), **fail2ban (SSH)**, unattended-upgrades, host firewall (443/80 + admin-only SSH), chrony, OOM protection, the TTL-backstop timer. |
-| `systemd/` | `demo-ttl-backstop.{sh,service,timer}` — the warden-independent hard-TTL backstop (removes any `demo.*` container older than 1200 s, every 60 s). |
+| `cloud-init.yaml` | Hardened Ubuntu 24.04: docker, **key-only SSH**, **swap-off + core-dumps-off + journald-volatile** (I2), **fail2ban (SSH)**, unattended-upgrades, host firewall (443/80 + admin-only SSH, ICMPv6 allowed), chrony, OOM protection. Clones this repo to `/opt/demo` and installs the TTL-backstop + demo-firewall units from it. |
+| `systemd/` | `demo-ttl-backstop.{sh,service,timer}` — the warden-independent hard-TTL backstop (removes any `demo.*` container older than **1320 s** = `HARD_TTL + POOL_MAX_AGE + 120 s slack`, swept every 60 s). |
 | `nftables/demo-int.nft` | The demo-int isolation rules (warden→instance ALLOW, instance→instance DENY, instance→warden DENY). |
-| `Makefile` | `verify` / `deploy` / `drain` / `down` + `dev-up` for local Gate-1. |
+| `Makefile` | `verify` / `whitepaper` / `deploy` / `drain` / `down` + `dev-up` / `dev-down` for local Gate-1. |
 | `demo.env.example` | Env template (image digests + ACME email). Copy → `demo.env` (**gitignored**; real values never commit). |
 | `PINNED_PRODUCT_TAG` | The netcanon version the demo pins (`v0.6.1`). Bumped by ordinary PR. |
 
@@ -28,9 +28,87 @@ docker pull ghcr.io/netcanon/netcanon:0.6.1
 make dev-up
 ```
 
+## Provisioning the host (Hetzner console)
+
+Launch box: **CPX32** (4 shared AMD EPYC vCPU / 8 GB / 160 GB NVMe), **Ubuntu
+24.04**, EU region. CPX rather than the originally-planned CX32 only because the
+CX line was out of stock — identical CPU/RAM class, so `MAX_ACTIVE = 32` is
+unchanged ([07](../docs/demo-plan/07-budget.md#sizing)).
+
+⚠️ **x86 only.** `demo-publish.yml` builds the warden and shim amd64-only, so a
+**CAX (ARM) box will not run them.**
+
+### Create-server wizard
+
+| Section | Setting | Why |
+|---|---|---|
+| Type | **CPX32** | 4 vCPU / 8 GB; measured demand is ~2.4 GiB at the full cap |
+| Location | **EU** (Falkenstein / Nuremberg / Helsinki) | EU hosting is itself on-message for a privacy demo |
+| Image | **Ubuntu 24.04** | What `cloud-init.yaml` targets |
+| Networking | **IPv4 + IPv6** | See the AAAA caveat below |
+| SSH keys | **Add your key** | `ssh_pwauth: false` — key-only; you log in as `root` |
+| Volumes | **none** | Claim 2 is *zero persistent volumes*; the local disk is already ~100x what is needed |
+| Firewalls | **create one** (rules below) | Free, and filters *before* the host — it survives an nftables mistake |
+| Backups | **off** | See below |
+| Placement groups | **none** | Anti-affinity for multi-server fleets; this is one box |
+| Labels | optional | e.g. `project=netcanon-demo`, `env=prod` |
+| Cloud config | paste `cloud-init.yaml` **after editing the SSH source** | See below |
+
+**Cloud firewall rules** — inbound only; leave outbound unrestricted (the host
+pulls from GHCR and talks to Let's Encrypt):
+
+- TCP **80, 443** from `0.0.0.0/0` + `::/0`
+- TCP **22** from **your admin IP only**
+
+**Backups: off — and not only for the ~20 % surcharge.** The host is reproducible
+from this repo by design (`make deploy` from a clean clone converging *is* Gate
+3's acceptance test), so a snapshot restores nothing the repo does not. It would
+also put a provider-held copy of Caddy's TLS private key and `demo.env` at rest.
+That is not a claims violation — session data is tmpfs-only and never touches
+disk — but it is an extra copy of secrets with no upside. If you ever do enable
+it, disclose it in the whitepaper's *What we do see* section.
+
+**Before pasting `cloud-init.yaml`:** replace `203.0.113.0/24` in the
+`/etc/nftables.conf` block with your real admin source. That rule is **IPv4-only**
+— if you SSH over IPv6 you will be locked out until you uncomment the `ip6 saddr`
+line beside it. Hetzner's web console is the way back in either way.
+
+**IPv6 caveat — publish an `A` record only.** Docker's IPv6 is off by default, so
+Caddy's published ports bind IPv4. Keep IPv6 on the server (free, useful
+outbound), but do **not** add an `AAAA` record yet — it would advertise an
+address that never answers.
+
+### First boot — verify before deploying
+
+cloud-init failures do not stop the boot, so check rather than assume:
+
+```bash
+ssh root@<ip>
+grep -i fatal /var/log/cloud-init-output.log        # expect no output
+systemctl is-active demo-ttl-backstop.timer demo-firewall.service
+swapon --show                                        # expect empty (I2)
+cat /proc/sys/kernel/core_pattern                    # expect |/bin/false
+nft list table inet host_fw                          # 80/443 open, SSH pinned
+docker --version && docker compose version
+```
+
+If the backstop timer or demo-firewall unit is inactive, **stop** — the host is
+missing hard-TTL enforcement (I3) or network isolation (I4), both of which the
+whitepaper claims.
+
+### DNS
+
+Add **`demo.netcanon.net` → A → `<your IPv4>`, DNS-only (grey cloud)** *before*
+`make deploy`. Caddy terminates TLS itself; with the record missing or proxied,
+the ACME HTTP-01 challenge fails and Caddy will not serve.
+
 ## Deploy (human-pulled, on the host)
 
 `make deploy` (verify signatures/SHA256SUMS — Gate-4 — then pull pinned images + `up -d`). No GitHub deploy secret exists; the operator SSHes in and runs it, then executes the Gate-4 live proofs.
+
+Then `make whitepaper` from the unpacked bundle to stamp the deploy date and
+render the copy Caddy serves at `/whitepaper` (CI deliberately leaves that one
+value blank — it cannot know when you deploy).
 
 ## DDoS / abuse posture
 
@@ -38,6 +116,24 @@ make dev-up
 - **SSH:** fail2ban jail (above).
 - **Volumetric L3/L4:** ⚠️ **not mitigated** — DNS-only Cloudflare exposes the origin IP and adds no scrubbing; only Hetzner's free network-edge protection applies. A conscious residual of the DNS-only trust-model choice (orange-cloud would fix it but adds Cloudflare to the TCB). The no-log privacy design also limits fail2ban-on-HTTP.
 
-## Status — ⚠️ draft, not yet Gate-1/Gate-3 verified
+## Status — Gate 1 ✅ verified, Gate 3/4 pending a real host
 
-Authored against the spec; needs a live Docker host to verify. Known verify points (flagged inline): the socket-proxy verb/DELETE behavior, the `DOCKER-USER` nftables ordering/idempotency + post-daemon-reload survival, `make deploy`'s signature/SHA256SUMS gate (Gate-4), and pinning the SSH source in `cloud-init.yaml`. Nothing is deployed.
+**Gate 1 passed** on Docker Desktop: the stack runs end to end (mint → iframed
+`/migrate` with XFO stripped and CSP `frame-ancestors` rewritten → allowlist 404s
+→ destroy), instance hardening is verified *as applied by dockerd*, and the
+instance network has no egress. `tests/demo/test_live_stack_smoke.py` scripts
+those proofs (28 pass / 2 skip); `tests/demo/load_sanity.py` measures capacity.
+
+**Still unverified — needs the real Linux host (Gate 3):**
+
+- **I4 host nftables** — instance→instance and instance→warden DENY live in the
+  host's `DOCKER-USER` chain and cannot be exercised on Docker Desktop, where
+  dockerd runs inside a VM. Run the smoke there with
+  `NETCANON_DEMO_HOST_NFTABLES=1`.
+- `DOCKER-USER` rule ordering/idempotency and survival across `daemon-reload`.
+- `make deploy`'s signature / `SHA256SUMS` gate (Gate 4).
+- Re-measure capacity on the box: the numbers in
+  [07](../docs/demo-plan/07-budget.md#sizing) came from Docker Desktop, whose
+  accounting differs from bare metal.
+
+Nothing is deployed. Nothing auto-deploys.

@@ -68,24 +68,52 @@ Notes:
   that exact GitHub Actions workflow, at that exact tag, in the public
   `netcanon/netcanon` repo, and signed via Sigstore's transparency log.
 
-### Cosign — demo stack images (pending demo-publish — Gate-4)
+### Cosign — demo stack images (live from the first `demo-v<N>` tag)
 
-The demo-specific images (the warden, and the socket-proxy/caddy variants if
-self-built) are **not yet published or signed**. Today they are
-built-from-source-in-repo and pinned by digest in `demo.env` — reproducible,
-but not signature-verifiable.
+The warden and the create-body authz shim are both Trusted Computing Base, and
+both are built, signed, SBOM-attested and provenance-attested by
+[`.github/workflows/demo-publish.yml`](../.github/workflows/demo-publish.yml).
+The signer identity is the workflow file at the exact demo tag:
 
-Once the demo-publish workflow ships (a later Gate-4 milestone), the same
-cosign verification will apply, with the anticipated signer identity of the
-form:
+```bash
+# Digests come from the bundle's demo.env; verify each against its tag identity.
+cosign verify ghcr.io/netcanon/netcanon-demo-warden@sha256:<digest> \
+    --certificate-identity 'https://github.com/netcanon/netcanon/.github/workflows/demo-publish.yml@refs/tags/demo-v1' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
+cosign verify ghcr.io/netcanon/netcanon-demo-warden-shim@sha256:<digest> \
+    --certificate-identity 'https://github.com/netcanon/netcanon/.github/workflows/demo-publish.yml@refs/tags/demo-v1' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
-https://github.com/netcanon/netcanon/.github/workflows/demo-publish.yml@refs/tags/demo-vX.Y.Z
-```
 
-**This proof is marked (pending demo-publish — Gate-4).** It does not work
-today, and we do not claim it does. Until then, the digest pins in `demo.env`
-plus `make verify` are the demo-image attestation.
+Notes:
+
+- Replace `demo-v1` with the demo tag the running bundle came from, and each
+  `<digest>` with the value in that bundle's `demo.env`.
+- This is a **second, separate** signer identity from the product image's
+  (`docker-publish.yml@refs/tags/vX.Y.Z`). Two artifacts, two identities, two
+  verify commands. Never widen either regexp to cover both.
+- Demo tags are `demo-v<N>` integers only. The workflow's ref guard refuses
+  anything else before it builds, because a tag like `demo-v1-rc1` would produce
+  a signature no identity above can match.
+- **Honest status:** the workflow exists and is gated, but no `demo-v<N>` tag has
+  been cut yet, so there is nothing signed to verify until the first demo release
+  (Gate 4). The digest pins in `demo.env` plus `make verify` are what you check
+  before then.
+
+### Verify the deploy bundle itself
+
+`SHA256SUMS` in each demo release is signed with `cosign sign-blob`, so the
+bundle is not a mutable, unsigned link in the chain:
+
+```bash
+cosign verify-blob SHA256SUMS \
+    --bundle SHA256SUMS.cosign.bundle \
+    --certificate-identity 'https://github.com/netcanon/netcanon/.github/workflows/demo-publish.yml@refs/tags/demo-v1' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+sha256sum -c SHA256SUMS      # then confirm every asset matches
+```
 
 ---
 
