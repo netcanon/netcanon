@@ -14,7 +14,7 @@ warden/shim live in [`demo/warden/`](../demo/warden/).
 | `cloud-init.yaml` | Hardened Ubuntu 24.04: docker, **key-only SSH**, **swap-off + core-dumps-off + journald-volatile** (I2), **fail2ban (SSH)**, unattended-upgrades, host firewall (443/80 + admin-only SSH, ICMPv6 allowed), chrony, `make` + `jq` for the deploy runbook, OOM protection. Clones this repo to `/opt/demo` and installs the TTL-backstop + demo-firewall units from it. |
 | `systemd/` | `demo-ttl-backstop.{sh,service,timer}` — the warden-independent hard-TTL backstop (removes any `demo.*` container older than **1320 s** = `HARD_TTL + POOL_MAX_AGE + 120 s slack`, swept every 60 s). |
 | `nftables/demo-int.nft` | The demo-int isolation rules (warden→instance ALLOW, instance→instance DENY, instance→warden DENY). |
-| `Makefile` | `verify` / `whitepaper` / `deploy` / `drain` / `down` + `dev-up` / `dev-down` for local Gate-1. |
+| `Makefile` | `verify` / `verify-bundle` (Gate 4) / `whitepaper` / `deploy` / `down` + `dev-up` / `dev-down` / `smoke-*`. ⚠️ `drain` is **not implemented** and exits non-zero — the warden has no drain sentinel. |
 | `demo.env.example` | Env template (image digests + ACME email). Copy → `demo.env` (**gitignored**; real values never commit). |
 | `PINNED_PRODUCT_TAG` | The netcanon version the demo pins (`v0.6.1`). Bumped by ordinary PR. |
 
@@ -108,11 +108,32 @@ the ACME HTTP-01 challenge fails and Caddy will not serve.
 
 ## Deploy (human-pulled, on the host)
 
-`make deploy` (verify signatures/SHA256SUMS — Gate-4 — then pull pinned images + `up -d`). No GitHub deploy secret exists; the operator SSHes in and runs it, then executes the Gate-4 live proofs.
+No GitHub deploy secret exists; the operator SSHes in and runs this by hand.
+
+**`cosign` is required** — `make deploy` fails closed without it:
+
+```bash
+curl -sSLo /usr/local/bin/cosign https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+chmod +x /usr/local/bin/cosign && cosign version
+```
+
+Unpack the release bundle, then:
+
+```bash
+make deploy DEMO_TAG=demo-v1 BUNDLE=./bundle
+```
+
+`deploy` depends on `verify-bundle`, so the Gate-4 check cannot be skipped: it
+`cosign verify-blob`s `SHA256SUMS` against the **exact** signer identity
+(`demo-publish.yml@refs/tags/<DEMO_TAG>` — which is why the tag has to be passed
+in; it is not recoverable from the bundle), then `sha256sum -c` makes that one
+signed manifest vouch for every other asset. Only then does it pull the
+digest-pinned images and `up -d`.
 
 Then `make whitepaper` from the unpacked bundle to stamp the deploy date and
 render the copy Caddy serves at `/whitepaper` (CI deliberately leaves that one
-value blank — it cannot know when you deploy).
+value blank — it cannot know when you deploy). Until you run it, `/whitepaper`
+serves the committed template, banner and all.
 
 ## DDoS / abuse posture
 

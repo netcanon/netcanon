@@ -166,6 +166,25 @@ def test_frontend_targets_the_real_warden_endpoints():
     assert "/i/" in text and "/migrate" in text
 
 
+def test_every_makefile_target_is_phony():
+    """A same-line ``.PHONY`` edit is the merge conflict git resolves silently and
+    wrongly: #396 and #397 each appended targets, one side won with no textual
+    conflict, and three targets went missing. Assert the invariant, don't rely on
+    catching it by eye at merge time."""
+    text = read("deploy/Makefile")
+    declared: set[str] = set()
+    for line in text.splitlines():
+        if line.startswith(".PHONY:"):
+            declared.update(line.split(":", 1)[1].split())
+    targets = {
+        match.group(1)
+        for match in re.finditer(r"^([a-z][a-z0-9-]*):(?!=)", text, re.MULTILINE)
+    }
+    assert targets, "no Makefile targets matched — the parser regex has rotted"
+    missing = targets - declared
+    assert not missing, f"deploy/Makefile targets missing from .PHONY: {sorted(missing)}"
+
+
 # ── The socket-proxy tag is load-bearing, and it already shipped wrong ───────
 # demo-publish.yml pinned :0.3, whose entrypoint renders haproxy.cfg into
 # /usr/local/etc/haproxy/ — forbidden by that service's ``read_only: true``, so

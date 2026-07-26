@@ -3,7 +3,14 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file demo.env
 
-.PHONY: help verify whitepaper deploy drain down dev-up dev-down smoke-up smoke smoke-down
+# Gate-4 inputs. BUNDLE is the unpacked release bundle; DEMO_TAG is the exact
+# demo-v<N> tag whose workflow run signed it (the cosign identity is the
+# workflow file AT that tag, so it cannot be inferred from the bundle).
+BUNDLE  ?= .
+DEMO_TAG ?=
+REPO    ?= netcanon/netcanon
+
+.PHONY: help verify verify-bundle whitepaper deploy drain down dev-up dev-down smoke-up smoke smoke-down
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-11s %s\n",$$1,$$2}'
@@ -28,13 +35,34 @@ whitepaper: ## Fill the deploy date + render frontend/whitepaper.html for /white
 	@rm -f .wp-values.filled.json
 	@echo "Rendered ../frontend/whitepaper.html — Caddy serves it at /whitepaper."
 
-deploy: ## Pull pinned images + bring the stack up (TODO Gate-4: verify signatures/SHA256SUMS first)
+# Gate 4. SHA256SUMS is the one mutable, unsigned link in the chain, so
+# demo-publish.yml cosign sign-blob's it; verify that signature FIRST and let the
+# manifest vouch for every other asset. Fails closed — no cosign, no deploy —
+# because a deploy target that silently skips verification is worse than one that
+# never claimed to verify at all.
+verify-bundle: ## Gate-4 — cosign-verify SHA256SUMS, then checksum the bundle (DEMO_TAG=demo-v<N>)
+	@test -n "$(DEMO_TAG)" || { echo "usage: make verify-bundle DEMO_TAG=demo-v1 [BUNDLE=<dir>]"; exit 1; }
+	@command -v cosign >/dev/null || { echo "cosign is not installed — Gate 4 cannot pass. See deploy/README.md."; exit 1; }
+	cd $(BUNDLE) && cosign verify-blob SHA256SUMS \
+		--bundle SHA256SUMS.cosign.bundle \
+		--certificate-identity "https://github.com/$(REPO)/.github/workflows/demo-publish.yml@refs/tags/$(DEMO_TAG)" \
+		--certificate-oidc-issuer https://token.actions.githubusercontent.com
+	cd $(BUNDLE) && sha256sum -c SHA256SUMS
+	@echo "Gate 4 OK — signature valid and every bundle file matches its published hash."
+
+deploy: verify-bundle ## Verify the bundle (Gate 4), then pull pinned images + bring the stack up
 	docker pull "$$(grep '^NETCANON_INSTANCE_IMAGE=' demo.env | cut -d= -f2-)"
 	$(COMPOSE) pull
 	$(COMPOSE) up -d
 
-drain: ## Stop minting new sessions (loopback control); let sessions lapse
-	@echo "TODO(Gate-1): trip the warden drain sentinel (loopback-only). SIGTERM != drain."
+# Deliberately exits non-zero. The warden has no drain sentinel yet, and a target
+# that prints a TODO and returns success is exactly what someone reaches for
+# mid-incident and believes.
+drain: ## NOT IMPLEMENTED — no warden drain sentinel exists; use `make down` (kills live sessions)
+	@echo "make drain is NOT IMPLEMENTED — the warden exposes no drain sentinel."
+	@echo "Intended design: loopback-only control (docs/demo-plan/02-deployment.md)."
+	@echo "Today your options are: wait out HARD_TTL, or 'make down' (SIGTERM != drain)."
+	@exit 1
 
 down: ## Stop the stack (SIGTERM — kills live sessions by design)
 	$(COMPOSE) down
