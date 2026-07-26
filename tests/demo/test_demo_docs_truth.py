@@ -209,6 +209,38 @@ def test_dockerfile_copies_every_warden_module():
     assert not missing, f"demo/warden modules absent from the Dockerfile COPY: {sorted(missing)}"
 
 
+def test_bundle_assets_are_read_through_the_bundle_variable():
+    """Twice now the deploy flow reached for a bundle asset in the wrong place:
+    ``deploy`` read ``demo.env`` from deploy/ after verifying the bundle's copy,
+    and ``whitepaper`` looked for ``whitepaper-values.json`` in the cwd while the
+    unpacked bundle put it in ./bundle. Both only surfaced by running the real
+    Gate-4 flow. Any recipe naming a bundle-only asset must reach it via
+    ``$(BUNDLE)``.
+    """
+    text = read("deploy/Makefile")
+    recipes: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        match = re.match(r"^([a-z][a-z0-9-]*):", line)
+        if match:
+            current = match.group(1)
+            recipes[current] = []
+        elif current and line.startswith("\t"):
+            recipes[current].append(line)
+        elif line.strip() and not line.startswith((" ", "\t")):
+            current = None
+
+    assert recipes, "no Makefile recipes parsed — the parser has rotted"
+    for name, body in recipes.items():
+        joined = "\n".join(body)
+        for asset in ("whitepaper-values.json", "SHA256SUMS"):
+            if asset in joined:
+                assert "$(BUNDLE)" in joined, (
+                    f"`make {name}` reads {asset} but never mentions $(BUNDLE) — it "
+                    "will look in deploy/ while the unpacked bundle put it elsewhere"
+                )
+
+
 def test_every_makefile_target_is_phony():
     """A same-line ``.PHONY`` edit is the merge conflict git resolves silently and
     wrongly: #396 and #397 each appended targets, one side won with no textual
