@@ -19,6 +19,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from demo.warden import constants as C
 
@@ -163,6 +164,77 @@ def test_frontend_targets_the_real_warden_endpoints():
     assert "/session/new" in text
     assert "/hb" in text and "/end" in text
     assert "/i/" in text and "/migrate" in text
+
+
+# ── The socket-proxy tag is load-bearing, and it already shipped wrong ───────
+# demo-publish.yml pinned :0.3, whose entrypoint renders haproxy.cfg into
+# /usr/local/etc/haproxy/ — forbidden by that service's ``read_only: true``, so
+# the socket-proxy crash-looped and took the whole privilege chain with it.
+# Gate 1 passed only because it happened to run an untagged (latest) image that
+# writes /tmp instead. Nothing could catch it: every document agreed with the
+# workflow, and all of them disagreed with what had actually been tested. Only
+# Gate 3 on a real host surfaced it. These tests make the constraint mechanical.
+SOCKET_PROXY_TMPFS_SAFE = {"v0.4.0", "v0.4.1", "v0.4.2"}
+
+TAG_DOCS = ("deploy/demo.env.example", "deploy/README.md")
+
+
+def workflow_socket_proxy_tag() -> str:
+    """The tag demo-publish.yml resolves to a digest for the deploy bundle.
+
+    Read from the PARSED yaml rather than the raw text: the comment sitting above
+    the key names the broken versions, so a regex over the file would happily
+    match those and pass while the real pin was wrong.
+    """
+    document = yaml.safe_load(read(".github/workflows/demo-publish.yml"))
+    found: list[str] = []
+
+    def walk(node) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "SOCKET_PROXY_TAG" and isinstance(value, str):
+                    found.append(value)
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(document)
+    assert len(found) == 1, f"expected exactly one SOCKET_PROXY_TAG, found {found}"
+    return found[0].rsplit(":", 1)[1]
+
+
+def test_published_socket_proxy_tag_survives_a_read_only_rootfs():
+    tag = workflow_socket_proxy_tag()
+    assert tag in SOCKET_PROXY_TMPFS_SAFE, (
+        f"demo-publish.yml pins socket-proxy {tag!r}, which is not known to render "
+        "haproxy.cfg onto a tmpfs path. Versions <= 0.3 write it to "
+        "/usr/local/etc/haproxy/ and crash-loop under `read_only: true`. Confirm "
+        "the new tag writes /tmp, then add it to SOCKET_PROXY_TMPFS_SAFE."
+    )
+
+
+def test_socket_proxy_tmpfs_covers_where_the_config_is_written():
+    """The hardening and the tag are one decision; assert them together."""
+    compose = yaml.safe_load(read("deploy/docker-compose.yml"))
+    proxy = compose["services"]["socket-proxy"]
+    assert proxy.get("read_only") is True, "socket-proxy lost its read-only rootfs"
+    assert "/tmp" in proxy.get("tmpfs", []), (
+        "socket-proxy renders haproxy.cfg to /tmp at startup; without a /tmp tmpfs "
+        "the read-only rootfs makes it crash-loop"
+    )
+
+
+@pytest.mark.parametrize("relpath", TAG_DOCS)
+def test_docs_recommend_the_socket_proxy_tag_that_is_published(relpath):
+    """A local stack built on a different version than the published one is how
+    the crash-loop got past Gate 1 in the first place."""
+    tag = workflow_socket_proxy_tag()
+    assert tag in read(relpath), (
+        f"{relpath} never mentions socket-proxy {tag!r} — the version it steers "
+        "operators toward can drift from the one demo-publish.yml pins"
+    )
 
 
 def test_frontend_ends_sessions_on_pagehide_not_visibilitychange():

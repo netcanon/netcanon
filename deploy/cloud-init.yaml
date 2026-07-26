@@ -17,6 +17,7 @@ packages:
   - docker.io
   - docker-compose-v2
   - git                 # clones this repo to /opt/demo (runcmd installs from it)
+  - make                # the deploy runbook is `make deploy` / `make whitepaper`
   - fail2ban            # SSH brute-force protection (see jail below)
   - unattended-upgrades # automatic security patches
   - nftables            # host firewall + the demo-int isolation rules
