@@ -244,6 +244,26 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; 
   </div>
 </section>
 
+<!-- netcanon's own nav links Dashboard at "/", which inside the iframe loads
+     THIS page into the instance frame. Starting a demo from there would mint a
+     session, and a mint destroys the cookie's existing one — silently taking
+     the instance (and the config pasted into it) with it. So when framed we
+     refuse to offer the button at all. -->
+<section id="s-nested" hidden aria-labelledby="nest-h">
+  <div class="wrap center status-card">
+    <h2 id="nest-h">You&rsquo;re already inside a demo instance</h2>
+    <p class="muted">This is the demo&rsquo;s own front page, reached from
+      netcanon&rsquo;s <strong>Dashboard</strong> link &mdash; which points at the
+      site root and so loads it inside your instance frame.</p>
+    <p class="muted">Starting another demo here would <strong>replace the instance
+      you are using now</strong>, discarding anything you have pasted into it.</p>
+    <p>
+      <button id="btn-nest-back" class="btn" type="button">&larr; Back to your instance</button>
+      <a class="btn" href="/" target="_top">Leave and start over</a>
+    </p>
+  </div>
+</section>
+
 <script>
 "use strict";
 /* ======================================================================
@@ -298,7 +318,11 @@ var isHidden = (document.visibilityState === "hidden");
 
 var $ = function (id) { return document.getElementById(id); };
 var SECTIONS = ["s-landing","s-provisioning","s-ratelimited","s-error",
-                "s-active","s-capacity","s-destroyed"];
+                "s-active","s-capacity","s-destroyed","s-nested"];
+
+/* True when this page is itself inside a frame — i.e. it was reached from the
+   product's Dashboard link rather than opened directly. */
+function isNested() { return window.self !== window.top; }
 
 /* Show exactly one top-level section. */
 function show(id) {
@@ -313,6 +337,10 @@ function clearTimers() {
 
 /* ---------- 2) PROVISIONING: mint a session ---------- */
 function startDemo() {
+  /* Guarded here rather than only at boot so every entry point is covered —
+     the landing button and all three retry paths. A mint from inside a frame
+     would destroy the very instance hosting the frame. */
+  if (isNested()) { show("s-nested"); return; }
   clearTimers();
   show("s-provisioning");
   fetch("/session/new", { method: "POST" })
@@ -541,7 +569,11 @@ $("btn-retry-cap").addEventListener("click", function () {
 $("btn-sample").addEventListener("click", trySample);
 $("btn-destroy").addEventListener("click", destroyNow);
 $("btn-again").addEventListener("click", function () { show("s-landing"); });
+$("btn-nest-back").addEventListener("click", function () { history.back(); });
 wireCopyButtons();
+
+/* Boot: if we were loaded into a frame, never show the landing pitch at all. */
+if (isNested()) { show("s-nested"); }
 </script>
 </body>
 </html>

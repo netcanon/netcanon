@@ -275,6 +275,26 @@ def test_docs_recommend_the_socket_proxy_tag_that_is_published(relpath):
     )
 
 
+def test_frontend_refuses_to_start_a_demo_from_inside_a_frame():
+    """netcanon's own nav links Dashboard at "/", which inside the iframe loads
+    this page into the instance frame. Minting from there destroys the cookie's
+    existing session — the very instance hosting the frame — so a mis-click cost
+    the visitor their pasted config with no warning.
+
+    The guard has to live in ``startDemo`` and not only in the boot path, or the
+    three retry buttons still reach the mint.
+    """
+    code = frontend_code()
+    assert "window.self !== window.top" in code, "no frame detection"
+    assert "s-nested" in code, "no dedicated section for the framed case"
+    body = code.split("function startDemo()", 1)
+    assert len(body) == 2, "startDemo() not found — has it been renamed?"
+    assert "isNested()" in body[1][:400], (
+        "startDemo must refuse when framed; guarding only the boot path leaves "
+        "btn-retry-rl / btn-retry-err / btn-retry-cap able to mint"
+    )
+
+
 def test_frontend_ends_sessions_on_pagehide_not_visibilitychange():
     """Ending on visibilitychange would destroy the instance on a mere tab
     switch — killing the demo's own copy-a-config-from-another-tab flow."""
