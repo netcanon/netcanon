@@ -16,7 +16,7 @@
 ## Components
 
 ```
-                      ┌────────────────────────── VPS (Hetzner CX32) ──────────────────────────┐
+                      ┌───────────────────────── VPS (Hetzner CPX32) ──────────────────────────┐
                       │                                                                        │
   Browser ── HTTPS ──▶│  Caddy (:443)                                                          │
                       │   ├── /            → static demo frontend (05)                         │
@@ -35,10 +35,11 @@
                       └────────────────────────────────────────────────────────────────────────┘
 ```
 
-*Box = CX32-class launch default (4 vCPU / 8 GB, EU Falkenstein — EU hosting is
-itself on-message for a privacy demo); the location fork (EU CX32 vs US CPX32),
-MAX_ACTIVE sizing, and the same-day rescale to CX42 live in
-[07](07-budget.md#sizing).*
+*Box = Hetzner CPX32 (4 shared AMD EPYC vCPU / 8 GB, EU region — EU hosting is
+itself on-message for a privacy demo). CPX32 rather than CX32 only because the
+CX line was out of stock; same CPU/RAM class, so MAX_ACTIVE is unchanged. x86
+only — the warden/shim images are amd64. Measured sizing and the same-day
+rescale live in [07](07-budget.md#sizing).*
 
 Caddy never talks to instances directly; the warden is the only path, so token
 checks and lifecycle state live in exactly one place. Because netcanon stamps

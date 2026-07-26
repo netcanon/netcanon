@@ -182,6 +182,32 @@ def test_demo_publish_uses_no_shared_build_cache():
         assert "type=gha" not in str(with_)
 
 
+@pytest.mark.parametrize("wf", ["demo-publish.yml", "desktop-msi-publish.yml"])
+def test_releases_are_built_as_a_draft_then_published(wf):
+    """GitHub's immutable-releases shape: attach every asset to a DRAFT, then
+    publish. Publishing first and uploading after is rejected once immutability
+    is enabled, so a release step without `draft: true` would break the release
+    train the moment that setting is flipped on.
+    """
+    data = yaml.safe_load((WORKFLOWS / wf).read_text(encoding="utf-8"))
+    steps = [s for job in data["jobs"].values() for s in (job.get("steps") or [])]
+
+    release_steps = [
+        s for s in steps if "action-gh-release" in str(s.get("uses", ""))
+    ]
+    assert release_steps, f"{wf} has no release step to check"
+    for step in release_steps:
+        assert (step.get("with") or {}).get("draft") is True, (
+            f"{wf} step {step.get('name')!r} creates a release without draft:true — "
+            "assets could not be attached once immutable releases is enabled"
+        )
+
+    publishes = [s for s in steps if "--draft=false" in str(s.get("run", ""))]
+    assert publishes, (
+        f"{wf} builds a draft but never publishes it — the release would stay hidden"
+    )
+
+
 def test_demo_publish_declares_least_privilege_at_workflow_level():
     data = workflow("demo-publish.yml")
     assert data["permissions"] == {"contents": "read"}

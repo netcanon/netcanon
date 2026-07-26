@@ -40,7 +40,7 @@ HB_STALE_VISIBLE = 75  # stale threshold while the tab reports visible
 HB_STALE_HIDDEN = 180  # ...while hidden (tolerate background-timer throttling)
 
 # ── Caps ────────────────────────────────────────────────────────────────────
-MAX_ACTIVE = 32  # global instance cap (CX32; docs/demo-plan/07-budget.md)
+MAX_ACTIVE = 32  # global instance cap (CPX32 4vCPU/8GB; docs/demo-plan/07-budget.md)
 POOL_SIZE = 4  # warm-pool target (counts toward MAX_ACTIVE)
 PER_IP_MAX_CONCURRENT = 2  # concurrent sessions per source IP
 PER_IP_MINT_WINDOW = 600  # sliding window for the per-IP mint rate limit

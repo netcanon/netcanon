@@ -532,14 +532,20 @@ jobs:
           path: bundle/
           retention-days: 30
 
-      # ONE action-gh-release call attaching EVERY asset. Deliberately atomic:
-      # a second call adding assets to an already-published release is exactly
-      # what GitHub's immutable-releases setting forbids, so a split publish
-      # would make the demo release train and that setting mutually exclusive.
-      - name: Attach the signed bundle to the demo release
+      # Attach every asset to a DRAFT, then publish as a separate step.
+      #
+      # This is GitHub's documented immutable-releases workflow ("attach all
+      # associated assets to the draft release", then publish): once a release is
+      # published under immutability its assets can no longer be added, modified
+      # or deleted. Creating it published and *then* uploading — what a single
+      # default action-gh-release call does — races that rule. Drafts stay
+      # mutable, so building the release fully before publishing is the only
+      # shape that works both with the setting on and with it off.
+      - name: Attach the signed bundle to a DRAFT release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
         with:
           tag_name: ${{ steps.tag.outputs.name }}
+          draft: true
           files: |
             bundle/demo.env
             bundle/whitepaper.html
@@ -567,3 +573,13 @@ jobs:
             Nothing here is deployed automatically — the host pulls this bundle
             by hand (`make deploy`).
           fail_on_unmatched_files: true
+
+      # Flip draft -> published only once every asset is attached. Under
+      # immutable releases this transition is what freezes the assets and the
+      # tag, and it is the last thing the workflow does, so a failure earlier
+      # leaves an unpublished draft rather than a half-signed public release.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.name }}
+        run: gh release edit "$TAG" --draft=false
