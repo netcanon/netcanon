@@ -170,6 +170,7 @@ mark.ph {
 <pre><code>netcanon image    : ghcr.io/netcanon/netcanon@sha256:<mark class="ph">&lt;NETCANON_IMAGE_DIGEST&gt;</mark>   (base python:3.14-slim-bookworm)
 requirements.lock : sha256:<mark class="ph">&lt;REQUIREMENTS_LOCK_SHA&gt;</mark>   (hash-locked; glibc/manylinux wheels — not Alpine/musl)
 warden image      : <mark class="ph">&lt;WARDEN_IMAGE_REF&gt;</mark>@sha256:<mark class="ph">&lt;WARDEN_IMAGE_DIGEST&gt;</mark>
+authz-shim image  : <mark class="ph">&lt;SHIM_IMAGE_REF&gt;</mark>@sha256:<mark class="ph">&lt;SHIM_IMAGE_DIGEST&gt;</mark>   (TCB component — the whole-body default-deny gate on container create)
 socket-proxy image: <mark class="ph">&lt;SOCKET_PROXY_IMAGE_REF&gt;</mark>@sha256:<mark class="ph">&lt;SOCKET_PROXY_IMAGE_DIGEST&gt;</mark>   (TCB component — the capability filter fronting docker.sock)
 caddy image       : <mark class="ph">&lt;CADDY_IMAGE_REF&gt;</mark>@sha256:<mark class="ph">&lt;CADDY_IMAGE_DIGEST&gt;</mark>
 compose sha256    : <mark class="ph">&lt;COMPOSE_SHA256&gt;</mark>

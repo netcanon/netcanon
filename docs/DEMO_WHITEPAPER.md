@@ -145,6 +145,7 @@ to compare.
 netcanon image    : ghcr.io/netcanon/netcanon@sha256:<NETCANON_IMAGE_DIGEST>   (base python:3.14-slim-bookworm)
 requirements.lock : sha256:<REQUIREMENTS_LOCK_SHA>   (hash-locked; glibc/manylinux wheels — not Alpine/musl)
 warden image      : <WARDEN_IMAGE_REF>@sha256:<WARDEN_IMAGE_DIGEST>
+authz-shim image  : <SHIM_IMAGE_REF>@sha256:<SHIM_IMAGE_DIGEST>   (TCB component — the whole-body default-deny gate on container create)
 socket-proxy image: <SOCKET_PROXY_IMAGE_REF>@sha256:<SOCKET_PROXY_IMAGE_DIGEST>   (TCB component — the capability filter fronting docker.sock)
 caddy image       : <CADDY_IMAGE_REF>@sha256:<CADDY_IMAGE_DIGEST>
 compose sha256    : <COMPOSE_SHA256>

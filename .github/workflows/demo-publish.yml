@@ -499,6 +499,8 @@ jobs:
             "REQUIREMENTS_LOCK_SHA": "${lock_sha}",
             "WARDEN_IMAGE_REF": "ghcr.io/${REPO_OWNER}/netcanon-demo-warden",
             "WARDEN_IMAGE_DIGEST": "${WARDEN_DIGEST#sha256:}",
+            "SHIM_IMAGE_REF": "ghcr.io/${REPO_OWNER}/netcanon-demo-warden-shim",
+            "SHIM_IMAGE_DIGEST": "${SHIM_DIGEST#sha256:}",
             "SOCKET_PROXY_IMAGE_REF": "ghcr.io/tecnativa/docker-socket-proxy",
             "SOCKET_PROXY_IMAGE_DIGEST": "${SOCKET_PROXY_DIGEST#sha256:}",
             "CADDY_IMAGE_REF": "docker.io/library/caddy",
