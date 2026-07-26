@@ -61,7 +61,7 @@ items:
 - **Host hard-TTL backstop timer** — a `systemd` timer + oneshot service that
   runs `every 60 s` (`OnUnitActiveSec=60s`, `OnBootSec=60s`) and force-removes
   any `demo.*`-labeled container whose `demo.created_at` is older than
-  `HARD_TTL + POOL_MAX_AGE = 1200 s` (20 min). This is the warden-independent
+  `HARD_TTL + POOL_MAX_AGE + 120 s slack = 1320 s` (22 min). This is the warden-independent
   enforcement domain: it holds the creation-age ceiling even while the warden is
   dead ([03](03-warden-spec.md#lifecycle-rules),
   [04](04-container-hardening.md)).

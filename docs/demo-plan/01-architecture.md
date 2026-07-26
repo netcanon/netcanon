@@ -103,7 +103,7 @@ disclosed in the whitepaper's *What we do see* ([06](06-privacy-whitepaper.md)).
      ([03](03-warden-spec.md#lifecycle-rules));
    - **hard TTL** → destroy unconditionally, enforced independently of the
      in-memory dict: **≤ 15 min after assignment** while the warden is live, and
-     **≤ ~20 min after creation** via the startup sweep + host systemd backstop if
+     **≤ ~23 min after creation** via the startup sweep + host systemd backstop if
      the warden is dead (**I3**).
 6. Destroy = `container.remove(v=True, force=True)` (`docker rm -fv`) → container
    + its tmpfs + any anonymous volume freed. Nothing to scrub because nothing
