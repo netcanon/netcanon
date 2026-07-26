@@ -264,12 +264,12 @@ _HOP_BY_HOP = {
 
 
 def _fix_response_headers(headers: httpx.Headers) -> list[tuple[str, str]]:
-    """Strip XFO and rewrite CSP frame-ancestors 'none' -> 'self' so the demo
-    origin may iframe the instance; drop hop-by-hop headers."""
+    """Strip XFO, rewrite CSP frame-ancestors 'none' -> 'self' so the demo origin
+    may iframe the instance, drop hop-by-hop + Date (uvicorn emits its own)."""
     out: list[tuple[str, str]] = []
     for k, v in headers.multi_items():
         kl = k.lower()
-        if kl in _HOP_BY_HOP or kl == "x-frame-options":
+        if kl in _HOP_BY_HOP or kl in ("x-frame-options", "date"):
             continue
         if kl == "content-security-policy":
             v = re.sub(r"frame-ancestors\s+'none'", "frame-ancestors 'self'", v, flags=re.IGNORECASE)

@@ -3,6 +3,17 @@
 # third party sees plaintext, so the whitepaper TCB stays our own stack).
 {
 	email {env.ACME_EMAIL}
+
+	# A request whose Host does not match the site block below never enters it,
+	# so that block's `log { output discard }` does not apply and Caddy's DEFAULT
+	# logger writes the entry — client IP included — to the container log, which
+	# the `local` driver persists to disk. A public IP is scanned constantly, and
+	# the first bot to reach this host arrived within a minute of Caddy starting.
+	# Drop access logs at the default logger too; runtime and ACME logs, which
+	# carry no visitor data and are needed to debug issuance, still flow.
+	log {
+		exclude http.log.access
+	}
 }
 
 demo.netcanon.net {
