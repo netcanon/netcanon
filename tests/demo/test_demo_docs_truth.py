@@ -166,6 +166,25 @@ def test_frontend_targets_the_real_warden_endpoints():
     assert "/i/" in text and "/migrate" in text
 
 
+def test_dockerfile_copies_every_warden_module():
+    """The Dockerfile names the warden's modules explicitly, so a new one imports
+    fine from the repo — green suite — and ImportErrors inside the container.
+    That is exactly how pages.py first shipped: every test passed and the warden
+    crash-looped on `cannot import name 'pages'`."""
+    copied: set[str] = set()
+    for line in read("demo/warden/Dockerfile").splitlines():
+        if line.startswith("COPY ") and "/app/warden/" in line:
+            copied.update(part for part in line.split()[1:] if part.endswith(".py"))
+    on_disk = {
+        path.name
+        for path in (REPO_ROOT / "demo" / "warden").glob("*.py")
+        if path.name != "__init__.py"
+    }
+    assert on_disk, "found no warden modules — the glob has rotted"
+    missing = on_disk - copied
+    assert not missing, f"demo/warden modules absent from the Dockerfile COPY: {sorted(missing)}"
+
+
 def test_every_makefile_target_is_phony():
     """A same-line ``.PHONY`` edit is the merge conflict git resolves silently and
     wrongly: #396 and #397 each appended targets, one side won with no textual

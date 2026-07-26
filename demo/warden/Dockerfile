@@ -14,7 +14,10 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 # Import as the `warden` namespace package so `from . import constants` resolves
 # both here (uvicorn warden.app:app) and in the repo tests (demo.warden.app).
-COPY constants.py app.py authz_shim.py /app/warden/
+# ⚠️ Explicit list, so a NEW module here must be added by hand or it imports fine
+# in the tests and ImportErrors in the container. Guarded by
+# test_dockerfile_copies_every_warden_module in tests/demo/test_demo_docs_truth.py.
+COPY constants.py app.py authz_shim.py pages.py /app/warden/
 RUN useradd --uid 1001 --create-home warden
 USER warden
 
