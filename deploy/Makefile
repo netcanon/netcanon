@@ -10,7 +10,7 @@ BUNDLE  ?= .
 DEMO_TAG ?=
 REPO    ?= netcanon/netcanon
 
-.PHONY: help verify verify-bundle whitepaper deploy drain down dev-up dev-down smoke-up smoke smoke-down
+.PHONY: help verify verify-bundle promote whitepaper deploy drain down dev-up dev-down smoke-up smoke smoke-down
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-11s %s\n",$$1,$$2}'
@@ -50,7 +50,26 @@ verify-bundle: ## Gate-4 — cosign-verify SHA256SUMS, then checksum the bundle 
 	cd $(BUNDLE) && sha256sum -c SHA256SUMS
 	@echo "Gate 4 OK — signature valid and every bundle file matches its published hash."
 
-deploy: verify-bundle ## Verify the bundle (Gate 4), then pull pinned images + bring the stack up
+# Verifying a bundle and then deploying whatever `demo.env` happens to contain is
+# theatre: the first real Gate-4 run verified demo-v0.1.0's signed digests and
+# would have brought up the locally-built `:dev` images sitting in deploy/.
+# `deploy` therefore PROMOTES the verified env into place first, and cannot be
+# reached except through verify-bundle.
+#
+# ACME_EMAIL is the one value the bundle deliberately does not carry (operator
+# data, not a build output), so it is preserved from the existing demo.env and
+# the promotion refuses rather than deploying a Caddy that cannot start.
+promote: verify-bundle ## Copy the VERIFIED bundle's digests into demo.env, keeping ACME_EMAIL
+	@test -f demo.env || { echo "no demo.env — cp demo.env.example demo.env and set ACME_EMAIL"; exit 1; }
+	@email="$$(grep '^ACME_EMAIL=' demo.env | cut -d= -f2-)"; \
+	 case "$$email" in ""|REPLACE_WITH_OPERATOR_EMAIL|you@example.com) \
+	   echo "set a real ACME_EMAIL in demo.env before deploying"; exit 1;; esac; \
+	 sed "s|^ACME_EMAIL=.*|ACME_EMAIL=$$email|" $(BUNDLE)/demo.env > demo.env.promoted && \
+	 mv demo.env.promoted demo.env && \
+	 echo "demo.env now carries $(DEMO_TAG)'s verified digests (ACME_EMAIL preserved)."
+	@grep -c '@sha256:' demo.env | xargs -I{} echo "  digest-pinned images in demo.env: {}"
+
+deploy: promote ## Gate 4 → promote the verified env → pull pinned images + bring the stack up
 	docker pull "$$(grep '^NETCANON_INSTANCE_IMAGE=' demo.env | cut -d= -f2-)"
 	$(COMPOSE) pull
 	$(COMPOSE) up -d
