@@ -3,7 +3,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose --env-file demo.env
 
-.PHONY: help verify whitepaper deploy drain down dev-up dev-down
+.PHONY: help verify whitepaper deploy drain down dev-up dev-down smoke-up smoke smoke-down
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-11s %s\n",$$1,$$2}'
@@ -44,3 +44,20 @@ dev-up: ## Local Gate-1: build warden+shim from source and run the stack
 
 dev-down: ## Tear down the local Gate-1 stack (+ volumes)
 	$(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml down -v
+
+# The live-smoke suite proves the claims that need a real daemon (module 08's
+# "[O]" rows): hardening as APPLIED by dockerd, no egress, the authz shim and
+# socket-proxy refusing on the wire, volume-reap, no Fernet key file.
+smoke-up: ## Bring up the dev stack with the warden published for the live smoke
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml \
+		-f docker-compose.smoke.yml up --build -d
+
+smoke: ## Run the live-stack smoke suite (needs `make smoke-up` first)
+	cd .. && NETCANON_DEMO_SMOKE=1 pytest tests/demo/test_live_stack_smoke.py -v
+
+# Instances must be removed BEFORE the network can go, or `down` fails on
+# demo-int still having endpoints attached.
+smoke-down: ## Remove demo instances, then tear the smoke stack down
+	-docker ps -aq --filter label=demo.instance | xargs -r docker rm -f
+	$(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml \
+		-f docker-compose.smoke.yml down -v

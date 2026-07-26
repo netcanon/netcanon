@@ -1,0 +1,27 @@
+# Live-smoke override — publishes the warden so the smoke suite can reach it.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+#       -f docker-compose.smoke.yml --env-file demo.env up -d --build
+#   NETCANON_DEMO_SMOKE=1 pytest tests/demo/test_live_stack_smoke.py
+#
+# ⚠️ LOCAL SMOKE ONLY — never part of the deploy path. Production publishes
+# ONLY Caddy (ports 80/443); the warden is never host-exposed, because its
+# /session/* API is meant to be reachable exclusively through Caddy and the
+# per-IP cap keys on the X-Forwarded-For hop Caddy sets. Bound to 127.0.0.1 so
+# even locally it is not on a network interface.
+services:
+  warden:
+    ports:
+      - "127.0.0.1:8098:8080"
+
+  # Keep Caddy OUT of the smoke stack. Assigning it to a profile that is never
+  # activated means `up` skips it. Two reasons:
+  #   1. It would try real ACME for demo.netcanon.net from a machine that domain
+  #      does not resolve to — failed challenges burn ACME rate limits for the
+  #      domain you actually need to issue for.
+  #   2. It wants host ports 80/443, which a dev box often already has taken.
+  # The live smoke and load-sanity probes talk to the warden directly, so nothing
+  # here needs the TLS terminator. Bring Caddy up with the plain dev stack when
+  # you specifically want to exercise it.
+  caddy:
+    profiles: ["tls"]
