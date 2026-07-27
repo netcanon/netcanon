@@ -155,8 +155,11 @@ without sampling there is no answer to "how much traffic did this get". A
 # last sample
 tail -1 /var/log/demo-stats.jsonl | jq .
 
-# sessions and refusals over the file
-jq -r '[.ts, (.warden.sessions_started//0), (.warden."503_count"//0)] | @tsv' /var/log/demo-stats.jsonl
+# sessions and refusals over the file, refusals broken out by cause
+jq -r '[.ts, (.warden.sessions_started//0),
+        (.warden.refusals_by_reason.rate_limited//0),
+        (.warden.refusals_by_reason.capacity//0),
+        (.warden.refusals_by_reason.create_failed//0)] | @tsv' /var/log/demo-stats.jsonl
 
 # requests by status code
 jq -r '[.ts, .http_requests_total, (.http_by_code|tostring)] | @tsv' /var/log/demo-stats.jsonl
@@ -170,9 +173,14 @@ Two things to know when reading it:
 - **`warden: null` means the demo was unreachable** at that timestamp. That is a
   recorded outage, deliberately distinct from a missing sample (timer not run).
 
-⚠️ **`503_count` is not a capacity signal.** It increments for per-IP rate limits
-(429), true saturation (503), *and* instance-create failures. Only the second
-means "the box is too small". Splitting it is open work.
+- **Refusals are split by cause**, because the three mean different things:
+  `rate_limited` is one visitor being greedy (a **429**, not a 503 at all),
+  `capacity` is genuine saturation — the only one that means "the box is too
+  small" — and `create_failed` is Docker or the pinned image being broken. A
+  create failure still answers `capacity` on the wire, so read the counter, not
+  the status code, when deciding whether to resize. (These replaced a single
+  `503_count` that summed all three; samples written before 2026-07-27 carry
+  the old key and cannot be broken down.)
 
 ## DDoS / abuse posture
 

@@ -334,7 +334,10 @@ per-session or per-visitor detail:
 - `sessions_started`
 - `destroys_by_reason` (`hard-ttl` / `idle` / `hb` / `end` / `reclaim`)
 - `pool_recycled` (unassigned instances recycled at ~290 s, `POOL_MAX_AGE − reaper_period`)
-- `503_count`
+- `refusals_by_reason` (`rate_limited` — a 429 / `capacity` — true saturation /
+  `create_failed` — Docker or the image is broken). Split by cause because only
+  `capacity` means the box is undersized; a create failure still reports
+  `capacity` on the wire, so the counter is the authority, not the status code.
 - `pool_refill_failures`
 
 These back an external uptime monitor and a synthetic

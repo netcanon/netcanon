@@ -131,7 +131,7 @@ async def test_empty_pool_below_the_cap_creates_inline_instead_of_refusing(warde
     assert warden.counters["destroys_by_reason"]["reclaim"] == 0, (
         "no live session may be sacrificed while slots are free"
     )
-    assert warden.counters["503_count"] == 0
+    assert sum(warden.counters["refusals_by_reason"].values()) == 0
 
 
 async def test_a_burst_larger_than_the_pool_is_fully_served(warden):
@@ -283,8 +283,71 @@ async def test_per_ip_table_is_capped_under_a_unique_ip_flood(warden, monkeypatc
 # ── Counters (the /healthz operational surface) ─────────────────────────────
 async def test_refusals_are_counted(warden):
     await saturate(warden)
-    before = warden.counters["503_count"]
+    before = sum(warden.counters["refusals_by_reason"].values())
 
     await warden.mint(ip="198.51.100.220")
 
-    assert warden.counters["503_count"] == before + 1
+    assert sum(warden.counters["refusals_by_reason"].values()) == before + 1
+
+
+# The three refusals below mean completely different things to an operator:
+# rate_limited is one visitor being greedy, capacity is the box being too small,
+# create_failed is Docker or the image being broken. The old single `503_count`
+# summed all three (and counted a 429 as a 503), so it could not answer the one
+# question it existed for — it read 33 on a box that had never been near its
+# cap. Each test asserts the OTHER buckets stay put; that isolation is the whole
+# point of the split, and a shared counter would pass the increment half alone.
+def _refusals(warden) -> dict:
+    return dict(warden.counters["refusals_by_reason"])
+
+
+async def test_a_rate_limited_visitor_is_counted_apart(warden):
+    """One IP over PER_IP_MAX_CONCURRENT. This is a 429, not a 503 at all."""
+    await warden.fill_pool()
+    for _ in range(C.PER_IP_MAX_CONCURRENT):
+        assert (await warden.mint(ip="198.51.100.7")).status_code == 200
+    before = _refusals(warden)
+
+    resp = await warden.mint(ip="198.51.100.7")
+
+    assert resp.status_code == 429, body_of(resp)
+    after = _refusals(warden)
+    assert after["rate_limited"] == before["rate_limited"] + 1
+    assert after["capacity"] == before["capacity"]
+    assert after["create_failed"] == before["create_failed"]
+
+
+async def test_a_capacity_refusal_is_counted_apart(warden):
+    """Genuine saturation: every slot taken and nothing reclaimable."""
+    await saturate(warden)
+    before = _refusals(warden)
+
+    resp = await warden.mint(ip="198.51.100.221")
+
+    assert resp.status_code == 503, body_of(resp)
+    after = _refusals(warden)
+    assert after["capacity"] == before["capacity"] + 1
+    assert after["rate_limited"] == before["rate_limited"]
+    assert after["create_failed"] == before["create_failed"]
+
+
+async def test_a_broken_docker_is_not_counted_as_capacity(warden):
+    """The refusal the old counter hid: plenty of headroom, but the create
+    fails. Reported as `capacity` on the wire (the frontend keys its states on
+    that, and "try again shortly" is right either way) while the counter says
+    `create_failed` — otherwise a broken image reads as "buy a bigger box"."""
+    warden.docker.create_fails = True
+    assert not warden.pool, "the create path is only reached with an empty pool"
+    before = _refusals(warden)
+
+    resp = await warden.mint(ip="198.51.100.222")
+
+    assert resp.status_code == 503, body_of(resp)
+    assert body_of(resp)["reason"] == "capacity", "wire contract must not move"
+    after = _refusals(warden)
+    assert after["create_failed"] == before["create_failed"] + 1, (
+        "a create failure must not be filed under capacity — that is the "
+        "conflation the split exists to remove"
+    )
+    assert after["capacity"] == before["capacity"]
+    assert after["rate_limited"] == before["rate_limited"]
