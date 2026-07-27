@@ -277,21 +277,36 @@ jobs:
       - name: Sanity-check MSI exists + reasonable size
         shell: bash
         run: |
-          msi=$(ls dist/*.msi 2>/dev/null | head -1)
-          if [ -z "$msi" ]; then
-            echo "FAIL: no MSI produced under dist/"
+          set -euo pipefail
+          # EXACTLY one MSI, not "at least one": the attach step below globs
+          # `dist/*.msi`, so a second MSI would be uploaded too and then frozen
+          # by publication.  The old `ls | head -1` inspected one file while a
+          # different set shipped.
+          shopt -s nullglob
+          msis=(dist/*.msi)
+          if [ "${#msis[@]}" -ne 1 ]; then
+            echo "::error::expected exactly 1 MSI under dist/, found ${#msis[@]} — refusing to build a release from an ambiguous artefact set."
             ls -la dist/ || true
             exit 1
           fi
+          msi="${msis[0]}"
           # PySide6 + Chromium WebEngine + Python interpreter should
           # produce ~200-300 MB.  Anything under 50 MB suggests
           # cx_Freeze silently dropped a major package.
           size=$(stat -c%s "$msi" 2>/dev/null || wc -c <"$msi")
-          printf "MSI: %s\nSize: %s bytes\n" "$msi" "$size"
+          sha=$(sha256sum "$msi" | cut -d' ' -f1)
+          printf "MSI: %s\nSize: %s bytes\nSHA256: %s\n" "$msi" "$size" "$sha"
           if [ "$size" -lt 52428800 ]; then
             echo "FAIL: MSI suspiciously small ($size < 50MB).  cx_Freeze probably skipped a critical package."
             exit 1
           fi
+          # Carried to the pre-publish gate so it compares GitHub's stored copy
+          # against what this job actually built, not against a re-read of disk.
+          {
+            echo "MSI_NAME=$(basename "$msi")"
+            echo "MSI_SIZE=$size"
+            echo "MSI_SHA256=$sha"
+          } >> "$GITHUB_ENV"
 
       - name: Upload MSI as workflow artefact
         # Diagnostic copy — survives 30 days regardless of whether the
@@ -338,8 +353,60 @@ jobs:
           # / `-dev1` tag take the "Latest release" slot (P3).
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
 
-      # Publish only after the MSI is attached. `--draft=false` does not touch
-      # the prerelease flag or the generated notes set above.
+      # The draft is the LAST moment these assets can be changed.  Everything
+      # checked so far was checked against the local `dist/` copy — not against
+      # what GitHub actually stored.  Download the release's own copy back and
+      # compare it byte-for-byte with what this job built, so a truncated or
+      # mangled upload is caught while it is still fixable.
+      #
+      # This is the MSI analogue of demo-publish.yml's "re-verify the assets
+      # GitHub stored" gate.  There is no signed SHA256SUMS manifest here, so
+      # the comparison is against MSI_SHA256 recorded at build time instead.
+      - name: Gate — re-verify the asset GitHub stored, before freezing it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ env.RELEASE_TAG }}
+          # One MSI and nothing else.  A backfill re-run against a tag whose
+          # draft already carries a stale MSI would otherwise publish both, and
+          # under immutable releases that pairing is permanent.
+          EXPECTED_ASSETS: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          # `gh --jq` uses gh's own embedded jq, so this needs no jq on PATH
+          # (the Windows runner's toolchain is not guaranteed to carry one).
+          summary="$(gh release view "$TAG" --json isDraft,assets \
+            --jq '"isDraft=\(.isDraft) assets=\(.assets|length)"')"
+          names="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          found="$(gh release view "$TAG" --json assets --jq '.assets | length')"
+          printf 'release %s %s\n%s\n' "$TAG" "$summary" "$(printf '%s\n' "$names" | sed 's/^/  /')"
+          if [ "$found" -ne "$EXPECTED_ASSETS" ]; then
+            echo "::error::release has $found assets, expected $EXPECTED_ASSETS — refusing to publish an incomplete or polluted release."
+            exit 1
+          fi
+          if [ "$names" != "$MSI_NAME" ]; then
+            echo "::error::attached asset is '$names', expected '$MSI_NAME'."
+            exit 1
+          fi
+          rm -rf roundtrip && mkdir roundtrip
+          gh release download "$TAG" --dir roundtrip --clobber
+          got="roundtrip/$MSI_NAME"
+          got_size=$(stat -c%s "$got" 2>/dev/null || wc -c <"$got")
+          got_sha=$(sha256sum "$got" | cut -d' ' -f1)
+          if [ "$got_size" != "$MSI_SIZE" ] || [ "$got_sha" != "$MSI_SHA256" ]; then
+            echo "::error::stored asset does not match what was built."
+            echo "  built:  $MSI_SIZE bytes  $MSI_SHA256"
+            echo "  stored: $got_size bytes  $got_sha"
+            exit 1
+          fi
+          echo "OK: what GitHub stored is byte-identical to the MSI this job built ($got_sha)."
+
+      # Publish only after the MSI is attached AND verified in place.  Under
+      # immutable releases this transition is what freezes the asset, and it is
+      # the last thing the workflow does, so a failure anywhere above leaves an
+      # unpublished draft rather than a permanently wrong public release.
+      # `--draft=false` does not touch the prerelease flag or the generated
+      # notes set above.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
