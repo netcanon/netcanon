@@ -343,6 +343,7 @@ def warden(monkeypatch) -> Warden:
     monkeypatch.setattr(app_module, "_reserving", 0)
     monkeypatch.setattr(app_module, "_counters", {
         "sessions_started": 0,
+        "sessions_that_translated": 0,
         "destroys_by_reason": dict.fromkeys(
             ("hard-ttl", "idle", "hb", "end", "reclaim"), 0
         ),

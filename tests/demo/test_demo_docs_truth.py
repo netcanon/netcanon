@@ -248,6 +248,35 @@ def test_site_assembly_never_deletes_the_bind_mounted_directory():
         )
 
 
+def test_every_healthz_counter_is_documented():
+    """`/healthz` is a published operator surface and the sampler writes every
+    key in it to disk, so each counter is a claim about what we observe. An
+    undocumented one is a number nobody can interpret and a disclosure nobody
+    made — the whitepaper's "What we do see" is only honest if it keeps up.
+
+    Generalises the refusal-reason guard below to the whole counter dict, so the
+    NEXT counter cannot ship undocumented either.
+    """
+    import ast
+
+    tree = ast.parse((REPO_ROOT / "demo/warden/app.py").read_text(encoding="utf-8"))
+    counters: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(getattr(t, "id", None) == "_counters" for t in node.targets):
+            continue
+        counters = [k.value for k in node.value.keys if isinstance(k, ast.Constant)]
+    assert counters, "could not find the _counters literal in app.py"
+
+    spec = (REPO_ROOT / "docs/demo-plan/03-warden-spec.md").read_text(encoding="utf-8")
+    missing = [c for c in counters if c not in spec]
+    assert not missing, (
+        f"/healthz exposes {missing} but the warden spec never mentions them — "
+        "the sampler writes every counter to disk, so each one needs saying out loud"
+    )
+
+
 def test_ci_lints_the_warden():
     """`demo/` is the demo's trusted computing base — the session manager and the
     authz shim standing between a visitor and the docker socket — and for its
