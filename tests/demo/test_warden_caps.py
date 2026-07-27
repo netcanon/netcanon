@@ -351,3 +351,60 @@ async def test_a_broken_docker_is_not_counted_as_capacity(warden):
     )
     assert after["capacity"] == before["capacity"]
     assert after["rate_limited"] == before["rate_limited"]
+
+
+# ── Engagement: minted vs actually used ─────────────────────────────────────
+# `sessions_started` alone cannot distinguish a visitor who translated a config
+# from one who opened the page and left. That difference is the only product
+# question the warden can answer without reading a body or keeping a per-visitor
+# record — /api/v1/migration/plan ALWAYS returns HTTP 200 and carries the real
+# outcome in the response body, which the proxy never buffers (I2), so "did it
+# succeed" is deliberately out of reach. "Did they try" is not.
+def _touch(warden, sess, path, method="POST"):
+    warden.app._refresh_activity(sess, method, path)
+
+
+async def test_a_session_that_translates_is_counted_once(warden):
+    await warden.fill_pool()
+    token = body_of(await warden.mint(ip="198.51.100.31"))["token"]
+    sess = warden.active[token]
+    assert warden.counters["sessions_that_translated"] == 0
+
+    _touch(warden, sess, "/api/v1/migration/plan")
+    assert warden.counters["sessions_that_translated"] == 1
+
+    # A visitor tweaking panes POSTs repeatedly; that is still ONE session that
+    # engaged, so the counter must stay a session count and not become a request
+    # count that one power user can dominate.
+    for path in ("/api/v1/migration/plan", "/api/v1/migration/plan/ports",
+                 "/api/v1/migration/plan/vlans"):
+        _touch(warden, sess, path)
+    assert warden.counters["sessions_that_translated"] == 1
+
+
+async def test_detect_and_sanitize_alone_do_not_count_as_translating(warden):
+    """`IDLE_RESETTING` covers eight POST paths, not just the plan ones. A
+    visitor who auto-detects a vendor or sanitises a config and then leaves has
+    not translated anything, and counting them would quietly inflate the
+    engagement rate the number exists to measure."""
+    await warden.fill_pool()
+    token = body_of(await warden.mint(ip="198.51.100.32"))["token"]
+    sess = warden.active[token]
+
+    for path in ("/api/v1/migration/detect", "/api/v1/sanitize"):
+        _touch(warden, sess, path)
+    assert warden.counters["sessions_that_translated"] == 0, (
+        "detect/sanitize counted as a translation"
+    )
+    assert sess.last_activity > 0, "these paths must still reset the idle timer"
+
+
+async def test_engagement_is_counted_per_session_not_per_visitor(warden):
+    """Two sessions that each translate count twice — the counter tracks
+    sessions, and the warden holds no cross-session visitor identity to dedupe
+    against even if it wanted to."""
+    await warden.fill_pool()
+    for i, ip in enumerate(("198.51.100.41", "198.51.100.42")):
+        token = body_of(await warden.mint(ip=ip))["token"]
+        _touch(warden, warden.active[token], "/api/v1/migration/plan")
+        assert warden.counters["sessions_that_translated"] == i + 1

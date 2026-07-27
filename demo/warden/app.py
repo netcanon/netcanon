@@ -43,6 +43,7 @@ _docker: docker.DockerClient | None = None
 _http: httpx.AsyncClient | None = None
 _counters = {
     "sessions_started": 0,
+    "sessions_that_translated": 0,  # minted AND used; vs sessions_started = bounce rate
     "destroys_by_reason": dict.fromkeys(("hard-ttl", "idle", "hb", "end", "reclaim"), 0),
     "pool_recycled": 0,
     "refusals_by_reason": dict.fromkeys(("rate_limited", "capacity", "create_failed"), 0),
@@ -82,6 +83,7 @@ class Session:
     last_activity: float
     hidden: bool = False
     src_ip: str = ""
+    translated: bool = False  # ever POSTed a plan; counted once, see _refresh_activity
 
 
 @dataclass
@@ -291,9 +293,7 @@ async def _proxy(request: Request, inst: Instance, path: str, token: str) -> Res
     # netcanon gates /api/v1 on `Authorization: Bearer <key>` (netcanon/api/auth.py).
     if path.startswith("/api/v1"):
         fwd_headers["Authorization"] = f"Bearer {getattr(inst, '_api_key', '')}"
-    req = _http.build_request(
-        request.method, url, headers=fwd_headers, content=request.stream()
-    )
+    req = _http.build_request(request.method, url, headers=fwd_headers, content=request.stream())
     upstream = await _http.send(req, stream=True)
     resp_headers = _fix_response_headers(upstream.headers)
 
@@ -308,10 +308,8 @@ async def _proxy(request: Request, inst: Instance, path: str, token: str) -> Res
     # Preserve duplicate headers (multiple Set-Cookie / CSP) — dict() would collapse them.
     resp.raw_headers = [(k.encode("latin-1"), v.encode("latin-1")) for k, v in resp_headers]
     # (Re)stamp the routing cookie so absolute-path requests reach this instance.
-    resp.set_cookie(
-        C.ROUTE_COOKIE, token, max_age=C.HARD_TTL, path="/",
-        httponly=True, secure=True, samesite="strict",
-    )
+    resp.set_cookie(C.ROUTE_COOKIE, token, max_age=C.HARD_TTL, path="/",
+                    httponly=True, secure=True, samesite="strict")
     return resp
 
 
@@ -320,6 +318,10 @@ def _refresh_activity(sess: Session, method: str, path: str) -> None:
     sess.last_heartbeat = now
     if method.upper() == "POST" and path in C.IDLE_RESETTING:
         sess.last_activity = now
+        # Once per session, plan-only: IDLE_RESETTING also covers detect/sanitize.
+        if not sess.translated and path.startswith("/api/v1/migration/plan"):
+            sess.translated = True
+            _counters["sessions_that_translated"] += 1
 
 
 # ── App ─────────────────────────────────────────────────────────────────────
@@ -345,10 +347,7 @@ async def _lifespan(_app: FastAPI):
         await _http.aclose()
 
 
-app = FastAPI(
-    title="netcanon-demo-warden", docs_url=None, redoc_url=None,
-    openapi_url=None, lifespan=_lifespan,
-)
+app = FastAPI(title="netcanon-demo-warden", docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan)
 
 
 def _client_ip(request: Request) -> str:
@@ -425,10 +424,8 @@ async def session_new(request: Request) -> Response:
         "idle_ttl_seconds": _idle_ttl,
         "instance_id": inst.instance_id,
     })
-    resp.set_cookie(
-        C.ROUTE_COOKIE, token, max_age=C.HARD_TTL, path="/",
-        httponly=True, secure=True, samesite="strict",
-    )
+    resp.set_cookie(C.ROUTE_COOKIE, token, max_age=C.HARD_TTL, path="/",
+                    httponly=True, secure=True, samesite="strict")
     return resp
 
 

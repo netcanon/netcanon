@@ -115,6 +115,12 @@ your request. Two more things, stated outright:
   to a visitor, and the per-IP records behind the concurrency cap stay in memory
   and are never sampled. This is how we tell whether the instance cap is set
   correctly; it is not analytics and there is no visitor dimension to analyse.
+  One of those totals counts **how many sessions ran at least one translation**
+  — a session count, incremented once, never a per-session record. We can tell
+  that *N of M* visitors used the thing; we cannot tell **which**, what they
+  translated, or whether the result was any good: the proxy never buffers a
+  response body, and the endpoint returns HTTP 200 whether the translation
+  succeeded or failed, so the outcome is deliberately out of our reach.
 - **A warden-set routing cookie.** netcanon's UI uses absolute URLs
   (`fetch('/api/v1/migration/plan')`, `href="/migrate"`) and has no root-path
   support, so the warden routes you to your one instance **by session, not by

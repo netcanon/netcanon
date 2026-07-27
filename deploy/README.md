@@ -168,6 +168,10 @@ without sampling there is no answer to "how much traffic did this get". A
 # last sample
 tail -1 /var/log/demo-stats.jsonl | jq .
 
+# engagement: minted vs actually used (the ratio is the bounce rate)
+jq -r '[.ts, (.warden.sessions_started//0), (.warden.sessions_that_translated//0)] | @tsv' \
+  /var/log/demo-stats.jsonl
+
 # sessions and refusals over the file, refusals broken out by cause
 jq -r '[.ts, (.warden.sessions_started//0),
         (.warden.refusals_by_reason.rate_limited//0),

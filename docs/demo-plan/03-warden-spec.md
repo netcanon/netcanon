@@ -332,6 +332,13 @@ pool size / active count / uptime, `/healthz` exposes aggregate counters with no
 per-session or per-visitor detail:
 
 - `sessions_started`
+- `sessions_that_translated` — sessions that ran ≥1 `/api/v1/migration/plan*`
+  POST, counted once per session. Against `sessions_started` this is the
+  engagement rate (minted vs actually used). Deliberately *not* a success count:
+  the endpoint always answers 200 and carries the outcome in a body the proxy
+  never buffers (I2), so "did it work" is unavailable without breaking a claim.
+  `detect` / `sanitize` do not count — they reset the idle timer but are not a
+  translation.
 - `destroys_by_reason` (`hard-ttl` / `idle` / `hb` / `end` / `reclaim`)
 - `pool_recycled` (unassigned instances recycled at ~290 s, `POOL_MAX_AGE − reaper_period`)
 - `refusals_by_reason` (`rate_limited` — a 429 / `capacity` — true saturation /
