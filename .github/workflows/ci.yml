@@ -53,12 +53,21 @@ jobs:
           pip install "ruff>=0.15,<0.16"
 
       - name: Run ruff
-        # Scope: the shipping package, the desktop shell, the dev tools, and
-        # the tests -- all driven lint-clean (netcanon/ + tests/ in the v0.2.0
-        # Stage-1 baseline; tools/ + netcanon_desktop/ added afterward).
+        # Scope: the shipping package, the desktop shell, the dev tools, the
+        # tests, and the demo warden -- all driven lint-clean (netcanon/ +
+        # tests/ in the v0.2.0 Stage-1 baseline; tools/ + netcanon_desktop/
+        # added afterward; demo/ added once the warden shipped).
+        #
+        # demo/ is here because it is the demo's TRUSTED COMPUTING BASE -- the
+        # session manager and the authz shim that stand between a visitor and
+        # the docker socket. It was lint-clean the whole time it was outside
+        # this list, which is precisely the problem: nothing was checking, so
+        # that was luck rather than a property. The warden is also the one file
+        # the whitepaper asks people to read end to end.
+        #
         # Config (rule set, ignores, line-length) lives in pyproject.toml
-        # [tool.ruff].
-        run: ruff check netcanon netcanon_desktop tools tests
+        # [tool.ruff]. Keep this list in sync with test_ci_lints_the_warden.
+        run: ruff check netcanon netcanon_desktop tools tests demo
 
   test:
     name: Tests (Python ${{ matrix.python-version }})
