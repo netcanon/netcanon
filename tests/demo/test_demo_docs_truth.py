@@ -200,6 +200,25 @@ def test_backstop_cannot_fire_before_a_live_session_deadline():
     )
 
 
+def test_ci_lints_the_warden():
+    """`demo/` is the demo's trusted computing base — the session manager and the
+    authz shim standing between a visitor and the docker socket — and for its
+    whole life it sat outside CI's ruff scope. It happened to be clean, which is
+    luck, not a property. Pin the scope so narrowing it fails here.
+    """
+    data = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    steps = [s for job in data["jobs"].values() for s in (job.get("steps") or [])]
+    ruff = [s for s in steps if "ruff check" in str(s.get("run", ""))]
+    assert ruff, "ci.yml no longer runs `ruff check` at all"
+    for step in ruff:
+        # Compare tokens, not a substring: "demo" appears inside other words.
+        targets = str(step["run"]).split("ruff check", 1)[1].split()
+        assert "demo" in targets, (
+            f"ci.yml lints {targets} — `demo` is missing, so the warden (the TCB, "
+            "and the one file the whitepaper asks people to read) is unlinted"
+        )
+
+
 @pytest.mark.parametrize(
     "doc", ("docs/demo-plan/03-warden-spec.md", "deploy/README.md")
 )
