@@ -143,6 +143,19 @@ render the copy Caddy serves at `/whitepaper` (CI deliberately leaves that one
 value blank — it cannot know when you deploy). Until you run it, `/whitepaper`
 serves the committed template, banner and all.
 
+Caddy serves **`deploy/site/`**, not the tracked `frontend/` — `make site`
+(run for you by `make deploy`) copies the frontend there, and `make whitepaper`
+renders the filled copy into it. `site/` is gitignored, so a deploy leaves the
+host's git tree clean and `git status` stays useful for spotting real drift.
+Rendering used to overwrite the tracked `frontend/whitepaper.html`, which left
+the tree permanently dirty and once blocked a `git checkout` mid-deploy.
+
+⚠️ `make site` copies **into** `site/` rather than replacing it, deliberately:
+the directory is bind-mounted into a running Caddy, and deleting it would leave
+that mount pointing at a removed inode — Caddy would go on serving a directory
+nothing can write to, and every static path would break until the stack was
+recreated.
+
 ## Traffic stats
 
 The demo keeps no access log (claim 4) and the warden's counters are in-RAM, so

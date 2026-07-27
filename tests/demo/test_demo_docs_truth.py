@@ -200,6 +200,54 @@ def test_backstop_cannot_fire_before_a_live_session_deadline():
     )
 
 
+def test_deploying_does_not_write_into_the_tracked_tree():
+    """`make whitepaper` renders the DEPLOY-specific copy — real digests, real
+    deploy date. It used to write that over the tracked `frontend/whitepaper.html`,
+    leaving the host's git tree permanently dirty: `git status` stopped being
+    useful for spotting real drift, and a `git checkout` was blocked mid-deploy.
+
+    Caddy now serves `deploy/site/`, which is gitignored. Pin all three halves —
+    where the render goes, what Caddy mounts, and that the mount is ignored —
+    because any one of them silently reverting reintroduces the dirty tree.
+    """
+    makefile = (REPO_ROOT / "deploy/Makefile").read_text(encoding="utf-8")
+    recipe = makefile.split("whitepaper:", 1)[1].split("\n\n", 1)[0]
+    # Assert on the RENDER TARGET only. Matching the recipe text wholesale
+    # false-positives on the target's own `@echo` explaining that the tracked
+    # copy is left alone — the same prose-vs-code trap as the claim-10 guard.
+    out = [ln.strip() for ln in recipe.splitlines() if "--out" in ln]
+    assert out, "make whitepaper no longer passes --out"
+    assert all("$(SITE)/whitepaper.html" in ln for ln in out), (
+        f"make whitepaper renders to {out} — it must write into $(SITE); "
+        "rendering over the tracked frontend copy is what dirties the host tree"
+    )
+
+    compose = (REPO_ROOT / "deploy/docker-compose.yml").read_text(encoding="utf-8")
+    assert "../frontend:/srv/frontend" not in compose, (
+        "Caddy mounts the tracked frontend/ again — the served copy and the "
+        "repo copy are the same file, so rendering dirties the tree"
+    )
+    assert "./site:/srv/frontend" in compose, "Caddy no longer serves deploy/site"
+
+    ignored = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "deploy/site/" in ignored, "deploy/site is not gitignored — it IS the dirt"
+
+
+def test_site_assembly_never_deletes_the_bind_mounted_directory():
+    """`deploy/site` is bind-mounted into a RUNNING Caddy. Replacing it (rm -rf
+    then recreate) leaves the container's mount pointing at a deleted inode, so
+    Caddy keeps serving a directory nothing can write to and every static path
+    breaks until the stack is recreated. Copy into it; never unlink it.
+    """
+    makefile = (REPO_ROOT / "deploy/Makefile").read_text(encoding="utf-8")
+    recipe = makefile.split("\nsite:", 1)[1].split("\n\n", 1)[0]
+    for destructive in ("rm -rf $(SITE)", "rm -rf site"):
+        assert destructive not in recipe, (
+            f"`make site` runs `{destructive}` on a directory bind-mounted into a "
+            "live Caddy — that orphans the mount and blanks the site"
+        )
+
+
 def test_ci_lints_the_warden():
     """`demo/` is the demo's trusted computing base — the session manager and the
     authz shim standing between a visitor and the docker socket — and for its

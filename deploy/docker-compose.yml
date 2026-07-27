@@ -52,7 +52,11 @@ services:
     networks: [caddy-net]
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ../frontend:/srv/frontend:ro
+      # ./site, not ../frontend: `make site` assembles the served copy so that
+      # rendering the filled whitepaper never writes into the tracked repo (a
+      # dirty host tree has already blocked a checkout mid-deploy). `make deploy`
+      # populates it before this container starts.
+      - ./site:/srv/frontend:ro
       - caddy-data:/data
       - caddy-config:/config
     cap_drop: [ALL]
