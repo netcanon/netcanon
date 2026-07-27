@@ -45,7 +45,7 @@ _counters = {
     "sessions_started": 0,
     "destroys_by_reason": dict.fromkeys(("hard-ttl", "idle", "hb", "end", "reclaim"), 0),
     "pool_recycled": 0,
-    "503_count": 0,
+    "refusals_by_reason": dict.fromkeys(("rate_limited", "capacity", "create_failed"), 0),
     "pool_refill_failures": 0,
 }
 _bg_tasks: set[asyncio.Task] = set()
@@ -202,9 +202,7 @@ async def _destroy(token: str, reason: str) -> None:
         if rec and rec.active > 0:
             rec.active -= 1
     await asyncio.to_thread(_docker_remove, sess.instance.container_id)
-    _counters["destroys_by_reason"][reason] = (
-        _counters["destroys_by_reason"].get(reason, 0) + 1
-    )
+    _counters["destroys_by_reason"][reason] = _counters["destroys_by_reason"].get(reason, 0) + 1
     log.info("session_destroyed reason=%s", reason)
 
 
@@ -376,7 +374,7 @@ async def session_new(request: Request) -> Response:
         rec.last_seen = now
         rec.mints = [t for t in rec.mints if now - t < C.PER_IP_MINT_WINDOW]
         if len(rec.mints) >= C.PER_IP_MINT_MAX or rec.active >= C.PER_IP_MAX_CONCURRENT:
-            _counters["503_count"] += 1
+            _counters["refusals_by_reason"]["rate_limited"] += 1
             return JSONResponse({"reason": "rate_limited"}, status_code=429)
         # Cap-check the POOL-HIT path too: a refill can land between another
         # mint's room check and this pop, so a warm instance != a free slot.
@@ -394,7 +392,7 @@ async def session_new(request: Request) -> Response:
                 _reserving += 1
         if not headroom:  # true saturation: reclaim the longest-idle session
             if await _reclaim_one(now) is None:
-                _counters["503_count"] += 1
+                _counters["refusals_by_reason"]["capacity"] += 1
                 return JSONResponse({"reason": "capacity"}, status_code=503)
             async with _lock:
                 _reserving += 1
@@ -404,7 +402,9 @@ async def session_new(request: Request) -> Response:
             async with _lock:
                 _reserving -= 1
             log.warning("inline instance create failed: %s", exc)
-            _counters["503_count"] += 1
+            # Separate from real saturation: this means Docker or the image is
+            # broken, not that the box is too small. Wire reason stays "capacity".
+            _counters["refusals_by_reason"]["create_failed"] += 1
             return JSONResponse({"reason": "capacity"}, status_code=503)
     token = secrets.token_urlsafe(C.TOKEN_NBYTES)
     async with _lock:

@@ -200,6 +200,41 @@ def test_backstop_cannot_fire_before_a_live_session_deadline():
     )
 
 
+@pytest.mark.parametrize(
+    "doc", ("docs/demo-plan/03-warden-spec.md", "deploy/README.md")
+)
+def test_every_refusal_reason_is_documented(doc):
+    """`/healthz` splits refusals by cause, and an operator reads those numbers
+    to decide whether the box needs resizing. A reason that exists in the code
+    but in no document is a number nobody can interpret.
+
+    This is the exact drift that already happened here: deploy/README.md carried
+    a caveat calling the split "open work" after it had shipped. Adding a fourth
+    reason without saying what it means now fails instead.
+    """
+    import ast
+
+    src = (REPO_ROOT / "demo/warden/app.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    # Read the reasons out of the `_counters` literal rather than importing the
+    # module: app.py imports the docker SDK, which CI deliberately does not have.
+    reasons: list[str] = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and ast.unparse(node.func) == "dict.fromkeys"):
+            continue
+        names = {n.value for n in ast.walk(node.args[0]) if isinstance(n, ast.Constant)}
+        if "rate_limited" in names:
+            reasons = sorted(names)
+    assert reasons, "could not find the refusals_by_reason literal in app.py"
+
+    text = (REPO_ROOT / doc).read_text(encoding="utf-8")
+    missing = [r for r in reasons if r not in text]
+    assert not missing, (
+        f"{doc} never mentions refusal reason(s) {missing} — an operator reading "
+        "these counters would have no way to know what they mean"
+    )
+
+
 def test_warden_stays_under_the_audited_line_count():
     """The whitepaper asks for trust on the grounds that the warden is small
     enough to read end to end (<=500 lines). Keep that claim true."""

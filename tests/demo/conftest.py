@@ -347,7 +347,9 @@ def warden(monkeypatch) -> Warden:
             ("hard-ttl", "idle", "hb", "end", "reclaim"), 0
         ),
         "pool_recycled": 0,
-        "503_count": 0,
+        "refusals_by_reason": dict.fromkeys(
+            ("rate_limited", "capacity", "create_failed"), 0
+        ),
         "pool_refill_failures": 0,
     })
 
