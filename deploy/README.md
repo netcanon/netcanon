@@ -143,6 +143,37 @@ render the copy Caddy serves at `/whitepaper` (CI deliberately leaves that one
 value blank — it cannot know when you deploy). Until you run it, `/whitepaper`
 serves the committed template, banner and all.
 
+## Traffic stats
+
+The demo keeps no access log (claim 4) and the warden's counters are in-RAM, so
+without sampling there is no answer to "how much traffic did this get". A
+`demo-stats.timer` writes aggregate totals to `/var/log/demo-stats.jsonl` every
+5 minutes — **totals only, no visitor dimension**, disclosed in the whitepaper's
+*What we do see*.
+
+```bash
+# last sample
+tail -1 /var/log/demo-stats.jsonl | jq .
+
+# sessions and refusals over the file
+jq -r '[.ts, (.warden.sessions_started//0), (.warden."503_count"//0)] | @tsv' /var/log/demo-stats.jsonl
+
+# requests by status code
+jq -r '[.ts, .http_requests_total, (.http_by_code|tostring)] | @tsv' /var/log/demo-stats.jsonl
+```
+
+Two things to know when reading it:
+
+- **Counters reset.** They are cumulative-since-process-start, so a restart
+  zeroes them. `warden_uptime_s` drops at the same moment — treat that as the
+  reset marker, exactly like a Prometheus counter.
+- **`warden: null` means the demo was unreachable** at that timestamp. That is a
+  recorded outage, deliberately distinct from a missing sample (timer not run).
+
+⚠️ **`503_count` is not a capacity signal.** It increments for per-IP rate limits
+(429), true saturation (503), *and* instance-create failures. Only the second
+means "the box is too small". Splitting it is open work.
+
 ## DDoS / abuse posture
 
 - **L7 abuse:** warden per-IP concurrency cap (2) + mint rate limit (≤30/600 s), Caddy 2 MB body cap, fail-closed 503 at `MAX_ACTIVE`, per-instance cpu/mem/pids caps, no egress.

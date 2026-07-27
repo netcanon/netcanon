@@ -116,9 +116,16 @@ runcmd:
   # demo-int isolation (I4): apply the nftables rules into DOCKER-USER after docker.
   - install -m 0755 /opt/demo/deploy/systemd/demo-firewall.sh /usr/local/bin/demo-firewall.sh
   - install -m 0644 /opt/demo/deploy/systemd/demo-firewall.service /etc/systemd/system/
+  # Aggregate traffic sampler. The demo keeps no access log, and the warden's
+  # counters are in-RAM and die with the process, so without this "how much
+  # traffic did we get" has no answer at all. Totals only — no visitor dimension.
+  - install -m 0755 /opt/demo/deploy/systemd/demo-stats.sh /usr/local/bin/demo-stats.sh
+  - install -m 0644 /opt/demo/deploy/systemd/demo-stats.service /etc/systemd/system/
+  - install -m 0644 /opt/demo/deploy/systemd/demo-stats.timer /etc/systemd/system/
   - systemctl daemon-reload
   - systemctl enable --now demo-ttl-backstop.timer
   - systemctl enable --now demo-firewall.service
+  - systemctl enable --now demo-stats.timer
   # Gate-3 tripwire: prove both units are actually active. cloud-init logs to
   # /var/log/cloud-init-output.log — check it before trusting the host.
   - systemctl is-active --quiet demo-ttl-backstop.timer || echo "FATAL demo-ttl-backstop.timer inactive"

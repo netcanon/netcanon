@@ -14,6 +14,15 @@
 	log {
 		exclude http.log.access
 	}
+
+	# Per-request HTTP metrics, off by default. These are counters aggregated by
+	# {server, handler, code, method} — there is no client-IP, path, user-agent
+	# or referrer label, so this is traffic volume without a visitor dimension
+	# and does not weaken claim 4. Exposed only on the admin endpoint (:2019),
+	# which is bound inside the container and never published to the host.
+	servers {
+		metrics
+	}
 }
 
 demo.netcanon.net {

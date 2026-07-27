@@ -107,6 +107,14 @@ status codes), our host provider's infrastructure-level traffic metadata, and
 whatever a TLS-terminating proxy inherently sees **in memory while streaming**
 your request. Two more things, stated outright:
 
+- **Aggregate traffic counters, sampled to disk.** The operational metadata above
+  lives in RAM and dies with the process, so a sampler writes it to a host file
+  every 5 minutes: session/destroy/refusal totals from the warden, and Caddy
+  request counts grouped by HTTP status. Totals only — **no client IP, no path,
+  no user-agent, no referrer, no per-session row**. Nothing in it can be traced
+  to a visitor, and the per-IP records behind the concurrency cap stay in memory
+  and are never sampled. This is how we tell whether the instance cap is set
+  correctly; it is not analytics and there is no visitor dimension to analyse.
 - **A warden-set routing cookie.** netcanon's UI uses absolute URLs
   (`fetch('/api/v1/migration/plan')`, `href="/migrate"`) and has no root-path
   support, so the warden routes you to your one instance **by session, not by
