@@ -1,0 +1,218 @@
+name: Demo — uptime & synthetic probe
+
+# Off-host monitoring for demo.netcanon.net, specified in
+# docs/demo-plan/02-deployment.md ("an external uptime monitor hitting / and
+# /healthz from off-host, so an outage is visible even if the box wedges") and
+# unbuilt until now. Off-host is the whole point: a monitor running ON the demo
+# box cannot tell you the demo box is down. The sampler already proved that —
+# it faithfully recorded `warden: null` during a real outage, into a file nobody
+# reads until someone goes looking.
+#
+# ── Deliberately NOT a hosted uptime service ──────────────────────────────────
+# Not because those are worse at this (they are better at timing, see below) but
+# because this needs NO account and NO secret: every endpoint it touches is
+# public HTTP, which preserves the "zero deploy secrets on GitHub" property the
+# deployment posture rests on. It also lives in the repo, so the monitor goes
+# through the same PR review, zizmor scan and pinned-action discipline as the
+# thing it monitors. It uses NO third-party actions at all — curl, jq, openssl
+# and gh are all present on the runner.
+#
+# ── Known limitations. Read these before trusting it ──────────────────────────
+# 1. TIMING IS NOT GUARANTEED. GitHub queues scheduled workflows and explicitly
+#    does not promise on-time execution; delays of 5-30 min are routine and runs
+#    can be skipped entirely during an incident. `*/5` is a hope, not an
+#    interval. Detection here is "eventually", not "within five minutes".
+# 2. SCHEDULED WORKFLOWS AUTO-DISABLE after 60 days of repository inactivity.
+#    That is a monitor dying silently — the worst failure mode one can have. If
+#    this repo ever goes quiet, monitoring stops without saying so.
+# 3. GitHub is a single point of failure for the monitor. If Actions is degraded
+#    you lose visibility (a hosted checker has the same shape of problem).
+# Mitigation for 1: each probe retries in-run before failing, so a transient
+# blip does not page. Mitigation for 2 and 3: none here — if you later want
+# dependable sub-15-minute detection, add a hosted checker alongside. The two
+# compose fine; this one keeps the synthetic probe a hosted service cannot
+# express.
+#
+# ── Why the synthetic probe is dispatch-only, not scheduled ───────────────────
+# It mints a REAL session, so on a schedule it would land in `sessions_started`
+# and `sessions_that_translated` every run. At the demo's actual volume (single
+# figures per day) an hourly probe would swamp the human signal and the
+# engagement rate would converge on 100% — the counter would measure our own
+# robot. Exempting it was considered and rejected: a shared-secret header puts a
+# secret on GitHub, runner IPs rotate so source matching fails, and a User-Agent
+# marker would make the warden inspect UA, which the whitepaper explicitly says
+# it does not record. Keeping the frequent tier read-only costs nothing and
+# needs no exemption at all.
+# Run it by hand after `make deploy`, or whenever the pool is suspect.
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'   # offset: top-of-hour crons queue worst
+  workflow_dispatch:
+    inputs:
+      deep:
+        description: "Also run the synthetic mint -> translate -> end probe"
+        type: boolean
+        default: true
+
+# Read-only by default; the alert job elevates to issues:write for itself only.
+permissions:
+  contents: read
+
+# Never cancel a run in flight: it may be mid-alert, and losing the notification
+# is worse than briefly queueing behind a slow check.
+concurrency:
+  group: demo-uptime
+  cancel-in-progress: false
+
+env:
+  BASE: https://demo.netcanon.net
+  HOST: demo.netcanon.net
+
+jobs:
+  liveness:
+    name: Liveness (read-only)
+    runs-on: ubuntu-latest
+    steps:
+      # Read-only by construction: GETs only, so this tier mints no session and
+      # cannot pollute the engagement counters no matter how often it runs.
+      - name: Probe the public surface
+        shell: bash
+        run: |
+          set -uo pipefail
+          fail=0
+          probe() {  # name url expected
+            local code=000
+            for i in 1 2 3; do
+              code=$(curl -o /tmp/body -sS -w '%{http_code}' --max-time 20 "$2" 2>/dev/null || echo 000)
+              if [ "$code" = "$3" ]; then echo "  OK    $1 ($code)"; return 0; fi
+              echo "  ....  $1 got $code (attempt $i/3)"; sleep 15
+            done
+            echo "::error::$1 failed — last status $code (3 attempts)"; return 1
+          }
+          probe "GET /"           "$BASE/"           200 || fail=1
+          probe "GET /whitepaper" "$BASE/whitepaper" 200 || fail=1
+          probe "GET /healthz"    "$BASE/healthz"    200 || fail=1
+
+          # A 200 from /healthz only proves the warden answers. An empty warm
+          # pool means every visitor waits for a cold container start, or the
+          # create path is broken outright — the site looks fine and is not.
+          # Separate "could not read the answer" from "the answer was bad".
+          # Both are alerts, but folding them together means the notification
+          # names the wrong fault and costs incident time — a swallowed jq
+          # failure would report a phantom empty pool.
+          if [ "$fail" -eq 0 ]; then
+            if ! jq -e . /tmp/body >/dev/null 2>&1; then
+              echo "::error::/healthz returned 200 but the body is not parseable JSON"
+              fail=1
+            else
+              pool=$(jq -r '.pool // -1' /tmp/body)
+              active=$(jq -r '.active // -1' /tmp/body)
+              echo "  pool=$pool active=$active"
+              if [ "$pool" -lt 1 ]; then
+                echo "::error::warm pool is $pool — the demo answers but cannot serve a visitor promptly"
+                fail=1
+              fi
+            fi
+          fi
+          exit "$fail"
+
+      - name: Check the TLS certificate has life left
+        shell: bash
+        run: |
+          set -uo pipefail
+          # Caddy renews automatically, so this is really an ACME-failure alarm:
+          # the useful moment to hear about it is well BEFORE expiry, while
+          # renewal can still be fixed by hand.
+          end=$(echo | openssl s_client -connect "$HOST:443" -servername "$HOST" 2>/dev/null \
+                | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+          if [ -z "$end" ]; then echo "::error::could not read the TLS certificate"; exit 1; fi
+          days=$(( ( $(date -d "$end" +%s) - $(date -u +%s) ) / 86400 ))
+          echo "  cert expires $end ($days days)"
+          if [ "$days" -lt 14 ]; then
+            echo "::error::TLS certificate expires in $days days — ACME renewal is not working"
+            exit 1
+          fi
+
+  deep:
+    name: Synthetic mint -> translate -> end
+    if: github.event_name == 'workflow_dispatch' && inputs.deep
+    runs-on: ubuntu-latest
+    steps:
+      # The check liveness cannot make: the site can answer every GET while the
+      # pool is silently broken and no visitor can actually translate anything.
+      # Mints a real session, hence dispatch-only (see the header).
+      - name: Drive a real translation end to end
+        shell: bash
+        run: |
+          set -euo pipefail
+          token=$(curl -fsS --max-time 60 -X POST "$BASE/session/new" | jq -r .token)
+          if [ -z "$token" ] || [ "$token" = "null" ]; then
+            echo "::error::mint returned no token — the demo could not hand out a session"; exit 1
+          fi
+          cleanup() { curl -fsS --max-time 30 -X POST "$BASE/session/$token/end" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          body=$(jq -nc --arg t "$(printf 'hostname probe-sw\n!\nvlan 10\n name USERS\n!\ninterface GigabitEthernet1/0/1\n switchport mode access\n switchport access vlan 10\n!')" \
+                 '{source:"cisco_iosxe_cli", target:"juniper_junos", raw_text:$t}')
+          out=$(curl -fsS --max-time 120 -X POST -H 'Content-Type: application/json' \
+                  -d "$body" "$BASE/i/$token/api/v1/migration/plan")
+          status=$(printf '%s' "$out" | jq -r '.status // "?"')
+          rendered=$(printf '%s' "$out" | jq -r '.rendered // ""')
+          echo "  job status: $status, rendered ${#rendered} chars"
+
+          # Assert on the TRANSLATION, not just a 200: /plan answers 200 even
+          # when the job failed, carrying the outcome in the body. A status check
+          # alone would pass while the demo rendered nothing.
+          if [ "$status" != "completed" ]; then
+            echo "::error::translation status was '$status', expected 'completed'"; exit 1
+          fi
+          case "$rendered" in
+            *"ge-1/0/1"*) echo "  OK    interface name translated to Junos form" ;;
+            *) echo "::error::rendered output lacks the translated interface name"; exit 1 ;;
+          esac
+
+  alert:
+    name: Open or close the outage issue
+    needs: [liveness, deep]
+    if: always() && github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # One issue per incident, not one per run: at this cadence a night-long
+      # outage would otherwise file ~100 issues and bury the signal it exists to
+      # raise. Recovery closes the thread, so the issue becomes an incident
+      # record with a start and an end rather than a stream of noise.
+      - name: File or resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RESULT: ${{ needs.liveness.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh label create demo-outage --color B60205 \
+            --description "Automated: demo.netcanon.net failed an uptime probe" 2>/dev/null || true
+          open=$(gh issue list --repo "$REPO" --label demo-outage --state open \
+                   --limit 1 --json number -q '.[0].number // empty')
+
+          if [ "$RESULT" != "success" ]; then
+            if [ -n "$open" ]; then
+              gh issue comment "$open" --repo "$REPO" --body "Still failing — $RUN_URL"
+              echo "commented on #$open"
+            else
+              gh issue create --repo "$REPO" --label demo-outage \
+                --title "demo.netcanon.net is failing its uptime probe" \
+                --body "$(printf 'An automated probe of https://demo.netcanon.net failed.\n\nRun: %s\n\nThis issue is updated by later failures and closed automatically on recovery.\nTiming caveat: scheduled workflows are queued by GitHub, so the outage may have begun well before this run.\n' "$RUN_URL")"
+              echo "opened a new outage issue"
+            fi
+          elif [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$REPO" --body "Recovered — $RUN_URL"
+            gh issue close "$open" --repo "$REPO" --reason completed
+            echo "closed #$open on recovery"
+          else
+            echo "healthy, nothing open"
+          fi
