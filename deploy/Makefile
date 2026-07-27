@@ -10,7 +10,14 @@ BUNDLE  ?= .
 DEMO_TAG ?=
 REPO    ?= netcanon/netcanon
 
-.PHONY: help verify verify-bundle promote whitepaper deploy drain down dev-up dev-down smoke-up smoke smoke-down
+# The directory Caddy actually serves. NOT the tracked ../frontend: rendering the
+# filled whitepaper over the tracked template left the host's git tree
+# permanently dirty, which has already blocked a `git checkout` mid-deploy and
+# makes `git status` on the host useless for spotting real drift. site/ is
+# gitignored and rebuilt from the repo on each deploy.
+SITE := site
+
+.PHONY: help verify verify-bundle promote site whitepaper deploy drain down dev-up dev-down smoke-up smoke smoke-down
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-11s %s\n",$$1,$$2}'
@@ -28,15 +35,26 @@ verify: ## Print pinned digests + compose sha256 (compare against the whitepaper
 # recipe itself must run from deploy/ (its ../tools, ../docs and ../frontend
 # paths are relative to here), so "run it from the bundle dir" was never a thing
 # that could work.
-whitepaper: ## Fill the deploy date + render frontend/whitepaper.html (BUNDLE=<dir>)
+# Assemble what Caddy serves. Deliberately copies INTO $(SITE) rather than
+# replacing it: the directory is bind-mounted into a running Caddy, and
+# `rm -rf` would leave that mount pointing at a deleted inode — the container
+# would keep serving the old, now-unreachable directory and every static path
+# would break until the stack was recreated.
+site: ## Assemble the served directory (frontend + whatever whitepaper exists)
+	@mkdir -p $(SITE)
+	@cp -r ../frontend/. $(SITE)/
+	@echo "Assembled $(SITE)/ — this, not ../frontend, is what Caddy mounts."
+
+whitepaper: site ## Fill the deploy date + render the served whitepaper (BUNDLE=<dir>)
 	@test -f $(BUNDLE)/whitepaper-values.json || { echo "$(BUNDLE)/whitepaper-values.json not found — pass BUNDLE=<unpacked bundle dir>"; exit 1; }
 	@jq --arg d "$$(date -u +%Y-%m-%d)" '. + {DEPLOY_DATE: $$d}' $(BUNDLE)/whitepaper-values.json > .wp-values.filled.json
 	python3 ../tools/render_whitepaper.py \
 		--in ../docs/DEMO_WHITEPAPER.md \
-		--out ../frontend/whitepaper.html \
+		--out $(SITE)/whitepaper.html \
 		--values .wp-values.filled.json
 	@rm -f .wp-values.filled.json
-	@echo "Rendered ../frontend/whitepaper.html — Caddy serves it at /whitepaper."
+	@echo "Rendered $(SITE)/whitepaper.html — Caddy serves it at /whitepaper."
+	@echo "The tracked ../frontend/whitepaper.html (template copy) is untouched."
 
 # Gate 4. SHA256SUMS is the one mutable, unsigned link in the chain, so
 # demo-publish.yml cosign sign-blob's it; verify that signature FIRST and let the
@@ -75,6 +93,7 @@ promote: verify-bundle ## Copy the VERIFIED bundle's digests into demo.env, keep
 deploy: promote ## Gate 4 → promote the verified env → pull pinned images + bring the stack up
 	docker pull "$$(grep '^NETCANON_INSTANCE_IMAGE=' demo.env | cut -d= -f2-)"
 	$(COMPOSE) pull
+	@$(MAKE) --no-print-directory site   # populate the mount BEFORE Caddy starts
 	$(COMPOSE) up -d
 
 # Deliberately exits non-zero. The warden has no drain sentinel yet, and a target
