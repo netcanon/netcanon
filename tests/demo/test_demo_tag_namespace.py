@@ -238,6 +238,45 @@ def test_releases_are_built_as_a_draft_then_published(wf):
     )
 
 
+@pytest.mark.parametrize("wf", ["demo-publish.yml", "desktop-msi-publish.yml"])
+def test_a_gate_runs_between_attaching_assets_and_publishing(wf):
+    """Publishing is the irreversible step: under immutable releases it freezes
+    the assets, so a release that ships wrong can only be superseded by a new
+    tag. The draft window is therefore the last point at which anything can be
+    checked, and every check up to the attach ran against a LOCAL copy — not
+    against what GitHub actually stored.
+
+    Both workflows close that with a gate that reads the assets back off the
+    release. This pins the ORDER, which is the part that carries the guarantee:
+    attach → verify → publish. A gate that ran after publication would be a
+    report, not a gate.
+    """
+    data = yaml.safe_load((WORKFLOWS / wf).read_text(encoding="utf-8"))
+    steps = [s for job in data["jobs"].values() for s in (job.get("steps") or [])]
+
+    attach = next(
+        i for i, s in enumerate(steps) if "action-gh-release" in str(s.get("uses", ""))
+    )
+    publish = next(
+        i for i, s in enumerate(steps) if "--draft=false" in str(s.get("run", ""))
+    )
+    assert attach < publish, f"{wf} publishes before attaching assets"
+
+    between = steps[attach + 1 : publish]
+    gates = [
+        s
+        for s in between
+        if "gh release download" in str(s.get("run", ""))
+        or "gh release view" in str(s.get("run", ""))
+    ]
+    assert gates, (
+        f"{wf} goes from attaching assets straight to publishing with nothing "
+        "reading them back off the release. Every earlier check inspected the "
+        "local copy, so a truncated or polluted upload would be frozen by "
+        "publication with no way to correct it."
+    )
+
+
 def test_demo_publish_declares_least_privilege_at_workflow_level():
     data = workflow("demo-publish.yml")
     assert data["permissions"] == {"contents": "read"}
