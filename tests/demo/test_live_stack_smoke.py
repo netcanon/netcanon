@@ -38,6 +38,7 @@ import json
 import os
 import subprocess
 import time
+from datetime import UTC
 
 import httpx
 import pytest
@@ -462,3 +463,127 @@ def test_instance_cannot_reach_the_warden_api(session):
     )
     assert code == 0, out
     assert "REACHED" not in out, f"an instance reached the warden API: {out}"
+
+
+# ── Claim 3: the backstop's AGE COMPARISON, not just its removal (proof 11) ──
+# The removal path was only ever exercised with the ceiling forced to 0, which
+# makes every positive age exceed it. That masks the thing most likely to be
+# wrong: a `demo.created_at` in the wrong units (milliseconds), a wrong-format
+# label, or broken arithmetic would all still remove everything and look
+# correct. Proof 11(b) as written closes this by parking a container for 1320 s
+# with the warden stopped, which is why it was never actually run.
+#
+# The label is what the script reads, so an age can be synthesized exactly.
+# These two tests together cover the real gap: the warden stamps a truthful
+# epoch-seconds label, and the unmodified script discriminates on it at its real
+# ceiling. Neither weakens the script to be testable.
+def _bash() -> str | None:
+    """A bash that can run the backstop. On Windows `shutil.which` finds the WSL
+    shim, which fails with execvpe when no distro is installed."""
+    import shutil
+
+    for cand in (shutil.which("bash"), r"C:\Program Files\Git\bin\bash.exe"):
+        if not cand or not os.path.exists(cand):
+            continue
+        probe = subprocess.run(
+            [cand, "-c", "printf ok"], capture_output=True, text=True, timeout=30
+        )
+        if probe.stdout.strip() == "ok":
+            return cand
+    return None
+
+
+def test_the_created_at_label_is_epoch_seconds_matching_real_creation(session):
+    """The backstop trusts `demo.created_at` completely. If the warden stamped
+    milliseconds, or a value unrelated to reality, the age arithmetic would be
+    wrong in a direction that only shows up as a container never being reaped."""
+    from datetime import datetime
+
+    info = inspect(session["container"])
+    label = info["Config"]["Labels"][C.LABEL_CREATED_AT]
+    assert label.isdigit(), f"{C.LABEL_CREATED_AT}={label!r} is not an integer"
+
+    # `.Created` is UTC with a Z and nanosecond precision. Dropping the fraction
+    # also drops the Z, and a NAIVE datetime's .timestamp() is read as LOCAL
+    # time — which silently offsets the comparison by the host's UTC offset.
+    # (That mistake was made here first, and showed up as a clean 25200s = 7h.)
+    created = (
+        datetime.fromisoformat(info["Created"].split(".")[0])
+        .replace(tzinfo=UTC)
+        .timestamp()
+    )
+    drift = abs(int(label) - created)
+    # The label is stamped just BEFORE the create call, so a small gap is
+    # expected; anything large means wrong units or a wrong clock.
+    assert drift < 120, (
+        f"{C.LABEL_CREATED_AT}={label} is {drift:.0f}s from the container's real "
+        f"creation time ({info['Created']}) — wrong units or a bad clock"
+    )
+
+
+def test_the_backstop_discriminates_by_age_at_its_real_ceiling(stack):
+    """Run the UNMODIFIED script, at its real 1320 s ceiling, against one
+    container synthesized older than the ceiling and one younger. Removing both
+    (or neither) means the comparison is not actually comparing."""
+    bash = _bash()
+    if bash is None:
+        pytest.skip("needs a bash to run demo-ttl-backstop.sh")
+
+    script = os.path.join("deploy", "systemd", "demo-ttl-backstop.sh")
+    with open(script, encoding="utf-8") as handle:
+        ceiling = int(
+            next(ln for ln in handle if ln.startswith("CEILING=")).split("=")[1]
+        )
+    now = int(time.time())
+    image = os.environ.get("NETCANON_DEMO_TEST_IMAGE", "ghcr.io/netcanon/netcanon:0.6.1")
+
+    # `docker create` is enough — the script globs `docker ps -aq`, and a
+    # never-started container cannot interact with anything.
+    aged = docker("create", "--label", f"{C.LABEL_INSTANCE}=backstop-aged",
+                  "--label", f"{C.LABEL_CREATED_AT}={now - ceiling - 90}",
+                  image, "sleep", "60")
+    fresh = docker("create", "--label", f"{C.LABEL_INSTANCE}=backstop-fresh",
+                   "--label", f"{C.LABEL_CREATED_AT}={now - 60}",
+                   image, "sleep", "60")
+    try:
+        result = subprocess.run([bash, script], capture_output=True, text=True, timeout=180)
+        assert result.returncode == 0, f"backstop failed: {result.stderr}"
+
+        surviving = docker("ps", "-aq", "--no-trunc")
+        assert aged not in surviving, (
+            f"a container {ceiling + 90}s old survived the {ceiling}s backstop — "
+            "the age comparison is not removing what it must"
+        )
+        assert fresh in surviving, (
+            "a 60s-old container was removed by the 1320s backstop — the age "
+            "comparison is not discriminating, which is exactly what a "
+            "ceiling-forced-to-0 test cannot detect"
+        )
+    finally:
+        for cid in (aged, fresh):
+            docker("rm", "-fv", cid, check=False)
+
+
+def test_the_backstop_removes_an_unlabelled_anomaly(stack):
+    """Adopt nothing: a demo-labelled container with no parseable creation time
+    is removed regardless of age, so an instance the warden did not stamp cannot
+    linger forever by having an unreadable label."""
+    bash = _bash()
+    if bash is None:
+        pytest.skip("needs a bash to run demo-ttl-backstop.sh")
+
+    image = os.environ.get("NETCANON_DEMO_TEST_IMAGE", "ghcr.io/netcanon/netcanon:0.6.1")
+    anomaly = docker("create", "--label", f"{C.LABEL_INSTANCE}=backstop-anomaly",
+                     "--label", f"{C.LABEL_CREATED_AT}=not-a-number",
+                     image, "sleep", "60")
+    try:
+        result = subprocess.run(
+            [bash, os.path.join("deploy", "systemd", "demo-ttl-backstop.sh")],
+            capture_output=True, text=True, timeout=180,
+        )
+        assert result.returncode == 0, f"backstop failed: {result.stderr}"
+        assert anomaly not in docker("ps", "-aq", "--no-trunc"), (
+            "a demo-labelled container with a non-numeric creation label survived"
+        )
+    finally:
+        docker("rm", "-fv", anomaly, check=False)
