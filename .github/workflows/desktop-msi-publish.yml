@@ -74,13 +74,13 @@ jobs:
     name: Test gate (unit + integration)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
       - name: Install dependencies
@@ -105,7 +105,7 @@ jobs:
 
     steps:
       - name: Checkout (full history for setuptools_scm)
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           # When triggered by workflow_dispatch the user supplies a tag
           # name as `inputs.tag`; checkout's `ref` accepts either a tag
@@ -227,7 +227,7 @@ jobs:
           exit 1
 
       - name: Set up Python
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
           # No `cache: "pip"` -- this is a single-shot publish job
@@ -296,7 +296,7 @@ jobs:
       - name: Upload MSI as workflow artefact
         # Diagnostic copy — survives 30 days regardless of whether the
         # release-asset upload below succeeds.
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: msi
           path: dist/*.msi
@@ -319,7 +319,7 @@ jobs:
         # already-published release is impossible by design — if an MSI is
         # missed on a published tag, cut a new patch tag rather than trying to
         # mutate the published one.
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           # Normalized tag (never a full ref) from the "Refuse a non-tag ref"
           # step so softprops can't mint a junk `refs/tags/refs/tags/…` tag (P4a).

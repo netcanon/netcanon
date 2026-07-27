@@ -60,13 +60,13 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
       - name: Install dependencies
@@ -112,7 +112,7 @@ jobs:
           fi
           echo "OK: publishing from '$REF'."
 
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
           # Full history for the merge-base ancestry guard below.
@@ -208,7 +208,7 @@ jobs:
       warden_digest: ${{ steps.build_warden.outputs.digest }}
       shim_digest: ${{ steps.build_shim.outputs.digest }}
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
@@ -222,10 +222,10 @@ jobs:
         run: echo "name=${REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
 
       - name: Log in to GHCR
-        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -241,7 +241,7 @@ jobs:
       # not re-add a shared cache here.
       - name: Build + push warden
         id: build_warden
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:
           context: ./demo/warden
           target: warden
@@ -252,7 +252,7 @@ jobs:
 
       - name: Build + push authz-shim
         id: build_shim
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:
           context: ./demo/warden
           target: shim
@@ -303,7 +303,7 @@ jobs:
           cosign attest --yes --predicate sbom-shim.spdx.json --type spdxjson "${SHIM_REF}"
 
       - name: Attest build provenance (SLSA)
-        uses: actions/attest-build-provenance@v3.0.0
+        uses: actions/attest-build-provenance@v4.1.1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.WARDEN_IMAGE_NAME }}
           subject-digest: ${{ steps.build_warden.outputs.digest }}
@@ -320,7 +320,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v4.36.2
+        uses: github/codeql-action/upload-sarif@v4.37.1
         if: always()
         with:
           sarif_file: trivy-demo-warden.sarif
@@ -352,7 +352,7 @@ jobs:
       id-token: write     # cosign sign-blob
       attestations: write
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
@@ -366,7 +366,7 @@ jobs:
         run: echo "name=${REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
 
@@ -377,7 +377,7 @@ jobs:
       # SECURITY.md already documents — rather than adding another third-party
       # action to a workflow that signs a Trusted Computing Base component.
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
 
       # The product-image digest is resolved PULL-SIDE from the registry, keyed
       # to the tracked deploy/PINNED_PRODUCT_TAG, then cosign-verified against
@@ -586,7 +586,7 @@ jobs:
           echo "OK: the bundle verifies against its own published identity."
 
       - name: Upload bundle as an Actions artifact (debugging)
-        uses: actions/upload-artifact@v5.0.0
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: demo-bundle-${{ steps.tag.outputs.name }}
           path: bundle/
@@ -602,7 +602,7 @@ jobs:
       # mutable, so building the release fully before publishing is the only
       # shape that works both with the setting on and with it off.
       - name: Attach the signed bundle to a DRAFT release
-        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           draft: true
