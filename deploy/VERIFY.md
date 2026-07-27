@@ -96,10 +96,11 @@ Notes:
 - Demo tags are `demo-v<major>.<minor>.<patch>`. The workflow's ref guard refuses
   anything else before it builds, because a tag like `demo-v1-rc1` would produce
   a signature no identity above can match.
-- **Honest status:** the workflow exists and is gated, but no `demo-v<semver>` tag has
-  been cut yet, so there is nothing signed to verify until the first demo release
-  (Gate 4). The digest pins in `demo.env` plus `make verify` are what you check
-  before then.
+- **Status:** live. Demo releases have been cut and published, so the signatures
+  above are real and verifiable today — Gate 4 (verifying a published bundle with
+  the operator's own cosign commands before deploying it) has been run. Use the
+  tag the running bundle came from; `deploy/demo.env` on the host records the
+  digests actually deployed, and `make verify` prints them.
 
 ### Verify the deploy bundle itself
 

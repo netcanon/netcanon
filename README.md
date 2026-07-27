@@ -5,6 +5,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/netcanon)](https://pypi.org/project/netcanon/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Container: GHCR](https://img.shields.io/badge/ghcr.io-netcanon%2Fnetcanon-2496ED?logo=docker&logoColor=white)](https://github.com/netcanon/netcanon/pkgs/container/netcanon)
+[![Live demo](https://img.shields.io/badge/live_demo-demo.netcanon.net-2ea44f)](https://demo.netcanon.net)
 
 **Multi-vendor network config translator with a verifiable cross-vendor audit.**
 
@@ -32,7 +33,36 @@ drops or transforms a field — before they ship.
 
 ---
 
-## See it in 10 seconds
+## Try it in your browser — nothing to install
+
+### **[demo.netcanon.net](https://demo.netcanon.net)**
+
+Paste a config, pick a target vendor, read the translation. It is the real
+application, not a video or a sandbox with the interesting parts removed.
+
+Because you are being asked to paste a network config into someone else's
+website, here is exactly what happens to it:
+
+- Every visitor gets their **own throwaway container**, destroyed when you close
+  the tab or after 15 minutes, whichever comes first.
+- Instances run with a **read-only root filesystem, tmpfs-only writes, and no
+  network egress at all** — the container that holds your config cannot reach
+  the internet.
+- **No access log, no analytics, no tracking cookies** (one session-routing
+  cookie, nothing else). The host has swap disabled and discards core dumps, so
+  your config cannot reach disk even indirectly.
+
+None of that is a promise you have to take on trust. The
+[demo whitepaper](docs/DEMO_WHITEPAPER.md) states each claim, and
+[`deploy/VERIFY.md`](deploy/VERIFY.md) gives you the commands to check them
+yourself — including a canary sweep of the entire host filesystem. The stack is
+built from this repo, pinned by digest, and cosign-signed, so you can rebuild
+the identical thing locally and audit it.
+
+> **Handling something sensitive?** Don't paste it. Run the container yourself —
+> it is one command, below, and it is the same image the demo runs.
+
+## See it in 10 seconds — locally
 
 ```bash
 docker run --rm --entrypoint netcanon ghcr.io/netcanon/netcanon:latest demo --pair cisco__junos
@@ -425,6 +455,12 @@ tests/fixtures/real/    Real-capture validation corpus (see RESULTS.md)
 
 ## See also
 
+* **[demo.netcanon.net](https://demo.netcanon.net)** — the live hosted demo;
+  no install, private throwaway instance per visitor
+* [`docs/DEMO_WHITEPAPER.md`](docs/DEMO_WHITEPAPER.md) — what the demo does with
+  your config, claim by claim
+* [`deploy/VERIFY.md`](deploy/VERIFY.md) — the commands to verify those claims
+  yourself
 * [`ARCHITECTURE.md`](ARCHITECTURE.md) — the four-layer model + canonical
   bridge + codec types
 * [`AGENTS.md`](AGENTS.md) — contributor directives, hard rules, doc-sync

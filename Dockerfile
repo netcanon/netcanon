@@ -125,5 +125,6 @@ LABEL org.opencontainers.image.title="Netcanon" \
       org.opencontainers.image.description="Multi-vendor network config translator with a verifiable cross-vendor audit" \
       org.opencontainers.image.source="https://github.com/netcanon/netcanon" \
       org.opencontainers.image.documentation="https://github.com/netcanon/netcanon/blob/main/README.md" \
+      org.opencontainers.image.url="https://demo.netcanon.net" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.vendor="Netcanon contributors"

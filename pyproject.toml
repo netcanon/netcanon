@@ -121,6 +121,9 @@ netcanon = "netcanon.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/netcanon/netcanon"
+# Rendered in PyPI's sidebar — the fastest path from "found the package" to
+# "watched it translate a config", with no install step in between.
+Demo = "https://demo.netcanon.net"
 Repository = "https://github.com/netcanon/netcanon"
 Issues = "https://github.com/netcanon/netcanon/issues"
 Changelog = "https://github.com/netcanon/netcanon/blob/main/CHANGELOG.md"
