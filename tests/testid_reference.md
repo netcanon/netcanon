@@ -17,7 +17,10 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `nav-devices`      | `<a>`   | Link to `/devices`; active on Devices page |
 | `nav-definitions`  | `<a>`   | Link to `/definitions`; active on Definitions page |
 | `nav-api-docs`     | `<a>`   | Link to `/docs` |
-| `kbd-cheatsheet-open-btn` | `<button>` | Right-rail `?` nav button; opens the keyboard-shortcut cheatsheet modal.  Sits immediately before `nav-theme-toggle` |
+| `kbd-cheatsheet-open-btn` | `<button>` | Right-rail `?` nav button; opens the keyboard-shortcut cheatsheet modal.  Sits before the palette picker and theme toggle |
+| `nav-palette` | `<details>` | Right-rail palette-picker disclosure (popover); holds the vendored `<nc-theme-picker compact>`.  Sits between `kbd-cheatsheet-open-btn` and `nav-theme-toggle`; dismissed on outside-click/Escape by `_partials/palette-popover.js` |
+| `nav-palette-summary` | `<summary>` | The 🎨 button that opens/closes the palette popover |
+| `nav-theme-picker` | `<nc-theme-picker>` | Vendored 10-swatch colour-palette control (`_vendor/theme-picker.js`); picking a swatch calls `NcTheme.set(theme, null)` → sets `<html data-nc-theme>` and persists `localStorage["nc-theme"]`, reapplied on load by the vendored boot |
 | `nav-theme-toggle` | `<button>` | Right-aligned sun/moon toggle; calls `NcTheme.set(null, mode)` (vendored `_vendor/theme-picker.js`) to flip `<html data-nc-mode>` between `light`/`dark`, persisted to `localStorage["nc-mode"]` and mirrored one-way into the legacy `localStorage["netcanon.theme.v1"]` for the self-contained `/docs` page.  `aria-label` and `aria-pressed` live-update to reflect the ACTION (next-state), not the current state |
 | `toast`            | `<div>` | Fixed-position toast notification; hidden by default |
 

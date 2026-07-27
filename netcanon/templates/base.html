@@ -222,7 +222,8 @@
        cheatsheet trigger).  Transparent background, hover lightens.
        Sun/moon and "?" glyphs swap inside via inner spans. */
     #nav-theme-toggle,
-    #nav-kbd-cheatsheet {
+    #nav-kbd-cheatsheet,
+    .nav-palette > summary {
       background: transparent;
       color: var(--nav-fg);
       border: 1px solid transparent;
@@ -238,7 +239,10 @@
     #nav-theme-toggle:hover,
     #nav-theme-toggle:focus-visible,
     #nav-kbd-cheatsheet:hover,
-    #nav-kbd-cheatsheet:focus-visible {
+    #nav-kbd-cheatsheet:focus-visible,
+    .nav-palette > summary:hover,
+    .nav-palette > summary:focus-visible,
+    .nav-palette[open] > summary {
       background: rgba(255,255,255,.08);
       color: var(--nav-fg-hover);
       border-color: rgba(255,255,255,.18);
@@ -265,6 +269,27 @@
     @media (prefers-color-scheme: dark) {
       html:not([data-nc-mode]) #nav-theme-toggle .moon { display: none; }
       html:not([data-nc-mode]) #nav-theme-toggle .sun  { display: inline; }
+    }
+    /* Palette picker disclosure — the right-rail swatch popover.  Native
+       <details>/<summary> drives open/close (the palette-popover.js partial
+       dismisses it on Escape / outside click); the panel holds the vendored
+       <nc-theme-picker compact> — 10 brand palettes that set <html
+       data-nc-theme> and persist localStorage["nc-theme"].  The summary
+       borrows the right-rail icon-button styling above. */
+    .nav-palette { position: relative; }
+    .nav-palette > summary { list-style: none; }
+    .nav-palette > summary::-webkit-details-marker { display: none; }
+    .nav-palette-panel {
+      position: absolute;
+      top: calc(100% + .4rem);
+      right: 0;
+      z-index: 60;
+      width: 190px;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      padding: .75rem;
+      box-shadow: var(--shadow-card);
     }
 
     main { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
@@ -428,6 +453,17 @@
             onclick="openKbdCheatsheet()">
       <span aria-hidden="true">?</span>
     </button>
+    <details class="nav-palette" id="nav-palette" data-testid="nav-palette">
+      <summary id="nav-palette-summary"
+               data-testid="nav-palette-summary"
+               aria-label="Choose color theme"
+               title="Choose color theme">
+        <span aria-hidden="true">&#x1F3A8;</span>
+      </summary>
+      <div class="nav-palette-panel" role="group" aria-label="Color theme">
+        <nc-theme-picker compact data-testid="nav-theme-picker"></nc-theme-picker>
+      </div>
+    </details>
     <button type="button"
             id="nav-theme-toggle"
             data-testid="nav-theme-toggle"
@@ -707,6 +743,9 @@
 
   /* ── Theme toggle (extracted to _partials/theme-toggle.js) ── */
   {% include "_partials/theme-toggle.js" %}
+
+  /* ── Palette popover (dismiss the swatch <details> on Escape / outside click) ── */
+  {% include "_partials/palette-popover.js" %}
 
 
   /* ── Keyboard cheatsheet (extracted to _partials/kbd-cheatsheet.js) ── */
