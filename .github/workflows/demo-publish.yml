@@ -532,6 +532,34 @@ jobs:
           echo "compose_sha=$compose_sha" >> "$GITHUB_OUTPUT"
           cat bundle/SHA256SUMS
 
+      # demo-v0.1.0 published with the authz-shim digest in demo.env but nowhere
+      # in the whitepaper: a TCB component the stack runs and no reader could
+      # verify. Under immutable releases the remedy is a whole new tag, so the
+      # completeness of the trust document has to be a build-time gate, not
+      # something noticed afterwards by cross-checking a deployed host.
+      - name: Gate — every digest the stack runs is publicly verifiable
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          while read -r digest; do
+            if ! grep -q "$digest" bundle/whitepaper.html; then
+              echo "::error::${digest:0:16}… is pinned in demo.env but absent from the whitepaper — a component nobody could verify"
+              missing=1
+            fi
+          done < <(grep -oE '@sha256:[0-9a-f]{64}' bundle/demo.env | cut -d: -f2 | sort -u)
+          [ "$missing" -eq 0 ] || exit 1
+
+          # DEPLOY_DATE is the only token CI cannot know. Anything else still
+          # pending means a placeholder nothing fills — a hole in the block.
+          pending="$(grep -oE '<mark class="ph">&lt;[A-Z0-9_]+&gt;</mark>' bundle/whitepaper.html \
+                     | grep -oE '[A-Z0-9_]{4,}' | sort -u | tr '\n' ' ' | xargs || true)"
+          if [ "$pending" != "DEPLOY_DATE" ]; then
+            echo "::error::unexpected unfilled whitepaper placeholders: '${pending}' (expected exactly DEPLOY_DATE)"
+            exit 1
+          fi
+          echo "OK: $(grep -c '@sha256:' bundle/demo.env) pinned images, all present in the whitepaper; only DEPLOY_DATE pending."
+
       # SHA256SUMS was the one mutable, unsigned link in the chain. sign-blob
       # closes it; immutable releases are the second belt.
       - name: Sign SHA256SUMS (cosign sign-blob, keyless)
@@ -539,6 +567,23 @@ jobs:
           cosign sign-blob --yes \
             --bundle bundle/SHA256SUMS.cosign.bundle \
             bundle/SHA256SUMS
+
+      # Run Gate 4 against our own output before anyone else has to. If the
+      # operator's documented verification cannot pass here, it must not become
+      # an immutable release.
+      - name: Gate — self-verify the bundle exactly as the operator will
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd bundle
+          cosign verify-blob SHA256SUMS \
+            --bundle SHA256SUMS.cosign.bundle \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/demo-publish.yml@refs/tags/${TAG}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          sha256sum -c SHA256SUMS
+          echo "OK: the bundle verifies against its own published identity."
 
       - name: Upload bundle as an Actions artifact (debugging)
         uses: actions/upload-artifact@v5.0.0
@@ -589,10 +634,40 @@ jobs:
             by hand (`make deploy`).
           fail_on_unmatched_files: true
 
-      # Flip draft -> published only once every asset is attached. Under
-      # immutable releases this transition is what freezes the assets and the
-      # tag, and it is the last thing the workflow does, so a failure earlier
-      # leaves an unpublished draft rather than a half-signed public release.
+      # The draft is the LAST moment these assets can be changed. Everything
+      # verified so far was verified against the local `bundle/` directory —
+      # not against what GitHub actually stored. Download the release's own
+      # copies back and re-run the operator's verification on those, so a
+      # truncated or mangled upload is caught while it is still fixable.
+      - name: Gate — re-verify the assets GitHub stored, before freezing them
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.name }}
+          EXPECTED_ASSETS: "8"
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf roundtrip && mkdir roundtrip
+          gh release download "$TAG" --dir roundtrip --clobber
+          found="$(find roundtrip -maxdepth 1 -type f | wc -l)"
+          if [ "$found" -ne "$EXPECTED_ASSETS" ]; then
+            echo "::error::draft has $found assets, expected $EXPECTED_ASSETS — refusing to publish an incomplete release"
+            find roundtrip -maxdepth 1 -type f -printf '  %f\n'
+            exit 1
+          fi
+          cd roundtrip
+          cosign verify-blob SHA256SUMS \
+            --bundle SHA256SUMS.cosign.bundle \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/demo-publish.yml@refs/tags/${TAG}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          sha256sum -c SHA256SUMS
+          echo "OK: what GitHub stored is byte-identical to what was signed."
+
+      # Flip draft -> published only once every asset is attached AND verified
+      # in place. Under immutable releases this transition is what freezes the
+      # assets and the tag, and it is the last thing the workflow does, so a
+      # failure anywhere above leaves an unpublished draft rather than a
+      # half-signed public release.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
