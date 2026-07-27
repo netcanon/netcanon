@@ -199,11 +199,19 @@ def translate(base_url: str, token: str) -> dict:
     except httpx.HTTPError as exc:
         return {"ok": False, "error": str(exc)}
     payload = response.json() if response.status_code == 200 else {}
+    # `/plan` is SYNCHRONOUS — it returns the finished job, so a 200 with no
+    # `rendered` is a real failure, not a job still in flight. It also always
+    # answers 200 and carries the outcome in `status` (completed / partial /
+    # failed), which is why `job_status` and `error` are captured here: without
+    # them a shortfall in the summary is a bare count with its cause discarded,
+    # and the run that produced it is gone by the time anyone reads the number.
     return {
         "ok": response.status_code == 200,
         "status": response.status_code,
         "job_status": payload.get("status"),
         "renders": bool(payload.get("rendered")),
+        "error": (payload.get("error") or "")[:400] if response.status_code == 200
+                 else response.text[:400],
         "seconds": round(time.monotonic() - started, 3),
     }
 
@@ -385,6 +393,21 @@ def run(base_url: str, sessions: int, slo_seconds: int) -> dict:
     print(f"  translated={len(ok)}/{len(granted)} rendered_output={len(rendered)}")
     report["translations_ok"] = len(ok)
     report["translations_rendered"] = len(rendered)
+    # A session that minted but could not translate is a visitor who reached a
+    # broken demo, so a shortfall must not reduce to a count. A 31/32 was
+    # recorded once at saturation and could not be explained afterwards --
+    # nothing had kept the failing job's status or error. Keep them now, and say
+    # so loudly enough that the next occurrence arrives already diagnosed.
+    shortfall = [r for r in results if not r.get("renders")]
+    report["translations_failed"] = [
+        {k: r.get(k) for k in ("status", "job_status", "error", "seconds")}
+        for r in shortfall
+    ]
+    if shortfall:
+        print(f"  !!    {len(shortfall)}/{len(granted)} session(s) produced NO rendered output:")
+        for r in shortfall:
+            print(f"          http={r.get('status')} job={r.get('job_status')!r} "
+                  f"after {r.get('seconds')}s :: {r.get('error') or '(no error reported)'}")
     if granted and not ok:
         fail("no translation succeeded — RSS below reflects IDLE instances, "
              "so it is NOT a valid sizing basis")
