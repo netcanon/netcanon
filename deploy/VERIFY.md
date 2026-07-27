@@ -325,6 +325,19 @@ docker ps -a --filter label=demo.instance
 #           60s sweep) with the warden still stopped
 ```
 
+The **age comparison** inside that script is covered by the smoke suite and no
+longer depends on anyone sitting through the 1320 s wait: `test_the_backstop_
+discriminates_by_age_at_its_real_ceiling` runs the unmodified script at its real
+ceiling against one container labelled older than it and one younger, and
+`test_the_created_at_label_is_epoch_seconds_matching_real_creation` checks the
+warden's `demo.created_at` against the container's true creation time.
+
+That pair covers what a ceiling-forced-to-0 test cannot: at a ceiling of 0 there
+is no such thing as a "fresh" container, so a script that had lost its age
+comparison entirely — or a label in the wrong units — would still remove
+everything and look correct. What remains genuinely host-only is the wall-clock
+half above: a real container ageing past 1320 s while the warden is stopped.
+
 ### 12. Core-dump proof — crashes leave no memory image on disk (claim 5) [O]
 
 Crash a process inside a live instance:
