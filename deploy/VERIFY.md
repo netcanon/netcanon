@@ -138,8 +138,14 @@ grep -r CANARY- / --binary-files=text --exclude-dir={proc,sys,dev}
 journalctl | grep CANARY-
 # expected: zero hits in any journal
 
-grep -a CANARY- /dev/sda
+# NOTE: naive grep is OOM-killed on a large device — it buffers unbounded on
+# binary data with no newlines. Bound the line length first:
+LC_ALL=C tr -c '[:print:]' '
+' < /dev/sda | LC_ALL=C grep -c CANARY-
 # expected: zero hits — raw block-device sweep, catches deleted-but-unallocated blocks too
+#
+# Run the canary through WITHOUT saving any response to host disk. A harness that
+# writes the canary to /tmp will find its own files and read as a claim violation.
 ```
 
 Also run the same sweep **before** the TTL expires, while the session is still
