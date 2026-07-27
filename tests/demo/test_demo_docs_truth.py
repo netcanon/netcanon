@@ -283,6 +283,43 @@ def test_frontend_targets_the_real_warden_endpoints():
     assert "/i/" in text and "/migrate" in text
 
 
+def test_cloud_init_installs_every_systemd_unit_in_the_repo():
+    """`deploy/systemd/` is installed by an explicit, hand-maintained list in
+    cloud-init — the same shape as the Dockerfile COPY list, and it rots the same
+    way. A unit added to the repo but not to cloud-init simply never runs on the
+    host, silently."""
+    cloud_init = read("deploy/cloud-init.yaml")
+    on_disk = {path.name for path in (REPO_ROOT / "deploy" / "systemd").iterdir()}
+    assert on_disk, "found no systemd units — the glob has rotted"
+    missing = {name for name in on_disk if name not in cloud_init}
+    assert not missing, (
+        f"deploy/systemd units never installed by cloud-init: {sorted(missing)}"
+    )
+
+
+def test_the_traffic_sampler_records_no_visitor_dimension():
+    """The sampler is the one thing on this host that persists anything at all,
+    so what it may collect is pinned rather than trusted to review. The whitepaper
+    promises totals only; these are the fields that would break that promise."""
+    # Strip comments first: the script's own comment promises "no user-agent, no
+    # referrer", and a raw substring check reads that promise as a violation —
+    # the same trap the claim-10 frontend guard hit.
+    script = "\n".join(
+        line.split("#", 1)[0]
+        for line in read("deploy/systemd/demo-stats.sh").splitlines()
+    )
+    forbidden = (
+        "remote_ip", "X-Forwarded-For", "x-forwarded-for", "client_ip",
+        "user-agent", "User-Agent", "referer", "Referer", "_per_ip",
+    )
+    for field in forbidden:
+        assert field not in script, (
+            f"demo-stats.sh references {field!r} — the whitepaper says the sampler "
+            "records no visitor dimension"
+        )
+    assert "healthz" in script, "the sampler no longer reads the aggregate counters"
+
+
 def test_dockerfile_copies_every_warden_module():
     """The Dockerfile names the warden's modules explicitly, so a new one imports
     fine from the repo — green suite — and ImportErrors inside the container.

@@ -157,6 +157,10 @@ mark.ph {
 <h2 id="what-we-do-see">What we do see</h2>
 <p>Honesty section — required. We (the operator) can observe: standard host operational metadata (session count, lifecycle timestamps, destroy reasons, status codes), our host provider's infrastructure-level traffic metadata, and whatever a TLS-terminating proxy inherently sees <strong>in memory while streaming</strong> your request. Two more things, stated outright:</p>
 <ul>
+<li><strong>Aggregate traffic counters, sampled to disk.</strong> The operational metadata above</li>
+</ul>
+<p>lives in RAM and dies with the process, so a sampler writes it to a host file every 5 minutes: session/destroy/refusal totals from the warden, and Caddy request counts grouped by HTTP status. Totals only — <strong>no client IP, no path, no user-agent, no referrer, no per-session row</strong>. Nothing in it can be traced to a visitor, and the per-IP records behind the concurrency cap stay in memory and are never sampled. This is how we tell whether the instance cap is set correctly; it is not analytics and there is no visitor dimension to analyse.</p>
+<ul>
 <li><strong>A warden-set routing cookie.</strong> netcanon's UI uses absolute URLs</li>
 </ul>
 <p>(<code>fetch('/api/v1/migration/plan')</code>, <code>href="/migrate"</code>) and has no root-path support, so the warden routes you to your one instance <strong>by session, not by path</strong>. To do that it sets a single cookie — <code>Set-Cookie: nc_route=&lt;token&gt;; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=900</code> — carrying only the opaque session token. That token is a <strong>bearer credential valid for the life of the session</strong> (not single-use), which is exactly why the cookie is HttpOnly, Secure, and SameSite=Strict — JS cannot read or forge it. It is not an analytics identifier and it dies with your session. Because the cookie is browser-global, a browser holds <strong>exactly one live session</strong> (a fresh mint replaces the previous one); the <strong>≤ 2-concurrent-sessions-per-IP</strong> cap is a separate guardrail bounding distinct devices behind one IP. The demo page itself still sets nothing (claim 10).</p>

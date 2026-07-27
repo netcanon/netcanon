@@ -1,0 +1,11 @@
+[Unit]
+Description=Sample the netcanon demo traffic counters every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Persistent=false
+
+[Install]
+WantedBy=timers.target
