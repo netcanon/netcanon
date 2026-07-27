@@ -48,14 +48,14 @@ jobs:
     name: Test gate (unit + integration)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           # setuptools_scm needs full history/tags or `pip install -e .`
           # falls back to a 0.0.0 version (matches the build job).
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
       - name: Install dependencies
@@ -96,7 +96,7 @@ jobs:
           fi
           echo "OK: publishing from tag '${GITHUB_REF}'."
 
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           # Full history + tags for setuptools_scm to derive the package
           # version from the triggering tag.  Without this, the wheel
@@ -188,7 +188,7 @@ jobs:
           exit 1
 
       - name: Set up Python
-        uses: actions/setup-python@v6.2.0
+        uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
           # No `cache: "pip"` -- this is a single-shot publish job
@@ -208,7 +208,7 @@ jobs:
         run: python -m twine check dist/*
 
       - name: Upload distribution artefacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: dist
           path: dist/
@@ -235,6 +235,6 @@ jobs:
           path: dist/
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # v1.14.0
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247  # v1.14.1
         # No `with:` block needed — Trusted Publishing infers everything
         # from the OIDC token + the environment configured on PyPI.
