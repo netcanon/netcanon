@@ -106,6 +106,59 @@ def test_every_pinned_image_is_reproducible_from_the_whitepaper():
         )
 
 
+# ── The release is immutable, so its completeness is a build-time property ───
+def release_attach_list() -> list[str]:
+    match = re.search(
+        r"files: \|\n((?:\s+bundle/\S+\n)+)", read(".github/workflows/demo-publish.yml")
+    )
+    assert match, "could not find the release attach list in demo-publish.yml"
+    return [line.strip() for line in match.group(1).splitlines() if line.strip()]
+
+
+def test_release_asset_count_gate_matches_the_attach_list():
+    """The pre-publish gate refuses to freeze a draft that does not hold exactly
+    EXPECTED_ASSETS files. Add an asset and forget the counter and the gate either
+    blocks every release or, worse, stops being able to notice a missing one."""
+    workflow = read(".github/workflows/demo-publish.yml")
+    expected = re.search(r'EXPECTED_ASSETS: "(\d+)"', workflow)
+    assert expected, "the pre-publish asset-count gate is gone"
+    attached = release_attach_list()
+    assert len(attached) == int(expected.group(1)), (
+        f"{len(attached)} assets are attached but the gate expects "
+        f"{expected.group(1)} — these two move together"
+    )
+
+
+def test_every_published_asset_is_covered_by_sha256sums():
+    """An asset attached to the release but missing from SHA256SUMS ships
+    *unverifiable*: the cosign signature vouches for the manifest, and the
+    manifest for everything it lists. Since the release is immutable, an asset
+    that slips out uncovered can never be brought under the signature.
+
+    SHA256SUMS and its own signature bundle are the two that cannot cover
+    themselves.
+    """
+    workflow = read(".github/workflows/demo-publish.yml")
+    block = re.search(r"sha256sum \\\n(.*?)> SHA256SUMS", workflow, re.DOTALL)
+    assert block, "could not find the SHA256SUMS manifest generation"
+    manifest = {
+        line.strip().rstrip(" \\")
+        for line in block.group(1).splitlines()
+        if line.strip().rstrip(" \\")
+    }
+    attached = {Path(name).name for name in release_attach_list()}
+    self_covering = {"SHA256SUMS", "SHA256SUMS.cosign.bundle"}
+    uncovered = attached - manifest - self_covering
+    assert not uncovered, (
+        f"attached but not in SHA256SUMS, so published unverifiable: {sorted(uncovered)}"
+    )
+    orphaned = manifest - attached
+    assert not orphaned, (
+        f"in SHA256SUMS but never attached, so `sha256sum -c` fails for the "
+        f"operator: {sorted(orphaned)}"
+    )
+
+
 def test_rendered_whitepaper_is_regenerated_from_the_markdown():
     """Every other ratchet in this file reads the MARKDOWN — but Caddy serves
     ``frontend/whitepaper.html``, and demo-publish.yml ships it as
