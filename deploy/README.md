@@ -213,7 +213,10 @@ Two things to know when reading it:
   **Run it after `make deploy`.**
 
 Failures open a single deduped `demo-outage` issue and close it on recovery, so
-one incident is one thread rather than one issue per probe.
+one incident is one thread rather than one issue per probe. The alert step also
+runs on a manual dispatch: alerting is the least-exercised code in any monitor,
+so a healthy dispatch proves auth, permissions and the issue lookup work — with
+no side effect — rather than leaving the first real execution to an incident.
 
 ⚠️ **Timing is not guaranteed.** GitHub queues scheduled workflows and does not
 promise on-time execution; delays of 5–30 minutes are routine and runs can be

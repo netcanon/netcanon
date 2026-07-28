@@ -175,7 +175,13 @@ jobs:
   alert:
     name: Open or close the outage issue
     needs: [liveness, deep]
-    if: always() && github.event_name != 'workflow_dispatch'
+    # Runs on dispatch too, deliberately. Alerting is the point of a monitor and
+    # is also its least-exercised code: gated to the cron, the FIRST time it ever
+    # ran would be during a real incident, and a broken alert path fails silently
+    # by definition. A healthy manual dispatch exercises auth, permissions and
+    # the issue lookup for real, with no side effect (it prints "healthy" and
+    # stops), so the path is provably working before it is needed.
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -189,27 +195,40 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          RESULT: ${{ needs.liveness.result }}
+          # BOTH results, not just liveness: a manual run where the synthetic
+          # probe fails but the site still answers GETs is exactly the
+          # silently-broken-pool case this exists to catch, and reading only
+          # liveness would report it as healthy.
+          LIVENESS: ${{ needs.liveness.result }}
+          DEEP: ${{ needs.deep.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
-          gh label create demo-outage --color B60205 \
-            --description "Automated: demo.netcanon.net failed an uptime probe" 2>/dev/null || true
+          # `[ x ] && y=1` would abort the script under `set -e` on the common
+          # path where the test is false. Use a plain if.
+          failed=0
+          if [ "$LIVENESS" = "failure" ] || [ "$DEEP" = "failure" ]; then failed=1; fi
+          echo "liveness=$LIVENESS deep=$DEEP -> failed=$failed"
+
           open=$(gh issue list --repo "$REPO" --label demo-outage --state open \
                    --limit 1 --json number -q '.[0].number // empty')
 
-          if [ "$RESULT" != "success" ]; then
+          if [ "$failed" -eq 1 ]; then
             if [ -n "$open" ]; then
               gh issue comment "$open" --repo "$REPO" --body "Still failing — $RUN_URL"
               echo "commented on #$open"
             else
+              # Only when actually filing — creating it every run would be a
+              # pointless mutating API call four times an hour, forever.
+              gh label create demo-outage --color B60205 \
+                --description "Automated: demo.netcanon.net failed an uptime probe" 2>/dev/null || true
               gh issue create --repo "$REPO" --label demo-outage \
                 --title "demo.netcanon.net is failing its uptime probe" \
                 --body "$(printf 'An automated probe of https://demo.netcanon.net failed.\n\nRun: %s\n\nThis issue is updated by later failures and closed automatically on recovery.\nTiming caveat: scheduled workflows are queued by GitHub, so the outage may have begun well before this run.\n' "$RUN_URL")"
               echo "opened a new outage issue"
             fi
-          elif [ -n "$open" ]; then
+          elif [ "$LIVENESS" = "success" ] && [ -n "$open" ]; then
             gh issue comment "$open" --repo "$REPO" --body "Recovered — $RUN_URL"
             gh issue close "$open" --repo "$REPO" --reason completed
             echo "closed #$open on recovery"
