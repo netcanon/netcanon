@@ -18,15 +18,18 @@ name: Demo — uptime & synthetic probe
 # and gh are all present on the runner.
 #
 # ── Known limitations. Read these before trusting it ──────────────────────────
-# 1. TIMING IS NOT GUARANTEED, AND ON THIS REPO IT IS BAD. Measured, not
-#    assumed: zizmor.yml runs `17 4 * * 1` and over eight weeks fired 189-761
-#    minutes late EVERY time (median ~4.4 h), never once within three hours of
-#    its slot. This workflow's first scheduled run had not appeared 57 minutes
-#    after merge. The cadence below is aspirational; real detection latency is
-#    measured in hours. Not a defect here — the same file via workflow_dispatch
-#    finishes in ~30 s. If you need timely detection, add a hosted checker for
-#    the liveness tier and keep this one for the synthetic probe, which a hosted
-#    service cannot express.
+# 1. THE CADENCE BELOW IS FICTION — measured on this workflow over its first 11
+#    hours: 5 runs of ~37 expected slots (14%), effective interval 138 min
+#    against the 15 configured, gaps of 169/129/105/151 min. The failure mode is
+#    SKIPPING, not lateness: a run that fires is punctual (0.1-6.9 min after its
+#    slot). GitHub documents this — scheduled workflows may be delayed under load
+#    and runs may be dropped. A weekly cron experiences it as delay (zizmor.yml
+#    on `17 4 * * 1` runs 189-761 min late every week, having no next slot to
+#    skip to); a 15-minute cron experiences it as most slots vanishing. Worst-
+#    case detection here is a couple of hours. Not a defect in this file — the
+#    same workflow via workflow_dispatch finishes in ~30 s. For timely detection
+#    add a hosted checker on the liveness tier (see deploy/README.md) and keep
+#    this one for the synthetic probe, which a hosted service cannot express.
 # 2. SCHEDULED WORKFLOWS AUTO-DISABLE after 60 days of repository inactivity.
 #    That is a monitor dying silently — the worst failure mode one can have. If
 #    this repo ever goes quiet, monitoring stops without saying so.

@@ -218,21 +218,67 @@ runs on a manual dispatch: alerting is the least-exercised code in any monitor,
 so a healthy dispatch proves auth, permissions and the issue lookup work — with
 no side effect — rather than leaving the first real execution to an incident.
 
-⚠️⚠️ **Timing is not guaranteed, and on THIS repository it is bad — measured,
-not assumed.** `zizmor.yml` has run on `17 4 * * 1` for eight weeks. Every single
-firing was late, by **189 to 761 minutes** (median ~4.4 h); not one landed within
-three hours of its slot. The first scheduled run of this workflow had likewise
-not appeared 57 minutes after it was merged.
+⚠️⚠️ **The cron does not run on its cadence — measured on this workflow, over
+its first 11 hours.** It fires, and every run so far has succeeded, but GitHub
+drops most invocations:
 
-So treat the cron cadence as **aspirational**. Detection here is measured in
-hours, and the `7,22,37,52` schedule buys far less than it looks like it does.
-That is a GitHub scheduling property, not a defect in this workflow — the same
-file run via `workflow_dispatch` completes in about 30 seconds.
+| | configured | actual |
+|---|---|---|
+| interval | 15 min | **138 min** |
+| slots fired | 37 of 37 | **5 of ~37 (14%)** |
+| gaps between runs | — | 169 / 129 / 105 / 151 min |
+
+The failure mode is **skipping, not lateness** — when a run does fire it is
+punctual, landing 0.1–6.9 min after its slot. GitHub documents this: scheduled
+workflows may be delayed under load, and runs may be dropped entirely. A
+low-frequency cron sees that as delay (`zizmor.yml` on `17 4 * * 1` has run
+189–761 min late every week for two months, because a weekly slot has no
+successor to skip to); a 15-minute cron sees it as ~86% of slots silently
+vanishing.
+
+So treat the cadence as **aspirational**: worst-case detection here is a couple
+of hours, not fifteen minutes. That is a GitHub scheduling property, not a defect
+in this workflow — the same file via `workflow_dispatch` completes in ~30 s.
 
 **If you want timely outage detection, put a hosted checker on the liveness
-tier** (UptimeRobot, Healthchecks.io — five minutes, no code) and keep this
-workflow for what a hosted service cannot express: the synthetic
-mint → translate → end probe, and the alert plumbing. Scheduled workflows also **auto-disable after 60 days of repository
+tier** and keep this workflow for what a hosted service cannot express: the
+synthetic mint → translate → end probe, and the alert plumbing.
+
+### Hosted checker — the configuration to create
+
+Any HTTP checker will do (UptimeRobot, Healthchecks.io, Better Stack…). It needs
+an account, so it is set up by hand in that service's console; the settings are
+recorded here so the configuration is reviewable in the repo rather than living
+only in someone's dashboard.
+
+| # | URL | Check | Interval | Catches |
+|---|---|---|---|---|
+| 1 | `https://demo.netcanon.net/` | HTTP 200 | 5 min | the box is down, TLS broken, Caddy dead |
+| 2 | `https://demo.netcanon.net/healthz` | **alert if keyword `"pool":0` IS PRESENT** | 5 min | warm pool exhausted — answers 200 but cannot serve a visitor promptly |
+| 3 | `demo.netcanon.net` | SSL/TLS expiry (usually free, ~14 days' notice) | daily | ACME renewal silently failing |
+
+Monitor 2 is the interesting one: it ports the warm-pool assertion from the
+GitHub workflow into the only vocabulary a hosted checker has. `"pool":0` is an
+exact substring of the response only when the pool is genuinely empty — verified
+against `pool=0/1/4`, and it does **not** collide with the sibling
+`pool_recycled` / `pool_refill_failures` keys, because the match requires the
+closing quote immediately after `pool`. If `POOL_SIZE` ever changes this keyword
+still holds; only renaming the field breaks it.
+
+⛔ **Do not point a checker at `POST /session/new`.** It would mint a real
+session on every poll — ~288/day — which both burns instance slots and destroys
+`sessions_that_translated` as a measure of human engagement. Session-minting
+probes belong on the dispatch-only workflow, for exactly this reason. Stick to
+the GETs above.
+
+**No privacy cost.** The checker is a third party polling two endpoints that
+already serve public, aggregate, visitor-free data. It sees nothing a visitor
+could not `curl` themselves, and nothing that needs disclosing in the
+whitepaper's *What we do see* beyond what is already there.
+
+Once it is running, the GitHub cron becomes free redundancy rather than the
+primary signal — leave it enabled; it costs nothing and an eventual check beats
+none. Scheduled workflows also **auto-disable after 60 days of repository
 inactivity** — a monitor dying silently. If you ever want dependable fast
 detection, add a hosted checker alongside; the two compose, and this one keeps
 the synthetic probe a hosted service cannot express.
