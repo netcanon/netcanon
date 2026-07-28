@@ -230,9 +230,44 @@ That is a GitHub scheduling property, not a defect in this workflow — the same
 file run via `workflow_dispatch` completes in about 30 seconds.
 
 **If you want timely outage detection, put a hosted checker on the liveness
-tier** (UptimeRobot, Healthchecks.io — five minutes, no code) and keep this
-workflow for what a hosted service cannot express: the synthetic
-mint → translate → end probe, and the alert plumbing. Scheduled workflows also **auto-disable after 60 days of repository
+tier** and keep this workflow for what a hosted service cannot express: the
+synthetic mint → translate → end probe, and the alert plumbing.
+
+### Hosted checker — the configuration to create
+
+Any HTTP checker will do (UptimeRobot, Healthchecks.io, Better Stack…). It needs
+an account, so it is set up by hand in that service's console; the settings are
+recorded here so the configuration is reviewable in the repo rather than living
+only in someone's dashboard.
+
+| # | URL | Check | Interval | Catches |
+|---|---|---|---|---|
+| 1 | `https://demo.netcanon.net/` | HTTP 200 | 5 min | the box is down, TLS broken, Caddy dead |
+| 2 | `https://demo.netcanon.net/healthz` | **alert if keyword `"pool":0` IS PRESENT** | 5 min | warm pool exhausted — answers 200 but cannot serve a visitor promptly |
+| 3 | `demo.netcanon.net` | SSL/TLS expiry (usually free, ~14 days' notice) | daily | ACME renewal silently failing |
+
+Monitor 2 is the interesting one: it ports the warm-pool assertion from the
+GitHub workflow into the only vocabulary a hosted checker has. `"pool":0` is an
+exact substring of the response only when the pool is genuinely empty — verified
+against `pool=0/1/4`, and it does **not** collide with the sibling
+`pool_recycled` / `pool_refill_failures` keys, because the match requires the
+closing quote immediately after `pool`. If `POOL_SIZE` ever changes this keyword
+still holds; only renaming the field breaks it.
+
+⛔ **Do not point a checker at `POST /session/new`.** It would mint a real
+session on every poll — ~288/day — which both burns instance slots and destroys
+`sessions_that_translated` as a measure of human engagement. Session-minting
+probes belong on the dispatch-only workflow, for exactly this reason. Stick to
+the GETs above.
+
+**No privacy cost.** The checker is a third party polling two endpoints that
+already serve public, aggregate, visitor-free data. It sees nothing a visitor
+could not `curl` themselves, and nothing that needs disclosing in the
+whitepaper's *What we do see* beyond what is already there.
+
+Once it is running, the GitHub cron becomes free redundancy rather than the
+primary signal — leave it enabled; it costs nothing and an eventual check beats
+none. Scheduled workflows also **auto-disable after 60 days of repository
 inactivity** — a monitor dying silently. If you ever want dependable fast
 detection, add a hosted checker alongside; the two compose, and this one keeps
 the synthetic probe a hosted service cannot express.
