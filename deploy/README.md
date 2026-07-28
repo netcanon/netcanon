@@ -218,10 +218,21 @@ runs on a manual dispatch: alerting is the least-exercised code in any monitor,
 so a healthy dispatch proves auth, permissions and the issue lookup work — with
 no side effect — rather than leaving the first real execution to an incident.
 
-⚠️ **Timing is not guaranteed.** GitHub queues scheduled workflows and does not
-promise on-time execution; delays of 5–30 minutes are routine and runs can be
-skipped during an incident. Detection is "eventually", not "within five
-minutes". Scheduled workflows also **auto-disable after 60 days of repository
+⚠️⚠️ **Timing is not guaranteed, and on THIS repository it is bad — measured,
+not assumed.** `zizmor.yml` has run on `17 4 * * 1` for eight weeks. Every single
+firing was late, by **189 to 761 minutes** (median ~4.4 h); not one landed within
+three hours of its slot. The first scheduled run of this workflow had likewise
+not appeared 57 minutes after it was merged.
+
+So treat the cron cadence as **aspirational**. Detection here is measured in
+hours, and the `7,22,37,52` schedule buys far less than it looks like it does.
+That is a GitHub scheduling property, not a defect in this workflow — the same
+file run via `workflow_dispatch` completes in about 30 seconds.
+
+**If you want timely outage detection, put a hosted checker on the liveness
+tier** (UptimeRobot, Healthchecks.io — five minutes, no code) and keep this
+workflow for what a hosted service cannot express: the synthetic
+mint → translate → end probe, and the alert plumbing. Scheduled workflows also **auto-disable after 60 days of repository
 inactivity** — a monitor dying silently. If you ever want dependable fast
 detection, add a hosted checker alongside; the two compose, and this one keeps
 the synthetic probe a hosted service cannot express.

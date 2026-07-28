@@ -18,10 +18,15 @@ name: Demo — uptime & synthetic probe
 # and gh are all present on the runner.
 #
 # ── Known limitations. Read these before trusting it ──────────────────────────
-# 1. TIMING IS NOT GUARANTEED. GitHub queues scheduled workflows and explicitly
-#    does not promise on-time execution; delays of 5-30 min are routine and runs
-#    can be skipped entirely during an incident. `*/5` is a hope, not an
-#    interval. Detection here is "eventually", not "within five minutes".
+# 1. TIMING IS NOT GUARANTEED, AND ON THIS REPO IT IS BAD. Measured, not
+#    assumed: zizmor.yml runs `17 4 * * 1` and over eight weeks fired 189-761
+#    minutes late EVERY time (median ~4.4 h), never once within three hours of
+#    its slot. This workflow's first scheduled run had not appeared 57 minutes
+#    after merge. The cadence below is aspirational; real detection latency is
+#    measured in hours. Not a defect here — the same file via workflow_dispatch
+#    finishes in ~30 s. If you need timely detection, add a hosted checker for
+#    the liveness tier and keep this one for the synthetic probe, which a hosted
+#    service cannot express.
 # 2. SCHEDULED WORKFLOWS AUTO-DISABLE after 60 days of repository inactivity.
 #    That is a monitor dying silently — the worst failure mode one can have. If
 #    this repo ever goes quiet, monitoring stops without saying so.
