@@ -248,6 +248,55 @@ def test_site_assembly_never_deletes_the_bind_mounted_directory():
         )
 
 
+def test_the_scheduled_uptime_probe_mints_no_session():
+    """The engagement counter measures humans, and a synthetic probe on a
+    schedule would drown them.
+
+    `sessions_that_translated` / `sessions_started` is only meaningful while the
+    frequent tier stays read-only. The demo sees single-figure visits per day,
+    so even an hourly synthetic would make the ratio converge on 100% and quietly
+    turn the metric into a measurement of our own robot. The deep probe therefore
+    mints a real session and is `workflow_dispatch`-only; the scheduled tier is
+    GETs. This pins that split, because moving the deep job onto the cron is a
+    one-line edit whose damage is silent and retroactive.
+    """
+    wf = yaml.safe_load((REPO_ROOT / ".github/workflows/demo-uptime.yml").read_text(encoding="utf-8"))
+    jobs = wf["jobs"]
+
+    scheduled = [
+        name for name, job in jobs.items()
+        # A job with no `if` runs on every trigger, including the cron.
+        if "workflow_dispatch" not in str(job.get("if", ""))
+    ]
+    for name in scheduled:
+        body = " ".join(str(s.get("run", "")) for s in jobs[name]["steps"])
+        assert "/session/new" not in body, (
+            f"job {name!r} runs on the schedule AND mints a session — that lands in "
+            "sessions_started/sessions_that_translated every run and destroys the "
+            "engagement metric"
+        )
+
+    deep = jobs["deep"]
+    assert "workflow_dispatch" in str(deep.get("if", "")), (
+        "the synthetic probe is no longer dispatch-gated"
+    )
+
+
+def test_the_uptime_probe_needs_no_secrets_or_third_party_actions():
+    """Two properties worth keeping: it uses only public HTTP, so the "zero
+    deploy secrets on GitHub" posture holds, and it pulls in no third-party
+    action, so monitoring adds nothing to the supply chain it watches. Only the
+    automatic GITHUB_TOKEN is allowed, for filing the outage issue."""
+    text = (REPO_ROOT / ".github/workflows/demo-uptime.yml").read_text(encoding="utf-8")
+    wf = yaml.safe_load(text)
+    for name, job in wf["jobs"].items():
+        for step in job["steps"]:
+            assert "uses" not in step, f"job {name!r} pulls in a third-party action"
+    secrets = set(re.findall(r"secrets\.([A-Z_]+)", text))
+    assert secrets <= {"GITHUB_TOKEN"}, f"the probe reads stored secrets: {sorted(secrets)}"
+    assert wf["permissions"] == {"contents": "read"}, "workflow-level permissions widened"
+
+
 def test_every_healthz_counter_is_documented():
     """`/healthz` is a published operator surface and the sampler writes every
     key in it to disk, so each counter is a claim about what we observe. An

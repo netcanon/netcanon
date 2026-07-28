@@ -199,6 +199,40 @@ Two things to know when reading it:
   `503_count` that summed all three; samples written before 2026-07-27 carry
   the old key and cannot be broken down.)
 
+## Uptime monitoring
+
+[`.github/workflows/demo-uptime.yml`](../.github/workflows/demo-uptime.yml) runs
+**off-host** — a monitor on the box cannot tell you the box is down. Two tiers:
+
+- **Liveness**, on a cron: `/`, `/whitepaper`, `/healthz` (including a warm-pool
+  check, since a 200 with `pool: 0` means the site answers but no visitor can be
+  served promptly) plus TLS days-remaining, which is really an ACME-failure
+  alarm — you want to hear about a broken renewal *before* expiry. GETs only.
+- **Synthetic `mint → translate → end`**, `workflow_dispatch` only. Catches the
+  thing liveness cannot: the site answering while the pool is silently broken.
+  **Run it after `make deploy`.**
+
+Failures open a single deduped `demo-outage` issue and close it on recovery, so
+one incident is one thread rather than one issue per probe. The alert step also
+runs on a manual dispatch: alerting is the least-exercised code in any monitor,
+so a healthy dispatch proves auth, permissions and the issue lookup work — with
+no side effect — rather than leaving the first real execution to an incident.
+
+⚠️ **Timing is not guaranteed.** GitHub queues scheduled workflows and does not
+promise on-time execution; delays of 5–30 minutes are routine and runs can be
+skipped during an incident. Detection is "eventually", not "within five
+minutes". Scheduled workflows also **auto-disable after 60 days of repository
+inactivity** — a monitor dying silently. If you ever want dependable fast
+detection, add a hosted checker alongside; the two compose, and this one keeps
+the synthetic probe a hosted service cannot express.
+
+⚠️ **The monitor shows up in its own metrics.** Liveness adds ~12 requests/hour
+of 200s to the Caddy counters, on top of the sampler's own ~12/hour against
+`/healthz`. In quiet hours that is most of the 200s in the series — subtract it
+before reading anything into request volume. It mints no session, so the
+`sessions_*` counters stay clean; that is deliberate and guarded by
+`test_the_scheduled_uptime_probe_mints_no_session`.
+
 ## DDoS / abuse posture
 
 - **L7 abuse:** warden per-IP concurrency cap (2) + mint rate limit (≤30/600 s), Caddy 2 MB body cap, fail-closed 503 at `MAX_ACTIVE`, per-instance cpu/mem/pids caps, no egress.
