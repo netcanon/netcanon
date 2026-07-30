@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<!-- netcanon.net — hand-written, single file, no build step, no JavaScript.
+     Design brief: docs/reviews/2026-07-29-landing-page-panel/panel/10-chair/DESIGN-BRIEF.md (uncommitted run artifact).
+     Tokens copied from netcanon/templates/_vendor/netcanon-ui.css (ui-design-spec v0.2.1, indigo theme);
+     amber banner treatment matches frontend/index.html so the demo shows the same banner.
+     LAUNCH GATE: the hero panes are the unedited output of `netcanon demo` at main including PR #421;
+     do not publish before a product release ships those scenarios in ghcr.io/netcanon/netcanon:latest. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'unsafe-inline'">
+<title>netcanon — translate network configs between vendors, with every loss declared</title>
+<meta name="description" content="Open-source multi-vendor network config translator. Parses one vendor's running-config, renders another's, and declares every field it translates as supported, lossy, or unsupported — with the reason. Try it in the browser or run it locally with one command.">
+<link rel="canonical" href="https://netcanon.net/">
+<meta property="og:title" content="netcanon — translate network configs between vendors, with every loss declared">
+<meta property="og:description" content="Multi-vendor config translator that shows its work — including the work it refuses. Cisco, Juniper, Arista, Aruba, FortiGate, MikroTik, OPNsense, VyOS.">
+<meta property="og:url" content="https://netcanon.net/">
+<meta property="og:image" content="https://netcanon.net/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:,">
+<style>
+/* Tokens: netcanon/templates/_vendor/netcanon-ui.css (ui-design-spec v0.2.1),
+   [data-nc-theme="indigo"] accent set; amber set from frontend/index.html.
+   Gradient tokens (--nc-gradient / --nc-grad-a / --nc-grad-b) deliberately NOT
+   carried — flat color only on this page. */
+:root {
+  --nc-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --nc-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --nc-fs-sm: 12px; --nc-fs-base: 14px; --nc-fs-md: 15px; --nc-fs-lg: 18px; --nc-fs-xl: 22px;
+  --nc-lh-tight: 1.2; --nc-lh-base: 1.5; --nc-lh-relaxed: 1.7;
+  --nc-r-md: 6px; --nc-r-lg: 8px;
+  --nc-bg: #ffffff; --nc-surface: #f6f8fa; --nc-surface-2: #ebeff3;
+  --nc-text: #1f2328; --nc-text-muted: #656d76;
+  --nc-border: #d0d7de; --nc-border-strong: #afb8c1;
+  --nc-ok: #1a7f37; --nc-warn: #9a6700; --nc-danger: #cf222e;
+  --nc-accent: #4f46e5; --nc-accent-hover: #4338ca; --nc-on-accent: #ffffff;
+  --nc-amber: #b45309; --nc-amber-bg: #fffbeb; --nc-amber-border: #fcd34d;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --nc-bg: #0d1117; --nc-surface: #161b22; --nc-surface-2: #1c2330;
+    --nc-text: #e6edf3; --nc-text-muted: #8b949e;
+    --nc-border: #30363d; --nc-border-strong: #444c56;
+    --nc-ok: #3fb950; --nc-warn: #d29922; --nc-danger: #f85149;
+    --nc-accent: #818cf8; --nc-accent-hover: #a5b4fc; --nc-on-accent: #1e1b4b;
+    --nc-amber: #fbbf24; --nc-amber-bg: #2a2410; --nc-amber-border: #a16207;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--nc-bg); color: var(--nc-text);
+  font-family: var(--nc-font); font-size: var(--nc-fs-md); line-height: var(--nc-lh-relaxed);
+}
+main, footer { display: block; }
+.col { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+.wide { max-width: 980px; }
+section { margin: 64px auto; }
+h1 {
+  font-size: clamp(28px, 5vw, 40px); font-weight: 600; line-height: var(--nc-lh-tight);
+  margin: 0 0 16px; letter-spacing: -0.015em;
+}
+h2 { font-size: var(--nc-fs-xl); font-weight: 600; line-height: 1.3; margin: 0 0 12px; }
+p { margin: 0 0 12px; }
+a { color: var(--nc-accent); text-decoration: none; }
+a:hover { color: var(--nc-accent-hover); text-decoration: underline; }
+code, pre { font-family: var(--nc-mono); font-size: 13px; }
+code { background: var(--nc-surface); border: 1px solid var(--nc-border); border-radius: 4px; padding: .1em .35em; }
+pre {
+  background: var(--nc-surface); border: 1px solid var(--nc-border); border-radius: var(--nc-r-md);
+  padding: 12px 14px; overflow-x: auto; line-height: 1.45; margin: 0 0 12px;
+}
+pre code { background: none; border: none; padding: 0; }
+.muted { color: var(--nc-text-muted); }
+.small { font-size: var(--nc-fs-sm); }
+
+/* ---- hero ---- */
+.hero { margin-top: 48px; display: flex; flex-direction: column; }
+.hero .sub { font-size: var(--nc-fs-lg); line-height: var(--nc-lh-base); max-width: 46em; }
+.vendor-row { color: var(--nc-text-muted); font-size: var(--nc-fs-base); margin: 12px 0 0; }
+.doors { display: flex; gap: 12px; flex-wrap: wrap; margin: 28px 0 8px; }
+.btn {
+  display: inline-block; padding: 10px 20px; border-radius: var(--nc-r-md);
+  font-weight: 600; font-size: var(--nc-fs-md); border: 1px solid transparent;
+}
+.btn-primary { background: var(--nc-accent); color: var(--nc-on-accent); }
+.btn-primary:hover { background: var(--nc-accent-hover); color: var(--nc-on-accent); text-decoration: none; }
+.btn-secondary { background: var(--nc-surface); color: var(--nc-text); border-color: var(--nc-border-strong); }
+.btn-secondary:hover { background: var(--nc-surface-2); color: var(--nc-text); text-decoration: none; }
+
+/* ---- CSS-only tabs ---- */
+.tabs { margin-top: 32px; }
+.tabs > input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.tabbar { display: flex; gap: 20px; border-bottom: 1px solid var(--nc-border); margin-bottom: 14px; }
+.tabbar label {
+  padding: 6px 2px 8px; cursor: pointer; color: var(--nc-text-muted);
+  border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500;
+}
+.tabbar label:hover { color: var(--nc-text); }
+#tab-cj:checked ~ .tabbar label[for="tab-cj"],
+#tab-fm:checked ~ .tabbar label[for="tab-fm"] { color: var(--nc-text); border-bottom-color: var(--nc-accent); }
+#tab-cj:focus-visible ~ .tabbar label[for="tab-cj"],
+#tab-fm:focus-visible ~ .tabbar label[for="tab-fm"] { outline: 2px solid var(--nc-accent); outline-offset: 2px; }
+.pane { display: none; }
+#tab-cj:checked ~ .pane-cj, #tab-fm:checked ~ .pane-fm { display: block; }
+.pane-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.pane-grid pre { margin: 0; }
+.pane-label { font-size: var(--nc-fs-sm); color: var(--nc-text-muted); margin: 0 0 6px; font-family: var(--nc-mono); }
+.banner {
+  background: var(--nc-amber-bg); border: 1px solid var(--nc-amber-border);
+  border-radius: var(--nc-r-md); color: var(--nc-amber);
+  padding: 10px 14px; margin: 12px 0; font-family: var(--nc-mono); font-size: 13px; line-height: 1.5;
+}
+.banner strong { font-weight: 600; }
+.advisory { color: var(--nc-text-muted); font-family: var(--nc-mono); font-size: 12.5px; margin: 10px 0 0; }
+.repro { margin-top: 14px; }
+.capacity { margin-top: 20px; }
+
+/* ---- matrix + comparison tables ---- */
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: var(--nc-fs-base); }
+th, td { text-align: left; padding: 8px 12px; border: 1px solid var(--nc-border); vertical-align: top; }
+th { background: var(--nc-surface); font-weight: 600; }
+td code { white-space: nowrap; }
+.ok { color: var(--nc-ok); font-weight: 600; }
+.warn { color: var(--nc-warn); font-weight: 600; }
+.unsup { color: var(--nc-text-muted); font-weight: 600; }
+
+/* ---- trust bridge (promise card, matches the demo SPA's .promise) ---- */
+.promise {
+  background: var(--nc-surface); border: 1px solid var(--nc-border);
+  border-left: 4px solid var(--nc-accent); border-radius: var(--nc-r-lg);
+  padding: 18px 22px;
+}
+.promise ul { margin: 0 0 12px; padding-left: 20px; }
+.promise li { margin-bottom: 6px; }
+
+/* ---- footer ---- */
+footer { border-top: 1px solid var(--nc-border); margin-top: 64px; padding: 32px 0 48px; }
+.strip { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 20px; font-size: var(--nc-fs-base); }
+
+/* ---- mobile ---- */
+@media (max-width: 640px) {
+  section { margin: 48px auto; }
+  .hero > h1 { order: 1; }
+  .hero > .sub { order: 3; }
+  .hero > .vendor-row { order: 2; }
+  .hero > .doors { order: 0; margin: 0 0 20px; }
+  .hero > .tabs { order: 4; }
+  .hero > .capacity { order: 5; }
+  .pane-grid { grid-template-columns: 1fr; }
+  .btn { width: 100%; text-align: center; }
+}
+</style>
+</head>
+<body>
+<main>
+
+<!-- ============================ hero ============================ -->
+<section class="col wide hero">
+  <h1>Translate a network config from one vendor to another&nbsp;&mdash; and get a list of everything that didn&rsquo;t.</h1>
+  <p class="sub">Netcanon parses one vendor&rsquo;s running-config, renders another&rsquo;s, and declares
+  every field it translates as <span class="ok">supported</span>, <span class="warn">lossy</span>,
+  or <span class="unsup">unsupported</span> &mdash; with the reason.</p>
+  <p class="vendor-row">Cisco IOS-XE &middot; Cisco NX-OS &middot; Cisco IOS-XR &middot; Juniper Junos &middot;
+  Arista EOS &middot; Aruba AOS-S &middot; Aruba AOS-CX &middot; FortiGate &middot; MikroTik RouterOS &middot;
+  OPNsense &middot; VyOS</p>
+
+  <div class="doors">
+    <a class="btn btn-primary" href="https://demo.netcanon.net">Try it in the browser</a>
+    <a class="btn btn-secondary" href="#install">Run it on your machine</a>
+  </div>
+  <p><strong>Handling something sensitive? Don&rsquo;t paste it.</strong> Run the container yourself &mdash;
+  it is one command, and it is the same image the demo runs.</p>
+
+  <div class="tabs">
+    <input type="radio" name="hero-tab" id="tab-cj" checked>
+    <input type="radio" name="hero-tab" id="tab-fm">
+    <div class="tabbar">
+      <label for="tab-cj">Cisco IOS-XE &rarr; Junos</label>
+      <label for="tab-fm">FortiGate &rarr; MikroTik</label>
+    </div>
+
+    <div class="pane pane-cj">
+      <div class="pane-grid">
+        <div>
+          <p class="pane-label">INPUT (cisco_iosxe_cli)</p>
+<pre><code>hostname access-sw-01
+!
+vlan 10
+ name DATA
+!
+vlan 20
+ name VOICE
+!
+interface GigabitEthernet1/0/1
+ description Server-A
+ switchport mode access
+ switchport access vlan 10
+ no shutdown
+!
+interface GigabitEthernet1/0/2
+ description Desk-Phone
+ switchport mode access
+ switchport access vlan 20
+ no shutdown
+!
+interface GigabitEthernet1/0/24
+ description Uplink-to-core
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+!
+snmp-server community public RO
+ip name-server 192.168.1.10
+ip name-server 192.168.1.11
+ntp server 192.168.1.20
+!
+ip access-list extended MGMT-PROTECT
+ permit tcp 192.168.99.0 0.0.0.255 any eq 22
+ deny   ip any any log
+!
+ip nat inside source list MGMT-PROTECT interface GigabitEthernet1/0/24 overload
+!
+ip route 0.0.0.0 0.0.0.0 192.168.1.1</code></pre>
+        </div>
+        <div>
+          <p class="pane-label">OUTPUT (juniper_junos)</p>
+<pre><code>set system host-name access-sw-01
+set system name-server 192.168.1.10
+set system name-server 192.168.1.11
+set system ntp server 192.168.1.20
+set interfaces ge-1/0/1 description "Server-A"
+set interfaces ge-1/0/1 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-1/0/1 unit 0 family ethernet-switching vlan members DATA
+set interfaces ge-1/0/2 description "Desk-Phone"
+set interfaces ge-1/0/2 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-1/0/2 unit 0 family ethernet-switching vlan members VOICE
+set interfaces ge-1/0/24 description "Uplink-to-core"
+set interfaces ge-1/0/24 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ge-1/0/24 unit 0 family ethernet-switching vlan members DATA
+set interfaces ge-1/0/24 unit 0 family ethernet-switching vlan members VOICE
+set vlans DATA vlan-id 10
+set vlans VOICE vlan-id 20
+set routing-options static route 0.0.0.0/0 next-hop 192.168.1.1
+set snmp community public authorization read-only</code></pre>
+        </div>
+      </div>
+      <div class="banner"><strong>Tier-3 sections detected but NOT translated</strong><br>
+        &nbsp;&nbsp;- ip access-list extended MGMT-PROTECT<br>
+        &nbsp;&nbsp;- ip nat inside source list MGMT-PROTECT interface GigabitEthernet1/0/24 overload</div>
+      <div class="repro">
+        <p class="small muted">This pane is the unedited output of:</p>
+<pre><code>docker run --rm --entrypoint netcanon ghcr.io/netcanon/netcanon:latest demo --pair cisco__junos</code></pre>
+        <p class="small muted">Installed via pip instead? <code>netcanon demo --pair cisco__junos</code>.
+        Image is amd64/x86-64 only today.</p>
+      </div>
+    </div>
+
+    <div class="pane pane-fm">
+      <div class="pane-grid">
+        <div>
+          <p class="pane-label">INPUT (fortigate_cli)</p>
+<pre><code>config system global
+    set hostname "branch-fw-01"
+end
+config system dns
+    set primary 192.168.1.10
+    set secondary 192.168.1.11
+end
+config system interface
+    edit "internal1"
+        set ip 192.168.10.1 255.255.255.0
+        set allowaccess ping
+    next
+    edit "internal2"
+        set ip 192.168.20.1 255.255.255.0
+        set allowaccess ping
+    next
+end
+config system dhcp server
+    edit 1
+        set interface "internal1"
+        set default-gateway 192.168.10.1
+        set netmask 255.255.255.0
+        config ip-range
+            edit 1
+                set start-ip 192.168.10.100
+                set end-ip 192.168.10.200
+            next
+        end
+    next
+end
+config firewall policy
+    edit 1
+        set name "lan-to-wan"
+        set srcintf "internal1"
+        set dstintf "wan1"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set schedule "always"
+        set service "ALL"
+        set nat enable
+    next
+end</code></pre>
+        </div>
+        <div>
+          <p class="pane-label">OUTPUT (mikrotik_routeros)</p>
+<pre><code>/system identity
+set name=branch-fw-01
+
+/interface ethernet
+set [ find default-name=ether1 ] disabled=no
+set [ find default-name=ether2 ] disabled=no
+
+/ip address
+add address=192.168.10.1/24 interface=ether1
+add address=192.168.20.1/24 interface=ether2
+
+/ip pool
+add name=dhcp_pool1 ranges=192.168.10.100-192.168.10.200
+
+/ip dhcp-server network
+add address=192.168.10.0/24 gateway=192.168.10.1
+
+/system dns
+set servers=192.168.1.10,192.168.1.11</code></pre>
+        </div>
+      </div>
+      <div class="banner"><strong>Tier-3 sections detected but NOT translated</strong><br>
+        &nbsp;&nbsp;- config firewall policy</div>
+      <p class="advisory">Advisories: port &lsquo;internal1&rsquo; / &lsquo;internal2&rsquo; are hardware-switch (L2 fabric)
+      members; the mapping to &lsquo;ether1&rsquo; / &lsquo;ether2&rsquo; is positional (name-shape only) and does NOT
+      carry the L2-switch membership &mdash; verify the target port&rsquo;s physical cabling and L2 role.</p>
+      <div class="repro">
+        <p class="small muted">This pane is the unedited output of:</p>
+<pre><code>docker run --rm --entrypoint netcanon ghcr.io/netcanon/netcanon:latest demo --pair fortigate__mikrotik</code></pre>
+        <p class="small muted">Image is amd64/x86-64 only today.</p>
+      </div>
+    </div>
+    <p class="small"><a href="https://github.com/netcanon/netcanon/tree/main/docs/walkthroughs">More pairs &mdash; Aruba&nbsp;AOS-S&nbsp;&rarr;&nbsp;Arista, OPNsense&nbsp;&rarr;&nbsp;Junos: walkthroughs &rarr;</a></p>
+  </div>
+
+  <p class="capacity muted">Every visitor gets a real, isolated instance &mdash; and when they run out, the
+  demo refuses new sessions rather than quietly sharing one. The command above is the no-wait path.</p>
+</section>
+
+<!-- ============================ scope ============================ -->
+<section class="col" id="scope">
+  <h2>What translates. What refuses. On purpose.</h2>
+  <p><strong>Translates:</strong> hostnames, interfaces (names, addresses, VRF bindings, MTU),
+  VLANs and L2 membership, static routes, DNS/NTP, SNMP, LAGs, local users, DHCP pools,
+  VRFs &mdash; the boring 80% of a migration. Cross-vendor interface naming included:
+  <code>GigabitEthernet1/0/1</code> becomes <code>ge-1/0/1</code>.</p>
+  <p><strong>Detects and lists, deliberately does not translate:</strong> firewall rules, NAT, VPN,
+  QoS, route-maps, dynamic routing stanzas. These are vendor-specific stateful policy that does
+  not translate cleanly across vendors &mdash; so netcanon surfaces them by name in a banner
+  instead of pretending.</p>
+  <p>Netcanon is the right tool for the <em>router</em> portion of a migration &mdash; and explicitly
+  the wrong tool to claim it does the firewall portion.</p>
+  <p>Netcanon is built and maintained by one person. The audit machinery below exists because
+  you shouldn&rsquo;t have to take one person&rsquo;s word for fidelity.</p>
+  <p class="small">What works for <em>your</em> vendor:
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/cisco_iosxe.md">Cisco IOS-XE</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/cisco_nxos.md">NX-OS</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/cisco_iosxr.md">IOS-XR</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/juniper_junos.md">Junos</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/arista_eos.md">Arista EOS</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/aruba_aoss.md">Aruba AOS-S</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/aruba_aoscx.md">Aruba AOS-CX</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/fortigate.md">FortiGate</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/mikrotik_routeros.md">MikroTik</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/opnsense.md">OPNsense</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/vyos.md">VyOS</a></p>
+</section>
+
+<!-- ============================ matrix slice ============================ -->
+<section class="col wide" id="matrix">
+  <h2>Every field has a declared fate</h2>
+  <p>An excerpt from the capability matrix &mdash; the <code>fortigate_cli</code> panel, verbatim:</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Canonical path</th><th>Class</th><th>Reason</th></tr>
+    <tr><td><code>&hellip;/vrrp-groups/group</code></td><td class="ok">supported</td>
+        <td>Nested-edit form: <code>config system interface / edit X / config vrrp / edit N / set vrip Y &hellip;</code></td></tr>
+    <tr><td><code>&hellip;/interface/config/description</code></td><td class="warn">lossy</td>
+        <td>FortiOS limits the interface alias to 25 characters; longer descriptions from other vendors are truncated.</td></tr>
+    <tr><td><code>&hellip;/vrrp-groups/group/virtual-ips</code></td><td class="warn">lossy</td>
+        <td>FortiOS <code>config vrrp / edit N</code> accepts a single <code>set vrip</code> per group. Multi-IP canonical
+        groups (IOS-XE repeated <code>vrrp N ip X</code>, Junos <code>virtual-address [ X Y Z ]</code>) emit the first VIP
+        and drop the tail with a <code># review:</code> line &mdash; operator must split into multiple groups manually.</td></tr>
+    <tr><td><code>&hellip;/filter/rule</code></td><td class="unsup">unsupported</td>
+        <td><code>config firewall policy</code> is Tier&nbsp;3 &mdash; session-based, zone-aware, UTM-enabled semantics
+        don&rsquo;t translate cleanly.</td></tr>
+    <tr><td><code>&hellip;/nat/rule</code></td><td class="unsup">unsupported</td>
+        <td>FortiGate NAT lives inside firewall policy and address / VIP objects &mdash; not auto-translatable.</td></tr>
+  </table>
+  </div>
+  <p style="margin-top:12px">Round-trip validated against real configs. The output is a draft for your review,
+  not a deploy artifact.</p>
+  <p class="small">The full matrix is <a href="https://github.com/netcanon/netcanon/blob/main/docs/CAPABILITIES.md">in the docs</a>
+  &mdash; and queryable from the running app: <code>GET /api/v1/migration/adapters/{name}/capabilities</code></p>
+</section>
+
+<!-- ============================ trust bridge ============================ -->
+<section class="col" id="trust">
+  <h2>Because you are being asked to paste a network config into someone else&rsquo;s website</h2>
+  <div class="promise">
+    <ul>
+      <li>Your session is <strong>one throwaway container</strong> &mdash; destroyed when you close the tab
+          or after 15 minutes, whichever comes first.</li>
+      <li><strong>No network egress at all</strong> &mdash; the container holding your config cannot reach
+          the internet.</li>
+      <li><strong>Nothing written to disk</strong> &mdash; read-only root, tmpfs-only writes, swap off,
+          core dumps discarded.</li>
+    </ul>
+    <p>None of that is a promise you have to take on trust: the
+    <a href="https://demo.netcanon.net/whitepaper">demo whitepaper</a> states each claim, and
+    <a href="https://github.com/netcanon/netcanon/blob/main/deploy/VERIFY.md">VERIFY</a> gives you
+    the commands to check them yourself.</p>
+    <p class="small muted">Demo bundle <code>demo-v0.1.3</code> &middot; deployed 2026-07-28.</p>
+  </div>
+  <p class="small muted" style="margin-top:10px">Your session is a throwaway container. Your config is
+  never stored. Sensitive? Don&rsquo;t paste it &mdash; <a href="#install">run it locally instead</a>.</p>
+</section>
+
+<!-- ============================ install ============================ -->
+<section class="col" id="install">
+  <h2>Run it on your machine</h2>
+<pre><code>docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 \
+    ghcr.io/netcanon/netcanon:latest</code></pre>
+  <p>then open <code>http://localhost:8000</code>. The image refuses an unauthenticated non-loopback
+  bind by default; the flag acknowledges you&rsquo;re running it locally. For anything reachable by
+  other hosts, set <code>NETCANON_API_KEY</code> instead.</p>
+  <p class="small muted">Image is amd64/x86-64 only today.</p>
+  <p>Prefer pip? <code>pip install netcanon</code> &mdash; same app, same CLI. Windows? There&rsquo;s an MSI on
+  <a href="https://github.com/netcanon/netcanon/releases">Releases</a>.</p>
+  <p><strong>No telemetry, no phone-home, no update checks &mdash; on any install path (pip, Docker,
+  MSI).</strong> The only network connections netcanon makes are the SSH sessions you configure
+  for backups.</p>
+</section>
+
+<!-- ============================ audit ============================ -->
+<section class="col" id="audit">
+  <h2>The audit underneath</h2>
+  <p>Every covered vendor pair is audited cell-by-cell for silent translation loss &mdash; the kind
+  that produces output that <em>looks</em> valid but quietly drops a field. The
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/METHODOLOGY.md">methodology is published</a>.
+  So is the <a href="https://github.com/netcanon/netcanon/blob/main/tests/fixtures/real/phase4_findings_residuals.md">list
+  of cells currently open</a>: every residual is enumerated and triaged, nothing swept under the rug.</p>
+  <p>The honest follow-up: the audit only covers cells we have fixtures for. Real-world configs
+  reach paths synthetic fixtures haven&rsquo;t. That&rsquo;s where you come in &mdash;
+  see <a href="#contribute">Contribute</a>.</p>
+</section>
+
+<!-- ============================ also in the box ============================ -->
+<section class="col" id="box">
+  <h2>Also in the box</h2>
+  <p><strong>Config backup over SSH.</strong> Netcanon pulls running-configs on a schedule and stores
+  them verbatim &mdash; its backup half exists to feed translation. If backup and diff is your
+  <em>only</em> need, <a href="https://github.com/ytti/oxidized">Oxidized</a> and
+  <a href="https://shrubbery.net/rancid/">RANCID</a> are purpose-built and more mature on
+  device-driver breadth; we say so ourselves.</p>
+  <p><strong>Config sanitizer.</strong> Sharing a config in a ticket or a forum post? Sanitize it first:</p>
+<pre><code>netcanon sanitize -i my-config.txt --source-vendor cisco_iosxe_cli --dry-run</code></pre>
+  <p>Every substitution is shown for your review.</p>
+</section>
+
+<!-- ============================ comparison ============================ -->
+<section class="col wide" id="where-it-fits">
+  <h2>Where it fits</h2>
+  <p>Most adjacent tools occupy a different slot &mdash; netcanon&rsquo;s niche is bidirectional
+  translation between vendors&rsquo; native running-config formats. Batfish analyses what you
+  translated; NAPALM deploys it. Complement, not alternative.</p>
+  <div class="tbl-wrap">
+  <table>
+    <tr><th>Tool</th><th>What it does</th><th>Translates native config?</th></tr>
+    <tr><td><strong>Netcanon</strong></td><td>Multi-vendor config translation (parse + render)</td>
+        <td>Yes &mdash; bidirectional</td></tr>
+    <tr><td><a href="https://github.com/batfish/batfish">Batfish</a></td><td>Config analysis + routing simulation</td>
+        <td>No &mdash; parse-only; <em>complements</em> netcanon</td></tr>
+    <tr><td><a href="https://github.com/google/capirca">Capirca</a> / <a href="https://github.com/aerleon/aerleon">Aerleon</a></td>
+        <td>Firewall ACL DSL &rarr; vendor syntax</td>
+        <td>No &mdash; render-only from a DSL; <em>competes</em> (firewall scope)</td></tr>
+    <tr><td><a href="https://github.com/napalm-automation/napalm">NAPALM</a> / <a href="https://github.com/ktbyers/netmiko">Netmiko</a></td>
+        <td>Device get/set + SSH transport</td>
+        <td>No &mdash; no translation; <em>complements</em> (deploy side)</td></tr>
+    <tr><td><a href="https://github.com/ytti/oxidized">Oxidized</a> / <a href="https://shrubbery.net/rancid/">RANCID</a></td>
+        <td>Multi-vendor config <strong>backup</strong> + diff</td>
+        <td>No &mdash; backup-only; overlaps netcanon&rsquo;s backup half</td></tr>
+  </table>
+  </div>
+  <p class="small" style="margin-top:12px">
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/walkthroughs/cisco_iosxe_to_junos.md">Cisco IOS-XE &rarr; Junos</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/walkthroughs/fortigate_to_mikrotik.md">FortiGate &rarr; MikroTik</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/walkthroughs/aruba_to_arista.md">Aruba AOS-S &rarr; Arista EOS</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/walkthroughs/opnsense_to_junos.md">OPNsense &rarr; Junos</a>
+  &mdash; each walkthrough ends in a manual-review checklist.</p>
+</section>
+
+<!-- ============================ integrators ============================ -->
+<section class="col" id="integrators">
+  <h2>Drive it from your stack</h2>
+  <p>Run netcanon as a container beside your stack; drive it over the versioned HTTP API or the
+  CLI. It is an app with an API, not an embeddable library &mdash; process isolation keeps its
+  dependency tree out of yours.</p>
+<pre><code>curl -s -H "Authorization: Bearer $NETCANON_API_KEY" \
+  -H "Content-Type: application/json" \
+  -X POST http://localhost:8000/api/v1/migration/plan \
+  -d '{"source":"cisco_iosxe_cli","target":"juniper_junos","raw_text":"..."}'</code></pre>
+  <p class="small muted">The response carries the rendered config <em>and</em> the declared losses in
+  the same payload:</p>
+<pre><code>{
+  "status": "completed",
+  "validation": { "severity": "ok", "lossy_paths": [], "unsupported_paths": [] },
+  "rendered": "set system host-name access-sw-01\n...",
+  "port_renames": { "GigabitEthernet1/0/1": "ge-1/0/1" },
+  "dropped_tier3_sections": [ "ip access-list extended MGMT-PROTECT" ]
+}</code></pre>
+  <p class="small muted">Response excerpt &mdash; bookkeeping fields elided; the full shape is in the
+  running app&rsquo;s own <code>/docs</code> (OpenAPI).</p>
+</section>
+
+<!-- ============================ contribute ============================ -->
+<section class="col" id="contribute">
+  <h2>Found a config it gets wrong?</h2>
+  <p>That&rsquo;s the contribution this project values most. Sanitize it first &mdash; the sanitizer shows
+  every substitution for your review &mdash; then submit it as a fixture.</p>
+  <p><a class="btn btn-secondary" href="https://github.com/netcanon/netcanon/blob/main/BUG_REPORTING.md">Sanitize + submit</a></p>
+</section>
+
+</main>
+
+<!-- ============================ footer ============================ -->
+<footer>
+  <div class="col">
+    <div class="strip">
+      <a href="https://github.com/netcanon/netcanon/blob/main/LICENSE">MIT license</a>
+      <a href="https://github.com/netcanon/netcanon/blob/main/SECURITY.md">SECURITY.md</a>
+      <a href="https://github.com/netcanon/netcanon/blob/main/docs/CAPABILITIES.md">Capability matrix</a>
+      <a href="https://github.com/netcanon/netcanon/blob/main/CHANGELOG.md">CHANGELOG</a>
+      <a href="https://github.com/netcanon/netcanon/releases">Releases</a>
+      <a href="https://demo.netcanon.net/whitepaper">Demo whitepaper</a>
+      <a href="https://github.com/netcanon/netcanon/blob/main/deploy/VERIFY.md">VERIFY</a>
+    </div>
+    <p class="small muted">Releases are cosign-signed with an SBOM attestation. Verify the image against its
+    immutable digest (substitute the release tag and the digest from
+    <a href="https://github.com/netcanon/netcanon/releases">Releases</a>):</p>
+<pre><code>cosign verify ghcr.io/netcanon/netcanon@sha256:&lt;digest&gt; \
+    --certificate-identity 'https://github.com/netcanon/netcanon/.github/workflows/docker-publish.yml@refs/tags/vX.Y.Z' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com</code></pre>
+    <p class="small muted">What this page sees: nothing. One hand-written HTML file &mdash; no JavaScript,
+    no cookies, no storage, no third-party requests. Analytics: none.</p>
+    <p class="small">Useful someday but not today?
+    <a href="https://github.com/netcanon/netcanon">Star it</a> so you can find it again &mdash; or
+    <a href="https://github.com/netcanon/netcanon/releases">watch releases</a> if you&rsquo;d rather be
+    told when it changes.</p>
+    <p class="small"><a href="https://github.com/netcanon/netcanon">github.com/netcanon/netcanon</a></p>
+  </div>
+</footer>
+</body>
+</html>
