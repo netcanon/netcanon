@@ -78,6 +78,12 @@ ip name-server 192.168.1.10
 ip name-server 192.168.1.11
 ntp server 192.168.1.20
 !
+ip access-list extended MGMT-PROTECT
+ permit tcp 192.168.99.0 0.0.0.255 any eq 22
+ deny   ip any any log
+!
+ip nat inside source list MGMT-PROTECT interface GigabitEthernet1/0/24 overload
+!
 ip route 0.0.0.0 0.0.0.0 192.168.1.1
 
 OUTPUT (juniper_junos)
@@ -107,6 +113,12 @@ Interface-name translations applied
   GigabitEthernet1/0/1 -> ge-1/0/1
   GigabitEthernet1/0/2 -> ge-1/0/2
   GigabitEthernet1/0/24 -> ge-1/0/24
+
+========================================================================
+Tier-3 sections detected but NOT translated
+========================================================================
+  - ip access-list extended MGMT-PROTECT
+  - ip nat inside source list MGMT-PROTECT interface GigabitEthernet1/0/24 overload
 ```
 
 The demo runs the rename-aware pipeline (the same path the browser UI
@@ -115,6 +127,12 @@ translated to native Junos form (`GigabitEthernet1/0/1` → `ge-1/0/1`)
 rather than left verbatim.
 
 ## Tier-3 boundary
+
+The demo scenario demonstrates this live: its source carries an
+`ip access-list extended MGMT-PROTECT` and an `ip nat inside source`
+rule, and the output above ends with both listed under "Tier-3
+sections detected but NOT translated" — nothing from either stanza
+appears in the Junos output.
 
 If your IOS-XE configs include `ip access-list extended`, `crypto ...`,
 `router bgp`, `service-policy ...`, or zone-based firewall config,
@@ -158,6 +176,12 @@ verify:
 - [ ] **Routing-protocol stanzas**: `router ospf`, `router bgp`,
       `router eigrp` are parse-tolerant but NOT auto-rendered.  Plan
       separate hand-translation for protocol config.
+- [ ] **Every Tier-3 section listed in the demo/banner output**: each
+      named stanza (ACLs, NAT, crypto, QoS) needs a hand-translation
+      plan of its own — in the demo scenario that means recreating
+      `MGMT-PROTECT` as a Junos firewall filter and replacing the NAT
+      overload rule with Junos source NAT, then binding both where the
+      original config bound them.
 
 ## See also
 

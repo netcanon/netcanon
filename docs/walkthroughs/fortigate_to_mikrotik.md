@@ -46,7 +46,11 @@ python tools/demo.py --pair fortigate__mikrotik
 ```
 
 The embedded scenario covers system global (hostname), system dns,
-two interfaces (`internal1`, `internal2`), and a DHCP server pool.
+two interfaces (`internal1`, `internal2`), and a DHCP server pool —
+plus a `config firewall policy` block that is deliberately NOT
+translated: the demo output ends by listing it under "Tier-3 sections
+detected but NOT translated", so you see the refusal working before
+you ever feed it a real config.
 
 ## Tier-3 boundary in this scenario
 
@@ -62,6 +66,11 @@ typically splits into:
 That's the matrix-honesty discipline working as designed: the
 operator sees explicitly what didn't translate, with a count and the
 section names, rather than getting silently-truncated output.
+
+The embedded demo scenario now exercises exactly this split: its
+`config firewall policy` stanza is detected and listed, while the
+system/interface/DHCP surfaces translate — the same behaviour you
+will see on a real backup, at miniature scale.
 
 ## Manual review checklist
 
