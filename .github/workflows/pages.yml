@@ -61,9 +61,12 @@ jobs:
           # CSP meta must stay.
           grep -q 'http-equiv="Content-Security-Policy"' "$f" \
             || { echo "::error::CSP meta tag missing"; fail=1; }
-          # The design brief bans the gradient tokens on this page.
-          if grep -qn 'nc-grad' "$f"; then
-            echo "::error::gradient token found — banned on the landing page"; fail=1
+          # The design brief bans the gradient tokens on this page. Match
+          # USAGE (var() reference or a token declaration), not prose — the
+          # page's own CSS comment names the banned tokens while excluding
+          # them, and a bare-substring grep failed on exactly that comment.
+          if grep -qnF -e 'var(--nc-grad' -e '--nc-gradient:' -e '--nc-grad-a:' -e '--nc-grad-b:' "$f"; then
+            echo "::error::gradient token used — banned on the landing page"; fail=1
           fi
           exit "$fail"
 
