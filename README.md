@@ -254,6 +254,15 @@ signature or SBOM attestation — operators in regulated environments
 should pull from GHCR for the attested provenance chain.  See
 [`SECURITY.md`](SECURITY.md) for the supply-chain story.
 
+### API stability (v0.x)
+
+The `/api/v1` surface carries a stability promise: request/response
+shapes don't break within v0.x; changed behaviour ships as new
+endpoints alongside the old ones, and the
+[CHANGELOG](CHANGELOG.md) names every break.  (Internal frozen
+surfaces are documented in
+[`netcanon/api/routes/README.md`](netcanon/api/routes/README.md).)
+
 ### Pip
 
 ```bash
