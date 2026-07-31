@@ -85,6 +85,12 @@ ip name-server 192.168.1.10
 ip name-server 192.168.1.11
 ntp server 192.168.1.20
 !
+ip access-list extended MGMT-PROTECT
+ permit tcp 192.168.99.0 0.0.0.255 any eq 22
+ deny   ip any any log
+!
+ip nat inside source list MGMT-PROTECT interface GigabitEthernet1/0/24 overload
+!
 ip route 0.0.0.0 0.0.0.0 192.168.1.1
 """
 
@@ -118,6 +124,19 @@ config system dhcp server
                 set end-ip 192.168.10.200
             next
         end
+    next
+end
+config firewall policy
+    edit 1
+        set name "lan-to-wan"
+        set srcintf "internal1"
+        set dstintf "wan1"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set schedule "always"
+        set service "ALL"
+        set nat enable
     next
 end
 """
@@ -185,7 +204,10 @@ SCENARIOS: dict[str, Scenario] = {
             "hostname, VLAN definitions, switchport access + trunk ports "
             "with their VLAN membership, an SNMP community, DNS / NTP "
             "servers, and a default static route - including cross-vendor "
-            "interface-name translation (GigabitEthernet1/0/1 -> ge-1/0/1)."
+            "interface-name translation (GigabitEthernet1/0/1 -> ge-1/0/1). "
+            "The source also carries an ACL and a NAT rule, which are "
+            "detected and deliberately NOT translated (the Tier-3 boundary) "
+            "- they are listed by name instead."
         ),
         source_text=_CISCO_IOSXE,
     ),
@@ -196,7 +218,10 @@ SCENARIOS: dict[str, Scenario] = {
         description=(
             "Translate FortiGate's nested config / edit / set / next / end "
             "model (system global, system dns, system interface, system "
-            "dhcp server) into RouterOS's `/path` slash-prefixed form."
+            "dhcp server) into RouterOS's `/path` slash-prefixed form. "
+            "The source also carries a firewall policy, which is detected "
+            "and deliberately NOT translated (the Tier-3 boundary) - "
+            "stateful policy does not move between vendors by find-replace."
         ),
         source_text=_FORTIGATE,
     ),
