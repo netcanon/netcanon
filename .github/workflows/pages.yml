@@ -1,0 +1,90 @@
+name: Site — deploy netcanon.net (GitHub Pages)
+
+# Deploys site/ (one hand-written HTML file + og.png) to GitHub Pages.
+# Hosting decision from the 2026-07-29 landing-page panel: GitHub Pages,
+# unanimously — zero new trusted parties (GitHub already holds source, CI,
+# releases, and the OIDC signing identity), a failure domain disjoint from the
+# demo box, and no reversal of the documented refusal to put Cloudflare in the
+# TCB (deploy/README.md "Why Cloudflare stays DNS-only").
+#
+# The cleanliness gate below is the landing page's colophon, enforced: the page
+# claims "no JavaScript, no cookies, no storage, no third-party requests" and a
+# claim on that page must never outlive its truth. A meta tag can be deleted in
+# an edit; this gate can't be — it fails the deploy instead.
+
+on:
+  push:
+    branches: [main]
+    paths: ['site/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never cancel a deploy in flight — a half-cancelled Pages deployment can leave
+# the site serving the previous artifact while the UI claims the new one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Page cleanliness gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: The page's own claims, enforced
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=site/index.html
+          fail=0
+          test -f "$f" || { echo "::error::$f missing"; exit 1; }
+          test -f site/og.png || { echo "::error::site/og.png missing (og:image would 404)"; fail=1; }
+
+          # No JavaScript at all — the colophon says so.
+          if grep -qiE '<script' "$f"; then
+            echo "::error::script tag found — the page claims no JavaScript"; fail=1
+          fi
+          # No fetchable external resource. <a> navigation links are fine;
+          # anything the BROWSER would request cross-origin is not.
+          if grep -nE '<(img|iframe|video|audio|source|embed|object)[^>]*src="https?://' "$f"; then
+            echo "::error::external fetchable resource found"; fail=1
+          fi
+          if grep -nE '<link[^>]*href="https?://' "$f" | grep -v 'rel="canonical"'; then
+            echo "::error::external <link> reference found"; fail=1
+          fi
+          # No cookies/storage tokens (defense in depth given the no-JS rule).
+          if grep -qniE 'localStorage|sessionStorage|document\.cookie' "$f"; then
+            echo "::error::storage/cookie reference found"; fail=1
+          fi
+          # CSP meta must stay.
+          grep -q 'http-equiv="Content-Security-Policy"' "$f" \
+            || { echo "::error::CSP meta tag missing"; fail=1; }
+          # The design brief bans the gradient tokens on this page.
+          if grep -qn 'nc-grad' "$f"; then
+            echo "::error::gradient token found — banned on the landing page"; fail=1
+          fi
+          exit "$fail"
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/configure-pages@v6.0.0
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: site/
+      - id: deployment
+        uses: actions/deploy-pages@v5.0.0
