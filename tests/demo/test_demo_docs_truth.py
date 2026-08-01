@@ -444,9 +444,14 @@ def test_frontend_makes_no_third_party_requests():
 
 
 def test_frontend_offsite_links_are_only_the_documented_ones():
-    """Anchor links off-origin are fine (GitHub/PyPI) — but only those."""
+    """Anchor links off-origin are fine (GitHub/PyPI/our own landing page) —
+    but only those. netcanon.net joined the list with the at-capacity screen's
+    "everything else still works" line (launch gate G8): the 503 surface must
+    route overflow somewhere that is up when the demo box is full or down."""
     hosts = set(re.findall(r"https://([a-z0-9.\-]+)", frontend_code()))
-    assert hosts <= {"github.com", "pypi.org"}, f"unexpected off-origin hosts: {hosts}"
+    assert hosts <= {"github.com", "pypi.org", "netcanon.net"}, (
+        f"unexpected off-origin hosts: {hosts}"
+    )
 
 
 def test_frontend_stays_within_the_weight_budget():
