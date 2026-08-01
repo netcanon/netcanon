@@ -26,6 +26,67 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-08-01
+
+### Added
+
+- **`netcanon demo` scenarios now demonstrate the Tier-3 refusal** (#421).
+  The Cisco IOS-XE sample carries an extended ACL (`MGMT-PROTECT`) and a NAT
+  overload rule; the FortiGate sample a `config firewall policy` block.  All
+  are detected, listed under "Tier-3 sections detected but NOT translated",
+  and deliberately not rendered — the jobs still complete.  Previously every
+  scenario printed "(none -- input was Tier-1/2 only)", so the 30-second demo
+  path never showed the product's defining behaviour.  Paired walkthroughs
+  regenerated to match.
+- **netcanon.net** (#423, #424, #425): a landing page for the bare domain —
+  one hand-written self-contained HTML file (no JavaScript, no cookies, no
+  third-party requests, meta-CSP), deployed via GitHub Pages with a CI
+  cleanliness gate that fails the deploy if the page ever stops matching its
+  own colophon.  The hero panes are the unedited output of the demo
+  scenarios, refusal visible, each with its reproduce command.
+- **`/api/v1` v0.x stability promise, stated** (#423): request/response
+  shapes don't break within v0.x; changed behaviour ships as new endpoints
+  alongside the old ones; this CHANGELOG names every break.  In the README
+  beside Install and on netcanon.net.
+- **The no-telemetry claim, enforced in CI** (#429): an AST guard fails on
+  any HTTP-client import in `netcanon/` / `netcanon_desktop/` (one documented
+  exception: the desktop shell's loopback readiness poll of its own embedded
+  server), and `printed-commands-smoke.yml` re-proves every printed command
+  against the *published* image on each release publish.
+- **Ephemeral public demo at demo.netcanon.net** (#391-#420): warden +
+  socket-proxy/authz-shim + Caddy stack, cosign-signed demo bundles
+  (`demo-vX.Y.Z`), a privacy whitepaper with per-claim VERIFY procedures,
+  off-host uptime monitoring, and aggregate-only counters
+  (`refusals_by_reason`, `sessions_that_translated`).  Demo infrastructure
+  only — nothing in the pip/Docker product changed for this.
+
+### Fixed
+
+- **Every printed `docker run` serve command now actually starts** (#427).
+  Five surfaces (demo SPA footer + at-capacity screen, both warden refusal
+  pages, the demo whitepaper) printed a command that exits "Refusing to
+  start" against the SEC-01 fail-closed bind.  All now carry
+  `-e NETCANON_ALLOW_INSECURE_BIND=1` with the one-clause reason beside it,
+  and a docs-truth ratchet scans all six command surfaces so the form cannot
+  rot back.
+- **README claimed NETCONF/REST backup fetchers that do not exist** (#429).
+  The only collectors are Netmiko and Paramiko — both SSH.  Corrected in the
+  backup section and the architecture tree.
+- **amd64/x86-64-only image declared** beside every docker command (#427) —
+  landing page, demo SPA, warden pages, whitepaper, README.  There is no
+  arm64 build yet; the only intolerable version of that is the undeclared
+  one.
+
+### Changed
+
+- Demo SPA launch-readiness (#428): "Try this sample" is the toolbar's
+  primary action (full-size, focused on session start); the at-capacity
+  screen says what still works (netcanon.net, the whitepaper) beside the
+  no-wait local command, and auto-retry backs off 10-60 s exponentially with
+  per-tab jitter instead of hammering every 30 s.
+- The vendored 10-swatch `<nc-theme-picker>` is surfaced in the app nav
+  (#392).
+
 ## [0.6.1] - 2026-07-22
 
 ### Changed
