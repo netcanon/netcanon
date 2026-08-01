@@ -27,7 +27,9 @@ design), (b) cross-visitor leakage, (c) post-session forensic recovery from the
 host, (d) log-based leakage at any layer, (e) a compromised or buggy demo
 application instance. Out of scope: a fully compromised host kernel/hypervisor
 (no hosted demo can defend that — if your config is that sensitive, run netcanon
-locally: `docker run --rm -p 8000:8000 ghcr.io/netcanon/netcanon`; we make that
+locally: `docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1
+ghcr.io/netcanon/netcanon` — an amd64/x86-64 image; the flag acknowledges a
+local unauthenticated bind, which the image otherwise refuses; we make that
 path one click away).
 
 ### Trusted Computing Base

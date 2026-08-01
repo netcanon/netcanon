@@ -163,10 +163,12 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; 
       </nav>
       <p class="muted" style="margin-bottom:.5rem">Prefer to run it yourself? One line, no sign-up:</p>
       <div class="docker-line" style="justify-content:flex-start">
-        <code id="docker-cmd">docker run --rm -p 8000:8000 ghcr.io/netcanon/netcanon</code>
+        <code id="docker-cmd">docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 ghcr.io/netcanon/netcanon</code>
         <button class="btn btn-ghost btn-sm copy-btn" type="button" data-copy="docker-cmd">Copy</button>
       </div>
-      <p class="muted" style="margin-top:.5rem;font-size:.85rem">&hellip;then open <code>http://localhost:8000</code>.</p>
+      <p class="muted" style="margin-top:.5rem;font-size:.85rem">&hellip;then open <code>http://localhost:8000</code>.
+      The flag acknowledges a local unauthenticated bind &mdash; the image refuses to start without it.
+      amd64/x86-64 image.</p>
     </div>
   </footer>
 </section>
@@ -228,9 +230,10 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; 
     <p><button id="btn-retry-cap" class="btn" type="button">Try again</button></p>
     <p class="muted" style="margin-top:2rem">No need to wait &mdash; run it locally instead:</p>
     <div class="docker-line" style="justify-content:flex-start">
-      <code id="docker-cmd-cap">docker run --rm -p 8000:8000 ghcr.io/netcanon/netcanon</code>
+      <code id="docker-cmd-cap">docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 ghcr.io/netcanon/netcanon</code>
       <button class="btn btn-ghost btn-sm copy-btn" type="button" data-copy="docker-cmd-cap">Copy</button>
     </div>
+    <p class="muted" style="font-size:.85rem">amd64/x86-64 image.</p>
     <p style="margin-top:1rem"><a href="https://github.com/netcanon/netcanon">netcanon on GitHub &rarr;</a></p>
   </div>
 </section>
