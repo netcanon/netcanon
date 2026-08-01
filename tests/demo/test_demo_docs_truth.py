@@ -668,3 +668,50 @@ def test_frontend_ends_sessions_on_pagehide_not_visibilitychange():
     assert "sendBeacon" in text
     beacon_line = next(line for line in text.splitlines() if "sendBeacon" in line)
     assert "visibilitychange" not in beacon_line
+
+
+# ---------------------------------------------------------------------------
+# G1 (2026-07-29 landing-page panel): every printed serve command must RUN.
+# Five surfaces printed `docker run --rm -p 8000:8000 ghcr.io/netcanon/netcanon`,
+# which exits "Refusing to start": the SEC-01 fail-closed bind refuses an
+# unauthenticated 0.0.0.0 bind unless the command carries an API key, a
+# loopback bind, or the explicit insecure-bind acknowledgement. A visitor's
+# first hands-on moment must not be a refusal we printed for them.
+
+_SERVE_COMMAND_SURFACES = (
+    "frontend/index.html",
+    "frontend/whitepaper.html",
+    "demo/warden/pages.py",
+    "docs/DEMO_WHITEPAPER.md",
+    "README.md",
+    "site/index.html",
+)
+
+
+def _docker_command_blocks(text: str) -> list[str]:
+    """Every `docker run ...` invocation, backslash-continuations joined."""
+    joined = re.sub(r"\\s*\n", " ", text)
+    return [m.group(0) for m in re.finditer(r"docker run[^\n`<]*", joined)]
+
+
+@pytest.mark.parametrize("relpath", _SERVE_COMMAND_SURFACES)
+def test_every_printed_serve_command_actually_starts(relpath):
+    text = (REPO_ROOT / relpath).read_text(encoding="utf-8")
+    bad = []
+    for cmd in _docker_command_blocks(text):
+        # Only serve commands for our image: they publish port 8000 and name
+        # the image. CLI invocations (`--entrypoint netcanon ... demo`) don't
+        # publish a port and never hit the bind gate.
+        if "8000:8000" not in cmd or "netcanon" not in cmd:
+            continue
+        if (
+            "NETCANON_ALLOW_INSECURE_BIND=1" in cmd
+            or "NETCANON_API_KEY" in cmd
+            or "NETCANON_HOST=127.0.0.1" in cmd
+        ):
+            continue
+        bad.append(cmd.strip())
+    assert not bad, (
+        f"{relpath}: printed serve command(s) that exit 'Refusing to start' "
+        f"as pasted: {bad}"
+    )

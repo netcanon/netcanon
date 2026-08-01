@@ -68,7 +68,8 @@ the identical thing locally and audit it.
 docker run --rm --entrypoint netcanon ghcr.io/netcanon/netcanon:latest demo --pair cisco__junos
 ```
 
-(Installed via pip instead? Just `netcanon demo --pair cisco__junos`.)
+(Installed via pip instead? Just `netcanon demo --pair cisco__junos`.
+The published image is amd64/x86-64 only today.)
 
 The `demo` command above translates a built-in sample. To translate your
 own, start the server (see [Install](#install)) and paste a config like
@@ -184,6 +185,9 @@ backup + sanitiser landscape — in
 > `-e NETCANON_ALLOW_INSECURE_BIND=1`; for anything reachable by other
 > hosts, set `NETCANON_API_KEY` (the full command below does). A pure
 > loopback bind (`-e NETCANON_HOST=127.0.0.1`) needs neither.
+
+The published image is **amd64/x86-64 only** today — there is no arm64
+build yet, on GHCR or the Docker Hub mirror.
 
 ```bash
 # Optional but recommended for production: setting the key explicitly keeps

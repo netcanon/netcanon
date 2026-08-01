@@ -62,7 +62,8 @@ the proxy instead of showing you a hollow version of the page.</p>
 <p><a href="migrate">← Back to Migrate</a></p>
 <p class="muted">Want the whole application? It's the same image, one command,
 no sign-up:</p>
-<pre><code>docker run --rm -p 8000:8000 ghcr.io/netcanon/netcanon</code></pre>
+<pre><code>docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 ghcr.io/netcanon/netcanon</code></pre>
+<p class="muted">amd64/x86-64 image; the flag acknowledges a local unauthenticated bind.</p>
 """
 
 _SESSION_GONE_BODY = """
@@ -70,7 +71,8 @@ _SESSION_GONE_BODY = """
 <p>Instances self-destruct on a hard timer, and everything they held goes with
 them — that's the point of the demo, not a fault.</p>
 <p><a href="/" target="_top">Start a fresh instance →</a></p>
-<pre><code>docker run --rm -p 8000:8000 ghcr.io/netcanon/netcanon</code></pre>
+<pre><code>docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 ghcr.io/netcanon/netcanon</code></pre>
+<p class="muted">amd64/x86-64 image; the flag acknowledges a local unauthenticated bind.</p>
 """
 
 NOT_IN_DEMO = _SHELL.format(title="Not in the demo", body=_NOT_IN_DEMO_BODY)
