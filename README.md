@@ -367,7 +367,7 @@ wrong tool to claim it does the firewall portion.
 Netcanon co-hosts:
 
 1. **Backup** — pulls `running-config` (or vendor equivalent) from
-   network devices over SSH / NETCONF / REST and stores it verbatim
+   network devices over SSH (Netmiko or Paramiko) and stores it verbatim
    in `configs/<hostname>.<ext>`.  Runs on a schedule or on demand.
 2. **Migration** — translates a stored backup from one vendor's
    config grammar to another through the canonical intent tree.
@@ -440,7 +440,7 @@ invocation uses `-x`, so each tier reports its full pass/fail count
 ```
 netcanon/              FastAPI application (shared by both platforms)
  ├── api/routes/          HTTP endpoints
- ├── collectors/          SSH/NETCONF/REST fetchers — one factory,
+ ├── collectors/          SSH fetchers (Netmiko / Paramiko) — one factory,
  │                        one mock-point (`get_collector`)
  ├── definitions/         Device-definition loader + shipped YAML
  │                        library (`library/`, baked into the wheel)
