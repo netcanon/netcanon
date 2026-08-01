@@ -211,7 +211,7 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; 
     </span>
     <span id="idle-hint" aria-live="polite"></span>
     <span class="spacer"></span>
-    <button id="btn-sample" class="btn btn-sm" type="button">Try this sample</button>
+    <button id="btn-sample" class="btn" type="button">Try this sample</button>
     <button id="btn-destroy" class="btn btn-red btn-sm" type="button">Destroy now</button>
     <a href="/whitepaper" style="font-size:.85rem">How we prove this &rarr;</a>
   </div>
@@ -228,7 +228,10 @@ footer nav { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 1rem; 
     <p aria-live="polite"><span class="muted">Retrying automatically in</span>
        <strong id="cap-countdown">10</strong><span class="muted">s&hellip;</span></p>
     <p><button id="btn-retry-cap" class="btn" type="button">Try again</button></p>
-    <p class="muted" style="margin-top:2rem">No need to wait &mdash; run it locally instead:</p>
+    <p class="muted" style="margin-top:2rem">Everything else still works:
+       <a href="https://netcanon.net">netcanon.net</a> &middot;
+       <a href="/whitepaper">the whitepaper</a> &mdash; and the command below runs
+       the same image locally, with no wait:</p>
     <div class="docker-line" style="justify-content:flex-start">
       <code id="docker-cmd-cap">docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 ghcr.io/netcanon/netcanon</code>
       <button class="btn btn-ghost btn-sm copy-btn" type="button" data-copy="docker-cmd-cap">Copy</button>
@@ -315,7 +318,7 @@ var deadlineMs = 0;       // receiptMs + ttl_seconds*1000, computed client-side
 var hbTimer = null;       // 30s heartbeat interval
 var tickTimer = null;     // 1s countdown interval
 var capTimer = null;      // at-capacity auto-retry interval
-var capDelay = 10;        // backoff seconds: 10 -> 20 -> 30 (cap 30)
+var capDelay = 10;        // backoff seconds: 10 -> 20 -> 40 -> 60 (cap 60, jittered)
 var capLeft = 0;
 var isHidden = (document.visibilityState === "hidden");
 
@@ -371,6 +374,10 @@ function goActive(j, receiptMs) {
   $("frame").src = "/i/" + encodeURIComponent(token) + "/migrate";
 
   show("s-active");
+  // The sample button IS the demo for a first-time visitor: give it focus on
+  // a fresh session so the primary action is one keypress away (and visibly
+  // ringed), instead of fourth-most-prominent in a toolbar.
+  $("btn-sample").focus({ preventScroll: true });
   tick();
   tickTimer = setInterval(tick, 1000);
   hbTimer = setInterval(heartbeat, 30000);
@@ -450,7 +457,9 @@ function destroyed() {
 /* ---------- 4) AT-CAPACITY: auto-retry with backoff ---------- */
 function enterCapacity() {
   show("s-capacity");
-  capLeft = capDelay;
+  // Small random jitter: at launch-day scale many tabs land here in the same
+  // second, and identical backoff would synchronize their retries into waves.
+  capLeft = capDelay + Math.floor(Math.random() * 6);
   $("cap-countdown").textContent = String(capLeft);
   if (capTimer) clearInterval(capTimer);
   capTimer = setInterval(function () {
@@ -458,7 +467,7 @@ function enterCapacity() {
     $("cap-countdown").textContent = String(Math.max(0, capLeft));
     if (capLeft <= 0) {
       clearInterval(capTimer); capTimer = null;
-      capDelay = Math.min(30, capDelay + 10); // 10 -> 20 -> 30, capped
+      capDelay = Math.min(60, capDelay * 2); // 10 -> 20 -> 40 -> 60, capped
       startDemo();
     }
   }, 1000);
