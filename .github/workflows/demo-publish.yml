@@ -672,4 +672,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.name }}
-        run: gh release edit "$TAG" --draft=false
+        # Same hardening as desktop-msi-publish.yml (v0.6.2 postmortem): gh's
+        # by-tag lookup is unreliable for DRAFT releases, so fall back to the
+        # draft's numeric ID and retry rather than leaving a hidden draft.
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3 4 5; do
+            if gh release edit "$TAG" --draft=false 2>/dev/null; then
+              echo "published $TAG by tag (attempt $attempt)"; exit 0
+            fi
+            rid=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+                    --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -1)
+            if [ -n "$rid" ] && gh api -X PATCH \
+                 "repos/${GITHUB_REPOSITORY}/releases/$rid" -F draft=false >/dev/null; then
+              echo "published $TAG by release id $rid (attempt $attempt)"; exit 0
+            fi
+            echo "attempt $attempt: draft for $TAG not publishable yet; retrying in 10s"
+            sleep 10
+          done
+          echo "::error::could not publish the draft release for $TAG after 5 attempts"
+          exit 1

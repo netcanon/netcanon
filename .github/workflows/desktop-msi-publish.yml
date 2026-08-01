@@ -408,7 +408,32 @@ jobs:
       # `--draft=false` does not touch the prerelease flag or the generated
       # notes set above.
       - name: Publish the release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ env.RELEASE_TAG }}
-        run: gh release edit "$TAG" --draft=false
+        # v0.6.2 postmortem: the bare `gh release edit` failed once with
+        # "release not found" ONE SECOND after the gate successfully downloaded
+        # this very draft's asset — gh's by-tag lookup is unreliable for drafts
+        # (the tags API only returns published releases; the fallback scan can
+        # race). So: try by tag, fall back to the draft's immutable numeric ID,
+        # retry with a pause. Nothing above is invalidated by waiting, and an
+        # unpublished draft is recoverable while a missed publish is a red
+        # release needing a human.
+        run: |
+          set -uo pipefail
+          for attempt in 1 2 3 4 5; do
+            if gh release edit "$TAG" --draft=false 2>/dev/null; then
+              echo "published $TAG by tag (attempt $attempt)"; exit 0
+            fi
+            rid=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+                    --jq ".[] | select(.tag_name == \"$TAG\" and .draft) | .id" | head -1)
+            if [ -n "$rid" ] && gh api -X PATCH \
+                 "repos/${GITHUB_REPOSITORY}/releases/$rid" -F draft=false >/dev/null; then
+              echo "published $TAG by release id $rid (attempt $attempt)"; exit 0
+            fi
+            echo "attempt $attempt: draft for $TAG not publishable yet; retrying in 10s"
+            sleep 10
+          done
+          echo "::error::could not publish the draft release for $TAG after 5 attempts"
+          exit 1
