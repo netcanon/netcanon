@@ -1,0 +1,73 @@
+name: Site — printed-commands smoke (published image)
+
+# Every code block on netcanon.net and in the README claims to run as pasted.
+# This proves it against the PUBLISHED image — the artifact a visitor actually
+# pulls — not against a source checkout that may be ahead of it.
+#
+# Trigger: release publish + manual dispatch, deliberately NOT a cron and NOT
+# PR-blocking. The commands' expected OUTPUT tracks the demo scenarios in the
+# source, so between "scenario change merged" and "next release published"
+# a scheduled run would sit red for weeks and train everyone to ignore it.
+# On release publish is exactly when :latest moves, so that is exactly when
+# the promise must be re-proven. (Demo bundle releases also fire this; they
+# don't move :latest, so the run simply re-checks the standing promise.)
+#
+# Fail direction: a failure here means the PUBLIC page is printing a command
+# that lies — fix the page or cut the release that makes it true (gate G7b),
+# never mute the check.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: The demo pair commands print the refusal and exit 0
+        shell: bash
+        run: |
+          set -euo pipefail
+          img=ghcr.io/netcanon/netcanon:latest
+          out=$(docker run --rm --entrypoint netcanon "$img" demo --pair cisco__junos)
+          grep -q "Tier-3 sections detected but NOT translated" <<<"$out"
+          grep -q "ip access-list extended MGMT-PROTECT" <<<"$out"
+          grep -q "set interfaces ge-1/0/1" <<<"$out"
+          echo "cisco__junos: refusal + translation present"
+          out=$(docker run --rm --entrypoint netcanon "$img" demo --pair fortigate__mikrotik)
+          grep -q "Tier-3 sections detected but NOT translated" <<<"$out"
+          grep -q "config firewall policy" <<<"$out"
+          echo "fortigate__mikrotik: refusal present"
+
+      - name: The serve command starts and answers /health
+        shell: bash
+        run: |
+          set -euo pipefail
+          cid=$(docker run -d -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 \
+                ghcr.io/netcanon/netcanon:latest)
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          ok=0
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8000/health; then ok=1; break; fi
+            sleep 2
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::serve command did not answer /health within 60s"
+            docker logs "$cid" | tail -20
+            exit 1
+          fi
+          echo "serve form: container up, /health 200"
+
+      - name: The sanitize command runs as pasted
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'hostname edge-1\nsnmp-server community sekrit RO\n' > my-config.txt
+          docker run --rm -v "$PWD:/w" -w /w --entrypoint netcanon \
+            ghcr.io/netcanon/netcanon:latest \
+            sanitize -i my-config.txt --source-vendor cisco_iosxe_cli --dry-run
+          echo "sanitize form: exit 0"
