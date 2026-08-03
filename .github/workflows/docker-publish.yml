@@ -222,7 +222,7 @@ jobs:
           fi
 
       - name: Log in to GHCR
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c  # v4.5.2
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -235,7 +235,7 @@ jobs:
       # there — login runs exactly as before (run3 dockerhub-login-unguarded).
       - name: Log in to Docker Hub
         if: steps.mirror.outputs.enabled == 'true'
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        uses: docker/login-action@371161bbe7024a29a25c5e19bfcbc0804fe9ad2c  # v4.5.2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -346,7 +346,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v4.37.1
+        uses: github/codeql-action/upload-sarif@v4.37.3
         if: always()      # upload even if Trivy failed, so partial findings still surface
         with:
           sarif_file: trivy-image.sarif
