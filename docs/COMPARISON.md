@@ -27,6 +27,23 @@ per-field capability declarations.
 
 ---
 
+## What device classes this is for
+
+The table below answers *which tool*.  This section answers *which
+box* — the axis a vendor list alone never settles.
+
+| Device class | Netcanon's fit |
+|---|---|
+| **Switches** — campus / DC access, aggregation, leaf-spine | Primary target.  Most of what such a box carries is inside the canonical model: interfaces, VLANs and L2 membership, LAGs, SVIs, static routes, VRFs, SNMP, local users. |
+| **Routers** — branch, edge, service-provider | Primary target.  Same canonical surface.  Dynamic-routing protocol stanzas (BGP / OSPF / IS-IS) are Tier 3 — detected when parsing, never rendered. |
+| **Firewall platforms** — FortiGate, OPNsense | **The L2/L3 layer only.**  That covers interface addressing, VLAN interfaces and local users.  The policy table, NAT, VPN and UTM are out of scope in either direction — and on a firewall appliance those are the majority of the configuration.  If your migration's centre of gravity is policy, Netcanon is the wrong tool; Capirca / Aerleon render that layer for the same targets. |
+
+Each codec declares its own device classes, most specific first, in
+`netcanon/migration/vendors/<vendor>.yaml` (`device_classes`).  A codec
+whose first declared class is `firewall` sits in the third row above.
+
+---
+
 ## Comparison table
 
 | Tool | Scope | Direction | Multi-vendor? | Translation accuracy posture |

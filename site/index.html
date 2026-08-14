@@ -79,6 +79,8 @@ pre code { background: none; border: none; padding: 0; }
 .hero { margin-top: 48px; display: flex; flex-direction: column; }
 .hero .sub { font-size: var(--nc-fs-lg); line-height: var(--nc-lh-base); max-width: 46em; }
 .vendor-row { color: var(--nc-text-muted); font-size: var(--nc-fs-base); margin: 12px 0 0; }
+.device-frame { margin: 12px 0 0; }
+.vendor-row strong { color: var(--nc-text); }
 .doors { display: flex; gap: 12px; flex-wrap: wrap; margin: 28px 0 8px; }
 .btn {
   display: inline-block; padding: 10px 20px; border-radius: var(--nc-r-md);
@@ -144,11 +146,12 @@ footer { border-top: 1px solid var(--nc-border); margin-top: 64px; padding: 32px
 @media (max-width: 640px) {
   section { margin: 48px auto; }
   .hero > h1 { order: 1; }
-  .hero > .sub { order: 3; }
-  .hero > .vendor-row { order: 2; }
+  .hero > .device-frame { order: 2; }
+  .hero > .vendor-row { order: 3; }
+  .hero > .sub { order: 4; }
   .hero > .doors { order: 0; margin: 0 0 20px; }
-  .hero > .tabs { order: 4; }
-  .hero > .capacity { order: 5; }
+  .hero > .tabs { order: 5; }
+  .hero > .capacity { order: 6; }
   .pane-grid { grid-template-columns: 1fr; }
   .btn { width: 100%; text-align: center; }
 }
@@ -163,9 +166,14 @@ footer { border-top: 1px solid var(--nc-border); margin-top: 64px; padding: 32px
   <p class="sub">Netcanon parses one vendor&rsquo;s running-config, renders another&rsquo;s, and declares
   every field it translates as <span class="ok">supported</span>, <span class="warn">lossy</span>,
   or <span class="unsup">unsupported</span> &mdash; with the reason.</p>
-  <p class="vendor-row">Cisco IOS-XE &middot; Cisco NX-OS &middot; Cisco IOS-XR &middot; Juniper Junos &middot;
-  Arista EOS &middot; Aruba AOS-S &middot; Aruba AOS-CX &middot; FortiGate &middot; MikroTik RouterOS &middot;
-  OPNsense &middot; VyOS</p>
+  <p class="device-frame"><strong>Built for switches and routers.</strong> Netcanon translates the
+  network-function layer those platforms share. It is not a firewall-policy tool.</p>
+  <p class="vendor-row"><strong>Switches and routers</strong> &mdash; Cisco IOS-XE &middot; Cisco NX-OS &middot;
+  Cisco IOS-XR &middot; Juniper Junos &middot; Arista EOS &middot; Aruba AOS-S &middot; Aruba AOS-CX &middot;
+  MikroTik RouterOS &middot; VyOS
+  <br><strong>Firewall platforms &mdash; the L2/L3 layer only</strong> &mdash; FortiGate &middot; OPNsense
+  <span class="small">(on a firewall that covers interface addressing, VLAN interfaces and local users;
+  the policy table, NAT, VPN and UTM are out of scope in either direction)</span></p>
 
   <div class="doors">
     <a class="btn btn-primary" href="https://demo.netcanon.net">Try it in the browser</a>
