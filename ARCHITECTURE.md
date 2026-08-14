@@ -579,10 +579,15 @@ profile currently declares `max_vlans`; per-vendor rationale:
 
 `max_local_users` is declared only where the datasheet number is
 small enough to matter and the codec actually round-trips users
-(Aruba 2930F family = 16; 6300M = 64).  OPNsense + FortiGate
-profiles leave it unset because their codecs list `local_users`
-in `unsupported_rename_categories` — the compatibility banner
-handles that UX.  MikroTik leaves it unset because RouterOS's
+(Aruba 2930F family = 16; 6300M = 64).  OPNsense leaves it unset
+because its user count is software-unbounded in practice and so
+carries no useful fit-check signal; FortiGate leaves it unset
+because the admin-account cap varies materially by FortiOS version
+and isn't a reliable datasheet number.  **Both codecs round-trip
+`CanonicalLocalUser` end-to-end** — see the
+`unsupported_rename_categories` discussion above, where the
+incorrect `{"local_users"}` entry and its compat-banner rationale
+were removed.  MikroTik leaves it unset because RouterOS's
 user count is software-unbounded.  Shipped-profile lock-in tests
 in
 [`tests/unit/migration/test_target_profile_shipped.py`](tests/unit/migration/test_target_profile_shipped.py)

@@ -9,7 +9,7 @@
 
 **Multi-vendor network config translator with a verifiable cross-vendor audit.**
 
-Translates running-config across twelve codecs spanning Cisco (IOS-XE,
+Translates running-config across the shipped codecs — Cisco (IOS-XE,
 NX-OS, IOS-XR), Juniper Junos, Arista EOS, Aruba (AOS-S, AOS-CX),
 Fortinet FortiGate, MikroTik RouterOS, OPNsense, and VyOS — see
 [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) for the full per-codec list.

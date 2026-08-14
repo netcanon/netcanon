@@ -414,13 +414,13 @@ def definitions_page(request: Request) -> HTMLResponse:
        ``Fortigate`` etc.).  Excludes overlays.
     2. **Version / model overlays** — the extra variants loaded
        alongside family bases (e.g. ``Cisco 17.12`` version-pin).
-       Explains the "loaded 5 but only 4 top-level rows" split.
-    3. **Migration target profiles** — the 50+ hardware-aware
-       profiles under ``definitions/target_profiles/``: per-model
-       port layouts, module variants (NM-8X etc.), stacking caps,
+       Explains the "loaded more than there are top-level rows" split.
+    3. **Migration target profiles** — the hardware-aware profiles
+       under ``definitions/target_profiles/``: per-model port
+       layouts, module variants (NM-8X etc.), stacking caps,
        VLAN/user limits.  Previously only reachable through the
        Tier-3 rename modal's dropdown.
-    4. **Vendors + codec capabilities** — the 8 migration vendors
+    4. **Vendors + codec capabilities** — the migration vendors
        with their shipped codecs (direction, certainty tier,
        device classes).
     """

@@ -19,8 +19,8 @@ lives in [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md
 
 ## Supported vendors
 
-Twelve migration codecs ship today, plus a `_mock` adapter used in
-tests.  Backup-side device definitions are listed under
+The migration codecs listed below ship today, plus a `_mock` adapter
+used in tests.  Backup-side device definitions are listed under
 [`../netcanon/definitions/library/`](../netcanon/definitions/library/) (one YAML per vendor/OS family).
 
 | Codec | Vendor | Wire format | Direction | Certainty |
