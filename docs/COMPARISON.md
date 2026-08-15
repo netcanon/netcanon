@@ -128,7 +128,10 @@ same engine that parses a config also scrubs it.
 ## See also
 
 - [`docs/CAPABILITIES.md`](CAPABILITIES.md) — what's supported,
-  lossy, or out-of-scope per vendor pair
+  lossy, or out-of-scope per vendor pair, and § Platform fit for the
+  per-device-class scope gradient the table above summarises
+- [`docs/glossary.md`](glossary.md) — "primary device class" and the
+  rest of the vocabulary used here
 - [`docs/METHODOLOGY.md`](METHODOLOGY.md) — the matrix-honesty
   discipline that backs the accuracy claim
 - [`docs/IDENTITY.md`](IDENTITY.md) — tagline / GitHub

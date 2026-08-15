@@ -23,20 +23,38 @@ The migration codecs listed below ship today, plus a `_mock` adapter
 used in tests.  Backup-side device definitions are listed under
 [`../netcanon/definitions/library/`](../netcanon/definitions/library/) (one YAML per vendor/OS family).
 
-| Codec | Vendor | Wire format | Direction | Certainty |
-|---|---|---|---|---|
-| `cisco_iosxe_cli` | Cisco IOS-XE | `show running-config` text | bidirectional | certified |
-| `cisco_iosxe`     | Cisco IOS-XE | NETCONF / OpenConfig XML  | bidirectional | best_effort (Phase 0.5 stub render) |
-| `cisco_nxos`      | Cisco NX-OS  | `show running-config` text | bidirectional | certified (all 4 phases — L1/L3 + L2 switchport/LAG + SNMP/users + HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed Anycast Gateway; round-trip-validated against a 6-config `batfish/lab-validation` corpus across 4 NX-OS 9.x scenarios; IPv6 anycast, plus a documented set of Tier-2/Tier-3 surfaces, remain unsupported — see the live matrix / §A) |
-| `cisco_iosxr`     | Cisco IOS-XR | `show running-config` text | bidirectional | certified (all 4 phases — interfaces (4-segment) + VRF + RT + RD-from-`router bgp` + per-iface VRF + Bundle-Ether LAGs + local users + per-VRF static + dot1q→VLAN; SP-routing/route-policy/MPLS/IS-IS surfaced via the Tier-3 banner; round-trip-validated against a 10-config corpus from two sources — `batfish/lab-validation` + `ios-xr/xrd-tools` SR/SRv6/IS-IS) |
-| `arista_eos`      | Arista EOS    | EOS CLI text              | bidirectional | certified |
-| `aruba_aoss`      | Aruba AOS-S   | AOS-S CLI banner + positional port lists | bidirectional | certified |
-| `aruba_aoscx`     | Aruba AOS-CX  | `show running-config` text | bidirectional | certified (all 4 phases — hostname + interfaces (multi-token names `interface vlan 11` / `lag 1` / `1/1/1`; L3 + L2 switchport `no routing` / `vlan access` / `vlan trunk`) + VLANs (id/name/description + port projection) + LAGs (`interface lag` + `lacp mode`) + local users + SNMP (community / system-location / system-contact / v3 USM) + `active-gateway` anycast (VSX/EVPN distributed gateway) + top-level `vrf` + default-VRF static + VXLAN L2 VLAN↔VNI binding (`interface vxlan` / `vni` / `vlan`); round-trip-validated against a 4-config `aruba/aoscx-ansible-dcn-workflows` corpus (VXLAN leaves + active-gateway cores) on AOS-CX 10.04 / 10.13; per-VLAN L2VNI RD/RT + symmetric-IRB L3VNI + VSX + VRRP remain unsupported) |
-| `juniper_junos`   | Juniper Junos | `set`-form CLI            | bidirectional | certified |
-| `fortigate_cli`   | Fortinet FortiGate | nested `config / edit / set / next / end` CLI | bidirectional | certified |
-| `mikrotik_routeros` | MikroTik RouterOS | `/path` slash-prefixed CLI export | bidirectional | certified |
-| `opnsense`        | OPNsense      | `config.xml`              | bidirectional | certified |
-| `vyos`            | VyOS          | `config.boot` curly-brace **or** `set`-form text | bidirectional | certified (Phases 1-6 — `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`) + `protocols static` routes + `system login` local users + `system`/`service` ntp servers (bare + 1.4 block form) + `bonding` LAGs (`mode 802.3ad` LACP + both member forms) + `service snmp` (v1/v2c community / location / contact + v3 USM users) + VRF (`vrf name` routing-instances + per-interface `vrf` binding) + `interfaces vxlan` netdevs (one VNI each — vni / source / mcast or remote / port); round-trip-validated against a 10-config real corpus from 4 sources spanning VyOS 1.3/1.4/1.5 (`cisagov/prescup-challenges` MIT IPv4/OSPF + IPv6/BGP, `zhouleyan/wcni-kind` Apache-2.0 VXLAN pair, `scottlaird/vyos-parser` + `rapid7/metasploit-framework` for `service snmp`); accepts BOTH the native curly-brace `config.boot` AND `set`-form input (`show configuration commands`, converted to curly-brace up front; the probe disambiguates VyOS set-form from the `set`-form `juniper_junos` codec); per-VRF static routes + symmetric-IRB L3VNI remain later phases) |
+**Platform fit.**  The canonical model covers the shared network-function
+layer.  On a switch or router that is most of the device's configuration;
+on a firewall appliance it is a minority of it.  The policy table, NAT, VPN
+and UTM profiles are Tier 3 and are out of scope **in either direction** —
+when a firewall is the *source* they are detected and listed by name; when a
+firewall is the *target*, nothing is emitted for them at all and no banner
+says so (Tier-3 detection is parse-side only).  If your migration's centre of
+gravity is policy, Netcanon is the wrong tool — see
+[`COMPARISON.md`](COMPARISON.md).
+
+A codec's **primary device class** — the `Primary class` column below, and
+the first entry in its `device_classes` — is the authoritative scope
+declaration for that platform: `firewall`-primary codecs are translated at
+the L2/L3 layer only.  The two-clause test for setting it lives in
+[`../AGENTS.md`](../AGENTS.md) § Hard Rules; the term is defined in
+[`glossary.md`](glossary.md); the boundary is guarded by
+[`../tests/unit/migration/test_scope_boundary.py`](../tests/unit/migration/test_scope_boundary.py).
+
+| Codec | Vendor | Primary class | Wire format | Direction | Certainty |
+|---|---|---|---|---|---|
+| `cisco_iosxe_cli` | Cisco IOS-XE | router | `show running-config` text | bidirectional | certified |
+| `cisco_iosxe`     | Cisco IOS-XE | router | NETCONF / OpenConfig XML  | bidirectional | best_effort (Phase 0.5 stub render) |
+| `cisco_nxos`      | Cisco NX-OS  | switch | `show running-config` text | bidirectional | certified (all 4 phases — L1/L3 + L2 switchport/LAG + SNMP/users + HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed Anycast Gateway; round-trip-validated against a 6-config `batfish/lab-validation` corpus across 4 NX-OS 9.x scenarios; IPv6 anycast, plus a documented set of Tier-2/Tier-3 surfaces, remain unsupported — see the live matrix / §A) |
+| `cisco_iosxr`     | Cisco IOS-XR | router | `show running-config` text | bidirectional | certified (all 4 phases — interfaces (4-segment) + VRF + RT + RD-from-`router bgp` + per-iface VRF + Bundle-Ether LAGs + local users + per-VRF static + dot1q→VLAN; SP-routing/route-policy/MPLS/IS-IS surfaced via the Tier-3 banner; round-trip-validated against a 10-config corpus from two sources — `batfish/lab-validation` + `ios-xr/xrd-tools` SR/SRv6/IS-IS) |
+| `arista_eos`      | Arista EOS    | switch | EOS CLI text              | bidirectional | certified |
+| `aruba_aoss`      | Aruba AOS-S   | switch | AOS-S CLI banner + positional port lists | bidirectional | certified |
+| `aruba_aoscx`     | Aruba AOS-CX  | switch | `show running-config` text | bidirectional | certified (all 4 phases — hostname + interfaces (multi-token names `interface vlan 11` / `lag 1` / `1/1/1`; L3 + L2 switchport `no routing` / `vlan access` / `vlan trunk`) + VLANs (id/name/description + port projection) + LAGs (`interface lag` + `lacp mode`) + local users + SNMP (community / system-location / system-contact / v3 USM) + `active-gateway` anycast (VSX/EVPN distributed gateway) + top-level `vrf` + default-VRF static + VXLAN L2 VLAN↔VNI binding (`interface vxlan` / `vni` / `vlan`); round-trip-validated against a 4-config `aruba/aoscx-ansible-dcn-workflows` corpus (VXLAN leaves + active-gateway cores) on AOS-CX 10.04 / 10.13; per-VLAN L2VNI RD/RT + symmetric-IRB L3VNI + VSX + VRRP remain unsupported) |
+| `juniper_junos`   | Juniper Junos | switch | `set`-form CLI            | bidirectional | certified |
+| `fortigate_cli`   | Fortinet FortiGate | firewall | nested `config / edit / set / next / end` CLI | bidirectional | certified |
+| `mikrotik_routeros` | MikroTik RouterOS | router | `/path` slash-prefixed CLI export | bidirectional | certified |
+| `opnsense`        | OPNsense      | firewall | `config.xml`              | bidirectional | certified |
+| `vyos`            | VyOS          | router | `config.boot` curly-brace **or** `set`-form text | bidirectional | certified (Phases 1-6 — `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`) + `protocols static` routes + `system login` local users + `system`/`service` ntp servers (bare + 1.4 block form) + `bonding` LAGs (`mode 802.3ad` LACP + both member forms) + `service snmp` (v1/v2c community / location / contact + v3 USM users) + VRF (`vrf name` routing-instances + per-interface `vrf` binding) + `interfaces vxlan` netdevs (one VNI each — vni / source / mcast or remote / port); round-trip-validated against a 10-config real corpus from 4 sources spanning VyOS 1.3/1.4/1.5 (`cisagov/prescup-challenges` MIT IPv4/OSPF + IPv6/BGP, `zhouleyan/wcni-kind` Apache-2.0 VXLAN pair, `scottlaird/vyos-parser` + `rapid7/metasploit-framework` for `service snmp`); accepts BOTH the native curly-brace `config.boot` AND `set`-form input (`show configuration commands`, converted to curly-brace up front; the probe disambiguates VyOS set-form from the `set`-form `juniper_junos` codec); per-VRF static routes + symmetric-IRB L3VNI remain later phases) |
 
 Backup-side device-definition YAMLs ship for every codec family above
 (plus per-OS-version overlays).  Cisco and Aruba each span two NOSes with
@@ -306,7 +324,7 @@ output.
 | `/routing/bgp` | Unsupported | BGP / IS-IS / OSPF / MPLS stanzas parse-and-ignore in v1; Junos routing-options grammar warrants a dedicated follow-up. |
 | `/firewall/filter` | Unsupported | Junos firewall filters (family / term / from / then) are Tier 3 — distinct from ACL models in other codecs. |
 
-#### `fortigate_cli` (bidirectional)
+#### `fortigate_cli` (bidirectional) — L2/L3 layer only (firewall policy is Tier 3, never translated)
 
 | Path | Class | Reason |
 |---|---|---|
@@ -340,7 +358,7 @@ output.
 | `/nat/rule` | Unsupported | NAT rules are Tier 3 — informational only. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | RouterOS VXLAN exists but is rare in canonical scope and not modelled in v1. |
 
-#### `opnsense` (bidirectional)
+#### `opnsense` (bidirectional) — L2/L3 layer only (firewall policy is Tier 3, never translated)
 
 | Path | Class | Reason |
 |---|---|---|

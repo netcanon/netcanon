@@ -65,6 +65,18 @@ by concern and listed alphabetically within each section.
 - **INPUT_FORMATS** — codec ClassVar string family (e.g. `cli`,
   `netconf-xml`, `xml`) shown in the target dropdown to disambiguate
   variants of the same vendor (e.g. Cisco IOS-XE NETCONF vs CLI).
+- **Primary device class** — the **first** entry in a codec's
+  `device_classes` (declared in `netcanon/migration/vendors/<vendor>.yaml`
+  and mirrored in its `CapabilityMatrix`).  It is the project's
+  authoritative scope declaration for that platform, so the order of
+  the list is load-bearing, not cosmetic.  A `firewall`-primary codec
+  (`fortigate_cli`, `opnsense`) is one Netcanon translates at the
+  L2/L3 layer only, and one that does not front the product — see the
+  two-clause scope test in [`AGENTS.md`](../AGENTS.md) § Hard Rules,
+  guarded by
+  [`tests/unit/migration/test_scope_boundary.py`](../tests/unit/migration/test_scope_boundary.py).
+  Distinct from the *set* of device classes, which is only used by the
+  cross-device-class compatibility guard.
 - **Probe** — `classmethod probe(raw_prefix) -> (confidence, reason) | None`.
   Each codec votes on a candidate input; the orchestrator picks the
   highest-confidence match for source detection.
