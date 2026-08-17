@@ -18,8 +18,9 @@ roles meet over a small shared canonical surface:
 * VLANs — id good; name/description collapse; port-membership and
   SVI sub-fields unsupported (OPNsense has no VLAN-centric port
   lists, no first-class SVI)
-* Static routes — lossy (OPNsense `<gateways>` + `<staticroutes>`
-  model is two-stage, codec doesn't currently render either)
+* Static routes — unsupported (OPNsense `<gateways>` +
+  `<staticroutes>` model is two-stage and the codec renders neither,
+  so the whole route vanishes rather than degrading)
 * DHCP server scopes — lossy (Junos two-stage `dhcp-local-server`
   versus OPNsense interface-keyed pool, plus codec wire-up gaps)
 * SNMP v1/v2c — good; SNMPv3 USM unsupported (lives in OPNsense

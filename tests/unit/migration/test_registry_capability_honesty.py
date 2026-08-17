@@ -725,9 +725,14 @@ def test_connected_route_loss_blocks_on_vanishing_codecs(name: str):
 @pytest.mark.parametrize("name", _CODEC_NAMES)
 def test_whole_static_route_drop_is_declared(name: str):
     """A codec that renders a PLAIN gateway static route to nothing — the whole
-    route vanishes — must declare ``/routing/static-route`` lossy/unsupported,
-    else validate_against reports ``severity: ok`` while the route is silently
-    discarded.
+    route vanishes — must declare ``/routing/static-route`` **unsupported**.
+
+    Not "lossy or unsupported": ``lossy`` means the record survives with
+    caveats, and a record that does not survive at all has no caveats to
+    report.  The distinction is operator-visible, not bookkeeping —
+    ``validate_against`` renders lossy as ``warn`` and unsupported as
+    ``block``, so a lossy declaration on a total drop invites an operator to
+    skim past the loss of their entire routing table.
 
     A plain destination+next-hop route (NO VRF, interface-nexthop, metric, or
     description) is unambiguous: every codec with a static-route render path
@@ -735,7 +740,20 @@ def test_whole_static_route_drop_is_declared(name: str):
     — opnsense's ``config.xml`` emits no ``<staticroutes>`` block.  This was
     the f92e97a audit's T0-1: opnsense left the BASE path undeclared, so
     classify() defaulted it to ``supported`` and a whole gateway route vanished
-    silently.
+    silently.  That audit declared it ``lossy``, which stopped the silence but
+    left the subtree self-contradictory — the total drop reported ``warn``
+    while its own child ``/routing/static-route/interface``, the same render
+    behaviour one leaf down, reported ``block``.  The scope re-weight wave
+    corrected it to ``unsupported`` and tightened this guard to the assertion
+    that would have caught it.
+
+    NOTE: this does NOT generalise to "a parent may never be less severe than
+    its child".  A ``supported`` parent with a ``lossy`` child is the normal
+    and correct shape — the record round-trips, one leaf of it does not — and
+    holds in 63 places across the registry (``/routing/static-route`` supported
+    with ``/routing/static-route/description`` lossy on arista_eos, every
+    ``/snmp/v3-user`` subtree, …).  What is forbidden is narrower and
+    behavioural: declaring a drop LOSSY when the record measurably vanishes.
 
     Sub-fields are deliberately omitted so a declared sub-field drop (e.g. the
     VRF binding, which aruba_aoscx drops by dropping the whole VRF-bound route
@@ -743,18 +761,22 @@ def test_whole_static_route_drop_is_declared(name: str):
     path — see the note on ``_NAMING_INDEPENDENT_DROP_FIELDS``."""
     codec = get_codec(name)
     caps = codec.capabilities
-    declared = {u.path for u in caps.unsupported} | {lp.path for lp in caps.lossy}
-    if "/routing/static-route" in declared:
-        return  # honestly declared (lossy or unsupported) — loss surfaces
+    if "/routing/static-route" in {u.path for u in caps.unsupported}:
+        return  # honestly declared a total drop — validate_against blocks
     tree = CanonicalIntent(
         hostname="r1",
         static_routes=[CanonicalStaticRoute(destination="10.9.0.0/24",
                                             gateway="10.0.0.2")],
     )
     rp = codec.parse(codec.render(tree))
+    lossy_paths = {lp.path for lp in caps.lossy}
     assert rp.static_routes, (
-        f"{name}: renders a plain gateway static route to nothing yet declares "
-        f"/routing/static-route neither lossy nor unsupported — "
-        f"validate_against reports 'supported' while the route silently "
-        f"vanishes (audit f92e97a T0-1). Add a LossyPath/UnsupportedPath."
+        f"{name}: renders a plain gateway static route to nothing, so the "
+        f"record does not survive — /routing/static-route must be declared "
+        f"UNSUPPORTED (block), not "
+        f"{'lossy (warn)' if '/routing/static-route' in lossy_paths else 'left undeclared'}. "
+        f"A vanished record is not a lossy round-trip; declaring it lossy "
+        f"under-states a total routing loss as a skimmable warning "
+        f"(audit f92e97a T0-1; severity corrected in the scope re-weight "
+        f"wave). Add an UnsupportedPath."
     )

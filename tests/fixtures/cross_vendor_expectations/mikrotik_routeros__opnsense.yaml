@@ -482,19 +482,24 @@ per_field_expectation:
     references: [opnsense-vlans]
 
   static_routes:
-    disposition: lossy
+    disposition: unsupported
     reason: >
       OPNsense splits static-route declaration into two blocks:
       ``<gateways>/<gateway_item>`` (named gateways) and
       ``<staticroutes>/<route>`` (routes referencing named
-      gateways).  The OPNsense codec parses both blocks, but its
-      render path emits neither; canonical static_routes from a
-      RouterOS source therefore drop on render.  Per-VRF routes
-      (RouterOS ``routing-table=TENANT-A``) are unsupported (they
-      have no OPNsense render target and the MikroTik codec does
-      not yet parse VRF context).  Default route (``0.0.0.0/0``)
-      maps to OPNsense's WAN-zone gateway pattern, not a
-      ``<staticroutes>`` entry — operator-curated.
+      gateways).  The OPNsense codec parses both blocks
+      (promotion #15), but its render path emits neither, so a
+      route from a RouterOS source does not survive the trip at
+      all.  Unsupported, not lossy: the record vanishes rather than
+      arriving with caveats, and the OPNsense capability matrix
+      declares ``/routing/static-route`` and every leaf beneath it
+      unsupported so validate_against blocks instead of warning.
+      Per-VRF routes (RouterOS ``routing-table=TENANT-A``) are
+      unsupported independently (they have no OPNsense render
+      target and the MikroTik codec does not yet parse VRF
+      context).  Default route (``0.0.0.0/0``) maps to OPNsense's
+      WAN-zone gateway pattern, not a ``<staticroutes>`` entry —
+      operator-curated, and still true once rendering lands.
     references: [mikrotik_ip_routing, opnsense-gateways]
 
   # ── Tier 2 — auto-translate with review ──

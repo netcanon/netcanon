@@ -482,7 +482,7 @@ per_field_expectation:
     references: [fgt-vlans, opn-vlans]
 
   static_routes:
-    disposition: lossy
+    disposition: unsupported
     reason: >
       FortiGate's flat ``config router static`` per-route table
       flattens cleanly into canonical (FortiGate codec parses
@@ -490,13 +490,17 @@ per_field_expectation:
       device -> interface).  OPNsense rendering would have to
       synthesise a ``<gateway_item>`` per unique next-hop on the
       canonical list (or reuse an existing one if the operator
-      pre-declared it), then emit ``<route>`` elements.  The
-      OPNsense codec capability matrix does NOT currently advertise
-      ``/routing/static-route`` as supported — render is unwired
-      pending wire-up.  Additionally, FortiGate's
+      pre-declared it), then emit ``<route>`` elements.  It emits
+      neither, so a route from a FortiGate source does not survive
+      the trip at all.  Unsupported, not lossy: the record vanishes
+      rather than arriving with caveats, and the OPNsense
+      capability matrix declares ``/routing/static-route`` and
+      every leaf beneath it unsupported so validate_against blocks
+      instead of warning.  Additionally, FortiGate's
       ``set dst 0.0.0.0 0.0.0.0`` (default route) is a first-class
       entry; the OPNsense equivalent is to set the WAN zone's
-      default-gateway flag rather than emit a ``<route>``.
+      default-gateway flag rather than emit a ``<route>`` — an
+      idiom mismatch that outlives the render gap.
     references: [fgt-static-routes, opn-static-routes]
 
   # ── Tier 2 — auto-translate with review ──

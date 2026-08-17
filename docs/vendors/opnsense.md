@@ -138,8 +138,15 @@ XML element mapping:
   `<staticroutes>` + `<gateways>` into `CanonicalStaticRoute` (since
   #350), so OPNsense-*as-source* routes translate outward — but the
   `config.xml` renderer emits **no** `<staticroutes>`/`<route>` block,
-  so an X→OPNsense migration drops every static route on render.  The
-  loss is declared (`opnsense/codec.py` LossyPath), not silent.
+  so an X→OPNsense migration drops every static route on render.
+  Because the record does not survive at all, this is declared
+  **unsupported**, not lossy: `/routing/static-route` and every leaf
+  beneath it (`gateway`, `metric`, `description`, `interface`, `vrf`)
+  are `UnsupportedPath` entries, so validation reports `block` rather
+  than `warn` and the operator is told to re-create routing on the
+  target.  It was declared lossy until the scope re-weight wave —
+  honest about the loss, but understating a total one as a skimmable
+  warning.
 
 ## What we don't do
 

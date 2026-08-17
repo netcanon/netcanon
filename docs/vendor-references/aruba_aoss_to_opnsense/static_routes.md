@@ -78,14 +78,16 @@ CanonicalStaticRoute:
 
 Aruba -> OPNsense:
 
-- `static_routes`: **lossy** — Aruba's flat `ip route DEST/N GW` form
-  carries the next-hop IP directly; OPNsense expects a NAMED gateway
-  reference plus a separate `<gateway_item>` declaration.  The
+- `static_routes`: **unsupported** — Aruba's flat `ip route DEST/N GW`
+  form carries the next-hop IP directly; OPNsense expects a NAMED
+  gateway reference plus a separate `<gateway_item>` declaration.  The
   cross-pair render would need to synthesise both blocks and pick a
-  gateway name (e.g. `cv_gw_<index>`) — the OPNsense codec capability
-  matrix does not currently advertise `/routing/static-route` on its
-  render side, so this drops pending wire-up.  Aruba's
-  `ip default-gateway` form is normalised to `0.0.0.0/0` on canonical
-  but the OPNsense idiom is to set the default via the WAN zone's
-  `<gateway>` rather than a `0.0.0.0/0` route.
+  gateway name (e.g. `cv_gw_<index>`).  It synthesises neither, so the
+  route does not survive the trip at all — which is `unsupported`, not
+  `lossy`; the OPNsense codec declares `/routing/static-route` and
+  every leaf beneath it unsupported, and validation blocks rather than
+  warns.  Aruba's `ip default-gateway` form is normalised to
+  `0.0.0.0/0` on canonical but the OPNsense idiom is to set the
+  default via the WAN zone's `<gateway>` rather than a `0.0.0.0/0`
+  route.
 - Per-VRF static routes: **not_applicable** — Aruba has no VRF.

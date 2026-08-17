@@ -93,10 +93,16 @@ matrix.supported references either path).  RouterOS-source canonical
 
 ### Disposition
 
+The OPNsense renderer emits no `<staticroutes>` block, so the whole
+record vanishes rather than arriving degraded — every leaf below is
+`unsupported`, not `lossy`, and validation blocks rather than warns.
+The parenthesised notes record what each field's disposition WOULD be
+once OPNsense `<staticroutes>` + `<gateways>` render wire-up lands.
+
 | Field | Disposition |
 |---|---|
-| `static_routes[].destination` | lossy (OPNsense render wire-up pending) |
-| `static_routes[].gateway` | lossy (OPNsense render wire-up pending; named-gateway indirection) |
-| `static_routes[].interface` | lossy (OPNsense render wire-up pending) |
-| `static_routes[].metric` | lossy (OPNsense render wire-up pending) |
-| `static_routes[].description` | lossy (OPNsense render wire-up pending; otherwise good) |
+| `static_routes[].destination` | unsupported (no `<staticroutes>` rendered; lossy once wire-up lands) |
+| `static_routes[].gateway` | unsupported (no `<staticroutes>` rendered; then lossy — named-gateway indirection) |
+| `static_routes[].interface` | unsupported (no `<staticroutes>` rendered; then lossy) |
+| `static_routes[].metric` | unsupported (no `<staticroutes>` rendered; then lossy) |
+| `static_routes[].description` | unsupported (no `<staticroutes>` rendered; then good) |

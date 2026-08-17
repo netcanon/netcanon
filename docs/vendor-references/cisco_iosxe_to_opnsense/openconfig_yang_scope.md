@@ -30,25 +30,33 @@ That's the full parse implementation.  `intent.hostname`,
 are NEVER populated by this codec, regardless of what the device's
 NETCONF reply carries.
 
-## What the matrix declares — the aspirational gap
+## What the matrix declares — the aspirational gap, since closed
 
-The codec's `CapabilityMatrix._CAPS` declares these paths as
-`supported`:
+> **Stale-then-corrected (scope re-weight wave, 2026-08).**  When this
+> note was written the codec's `CapabilityMatrix._CAPS` declared
+> `/system/hostname`, `/system/dns-server`, `/system/ntp-server`,
+> `/vlans/vlan/{id,name}`, `/routing/static-route` and
+> `/snmp/{community,location,contact,trap-host}` **`supported`** —
+> aspirationally, so cross-codec mesh translations wouldn't classify
+> them `unsupported` on the target side, even though the parser reads
+> XML for none of them.  **That is no longer true.**  All ten now
+> classify `unsupported` (verified against the live matrix), which is
+> what `docs/CAPABILITIES.md` § `cisco_iosxe` describes: "Every other
+> canonical surface is declared `unsupported` so the cross-mesh audit
+> matrix flags the gap honestly rather than masquerading as drift."
+>
+> The paragraph is kept rather than deleted because the reasoning it
+> records — declaring a path `supported` to keep mesh arithmetic tidy —
+> is a live temptation, and `docs/METHODOLOGY.md` treats it as a
+> violation equal to under-claiming.  This is the worked example of
+> the trap, not a description of current behaviour.
 
-* `/system/hostname`, `/system/dns-server`, `/system/ntp-server`
-* `/vlans/vlan/id`, `/vlans/vlan/name`
-* `/routing/static-route`
-* `/snmp/community`, `/snmp/location`, `/snmp/contact`,
-  `/snmp/trap-host`
-
-These declarations are aspirational: present so cross-codec mesh
-translations don't classify these paths as `unsupported` on the
-target side.  But the parser does not actually read XML for any of
-them.  Operationally, an OPNsense render running on a canonical
-tree produced by `cisco_iosxe` parse will see empty `intent.hostname`,
-empty `intent.snmp`, empty `intent.vlans`, empty `intent.static_routes`
-— so the OPNsense renderer emits nothing for those categories on
-this cross-pair.
+Operationally, an OPNsense render running on a canonical tree produced
+by `cisco_iosxe` parse sees empty `intent.hostname`, empty
+`intent.snmp`, empty `intent.vlans`, empty `intent.static_routes` — so
+the OPNsense renderer emits nothing for those categories on this
+cross-pair, and would emit nothing for `static_routes` regardless,
+since it renders no `<staticroutes>` block for any source.
 
 ## Real Cisco NETCONF replies do carry the data
 

@@ -71,12 +71,14 @@ OPNsense static-route notes:
 
 Junos -> OPNsense:
 
-- `static_routes`: **lossy** — Junos default IPv4 + named-prefix +
-  IPv6 statics in `set routing-options static route X/N next-hop Y`
+- `static_routes`: **unsupported** — Junos default IPv4 + named-prefix
+  + IPv6 statics in `set routing-options static route X/N next-hop Y`
   parse cleanly to canonical entries with `destination` (CIDR), and
-  `gateway`.  The OPNsense codec does not currently render
-  `<gateways>` or `<staticroutes>`; the entire list drops on render
-  pending wire-up.
+  `gateway`.  The OPNsense codec renders neither `<gateways>` nor
+  `<staticroutes>`, so the entire list drops — the record does not
+  survive the trip, which is `unsupported`, not `lossy`; the codec
+  declares `/routing/static-route` and every leaf beneath it
+  unsupported, and validation blocks rather than warns.
 - Per-VRF static routes (Junos `set routing-instances <vrf> routing-
   options static`) are unsupported on the cross-pair: the
   `juniper_junos` source codec now harvests per-VRF statics onto
@@ -89,6 +91,8 @@ Junos -> OPNsense:
 - `metric` / `description` round-trip the canonical scalar through
   to OPNsense's `<descr>` (where wire-up exists).
 
-Disposition: **lossy** dominated by codec wire-up gap on OPNsense
-(structural mapping is straightforward) plus VRF-bound routes
-unsupported.
+Disposition: **unsupported**, dominated by the render gap on OPNsense
+(the structural mapping itself is straightforward, and would be merely
+lossy once `<staticroutes>` rendering lands); VRF-bound routes are
+unsupported for a second, independent reason — OPNsense has no VRF
+model at all.

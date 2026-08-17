@@ -528,20 +528,26 @@ per_field_expectation:
   # ── Tier 1 — static routes ──
 
   static_routes:
-    disposition: lossy
+    disposition: unsupported
     reason: >
       Junos's ``set routing-options static route X/N next-hop Y``
       parses cleanly to canonical entries.  OPNsense splits static-
       route declaration into ``<gateways>`` (named gateways) +
       ``<staticroutes>`` (routes referencing named gateways).  The
-      OPNsense codec does not currently parse OR emit either block;
-      canonical static_routes from a Junos source therefore drop on
-      render.  Per-VRF static routes (Junos ``set routing-instances
-      <vrf> routing-options static``) carry a populated
-      ``CanonicalStaticRoute.vrf`` from the Junos source but drop
-      on this cross-pair because OPNsense has no VRF model.
-      Junos's ``qualified-next-hop`` flattens to
-      multiple canonical entries.
+      OPNsense codec PARSES both (promotion #15 — an earlier
+      revision of this file said it parsed neither, which was
+      already stale when written) but its ``config.xml`` renderer
+      emits neither, so a route from a Junos source does not
+      survive the trip at all.  Unsupported, not lossy: the record
+      vanishes rather than arriving with caveats, and the OPNsense
+      capability matrix declares ``/routing/static-route`` and
+      every leaf beneath it unsupported so validate_against blocks
+      instead of warning.  Per-VRF static routes (Junos ``set
+      routing-instances <vrf> routing-options static``) carry a
+      populated ``CanonicalStaticRoute.vrf`` from the Junos source
+      and would drop on this cross-pair independently, because
+      OPNsense has no VRF model.  Junos's ``qualified-next-hop``
+      flattens to multiple canonical entries.
     references: [junos-static-routing, opnsense-gateways]
 
   # ── Tier 2 — DHCP server ──

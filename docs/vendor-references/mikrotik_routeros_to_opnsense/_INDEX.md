@@ -37,7 +37,7 @@ Asymmetry on this direction concentrates on:
 | `system_services.md` | Hostname (RouterOS bare -> OPNsense `<hostname>`) / DNS (RouterOS comma-list -> OPNsense repeated `<dnsserver>`) / NTP / IANA tz database name (shared shape, OPNsense render wire-up pending) / syslog. |
 | `interfaces.md` | RouterOS `etherN` / `default-name` versus OPNsense zone-tag (`<wan>` / `<lan>` / `<optN>`) plus BSD `<if>`.  IP / MTU / enable round-trip cleanly.  VRF structurally absent. |
 | `vlans.md` | RouterOS two-plane model (Plane 1 `/interface vlan` + Plane 2 bridge VLAN filtering) versus OPNsense's "VLAN as one tagged sub-interface on one parent NIC" model.  No port-membership concept on OPNsense. |
-| `static_routes.md` | RouterOS CIDR `/ip route` versus OPNsense's two-block `<gateways>` + `<staticroutes>` model.  OPNsense codec render wire-up pending. |
+| `static_routes.md` | RouterOS CIDR `/ip route` versus OPNsense's two-block `<gateways>` + `<staticroutes>` model.  OPNsense renders neither block, so this direction is unsupported (the route vanishes), not lossy. |
 | `dhcp.md` | RouterOS three-section DHCP form (`/ip pool` + `/ip dhcp-server` + `/ip dhcp-server network`) versus OPNsense's interface-keyed `<dhcpd>/<lan>` zone form.  Lease-time units shared (seconds). |
 | `snmp.md` | RouterOS overloaded `/snmp community` versus OPNsense `<snmpd>`.  v1/v2c surface round-trips; SNMPv3 USM unsupported on OPNsense (lives in plugin's `snmpd.conf`, not `config.xml`). |
 | `local_users.md` | RouterOS named groups (full/write/read) versus OPNsense binary admin/users.  Hash format gap dominates — RouterOS `/export` carries no password material, OPNsense expects bcrypt. |
