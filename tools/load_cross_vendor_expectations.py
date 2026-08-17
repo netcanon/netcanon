@@ -10,9 +10,15 @@ repo root::
 Exits non-zero if any file fails validation; prints a summary table
 of (pair, certainty, field-count, disposition-breakdown) on success.
 
-This is a lint-style utility — the test suite wires equivalent checks
-into ``tests/unit/migration/test_cross_vendor_expectations.py`` (when
-that file exists; not required for Phase 3a).
+``tests/unit/migration/test_cross_vendor_expectations.py`` calls
+:func:`validate_one` directly, once per pair file, so the rules below are
+enforced by CI and have exactly one definition — add a rule here and the
+suite picks it up.  Run this script directly when you want the summary
+table; run pytest when you want the gate.
+
+It was NOT always wired: for most of its life this was a standalone
+lint-style utility nothing executed, and three files drifted out of schema
+compliance unnoticed.  Keep the test attached.
 """
 
 from __future__ import annotations
