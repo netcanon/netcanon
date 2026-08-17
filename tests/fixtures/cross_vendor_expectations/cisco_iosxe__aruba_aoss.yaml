@@ -202,7 +202,7 @@ per_field_expectation:
 
   "interfaces[].name":
     disposition: lossy
-    note: >
+    reason: >
       OpenConfig source emits `<name>GigabitEthernet1/0/1</name>`;
       the parser stores verbatim on CanonicalInterface.name.  AOS-S
       target render emits via the port-rename mesh, mapping Cisco
@@ -214,7 +214,7 @@ per_field_expectation:
       `GigabitEthernet0/0/4` carrying nothing other than its name)
       are elided by AOS-S render — there is no AOS-S equivalent
       port-name to emit and no per-port settings to anchor the
-      record.  Wave 7c (commit `1b1b865`) cleared count drift on
+      record.  Wave 7c cleared count drift on
       every other surface; the remaining bare-stub elision is
       vendor-wire-correct and reclassified `good → lossy`.
     references: [oc-interfaces, iosxe-interface-cg, aoss-bog]

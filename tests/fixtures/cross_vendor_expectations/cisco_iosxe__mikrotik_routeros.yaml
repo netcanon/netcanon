@@ -201,7 +201,7 @@ per_field_expectation:
 
   "interfaces[].name":
     disposition: lossy
-    note: >
+    reason: >
       OpenConfig <interface><name> -> RouterOS interface name (after
       the rename mesh translates Cisco's speed-encoded name to
       RouterOS's flat etherN form).  Without the rename mesh, the
@@ -213,10 +213,10 @@ per_field_expectation:
       VLAN model REQUIRES a parent bridge, so this is vendor-wire-
       correct rather than a translator phantom.  The synthesised
       bridge inflates the source-vs-target interface count by 1 on
-      fixtures with VLAN sub-interfaces; Wave 7c (commit `1b1b865`)
+      fixtures with VLAN sub-interfaces; Wave 7c
       cleared other count drift surfaces and reclassified this
       `good → lossy` to reflect the structural delta.
-    references: [oc-interfaces, routeros-iface, routeros-bridge]
+    references: [oc-interfaces, routeros-iface, vlan-render-gap]
 
   "interfaces[].description":
     disposition: good

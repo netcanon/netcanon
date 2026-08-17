@@ -62,6 +62,45 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **The expectation-YAML schema validator was wired into nothing, and three
+  files had drifted out of compliance.**
+  `tools/load_cross_vendor_expectations.py` has always checked the 56 pair
+  YAMLs against the schema in their own README, but it was a standalone script
+  no test ran, so it rotted silently.  Three `cisco_iosxe__*` files failed it.
+  Root cause pinned by `git log -S` to `ba86562` ("Wave 7c close-out: flip 3
+  cisco_iosxe-source vendor-wire-correct cells to lossy"), which flipped
+  `interfaces[].name` from `good` to `lossy` in each without renaming the
+  accompanying `note:` to `reason:` -- the requirement is
+  disposition-dependent, so flipping a disposition invalidates the entry.
+  Exactly three cells flipped; exactly three files failed.
+
+  Fixing the key surfaced a second defect the validator's per-file
+  short-circuit had masked: `cisco_iosxe__mikrotik_routeros` cited a reference
+  id `routeros-bridge` that was never declared -- in that file or anywhere in
+  the corpus.  Its claim (RouterOS's VLAN model requires a parent bridge, so
+  the synthesised `bridge1` is vendor-wire-correct rather than a translator
+  phantom) is in fact grounded by the already-declared `vlan-render-gap`, whose
+  note cites MikroTik's "Basic VLAN switching (bridge VLAN filtering)" page and
+  shows the synthetic bridge; the citation now points there rather than at an
+  invented id.  Also removed a dangling `` (commit `1b1b865`) `` from all three
+  files -- that revision exists nowhere in this repo.
+
+  New `tests/unit/migration/test_cross_vendor_expectations.py` (169 cases)
+  calls the tool's own `validate_one` rather than re-implementing the rules, so
+  the schema keeps one definition and a rule added to the tool is enforced
+  automatically.  Two checks the tool does not make, each probed against the
+  corpus before adoption: the filename must equal
+  `<source_vendor>__<target_vendor>` from `meta` (the reconciler indexes by
+  FILENAME, so a disagreement reconciles a cell against the wrong pair's
+  expectations and every resulting variance class is quietly wrong), and every
+  declared `references[].path` must resolve on disk (the tool proves cited ids
+  are declared, never that a declared reference points at a real note).  All
+  three guards were verified red -- the schema one against the actual
+  historical defect.
+
+  No effect on the fidelity baseline: `reason` and `note` are documentation
+  fields the reconciler never reads, and no disposition changed.
+
 - **OPNsense declared a total loss of your routing table as a warning.**
   The `config.xml` renderer emits no `<staticroutes>`/`<route>` block, so a
   static route translated INTO OPNsense vanishes entirely -- destination,
