@@ -531,3 +531,50 @@ class TestPathListDeduplication:
         assert entries.count() < int(stat), (
             "de-dup should collapse ≥2 entries for the 3-interface input"
         )
+
+
+class TestScopeAdvisoryBanner:
+    """A1 -- the target-platform scope advisory, proven in a real browser.
+
+    The unit tests prove ``check_scope_advisory`` returns the right object and
+    that ``run_plan`` attaches it.  Neither proves an operator can SEE it, and
+    the design's first candidate channel (``job.warnings``) was rejected
+    precisely because it is populated, serialized and then discarded by the
+    UI.  These two tests are the live proof that this channel is not.
+    """
+
+    def test_banner_visible_translating_into_a_firewall_target(
+        self, page: Page, live_server_url: str,
+    ):
+        mp = MigratePage(page)
+        page.goto(live_server_url + "/migrate")
+        mp.source_select.wait_for(state="visible", timeout=5_000)
+        mp.pick_source("cisco_iosxe_cli")
+        mp.pick_target("fortigate_cli")
+        mp.fill_raw(
+            "hostname edge-01\n!\n"
+            "interface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n!\n"
+        )
+        mp.submit_and_wait()
+        banner = page.locator('[data-testid="migrate-scope-advisory-banner"]')
+        expect(banner).to_be_visible()
+        expect(banner).to_contain_text("firewall platform")
+        # The per-target binding grammar, not a generic sentence.
+        expect(banner).to_contain_text("set srcintf")
+        expect(
+            page.locator('[data-testid="migrate-scope-advisory-0"]')
+        ).to_be_visible()
+
+    def test_banner_hidden_translating_into_a_switch_target(
+        self, page: Page, live_server_url: str,
+    ):
+        mp = MigratePage(page)
+        page.goto(live_server_url + "/migrate")
+        mp.source_select.wait_for(state="visible", timeout=5_000)
+        mp.pick_source("cisco_iosxe_cli")
+        mp.pick_target("juniper_junos")
+        mp.fill_raw("hostname access-01\n!\nvlan 10\n name DATA\n!\n")
+        mp.submit_and_wait()
+        expect(
+            page.locator('[data-testid="migrate-scope-advisory-banner"]')
+        ).to_be_hidden()

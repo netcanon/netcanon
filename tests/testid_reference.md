@@ -517,6 +517,8 @@ diff page's banner severity palette (`diff-banner-*` / `mig-banner-*`).
 | `migrate-tier3-banner`                | `<div>`    | Notification banner — visible iff `MigrationJob.dropped_tier3_sections` is non-empty.  Surfaces source-side stanza headers the parser deliberately drops (ACLs, NAT, QoS, route-maps, IPsec, etc).  See `netcanon/migration/_tier3_detection.py` |
 | `migrate-tier3-count`                 | `<strong>` | Detected-section count rendered inside the Tier-3 banner |
 | `migrate-tier3-section-N`             | `<li>`     | One row per detected stanza header, indexed `N=0..len-1`.  Children are `<code>` elements with the literal label |
+| `migrate-scope-advisory-banner`       | `<div>`    | Notification banner — visible iff `MigrationJob.scope_advisories` is non-empty.  Reports the TARGET platform (the Tier-3 banner above reports the source): fires when translating into a firewall-primary platform, whose policy plane is never emitted.  See `check_scope_advisory` in `netcanon/services/migration_validate.py` |
+| `migrate-scope-advisory-N`            | `<li>`     | One row per advisory reason, indexed `N=0..len-1`.  Plain escaped text, no `<code>` children |
 | `migrate-stats`                       | `<div>`    | Supported/lossy/unsupported path counts |
 | `migrate-stat-supported`              | `<strong>` | Count number |
 | `migrate-stat-lossy`                  | `<strong>` | Count number |

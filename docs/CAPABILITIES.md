@@ -28,10 +28,10 @@ layer.  On a switch or router that is most of the device's configuration;
 on a firewall appliance it is a minority of it.  The policy table, NAT, VPN
 and UTM profiles are Tier 3 and are out of scope **in either direction** —
 when a firewall is the *source* they are detected and listed by name; when a
-firewall is the *target*, nothing is emitted for them at all and no banner
-says so (Tier-3 detection is parse-side only).  If your migration's centre of
-gravity is policy, Netcanon is the wrong tool — see
-[`COMPARISON.md`](COMPARISON.md).
+firewall is the *target*, nothing is emitted for them at all and the migrate
+page raises a **scope advisory** saying so (see § Scope advisories below).
+If your migration's centre of gravity is policy, Netcanon is the wrong tool —
+see [`COMPARISON.md`](COMPARISON.md).
 
 A codec's **primary device class** — the `Primary class` column below, and
 the first entry in its `device_classes` — is the authoritative scope
@@ -583,6 +583,32 @@ fields.  The migrate page reflects this in the status banner and
 
 Job status reaches `failed` only when a stage actually raises;
 validation alone never fails the job.
+
+### D2. Scope advisories (target-platform notices)
+
+Separate from the severity ladder above, and deliberately so: that ladder
+grades **per-xpath** loss for fields the source actually carried, whereas a
+scope advisory reports something about the **target platform** that no field
+can express — the absence of a whole configuration plane.
+
+`job.scope_advisories` is populated by `run_plan` when the target's *primary
+device class* is `firewall` and the source's is not (see § Platform fit).  It
+is a notice, never a gate: `job.status` and `job.validation.severity` are
+untouched, the render proceeds, and the operator may ignore it.
+
+It exists because that direction was otherwise unreported.  The Tier-3 banner
+reads the **source** config, so it says nothing when the source is a switch;
+and `/filter/rule` / `/nat/rule` are declared `unsupported` but no canonical
+field walks to them, so `validate_against` — which is a *loss* detector, not
+an *absence* detector — cannot fire on them either.  Building a canonical
+firewall surface would not change that: with `firewall_rules == []` the walker
+still yields nothing.  So the notice is stated where it can be stated at all.
+
+Firewall→firewall pairs deliberately raise no advisory: there the source
+codec's Tier-3 detector already names the lost policy stanzas.
+
+Rendered on the migrate page as `migrate-scope-advisory-banner`, beneath the
+Tier-3 banner.
 
 ### E. Compatibility-banner per rename pane
 

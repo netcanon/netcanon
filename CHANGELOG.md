@@ -26,6 +26,59 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Added
+
+- **Scope advisory when translating into a firewall platform.**  A
+  switch/router -> FortiGate or OPNsense job now raises a banner on the
+  migrate page saying that Netcanon emits no policy plane, and that policy
+  already on the appliance binds to interface names this output may rename or
+  invent.  Nothing on the page said so before: the Tier-3 banner reads the
+  SOURCE config, so it is silent when the source is a switch, and
+  `/filter/rule` / `/nat/rule` are declared `unsupported` but no canonical
+  field walks to them, so `validate_against` -- a loss detector, not an
+  absence detector -- cannot fire on them either.  New
+  `MigrationJob.scope_advisories` (additive; no existing `/api/v1` shape
+  changes) and `check_scope_advisory()`.  Fires on 22 of 169 ordered codec
+  pairs; firewall->firewall is excluded because that direction is already
+  loud.  Notice only -- it never refuses a job or changes its status.
+
+- **The product's scope is now a declaration rather than an argument.**  A
+  codec's first `device_classes` entry is its **primary device class** and is
+  the authoritative scope statement for that platform.  Two-clause test for
+  setting it in `AGENTS.md` § Hard Rules; `Primary class` column and a
+  Platform-fit section in `docs/CAPABILITIES.md`; definition in
+  `docs/glossary.md`; guarded by
+  `tests/unit/migration/test_scope_boundary.py`.
+
+### Changed
+
+- **netcanon.net and README state the device-class gradient** instead of a
+  flat vendor list: switches and routers first, firewall platforms declared
+  as L2/L3-layer-only.  No codec was removed and none lost capability -- both
+  firewall platforms remain first-class parse sources, auto-detected and
+  fully audited.  The landing page's capability-matrix excerpt moved off the
+  `fortigate_cli` panel onto `cisco_iosxe_cli`, so the page no longer proves
+  its central claim exclusively with a platform it translates only in part.
+
+### Fixed
+
+- **`juniper_junos` declared the wrong device classes.**  The codec listed
+  `[switch, router]` while `vendors/juniper_junos.yaml` listed
+  `[switch, router, firewall]` and named the SRX series.  The codec was the
+  wrong side -- it parses a vSRX fixture to 15 interfaces with 36
+  `set security *` stanzas surfaced as Tier 3 -- so it gained the class.
+  Junos remains switch-primary.  A new agreement guard makes the two sides
+  unable to drift again.
+
+- **Four doc-truth defects**, all pre-existing: a stale `CODEC_BUG` triage row
+  naming a `juniper_junos -> fortigate_cli` cell that exists nowhere in the
+  mesh (the real fifth cell is `juniper_junos -> cisco_iosxe_cli`, and it is
+  the real-fixture twin of the synthetic row beside it); `ARCHITECTURE.md`
+  contradicting itself on `unsupported_rename_categories`; and unguarded
+  prose counts ("the 8 migration vendors" when there are 12, "50+ profiles"
+  when there are 54, "twelve codecs") deleted per the AGENTS.md rule rather
+  than updated.
+
 ## [0.6.2] - 2026-08-01
 
 ### Added

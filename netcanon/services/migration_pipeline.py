@@ -111,7 +111,11 @@ from ..models.migration import (
     MigrationJobStatus,
     TransformSpec,
 )
-from .migration_validate import check_class_compat, validate_against
+from .migration_validate import (
+    check_class_compat,
+    check_scope_advisory,
+    validate_against,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +266,14 @@ def run_plan(
             " ".join(class_compat.reasons),
         )
         return job
+
+    # Stage 0b — scope advisory.  A NOTICE, not a gate: it never refuses and
+    # never changes job.status.  Kept separate from the guard above because
+    # that function's `warn` severity is already claimed by "an adapter
+    # declared no device_classes", which is a different statement entirely.
+    scope_advisory = check_scope_advisory(source, target)
+    if scope_advisory is not None:
+        job.scope_advisories.extend(scope_advisory.reasons)
 
     try:
         # Stage 2 — parse

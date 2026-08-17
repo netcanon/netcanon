@@ -480,6 +480,8 @@ class MigrationJob(BaseModel):
             parse so the migrate page can render a "Detected in
             source but not translated" banner.  Notification surface
             only — never read by any render-side code or transform.
+            See also ``scope_advisories``, which reports the TARGET
+            platform rather than the source.
             Populated by every codec's ``parse()``; see
             :mod:`netcanon.migration._tier3_detection` for the per-
             vendor detectors.
@@ -638,6 +640,15 @@ class MigrationJob(BaseModel):
     #: ``parse()``; see :mod:`netcanon.migration._tier3_detection` for
     #: the per-vendor detectors.
     dropped_tier3_sections: list[str] = Field(default_factory=list)
+
+    #: Scope notices about the TARGET platform, as opposed to
+    #: :attr:`dropped_tier3_sections` which reports the SOURCE.  Populated by
+    #: ``run_plan`` from :func:`netcanon.services.migration_validate
+    #: .check_scope_advisory` when translating into a firewall-primary
+    #: platform, where Netcanon emits no policy plane and nothing else on the
+    #: page would say so.  Notification surface only — never read by render-
+    #: side code.  Empty for every switch/router target.
+    scope_advisories: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
