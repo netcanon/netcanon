@@ -465,20 +465,25 @@ per_field_expectation:
     references: [opnsense-vlans, arista-vlan-cg]
 
   static_routes:
-    disposition: lossy
+    disposition: unsupported
     reason: >
       OPNsense splits static-route declaration into two blocks:
       ``<gateways>/<gateway_item>`` (named gateways) and
       ``<staticroutes>/<route>`` (routes referencing named
-      gateways).  The OPNsense codec does not currently render
-      either block on cross-vendor; canonical static_routes from
-      an Arista source therefore drop pending wire-up.  Per-VRF
-      static routes (Arista ``ip route vrf X ...``) carry a
-      populated ``CanonicalStaticRoute.vrf`` but drop on this
-      cross-pair because OPNsense has no VRF model.  Arista's
-      ``0.0.0.0/0`` form would also need
-      remapping to the OPNsense default-gateway idiom (set via
-      the WAN zone interface).
+      gateways).  The OPNsense codec PARSES both (promotion #15)
+      but its ``config.xml`` renderer emits neither, so a route
+      from an Arista source does not survive the trip at all —
+      destination and next-hop alike.  Unsupported, not lossy: the
+      record vanishes rather than arriving with caveats, and the
+      OPNsense capability matrix declares ``/routing/static-route``
+      and every leaf beneath it unsupported so validate_against
+      blocks instead of warning.  Per-VRF static routes (Arista
+      ``ip route vrf X ...``) carry a populated
+      ``CanonicalStaticRoute.vrf`` and would drop on this
+      cross-pair independently, because OPNsense has no VRF model.
+      Arista's ``0.0.0.0/0`` form would also need remapping to the
+      OPNsense default-gateway idiom (set via the WAN zone
+      interface) even once ``<staticroutes>`` rendering lands.
     references: [opnsense-gateways, arista-routing-cg]
 
   # ── Tier 2 — auto-translate with review ──

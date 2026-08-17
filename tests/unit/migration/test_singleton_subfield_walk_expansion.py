@@ -47,12 +47,14 @@ _SUBPATHS = [_SR + "gateway", _RI + "instance-type", _V6 + "scope"]
 #: anchor at all.
 _EXPECTED: dict[str, dict[str, str]] = {
     # Gateway: every codec renders `ip route <dest> <next-hop>` faithfully
-    # except OPNsense (renders no <staticroutes> -> lossy, parity with the
-    # route anchor) and the NETCONF stub (renders no static routes -> unsupp).
-    _SR + "gateway": {
-        "opnsense": "lossy",
-        "cisco_iosxe": "unsupported",
-    },
+    # except OPNsense and the NETCONF stub, neither of which renders any
+    # <staticroutes> anchor at all -> unsupported for both.  OPNsense was
+    # ``lossy`` here until the scope re-weight wave, in parity with a route
+    # anchor that was itself mis-declared lossy; a next-hop with no route to
+    # hang on has not been downgraded, it is gone.
+    _SR + "gateway": dict.fromkeys(
+        ("opnsense", "cisco_iosxe"), "unsupported",
+    ),
     # instance-type: only Arista (mac-vrf/vrf branch) and Junos (explicit
     # `instance-type`) round-trip the discriminator.  The CLI VRF renderers
     # emit a plain `vrf <name>` (lossy); the codecs with no VRF model at all

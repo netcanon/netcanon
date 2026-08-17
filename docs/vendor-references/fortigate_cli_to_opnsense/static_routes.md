@@ -95,7 +95,7 @@ prefix, prefix_length, next_hop, interface, distance, description, vrf
 
 FortiGate -> OPNsense:
 
-- **lossy** — Two-stage divergence:
+- **unsupported** — Two-stage divergence:
   1. FortiGate's flat per-route table flattens into canonical
      `static_routes` cleanly (FortiGate codec parses `dst`/`mask` ->
      prefix/prefix_length; `gateway` -> `next_hop`; `device` ->
@@ -103,9 +103,12 @@ FortiGate -> OPNsense:
   2. OPNsense rendering would have to synthesise a `<gateway_item>`
      per unique next-hop on the canonical list (or reuse an
      existing one if the operator pre-declared it), then emit
-     `<route>` elements.  The OPNsense codec capability matrix
-     does NOT currently advertise `/routing/static-route` as
-     supported — render is unwired pending wire-up.
+     `<route>` elements.  It synthesises neither, so the route does
+     not survive the trip at all — `unsupported`, not `lossy`: the
+     OPNsense codec declares `/routing/static-route` and every leaf
+     beneath it unsupported, and validation blocks rather than warns.
+     The per-field notes below describe what the mapping would lose
+     once OPNsense renders routes at all.
 - The default-route idiom diverges: FortiGate's
   `set dst 0.0.0.0 0.0.0.0 / set gateway X` is a first-class entry
   in `config router static`; the OPNsense equivalent is to set the

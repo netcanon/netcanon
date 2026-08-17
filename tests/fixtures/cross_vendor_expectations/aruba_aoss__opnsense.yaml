@@ -448,18 +448,23 @@ per_field_expectation:
     references: [opnsense-vlans, aruba-vlans]
 
   static_routes:
-    disposition: lossy
+    disposition: unsupported
     reason: >
       OPNsense splits static-route declaration into two blocks:
       ``<gateways>/<gateway_item>`` (named gateways) and
       ``<staticroutes>/<route>`` (routes referencing named
-      gateways).  The OPNsense codec does not currently render
-      either block on cross-vendor; canonical static_routes from
-      an Aruba source drop pending wire-up.  Aruba's legacy
-      ``ip default-gateway`` form normalises to a ``0.0.0.0/0``
-      canonical record but the OPNsense idiom is to set the
-      default via the WAN zone's ``<gateway>`` rather than a
-      ``0.0.0.0/0`` route.
+      gateways).  The OPNsense codec PARSES both (promotion #15)
+      but its ``config.xml`` renderer emits neither, so a route
+      from an Aruba source does not survive the trip at all.
+      Unsupported, not lossy: the record vanishes rather than
+      arriving with caveats, and the OPNsense capability matrix
+      declares ``/routing/static-route`` and every leaf beneath it
+      unsupported so validate_against blocks instead of warning.
+      Aruba's legacy ``ip default-gateway`` form normalises to a
+      ``0.0.0.0/0`` canonical record, but the OPNsense idiom is to
+      set the default via the WAN zone's ``<gateway>`` rather than
+      a ``0.0.0.0/0`` route — a second, independent mismatch that
+      survives even once ``<staticroutes>`` rendering lands.
     references: [opnsense-gateways, aruba-static-routes]
 
   # ── Tier 2 — auto-translate with review ──

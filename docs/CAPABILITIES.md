@@ -366,7 +366,8 @@ output.
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | OPNsense uses CARP for HA (distinct semantics); no anycast-gateway grammar. |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
 | `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
-| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
+| `/routing/static-route` (and `gateway` / `metric` / `description` / `interface`) | Unsupported | The parser harvests routes from `<gateways>` + `<staticroutes>`, so OPNsense-as-**source** translates outward fine — but the `config.xml` renderer emits neither block, so a route translated **into** OPNsense does not survive at all.  A record that vanishes is unsupported, not lossy: validation reports `block`, and an X→OPNsense plan tells the operator to re-create routing on the target rather than warning them past it. |
+| `/routing/static-route/vrf` | Unsupported | Separate rationale from the render gap above: OPNsense's `config.xml` has no VRF model at all, so a per-VRF binding parses-and-ignores and stays unsupported even once `<staticroutes>` rendering lands. |
 | `/interfaces/interface/config/description` | Lossy | OPNsense imposes no length limit on description text; other vendors (Cisco 240 chars, Juniper 900) may truncate on render. |
 | `/filter/rule` | Unsupported | `<filter>` is Tier 3. |
 | `/nat/outbound` | Unsupported | `<nat>` is Tier 3. |

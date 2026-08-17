@@ -76,14 +76,15 @@ CanonicalStaticRoute:
   description: str
 ```
 
-- `static_routes`: **lossy** — Arista's flat `ip route DEST/N GW`
+- `static_routes`: **unsupported** — Arista's flat `ip route DEST/N GW`
   form carries the next-hop IP directly; OPNsense expects a NAMED
   gateway reference plus a separate `<gateway_item>` declaration.
   Cross-pair render would need to synthesise both blocks and pick
-  a gateway name (e.g. `cv_gw_<index>`) — the OPNsense codec
-  capability matrix does not currently advertise
-  `/routing/static-route` on its render side, so this drops
-  pending wire-up.  Arista's `0.0.0.0/0` form would also need
+  a gateway name (e.g. `cv_gw_<index>`).  It synthesises neither, so
+  the route does not survive the trip at all — which is `unsupported`,
+  not `lossy`; the OPNsense codec declares `/routing/static-route`
+  and every leaf beneath it unsupported, and validation blocks rather
+  than warns.  Arista's `0.0.0.0/0` form would also need
   remapping to the OPNsense default-gateway idiom (set via the WAN
   zone interface) rather than emitting an explicit
   `<route><network>0.0.0.0/0</network></route>`.

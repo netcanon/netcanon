@@ -352,13 +352,17 @@ per_field_expectation:
   static_routes:
     disposition: not_applicable
     note: >
-      cisco_iosxe parser doesn't walk
-      `<network-instances><protocols><protocol identifier=STATIC>`.
-      intent.static_routes is empty after parse.  OPNsense target
-      uses a two-block model (`<gateways>` + `<staticroutes>`)
-      that the OPNsense codec doesn't currently render either —
-      double-gap, with neither end currently producing or
-      consuming canonical static-route records on this pair.
+      Stays `not_applicable` rather than `unsupported` because the
+      gap on this pair is SOURCE-side: the cisco_iosxe parser
+      doesn't walk
+      `<network-instances><protocols><protocol identifier=STATIC>`,
+      so intent.static_routes is empty after parse and there is
+      never a record for the target to lose.  The OPNsense target
+      independently declares `/routing/static-route` unsupported
+      (its config.xml renderer emits neither `<gateways>` nor
+      `<staticroutes>`) — so this is a double-gap, and closing the
+      IOS-XE parse side alone would move this row to
+      `unsupported`, not to `good`.
     references: [oc-network-instance]
 
   # ── Tier 2 — auto-translate with review ──

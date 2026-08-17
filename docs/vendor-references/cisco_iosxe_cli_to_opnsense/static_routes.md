@@ -103,10 +103,12 @@ but OPNsense has no canonical-portable VRF model and the OPNsense
 codec declares ``/routing/static-route/vrf`` ``unsupported``, so the
 VRF is dropped on render.
 
-Disposition: **lossy** at the field level.  At the WIRE-UP level, the
-OPNsense codec's capability matrix does not currently advertise any
-``/routing/static-route`` path — the canonical static_routes list
-parses but the OPNsense render path does not emit
-``<staticroutes>``.  Cross-pair effectively drops the route list.
-Lands when OPNsense ``<staticroutes>`` + ``<gateways>`` wire-up is
-added.
+Disposition: **unsupported**.  The per-field notes above describe what
+the mapping WOULD lose once OPNsense renders routes at all; today it
+renders none, so the whole record is dropped and the field-level
+nuance never gets a chance to apply.  The OPNsense codec declares
+``/routing/static-route`` and every leaf beneath it ``unsupported``,
+and validation blocks rather than warns — a vanished route is not a
+lossy round-trip.  This row becomes ``lossy`` (per the field notes
+above) when OPNsense ``<staticroutes>`` + ``<gateways>`` render
+wire-up lands.

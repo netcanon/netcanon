@@ -62,6 +62,57 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **OPNsense declared a total loss of your routing table as a warning.**
+  The `config.xml` renderer emits no `<staticroutes>`/`<route>` block, so a
+  static route translated INTO OPNsense vanishes entirely -- destination,
+  next-hop and all.  `/routing/static-route` and its `gateway` / `metric` /
+  `description` leaves were declared `lossy`, which renders as `warn`; they
+  are now `unsupported`, which renders as `block`.  The subtree had been
+  self-contradictory since the f92e97a audit: the total drop reported `warn`
+  while its own child `/routing/static-route/interface` -- the SAME render
+  behaviour, one leaf down -- reported `block`.  Lossy means "survives with
+  caveats", and a record that does not survive has no caveats to report.  An
+  X->OPNsense plan now tells the operator to re-create routing on the target
+  instead of inviting them to skim past it.  Parse is unaffected: OPNsense as
+  a SOURCE still harvests routes from both blocks and translates outward.
+
+  `test_whole_static_route_drop_is_declared` was tightened from "declared
+  lossy or unsupported" to "declared unsupported" and verified to fail
+  against the old declaration.  A sweep of every bidirectional codec found
+  this was the only base-path surface in the registry declared `lossy` at
+  all, so it is the only instance of the defect.  The guard deliberately does
+  NOT generalise to "a parent may never be less severe than its child": a
+  `supported` parent with a `lossy` child is the normal, correct shape -- the
+  record round-trips, one leaf of it does not -- and holds in 63 places
+  across the registry.
+
+  Doc-sync 178 discharged in full: 7 of the 14 OPNsense expectation YAMLs
+  moved (6 `lossy` -> `unsupported`, plus a note correction on the
+  `not_applicable` seventh; the 7 OPNsense-as-source pairs are governed by
+  the other codec's matrix and correctly did not move), 6
+  `docs/vendor-references/` verdicts, `docs/CAPABILITIES.md`,
+  `docs/vendors/opnsense.md`, and a `--write-baseline` regen.  Measured
+  effect on the cross-mesh audit: `EXPECTED_LOSSY` 1226 -> 1196,
+  `EXPECTED_UNSUPPORTED` 738 -> 768, **`CODEC_BUG` unchanged at 5** (proven
+  by regen, not asserted), every other class and the severity roll-up
+  unchanged.  `CROSS_MESH_RESULTS.md` is byte-identical, because the Phase-1
+  comparator resolves "unsupported in target" through
+  `_FIELD_TO_IDENTITY_XPATHS`, which has no `static_routes` entry.
+
+- **Two stale doc-truth claims about our own codecs**, both pre-existing and
+  both found while discharging the doc-sync above: the
+  `juniper_junos -> opnsense` expectation YAML said the OPNsense codec
+  "does not currently parse OR emit either block" (it has parsed both since
+  promotion #15), and
+  `docs/vendor-references/cisco_iosxe_to_opnsense/openconfig_yang_scope.md`
+  described ten paths as declared `supported` "aspirationally ... so
+  cross-codec mesh translations don't classify these paths as `unsupported`"
+  -- all ten now classify `unsupported`, verified against the live matrix.
+  The second is kept as a marked worked example rather than deleted, because
+  declaring a path `supported` to keep mesh arithmetic tidy is a live
+  temptation that `docs/METHODOLOGY.md` treats as a violation equal to
+  under-claiming.
+
 - **`juniper_junos` declared the wrong device classes.**  The codec listed
   `[switch, router]` while `vendors/juniper_junos.yaml` listed
   `[switch, router, firewall]` and named the SRX series.  The codec was the

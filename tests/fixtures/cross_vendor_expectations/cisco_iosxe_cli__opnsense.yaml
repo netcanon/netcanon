@@ -408,20 +408,24 @@ per_field_expectation:
     references: [opnsense-vlans]
 
   static_routes:
-    disposition: lossy
+    disposition: unsupported
     reason: >
       OPNsense splits static-route declaration into two blocks:
       ``<gateways>/<gateway_item>`` (named gateways) and
       ``<staticroutes>/<route>`` (routes referencing named
-      gateways).  The OPNsense codec now PARSES both blocks
+      gateways).  The OPNsense codec PARSES both blocks
       (``parse.py`` ``_parse_static_routes`` harvests the
       ``<gateway_item>`` default route + ``<staticroutes>/<route>``
       entries, resolving named gateways to their IP; promotion #15),
-      but the config.xml renderer still emits neither block, so
-      canonical static_routes from a Cisco source drop on render.
+      but the config.xml renderer emits neither, so a route from a
+      Cisco source does not survive the trip at all.  Unsupported,
+      not lossy: the record vanishes rather than arriving with
+      caveats, and the OPNsense capability matrix declares
+      ``/routing/static-route`` and every leaf beneath it
+      unsupported so validate_against blocks instead of warning.
       Per-VRF static routes (Cisco ``ip route vrf X ...``) carry a
-      populated ``CanonicalStaticRoute.vrf`` but drop on this
-      cross-pair because OPNsense has no VRF model.
+      populated ``CanonicalStaticRoute.vrf`` and would drop on this
+      cross-pair independently, because OPNsense has no VRF model.
     references: [opnsense-gateways]
 
   # ── Tier 2 — auto-translate with review ──

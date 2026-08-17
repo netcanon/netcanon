@@ -176,16 +176,6 @@ class OPNsenseCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
-                path="/routing/static-route/gateway",
-                reason=(
-                    "Renders no <staticroutes> block (see /routing/static-route), "
-                    "so the next-hop gateway is dropped on render. Declared lossy "
-                    "for parity with the route anchor so validate_against surfaces "
-                    "the loss instead of reporting severity:ok (audit e5b77d7, PR-2c)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "OPNsense renders only BSD CARP; a non-CARP source mode "
@@ -259,50 +249,6 @@ class OPNsenseCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
-                # Base static-route path.  Previously UNDECLARED — so
-                # classify() defaulted it to ``supported`` and a whole
-                # gateway route rendered to nothing while validate_against
-                # reported ``severity: ok`` (audit f92e97a T0-1).  OPNsense's
-                # config.xml renderer emits no <staticroutes>/<route> block at
-                # all (see render.py), so the ENTIRE route — destination +
-                # next-hop — drops on render.  Declared lossy (warn, matching
-                # the cross_vendor_expectations dispositions for this codec)
-                # so the loss surfaces instead of reporting ok; operators
-                # re-add routes on the OPNsense target.  (Interface-only
-                # connected routes are the harder loss and stay unsupported /
-                # block below.)
-                path="/routing/static-route",
-                reason=(
-                    "Parse harvests routes (the <gateways> default route + "
-                    "<staticroutes>/<route> entries, resolving named gateways "
-                    "to their IP; promotion #15), but the config.xml renderer "
-                    "emits no <staticroutes>/<route> block, so the route is "
-                    "dropped on render. Declared lossy so validate_against "
-                    "surfaces the render loss instead of reporting severity:ok "
-                    "(audit f92e97a T0-1)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
-                path="/routing/static-route/metric",
-                reason=(
-                    "Subsumed by the whole-route drop (see "
-                    "/routing/static-route): no <staticroutes> block is "
-                    "rendered, so the administrative distance (metric) is "
-                    "dropped with the route (audit f92e97a T0-1)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
-                path="/routing/static-route/description",
-                reason=(
-                    "Subsumed by the whole-route drop (see "
-                    "/routing/static-route): the route name / description is "
-                    "dropped with the unrendered route (audit f92e97a T0-1)."
-                ),
-                severity="warn",
-            ),
-            LossyPath(
                 path="/interfaces/interface/config/description",
                 reason=(
                     "OPNsense imposes no length limit on description text; "
@@ -360,15 +306,73 @@ class OPNsenseCodec(CodecBase):
                     "instance-type discriminator is dropped (audit e5b77d7, PR-2c)."
                 ),
             ),
+            # ---- static routes: the WHOLE surface, not a partial loss ----
+            #
+            # This codec's config.xml renderer emits no <staticroutes>/<route>
+            # block at all (see render.py), so every static route vanishes on
+            # render — destination, next-hop and all.  A record that does not
+            # survive at all is ``unsupported``; ``lossy`` means "survives with
+            # caveats".  These four leaves were declared lossy from the
+            # f92e97a T0-1 audit (which was fixing a worse bug — the base path
+            # was UNDECLARED, so classify() defaulted it to ``supported`` and
+            # the route vanished under ``severity: ok``).  Lossy was the right
+            # step then and the wrong resting place: it left this subtree
+            # self-contradictory, with the total drop reported ``warn`` while
+            # its own child /routing/static-route/interface — the SAME render
+            # behaviour, one leaf down — reported ``block``.  Now the whole
+            # subtree is unsupported and validate_against blocks uniformly, so
+            # an operator is told to re-create routing on the OPNsense target
+            # rather than to skim a warning.  Guarded by
+            # test_registry_capability_honesty.py::
+            # test_whole_static_route_drop_is_declared, which since this change
+            # requires ``unsupported`` — not merely "declared" — whenever a
+            # plain gateway route round-trips to nothing.
+            UnsupportedPath(
+                path="/routing/static-route",
+                reason=(
+                    "Parse harvests routes (the <gateways> default route + "
+                    "<staticroutes>/<route> entries, resolving named gateways "
+                    "to their IP; promotion #15), but the config.xml renderer "
+                    "emits no <staticroutes>/<route> block, so the ENTIRE "
+                    "route is dropped on render. Declared unsupported (block): "
+                    "the record does not survive, which is not a lossy "
+                    "round-trip (audit f92e97a T0-1; severity corrected in the "
+                    "scope re-weight wave)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/routing/static-route/gateway",
+                reason=(
+                    "Dropped with the whole route (see /routing/static-route): "
+                    "no <staticroutes> block is rendered, so the next-hop "
+                    "gateway has nothing to attach to (audit e5b77d7, PR-2c)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/routing/static-route/metric",
+                reason=(
+                    "Dropped with the whole route (see /routing/static-route): "
+                    "no <staticroutes> block is rendered, so the "
+                    "administrative distance (metric) goes with it "
+                    "(audit f92e97a T0-1)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/routing/static-route/description",
+                reason=(
+                    "Dropped with the whole route (see /routing/static-route): "
+                    "the route name / description goes with the unrendered "
+                    "route (audit f92e97a T0-1)."
+                ),
+            ),
             UnsupportedPath(
                 path="/routing/static-route/interface",
                 reason=(
                     "No <staticroutes> block is rendered (see "
                     "/routing/static-route), so an interface-only (connected) "
                     "static route — which has no gateway to fall back on — is "
-                    "dropped entirely. Declared unsupported (block) to surface "
-                    "the connected-route reachability loss as harder than a "
-                    "gateway route's lossy drop (audit f92e97a T0-1)."
+                    "dropped entirely, a reachability loss (audit f92e97a "
+                    "T0-1)."
                 ),
             ),
             UnsupportedPath(
@@ -553,8 +557,10 @@ class OPNsenseCodec(CodecBase):
                 reason=(
                     "Per-VRF static-route binding parses-and-ignores in "
                     "v1.  Schema exists on CanonicalStaticRoute.vrf; "
-                    "wire-up scheduled for v0.2.0 (closes existing "
-                    "per-VRF static-route lossy declaration)."
+                    "wire-up scheduled for v0.2.0.  Independent of the "
+                    "whole-route render drop above: OPNsense's config.xml "
+                    "has no VRF model at all, so this leaf stays unsupported "
+                    "even once <staticroutes> rendering lands."
                 ),
             ),
         ],
