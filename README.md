@@ -9,10 +9,15 @@
 
 **Multi-vendor network config translator with a verifiable cross-vendor audit.**
 
-Translates running-config across twelve codecs spanning Cisco (IOS-XE,
-NX-OS, IOS-XR), Juniper Junos, Arista EOS, Aruba (AOS-S, AOS-CX),
-Fortinet FortiGate, MikroTik RouterOS, OPNsense, and VyOS — see
-[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) for the full per-codec list.
+**Built for switches and routers.**  Translates running-config across
+Cisco (IOS-XE, NX-OS, IOS-XR), Juniper Junos, Arista EOS, Aruba
+(AOS-S, AOS-CX), MikroTik RouterOS, and VyOS.
+
+**Fortinet FortiGate and OPNsense are supported at the L2/L3 layer
+only:** that covers interface addressing, VLAN interfaces and local
+users; the policy table, NAT, VPN and UTM are out of scope in either
+direction.  See [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) for the
+full per-codec list.
 You point Netcanon at a config from one vendor and it renders the
 equivalent config for another — through a shared canonical model, with
 every translatable field declared as supported, lossy, or unsupported.

@@ -308,6 +308,50 @@ tests use these exclusively — never CSS classes or element structure.  See
   "the docs lied to me" is what differentiates Netcanon's
   matrix-honesty discipline from the over-claiming alternatives in
   this space.
+- **Never** author or change a codec's `device_classes[0]` without applying
+  the scope test.  A codec's **first** entry in `device_classes` — declared in
+  `netcanon/migration/vendors/<vendor>.yaml` and mirrored in its
+  `CapabilityMatrix` — is its **primary device class**, and that single field
+  is the project's authoritative scope declaration for the platform.  Order is
+  therefore load-bearing: re-ordering an existing codec's classes is a scope
+  change, not a tidy-up.
+
+  A platform is **`firewall`-primary** when **both** hold:
+  **(a)** the modal *real* config of that platform is majority Tier-3 by
+  volume — the canonical model covers a minority of what an operator actually
+  wrote; **and**
+  **(b)** the platform is not deployed as a switching or routing NOS in its own
+  right, so its L2/L3 surface is incidental rather than the reason the box
+  exists.
+
+  Both clauses are required.  Clause (a) alone would take `cisco_iosxr`
+  (MPLS / IS-IS / route-policy dominate real SP configs) — clause (b) saves it.
+  Clause (b) alone would take nothing.  Junos is the worked example of why the
+  test is two-clause and not one: Junos ships on SRX firewalls and declares
+  `firewall`, but it is `switch`-primary because EX / QFX / MX are Junos boxes
+  in their own right.
+
+  **What `firewall`-primary means, operationally.**  Netcanon translates that
+  platform's L2/L3 layer only.  Such a codec **must not** be a landing-page
+  hero pane, **must not** be the landing-page capability-matrix excerpt, and
+  **must not** be more than one of the four `netcanon/tools/demo.py` scenarios.
+  It **may** ship, be certified, hold fixtures, be auto-detected, be
+  sanitisable, and participate fully in the cross-mesh audit as a source.
+  Enforced by [`tests/unit/migration/test_scope_boundary.py`](tests/unit/migration/test_scope_boundary.py),
+  which pins the roster, asserts the codec ↔ vendor-YAML agreement, and
+  ratchets the demo-scenario count.  ⚠️ The scenario clause is **not yet met**:
+  HEAD carries two firewall-primary scenarios (`fortigate__mikrotik`,
+  `opnsense__junos`) and the guard ratchets at 2 with a target of 1, because
+  closing it re-authors a demo scenario and drags the hero pane, `og.png` and
+  the paired walkthrough with it.  Lower the ratchet when that wave lands;
+  never raise it.
+
+  Rationale: the scope complaint this rule answers was *perception weight*,
+  not correctness — nothing over-claimed, but two of twelve codecs held a
+  disproportionate share of the product's shop window.  Encoding the answer in
+  `device_classes[0]` means it is read from a declaration rather than
+  re-derived from a measurement every time someone asks.  Full workings in
+  `docs/reviews/2026-08-10-firewall-scope-exit/`.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

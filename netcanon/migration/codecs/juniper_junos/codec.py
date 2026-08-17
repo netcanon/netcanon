@@ -118,7 +118,16 @@ class JunosCodec(CodecBase):
         adapter="juniper_junos",
         vendor_id="juniper_junos",
         version_range="18.x+",
-        device_classes=[DeviceClass.switch, DeviceClass.router],
+        # `firewall` is third, not first: Junos ships on EX / QFX switches and
+        # MX routers as well as SRX firewalls, so it is switch-primary under
+        # the scope test in AGENTS.md (clause (b) fails — Junos IS a switching
+        # NOS in its own right).  It is declared at all because the codec does
+        # cover SRX: `jnprautomate_mnha_vsrx_a_junos.set` parses to 15
+        # interfaces with 36 `set security *` stanzas surfaced as Tier 3.
+        # Was missing here while `vendors/juniper_junos.yaml` (which names the
+        # SRX series in its header) had it — drift closed by the agreement
+        # guard in tests/unit/migration/test_scope_boundary.py.
+        device_classes=[DeviceClass.switch, DeviceClass.router, DeviceClass.firewall],
         supported=[
             "/system/hostname",
             # `set system syslog host <ip>` — parse+render; was implicit-

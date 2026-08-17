@@ -16,13 +16,14 @@ import pytest
 
 from netcanon.migration.codecs._mock import MockCodec
 from netcanon.migration.codecs.base import CodecBase
+from netcanon.migration.codecs.registry import get_codec, list_codecs
 from netcanon.models.migration import (
     CapabilityMatrix,
     DeviceClass,
     MigrationJobStatus,
 )
 from netcanon.services.migration_pipeline import run_plan
-from netcanon.services.migration_validate import check_class_compat
+from netcanon.services.migration_validate import check_class_compat, check_scope_advisory
 
 pytestmark = pytest.mark.unit
 
@@ -243,3 +244,126 @@ class TestRunPlanClassGuard:
         unforced = run_plan(MockCodec(), MockCodec(), raw, force=False)
         forced = run_plan(MockCodec(), MockCodec(), raw, force=True)
         assert unforced.status == forced.status == MigrationJobStatus.completed
+
+
+class TestScopeAdvisory:
+    """``check_scope_advisory`` — the firewall-target NOTICE (not a gate).
+
+    Deliberately a separate function from ``check_class_compat``: three of
+    that function's arms already return ``severity="warn"`` for "an adapter
+    declared no device_classes", so a caller demuxing on severity alone would
+    render those under this advisory's heading.  See the comment above
+    ``check_class_compat``'s final return.
+    """
+
+    def test_fires_switch_source_into_firewall_target(self):
+        rep = check_scope_advisory(
+            get_codec("cisco_iosxe_cli"), get_codec("fortigate_cli")
+        )
+        assert rep is not None
+        assert rep.compatible is True, "an advisory must never refuse the job"
+        assert rep.severity == "warn"
+        assert len(rep.reasons) == 2
+
+    @pytest.mark.parametrize("target_name", ["fortigate_cli", "opnsense"])
+    def test_every_non_firewall_source_advises_on_both_firewall_targets(
+        self, target_name
+    ):
+        target = get_codec(target_name)
+        fired = [
+            name
+            for name in list_codecs()
+            if check_scope_advisory(get_codec(name), target) is not None
+        ]
+        assert "fortigate_cli" not in fired
+        assert "opnsense" not in fired
+        assert len(fired) == len(list_codecs()) - 2
+
+    @pytest.mark.parametrize("target_name", ["mikrotik_routeros", "vyos", "juniper_junos"])
+    def test_secondary_firewall_targets_do_not_advise(self, target_name):
+        """R1 regression.
+
+        These three declare ``firewall`` but not FIRST, so they are full-scope
+        router/switch platforms.  A membership test (``firewall in tgt``)
+        misfires on every one of them -- that was the plan's original bug.
+        """
+        rep = check_scope_advisory(
+            get_codec("cisco_iosxe_cli"), get_codec(target_name)
+        )
+        assert rep is None
+
+    def test_firewall_to_firewall_does_not_advise(self):
+        """That direction is not silent: the source codec's Tier-3 detector
+        already names the lost policy stanzas in ``dropped_tier3_sections``.
+        """
+        assert check_scope_advisory(get_codec("opnsense"), get_codec("fortigate_cli")) is None
+        assert check_scope_advisory(get_codec("fortigate_cli"), get_codec("opnsense")) is None
+
+    def test_binding_phrase_is_per_target_not_generic(self):
+        """Naming FortiOS syntax on an OPNsense job would be a small,
+        falsifiable error of exactly the kind this wave exists to remove.
+        """
+        fg = check_scope_advisory(get_codec("cisco_iosxe_cli"), get_codec("fortigate_cli"))
+        opn = check_scope_advisory(get_codec("cisco_iosxe_cli"), get_codec("opnsense"))
+        assert "set srcintf" in fg.reasons[1]
+        assert "set srcintf" not in opn.reasons[1]
+        assert "<interface>" in opn.reasons[1]
+
+    def test_advisory_makes_no_security_posture_claim(self):
+        """Binding retraction: both platforms fail CLOSED (FortiOS transit
+        needs an explicit policy; OPNsense pf blocks WAN ingress by default),
+        so any "no security posture" / "traffic is permitted" framing is
+        falsifiable.  The defensible mechanisms are rebinding and silence.
+        """
+        for target in ("fortigate_cli", "opnsense"):
+            text = " ".join(
+                check_scope_advisory(get_codec("cisco_iosxe_cli"), get_codec(target)).reasons
+            ).lower()
+            for banned in ("security posture", "wide open", "permits all", "unprotected"):
+                assert banned not in text, f"{target}: advisory must not claim {banned!r}"
+
+    def test_class_guard_still_blocks_disjoint_pairs(self):
+        """R2 regression.
+
+        The advisory lives OUTSIDE ``check_class_compat`` precisely so it can
+        never shadow the block arm.  A switch-only source against a
+        firewall-only target must still be refused.
+        """
+        src = _StubCodec("switch_only", [DeviceClass.switch])
+        tgt = _StubCodec("firewall_only", [DeviceClass.firewall])
+        assert check_class_compat(src, tgt).severity == "block"
+        assert check_scope_advisory(src, tgt) is not None
+
+
+class TestScopeAdvisoryReachesTheJob:
+    """R3 -- the advisory must be attached to the job, not computed and lost."""
+
+    def test_run_plan_attaches_the_advisory_without_changing_status(self):
+        job = run_plan(
+            get_codec("cisco_iosxe_cli"),
+            get_codec("fortigate_cli"),
+            "hostname edge-01\n!\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n",
+        )
+        assert len(job.scope_advisories) == 2
+        assert job.status is not MigrationJobStatus.failed
+        assert job.rendered is not None, "an advisory must not suppress the render"
+
+    def test_advisory_does_not_leak_into_the_rename_warning_channel(self):
+        """``job.warnings`` is a port-rename side-channel: every UI consumer
+        treats an entry as a renameable port name, and one carrying quotes
+        renders as a phantom interface row.  The advisory must not go there.
+        """
+        job = run_plan(
+            get_codec("cisco_iosxe_cli"),
+            get_codec("fortigate_cli"),
+            "hostname edge-01\n!\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n",
+        )
+        assert job.warnings == []
+
+    def test_switch_to_switch_job_carries_no_advisory(self):
+        job = run_plan(
+            get_codec("cisco_iosxe_cli"),
+            get_codec("juniper_junos"),
+            "hostname access-01\n!\nvlan 10\n name DATA\n",
+        )
+        assert job.scope_advisories == []

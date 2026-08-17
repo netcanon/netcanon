@@ -19,6 +19,7 @@ from ..migration.codecs.base import CodecBase
 from ..models.diff import CompatibilityReport
 from ..models.migration import (
     CapabilityMatrix,
+    DeviceClass,
     LossyPath,
     UnsupportedPath,
     ValidationReport,
@@ -179,6 +180,11 @@ def check_class_compat(
     :mod:`netcanon.models.diff` so the UI banner component stays the
     same regardless of which layer surfaced the mismatch.
 
+    This function is a **gate**: its answer decides whether the job runs.
+    Scope *notices* — which never refuse anything — live in
+    :func:`check_scope_advisory`.  Keep the two separate; the reasoning is
+    in the comment above this function's final ``return``.
+
     Args:
         source: Adapter that will parse the input.
         target: Adapter that will render the output.
@@ -236,8 +242,109 @@ def check_class_compat(
             ],
         )
 
+    # NOTE — do not add a firewall-target arm here, or anywhere above this
+    # point.  Every codec declares ``router``, so a switch-only source and a
+    # firewall-primary target still intersect and reach this line; but a
+    # genuinely disjoint pair (a source declaring only ``switch`` against a
+    # target declaring only ``firewall``) matches BOTH the block arm above and
+    # any firewall-target predicate.  Hoisting one above the other makes this
+    # guard's only refusal unreachable for every firewall target.  The scope
+    # advisory is therefore a SEPARATE function — see
+    # :func:`check_scope_advisory` — which also keeps this function's
+    # gate semantics (block/allow) from being confused with a notice.
     return CompatibilityReport(
         compatible=True,
         severity="ok",
         reasons=[],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Scope advisory (notice, not a gate)
+# ---------------------------------------------------------------------------
+
+#: Per-target policy-binding grammar, named so the advisory never prints
+#: FortiOS syntax on an OPNsense job.  Keyed by ``CapabilityMatrix.adapter``.
+_POLICY_BINDING_PHRASE = {
+    "fortigate_cli": "FortiOS policies bind to interface names (set srcintf / set dstintf)",
+    "opnsense": "OPNsense rules bind to interface zone tags (<interface>lan</interface>)",
+}
+_POLICY_BINDING_FALLBACK = "Firewall policy binds to interface names"
+
+
+def _primary_class(caps: CapabilityMatrix) -> DeviceClass | None:
+    """First declared device class — the platform's scope declaration.
+
+    See ``AGENTS.md`` § Hard Rules ("Never author or change a codec's
+    ``device_classes[0]`` without applying the scope test").
+    """
+    classes = caps.device_classes
+    return classes[0] if classes else None
+
+
+def _is_firewall_primary(caps: CapabilityMatrix) -> bool:
+    """``True`` iff this adapter's PRIMARY device class is ``firewall``.
+
+    Keyed on position 0 deliberately, not on membership: ``mikrotik_routeros``,
+    ``vyos`` and ``juniper_junos`` all declare ``firewall`` as a secondary
+    class and are full-scope router/switch platforms.  A membership test
+    misfires on all three.
+    """
+    return _primary_class(caps) is DeviceClass.firewall
+
+
+def check_scope_advisory(
+    source: CodecBase, target: CodecBase
+) -> CompatibilityReport | None:
+    """Notice for translations INTO a firewall-primary platform.
+
+    This is deliberately **not** part of :func:`check_class_compat`.  That
+    function is a gate whose contract is block-or-allow; this is a notice that
+    never refuses anything.  Merging them would force the caller to demux on
+    ``severity == "warn"``, which three of ``check_class_compat``'s own arms
+    already return for an unrelated reason (an adapter that declares no
+    classes at all) — and their text would then be rendered under this
+    advisory's heading.
+
+    Fires only when the target is firewall-primary and the source is not.
+    A firewall-to-firewall pair is excluded on purpose: that direction is
+    already loud, because the source codec's Tier-3 detector names the lost
+    policy stanzas in ``dropped_tier3_sections``.  The silent direction — and
+    the only one this covers — is switch/router into firewall.
+
+    Args:
+        source: Adapter that will parse the input.
+        target: Adapter that will render the output.
+
+    Returns:
+        A ``warn``-severity, ``compatible=True`` report, or ``None`` when the
+        pair does not warrant one.  ``None`` rather than an ``ok`` report so
+        the caller needs no severity parsing to tell "no advisory" from
+        "advisory that happens to be mild".
+    """
+    if not _is_firewall_primary(target.capabilities):
+        return None
+    if _is_firewall_primary(source.capabilities):
+        return None
+
+    adapter = target.capabilities.adapter
+    binding = _POLICY_BINDING_PHRASE.get(adapter, _POLICY_BINDING_FALLBACK)
+    return CompatibilityReport(
+        compatible=True,
+        severity="warn",
+        reasons=[
+            f"Target {adapter} is a firewall platform; Netcanon translates "
+            f"its L2/L3 layer only.  It carries interface addressing, VLAN "
+            f"interfaces and local users onto a firewall target - the policy "
+            f"table, NAT, VPN and UTM are not emitted.  No banner reports the "
+            f"target's missing policy plane: the Tier-3 banner reads your "
+            f"source config, not the target.",
+            f"{binding}, and the interface names in this output come from the "
+            f"source config, rewritten by Netcanon's cross-vendor "
+            f"interface-name translation - and by any target profile you "
+            f"applied in the rename panel.  If you merge it into an appliance "
+            f"that already carries policy, check every rule binding: a rule "
+            f"can end up on a different interface than it was written for, or "
+            f"on one this config does not define.",
+        ],
     )

@@ -79,6 +79,8 @@ pre code { background: none; border: none; padding: 0; }
 .hero { margin-top: 48px; display: flex; flex-direction: column; }
 .hero .sub { font-size: var(--nc-fs-lg); line-height: var(--nc-lh-base); max-width: 46em; }
 .vendor-row { color: var(--nc-text-muted); font-size: var(--nc-fs-base); margin: 12px 0 0; }
+.device-frame { margin: 12px 0 0; }
+.vendor-row strong { color: var(--nc-text); }
 .doors { display: flex; gap: 12px; flex-wrap: wrap; margin: 28px 0 8px; }
 .btn {
   display: inline-block; padding: 10px 20px; border-radius: var(--nc-r-md);
@@ -144,11 +146,12 @@ footer { border-top: 1px solid var(--nc-border); margin-top: 64px; padding: 32px
 @media (max-width: 640px) {
   section { margin: 48px auto; }
   .hero > h1 { order: 1; }
-  .hero > .sub { order: 3; }
-  .hero > .vendor-row { order: 2; }
+  .hero > .device-frame { order: 2; }
+  .hero > .vendor-row { order: 3; }
+  .hero > .sub { order: 4; }
   .hero > .doors { order: 0; margin: 0 0 20px; }
-  .hero > .tabs { order: 4; }
-  .hero > .capacity { order: 5; }
+  .hero > .tabs { order: 5; }
+  .hero > .capacity { order: 6; }
   .pane-grid { grid-template-columns: 1fr; }
   .btn { width: 100%; text-align: center; }
 }
@@ -163,9 +166,14 @@ footer { border-top: 1px solid var(--nc-border); margin-top: 64px; padding: 32px
   <p class="sub">Netcanon parses one vendor&rsquo;s running-config, renders another&rsquo;s, and declares
   every field it translates as <span class="ok">supported</span>, <span class="warn">lossy</span>,
   or <span class="unsup">unsupported</span> &mdash; with the reason.</p>
-  <p class="vendor-row">Cisco IOS-XE &middot; Cisco NX-OS &middot; Cisco IOS-XR &middot; Juniper Junos &middot;
-  Arista EOS &middot; Aruba AOS-S &middot; Aruba AOS-CX &middot; FortiGate &middot; MikroTik RouterOS &middot;
-  OPNsense &middot; VyOS</p>
+  <p class="device-frame"><strong>Built for switches and routers.</strong> Netcanon translates the
+  network-function layer those platforms share. It is not a firewall-policy tool.</p>
+  <p class="vendor-row"><strong>Switches and routers</strong> &mdash; Cisco IOS-XE &middot; Cisco NX-OS &middot;
+  Cisco IOS-XR &middot; Juniper Junos &middot; Arista EOS &middot; Aruba AOS-S &middot; Aruba AOS-CX &middot;
+  MikroTik RouterOS &middot; VyOS
+  <br><strong>Firewall platforms &mdash; the L2/L3 layer only</strong> &mdash; FortiGate &middot; OPNsense
+  <span class="small">(on a firewall that covers interface addressing, VLAN interfaces and local users;
+  the policy table, NAT, VPN and UTM are out of scope in either direction)</span></p>
 
   <div class="doors">
     <a class="btn btn-primary" href="https://demo.netcanon.net">Try it in the browser</a>
@@ -378,23 +386,31 @@ set servers=192.168.1.10,192.168.1.11</code></pre>
 <!-- ============================ matrix slice ============================ -->
 <section class="col wide" id="matrix">
   <h2>Every field has a declared fate</h2>
-  <p>An excerpt from the capability matrix &mdash; the <code>fortigate_cli</code> panel, verbatim:</p>
+  <p>An excerpt from the capability matrix &mdash; the <code>cisco_iosxe_cli</code> panel of
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/CAPABILITIES.md">docs/CAPABILITIES.md</a>,
+  verbatim:</p>
   <div class="tbl-wrap">
   <table>
     <tr><th>Canonical path</th><th>Class</th><th>Reason</th></tr>
-    <tr><td><code>&hellip;/vrrp-groups/group</code></td><td class="ok">supported</td>
-        <td>Nested-edit form: <code>config system interface / edit X / config vrrp / edit N / set vrip Y &hellip;</code></td></tr>
-    <tr><td><code>&hellip;/interface/config/description</code></td><td class="warn">lossy</td>
-        <td>FortiOS limits the interface alias to 25 characters; longer descriptions from other vendors are truncated.</td></tr>
-    <tr><td><code>&hellip;/vrrp-groups/group/virtual-ips</code></td><td class="warn">lossy</td>
-        <td>FortiOS <code>config vrrp / edit N</code> accepts a single <code>set vrip</code> per group. Multi-IP canonical
-        groups (IOS-XE repeated <code>vrrp N ip X</code>, Junos <code>virtual-address [ X Y Z ]</code>) emit the first VIP
-        and drop the tail with a <code># review:</code> line &mdash; operator must split into multiple groups manually.</td></tr>
-    <tr><td><code>&hellip;/filter/rule</code></td><td class="unsup">unsupported</td>
-        <td><code>config firewall policy</code> is Tier&nbsp;3 &mdash; session-based, zone-aware, UTM-enabled semantics
-        don&rsquo;t translate cleanly.</td></tr>
-    <tr><td><code>&hellip;/nat/rule</code></td><td class="unsup">unsupported</td>
-        <td>FortiGate NAT lives inside firewall policy and address / VIP objects &mdash; not auto-translatable.</td></tr>
+    <tr><td><code>/routing/static-route/vrf</code></td><td class="ok">supported</td>
+        <td>Per-VRF static routes: <code>ip route vrf &lt;NAME&gt; &lt;dest&gt; &lt;mask&gt; &lt;gw&gt;</code> round-trips
+        through parse + render onto <code>CanonicalStaticRoute.vrf</code>. Administrative-distance is harvested onto
+        <code>metric</code> (and re-emitted) and a trailing <code>name &lt;X&gt;</code> onto <code>description</code>;
+        only the <code>global</code> route-leak / <code>tag</code> / <code>track</code> tokens are not modelled and
+        parse-and-ignore.</td></tr>
+    <tr><td><code>&hellip;/interface/config/type</code></td><td class="warn">lossy</td>
+        <td>CLI parser infers IANA type from name prefix (GigabitEthernet &rarr; ethernetCsmacd, Loopback &rarr;
+        softwareLoopback) but cannot detect all IANA types.</td></tr>
+    <tr><td><code>&hellip;/interface/ipv4/address/virtual-gateway-address</code></td><td class="warn">lossy</td>
+        <td>SD-Access anycast-gateway (<code>virtual_gateway_address == the interface primary IP</code>) round-trips via
+        <code>fabric forwarding mode anycast-gateway</code>, but a SEPARATE cross-vendor VARP virtual IP (the Arista/Junos
+        shape, <code>virtual_gateway_address != the interface IP</code>) has no IOS-XE equivalent and drops on render
+        (review comment only). Demoted from supported to <strong>lossy</strong> so the separate-VIP loss surfaces instead
+        of reporting <code>severity:ok</code> (silent-loss guard).</td></tr>
+    <tr><td><code>/firewall</code></td><td class="unsup">unsupported</td>
+        <td>Zone-based firewall (zone-pair / policy-map type inspect) is Tier&nbsp;3.</td></tr>
+    <tr><td><code>/nat</code></td><td class="unsup">unsupported</td>
+        <td>NAT is Tier&nbsp;3 &mdash; semantics are tightly coupled to interface zone designations.</td></tr>
   </table>
   </div>
   <p style="margin-top:12px">Round-trip validated against real configs. The output is a draft for your review,

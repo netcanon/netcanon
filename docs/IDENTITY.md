@@ -31,7 +31,7 @@ surface.
 ## GitHub repo description (extended)
 
 ```
-Multi-vendor network config translator — Cisco / Juniper / Fortinet / Aruba / Arista / MikroTik / OPNsense / VyOS. Cross-mesh audit catches silent translation errors before they ship.
+Multi-vendor switch & router config translator — Cisco / Juniper / Arista / Aruba / MikroTik / VyOS. Cross-mesh audit catches silent translation errors before they ship. Firewall platforms (Fortinet FortiGate, OPNsense) are supported at the L2/L3 layer only — policy, NAT and VPN are out of scope.
 ```
 
 (Fits comfortably under GitHub's 350-char limit.  Names the vendor

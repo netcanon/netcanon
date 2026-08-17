@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+from html import unescape
 from pathlib import Path
 
 import pytest
@@ -719,4 +720,63 @@ def test_every_printed_serve_command_actually_starts(relpath):
     assert not bad, (
         f"{relpath}: printed serve command(s) that exit 'Refusing to start' "
         f"as pasted: {bad}"
+    )
+
+# ---------------------------------------------------------------------------
+# The landing page prints a capability-matrix excerpt and calls it "verbatim".
+# That word is a claim, and a claim on that page must not outlive its truth:
+# a reason string can be reworded in docs/CAPABILITIES.md by a codec PR that
+# never opens site/index.html, and nothing would notice.  This is the A5
+# transcription guard (review finding R10).
+#
+# Normalisation is deliberately asymmetric because the two sides are different
+# languages: site/ is HTML (strip tags, unescape entities), CAPABILITIES.md is
+# markdown (strip ` and ** only).  Stripping "tags" from the markdown side
+# would eat the <NAME>/<dest>/<mask> placeholders that appear literally in the
+# reason text -- a bug this guard was written after hitting.
+# ---------------------------------------------------------------------------
+
+_MATRIX_ROW_RE = re.compile(
+    r'<tr><td><code>(?P<path>.*?)</code></td>'
+    r'<td class="(?:ok|warn|unsup)">(?P<klass>.*?)</td>\s*'
+    r"<td>(?P<reason>.*?)</td></tr>",
+    re.S,
+)
+
+
+def _squash(text: str) -> str:
+    for a, b in (("\u2192", "->"), ("\u2014", "-"), ("\u00a0", " ")):
+        text = text.replace(a, b)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _matrix_rows() -> list[tuple[str, str, str]]:
+    page = read("site/index.html")
+    section = page.split('id="matrix"', 1)[1].split("</table>", 1)[0]
+    rows = []
+    for m in _MATRIX_ROW_RE.finditer(section):
+        strip_html = lambda s: _squash(unescape(re.sub(r"<[^>]+>", "", s)))  # noqa: E731
+        rows.append((strip_html(m["path"]), m["klass"].strip(), strip_html(m["reason"])))
+    return rows
+
+
+def test_matrix_excerpt_rows_are_transcribed_not_composed():
+    """Every reason string on the page appears verbatim in CAPABILITIES.md."""
+    caps = _squash(read("docs/CAPABILITIES.md").replace("`", "").replace("**", ""))
+    rows = _matrix_rows()
+    assert rows, "no capability-matrix rows found in site/index.html #matrix"
+    missing = [path for path, _klass, reason in rows if reason not in caps]
+    assert not missing, (
+        "site/index.html calls the matrix excerpt 'verbatim', but these rows' "
+        f"reason strings are not in docs/CAPABILITIES.md: {missing}.  Either "
+        "re-transcribe the row or stop calling the excerpt verbatim."
+    )
+
+
+def test_matrix_excerpt_shows_at_least_one_lossy_row():
+    """An all-green slice is the wrong slice (landing-page design brief)."""
+    classes = [klass for _path, klass, _reason in _matrix_rows()]
+    assert "lossy" in classes, (
+        f"matrix excerpt must carry at least one lossy row with its full "
+        f"reason; got {classes}"
     )

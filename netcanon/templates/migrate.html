@@ -439,6 +439,16 @@
          class="mig-banner mig-banner-warn"
          style="display:none; margin-top:.5rem"></div>
 
+    <!-- Scope advisory: reports the TARGET platform, where the tier-3
+         banner above reports the SOURCE.  Fires when translating into a
+         firewall-primary platform, whose policy plane netcanon never
+         emits and which no other banner on this page mentions.
+         Populated by JS from job.scope_advisories; rendered via
+         renderScopeAdvisoryBanner(). -->
+    <div id="mig-scope-banner" data-testid="migrate-scope-advisory-banner"
+         class="mig-banner mig-banner-warn"
+         style="display:none; margin-top:.5rem"></div>
+
     <div id="mig-stats" class="mig-stats"
          data-testid="migrate-stats" style="margin-top:.5rem"></div>
   </div>
@@ -840,6 +850,7 @@
   var summary    = document.getElementById('mig-status-summary');
   var banner     = document.getElementById('mig-banner');
   var tier3Banner = document.getElementById('mig-tier3-banner');
+  var scopeBanner = document.getElementById('mig-scope-banner');
   var stats      = document.getElementById('mig-stats');
   var outputSec  = document.getElementById('mig-output-section');
   var output     = document.getElementById('mig-output');
@@ -1451,6 +1462,7 @@
     // translate them.  See ARCHITECTURE.md "Cross-cutting render-time
     // policies" for the Tier-3 boundary rationale.
     renderTier3Banner(job);
+    renderScopeAdvisoryBanner(job);
 
     // Counts strip.
     if (job.validation) {
@@ -1571,6 +1583,35 @@
       + 'Operator must apply them manually on the target device.'
       + '</div>'
       + '<ul style="margin-top:.4rem">' + rows + '</ul>';
+  }
+
+  /** Render the scope-advisory banner.
+   *
+   * Reads job.scope_advisories (populated by run_plan via
+   * check_scope_advisory()).  Distinct from the tier-3 banner above:
+   * that one reports what the SOURCE carried and we dropped, this one
+   * reports what the TARGET platform will not receive at all.  Without
+   * it, a switch -> firewall translation says nothing anywhere about the
+   * missing policy plane.  Notification only.
+   */
+  function renderScopeAdvisoryBanner(job) {
+    if (!scopeBanner) return;
+    var notes = (job && job.scope_advisories) || [];
+    if (!notes.length) {
+      scopeBanner.style.display = 'none';
+      scopeBanner.innerHTML = '';
+      return;
+    }
+    var rows = notes.map(function(note, idx) {
+      return '<li data-testid="migrate-scope-advisory-' + idx + '">'
+           + escapeHtml(note) + '</li>';
+    }).join('');
+    scopeBanner.style.display = '';
+    scopeBanner.innerHTML =
+      '<div style="flex:1">'
+      + '<strong>&#9888; Target is a firewall platform</strong>'
+      + '<ul style="margin-top:.4rem;font-size:.82rem">' + rows + '</ul>'
+      + '</div>';
   }
 
   /** Render a bucket of validation findings.
