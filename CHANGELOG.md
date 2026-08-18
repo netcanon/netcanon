@@ -62,6 +62,23 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Code Scanning outage was enough to publish an unsigned `:latest`.**
+  `docker-publish.yml` pushes every tag the instant `Build and push`
+  completes; until `cosign sign` runs, GHCR serves an image nobody has signed.
+  Three failable steps sat in that window -- the Trivy scan, the SARIF upload,
+  and the cosign install itself -- and because the job aborts on any of them
+  while the tag stays moved, the unsigned `:latest` would have been permanent,
+  not transient.  The SARIF step was the sharpest edge: it carried
+  `if: always()`, which governs whether a step RUNS after an earlier failure
+  and says nothing about its own failure propagating, so a GitHub Code Scanning
+  hiccup alone could ship an unsigned release.  Cosign is now installed up
+  front, sign / SBOM / attest / verify follow the push with **zero** steps in
+  between, scanning is demoted to the end as pure reporting, and the SARIF
+  upload is explicitly `continue-on-error`.  No step was added or removed --
+  18 before, 18 after, one body changed -- and the reordering is guarded by
+  `tests/unit/test_docker_publish_signing_window.py`, whose four assertions
+  were each verified red against the previous ordering.
+
 - **SECURITY.md contradicted itself about how the PyPI publish action is
   pinned.**  One bullet said the workflow uses
   `pypa/gh-action-pypi-publish@release/v1` -- a floating upstream branch --
