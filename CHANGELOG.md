@@ -62,6 +62,21 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **The complexity ratchet could not see ruff 0.16's second suppression
+  spelling.**  Both guard patterns in `tests/unit/test_complexity_ratchet.py`
+  required the literal `noqa`, but ruff 0.16 stabilised a `ruff:`-prefixed
+  `ignore` directive taking a bracketed code list, which contains no `noqa`
+  token at all.  Measured against both pins rather than inferred: under ruff
+  0.15.17 the form is REJECTED (the C901 violation still reports, plus an
+  invalid-directive error); under 0.16.3 it SILENTLY SUPPRESSES, file-level and
+  inline alike, with a bogus-directive control confirming the probe was valid.
+  Adopting 0.16 without this would have reopened review finding #57 -- the
+  complexity gate dodgeable with a green `ruff check` AND a green ratchet.  Both
+  new patterns were verified red by injecting each form into a real module.  The
+  ratchet is now correct whichever pin is in force, so the ruff-0.16 bump is
+  unblocked (it still needs the `ci.yml` pin moved in the same change to be
+  anything other than inert).
+
 - **The expectation-YAML schema validator was wired into nothing, and three
   files had drifted out of compliance.**
   `tools/load_cross_vendor_expectations.py` has always checked the 56 pair

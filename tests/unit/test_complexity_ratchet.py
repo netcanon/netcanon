@@ -39,6 +39,19 @@ _TREES = ("netcanon", "netcanon_desktop", "tools")
 #: this guard is neither self-counted nor self-suppressed (review #57 — the old
 #: exact-substring marker matched only the canonical spelling, so every variant
 #: dodged the ratchet).
+#: ``noqa`` is not the only spelling.  ruff 0.16 stabilised a SECOND
+#: suppression form -- a ``ruff:``-prefixed ``ignore`` directive taking a
+#: bracketed code list -- which contains no ``noqa`` token at all, so the
+#: pattern below cannot see it.  Verified empirically against ruff 0.15.17
+#: and 0.16.3: under 0.15 the form is REJECTED (the C901 violation still
+#: reports, plus an invalid-directive error); under 0.16 it SILENTLY
+#: SUPPRESSES, both file-level and inline.  Adopting 0.16 without this
+#: pattern reopens #57 with a green `ruff check` AND a green ratchet.
+#: Matched now so the guard is already correct when the pin moves.
+_C901_IGNORE_RE = re.compile(
+    r"#\s*ruff:\s*ignore\s*\[[^\]]*\bC90\d?\b[^\]]*\]", re.IGNORECASE,
+)
+
 _C901_INLINE_RE = re.compile(r"#\s*noqa:?[^\n]*\bC901\b", re.IGNORECASE)
 
 #: A file-level ruff directive (the ``ruff:``-prefixed noqa form), optionally
@@ -47,6 +60,13 @@ _C901_INLINE_RE = re.compile(r"#\s*noqa:?[^\n]*\bC901\b", re.IGNORECASE)
 #: the inline ratchet inert.  (Kept out of literal form for the reason above.)
 _RUFF_FILE_DIRECTIVE_RE = re.compile(
     r"#\s*ruff:\s*noqa(?::\s*(?P<codes>[^\n]*))?", re.IGNORECASE
+)
+
+#: The ruff-0.16 ``ignore`` form of the same file-level hazard.  A bracketed
+#: code list naming C90/C901 at file scope disables the complexity gate for
+#: the whole module exactly as the ``noqa`` spelling does.
+_RUFF_FILE_IGNORE_RE = re.compile(
+    r"#\s*ruff:\s*ignore\s*\[(?P<codes>[^\]]*)\]", re.IGNORECASE,
 )
 
 #: Pre-existing functions over the max-complexity ceiling, grandfathered with an
@@ -60,7 +80,7 @@ def _c901_suppression_count() -> int:
     for tree in _TREES:
         for path in (_ROOT / tree).rglob("*.py"):
             for line in path.read_text(encoding="utf-8").splitlines():
-                if _C901_INLINE_RE.search(line):
+                if _C901_INLINE_RE.search(line) or _C901_IGNORE_RE.search(line):
                     n += 1
     return n
 
@@ -97,7 +117,8 @@ def test_no_blanket_or_c901_file_directive() -> None:
     for tree in _TREES:
         for path in (_ROOT / tree).rglob("*.py"):
             for line in path.read_text(encoding="utf-8").splitlines():
-                m = _RUFF_FILE_DIRECTIVE_RE.search(line)
+                m = (_RUFF_FILE_DIRECTIVE_RE.search(line)
+                     or _RUFF_FILE_IGNORE_RE.search(line))
                 if m is None:
                     continue
                 codes = (m.group("codes") or "").strip()
