@@ -101,10 +101,24 @@ dev = [
     "pytest-xdist>=3.5.0",
     "coverage>=7.4.0",
     "pytest-cov>=4.1.0",
-    # Linting (v0.2.0 tooling baseline).  Pinned to a minor range so a
-    # ruff release that adds/changes a rule can't silently turn the CI
-    # `ruff check` gate red on an unrelated PR.
-    "ruff>=0.15,<0.16",
+    # Linting (v0.2.0 tooling baseline).  EXACT pin, deliberately.
+    #
+    # A range does not do what the old comment here claimed.  CI installs
+    # fresh on every run and pip resolves to the newest match, so
+    # `ruff>=0.15,<0.16` silently adopted 0.15.18 through 0.15.22 as they
+    # shipped -- five releases, no PR, no review.  Only an exact pin can
+    # keep a new ruff release from reaching the gate on its own.
+    #
+    # This line is the SINGLE source of truth for the linter version:
+    # Dependabot watches pyproject.toml (that is where its ruff PRs are
+    # raised), so each bump now arrives as a reviewable, CI-tested PR
+    # after the 7-day cooldown in .github/dependabot.yml.  ci.yml's lint
+    # job READS this value rather than repeating it -- a duplicated
+    # constraint there is what made the ruff bump PR inert, since the two
+    # could disagree with nothing noticing.
+    #
+    # Guarded by tests/unit/test_ruff_pin_is_exact.py.
+    "ruff==0.16.3",
 ]
 desktop = [
     "PySide6>=6.7.0",

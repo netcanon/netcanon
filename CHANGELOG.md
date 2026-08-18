@@ -62,6 +62,24 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **The ruff pin did not do what its own comment claimed.**  `pyproject.toml`
+  carried `ruff>=0.15,<0.16` under a comment saying the range existed so "a
+  ruff release that adds/changes a rule can't silently turn the CI `ruff check`
+  gate red on an unrelated PR".  A range cannot do that: CI installs fresh
+  every run and pip resolves to the newest match, so the constraint silently
+  adopted 0.15.18 through 0.15.22 as they shipped -- five releases, no PR, no
+  review.  Measured rather than argued: `pip install --dry-run
+  "ruff>=0.15,<0.16"` resolved to `ruff-0.15.22` while the pin was in force.
+  Now `ruff==0.16.3`, so no release reaches the gate without a reviewed,
+  CI-tested PR -- Dependabot watches `pyproject.toml`, which is where its ruff
+  PRs are already raised.  `ci.yml`'s lint job now DERIVES the pin from
+  `pyproject.toml` instead of repeating it: the old "keep this constraint in
+  sync" comment was enforced by nothing, and that divergence is exactly what
+  would have made a Dependabot bump inert (contributors move, the gate does
+  not).  Tree verified clean under 0.16.3 over CI's exact scope.  Guarded by
+  `tests/unit/test_ruff_pin_is_exact.py`, three assertions, each verified red
+  against the previous arrangement.
+
 - **A Code Scanning outage was enough to publish an unsigned `:latest`.**
   `docker-publish.yml` pushes every tag the instant `Build and push`
   completes; until `cosign sign` runs, GHCR serves an image nobody has signed.
