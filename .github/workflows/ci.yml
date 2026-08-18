@@ -44,13 +44,24 @@ jobs:
           cache: "pip"
 
       - name: Install ruff
-        # Keep this constraint in sync with the `ruff` pin in the
-        # pyproject.toml [project.optional-dependencies] dev extra.  A
-        # ruff minor bump can add or change rules, so pinning keeps this
-        # gate deterministic across otherwise-unrelated PRs.
+        # Read the pin out of pyproject.toml rather than repeating it.
+        #
+        # 'Keep this in sync' was the old instruction here, and it did not
+        # hold: nothing checked it, so the gate and the declared dev
+        # dependency could drift apart silently -- which is exactly why a
+        # Dependabot bump to the pyproject constraint would have been
+        # INERT (contributors move, the gate does not).  Deriving it makes
+        # divergence structurally impossible instead of merely forbidden.
+        #
+        # The pin is exact (`ruff==X.Y.Z`) so no ruff release ever reaches
+        # this gate without a reviewed PR; tests/unit/test_ruff_pin_is_exact.py
+        # enforces both that property and the absence of a literal version
+        # here.  A malformed pyproject fails this step loudly.
         run: |
           python -m pip install --upgrade pip
-          pip install "ruff>=0.15,<0.16"
+          RUFF_PIN=$(python -c "import tomllib, pathlib; specs=tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['optional-dependencies']['dev']; print(next(s for s in specs if s.replace(' ', '').startswith('ruff==')))")
+          echo "Installing pinned linter: ${RUFF_PIN}"
+          pip install "${RUFF_PIN}"
 
       - name: Run ruff
         # Scope: the shipping package, the desktop shell, the dev tools, the
