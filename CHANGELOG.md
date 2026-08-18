@@ -62,6 +62,20 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **SECURITY.md contradicted itself about how the PyPI publish action is
+  pinned.**  One bullet said the workflow uses
+  `pypa/gh-action-pypi-publish@release/v1` -- a floating upstream branch --
+  while another bullet in the same document listed that action among those
+  pinned to full commit SHAs.  The workflow SHA-pins it, so the first bullet
+  was wrong, and wrong in the direction of UNDER-claiming the hardening in a
+  security document.  Surfaced by the #438 action bump, which moved that very
+  pin.  Also dropped an unguarded prose count ("All 11 third-party action
+  references") that is wrong on either reading -- there are 10 distinct
+  third-party actions across 23 references -- per the AGENTS.md rule that
+  unguarded counts get deleted rather than updated.  Both substantive claims
+  were verified and DO hold: 23/23 third-party references are SHA-pinned and
+  every first-party reference is tag-pinned.
+
 - **The complexity ratchet could not see ruff 0.16's second suppression
   spelling.**  Both guard patterns in `tests/unit/test_complexity_ratchet.py`
   required the literal `noqa`, but ruff 0.16 stabilised a `ruff:`-prefixed
