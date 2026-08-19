@@ -308,6 +308,30 @@ tests use these exclusively — never CSS classes or element structure.  See
   "the docs lied to me" is what differentiates Netcanon's
   matrix-honesty discipline from the over-claiming alternatives in
   this space.
+- **Never** let a failable step sit between publishing an artifact and
+  signing it.  `Build and push` in `docker-publish.yml` makes every tag
+  live — `:latest` included — the instant it completes, and a failing step
+  aborts the job *with the tag still moved*, so the unsigned window is
+  permanent rather than transient.  Install prerequisite tooling BEFORE the
+  push; put sign / SBOM / attest / verify immediately after it; demote
+  scanning and reporting to the end and mark them `continue-on-error`.
+  Failure mode: three failable steps once sat in that window and a GitHub
+  Code Scanning outage alone was sufficient to ship an unsigned release
+  (#441).  Note `if: always()` does NOT make a step non-fatal — it governs
+  whether the step RUNS after an earlier failure, not whether its own
+  failure propagates.  Guarded by
+  `tests/unit/test_docker_publish_signing_window.py`.
+- **Never** express a CI tool version as a RANGE and call it pinned, and
+  never repeat that version in a second file.  CI installs fresh on every
+  run and pip resolves to the newest match, so a range silently adopts
+  releases: `ruff>=0.15,<0.16` took 0.15.18 through 0.15.22 with no PR and
+  no review (#442).  Pin exactly, in the manifest Dependabot watches
+  (`pyproject.toml` — a pin buried in a workflow `run:` block is invisible
+  to it and freezes the tool instead), and have the workflow DERIVE the
+  value rather than restate it — a duplicated constraint is what makes a
+  dependency-bump PR inert, since the gate and the declared dependency can
+  disagree with nothing noticing.  Guarded by
+  `tests/unit/test_ruff_pin_is_exact.py`.
 - **Never** author or change a codec's `device_classes[0]` without applying
   the scope test.  A codec's **first** entry in `device_classes` — declared in
   `netcanon/migration/vendors/<vendor>.yaml` and mirrored in its

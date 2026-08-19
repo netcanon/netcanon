@@ -62,6 +62,23 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Three doc-sync gaps left by this wave's own merges**, found by auditing
+  compliance rather than assuming it.  (1) `SECURITY.md` still described Trivy
+  as running "after `Build and push`" -- literally true but no longer the point,
+  since the unsigned-`:latest` fix deliberately moved scanning to run AFTER
+  signing/attestation; the bullet now states that ordering as the security
+  property it is.  (2) `SECURITY.md` claimed "all three ci.yml jobs are
+  read-only" when there are **six** -- the substantive claim holds (none
+  override the workflow-level `contents: read`), so the count was deleted per
+  the AGENTS.md unguarded-count rule rather than replaced with one that rots
+  again.  This is the same defect class fixed one commit earlier in the same
+  file, missed then because the grep was scoped to the specific claim under
+  review.  (3) Two cross-cutting invariants surfaced by bugs this wave were
+  never written into `AGENTS.md` § Hard Rules, which its own doc-sync table
+  requires: nothing failable may sit between publishing an artifact and signing
+  it, and a version RANGE is not a pin (pin exactly, in the manifest Dependabot
+  watches, and derive it rather than repeating it).
+
 - **The ruff pin did not do what its own comment claimed.**  `pyproject.toml`
   carried `ruff>=0.15,<0.16` under a comment saying the range existed so "a
   ruff release that adds/changes a rule can't silently turn the CI `ruff check`

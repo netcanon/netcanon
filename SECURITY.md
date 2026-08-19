@@ -551,12 +551,23 @@ hardening.
   `.github/zizmor.yml` implements the hybrid action-pinning policy
   (tag-pin allowed for `actions/*` + `github/*` first-party
   publishers; SHA-pin required for third-party publishers).
-- **Trivy Docker image scanning.**  Runs after `Build and push` in
-  `.github/workflows/docker-publish.yml`; scans the just-built image
-  for OS-package + Python-package CVEs at HIGH+CRITICAL severity
-  (`ignore-unfixed: true` filters noise).  Results upload to Code
-  scanning under the `trivy-image` category.  Fires on every release
-  tag push (`v*.*.*`).
+- **Trivy Docker image scanning.**  Runs at the END of
+  `.github/workflows/docker-publish.yml` — deliberately AFTER the image
+  is signed, SBOM-attested and signature-verified.  It scans the
+  published image by digest for OS-package + Python-package CVEs at
+  HIGH+CRITICAL severity (`ignore-unfixed: true` filters noise).  Results
+  upload to Code scanning under the `trivy-image` category.  Fires on
+  every release tag push (`v*.*.*`).
+
+  The ordering is a security property, not a preference.  `Build and
+  push` makes every tag live — `:latest` included — the instant it
+  completes, and a later step failing aborts the job with the tag still
+  moved.  Scanning used to sit between the push and `cosign sign`, so a
+  GitHub Code Scanning outage could leave GHCR serving a permanently
+  unsigned `:latest`.  Scanning is informational (`exit-code: 0`) and the
+  SARIF upload is `continue-on-error`, so neither can now cost a release
+  its signature.  Enforced by
+  `tests/unit/test_docker_publish_signing_window.py`.
 - **SHA-pinned third-party actions.**  Every third-party action
   reference in the workflow corpus
   (`softprops/action-gh-release`, `docker/setup-buildx-action`,
@@ -570,8 +581,8 @@ hardening.
   the hybrid policy — GitHub controls those repos with force-push
   protection.
 - **Workflow-level `permissions: contents: read` on `ci.yml`.**
-  Default-deny `GITHUB_TOKEN` scope at workflow level; all three
-  ci.yml jobs are read-only.  Other workflow files (`docker-publish`,
+  Default-deny `GITHUB_TOKEN` scope at workflow level; every ci.yml job
+  is read-only (none override it).  Other workflow files (`docker-publish`,
   `pypi-publish`, `desktop-msi-publish`, `zizmor`) declare narrower
   per-job scopes where write access is required (`packages: write` /
   `id-token: write` for publish jobs; `security-events: write` for
