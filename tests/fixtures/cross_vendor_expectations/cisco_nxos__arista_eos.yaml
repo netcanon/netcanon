@@ -1,0 +1,358 @@
+# Cross-vendor fidelity expectations: cisco_nxos -> arista_eos
+#
+# Source: cisco_nxos codec — NX-OS `show running-config` text.
+# Target: arista_eos codec — EOS CLI render.
+#
+# Both codecs declare `device_classes = [switch, router]`, so this is the
+# widest kind of pair in the mesh: two DC-class leaf/spine platforms with
+# heavily overlapping canonical surface (L2/L3 interfaces, VLANs + SVIs,
+# VXLAN-EVPN, VRFs, LAGs, SNMP, local users, static routes, anycast gateway).
+# The realistic migration is a Nexus leaf being replaced by an Arista leaf in
+# the same fabric role.
+#
+# Dispositions here are grounded in three in-repo sources rather than
+# asserted: each codec's `CapabilityMatrix`, and a full `run_full_mesh.py`
+# pass over the committed corpus (13 fixture cells, 0 render errors, 0
+# re-parse errors). The per-field measurement is cached in
+# `docs/vendor-references/cisco_nxos_to_arista_eos/canonical_surface.md`.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_nxos_to_arista_eos/
+#
+# Authored 2026-08-19 as the first pair of the cisco_nxos expectation mesh
+# (A6). cisco_nxos was chosen over vyos — the codec the original A6 scoping
+# named — because it is joint-best on coverage gained (161 cells) and carries
+# ~40% more unexplained drift in the blind region.
+
+meta:
+  source_vendor: cisco_nxos
+  target_vendor: arista_eos
+  primary_use_case: >
+    DC leaf refresh: a Cisco Nexus 9000 leaf replaced by an Arista 7050/7280
+    in the same EVPN-VXLAN fabric role.  Shared surface is broad — hostname,
+    interfaces (L3 addressing, MTU, state), VLANs, VRFs with L3 VNIs,
+    VXLAN VNI bindings, LAGs, SNMP, local users, static routes and the
+    distributed anycast gateway MAC.  The pair is realistic enough that most
+    fields are `good`; the losses that remain are concentrated in vendor
+    naming (LAG membership) and in fabric detail Arista models differently
+    (multicast replication group, SVI-on-VLAN addressing).
+  certainty: medium
+  references:
+    - id: nxos-arista-surface
+      path: docs/vendor-references/cisco_nxos_to_arista_eos/canonical_surface.md
+      title: "NX-OS -> Arista EOS: measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-19"
+    - id: lag-naming
+      path: docs/vendor-references/cisco_nxos_to_arista_eos/lag_naming.md
+      title: "LAG membership across NX-OS -> Arista EOS (name-derived channel-group)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-19"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field audited
+# by tools/run_full_mesh.py (_AUDITED_FIELDS).
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- auto-translatable scalars / lists --
+
+  hostname:
+    disposition: good
+    note: "`hostname <name>` on both platforms; preserved on 13 of 13 cells."
+    references: [nxos-arista-surface]
+
+  domain:
+    disposition: good
+    note: >
+      NX-OS `ip domain-name` maps to the Arista equivalent; preserved on both
+      cells that populate it.
+    references: [nxos-arista-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Both matrices declare `/system/dns-server` supported and both platforms
+      spell it `ip name-server <ip>`.  No committed fixture on this pair
+      populates the field, so this rests on the declarations rather than an
+      observed round-trip -- stated rather than left implicit.
+    references: [nxos-arista-surface]
+
+  ntp_servers:
+    disposition: good
+    note: "`ntp server <ip>` on both; preserved on the one cell exercising it."
+    references: [nxos-arista-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      The arista_eos matrix declares `/system/timezone` unsupported -- "Render
+      emits no clock/timezone stanza; intent.timezone is dropped on
+      migration".  The NX-OS matrix carries the identical declaration, so this
+      is a symmetric gap in the pair rather than an Arista limitation.  Re-set
+      the clock timezone on the target by hand.
+    references: [nxos-arista-surface]
+
+  syslog_servers:
+    disposition: good
+    note: "Preserved on the one cell exercising it."
+    references: [nxos-arista-surface]
+
+  # -- Interfaces.  No top-level key on purpose: the record itself survives on
+  # every cell and the loss is confined to the four sub-fields below, so
+  # declaring the parent lossy would mark all 13 cells over-declared. --
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Names are carried verbatim by design -- the cross-mesh audit scores name
+      STABILITY; native translation (`Ethernet1/3` -> `Ethernet3`) belongs to
+      the orchestrator's port-rename layer, which this path does not engage.
+    references: [nxos-arista-surface]
+
+  "interfaces[].description":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: "Admin state round-trips, including the negated (`shutdown`) form."
+    references: [nxos-arista-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Drifts on 7 of 13 cells, and the loss is the interface's OWN address
+      rather than a cosmetic attribute: on an SVI that also carries a
+      distributed anycast gateway the source holds `ip=192.168.10.1` alongside
+      `virtual_gateway_address=192.168.10.1`, and the target returns `ip=""`
+      with the virtual-gateway companion intact.  The Arista render emits the
+      VARP anycast address but not the SVI's primary IP, so a fabric leaf
+      loses per-SVI addressing while appearing to keep its gateway.
+      Re-declare the primary addresses on the target.
+    references: [nxos-arista-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The IANA ifType (`ianaift:ethernetCsmacd`) drops on 12 of 13 cells --
+      observed on the management interface (`mgmt0`).  Cosmetic: the interface
+      and its addressing survive, and the type is re-inferable from the name
+      prefix on the target.
+    references: [nxos-arista-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Goes null on all 13 cells.  The Arista renderer derives its
+      `channel-group <N>` from the LAG name; an NX-OS `port-channel1` does not
+      match its `Port-Channel<N>` grammar, so no `channel-group` line is
+      emitted and the member never re-associates.  See the `lags` entry and
+      `lag_naming.md` -- the same canonical record round-trips intact when the
+      name is Arista-shaped, so this is naming, not a modelling gap.
+    references: [lag-naming, nxos-arista-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: lossy
+    reason: >
+      Drifts on 4 of 13 cells.  NX-OS sources carry `mode="hsrp"` groups; HSRP
+      is declared lossy on the NX-OS side independently (it has no native EOS
+      wire protocol and maps onto VRRP), so cross-protocol election timing and
+      mode do not survive.  Verify the first-hop redundancy pair was
+      re-created on the target.
+    references: [nxos-arista-surface]
+
+  # -- VLANs.  Top-level key omitted for the same reason as interfaces. --
+
+  "vlans[].id":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "vlans[].name":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Drifts on 7 of 13 cells.  An L3 address carried on the VLAN record
+      itself -- the SVI-on-VLAN shape, including the anycast
+      `virtual_gateway_address` companion -- drops, because the Arista codec
+      renders SVI addressing from a sibling `interface Vlan<N>` stanza rather
+      than synthesising it from the VLAN record.  Same root cause as
+      `interfaces[].ipv4_addresses`, seen from the VLAN side.
+    references: [nxos-arista-surface]
+
+  static_routes:
+    disposition: good
+    note: >
+      `ip route <dest> <next-hop>` on both platforms, including the per-VRF
+      form; preserved on all 8 cells that populate routes.
+    references: [nxos-arista-surface]
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence, not a target gap: the cisco_nxos codec never
+      populates `intent.dhcp_servers` (0 of 13 cells), so there is nothing for
+      the Arista target to lose.  Arista *can* render DHCP pools -- its matrix
+      declares `/dhcp-servers/pool` supported -- so closing the NX-OS parse
+      side would move this row to `good` or `lossy`, not leave it here.
+    references: [nxos-arista-surface]
+
+  # -- Tier 2 -- translatable with caveats --
+
+  "snmp.community":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "snmp.location":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "snmp.contact":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      The only SNMP attribute that drifts (4 of 11 populated cells; the
+      Phase-1 dict diff names `v3_users` as the sole value-drift key).  NX-OS
+      emits SNMPv3 USM digests in a localized-key form the Arista render does
+      not reproduce verbatim, so v3 users need re-keying on the target.
+      v1/v2c is unaffected.
+    references: [nxos-arista-surface]
+
+  lags:
+    disposition: lossy
+    reason: >
+      Kept as a whole-record disposition because the record does not survive
+      on any populated cell (0 preserved / 5 drifted): "all N lags dropped".
+      Both platforms model link aggregation natively and the canonical record
+      carries name, members and LACP mode -- but a BARE cross-vendor render
+      drops the membership, because the Arista renderer derives
+      `channel-group <N>` from the LAG name and an NX-OS `port-channel1` does
+      not match `Port-Channel<N>`.  Verified by probe: the identical canonical
+      record round-trips intact when the name is Arista-shaped and is lost
+      when it is NX-OS-shaped.  Lossy rather than unsupported for exactly that
+      reason -- the target models the concept fully.  The orchestrator's
+      port-rename mesh closes this on the deploy path.
+    references: [lag-naming, nxos-arista-surface]
+
+  "local_users[].name":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: "The NX-OS named role maps onto the Arista privilege model."
+    references: [nxos-arista-surface]
+
+  "local_users[].hashed_password":
+    disposition: lossy
+    reason: >
+      Drifts on every populated cell (10), but representationally rather than
+      as a loss: an NX-OS `5 $5$<salt>$<digest>` re-parses from the Arista render as
+      `arista:5:$5$<salt>$<digest>`.  The digest is preserved verbatim and only the
+      vendor/type marker around it changes, so accounts remain usable -- but a
+      byte-comparison of the password field will not match, and tooling that
+      diffs credentials across the migration reports every user as changed.
+    references: [nxos-arista-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos codec never populates
+      `intent.radius_servers` (0 of 13 cells) -- its matrix declares both
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported on render, and no fixture exercises a parse side.
+    references: [nxos-arista-surface]
+
+  # -- EVPN-VXLAN fabric surface --
+
+  "vxlan_vnis[].vni":
+    disposition: good
+    references: [nxos-arista-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: "The VNI-to-VLAN binding survives."
+    references: [nxos-arista-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: lossy
+    reason: >
+      The underlay multicast replication group (e.g. `239.11.11.10`) that an
+      NX-OS multicast-mode fabric binds per VNI is dropped (4 cells).  A
+      fabric using ingress replication is unaffected; a multicast-mode fabric
+      re-renders without its replication group and will not forward BUM
+      traffic until it is re-declared.
+    references: [nxos-arista-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells).  Both codecs model EVPN
+      Type-5 IP-prefix advertisement as a VRF property via
+      `CanonicalRoutingInstance.l3_vni` rather than as standalone route
+      records -- both matrices declare `/evpn-type5-routes/route` lossy with
+      that same rationale -- so the surface is carried under
+      `routing_instances`, not here.
+    references: [nxos-arista-surface]
+
+  "routing_instances[].name":
+    disposition: good
+    note: "VRF name, RD/RT and the L3 VNI binding round-trip."
+    references: [nxos-arista-surface]
+
+  "routing_instances[].description":
+    disposition: lossy
+    reason: >
+      The VRF description string is dropped on render (2 cells).  Cosmetic
+      relative to the routing surface, but it is operator-authored text that
+      will not survive the migration.
+    references: [nxos-arista-surface]
+
+  # -- Vendor-specific / structural surfaces --
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells).  The NX-OS matrix declares
+      two raw-section surfaces lossy -- `vdc` (N7K virtualisation grammar with
+      no canonical primitive) and `features` (derived on render from the
+      canonical tree shape rather than carried) -- but neither reaches the
+      Arista target as canonical data.
+    references: [nxos-arista-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-only concept (`apply-groups` configuration inheritance); an NX-OS
+      source never populates it.
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-only companion to `apply_groups`."
+
+  anycast_gateway_mac:
+    disposition: good
+    note: >
+      The chassis-wide distributed-anycast-gateway MAC round-trips: NX-OS
+      `fabric forwarding anycast-gateway-mac <mac>` maps onto the Arista
+      equivalent, preserved on all 7 cells that populate it.
+    references: [nxos-arista-surface]

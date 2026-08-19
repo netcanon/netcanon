@@ -28,6 +28,25 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+- **First `cisco_nxos` cross-vendor expectation pair (A6).**  The audit can only
+  classify a cell that HAS a pair YAML, so 723 of 1224 mesh cells were
+  structurally blind -- `CODEC_BUG = 5` was a count over the covered subset,
+  not the mesh.  `cisco_nxos__arista_eos` closes 13 of them.  Chosen over
+  `vyos`, which the original A6 scoping named: measured on unexplained drift
+  already visible in the blind region (excluding the known `interfaces` /
+  `local_users` cross-vendor artifacts), vyos ranks LAST of the four blind
+  codecs and cisco_nxos is joint-best on coverage gained.
+  Effect: ALIGNED 1690 -> 1874, EXPECTED_LOSSY 1196 -> 1246,
+  **CODEC_BUG unchanged at 5**, severity roll-up unchanged.
+
+- **The reconciliation report hardcoded which codecs were blind.**  Its
+  coverage note named `aruba_aoscx / cisco_iosxr / cisco_nxos / vyos`
+  literally while computing the counts beside them, so the moment the first
+  cisco_nxos pair landed the report asserted zero coverage for a codec it had
+  just reconciled 13 cells for.  Both the codec names and the subset size are
+  now derived from the loaded expectations, and the note degrades correctly to
+  "every codec now has at least one pair YAML" once the last one lands.
+
 - **Scope advisory when translating into a firewall platform.**  A
   switch/router -> FortiGate or OPNsense job now raises a banner on the
   migrate page saying that Netcanon emits no policy plane, and that policy

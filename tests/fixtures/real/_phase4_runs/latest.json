@@ -1,9 +1,34 @@
 {
-  "started_utc": "2026-08-17T16:24:25+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260817T162424Z.json",
-  "mesh_run_started_utc": "2026-08-17T16:24:18+00:00",
+  "started_utc": "2026-08-19T05:33:45+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260819T053023Z.json",
+  "mesh_run_started_utc": "2026-08-19T05:30:17+00:00",
   "cells_total": 1224,
-  "expectation_yamls_loaded": 56,
+  "expectation_yamls_loaded": 57,
+  "covered_codecs": [
+    "arista_eos",
+    "aruba_aoss",
+    "cisco_iosxe",
+    "cisco_iosxe_cli",
+    "cisco_nxos",
+    "fortigate_cli",
+    "juniper_junos",
+    "mikrotik_routeros",
+    "opnsense"
+  ],
+  "all_codecs": [
+    "arista_eos",
+    "aruba_aoscx",
+    "aruba_aoss",
+    "cisco_iosxe",
+    "cisco_iosxe_cli",
+    "cisco_iosxr",
+    "cisco_nxos",
+    "fortigate_cli",
+    "juniper_junos",
+    "mikrotik_routeros",
+    "opnsense",
+    "vyos"
+  ],
   "intra_vendor_cells_skipped": [
     {
       "fixture": "tests/fixtures/real/arista_eos/batfish_duplicateprivate_eos4211.txt",
@@ -1955,11 +1980,6 @@
     {
       "fixture": "tests/fixtures/real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt",
       "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt",
-      "source_codec": "cisco_nxos",
       "target_codec": "aruba_aoscx"
     },
     {
@@ -2010,11 +2030,6 @@
     {
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt",
       "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt",
-      "source_codec": "cisco_nxos",
       "target_codec": "aruba_aoscx"
     },
     {
@@ -2061,11 +2076,6 @@
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_bgp_redist_d1.txt",
       "source_codec": "cisco_nxos",
       "target_codec": "vyos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_evpn_l2vni_nx1.txt",
-      "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
     },
     {
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_evpn_l2vni_nx1.txt",
@@ -2120,11 +2130,6 @@
     {
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt",
       "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt",
-      "source_codec": "cisco_nxos",
       "target_codec": "aruba_aoscx"
     },
     {
@@ -2171,11 +2176,6 @@
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt",
       "source_codec": "cisco_nxos",
       "target_codec": "vyos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt",
-      "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
     },
     {
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt",
@@ -2230,11 +2230,6 @@
     {
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_hsrp_nxos1.txt",
       "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_hsrp_nxos1.txt",
-      "source_codec": "cisco_nxos",
       "target_codec": "aruba_aoscx"
     },
     {
@@ -2281,11 +2276,6 @@
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_hsrp_nxos1.txt",
       "source_codec": "cisco_nxos",
       "target_codec": "vyos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_hsrp_nxos2.txt",
-      "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
     },
     {
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_hsrp_nxos2.txt",
@@ -2340,11 +2330,6 @@
     {
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_n9kv_ebgp_r1.txt",
       "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_n9kv_ebgp_r1.txt",
-      "source_codec": "cisco_nxos",
       "target_codec": "aruba_aoscx"
     },
     {
@@ -2391,11 +2376,6 @@
       "fixture": "tests/fixtures/real/cisco_nxos/batfish_nxos_n9kv_ebgp_r1.txt",
       "source_codec": "cisco_nxos",
       "target_codec": "vyos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
-      "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
     },
     {
       "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
@@ -2450,11 +2430,6 @@
     {
       "fixture": "tests/fixtures/real/cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt",
       "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt",
-      "source_codec": "cisco_nxos",
       "target_codec": "aruba_aoscx"
     },
     {
@@ -2505,11 +2480,6 @@
     {
       "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
       "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
-      "source_codec": "cisco_nxos",
       "target_codec": "aruba_aoscx"
     },
     {
@@ -2556,11 +2526,6 @@
       "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
       "source_codec": "cisco_nxos",
       "target_codec": "vyos"
-    },
-    {
-      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_vxlan_mcast_leaf2_nxos.cfg",
-      "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
     },
     {
       "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_vxlan_mcast_leaf2_nxos.cfg",
@@ -3941,11 +3906,6 @@
       "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
       "source_codec": "cisco_iosxr",
       "target_codec": "vyos"
-    },
-    {
-      "fixture": "tests/fixtures/synthetic/cisco_nxos/kitchen_sink.cfg",
-      "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos"
     },
     {
       "fixture": "tests/fixtures/synthetic/cisco_nxos/kitchen_sink.cfg",
@@ -4134,19 +4094,19 @@
     }
   ],
   "aggregate": {
-    "ALIGNED": 1690,
+    "ALIGNED": 1874,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 1196,
+    "EXPECTED_LOSSY": 1246,
     "EXPECTED_UNSUPPORTED": 768,
-    "METHODOLOGY_ISSUE_under": 916,
+    "METHODOLOGY_ISSUE_under": 935,
     "METHODOLOGY_ISSUE_over": 21,
     "STRUCTURAL_ONLY": 1179,
-    "TRIVIAL_EMPTY": 9524,
-    "fields_total": 15299,
+    "TRIVIAL_EMPTY": 9791,
+    "fields_total": 15819,
     "severity_high": 5,
     "severity_medium": 106,
-    "severity_low": 2010,
-    "severity_ok": 13178
+    "severity_low": 2029,
+    "severity_ok": 13679
   },
   "severity_matrix": {
     "arista_eos": {
@@ -4402,11 +4362,6 @@
       "source_codec": "cisco_iosxr",
       "target_codec": "vyos",
       "drifted_total": 43
-    },
-    {
-      "source_codec": "cisco_nxos",
-      "target_codec": "arista_eos",
-      "drifted_total": 37
     },
     {
       "source_codec": "cisco_nxos",
