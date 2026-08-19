@@ -92,11 +92,13 @@ Constraints honoured
 --------------------
 * Standalone executable — no pytest dependency at runtime.
 * Self-contained — no internet, no external API calls.
-* Honest about misses — cells whose pair YAML doesn't exist (the 56
-  expectation YAMLs cover only an 8-codec subset; aruba_aoscx /
-  cisco_iosxr / cisco_nxos / vyos have none, so ~59% of mesh cells are
-  uncovered) are reported in the JSON's
-  ``cells_without_expectation_yaml`` field rather than silently dropped.
+* Honest about misses — cells whose pair YAML doesn't exist are reported
+  in the JSON's ``cells_without_expectation_yaml`` field rather than
+  silently dropped, and the generated report names which codecs are
+  uncovered.  Both the counts and the codec names are DERIVED from the
+  loaded expectations: a hand-maintained list there went stale the moment
+  the first cisco_nxos pair YAML landed, still asserting zero coverage
+  while the count beside it had already moved.
 * Idempotent — re-running produces a new timestamped JSON; the
   skeleton .md gets overwritten on every invocation.
 """
@@ -1030,6 +1032,15 @@ def run_reconciliation(mesh_json_path: Path) -> dict[str, Any]:
         "mesh_run_started_utc": mesh.get("started_utc"),
         "cells_total": len(cells_out),
         "expectation_yamls_loaded": len(expectations),
+        # Derived, never hardcoded: the coverage note below names which
+        # codecs are blind, and a hand-maintained list there went stale the
+        # moment the first cisco_nxos pair YAML landed (it kept asserting
+        # zero coverage while the count beside it had already moved).
+        "covered_codecs": sorted({c for pair in expectations for c in pair}),
+        "all_codecs": sorted(
+            {c["source_codec"] for c in cells_out}
+            | {c["target_codec"] for c in cells_out}
+        ),
         "intra_vendor_cells_skipped": intra_vendor_cells,
         "cells_without_expectation_yaml": cells_without_yaml,
         "aggregate": aggregate,
@@ -1184,16 +1195,28 @@ def render_skeleton_md(result: dict[str, Any]) -> str:
         n = len(result["cells_without_expectation_yaml"])
         m = result.get("expectation_yamls_loaded", 0)
         total = result.get("cells_total", 0)
+        covered = result.get("covered_codecs") or []
+        every = result.get("all_codecs") or []
+        blind = [c for c in every if c not in set(covered)]
+        blind_txt = (
+            f"**{' / '.join(blind)} have ZERO expectation coverage** as "
+            f"both source and target, so any drift into or out of "
+            f"{'those codecs' if len(blind) > 1 else 'that codec'} is "
+            f"structurally invisible to this residual.  "
+            if blind else
+            "Every codec now has at least one pair YAML, so no codec is "
+            "wholly invisible to this residual — though individual PAIRS "
+            "may still lack one.  "
+        )
         lines.append(
             f"**Coverage note:** {n} cross-vendor cell(s) have no matching "
-            f"pair YAML.  The {m} expectation YAMLs cover only an 8-codec "
-            f"subset (8 of the 12 codecs); **aruba_aoscx / cisco_iosxr / "
-            f"cisco_nxos / vyos have ZERO expectation coverage** as both "
-            f"source and target, so any drift into or out of those codecs "
-            f"is structurally invisible to this residual.  That makes "
-            f"these {n} of {total} cells expected, NOT a missing-files "
-            f"error — the headline residual is computed over the covered "
-            f"subset, not the full mesh.  Detail in the per-run JSON.\n"
+            f"pair YAML.  The {m} expectation YAMLs cover a "
+            f"{len(covered)}-codec subset ({len(covered)} of the "
+            f"{len(every)} codecs); {blind_txt}"
+            f"That makes these {n} of {total} cells expected, NOT a "
+            f"missing-files error — the headline residual is computed over "
+            f"the covered subset, not the full mesh.  Detail in the "
+            f"per-run JSON.\n"
         )
 
     lines.append("## Aggregate variance counts\n")
