@@ -28,6 +28,23 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+- **A new expectation pair can no longer declare a loss the corpus never
+  exhibits.**  The aggregate Fid-F7 ratchet already stops `METHODOLOGY_under`
+  debt growing, but it cannot catch an over-declaration at authoring time:
+  adding a pair legitimately grows that bucket and forces a conscious
+  re-baseline, which absorbs whatever the new pair brought -- including
+  fields hedged to `lossy` when the author was unsure.  The new PER-PAIR
+  ratchet gives an unlisted pair an allowance of **zero**, so "when in doubt
+  mark it lossy" now fails loudly.  Achievable, not aspirational:
+  `cisco_nxos__arista_eos`, authored field-by-field against measured
+  per-fixture behaviour, scores 0 -- one of only 4 pairs of 57 that do.
+  The 53 seeded pairs (157 declarations) are pre-existing debt left at
+  measured values rather than fixed in bulk, because the Fid-F7 sweep already
+  investigated this class and found most candidates are honest sub-canonical
+  lossy the mesh is blind to.  Counted from the reconciler's own variance
+  classes rather than a parallel re-join, so the ratchet and the audit cannot
+  disagree.  Both assertions verified red.
+
 - **First `cisco_nxos` cross-vendor expectation pair (A6).**  The audit can only
   classify a cell that HAS a pair YAML, so 723 of 1224 mesh cells were
   structurally blind -- `CODEC_BUG = 5` was a count over the covered subset,
