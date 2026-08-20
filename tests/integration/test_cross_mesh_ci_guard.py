@@ -389,3 +389,157 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
         "reconciled field-cells dropped vs baseline — fewer fields are being "
         "classified than the committed coverage floor."
     )
+
+
+# ---------------------------------------------------------------------------
+# Per-pair unevidenced-declaration ratchet.
+#
+# A field declared ``lossy`` / ``unsupported`` whose loss is NEVER observed on
+# any cell of its pair is an unevidenced claim: the corpus preserves the data
+# every time, and the YAML says it does not.  The aggregate Fid-F7 ratchet
+# above cannot catch this at authoring time, because adding a pair legitimately
+# grows METHODOLOGY_under and forces a conscious re-baseline that absorbs
+# whatever the new pair brought with it -- including hedged declarations.
+#
+# So this ratchet is PER PAIR, and a pair not listed below must score ZERO.
+# That is the property that makes authoring (or delegating) a new pair safe:
+# "when unsure, mark it lossy" no longer passes silently.  It is achievable --
+# cisco_nxos__arista_eos, authored field-by-field against measured per-fixture
+# behaviour rather than from the capability matrices, scores 0.
+#
+# The 53 seeded pairs are pre-existing debt, left at their measured values
+# rather than "fixed" in bulk: the Fid-F7 sweep already investigated this class
+# and found most candidates are honest sub-canonical lossy the mesh is blind to
+# (the loss is real, just below the granularity Phase 1 compares at).  Lowering
+# an entry is always allowed; raising one is a conscious edit.
+# ---------------------------------------------------------------------------
+
+_UNEVIDENCED_BASELINE: dict[str, int] = {
+    "arista_eos__aruba_aoss": 2,
+    "arista_eos__cisco_iosxe": 3,
+    "arista_eos__cisco_iosxe_cli": 1,
+    "arista_eos__fortigate_cli": 3,
+    "arista_eos__juniper_junos": 4,
+    "arista_eos__mikrotik_routeros": 1,
+    "arista_eos__opnsense": 6,
+    "aruba_aoss__arista_eos": 2,
+    "aruba_aoss__cisco_iosxe": 2,
+    "aruba_aoss__cisco_iosxe_cli": 3,
+    "aruba_aoss__fortigate_cli": 2,
+    "aruba_aoss__juniper_junos": 5,
+    "aruba_aoss__mikrotik_routeros": 4,
+    "aruba_aoss__opnsense": 6,
+    "cisco_iosxe__aruba_aoss": 1,
+    "cisco_iosxe__cisco_iosxe_cli": 2,
+    "cisco_iosxe__fortigate_cli": 1,
+    "cisco_iosxe__juniper_junos": 1,
+    "cisco_iosxe__opnsense": 2,
+    "cisco_iosxe_cli__arista_eos": 2,
+    "cisco_iosxe_cli__aruba_aoss": 2,
+    "cisco_iosxe_cli__cisco_iosxe": 2,
+    "cisco_iosxe_cli__fortigate_cli": 3,
+    "cisco_iosxe_cli__juniper_junos": 4,
+    "cisco_iosxe_cli__mikrotik_routeros": 1,
+    "cisco_iosxe_cli__opnsense": 4,
+    "fortigate_cli__arista_eos": 1,
+    "fortigate_cli__aruba_aoss": 2,
+    "fortigate_cli__cisco_iosxe": 3,
+    "fortigate_cli__cisco_iosxe_cli": 2,
+    "fortigate_cli__juniper_junos": 6,
+    "fortigate_cli__mikrotik_routeros": 3,
+    "fortigate_cli__opnsense": 6,
+    "juniper_junos__arista_eos": 3,
+    "juniper_junos__aruba_aoss": 3,
+    "juniper_junos__cisco_iosxe": 2,
+    "juniper_junos__cisco_iosxe_cli": 8,
+    "juniper_junos__fortigate_cli": 4,
+    "juniper_junos__mikrotik_routeros": 2,
+    "juniper_junos__opnsense": 5,
+    "mikrotik_routeros__arista_eos": 2,
+    "mikrotik_routeros__aruba_aoss": 1,
+    "mikrotik_routeros__cisco_iosxe": 1,
+    "mikrotik_routeros__cisco_iosxe_cli": 1,
+    "mikrotik_routeros__fortigate_cli": 4,
+    "mikrotik_routeros__juniper_junos": 3,
+    "mikrotik_routeros__opnsense": 5,
+    "opnsense__arista_eos": 3,
+    "opnsense__cisco_iosxe": 3,
+    "opnsense__cisco_iosxe_cli": 2,
+    "opnsense__fortigate_cli": 5,
+    "opnsense__juniper_junos": 5,
+    "opnsense__mikrotik_routeros": 3,
+}
+
+_EVIDENCED = {"EXPECTED_LOSSY", "EXPECTED_UNSUPPORTED"}
+
+
+def _unevidenced_by_pair(result: dict) -> dict[str, int]:
+    """Count, per pair, fields declared lossy/unsupported with no observed loss.
+
+    Derived from the reconciler's OWN variance classes rather than by
+    re-joining actual-vs-expected here, so the ratchet and the audit cannot
+    disagree: a field counts as unevidenced when at least one cell classified
+    METHODOLOGY_ISSUE_under (preserved against a declared loss) and NO cell
+    classified EXPECTED_LOSSY / EXPECTED_UNSUPPORTED anywhere in the pair.
+    """
+    seen: dict[tuple[str, str], dict[str, set[str]]] = {}
+    for cell in result["cells"]:
+        key = (cell["source_codec"], cell["target_codec"])
+        fields = seen.setdefault(key, {})
+        for field, var in (cell.get("field_variances") or {}).items():
+            fields.setdefault(field, set()).add(var["variance"])
+    out: dict[str, int] = {}
+    for (src, tgt), fields in seen.items():
+        n = sum(
+            1 for classes in fields.values()
+            if "METHODOLOGY_ISSUE_under" in classes and not (classes & _EVIDENCED)
+        )
+        if n:
+            out[f"{src}__{tgt}"] = n
+    return out
+
+
+def test_no_new_pair_declares_a_loss_it_never_observes(mesh_and_recon):
+    """A NEW pair may not claim a loss the corpus never exhibits.
+
+    Verified red by adding a `lossy` disposition for a field that always
+    survives on cisco_nxos__arista_eos; the pair is absent from the baseline,
+    so its allowance is 0 and the guard fires.
+    """
+    _, result = mesh_and_recon
+    live = _unevidenced_by_pair(result)
+    offenders = []
+    for pair, n in sorted(live.items()):
+        allowed = _UNEVIDENCED_BASELINE.get(pair, 0)
+        if n > allowed:
+            offenders.append(f"{pair}: {n} unevidenced (allowed {allowed})")
+    assert not offenders, (
+        "expectation YAML(s) declare a loss the corpus never exhibits -- every "
+        "cell of the pair PRESERVES the field while the YAML calls it lossy or "
+        "unsupported:\n  " + "\n  ".join(offenders) + "\n\n"
+        "For a new pair the allowance is 0.  Author each disposition against "
+        "what the mesh actually does for that pair (source matrix + target "
+        "matrix + per-fixture behaviour), not from the capability matrices "
+        "alone, and do not hedge to `lossy` when unsure -- an unevidenced "
+        "`lossy` is over-claiming loss exactly as a missing declaration is "
+        "under-claiming it.  If the loss is real but sub-canonical (below the "
+        "granularity Phase 1 compares at), say so in the reason and seed the "
+        "pair in _UNEVIDENCED_BASELINE deliberately."
+    )
+
+
+def test_unevidenced_declaration_debt_does_not_grow_in_total(mesh_and_recon):
+    """The per-pair allowances above must not be silently traded off.
+
+    A pair improving while another regresses would leave every per-pair
+    assertion green.  The total is ratcheted too, so debt can only shrink.
+    """
+    _, result = mesh_and_recon
+    live = sum(_unevidenced_by_pair(result).values())
+    base = sum(_UNEVIDENCED_BASELINE.values())
+    assert live <= base, (
+        f"total unevidenced declarations grew: live={live} > baseline={base}. "
+        f"Lowering an entry in _UNEVIDENCED_BASELINE is always fine; raising "
+        f"one is a conscious edit that belongs in the same change as the "
+        f"disposition it excuses."
+    )
