@@ -204,7 +204,7 @@ jobs:
           exit 1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
 
       # Resolve whether the optional Docker Hub mirror is configured.  The
       # `secrets` context is NOT available in a step-level `if:`, so we map
@@ -451,7 +451,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v4.37.6
+        uses: github/codeql-action/upload-sarif@v4.37.7
         continue-on-error: true   # reporting only; never fail a publish (image is signed + attested by now)
         if: always()      # upload even if Trivy failed, so partial findings still surface
         with:
