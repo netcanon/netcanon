@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-08-24
+
 ### Added
 
 - **A new expectation pair can no longer declare a loss the corpus never
