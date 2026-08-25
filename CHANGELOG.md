@@ -75,6 +75,31 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`demo-publish.yml` had the same unsigned-publish window #441 closed in
+  `docker-publish.yml`.**  Its `warden-image` job installed cosign *after*
+  pushing both images, so a failed install left the demo warden and
+  authz-shim public and permanently unsignable by that run.  Two more
+  violations rode along: the Trivy SARIF upload was `if: always()` with no
+  `continue-on-error` (which governs whether a step RUNS, not whether its
+  own failure propagates), and signature *verification* sat behind those
+  scanning steps, so a Code Scanning outage skipped the check that proves
+  the signature is real.
+
+  The AGENTS.md rule was always stated generally -- never let a failable
+  step sit between publishing an artifact and signing it -- but the guard
+  enforcing it named exactly one workflow, so nothing ever looked at the
+  other.  `tests/unit/test_docker_publish_signing_window.py` is now
+  parametrised over both, with a fifth assertion that prerequisite signing
+  tooling is installed BEFORE the first push; all five were verified red
+  against the old ordering.  The job now mirrors `docker-publish`'s shape
+  exactly: prereqs -> push -> sign -> SBOM -> attest -> verify -> scan ->
+  report(`continue-on-error`).
+
+  Found while reviewing a routine Dependabot action-pin bump (#446), which
+  touched two lines in that job.  `demo-publish.yml` signs Trusted Computing
+  Base components, so it was the more sensitive of the two workflows to
+  have left unguarded.
+
 - **The landing page claimed a demo bundle two versions older than the one
   deployed.**  `site/index.html` read `demo-v0.1.3 - deployed 2026-07-28`
   while the host has run `demo-v0.1.4` since 2026-08-01 and `demo-v0.1.5`

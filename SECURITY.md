@@ -567,7 +567,17 @@ hardening.
   unsigned `:latest`.  Scanning is informational (`exit-code: 0`) and the
   SARIF upload is `continue-on-error`, so neither can now cost a release
   its signature.  Enforced by
-  `tests/unit/test_docker_publish_signing_window.py`.
+  `tests/unit/test_docker_publish_signing_window.py`, which asserts the
+  ordering against the PARSED workflow for **both**
+  `docker-publish.yml` and `demo-publish.yml`.  The second was added
+  after a review found the same three violations there: the cosign
+  install sat after both image pushes, the SARIF upload was
+  `if: always()` with no `continue-on-error`, and signature
+  verification sat behind the scanning steps that could abort the job.
+  The rule had always been stated generally; only the guard was
+  workflow-specific, so nothing looked.  `demo-publish.yml` signs the
+  demo warden and authz-shim, which are Trusted Computing Base
+  components, so it is the more sensitive of the two.
 - **SHA-pinned third-party actions.**  Every third-party action
   reference in the workflow corpus
   (`softprops/action-gh-release`, `docker/setup-buildx-action`,
