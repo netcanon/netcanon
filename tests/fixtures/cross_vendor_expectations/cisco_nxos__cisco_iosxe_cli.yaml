@@ -1,0 +1,426 @@
+# Cross-vendor fidelity expectations: cisco_nxos -> cisco_iosxe_cli
+#
+# Source: cisco_nxos codec — NX-OS `show running-config` text.
+# Target: cisco_iosxe_cli codec — IOS-XE CLI render (text, not NETCONF).
+#
+# A Cisco-to-Cisco pair, so the shared surface is the widest in the mesh
+# apart from the intra-vendor cells: hostname, L2/L3 interfaces, VLANs and
+# SVIs, VRFs with RD/RT and L3 VNIs, VXLAN VNI bindings, LAG bundles, SNMP,
+# local users, static routes and the distributed anycast gateway MAC all
+# round-trip. The realistic migration is a Nexus 9000 leaf or aggregation
+# switch replaced by a Catalyst 9000 in the same role.
+#
+# Dispositions are grounded in three in-repo sources rather than asserted:
+# each codec's `CapabilityMatrix`, a full `tools/run_full_mesh.py` pass over
+# the committed corpus (13 fixture cells, 0 render errors, 0 re-parse
+# errors), and a re-read of that pass through the reconciler's own
+# `actual_disposition` resolver so the per-sub-field counts match what the CI
+# ratchet sees. The measurement is cached in
+# `docs/vendor-references/cisco_nxos_to_cisco_iosxe_cli/canonical_surface.md`.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_nxos_to_cisco_iosxe_cli/
+#
+# Authored 2026-08-20 as the second pair of the cisco_nxos expectation mesh
+# (A6), after cisco_nxos__arista_eos.
+
+meta:
+  source_vendor: cisco_nxos
+  target_vendor: cisco_iosxe_cli
+  primary_use_case: >
+    Nexus-to-Catalyst refresh inside one estate: an NX-OS leaf / aggregation
+    switch re-homed onto IOS-XE, captured and re-emitted as CLI text.  Being
+    same-vendor, almost everything survives — VLANs and their SVI addressing,
+    VRFs with RD/RT and L3 VNIs, VXLAN bindings, LAG membership, static
+    routes, SNMP v1/v2c and the anycast gateway MAC.  The losses that remain
+    are concentrated where NX-OS has a construct IOS-XE spells differently or
+    not at all: HSRP first-hop redundancy, NX-OS RBAC role names, the
+    per-user SNMPv3 engineID, and the lower-case `port-channel<N>` bundle
+    name.
+  certainty: medium
+  references:
+    - id: nxos-iosxecli-surface
+      path: docs/vendor-references/cisco_nxos_to_cisco_iosxe_cli/canonical_surface.md
+      title: "NX-OS -> Cisco IOS-XE (CLI): measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-20"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field audited
+# by tools/run_full_mesh.py (_AUDITED_FIELDS).  `interfaces`, `lags`,
+# `local_users` and `snmp` are addressed by sub-field only: the record itself
+# survives on every populated cell and the loss is confined to the sub-fields
+# named below, so a top-level key would over-declare every other sub-field.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- auto-translatable scalars / lists --
+
+  hostname:
+    disposition: good
+    note: "`hostname <name>` on both platforms; preserved on 13 of 13 cells."
+    references: [nxos-iosxecli-surface]
+
+  domain:
+    disposition: good
+    note: >
+      NX-OS `ip domain-name <fqdn>` re-renders as the IOS-XE `ip domain name`
+      form and re-parses back (the parser accepts both the modern and the
+      legacy hyphenated spelling); preserved on both cells that populate it.
+    references: [nxos-iosxecli-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      No committed fixture on this pair populates resolvers, so this rests on
+      the code path rather than an observed round-trip -- stated plainly
+      rather than left implicit.  The IOS-XE CLI matrix enumerates no
+      `/system/dns-server` xpath, but its parser and renderer both implement
+      `ip name-server <ip>` end to end, and the two sibling scalars that are
+      equally undeclared (`domain`, `ntp_servers`) preserve on every cell that
+      exercises them.
+    references: [nxos-iosxecli-surface]
+
+  ntp_servers:
+    disposition: good
+    note: "`ntp server <ip>` on both; preserved on the one cell exercising it."
+    references: [nxos-iosxecli-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported with the same
+      reason -- "Render emits no clock/timezone stanza; intent.timezone is
+      dropped on migration" -- so the clock timezone leaves the config
+      regardless of fixture coverage (no cell on this pair populates it).
+      Re-apply `clock timezone <name> <offset>` by hand on the target, and
+      re-check any time-of-day ACL or scheduled job that assumed local time.
+    references: [nxos-iosxecli-surface]
+
+  syslog_servers:
+    disposition: good
+    note: >
+      NX-OS `logging server <ip>` re-renders as `logging host <ip>`;
+      preserved on the one cell exercising it.
+    references: [nxos-iosxecli-surface]
+
+  # -- Interfaces.  Top-level key omitted on purpose: the interface records
+  # themselves survive on every cell (name and IPv4 addressing preserve 13 of
+  # 13) and the drift is confined to the three sub-fields below. --
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Names are carried verbatim by design -- the cross-mesh audit scores name
+      STABILITY; native translation (`Ethernet1/1` -> `GigabitEthernet1/0/1`)
+      belongs to the orchestrator's port-rename layer, which this path does
+      not engage.
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].description":
+    disposition: good
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: "Admin state round-trips, including the negated (`shutdown`) form."
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on all 13 cells, SVIs included -- the primary address, its
+      prefix length and any secondaries survive.  This is where the pair beats
+      `cisco_nxos__arista_eos`, which loses SVI addressing on the fabric
+      leaves.
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: "Preserved on the 3 cells that carry IPv6 interface addressing."
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].vrf":
+    disposition: good
+    note: >
+      NX-OS `vrf member <name>` re-renders as `vrf forwarding <name>`; the
+      interface stays in its VRF on 12 of 13 cells (the 13th has no VRFs).
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].switchport_mode":
+    disposition: good
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].access_vlan":
+    disposition: good
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: good
+    note: "The allowed-VLAN list survives, including its ranges."
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: good
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].dhcp_client":
+    disposition: good
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The IANA ifType drops on 12 of 13 cells, always on the same interface:
+      `mgmt0` arrives as `ianaift:ethernetCsmacd` and re-parses as
+      `ianaift:other`.  The IOS-XE CLI parser infers the type from the name
+      prefix (`GigabitEthernet` -> ethernetCsmacd, `Loopback` ->
+      softwareLoopback) and `mgmt0` is not an IOS-XE name.  Cosmetic in
+      routing terms -- the port, its address and its state all survive -- but
+      inventory that keys on ifType will see the management port change
+      class.  Renaming the port to its IOS-XE form (`GigabitEthernet0/0`),
+      by hand or through the port-rename mesh, restores the type.
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts on all 5 cells that have bundles: a member port's
+      `lag_member_of` arrives as `port-channel1` and re-parses as
+      `Port-channel1`.  The membership itself is intact -- the target's
+      `channel-group` line is valid IOS-XE and `lags[].members` preserves --
+      so what is lost is the exact name token: anything keyed on the literal
+      lower-case string (inventory, monitoring templates, scripts that match
+      interface names) must be re-pointed at the capitalised form.
+    references: [nxos-iosxecli-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      The first-hop-redundancy group does not survive at all.  On all 4 cells
+      that carry one, the source holds an HSRP group on an SVI (`mode="hsrp"`,
+      a virtual IP, a priority, `preempt`, and on two cells an authentication
+      key) and the re-parsed target holds an empty list.  The IOS-XE CLI
+      matrix declares `/interfaces/interface/vrrp-groups/group/mode` lossy
+      because a cross-family source mode drops to a review comment on render
+      -- and a comment is not configuration, so nothing comes back.  The
+      operator consequence is severe and silent: the migrated SVI has neither
+      HSRP nor VRRP, the virtual IP that hosts use as their default gateway is
+      never configured on the box, and the redundancy pair does not form.
+      Re-create the group as `standby <id>` (HSRP) or `vrrp <id>` on the
+      target, re-apply the virtual IP, priority, preempt and authentication,
+      and confirm the peer election before cutting traffic over.
+    references: [nxos-iosxecli-surface]
+
+  # -- VLANs.  Whole-record disposition: nothing under `vlans` drifts. --
+
+  vlans:
+    disposition: good
+    note: >
+      Preserved on all 13 cells -- id, name, tagged and untagged port lists,
+      and the L3 address carried on the VLAN record itself (the SVI-on-VLAN
+      shape), which the IOS-XE render mounts onto a synthesized `interface
+      Vlan<N>`.  The target matrix declares the VLAN `description` and the
+      VLAN-record anycast companions lossy, but no fixture on this pair
+      populates them, so no cell reaches those paths.
+    references: [nxos-iosxecli-surface]
+
+  static_routes:
+    disposition: good
+    note: >
+      `ip route <dest> <next-hop>` on both platforms, including the per-VRF
+      form and an explicit metric; preserved on all 8 cells that populate
+      routes.  Both matrices declare the route `description` lossy (an IOS-XE
+      route name is a single whitespace-free token), but no NX-OS fixture
+      labels its routes, so nothing drifts.
+    references: [nxos-iosxecli-surface]
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence, not a target gap: the cisco_nxos codec declares
+      `/dhcp-servers/pool` unsupported and never populates
+      `intent.dhcp_servers` (0 of 13 cells), so there is nothing for the
+      IOS-XE target to lose.  IOS-XE *can* render DHCP pools, so closing the
+      NX-OS parse side would move this row to `good` or `lossy`, not leave it
+      here.
+    references: [nxos-iosxecli-surface]
+
+  # -- Tier 2 -- translatable with caveats --
+
+  "snmp.community":
+    disposition: good
+    note: "Preserved on all 11 cells that configure SNMP."
+    references: [nxos-iosxecli-surface]
+
+  "snmp.location":
+    disposition: good
+    references: [nxos-iosxecli-surface]
+
+  "snmp.contact":
+    disposition: good
+    references: [nxos-iosxecli-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    references: [nxos-iosxecli-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      The only SNMP attribute that drifts (4 of 11 populated cells; the
+      Phase-1 dict diff names `v3_users` as the sole value-drift key).  The
+      USM user survives with its name and auth protocol, but two things
+      change: the per-user engineID the NX-OS source carries is dropped (the
+      IOS-XE matrix declares `/snmp/v3-user/engine-id` lossy -- engineIDs are
+      device-assigned), and a user that had no NX-OS group is rendered into a
+      synthesized `v3group`.  Separately, the NX-OS matrix declares the auth
+      and priv passphrases lossy, so the localized key material never reaches
+      the target in the first place.  Re-create the v3 group with the views
+      and rights it needs, then re-key each user on the target device.
+      v1/v2c communities are unaffected.
+    references: [nxos-iosxecli-surface]
+
+  # -- LAGs.  Top-level key omitted: the bundle survives (members and LACP
+  # mode preserve on every populated cell); only the name re-cases. --
+
+  "lags[].name":
+    disposition: lossy
+    reason: >
+      Drifts on all 5 cells that carry bundles: NX-OS writes
+      `port-channel<N>` and IOS-XE re-parses `Port-channel<N>`.  Purely a
+      spelling change -- the bundle, its members and its LACP mode are intact
+      -- but it is a real name change the operator inherits: LAG-keyed
+      inventory, monitoring and any config that references the bundle by its
+      lower-case name must be re-pointed.  The reconciler's LAG-name
+      canonicaliser accepts `Po<N>` / `Port-channel<N>` / `Port-Channel<N>`
+      but not the lower-case NX-OS spelling, which is why this surfaces as
+      drift rather than collapsing to a vendor-correct rename.
+    references: [nxos-iosxecli-surface]
+
+  "lags[].members":
+    disposition: good
+    note: "Member port lists survive verbatim on all 5 populated cells."
+    references: [nxos-iosxecli-surface]
+
+  "lags[].mode":
+    disposition: good
+    note: "LACP mode (`active`) round-trips."
+    references: [nxos-iosxecli-surface]
+
+  # -- Local users.  Top-level key omitted: the account survives; only the
+  # role label drifts. --
+
+  "local_users[].name":
+    disposition: good
+    references: [nxos-iosxecli-surface]
+
+  "local_users[].privilege_level":
+    disposition: good
+    note: "The 1-15 privilege scale is shared, and carries across verbatim."
+    references: [nxos-iosxecli-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Same-vendor hash family, so the digest crosses untouched: an NX-OS
+      `5 $5$<salt>$<digest>` re-renders as `secret 5 $5$<salt>$<digest>` and
+      re-parses identically.  Preserved on all 9 cells with local accounts --
+      unlike the Arista target, where the marker around the digest is
+      rewritten.
+    references: [nxos-iosxecli-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on all 9 cells with local accounts: `network-admin` re-parses as
+      `admin` and `network-operator` as `operator`.  The IOS-XE render
+      deliberately omits the `role <name>` line, and the parser re-derives the
+      role from the privilege number instead (privilege 15 -> `admin`, else
+      `operator`), so NX-OS RBAC role names have no representation on the
+      target.  The account, its privilege and its password all survive, so
+      login still works -- but any custom NX-OS role with feature-scoped rules
+      must be re-authored on the target as a parser view or an AAA
+      authorization profile, and until it is, the user's rights are whatever
+      their privilege number alone grants.
+    references: [nxos-iosxecli-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos codec declares both
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported and never populates `intent.radius_servers` (0 of 13
+      cells), so no cell on this pair carries AAA server data.
+    references: [nxos-iosxecli-surface]
+
+  # -- EVPN-VXLAN fabric surface --
+
+  vxlan_vnis:
+    disposition: good
+    note: >
+      Preserved on all 8 cells that build a VTEP: the VNI, its VLAN binding,
+      the VTEP source interface, the UDP port and -- on the 2 multicast-mode
+      cells -- the underlay replication group all survive the NVE render.
+      The target matrix declares `/vxlan-vnis/udp-port` and
+      `/vxlan-vnis/flood-list` lossy, but every fixture uses the default 4789
+      and none carries a static flood list, so those paths are never reached;
+      a fabric with a non-default VXLAN UDP port would lose the override.
+    references: [nxos-iosxecli-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells).  Both codecs model EVPN
+      Type-5 IP-prefix advertisement as a VRF property via
+      `CanonicalRoutingInstance.l3_vni` rather than as standalone route
+      records -- both matrices declare `/evpn-type5-routes/route` lossy with
+      that rationale -- so the surface is carried under `routing_instances`,
+      not here.
+    references: [nxos-iosxecli-surface]
+
+  routing_instances:
+    disposition: good
+    note: >
+      Preserved on all 12 cells with VRFs: the name, the route
+      distinguisher, RT imports and exports, the L3 VNI binding, the
+      instance-type discriminator and the VRF description all round-trip into
+      `vrf definition <name>` with its address-family block.  The target
+      matrix declares the instance and its instance-type lossy for the
+      mac-vrf shape, which no fixture on this pair exercises.
+    references: [nxos-iosxecli-surface]
+
+  # -- Vendor-specific / structural surfaces --
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells).  The NX-OS matrix declares
+      two raw-section surfaces lossy -- `vdc` (N7K virtualisation grammar with
+      no canonical primitive) and `features` (derived on render from the
+      canonical tree shape rather than carried) -- but neither reaches the
+      IOS-XE target as canonical data.
+    references: [nxos-iosxecli-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-only concept (`apply-groups` configuration inheritance); an NX-OS
+      source never populates it.
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-only companion to `apply_groups`."
+
+  anycast_gateway_mac:
+    disposition: good
+    note: >
+      The chassis-wide distributed-anycast-gateway MAC round-trips: NX-OS
+      `fabric forwarding anycast-gateway-mac <mac>` maps onto the IOS-XE
+      SD-Access equivalent, preserved on all 7 cells that populate it.
+    references: [nxos-iosxecli-surface]

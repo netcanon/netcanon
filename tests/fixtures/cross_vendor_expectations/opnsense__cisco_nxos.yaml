@@ -1,0 +1,602 @@
+# Cross-vendor fidelity expectations: opnsense -> cisco_nxos
+#
+# Source: opnsense codec — OPNsense `config.xml`.
+# Target: cisco_nxos codec — NX-OS `show running-config` render.
+#
+# `opnsense` declares device_classes = [firewall, router]; `cisco_nxos`
+# declares [switch, router].  The overlap is the ROUTER surface only, so this
+# is a narrow pair by construction: addressing, static routes, VLAN ids,
+# SNMP v1/v2c and the user inventory carry across, while everything
+# firewall-shaped (DHCP server pools, RADIUS servers, CARP high availability,
+# DHCP/DHCPv6 client uplinks) either drops or changes protocol.
+#
+# Every disposition below is authored from a MEASUREMENT, not from the two
+# capability matrices: a full `tools/run_full_mesh.py` pass over the
+# committed corpus (8 fixture cells, 0 render errors, 0 re-parse errors),
+# read per sub-field across every cell.  The counts and the drifting
+# sub-fields are cached in
+# `docs/vendor-references/opnsense_to_cisco_nxos/canonical_surface.md`.
+#
+# House pattern: the top-level key is OMITTED wherever the record itself
+# survives and only sub-fields drop (`interfaces`, `vlans`, `static_routes`,
+# `lags`, `local_users` — every one of those lists round-trips N records to N
+# on every cell bar one, noted below).  A top-level key is kept only where
+# the disposition is about the WHOLE record (`dhcp_servers`,
+# `radius_servers`, and the surfaces the source never populates).
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/opnsense_to_cisco_nxos/
+
+meta:
+  source_vendor: opnsense
+  target_vendor: cisco_nxos
+  primary_use_case: >
+    Edge collapse: an OPNsense firewall/router at a site boundary replaced by
+    a Cisco Nexus acting as the L3 border-leaf, with the firewall function
+    moving elsewhere.  The router-shaped surface (hostname, domain, DNS,
+    interface addressing, VLAN ids, static routes, SNMP v1/v2c, local user
+    inventory, LACP bundles) is what migrates.  The losses cluster in three
+    places an operator must plan for: the DHCP/DHCPv6 client uplinks and the
+    DHCP server pools that make an OPNsense box a working edge device, the
+    RADIUS servers behind its authentication, and CARP high availability,
+    which re-renders as HSRP with its shared key stripped.
+  certainty: medium
+  references:
+    - id: opnsense-nxos-surface
+      path: docs/vendor-references/opnsense_to_cisco_nxos/canonical_surface.md
+      title: "OPNsense -> Cisco NX-OS: measured canonical surface (8 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-20"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field audited
+# by tools/run_full_mesh.py (_AUDITED_FIELDS), at sub-field granularity where
+# the disposition varies by sub-field.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars / lists --
+
+  hostname:
+    disposition: lossy
+    reason: >
+      Preserved verbatim on 7 of 8 cells.  It drifts on the one fixture whose
+      source carries no `<hostname>`: the NX-OS renderer is
+      `tree.hostname or "switch"`, so an unnamed source re-parses as a device
+      literally named `switch`.  Nothing is lost — a value is INVENTED — but
+      it is invented silently, so an inventory diff after the migration shows
+      a host that does not exist.  Set the real hostname on the target before
+      applying.
+    references: [opnsense-nxos-surface]
+
+  domain:
+    disposition: good
+    note: >
+      OPNsense `<system>/<domain>` maps onto NX-OS `ip domain-name`;
+      preserved on all 7 cells that populate it.
+    references: [opnsense-nxos-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      `ip name-server <ip>` on the target; the resolver list round-trips in
+      order on all 4 cells that populate it.
+    references: [opnsense-nxos-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence, not a target gap: the opnsense codec declares
+      `/system/ntp-server` unsupported (it does not wire `<timeservers>` into
+      canonical), and no cell of the corpus carries a single NTP server.
+      NX-OS renders `ntp server <ip>` natively, so closing the OPNsense PARSE
+      side is what would move this row — nothing here is a Nexus limitation.
+    references: [opnsense-nxos-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Unsupported on BOTH ends and untested by the corpus (empty on both
+      sides of all 8 cells).  The opnsense codec never wires
+      `/system/timezone` into canonical, and the cisco_nxos matrix declares
+      it unsupported on render — "Render emits no clock/timezone stanza;
+      intent.timezone is dropped on migration".  Even a future OPNsense parse
+      fix would not carry the zone across; set the clock timezone on the
+      Nexus by hand.
+    references: [opnsense-nxos-surface]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence: the opnsense codec declares
+      `/system/syslog-server` unsupported and no cell populates it.  NX-OS
+      renders `logging server <ip>` natively, so this row moves when the
+      OPNsense `<syslog>` parse lands, not when the target changes.
+    references: [opnsense-nxos-surface]
+
+  # -- Interfaces.  Top-level key omitted deliberately: the interface RECORD
+  # survives on every cell (2->2, 3->3, 7->7, 8->8 — no row is ever dropped),
+  # and the loss is confined to the sub-fields below. --
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Carried verbatim on all 8 cells.  The audit scores name STABILITY, not
+      target-native spelling: a FreeBSD `em0` / `igc0` is not a legal NX-OS
+      interface name, and translating it to `Ethernet1/x` is the
+      orchestrator's port-rename layer, which this path does not engage.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].default_name":
+    disposition: not_applicable
+    note: >
+      The OPNsense parser never populates the pre-rename companion name;
+      empty on both sides of all 8 cells.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: "Interface descriptions round-trip on every cell that sets one."
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: "Admin state round-trips on all 8 cells, including the disabled form."
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on all 8 cells and on all 30 interface records in the corpus:
+      the source carries no type at all and the target invents
+      `ianaift:other`.  `_infer_type()` in the NX-OS parser derives the IANA
+      ifType from the NX-OS name prefix and falls back to `other` for
+      anything unrecognised — no FreeBSD device name (`em0`, `igc0`, `ixl0`,
+      `lo0`) matches a prefix.  Cosmetic: it is a derived attribute, and
+      renaming the ports to NX-OS-native names resolves it as a side effect.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: "Explicit MTU round-trips on the one cell that sets one."
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Address and prefix length round-trip on all 8 cells.  Note this covers
+      only STATICALLY addressed interfaces — a DHCP-addressed uplink carries
+      no address here at all, see `interfaces[].dhcp_client`.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: "Preserved on both cells that carry IPv6 addressing."
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].dhcp_client":
+    disposition: lossy
+    reason: >
+      Drops on every interface that uses it (5 records; the 3 cells scored
+      preserved simply have no DHCP-addressed interface).  This is the
+      largest silent functional loss on the pair: an OPNsense WAN zone set to
+      DHCP carries NO static address in canonical, so with the client flag
+      gone the rendered NX-OS interface has no addressing whatsoever — the
+      uplink comes up dead rather than visibly misconfigured.  Give the
+      target a static address, or re-add `ip address dhcp` by hand.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].dhcp_client_v6":
+    disposition: lossy
+    reason: >
+      Drops on all 7 records that set it.  The IPv6 acquisition mode is a
+      string, not a flag — `dhcp6` (stateful DHCPv6) and `track6` (track a
+      delegated prefix from another zone) both blank to `""`.  A site whose
+      LAN prefix is derived from the WAN delegation loses that relationship
+      entirely; re-address the IPv6 side statically on the target.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: lossy
+    reason: >
+      The group SURVIVES — id, virtual IP, priority, preempt and
+      advertisement interval all round-trip on all 4 records — but its
+      PROTOCOL changes.  The NX-OS codec renders every CanonicalVRRPGroup as
+      an `hsrp` block regardless of source mode, so an OPNsense CARP group
+      re-parses as `mode: hsrp` with its shared passphrase
+      (`authentication: carp-key:<passphrase>`) and its group description
+      blanked.  The result is an UNAUTHENTICATED first-hop redundancy group
+      that still diffs clean on virtual IPs: re-key the HSRP pair and confirm
+      both members before cutting over, or the two boxes will both believe
+      they are active.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      The back-pointer is rewritten on both member records that carry one:
+      `lagg0` -> `port-channel0`.  OPNsense LAG bundles are FreeBSD
+      `lagg(4)` and ZERO-based; the render maps the index straight through,
+      and NX-OS numbers port-channels from 1, so the bundle must be
+      RENUMBERED as well as renamed before the config will apply.  The
+      reconciler's LAG-name equivalence does not recognise either spelling,
+      so this surfaces as real drift rather than being folded away.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].switchport_mode":
+    disposition: not_applicable
+    note: >
+      Source-side absence: the opnsense codec declares
+      `/interfaces/interface/switchport-mode` unsupported (OPNsense has no
+      switching fabric), and no record in the corpus populates it.  The
+      Nexus target models it fully, so an operator building L2 ports on the
+      target is creating new state, not restoring lost state.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].access_vlan":
+    disposition: not_applicable
+    note: "Same source-side absence as `switchport_mode`; declared unsupported on the opnsense side and empty on every record."
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].dot1q_vlan":
+    disposition: not_applicable
+    note: >
+      The opnsense codec declares `/interfaces/interface/dot1q-vlan`
+      unsupported — its VLAN interfaces surface as `vlans` records, not as a
+      per-interface tag — and no record populates it.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: not_applicable
+    note: "Same source-side absence as `switchport_mode`; empty on every record in the corpus."
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: not_applicable
+    note: "Same source-side absence as `switchport_mode`; empty on every record in the corpus."
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].voice_vlan":
+    disposition: unsupported
+    reason: >
+      Unsupported on both ends and untested by the corpus.  OPNsense has no
+      LLDP-MED voice-VLAN signalling so the field is never populated, and the
+      cisco_nxos matrix declares `/interfaces/interface/voice-vlan`
+      unsupported on render — "This codec does not model NX-OS per-port voice
+      VLAN; dropped on render".  Even if the source side were wired up, the
+      value would not reach the target.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].tunnel_type":
+    disposition: lossy
+    reason: >
+      No committed fixture exercises this, so the call rests on the two
+      matrices rather than on observed drift — stated plainly rather than
+      implied.  Both declare it lossy, and the target's rationale is the
+      operative one for an OPNsense source: `gre` and `ipip` round-trip via
+      `tunnel mode gre ip` / `tunnel mode ipip`, while `ipsec` / `vxlan` /
+      `eoip` have no NX-OS interface-encapsulation equivalent and drop.
+      IPsec is the tunnel an OPNsense edge box is most likely to carry, so
+      expect site-to-site tunnels to need re-homing rather than re-rendering.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].vrf":
+    disposition: not_applicable
+    note: >
+      OPNsense `config.xml` has no VRF schema (the codec declares
+      `/routing-instances/instance` unsupported), so no interface record
+      carries a VRF binding.  NX-OS models `vrf member` natively — this is a
+      source-side absence only.
+    references: [opnsense-nxos-surface]
+
+  "interfaces[].kind":
+    disposition: not_applicable
+    note: "Internal sub-type discriminator; never populated by the OPNsense parser on any cell."
+    references: [opnsense-nxos-surface]
+
+  # -- VLANs.  Top-level key omitted: both populated cells round-trip 5
+  # records to 5 with no drift on any sub-field. --
+
+  "vlans[].id":
+    disposition: good
+    note: "VLAN tags round-trip on both cells that define VLANs (5 records each)."
+    references: [opnsense-nxos-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      OPNsense's `<descr>` lands as the canonical VLAN name and re-parses
+      from the NX-OS `vlan <id> / name <x>` stanza unchanged.
+    references: [opnsense-nxos-surface]
+
+  "vlans[].description":
+    disposition: lossy
+    reason: >
+      Not exercised by the corpus — the OPNsense parser folds `<descr>` into
+      `name` and leaves `description` empty on every VLAN record — so this
+      rests on the target's declaration, stated plainly rather than implied.
+      The cisco_nxos matrix declares `/vlans/vlan/description` lossy: the
+      render emits the VLAN name but no separate description line, so a
+      canonical description distinct from the name would drop.
+    references: [opnsense-nxos-surface]
+
+  "vlans[].tagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side absence: the opnsense codec declares
+      `/vlans/vlan/tagged-ports` unsupported (no per-VLAN port-membership
+      concept) and no record populates it.  Trunk topology on the Nexus is
+      new state the operator builds, not state the migration lost.
+    references: [opnsense-nxos-surface]
+
+  "vlans[].untagged_ports":
+    disposition: not_applicable
+    note: "Same source-side absence as `tagged_ports`; declared unsupported on the opnsense side and empty on every record."
+    references: [opnsense-nxos-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Not exercised by the corpus — no VLAN record in any cell carries L3
+      addressing, since OPNsense hangs the address on the zone interface
+      instead — so this rests on the target's declaration.  The cisco_nxos
+      matrix declares `/vlans/vlan/ipv4/address/ip` (and its secondary /
+      virtual-gateway companions) lossy: the codec renders an SVI only from a
+      sibling interface stanza, so an address carried on the VLAN record
+      itself is dropped.  Re-declare such SVIs as `interface Vlan<N>` on the
+      target.
+    references: [opnsense-nxos-surface]
+
+  # -- Static routes.  Top-level key omitted: the route record survives 1->1
+  # on every populated cell; only the description drops. --
+
+  "static_routes[].destination":
+    disposition: good
+    note: >
+      `ip route <dest> <next-hop>` on the target; the prefix round-trips on
+      all 3 cells that carry routes.  Worth noting against the matrices: the
+      opnsense codec still declares the whole `/routing/static-route` family
+      unsupported, which the measurement contradicts — the parse wire-up
+      landed without the declaration being flipped, and this file follows the
+      measurement.
+    references: [opnsense-nxos-surface]
+
+  "static_routes[].gateway":
+    disposition: good
+    note: "The resolved next-hop address round-trips on every populated cell."
+    references: [opnsense-nxos-surface]
+
+  "static_routes[].description":
+    disposition: lossy
+    reason: >
+      Drops on the one route in the corpus that carries operator text.  The
+      NX-OS render emits destination + next-hop + metric only (declared lossy
+      in its matrix), so the route's purpose — the thing that tells the next
+      engineer why a /12 points at that next-hop — does not survive.  Carry
+      it forward as a comment or in your source of truth.
+    references: [opnsense-nxos-surface]
+
+  "static_routes[].interface":
+    disposition: not_applicable
+    note: >
+      Source-side absence: the OPNsense gateway model resolves to a next-hop
+      ADDRESS, never an egress interface, and no route record in the corpus
+      populates this.  NX-OS supports the interface form natively.
+    references: [opnsense-nxos-surface]
+
+  "static_routes[].metric":
+    disposition: not_applicable
+    note: >
+      Not populated on any route in the corpus — the OPNsense parser does not
+      extract a per-route distance.  NX-OS renders the metric when canonical
+      carries one, so this is a source-side gap only.
+    references: [opnsense-nxos-surface]
+
+  "static_routes[].vrf":
+    disposition: not_applicable
+    note: "OPNsense has no VRF schema, so no route is ever VRF-scoped; the NX-OS target renders `ip route ... vrf` natively."
+    references: [opnsense-nxos-surface]
+
+  # -- Whole-record losses.  Top-level keys kept: the record does not
+  # survive at all. --
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      The record does not survive: "all 1 dhcp_servers dropped" on every one
+      of the 4 cells that define a pool.  The cisco_nxos matrix declares
+      `/dhcp-servers/pool` unsupported — the render emits no DHCP server
+      configuration at all.  Unsupported rather than lossy for exactly that
+      reason: nothing partial arrives.  Every pool (range, gateway, DNS
+      servers, lease time, domain name) has to be re-created, and on a Nexus
+      that normally means relaying to a DHCP server elsewhere rather than
+      serving locally — plan the relay before the cutover, or the LAN loses
+      addressing the moment the OPNsense box is removed.
+    references: [opnsense-nxos-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      The record does not survive: "all 2 radius_servers dropped" on the one
+      cell that defines them.  The cisco_nxos matrix declares both
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported — the render emits no AAA configuration.  Host, shared
+      secret and the auth/acct ports all have to be re-entered on the target,
+      and the shared secret does not exist anywhere in the migrated output,
+      so retrieve it from the source box (or the RADIUS server) BEFORE
+      decommissioning.
+    references: [opnsense-nxos-surface]
+
+  # -- SNMP --
+
+  "snmp.community":
+    disposition: good
+    note: "Round-trips on all 3 cells that configure SNMP."
+    references: [opnsense-nxos-surface]
+
+  "snmp.location":
+    disposition: good
+    references: [opnsense-nxos-surface]
+
+  "snmp.contact":
+    disposition: good
+    references: [opnsense-nxos-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: "Trap destinations round-trip as `snmp-server host <ip>` lines."
+    references: [opnsense-nxos-surface]
+
+  "snmp.v3_users":
+    disposition: good
+    note: >
+      Stated plainly: this is preserved by ABSENCE of data, not by
+      round-tripping any.  The opnsense codec declares `/snmp/v3-user`
+      unsupported (its v3 USM store lives in the bsnmpd plugin's own config,
+      not in `config.xml`), so the list is empty on both sides of all 8
+      cells and no fixture tests it.  If that parse side is ever wired up,
+      the NX-OS target declares the v3 auth/priv key digests and the engine
+      ID lossy, so v3 users would then need re-keying on the target — but
+      nothing is lost on this pair today.
+    references: [opnsense-nxos-surface]
+
+  # -- LAGs.  Top-level key omitted: the bundle survives 1->1 with its
+  # members and mode intact; only the name is rewritten. --
+
+  "lags[].name":
+    disposition: lossy
+    reason: >
+      `lagg0` -> `port-channel0` on the one cell that defines a bundle.  The
+      rename itself is vendor-correct, but OPNsense LAGs are zero-based and
+      NX-OS numbers port-channels from 1, so the straight index mapping
+      produces an ID the target cannot accept: renumber the bundle (and its
+      `interfaces[].lag_member_of` back-pointers) as part of the port-rename
+      pass.
+    references: [opnsense-nxos-surface]
+
+  "lags[].members":
+    disposition: good
+    note: "Member port lists round-trip intact on the one cell that defines a bundle."
+    references: [opnsense-nxos-surface]
+
+  "lags[].mode":
+    disposition: good
+    note: >
+      The LACP mode survives (`active`); OPNsense's `<proto>lacp</proto>`
+      lands on the NX-OS `channel-group ... mode active` form.
+    references: [opnsense-nxos-surface]
+
+  # -- Local users.  Top-level key omitted; `local_users[].name` carries the
+  # record-count loss and MUST stay the first local_users key in this file
+  # (the reconciler attributes a list's structural drift to the first
+  # sub-field key that claims it). --
+
+  "local_users[].name":
+    disposition: lossy
+    reason: >
+      Usernames survive on 6 of 8 cells, but one cell drops 4 of its 5
+      accounts (5 -> 1), and the four it drops are exactly those with an
+      EMPTY password hash.  The NX-OS render emits a passwordless account as
+      `username <name> role <role>`, and the NX-OS parser only recognises
+      lines carrying `password <type> <hash>`, so the account is absent from
+      the migrated inventory.  Any key-only / GUI-disabled OPNsense account
+      therefore disappears from the audit trail: enumerate the source users
+      and give each one a credential on the target.
+    references: [opnsense-nxos-surface]
+
+  "local_users[].privilege_level":
+    disposition: lossy
+    reason: >
+      Downgrades `15` -> `1` on all 8 administrator records across 7 cells.
+      NX-OS has no numeric privilege: the parser derives it from the NAMED
+      role, mapping `network-admin` / `vdc-admin` to 15 and everything else
+      to 1.  OPNsense's role string is `admin`, which is not an NX-OS role
+      name, so EVERY OPNsense administrator re-parses as an unprivileged
+      user.  Re-map the roles to `network-admin` on the target, or nobody
+      arrives with administrative rights.
+    references: [opnsense-nxos-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      The digest is preserved byte-for-byte wherever the account survives (6
+      of 8 cells): a `bcrypt:$2y$<rounds>$<digest>` value comes back
+      identical.  Canonical fidelity is exact — but the render tags it
+      `password 0 <value>`, and type 0 is the NX-OS PLAINTEXT marker, so a
+      real Nexus would hash the digest string as if it were the password.
+      The mesh scores preservation, not target-syntax validity; reset these
+      passwords on the target rather than trusting the round-trip.
+    references: [opnsense-nxos-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: >
+      The role string itself is carried verbatim (`admin` / `user`) wherever
+      the account survives; what it no longer BUYS on the target is covered
+      under `local_users[].privilege_level`.
+    references: [opnsense-nxos-surface]
+
+  # -- EVPN-VXLAN fabric + VRF surface: structurally absent on the source --
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      Source-side absence: the opnsense codec declares `/vxlan-vnis/vni`,
+      `/vxlan-vnis/source-interface` and `/vxlan-vnis/udp-port` unsupported
+      ("VXLAN not modelled — OPNsense is a firewall codec"), and the list is
+      empty on both sides of all 8 cells.  The Nexus target models NVE / VNI
+      bindings fully; there is simply nothing on this direction to render.
+    references: [opnsense-nxos-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side absence: OPNsense has no EVPN concept, so the list is empty
+      on every cell.  (The NX-OS target models Type-5 IP-prefix advertisement
+      as a VRF property via `CanonicalRoutingInstance.l3_vni` rather than as
+      standalone route records, so even a populated source would land under
+      `routing_instances`.)
+    references: [opnsense-nxos-surface]
+
+  routing_instances:
+    disposition: not_applicable
+    note: >
+      Source-side absence: `config.xml` has no VRF / routing-instance schema
+      and the opnsense codec declares `/routing-instances/instance`
+      unsupported; empty on both sides of all 8 cells.  NX-OS renders
+      `vrf context <name>` with RD/RT and L3 VNI natively, so per-VRF
+      separation on the target is new design work.
+    references: [opnsense-nxos-surface]
+
+  anycast_gateway_mac:
+    disposition: not_applicable
+    note: >
+      Source-side absence: the opnsense codec declares
+      `/anycast-gateway-mac` unsupported and the scalar is empty on both
+      sides of all 8 cells.  The Nexus target declares it supported
+      (`fabric forwarding anycast-gateway-mac`), so this row would move only
+      if an OPNsense source could ever carry a distributed anycast gateway.
+    references: [opnsense-nxos-surface]
+
+  # -- Tier 3 / vendor-provenance surfaces --
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Empty on both sides of all 8 cells.  Tier-3 content is informational by
+      design and never auto-rendered; OPNsense's firewall / NAT / VPN state
+      does not reach the Nexus as canonical data, and the NX-OS-side raw
+      surfaces its matrix declares lossy (`vdc`, `features`) have no OPNsense
+      source to come from.
+    references: [opnsense-nxos-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-only concept (`apply-groups` configuration inheritance); an
+      OPNsense source never populates it.
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-only companion to `apply_groups`; never populated by an OPNsense source."

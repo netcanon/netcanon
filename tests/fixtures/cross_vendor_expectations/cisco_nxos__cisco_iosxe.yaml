@@ -1,0 +1,496 @@
+# Cross-vendor fidelity expectations: cisco_nxos -> cisco_iosxe
+#
+# Source: cisco_nxos codec — NX-OS `show running-config` text.
+# Target: cisco_iosxe codec — OpenConfig/NETCONF YANG XML.  This is the
+# NETCONF sibling of `cisco_iosxe_cli` (operator-paste CLI), NOT the CLI
+# codec.  Its render() is a Phase-0.5 stub that emits ONLY the
+# `openconfig-interfaces` subtree: interface name, `enabled`, IANA type,
+# description, and the IPv4/IPv6 address augments.  No `<system>`, no
+# `<vlans>`, no `<network-instances>`, no `<snmp>`, no aggregation augment,
+# no VXLAN model.
+#
+# That one fact decides nearly every row below.  The NX-OS parser is broad —
+# it populates hostname, VLANs, SVIs, VRFs, VXLAN VNIs, LAGs, SNMP, local
+# users, static routes and the anycast-gateway MAC — and all of it reaches the
+# canonical tree intact and is then dropped on render.  So the dispositions
+# here are dominated by `unsupported` (the record does not survive) rather
+# than `lossy` (the record survives with caveats).  Only the interface record
+# survives, and even there nine sub-fields go.
+#
+# Dispositions are grounded in two in-repo sources rather than asserted: each
+# codec's `CapabilityMatrix`, and a full `tools/run_full_mesh.py` pass over
+# the committed corpus (13 fixture cells, 0 render errors, 0 re-parse
+# errors).  The per-field and per-sub-field measurement is cached in
+# `docs/vendor-references/cisco_nxos_to_cisco_iosxe/canonical_surface.md`.
+#
+# For a real Nexus-to-Catalyst migration, route through `cisco_iosxe_cli`
+# instead — that target emits the full canonical surface.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_nxos_to_cisco_iosxe/
+#
+# Authored 2026-08-20 as part of the cisco_nxos expectation mesh (A6),
+# sibling to cisco_nxos__arista_eos.yaml.
+
+meta:
+  source_vendor: cisco_nxos
+  target_vendor: cisco_iosxe
+  primary_use_case: >
+    An NX-OS running-config consumed into a NETCONF/OpenConfig-driven
+    orchestration pipeline that speaks the cisco_iosxe codec.  Appropriate
+    ONLY for the narrow case where the downstream consumer needs
+    interface-level data — names, admin state, descriptions, IPv4/IPv6
+    addressing — and accepts that everything else must be applied by another
+    path.  A Nexus leaf carries VLANs, SVIs, VRFs, VXLAN VNIs, port-channels,
+    HSRP groups, SNMP and local accounts; none of that survives this target's
+    Phase-0.5 render.  For an actual Nexus 9000 -> Catalyst 9000 / ISR / ASR
+    migration use the `cisco_nxos -> cisco_iosxe_cli` pair.
+  certainty: medium
+  references:
+    - id: nxos-iosxe-surface
+      path: docs/vendor-references/cisco_nxos_to_cisco_iosxe/canonical_surface.md
+      title: "NX-OS -> Cisco IOS-XE (NETCONF/OpenConfig): measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-20"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field audited
+# by tools/run_full_mesh.py (_AUDITED_FIELDS).  `interfaces` carries no
+# top-level key on purpose — the record survives on all 13 cells and the loss
+# is confined to the sub-fields listed below.  Every other list/record field
+# KEEPS its top-level key, because on those the whole record is what goes.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- System scalars.  The stub emits no `<system>` container at all, so
+  # every one of these is dropped on render regardless of value. --
+
+  hostname:
+    disposition: unsupported
+    reason: >
+      Drops on all 13 of 13 cells — the device name goes to `""`.  The
+      cisco_iosxe matrix declares `/system/hostname` unsupported: the
+      Phase-0.5 stub render emits no `<system>` element, so `intent.hostname`
+      never reaches the output XML.  Nothing identifies the device in the
+      rendered config; set the hostname on the target by hand.  Flips to
+      `good` once the render walks openconfig-system.
+    references: [nxos-iosxe-surface]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      Drops on both cells that populate it (11 untested).  NX-OS
+      `ip domain-name` parses cleanly onto `intent.domain`; the stub render
+      emits no `<system><domain-name>`, so it is dropped.  Unqualified
+      hostnames on the target will not resolve until the domain is re-set.
+    references: [nxos-iosxe-surface]
+
+  dns_servers:
+    disposition: unsupported
+    reason: >
+      No committed fixture on this pair populates DNS resolvers, so this
+      rests on the declaration rather than an observed drop — stated rather
+      than left implicit.  The cisco_iosxe matrix declares
+      `/system/dns-server` unsupported ("stub render emits no
+      `<system><dns>` element"), and the NX-OS side parses `ip name-server`
+      happily, so any config that did carry resolvers would lose them.
+      Re-declare name servers on the target.
+    references: [nxos-iosxe-surface]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      The one cell that populates NTP loses all of it ("all 2 ntp_servers
+      dropped"); 12 cells untested.  `/system/ntp-server` is declared
+      unsupported on the target — no `<system><ntp>` element is emitted.  The
+      target boots with no time source, which breaks log correlation and any
+      certificate or TACACS/RADIUS timing that depends on clock sync.
+    references: [nxos-iosxe-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Blocked on both ends and untested by the corpus (0 of 13 cells).  The
+      NX-OS matrix declares `/system/timezone` unsupported — the parser never
+      populates it — and the cisco_iosxe matrix declares the same path
+      unsupported on render.  Set the clock timezone on the target by hand;
+      no automated path carries it today.
+    references: [nxos-iosxe-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      The one cell that populates syslog loses all of it ("all 1
+      syslog_servers dropped"); 12 cells untested.  `/system/syslog-server`
+      is declared unsupported on the target.  The migrated device logs
+      nowhere off-box until the collectors are re-declared.
+    references: [nxos-iosxe-surface]
+
+  # -- Interfaces.  No top-level key on purpose: on all 13 cells the Phase-1
+  # drift is a per-record dict, never a "list dropped" / count-drift string,
+  # so the interface RECORD survives everywhere and the loss is confined to
+  # the sub-fields below.  Declaring the parent lossy would over-declare all
+  # 13 cells. --
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Preserved on every cell.  Names are carried verbatim by design — the
+      cross-mesh audit scores name STABILITY; native translation
+      (`Ethernet1/3` -> `GigabitEthernet1/0/3`) belongs to the orchestrator's
+      port-rename layer, which this path does not engage.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Free-text round-trips: the NX-OS `description <text>` line lands on
+      `<config><description>` in the rendered XML and re-parses verbatim.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state round-trips, including the negated (`shutdown`) form —
+      `intent.enabled` maps to the YANG boolean `<config><enabled>`.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].interface_type":
+    disposition: good
+    note: >
+      The IANA ifType the NX-OS parser infers from the name prefix survives
+      on every cell that carries it — the stub DOES emit `<config><type>`.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].dhcp_client":
+    disposition: good
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on every cell that carries IPv6.  One caveat the corpus does
+      not currently exercise: the target matrix declares
+      `/interfaces/interface/ipv6/address/scope` lossy, because the stub
+      emits no scope leaf and does not re-infer link-local from an fe80::/10
+      prefix on re-parse.  A source that marks an address explicitly
+      link-local would lose that discriminator; no committed fixture on this
+      pair does.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Drifts on 4 of 13 cells, from two distinct causes, and only one of them
+      is cosmetic.  On two cells the drift is confined to the anycast
+      companion: the target keeps `ip` and `prefix_length` and clears
+      `virtual_gateway_address`, matching the target's own
+      `/interfaces/interface/ipv4/address/virtual-gateway-address`
+      unsupported declaration.  On the other two the loss is substantive — a
+      `loopback0` carrying a second address with `is_secondary: true`
+      re-parses with `is_secondary: false`.  Both addresses survive as
+      values, but the primary/secondary discriminator is gone, so the pair
+      re-renders as two PRIMARY addresses on one loopback and the second
+      overwrites the first on a real box.  Check every multi-address
+      interface after migration and re-apply the `secondary` keyword.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      Drifts on 6 of 13 cells and the measurement is blunter than the
+      declaration: a jumbo `mtu 9216` comes back as `null`, not as a
+      degraded value.  The stub render never emits `<config><mtu>`.  Kept
+      `lossy` to stay in step with the target matrix, which declares
+      `/interfaces/interface/config/mtu` lossy for a narrower reason
+      (OpenConfig's single mtu leaf cannot distinguish link-MTU from
+      ip-MTU).  Practically: re-apply jumbo MTU on every fabric uplink and
+      SVI, or the VXLAN underlay will black-hole full-size frames.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].vrf":
+    disposition: unsupported
+    reason: >
+      The single most damaging loss on this pair.  Drifts on 12 of 13 cells:
+      an interface bound to `VRF_SERVICE_CUST_1` comes back with `vrf: ""`.
+      The stub render emits no `<network-instances>` subtree, so there is
+      nowhere to express interface-to-VRF membership, and the companion
+      `routing_instances` field is dropped wholesale for the same reason.
+      The two losses compound: every interface that was isolated in a
+      customer or management VRF lands in the GLOBAL routing table on the
+      target.  That is a silent tenant-separation failure, not a missing
+      line — traffic forwards, just to the wrong place.  Re-create every VRF
+      and re-bind every interface before the target carries production
+      traffic.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].switchport_mode":
+    disposition: unsupported
+    reason: >
+      Drifts on 8 of 13 cells: `"trunk"` / `"access"` -> `null`.  The target
+      matrix declares `/interfaces/interface/switchport-mode` unsupported —
+      the Phase-0.5 stub renders no `openconfig-vlan:switched-vlan` augment,
+      so no L2 port role appears in the output at all.  Every access and
+      trunk port must be re-declared on the target.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].access_vlan":
+    disposition: unsupported
+    reason: >
+      Drifts on 8 of 13 cells: `10` -> `null`.  Same `switched-vlan` render
+      gap as `switchport_mode`; `/interfaces/interface/access-vlan` is
+      declared unsupported.  Access ports arrive on the target with no VLAN
+      assignment.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: unsupported
+    reason: >
+      Drifts on 4 of 13 cells: `[10, 2000]` -> `[]`.
+      `/interfaces/interface/trunk-allowed-vlans` is declared unsupported —
+      the stub renders no trunk allowed-list.  An empty allowed-list is not
+      a safe default in either direction; re-declare the per-trunk VLAN set
+      explicitly.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: unsupported
+    reason: >
+      Drifts on 2 of 13 cells: `999` -> `null`.
+      `/interfaces/interface/trunk-native-vlan` is declared unsupported.
+      Losing a non-default native VLAN silently reverts untagged traffic on
+      that trunk to VLAN 1 — re-declare it.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: unsupported
+    reason: >
+      Drifts on 5 of 13 cells: `"port-channel1"` -> `null`.  The stub render
+      models no `openconfig-if-aggregate` augment, so no `channel-group`
+      binding is emitted and the member never re-associates.  Unlike the
+      arista_eos target — where the same field drops for a NAMING reason the
+      port-rename mesh can close — there is no bundle to join here at all;
+      see the `lags` entry.  Members arrive as standalone ports.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      Drifts on 4 of 13 cells — the whole FHRP group list is dropped.  The
+      target matrix declares `/interfaces/interface/vrrp-groups/group`
+      unsupported ("VRRP / HSRP / CARP parse-and-ignore in v1"), together
+      with every leaf under it (mode, priority, preempt, advertisement
+      interval, authentication, virtual IPv6s, description).  NX-OS sources
+      carry `mode="hsrp"` groups, so the entire first-hop redundancy design
+      — virtual IPs, election priorities, preempt behaviour — must be
+      re-created on the target.  Until it is, hosts pointing at the virtual
+      gateway have no default gateway.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].voice_vlan":
+    disposition: unsupported
+    reason: >
+      No fixture on this pair populates a voice VLAN, so this rests on the
+      declarations.  Both matrices declare `/interfaces/interface/voice-vlan`
+      unsupported — NX-OS does not parse it and the stub does not render it —
+      so an auxiliary VLAN would be lost in both directions.
+    references: [nxos-iosxe-surface]
+
+  "interfaces[].tunnel_type":
+    disposition: lossy
+    reason: >
+      Untested by the corpus (no fixture on this pair carries a tunnel
+      interface).  The target matrix declares
+      `/interfaces/interface/tunnel-type` lossy: the render emits only
+      name/enabled/type/description plus IP addresses and models no
+      tunnel-encapsulation augment, so the tunnel interface survives as an
+      interface while its encapsulation drops.  Re-declare the tunnel mode
+      on the target.
+    references: [nxos-iosxe-surface]
+
+  # -- L2 / L3 records the stub render never walks.  Top-level keys, because
+  # what is lost is the whole record, not a sub-field of it. --
+
+  vlans:
+    disposition: unsupported
+    reason: >
+      Kept as a whole-record disposition: on 7 of the 11 drifting cells the
+      list goes wholesale ("all N vlans dropped", or a count drift as steep
+      as 47 -> 1).  The stub render does not walk `intent.vlans` and emits no
+      top-level `<vlans>` subtree — the target matrix says exactly that for
+      `/vlans/vlan/id` and `/vlans/vlan/name`.  The rows that DO come back
+      (2 cells preserved, 4 more keeping an id) are an artefact, not VLAN
+      support: they are re-derived on re-parse from the synthesised
+      `interface VlanN` SVIs that survive through the interfaces subtree.
+      Those survivors still lose the VLAN `name` (4 cells),
+      `untagged_ports` (4), `ipv4_addresses` (2) and `tagged_ports` (2), so
+      even a surviving VLAN carries no port membership.  Re-create the VLAN
+      database and all port assignments on the target.
+    references: [nxos-iosxe-surface]
+
+  static_routes:
+    disposition: unsupported
+    reason: >
+      Every populated cell loses the whole list — 8 of 8 ("all N
+      static_routes dropped"), 5 cells untested.  The target matrix declares
+      `/routing/static-route` unsupported: the stub render does not walk
+      `intent.static_routes` and emits no
+      `<network-instances>/<protocols><protocol identifier=STATIC>`.  The
+      next-hop gateway (`/routing/static-route/gateway`) and the per-VRF
+      binding (`/routing/static-route/vrf`) are declared unsupported for the
+      same reason.  Default routes and management-VRF routes both go; the
+      target has no static routing at all until they are re-entered.
+    references: [nxos-iosxe-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Untested by the corpus (0 of 13 cells) and blocked on both ends: the
+      NX-OS matrix declares `/dhcp-servers/pool` unsupported, so the parser
+      never populates it, and the cisco_iosxe matrix declares the same path
+      unsupported on render.  Closing the NX-OS parse side alone would not
+      move this row — the target render has to be wired too.
+    references: [nxos-iosxe-surface]
+
+  snmp:
+    disposition: unsupported
+    reason: >
+      Drops entirely on all 11 populated cells: Phase 1 records the whole
+      `snmp` object going to `None`.  The target matrix declares `/snmp`
+      unsupported along with every child — community, location, contact,
+      trap-host and the full v3 USM surface (user, group, auth-protocol,
+      priv-protocol, priv-passphrase).  Community strings, trap
+      destinations and SNMPv3 users all disappear; v3 accounts must be
+      re-created and re-keyed on the target, since the localized keys the
+      NX-OS side carries (`0x<hex-digest>` shape) are not reproduced
+      anywhere in the render.  The device is unmonitorable until this is
+      redone.  Note the target's own reason: SNMPv3 wire-up needs the
+      `Cisco-IOS-XE-snmp` native YANG module, which this OpenConfig stub
+      does not cover — so this is a modelling gap, not just an unwired
+      branch.
+    references: [nxos-iosxe-surface]
+
+  lags:
+    disposition: unsupported
+    reason: >
+      The whole record vanishes on all 5 populated cells ("all N lags
+      dropped"); 8 cells untested.  The stub render emits no
+      `openconfig-if-aggregate` augment, so neither the bundle nor its
+      membership nor its LACP mode appears in the output.  Unsupported
+      rather than lossy precisely because nothing survives — contrast the
+      arista_eos target, where the identical canonical record is dropped for
+      a fixable NAMING reason and the port-rename mesh closes it.  Worth
+      flagging on the codec side: cisco_iosxe declares NO `/lags/lag` path
+      at all, neither supported nor unsupported, so the capability matrix is
+      silent where the corpus is unambiguous.  Every port-channel must be
+      rebuilt on the target.
+    references: [nxos-iosxe-surface]
+
+  local_users:
+    disposition: unsupported
+    reason: >
+      The whole record vanishes on all 9 populated cells ("all N
+      local_users dropped"); 4 cells untested.  The stub render emits no
+      `<system><aaa>` subtree, so usernames, roles, privilege levels and
+      password hashes are all dropped — an NX-OS `5 $5$<salt>$<digest>`
+      entry has nowhere to land.  As with `lags`, the cisco_iosxe matrix
+      declares no `/local-users/user` path at all, so the measurement is the
+      only evidence.  The rendered config contains NO local accounts: if it
+      were pushed to a device whose only other access path is the console,
+      the box would be unreachable.  Re-create every account and set
+      passwords out of band.
+    references: [nxos-iosxe-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Untested by the corpus (0 of 13 cells) and blocked on both ends: the
+      NX-OS matrix declares `/radius-servers/server/host` and
+      `/radius-servers/server/key` unsupported, so the parser never
+      populates them, and the cisco_iosxe matrix declares both unsupported
+      on render ("stub render emits only interfaces").  Combined with the
+      `local_users` drop, the rendered config has no authentication of any
+      kind — neither local nor remote.
+    references: [nxos-iosxe-surface]
+
+  # -- EVPN-VXLAN fabric surface.  None of it is modelled by this target. --
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      The whole record vanishes on all 8 populated cells; 5 cells untested.
+      The target matrix declares `/vxlan-vnis/vni`,
+      `/vxlan-vnis/source-interface` and `/vxlan-vnis/udp-port` unsupported —
+      "VXLAN not modelled in this NETCONF/OpenConfig stub codec.  CLI
+      sibling defers VXLAN wire-up until Catalyst demand arrives; NETCONF
+      stays in lockstep."  A Nexus leaf's entire overlay — VNI-to-VLAN
+      bindings, the NVE source loopback and any multicast replication group
+      — is gone.  This pair cannot carry a fabric migration.
+    references: [nxos-iosxe-surface]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Untested by the corpus (0 of 13 cells) — the NX-OS codec models EVPN
+      Type-5 IP-prefix advertisement as a VRF property via
+      `CanonicalRoutingInstance.l3_vni` rather than as standalone route
+      records, and declares `/evpn-type5-routes/route` lossy on that basis.
+      The target declares the same path unsupported: "EVPN Type-5
+      advertisement requires VXLAN render wire-up plus VRF render wire-up —
+      both deferred in this Phase 0.5 stub."  Doubly lost here, because the
+      surface that actually carries it (`routing_instances`) is itself
+      dropped wholesale on this pair.
+    references: [nxos-iosxe-surface]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      The whole record vanishes on 12 of 13 cells ("all N routing_instances
+      dropped"); 1 cell untested.  The target matrix declares
+      `/routing-instances/instance` unsupported — the stub render does not
+      walk `intent.routing_instances` and emits no `<network-instances>`
+      element — and `/routing-instances/instance/instance-type` with it, so
+      even the mac-vrf vs vrf discriminator goes.  VRF names, route
+      distinguishers, import/export route targets and L3 VNI bindings are
+      all lost.  Read this together with `interfaces[].vrf`: the VRFs
+      disappear AND the interfaces that were in them fall back to the global
+      table.
+    references: [nxos-iosxe-surface]
+
+  # -- Vendor-specific / structural surfaces --
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells).  The NX-OS matrix declares
+      two raw-section surfaces lossy — `vdc` (N7K virtualisation grammar
+      with no canonical primitive) and `features` (derived on render from
+      the canonical tree shape rather than carried) — but neither reaches
+      the cisco_iosxe target as canonical data, and the target declares no
+      raw-section path at all.
+    references: [nxos-iosxe-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-only concept (`apply-groups` configuration inheritance); an
+      NX-OS source never populates it, and neither matrix declares a path
+      for it.
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-only companion to `apply_groups`; never populated here."
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Drops on all 7 populated cells — the chassis-wide MAC goes to `""`; 6
+      cells untested.  NX-OS `fabric forwarding anycast-gateway-mac <mac>`
+      parses cleanly, but the target matrix declares `/anycast-gateway-mac`
+      unsupported ("parses-and-ignores in v1; schema exists on
+      CanonicalIntent, wire-up scheduled for v0.2.0 Wave C").  Consistent
+      with the per-address `virtual_gateway_address` companion also being
+      declared unsupported, so the distributed anycast gateway is lost at
+      both the system and the per-SVI level.
+    references: [nxos-iosxe-surface]

@@ -26,6 +26,39 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Added
+
+- **A6 complete for `cisco_nxos`: the remaining 15 cross-vendor expectation
+  pairs.**  The audit can only classify a cell that HAS a pair YAML, so
+  `CODEC_BUG = 5` was a count over the covered subset rather than over the
+  mesh.  #444 closed 13 cells with the first pair; these 15 close **148 more
+  (412 -> 560 of 1224 cells)**, finishing `cisco_nxos` against every codec
+  that already had coverage.  Effect on the aggregate: ALIGNED 1874 -> 3743,
+  EXPECTED_LOSSY 1246 -> 1719, EXPECTED_UNSUPPORTED 768 -> 1256,
+  **`CODEC_BUG` unchanged at 5** and **`METHODOLOGY_ISSUE_over` unchanged at
+  21** -- the two severity ratchets both held exactly.
+
+  Authored one-agent-per-pair against a per-pair evidence dossier (both
+  capability matrices, per-field preserved/drifted counts, and the sub-field
+  drift AGGREGATE across every cell) rather than from the capability matrices
+  alone.  The aggregate mattered: reading a single drift sample had previously
+  made `interfaces` look like it drifts on two sub-fields when it drifts on
+  four, which is how a false `good` -- and so a false CODEC_BUG -- gets
+  manufactured.
+
+  Every one of the 15 scores **zero unevidenced declarations** under the
+  per-pair ratchet added in #445, which allows an unlisted pair exactly zero.
+  `_UNEVIDENCED_BASELINE` is therefore untouched: no pair needed seeding, and
+  none was added to make a gate go green.  Where a target matrix declared a
+  loss the corpus never exhibits, the pair follows the corpus -- e.g.
+  `cisco_iosxe_cli__cisco_nxos` declares `static_routes[].metric` **good**
+  against the NX-OS matrix's lossy claim, because the one cell that populates
+  it preserves it (14 others are trivially empty); declaring it `lossy` would
+  have been an unevidenced over-claim and failed the ratchet.
+
+  Still blind, and unfunded: `vyos` (258 cell appearances), `cisco_iosxr`
+  (246) and `aruba_aoscx` (186).
+
 ### Changed
 
 - **The public demo now serves netcanon v0.6.3, not v0.6.1.**
