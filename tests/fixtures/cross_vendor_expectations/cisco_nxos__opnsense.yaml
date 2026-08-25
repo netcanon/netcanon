@@ -1,0 +1,608 @@
+# Cross-vendor fidelity expectations: cisco_nxos -> opnsense
+#
+# Source: cisco_nxos codec — NX-OS `show running-config` text.
+# Target: opnsense codec — OPNsense `config.xml` render.
+#
+# This is a DC-switch -> firewall pair.  cisco_nxos declares
+# `device_classes = [switch, router]`; opnsense is a FreeBSD router/firewall
+# codec whose entire configuration surface is one `config.xml` document.  Most
+# of the loss below is that role mismatch — the EVPN-VXLAN fabric, the VRF
+# surface and the whole L2 switching surface have no OPNsense target — but two
+# of the biggest losses are render-side coverage gaps instead (static routes,
+# NTP/syslog), and those are called out as such so an operator knows which
+# ones a codec change could close.
+#
+# Every disposition here is authored from a MEASUREMENT, not from the two
+# capability matrices: an in-process `tools/run_full_mesh.py` pass over the
+# committed corpus (13 fixture cells, 0 render errors, 0 re-parse errors),
+# read per-field AND per-sub-field.  A field that never drifts on the corpus
+# is `good` even where a matrix declares a caveat; a field that does drift is
+# never called `good`.  The measurement is cached in
+# `docs/vendor-references/cisco_nxos_to_opnsense/canonical_surface.md`.
+#
+# Structural note: no cell shows a list-count drift on `interfaces`, `vlans`
+# or `local_users` — every source record survives as a record and the loss is
+# confined to the sub-fields named below — so those three are addressed by
+# SUB-FIELD keys only and no `STRUCTURAL_ONLY` collapse occurs on this pair.
+# `static_routes`, `vxlan_vnis` and `routing_instances` keep a top-level key
+# because there the RECORD itself vanishes.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_nxos_to_opnsense/
+
+meta:
+  source_vendor: cisco_nxos
+  target_vendor: opnsense
+  primary_use_case: >
+    Retiring a Cisco Nexus 9000 leaf into an OPNsense firewall as the routed
+    edge of a much flatter network — the usual trigger is a small site whose
+    EVPN-VXLAN fabric is being collapsed onto commodity hardware, with the
+    firewall taking over inter-VLAN routing and the security boundary.
+    Interface identity and addressing, VLAN identity, LAGs, local accounts and
+    SNMP v1/v2c translate.  The static routing table, first-hop redundancy,
+    NTP/syslog, the fabric (VXLAN VNIs, VRFs, anycast gateway) and the whole
+    L2 switching surface do not, and have to be rebuilt on the target rather
+    than migrated.
+  certainty: medium
+  references:
+    - id: nxos-opnsense-surface
+      path: docs/vendor-references/cisco_nxos_to_opnsense/canonical_surface.md
+      title: "NX-OS -> OPNsense: measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-20"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field audited
+# by tools/run_full_mesh.py (_AUDITED_FIELDS).
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- System services --
+
+  hostname:
+    disposition: good
+    note: >
+      NX-OS `hostname <name>` becomes `<system>/<hostname>`; preserved on 13
+      of 13 cells.
+    references: [nxos-opnsense-surface]
+
+  domain:
+    disposition: good
+    note: >
+      NX-OS `ip domain-name` becomes `<system>/<domain>`; preserved on both
+      cells that populate it.
+    references: [nxos-opnsense-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Both matrices declare `/system/dns-server` supported — NX-OS `ip
+      name-server <ip>` maps to a repeated `<system>/<dnsserver>` element.  No
+      committed fixture on this pair populates the field (0 of 13 cells), so
+      this rests on the declarations rather than an observed round-trip —
+      stated rather than left implicit.
+    references: [nxos-opnsense-surface]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      The whole record vanishes: the one cell that populates it re-parses with
+      zero servers ("all 2 ntp_servers dropped").  The opnsense matrix
+      declares `/system/ntp-server` unsupported — "Render emits no
+      `<system><timeservers>`" — and no such element appears anywhere in the
+      rendered `config.xml`.  Time sync has to be re-entered on the firewall
+      (System > Settings > General), and until it is, the box has no
+      trusted clock for certificate validation or log correlation.
+    references: [nxos-opnsense-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      The opnsense matrix declares `/system/timezone` unsupported ("Render
+      emits no time-zone stanza; intent.timezone is dropped on migration") and
+      the NX-OS matrix carries the identical declaration, so neither side of
+      this pair can carry a clock timezone.  No fixture populates it (0 of 13
+      cells), so the corpus neither confirms nor contradicts the declaration.
+      OPNsense stores an Olson zone name (`America/Los_Angeles`) in
+      `<system>/<timezone>`, so this is a hand-set value on the target even
+      when one is available.
+    references: [nxos-opnsense-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      The whole record vanishes: the one cell that populates it
+      (`nautobot_gc_nxos_snmp_spine01_nxos933`) re-parses with zero servers
+      ("all 1 syslog_servers dropped").  The opnsense matrix declares
+      `/system/syslog-server` unsupported — "Render emits no remote-syslog
+      config" — so no `<syslog>` element is produced at all.  Off-box logging
+      has to be reconfigured before the firewall has any audit trail beyond
+      its local ring buffer.
+    references: [nxos-opnsense-surface]
+
+  # -- Interfaces.  Sub-field keys only: every source interface survives as a
+  # record on every cell (no list-count drift anywhere on this pair), so a
+  # top-level `interfaces` key would over-declare all 13 cells. --
+
+  "interfaces[].switchport_mode":
+    disposition: unsupported
+    reason: >
+      Drifts to `null` on every access/trunk port that has one (29
+      record-occurrences; e.g. `trunk` -> `null`, `access` -> `null`).
+      OPNsense is a BSD firewall with no switching fabric, so the matrix
+      declares `/interfaces/interface/switchport-mode` unsupported and the
+      render emits nothing — an access port arrives as a bare enabled
+      interface.  A Nexus leaf's entire L2 edge has to stay on a switch or be
+      rebuilt behind the firewall; it does not migrate.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].access_vlan":
+    disposition: unsupported
+    reason: >
+      Drifts to `null` on every access port (13 record-occurrences; e.g. `10`
+      -> `null`).  OPNsense models VLANs as `<vlans>` child interfaces rather
+      than as a per-port access VLAN, so the matrix declares
+      `/interfaces/interface/access-vlan` unsupported and the port-to-VLAN
+      binding is dropped.  Together with `vlans[].untagged_ports` below,
+      nothing in the migrated config records which host ports belonged to
+      which VLAN — capture that mapping off the Nexus before the cutover.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: unsupported
+    reason: >
+      Drifts to `[]` on every trunk (10 record-occurrences; e.g. `[10, 2000]`
+      -> `[]`).  The matrix declares `/interfaces/interface/trunk-allowed-vlans`
+      unsupported: OPNsense uses the allowed-list only as a parent-binding
+      hint, so it is never preserved on the port.  Each allowed VLAN has to be
+      re-created as its own `<vlans>/<vlan>` child interface on the correct
+      parent.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: unsupported
+    reason: >
+      Drifts to `null` wherever populated (4 record-occurrences; `999` ->
+      `null`).  OPNsense has no native-VLAN concept — untagged frames are
+      simply the parent NIC's own traffic — so the matrix declares
+      `/interfaces/interface/trunk-native-vlan` unsupported and the render
+      drops it.  Untagged traffic on a migrated trunk needs an explicit
+      decision on the target: either the parent interface itself or a new
+      child interface.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].voice_vlan":
+    disposition: unsupported
+    reason: >
+      OPNsense has no voice VLAN (declared unsupported as
+      `/interfaces/interface/voice-vlan`), and the NX-OS matrix declares the
+      same path unsupported on its own side, so the source never populates the
+      field on this corpus (0 of 13 cells) and nothing was measured.  The row
+      records the target gap so a future voice-enabled fixture does not read
+      as a regression.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].dot1q_vlan":
+    disposition: unsupported
+    reason: >
+      Routed sub-interface 802.1Q tags are declared unsupported on the
+      opnsense matrix (ship-before-wire, GAP 7).  The NX-OS source never
+      populates the field on this corpus (0 of 13 cells), so nothing was
+      measured.  A migrated router-on-a-stick sub-interface would lose its tag
+      and need re-creating as an OPNsense VLAN child interface bound to the
+      right parent.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].vrf":
+    disposition: unsupported
+    reason: >
+      The second most frequent drift on the pair (28 record-occurrences; e.g.
+      `VRF_SERVICE_CUST_1` -> `""`, `management` -> `""`).  OPNsense has no
+      VRF construct in `config.xml` at all — the matrix declares
+      `/routing-instances/instance` unsupported and renders none — so every
+      interface lands in the one global routing table.  Tenant separation
+      collapses the moment the config is applied: SVIs that were in different
+      customer VRFs become mutually reachable, and the out-of-band
+      `management` VRF is gone with them.  Rebuild the separation as firewall
+      policy (or keep it upstream) before deploying.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      The whole group vanishes on all 4 occurrences (`Vlan10` on the two HSRP
+      fixtures, `Vlan600` on busterswt, `Vlan10` on the kitchen sink): source
+      `[{group_id: 10, mode: "hsrp", virtual_ips: ["10.10.10.3"], ...}]` ->
+      `[]`, and no `<virtualip>` element appears in the render.  OPNsense's
+      HA primitive is BSD CARP and the matrix states that a non-CARP source
+      mode "is skipped on render and the whole group drops"; the NX-OS corpus
+      only ever produces HSRP.  The shared virtual IP that hosts use as their
+      default gateway is therefore absent from the migrated config — re-create
+      each group as a CARP `<vip>` with a matching VHID and password on both
+      peers, and re-check priority and preempt by hand.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      The interface keeps its own primary address — `<ipaddr>` + `<subnet>`
+      round-trip on every cell — but two attachments to it do not (9
+      record-occurrences).  (1) On a distributed-anycast SVI the
+      `virtual_gateway_address` companion is blanked (`192.168.10.1` ->
+      `""`), because the matrix declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address`
+      unsupported.  (2) A SECONDARY address is dropped outright: `loopback0`
+      goes `[10.0.255.30/32, 10.0.254.201/32 (secondary)]` ->
+      `[10.0.255.30/32]` on the akarneliuk cell and
+      `[192.168.0.5/32, 192.168.0.15/32 (secondary)]` -> `[192.168.0.5/32]`
+      on busterswt, matching `/interfaces/interface/ipv4/address/secondary-ip`
+      unsupported ("Render emits one IPv4 address per interface").  On an
+      NX-OS VTEP that secondary loopback is the shared anycast VTEP address,
+      so re-declare every secondary on the target as an OPNsense virtual IP
+      before assuming the interface is complete.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The most frequent drift on the pair and the least consequential: 1102
+      record-occurrences, always `ianaift:ethernetCsmacd` -> `""`.  OPNsense's
+      `<interfaces>` block has no type element, so the IANA ifType is dropped
+      on render and re-inferred from the interface name on the target.  The
+      interface, its addressing and its state all survive; only the
+      discriminator is lost.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Preserved on 13 of 13 cells — the render carries the source-native name
+      verbatim into `<if>` (`<ethernet1_3><if>Ethernet1/3</if>`), so the
+      cross-mesh name-STABILITY score is clean.  A real deployment still needs
+      the orchestrator's port-rename layer, which this path does not engage:
+      OPNsense's operator-facing labels are zone tags (`wan` / `lan` / `optN`)
+      over BSD device names (`em0`, `igb1`), not `Ethernet1/3`.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 9 cells that populate it — NX-OS `description` maps to
+      `<descr>`, which OPNsense does not length-limit.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state round-trips on 13 of 13 cells, including the negated
+      (`shutdown`) form — `<enable/>` present means up, absent means down.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on all 6 cells that populate it, jumbo values included
+      (`9216` survives, above OPNsense's usual 9000 GUI ceiling — check the
+      NIC actually accepts it on the target hardware).
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate it (`<ipaddrv6>` + `<subnetv6>`).
+      The matrix declares `/interfaces/interface/ipv6/address/secondary-ip`
+      unsupported — the render emits one IPv6 per interface — but no fixture
+      on this pair carries a second IPv6, so that limit is never exercised
+      here.  It would bite exactly as the IPv4 secondary does.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: good
+    note: >
+      Membership survives on all 5 cells that populate it: the OPNsense codec
+      carries the NX-OS-native bundle name through into `<laggs>/<lagg>`
+      rather than deriving its own `lagg<N>` grammar from it, so members
+      re-associate without a rename map on this direction.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].dhcp_client":
+    disposition: good
+    note: >
+      Preserved on 13 of 13 cells — though no fixture on this pair configures
+      a DHCP-client interface, so what is measured is the flag holding its
+      static default rather than a `<ipaddr>dhcp</ipaddr>` round-trip.
+    references: [nxos-opnsense-surface]
+
+  "interfaces[].tunnel_type":
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos codec never populates the field on
+      this corpus (0 of 13 cells) — its own matrix declares
+      `/interfaces/interface/tunnel-type` lossy.  OPNsense would express a
+      tunnel in a separate section (IPsec, GRE/GIF plugin) rather than as an
+      encapsulation discriminator on an interface, and its matrix declares the
+      path lossy for that reason, so closing the NX-OS parse side would move
+      this row to `lossy`, not to `good`.
+    references: [nxos-opnsense-surface]
+
+  # -- VLANs.  Sub-field keys only; every VLAN record survives. --
+
+  "vlans[].id":
+    disposition: good
+    note: >
+      The VLAN id becomes the `<vlans>/<vlan>/<tag>` value and re-parses
+      intact on 13 of 13 cells.
+    references: [nxos-opnsense-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      Preserved on all 5 cells that populate it — the NX-OS `vlan / name <X>`
+      lands in the VLAN entry's `<descr>` and comes back as the canonical
+      name.
+    references: [nxos-opnsense-surface]
+
+  "vlans[].description":
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos parser folds `vlan / name <X>` into
+      `vlans[].name` and never populates a separate description, so 0 of 13
+      cells carry one.  Worth knowing for a future source that does: the
+      opnsense matrix declares `/vlans/vlan/description` lossy because
+      `<descr>` is a single slot already holding the VLAN name, so the two
+      canonical fields would collide and one would drop.
+    references: [nxos-opnsense-surface]
+
+  "vlans[].tagged_ports":
+    disposition: unsupported
+    reason: >
+      Drifts to `[]` wherever populated (8 record-occurrences; e.g.
+      `["Ethernet1/1", "Ethernet1/2", "port-channel1"]` -> `[]`).  OPNsense
+      binds a VLAN to exactly ONE parent (`<vlan><if>port-channel1</if>`), so
+      multi-port tagged membership cannot be represented and the matrix
+      declares `/vlans/vlan/tagged-ports` unsupported.  Re-check which parent
+      the render chose for each VLAN and re-create the remaining trunk members
+      by hand.
+    references: [nxos-opnsense-surface]
+
+  "vlans[].untagged_ports":
+    disposition: unsupported
+    reason: >
+      Same mechanism as `tagged_ports` and the more common of the two here (12
+      record-occurrences; e.g. `["Ethernet1/5", "Ethernet1/6",
+      "port-channel2002"]` -> `[]`).  The list of access ports in each VLAN is
+      dropped entirely; this is the VLAN-side half of the
+      `interfaces[].access_vlan` loss, and both halves disappear together, so
+      the port-to-VLAN mapping survives nowhere in the migrated config.
+    references: [nxos-opnsense-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Drifts to `[]` on every VLAN record that carries an SVI address (14
+      record-occurrences).  The OPNsense render mounts L3 on the INTERFACE
+      record (`<vlan10><if>Vlan10</if><ipaddr>192.168.10.1</ipaddr>`) and
+      never back onto the `<vlans>` entry, which is why the matrix declares
+      `/vlans/vlan/ipv4/address/ip` lossy.  On this corpus the address itself
+      still survives on the sibling `interfaces[]` `Vlan<N>` record (measured:
+      `Vlan10` `192.168.10.1` preserved on the akarneliuk cell while the
+      VLAN-mounted copy dropped), so this is a canonical-shape change rather
+      than a reachability loss — `interfaces[].ipv4_addresses` is the row that
+      matters operationally.  Anything reading gateway addresses off the VLAN
+      record (documentation exports, IPAM sync) has to read the interface
+      record instead.
+    references: [nxos-opnsense-surface]
+
+  # -- Routing: the wholesale losses --
+
+  static_routes:
+    disposition: unsupported
+    reason: >
+      Whole-record disposition because no route survives: all 8 populated
+      cells re-parse with zero routes ("all N static_routes dropped"; 13 route
+      records in total, 6 of them default routes including an IPv6 `::/0`).
+      The opnsense matrix declares `/routing/static-route` and every leaf
+      beneath it unsupported — the codec PARSES `<gateways>` +
+      `<staticroutes>` (promotion #15) but the `config.xml` renderer emits
+      neither block, so destination, next hop, metric, description and VRF
+      binding all go together, and no such element appears in the render.
+      This is the pair's most dangerous loss because it is silent: the
+      migrated firewall comes up with interface addressing that looks correct
+      and NO default route.  Re-create each route on the target as a named
+      `<gateway_item>` first, then a route referencing it — and do it before
+      the box is cut over, not after.
+    references: [nxos-opnsense-surface]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Whole-record disposition because no record survives: 12 of 13 cells
+      re-parse with zero routing instances ("all N routing_instances
+      dropped").  The opnsense matrix declares `/routing-instances/instance`
+      unsupported — "Render emits no VRF/routing-instance construct" — so the
+      VRF name, route-distinguisher, route-target imports/exports and the L3
+      VNI are lost together with the per-interface bindings
+      (`interfaces[].vrf`).  Multi-tenancy has to be re-designed as firewall
+      policy or as separate appliances; OPNsense has no VRF to migrate into.
+    references: [nxos-opnsense-surface]
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Whole-record disposition because no record survives: all 8 populated
+      cells re-parse with zero VNIs ("all 5 vxlan_vnis dropped").  The
+      opnsense matrix declares `/vxlan-vnis/vni`,
+      `/vxlan-vnis/source-interface` and `/vxlan-vnis/udp-port` unsupported —
+      "VXLAN not modelled — OPNsense is a firewall codec" — so the VNI-to-VLAN
+      bindings, the VTEP source interface and the multicast replication groups
+      all disappear.  An OPNsense box cannot take over a leaf's VTEP role; the
+      overlay has to terminate somewhere else.
+    references: [nxos-opnsense-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Drops to `""` on all 7 cells that populate it (`00:00:00:5e:12:34` ->
+      `""`).  The opnsense matrix declares `/anycast-gateway-mac` unsupported
+      (parses-and-ignores in v1; OPNsense has no distributed-anycast-gateway
+      primitive).  Paired with the anycast companion loss in
+      `interfaces[].ipv4_addresses`, the whole distributed-gateway construct
+      is gone — the migrated device is not a fabric leaf and needs real,
+      unique gateway addressing plus a CARP VIP if the gateway must be shared.
+    references: [nxos-opnsense-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side absence: not populated on any cell (0 of 13).  The
+      cisco_nxos codec models EVPN Type-5 IP-prefix advertisement as a VRF
+      property via `CanonicalRoutingInstance.l3_vni` rather than as standalone
+      route records — its matrix declares `/evpn-type5-routes/route` lossy
+      with that rationale — so the surface is carried under
+      `routing_instances`, where it is lost for the reason given there.
+    references: [nxos-opnsense-surface]
+
+  # -- Management plane --
+
+  "snmp.community":
+    disposition: good
+    note: >
+      Preserved verbatim on both cells that carry a v1/v2c community
+      (`<snmpd>/<rocommunity>`).  Note the RW/RO distinction: OPNsense's
+      `<rocommunity>` is read-only, so an NX-OS community configured `rw`
+      arrives read-only on the target.
+    references: [nxos-opnsense-surface]
+
+  "snmp.location":
+    disposition: good
+    note: "Preserved into `<snmpd>/<syslocation>` on both cells that set it."
+    references: [nxos-opnsense-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: "Preserved into `<snmpd>/<syscontact>` on both cells that set it."
+    references: [nxos-opnsense-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: "Preserved into `<snmpd>/<traphost>` on both cells that set one."
+    references: [nxos-opnsense-surface]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      The only SNMP attribute that drifts, and it drifts on all 11 cells that
+      populate SNMP — the USM user list does not survive at all.  The opnsense
+      matrix declares `/snmp/v3-user` (and its auth-protocol, priv-protocol,
+      priv-passphrase and group leaves) unsupported because OPNsense keeps
+      SNMPv3 users in the bsnmpd / net-snmp plugin's own `snmpd.conf`
+      (`createUser` lines), not in the `config.xml` this codec reads and
+      writes.  On the 9 cells whose source SNMP is v3-ONLY there is nothing
+      left to render, so the whole `snmp` record re-parses as absent.  Every
+      v3 user has to be re-created and re-keyed on the target; v1/v2c is
+      unaffected.
+    references: [nxos-opnsense-surface]
+
+  "local_users[].name":
+    disposition: good
+    note: "Preserved on all 9 cells that carry a user (`<system>/<user>/<name>`)."
+    references: [nxos-opnsense-surface]
+
+  "local_users[].privilege_level":
+    disposition: good
+    note: >
+      The numeric privilege level round-trips unchanged (`15` -> `15`) on all
+      9 cells, despite the NX-OS matrix declaring
+      `/local-users/user/privilege-level` lossy — the OPNsense codec re-derives
+      it from the rendered group membership and lands on the same value.
+    references: [nxos-opnsense-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on all 10 populated user records: `network-admin` -> `admin` (9
+      records, rendered as `<groupname>admins</groupname>` +
+      `<priv>page-all</priv>`) and `network-operator` -> `user` (1 record,
+      `<groupname>users</groupname>`).  The account survives and lands on the
+      correct side of the admin boundary, but OPNsense's group model is
+      effectively binary here, so any finer NX-OS RBAC role — a custom role
+      with scoped feature rules — has to be rebuilt as an OPNsense group with
+      hand-picked privileges.  Review each migrated account rather than
+      assuming the mapping preserved its scope.
+    references: [nxos-opnsense-surface]
+
+  "local_users[].hashed_password":
+    disposition: unsupported
+    reason: >
+      The credential does not survive at all: shape `5 $5$<salt>$<digest>` ->
+      `""` on every one of the 10 populated user records.  The render emits no
+      password element, only a review comment in its place ("5 hash from
+      source vendor cannot be re-used on OPNsense; reset this user password
+      manually"), because OPNsense's account store expects its own FreeBSD
+      `crypt(3)` form rather than a foreign NX-OS type-5 blob.  Every migrated
+      account therefore arrives with no credential — set passwords on all of
+      them before the config is applied, or the firewall has no usable
+      administrative login.
+    references: [nxos-opnsense-surface]
+
+  # -- LAGs --
+
+  lags:
+    disposition: good
+    note: >
+      Kept as a whole-record disposition because the whole record survives:
+      preserved on all 5 cells that populate LAGs, drifted on none.  Name,
+      members and LACP mode carry verbatim (`port-channel1` with members
+      `Ethernet1/5` / `Ethernet1/6`, mode `active`) into
+      `<laggs>/<lagg>/<laggif>`, so no rename map is needed on this direction.
+      One caveat the corpus does not exercise: the opnsense matrix declares
+      `/lags/lag/mode` lossy because FreeBSD `lagg` has a single `lacp` proto
+      with no active/passive distinction, so a `passive` bundle would re-parse
+      as `active`.  Every bundle in this corpus is already `active`.
+    references: [nxos-opnsense-surface]
+
+  # -- Surfaces the NX-OS source never populates --
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence, not a target gap: the cisco_nxos codec never
+      populates `intent.dhcp_servers` (0 of 13 cells; its matrix declares
+      `/dhcp-servers/pool` unsupported).  OPNsense is in practice the DHCP
+      server for the networks it routes, so this is a surface an operator will
+      have to build on the target by hand regardless of what the migration
+      carries — the opnsense matrix advertises no `/dhcp-servers/pool` path
+      either.
+    references: [nxos-opnsense-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos codec never populates
+      `intent.radius_servers` (0 of 13 cells) — its matrix declares both
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported and no fixture exercises a parse side.  An operator
+      migrating a Nexus that does use RADIUS must re-enter the servers and
+      shared secrets on the OPNsense side (`<authserver>`) regardless.
+    references: [nxos-opnsense-surface]
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered — and not populated on this pair
+      (0 of 13 cells).  The NX-OS matrix declares two raw-section surfaces
+      lossy (`vdc`, the N7K virtualisation grammar with no canonical
+      primitive, and `features`, derived on render from the canonical tree
+      shape), but neither reaches the OPNsense target as canonical data.
+    references: [nxos-opnsense-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-only concept (`apply-groups` configuration inheritance); an NX-OS
+      source never populates it.
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-only companion to `apply_groups`."

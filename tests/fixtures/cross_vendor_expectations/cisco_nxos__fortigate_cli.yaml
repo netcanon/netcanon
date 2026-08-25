@@ -1,0 +1,588 @@
+# Cross-vendor fidelity expectations: cisco_nxos -> fortigate_cli
+#
+# Source: cisco_nxos codec — NX-OS `show running-config` text.
+# Target: fortigate_cli codec — FortiOS CLI render.
+#
+# This is a DC-switch -> firewall pair.  cisco_nxos declares
+# `device_classes = [switch, router]`; fortigate_cli is a stateful-firewall
+# codec with an L3-only interface model and no fabric data plane.  Almost all
+# of the loss below is that role mismatch, not a codec defect: the EVPN-VXLAN
+# surface, the VRF surface and the switchport surface have no FortiOS target,
+# while the system/services surface (hostname, domain, NTP, SNMP v1/v2c, LAGs,
+# static routes) round-trips cleanly.
+#
+# Every disposition here is authored from a MEASUREMENT, not from the two
+# capability matrices: an in-process `tools/run_full_mesh.py` pass over the
+# committed corpus (13 fixture cells, 0 render errors, 0 re-parse errors),
+# read per-field AND per-sub-field.  A field that never drifts on the corpus
+# is `good` even where a matrix declares a caveat; a field that does drift is
+# never called `good`.  The measurement is cached in
+# `docs/vendor-references/cisco_nxos_to_fortigate_cli/canonical_surface.md`.
+#
+# Ordering note: seven cells show a wholesale `interfaces` list-count drift
+# (the render ADDS a `vlan<id>` child interface per VLAN; no source interface
+# is ever dropped).  Phase 1 encodes a count drift as a summary string, so
+# Phase 4 sees every `interfaces[]` sub-field as drifted on those cells and
+# collapses all but the FIRST to STRUCTURAL_ONLY.  The interface block below
+# therefore lists the genuinely-lossy sub-fields before the preserved ones, so
+# the structural signal is claimed by a key that actually declares a loss
+# rather than manufacturing a CODEC_BUG against a `good` one.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_nxos_to_fortigate_cli/
+
+meta:
+  source_vendor: cisco_nxos
+  target_vendor: fortigate_cli
+  primary_use_case: >
+    Collapsing a Cisco Nexus 9000 leaf into a FortiGate as a converged
+    routing-and-security edge — the usual trigger is decommissioning an
+    EVPN-VXLAN fabric in favour of a flatter L3-routed design with the
+    firewall as the tenant boundary.  System services, interface identity and
+    addressing, LAGs, static routes, local-user accounts and SNMP v1/v2c
+    translate; the fabric (VXLAN VNIs, VRFs, anycast gateway) and the whole L2
+    switching surface (switchport mode, access/trunk VLANs, VLAN port
+    membership) do not, and must be redesigned rather than migrated.
+  certainty: medium
+  references:
+    - id: nxos-fortigate-surface
+      path: docs/vendor-references/cisco_nxos_to_fortigate_cli/canonical_surface.md
+      title: "NX-OS -> FortiGate CLI: measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-20"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field audited
+# by tools/run_full_mesh.py (_AUDITED_FIELDS).  `interfaces`, `vlans`,
+# `static_routes`, `snmp` and `local_users` are addressed by SUB-FIELD keys
+# only — their records survive the migration and the loss is confined to the
+# attributes named below, so a top-level key would over-declare every cell.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- System services --
+
+  hostname:
+    disposition: good
+    note: >
+      NX-OS `hostname <name>` becomes `set hostname "<name>"` under
+      `config system global`; preserved on 13 of 13 cells.
+    references: [nxos-fortigate-surface]
+
+  domain:
+    disposition: good
+    note: >
+      NX-OS `ip domain-name` becomes `set domain` under `config system dns`;
+      preserved on both cells that populate it.
+    references: [nxos-fortigate-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Both matrices declare `/system/dns-server` supported.  No committed
+      fixture on this pair populates the field (0 of 13 cells), so this rests
+      on the declarations rather than an observed round-trip — stated rather
+      than left implicit.  FortiOS schemas DNS as `set primary` / `set
+      secondary` under `config system dns`, so a source list longer than the
+      FortiOS slots would need checking when a fixture finally exercises it.
+    references: [nxos-fortigate-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Preserved on the one cell that exercises it; FortiOS emits one
+      `config ntpserver` edit per address with no cap.
+    references: [nxos-fortigate-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      The fortigate_cli matrix declares `/system/timezone` unsupported —
+      "Render emits no clock/timezone stanza; intent.timezone is dropped on
+      migration" — and the NX-OS matrix carries the identical declaration, so
+      neither side of this pair can carry a clock timezone.  No fixture
+      populates it (0 of 13 cells), so the corpus neither confirms nor
+      contradicts the declaration.  Set the timezone by hand on the FortiGate
+      (`config system global / set timezone <index>`); FortiOS indexes
+      timezones numerically rather than by zoneinfo name, so this is not a
+      copy-across even when a value is available.
+    references: [nxos-fortigate-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      The whole record vanishes: the one cell that populates it
+      (`nautobot_gc_nxos_snmp_spine01_nxos933`) re-parses with zero syslog
+      servers ("all 1 syslog_servers dropped").  The fortigate_cli matrix
+      declares `/system/syslog-server` unsupported — "Render emits no
+      logging/syslog config" — so no `config log syslogd setting` stanza is
+      produced at all.  Log export must be reconfigured on the FortiGate
+      before the box has any off-device logging.
+    references: [nxos-fortigate-surface]
+
+  # -- Interfaces.  Sub-field keys only; no interface record is ever dropped
+  # (the target list GROWS — see the ordering note in the header). --
+
+  "interfaces[].switchport_mode":
+    disposition: unsupported
+    reason: >
+      Drifts to `null` on every access/trunk port that has one (17
+      record-occurrences).  FortiOS has no switchport access/trunk mode —
+      every port is routed — so the fortigate_cli matrix declares
+      `/interfaces/interface/switchport-mode` unsupported and the render emits
+      nothing.  A Nexus leaf's entire L2 edge arrives as bare L3 ports: plan
+      to rebuild the access layer on a switch that stays, or on the
+      FortiGate's hardware-switch feature where the model supports it.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].access_vlan":
+    disposition: unsupported
+    reason: >
+      Drifts to `null` on every access port (8 record-occurrences).  FortiOS
+      has no per-port access VLAN (declared unsupported as
+      `/interfaces/interface/access-vlan`), so the port-to-VLAN binding is
+      dropped on render.  Combined with the VLAN-side loss below, nothing
+      records which host ports belonged to which VLAN — capture that mapping
+      from the Nexus before the cutover.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: unsupported
+    reason: >
+      Drifts to `[]` on every trunk (6 record-occurrences; e.g. `[10, 2000]`
+      -> `[]`).  FortiOS carries trunks as stacked VLAN child-interfaces, not
+      as an allowed-list on the parent, so the list has nowhere to render.
+      Each allowed VLAN has to be re-created as its own child interface.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: unsupported
+    reason: >
+      FortiOS has no native VLAN on a routed port; the fortigate_cli matrix
+      declares `/interfaces/interface/trunk-native-vlan` unsupported and the
+      render drops it.  Only two cells carry the field and both are
+      list-count-drift cells, so the corpus never isolates its behaviour — the
+      declaration, not a measurement, is what stands behind this row.  Untagged
+      traffic on a migrated trunk will need an explicit child interface.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].voice_vlan":
+    disposition: unsupported
+    reason: >
+      FortiOS has no per-port voice VLAN (declared unsupported on the
+      fortigate_cli matrix).  The NX-OS source never populates the field on
+      this corpus, so nothing was measured; the row records the target gap so
+      a future voice-enabled fixture doesn't read as a regression.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].dot1q_vlan":
+    disposition: unsupported
+    reason: >
+      Routed sub-interface 802.1Q tags are declared unsupported on the
+      fortigate_cli matrix (ship-before-wire, GAP 7).  The NX-OS source never
+      populates the field on this corpus, so nothing was measured.  A migrated
+      router-on-a-stick sub-interface would lose its tag and need re-creating
+      as a FortiOS VLAN child interface.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].vrf":
+    disposition: unsupported
+    reason: >
+      The single most frequent drift on the pair (18 record-occurrences; e.g.
+      `VRF_SERVICE_CUST_1` -> `""`, `management` -> `""`).  FortiGate models
+      tenancy as VDOMs rather than VRFs and the codec renders no
+      routing-instance construct, so every interface lands in the global
+      routing table.  Tenant separation collapses: interfaces that were in
+      different customer VRFs become mutually reachable the moment the config
+      is applied.  Re-create the separation as VDOMs (or as firewall policy)
+      before deploying.  The `mgmt0` case is the same mechanism — the
+      out-of-band management VRF is gone.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      The whole group vanishes on both cells that carry one (`Vlan10` on the
+      two HSRP fixtures): the render emits an empty `config vrrp` block plus a
+      review comment stating that a `mode='hsrp'` group has no FortiOS
+      equivalent, so nothing re-parses.  FortiOS speaks only IETF VRRP and the
+      NX-OS corpus only ever produces HSRP groups, so first-hop redundancy
+      does not survive this pair in practice — rebuild it as FortiOS VRRP (or
+      as an HA cluster) and re-check the virtual IP, priority and preempt
+      settings by hand.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Ordinary routed interfaces and plain SVIs keep their address — the
+      render emits `set ip <addr> <mask>` and it re-parses intact.  What does
+      NOT survive is an SVI whose address carries a distributed-anycast
+      companion (`virtual_gateway_address` populated, i.e. NX-OS
+      `fabric forwarding mode anycast-gateway`): those interfaces render with
+      no `set ip` line at all and re-parse with an EMPTY address list (5
+      record-occurrences across the two anycast fabrics in the corpus).  This
+      is not the anycast companion being dropped — it is the interface's own
+      primary address going missing, so the tenant's default gateway is absent
+      from the migrated config.  Re-declare the gateway addresses on the
+      FortiGate.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Names carry verbatim by design — the cross-mesh audit scores name
+      STABILITY.  Native translation (`Ethernet1/3` -> `port3`) belongs to the
+      orchestrator's port-rename layer, which this path does not engage, so a
+      real deployment still needs a rename map.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on every cell that populates it.  FortiOS caps `set alias` at
+      25 characters, so a longer NX-OS description would truncate — no fixture
+      in this corpus exceeds the cap.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: "Admin state round-trips, including the negated (`shutdown`) form."
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].interface_type":
+    disposition: good
+    note: >
+      Preserved on every cell despite the fortigate_cli matrix declaring
+      `/interfaces/interface/config/type` lossy — the codec re-infers the
+      IANA ifType from the `type vlan` sub-setting or the name shape, and on
+      this corpus it always lands on the same value.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: good
+    note: >
+      Membership survives: the FortiGate codec carries the NX-OS-native bundle
+      name through rather than deriving a channel-group number from it, so
+      `port-channel1` members re-associate without a rename map.
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].dhcp_client":
+    disposition: good
+    references: [nxos-fortigate-surface]
+
+  "interfaces[].tunnel_type":
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos codec never populates the field on
+      this corpus (0 of 13 cells) — its own matrix declares
+      `/interfaces/interface/tunnel-type` lossy.  FortiOS would express a
+      tunnel in a separate top-level section (`config system gre-tunnel`,
+      `config vpn ipsec phase1-interface`) rather than as an encapsulation
+      discriminator on an interface, so this row would become `unsupported`,
+      not `good`, if the NX-OS parse side were closed.
+    references: [nxos-fortigate-surface]
+
+  # -- VLANs.  Sub-field keys only; the VLAN records themselves all survive. --
+
+  "vlans[].id":
+    disposition: good
+    note: "The VLAN id is the FortiOS child interface's `set vlanid`; preserved on every cell."
+    references: [nxos-fortigate-surface]
+
+  "vlans[].name":
+    disposition: lossy
+    reason: >
+      Drifts on every cell (41 record-occurrences).  FortiOS has no VLAN name
+      object — the VLAN's identity IS the child interface's edit key — so on
+      re-parse the canonical name becomes that key: a long descriptive
+      `user_svi_*` name comes back as `Vlan10`, `PROD` comes back as `Vlan10`,
+      and an unnamed VLAN comes back as `vlan1`.  The VLAN survives and its id
+      is correct, but every
+      operator-authored VLAN name is replaced by a machine-generated token.
+      Anything keyed off VLAN names (documentation, NetBox sync, ACL naming
+      conventions) needs re-mapping.
+    references: [nxos-fortigate-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Drifts to `[]` on every cell that carries an SVI address (14
+      record-occurrences).  The FortiGate codec always mounts SVI addressing
+      on the INTERFACE record (the `Vlan<id>` / `vlan<id>` child interface),
+      never back onto the VLAN record, so the VLAN-mounted copy is empty on
+      re-parse.  For a plain SVI the address itself still survives on the
+      interface mount, so this is a canonical-shape change rather than a
+      reachability loss; for an anycast SVI it is lost on both mounts — see
+      `interfaces[].ipv4_addresses`, which is the row that matters
+      operationally.
+    references: [nxos-fortigate-surface]
+
+  "vlans[].tagged_ports":
+    disposition: unsupported
+    reason: >
+      Drifts to `[]` wherever populated (8 record-occurrences; e.g.
+      `["Ethernet1/1", "Ethernet1/2", "port-channel1"]` -> `[]`).  FortiOS
+      binds a VLAN to exactly ONE parent (`set interface "<parent>"`), so
+      multi-port tagged membership cannot be represented and the fortigate_cli
+      matrix declares `/vlans/vlan/tagged-ports` unsupported.  Worse, the
+      parent the render picks is inferred and is not always a real trunk —
+      on `batfish_nxos_hsrp_nxos1` both VLAN child interfaces are bound to
+      `loopback123`.  Re-point every VLAN child interface at the correct
+      uplink and re-create the remaining members by hand.
+    references: [nxos-fortigate-surface]
+
+  "vlans[].untagged_ports":
+    disposition: unsupported
+    reason: >
+      Same mechanism as `tagged_ports`, and the more common of the two on this
+      corpus (12 record-occurrences).  The list of access ports in each VLAN
+      is dropped entirely; nothing in the FortiGate config records which host
+      ports were untagged members.  This is the L2 half of the
+      `interfaces[].access_vlan` loss — both directions of the mapping
+      disappear together.
+    references: [nxos-fortigate-surface]
+
+  "vlans[].description":
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos parser folds `vlan / name <X>` into
+      `vlans[].name` and never populates a separate description (its own
+      matrix declares `/vlans/vlan/description` lossy), so 0 of 13 cells carry
+      one and nothing reaches the FortiGate side.
+    references: [nxos-fortigate-surface]
+
+  # -- Routing --
+
+  "static_routes[].destination":
+    disposition: good
+    note: >
+      NX-OS CIDR converts to the FortiOS `set dst <addr> <mask>` pair and back
+      without loss, including the IPv6 default route.
+    references: [nxos-fortigate-surface]
+
+  "static_routes[].gateway":
+    disposition: good
+    references: [nxos-fortigate-surface]
+
+  "static_routes[].metric":
+    disposition: good
+    note: >
+      The integer round-trips.  Note the semantics differ — NX-OS treats it as
+      a per-static metric, FortiOS orders by administrative distance — so an
+      unchanged number can still change which route wins.
+    references: [nxos-fortigate-surface]
+
+  "static_routes[].vrf":
+    disposition: unsupported
+    reason: >
+      Drifts to `""` on every per-VRF route (6 record-occurrences; e.g.
+      `management` -> `""`, `TENANT-A` -> `""`).  The fortigate_cli matrix
+      declares `/routing/static-route/vrf` unsupported — the binding
+      parses-and-ignores in v1 because there is no routing-instance to bind
+      to.  The consequence is silent and dangerous: a management-VRF default
+      route and a tenant-VRF default route both land in the global table, so
+      the last one rendered wins and traffic can follow the wrong next hop.
+      Split them across VDOMs or drop the ones that should not be global.
+    references: [nxos-fortigate-surface]
+
+  "static_routes[].interface":
+    disposition: not_applicable
+    note: >
+      Source-side absence: no fixture on this pair populates an
+      outgoing-interface next hop (0 of 13 cells), so there is nothing for the
+      FortiGate target to lose.  A real deployment would also need the
+      port-rename mesh here, since the interface token is vendor-native.
+    references: [nxos-fortigate-surface]
+
+  "static_routes[].description":
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos matrix declares
+      `/routing/static-route/description` lossy and no fixture populates it.
+    references: [nxos-fortigate-surface]
+
+  # -- Management plane --
+
+  "snmp.community":
+    disposition: good
+    note: "v1/v2c community round-trips on every cell that populates SNMP."
+    references: [nxos-fortigate-surface]
+
+  "snmp.location":
+    disposition: good
+    references: [nxos-fortigate-surface]
+
+  "snmp.contact":
+    disposition: good
+    references: [nxos-fortigate-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    references: [nxos-fortigate-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      The only SNMP attribute that drifts (11 of 11 populated cells; the
+      Phase-1 dict diff names `v3_users` as the sole value-drift key).  The USM
+      user itself survives — name, auth protocol and priv protocol all
+      round-trip — but the VACM group is dropped (`network-admin` -> `""`),
+      because FortiOS `config system snmp user` groups users implicitly by
+      security level and carries no group object.  The passphrase blob is also
+      re-tagged on render (`0x<localized-key>` -> `ENC 0x<localized-key>`); a
+      FortiOS `ENC` blob is wrapped with the target device's own key, so the
+      imported literal will not authenticate and every v3 user needs re-keying
+      on the FortiGate.  v1/v2c is unaffected.
+    references: [nxos-fortigate-surface]
+
+  "local_users[].name":
+    disposition: good
+    references: [nxos-fortigate-surface]
+
+  "local_users[].privilege_level":
+    disposition: good
+    note: "The numeric privilege level round-trips unchanged on every cell."
+    references: [nxos-fortigate-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on every cell that carries a user (9).  NX-OS RBAC role names are
+      mapped onto FortiOS accprofile names: `network-admin` becomes the
+      built-in `super_admin`, which grants full read-write across every VDOM —
+      a privilege WIDENING relative to a scoped Nexus role, so review it
+      rather than accepting it.  A role with no mapping is passed through
+      verbatim (`network-operator` stays `network-operator` on the kitchen-sink
+      fixture) and will not resolve to a FortiOS built-in accprofile unless
+      the operator creates one with that exact name.
+    references: [nxos-fortigate-surface]
+
+  "local_users[].hashed_password":
+    disposition: unsupported
+    reason: >
+      The credential does not survive at all: shape `5 $5$<salt>$<digest>` ->
+      `""` on every one of the 10 populated user records.  FortiOS stores
+      admin passwords as a device-key-wrapped `ENC` blob and cannot accept a
+      foreign crypt hash, so the render emits NO password line — only a review
+      comment telling the operator to reset the password manually.  Every
+      migrated admin account therefore arrives on the FortiGate with no
+      credential; set passwords on all of them before the config is applied,
+      or the box is administratively unreachable.
+    references: [nxos-fortigate-surface]
+
+  # -- LAGs --
+
+  lags:
+    disposition: good
+    note: >
+      Kept as a whole-record disposition because the whole record survives:
+      preserved on all 5 cells that populate LAGs, drifted on none.  Name,
+      members and LACP mode all carry verbatim (`port-channel1` with members
+      `Ethernet1/5` / `Ethernet1/6`, mode `active`) — the FortiGate codec
+      keeps the source-native bundle name instead of imposing its own
+      grammar, so no rename map is needed on this direction.
+    references: [nxos-fortigate-surface]
+
+  # -- EVPN-VXLAN fabric surface: the wholesale losses --
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Whole-record disposition because no record survives: every populated
+      cell re-parses with zero VNIs ("all N vxlan_vnis dropped", 8 of 8
+      populated cells).  The fortigate_cli matrix declares `/vxlan-vnis/vni`,
+      `/vxlan-vnis/source-interface` and `/vxlan-vnis/udp-port` unsupported —
+      "VXLAN not modelled — FortiGate is a firewall codec" — so the VNI-to-VLAN
+      bindings, the VTEP source interface and the multicast replication groups
+      all disappear.  A FortiGate cannot take over a leaf's VTEP role; the
+      overlay has to terminate somewhere else.
+    references: [nxos-fortigate-surface]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Whole-record disposition because no record survives: 12 of 13 cells
+      re-parse with zero routing instances ("all N routing_instances
+      dropped").  The fortigate_cli matrix declares
+      `/routing-instances/instance` unsupported — "Render emits no
+      VRF/routing-instance construct (VDOMs not modelled)" — so the VRF name,
+      route-distinguisher, route-target imports/exports and the L3 VNI are all
+      lost together with the per-interface bindings
+      (`interfaces[].vrf`).  This is the pair's structural loss: multi-tenancy
+      has to be re-designed as VDOMs, which are not a 1:1 substitute for a VRF.
+    references: [nxos-fortigate-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Drops to `""` on all 7 cells that populate it.  The fortigate_cli matrix
+      declares `/anycast-gateway-mac` unsupported (parses-and-ignores in v1;
+      FortiGate has no distributed-anycast-gateway fabric primitive).  Paired
+      with the anycast SVI address loss in `interfaces[].ipv4_addresses`, the
+      whole distributed-gateway construct is gone — the migrated device is not
+      a fabric leaf and must be given real, unique gateway addressing.
+    references: [nxos-fortigate-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side absence: not populated on any cell (0 of 13).  The cisco_nxos
+      codec models EVPN Type-5 IP-prefix advertisement as a VRF property via
+      `CanonicalRoutingInstance.l3_vni` rather than as standalone route
+      records — its matrix declares `/evpn-type5-routes/route` lossy with that
+      rationale — so the surface is carried under `routing_instances`, where
+      it is lost for the reason given there.
+    references: [nxos-fortigate-surface]
+
+  # -- Surfaces the NX-OS source never populates --
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence, not a target gap: the cisco_nxos codec never
+      populates `intent.dhcp_servers` (0 of 13 cells; its matrix declares
+      `/dhcp-servers/pool` unsupported).  FortiGate does model DHCP servers
+      (`config system dhcp server`, interface-bound), so closing the NX-OS
+      parse side would move this row to `good` or `lossy`, not leave it here.
+    references: [nxos-fortigate-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos codec never populates
+      `intent.radius_servers` (0 of 13 cells) — its matrix declares both
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported and no fixture exercises a parse side.  Operators migrating
+      a Nexus that does use RADIUS must re-enter the servers and shared
+      secrets on the FortiGate regardless.
+    references: [nxos-fortigate-surface]
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered — and not populated on this pair
+      (0 of 13 cells).  The NX-OS matrix declares two raw-section surfaces
+      lossy (`vdc`, the N7K virtualisation grammar with no canonical
+      primitive, and `features`, derived on render from the canonical tree
+      shape), but neither reaches the FortiGate target as canonical data.
+    references: [nxos-fortigate-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-only concept (`apply-groups` configuration inheritance); an NX-OS
+      source never populates it.
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-only companion to `apply_groups`."

@@ -1,0 +1,569 @@
+# Cross-vendor fidelity expectations: cisco_nxos -> mikrotik_routeros
+#
+# Source: cisco_nxos codec — NX-OS `show running-config` text.
+# Target: mikrotik_routeros codec — RouterOS `/export verbose` text.
+#
+# This is a CLASS-CROSSING pair.  cisco_nxos declares
+# `device_classes = [switch, router]` and its committed fixtures are DC leaves
+# and spines: EVPN-VXLAN, VRFs, SVIs with anycast gateways, HSRP, port-channels.
+# The mikrotik_routeros codec models L2 as bridge VLAN filtering rather than
+# switchport, renders no VRF / routing-instance construct, and does not model
+# VXLAN.  Much of the source's fabric surface therefore has nowhere to land,
+# and this file says so field by field rather than averaging it away.
+#
+# Dispositions are grounded in three in-repo sources rather than asserted:
+# each codec's `CapabilityMatrix`, a full `run_full_mesh.py` pass over the
+# committed corpus (13 fixture cells, 0 render errors, 0 re-parse errors), and
+# a name-matched per-interface probe (1102 records) used to tell which
+# `interfaces[]` attributes really drop.  The measurement is cached in
+# `docs/vendor-references/cisco_nxos_to_mikrotik_routeros/canonical_surface.md`.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_nxos_to_mikrotik_routeros/
+#
+# Authored 2026-08-20 as part of the cisco_nxos expectation mesh (A6), sibling
+# to cisco_nxos__arista_eos.yaml.
+
+meta:
+  source_vendor: cisco_nxos
+  target_vendor: mikrotik_routeros
+  primary_use_case: >
+    Retiring a Cisco Nexus into a much simpler RouterOS box — a lab, a branch
+    edge, or a remote site that inherits the Nexus's addressing and routing
+    but not its fabric role.  Identity, L3 addressing, static routing, LAGs,
+    SNMP v1/v2c and the user list carry over cleanly.  Everything that makes
+    the source a DATA-CENTRE switch does not: VLAN-to-port membership, VRFs,
+    VXLAN VNIs, the distributed anycast gateway and the first-hop redundancy
+    groups all render empty or as review comments.  Treat the RouterOS output
+    as a correct L3 skeleton that still needs its L2 and its tenancy rebuilt
+    by hand.
+  certainty: medium
+  references:
+    - id: nxos-routeros-surface
+      path: docs/vendor-references/cisco_nxos_to_mikrotik_routeros/canonical_surface.md
+      title: "NX-OS -> MikroTik RouterOS: measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-20"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field audited
+# by tools/run_full_mesh.py (_AUDITED_FIELDS).  Sub-field keys are used, and
+# the top-level key omitted, wherever the RECORD survives and only attributes
+# of it drop — `vlans`, `static_routes`, `snmp` and `local_users` are all
+# authored that way.  `interfaces` keeps its top-level key because the drift
+# is at the list level (record count), not per-attribute.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- auto-translatable scalars / lists --
+
+  hostname:
+    disposition: good
+    note: >
+      NX-OS `hostname <name>` becomes RouterOS `/system identity set
+      name=<name>`; preserved on 13 of 13 cells.
+    references: [nxos-routeros-surface]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      Drops to empty on both cells that populate it (`lab.karneliuk.com` ->
+      `''`).  The mikrotik_routeros matrix declares `/system/domain`
+      unsupported — "Render emits no system domain-name; intent.domain is
+      dropped on migration".  RouterOS carries the search domain under
+      `/ip dns set domain=`, which this codec does not emit, so re-set it
+      there by hand if resolver search suffixes matter.
+    references: [nxos-routeros-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Both matrices declare `/system/dns-server` supported (NX-OS
+      `ip name-server`, RouterOS `/ip dns set servers=`).  No committed
+      fixture on this pair populates the field — 0 preserved, 0 drifted,
+      13 trivially empty — so this rests on the two declarations rather than
+      an observed round-trip.  Stated rather than left implicit.
+    references: [nxos-routeros-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      NX-OS `ntp server <ip>` becomes `/system ntp client`; preserved on the
+      one cell that exercises it.
+    references: [nxos-routeros-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      No fixture on this pair populates a timezone, so this follows the
+      matrices: BOTH codecs declare `/system/timezone` unsupported — "Render
+      emits no clock/timezone stanza; intent.timezone is dropped on
+      migration".  A symmetric gap rather than a RouterOS limitation, but the
+      operator still has to set `/system clock set time-zone-name=` on the
+      target, and log timestamps will be wrong until they do.
+    references: [nxos-routeros-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      "all 1 syslog_servers dropped" on the one cell that carries a logging
+      host.  The mikrotik_routeros matrix declares `/system/syslog-server`
+      unsupported — "Render emits no logging/syslog config".  The migrated
+      box logs only to its local buffer until `/system logging action` plus a
+      matching rule are re-created, so remote log collection stops silently at
+      cutover.
+    references: [nxos-routeros-surface]
+
+  # -- Interfaces.  The top-level key is KEPT here (unlike vlans / snmp /
+  # local_users) because the drift is at the LIST level: every cell shows a
+  # record-count drift, so Phase 1 grades every interfaces[] sub-field as
+  # drifted and no sub-field can honestly be called `good`.  The sub-field
+  # keys below are restricted to attributes a name-matched probe confirms
+  # really do drop; name, description, enabled, ipv6_addresses,
+  # lag_member_of, dhcp_client, dhcp_client_v6, kind and tunnel_type are
+  # byte-identical on all 1102 name-matched records and are deliberately NOT
+  # given keys, because declaring them `good` would manufacture a false
+  # CODEC_BUG against the parent's count drift. --
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list drifts on all 13 cells, but ADDITIVELY: nothing from
+      the source is lost (`lost: []` on every cell), and the target gains
+      records — `bridge1` plus one `vlan<N>` per canonical VLAN (19 -> 20,
+      67 -> 114 on a 47-VLAN spine).  RouterOS's VLAN model requires a parent
+      bridge, so this is vendor-wire-correct rather than a translator
+      phantom, but the operator inherits an interface inventory that no longer
+      matches the source one-for-one, and any tooling that diffs interface
+      counts across the migration will report every device as changed.
+      Per-attribute losses are itemised in the sub-field entries below.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The IANA ifType drops on 1065 of 1102 name-matched records
+      (`ianaift:ethernetCsmacd` -> `''`).  The mikrotik_routeros matrix
+      declares `/interfaces/interface/config/type` lossy: RouterOS does not
+      expose an IANA ifType and the codec re-infers it from the name prefix
+      (etherN -> ethernetCsmacd, vlanN -> l3ipvlan).  Cosmetic — the interface
+      and its addressing survive — but NX-OS names do not match RouterOS's
+      inference table, so the type comes back empty rather than re-derived.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      Jumbo MTU on an SVI is dropped (3 records; `Vlan777` 9216 -> null).
+      Physical-port MTU survives.  A fabric that relies on 9216 on its VLAN
+      interfaces will silently fall back to the RouterOS default and fragment
+      or black-hole oversized frames — re-declare MTU on every L3 VLAN
+      interface on the target.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      The address itself round-trips; the anycast companion does not.  On 9
+      records the source carries `ip=192.168.10.1` alongside
+      `virtual_gateway_address=192.168.10.1` and the target returns the
+      address with an empty companion.  The mikrotik_routeros matrix declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address`
+      unsupported (parses-and-ignores in v1).  The SVI keeps a usable IP but
+      stops being a distributed gateway; see also `anycast_gateway_mac`.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].switchport_mode":
+    disposition: unsupported
+    reason: >
+      `trunk` / `access` -> null on 29 records.  The matrix reason is
+      structural: "RouterOS models L2 via bridge VLAN filtering, not
+      switchport modes; the mode is dropped."  Every port lands on the target
+      as a plain L2 member of `bridge1` with no mode, so the bridge VLAN table
+      has to be authored from scratch.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].access_vlan":
+    disposition: unsupported
+    reason: >
+      Access-VLAN membership drops on 13 records (`10` -> null).  Matrix:
+      "RouterOS has no per-port access-VLAN (bridge VLAN table instead);
+      dropped on render."  Re-create as `/interface bridge port` PVID plus a
+      `/interface bridge vlan` untagged entry.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: unsupported
+    reason: >
+      The allowed-VLAN list drops on 10 records (`[10, 2000]` -> `[]`).
+      Matrix: "RouterOS tags VLANs in the bridge VLAN table; the allowed-list
+      is dropped on render."  Until the bridge VLAN table is rebuilt, an
+      uplink that carried a filtered set of VLANs carries none.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: unsupported
+    reason: >
+      Native/untagged VLAN drops on 4 records (`999` -> null).  Matrix:
+      "RouterOS PVID lives on the bridge port, not modelled here; dropped on
+      render."  Set `pvid=` on the corresponding `/interface bridge port`.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].voice_vlan":
+    disposition: unsupported
+    reason: >
+      No NX-OS fixture on this pair populates a voice VLAN, so this follows
+      the target matrix, which declares `/interfaces/interface/voice-vlan`
+      unsupported — "RouterOS has no voice-VLAN; dropped on render."  A source
+      that does carry one loses it silently; there is no RouterOS equivalent
+      to re-create, only a manually tagged bridge VLAN entry.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].dot1q_vlan":
+    disposition: unsupported
+    reason: >
+      Routed sub-interface 802.1Q tags (`encapsulation dot1Q N`) are not
+      populated by any fixture on this pair, so this follows the target
+      matrix, which declares `/interfaces/interface/dot1q-vlan` unsupported
+      (ship-before-wire, GAP 7).  A routed sub-interface would arrive on the
+      target without its tag and would need re-creating as an
+      `/interface vlan` child of the physical port.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].vrf":
+    disposition: unsupported
+    reason: >
+      The per-interface VRF binding blanks on 28 records
+      (`VRF_SERVICE_CUST_1` -> `''`) because the target renders no VRF
+      construct at all (see `routing_instances`).  The interface keeps its
+      address and comes up in the GLOBAL table, so tenant SVIs that were
+      isolated on the Nexus become mutually reachable on the RouterOS box.
+      This is a silent isolation change, not a cosmetic one — audit it before
+      cutover.
+    references: [nxos-routeros-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      The FHRP group does not survive: on 4 records the source's
+      `mode='hsrp'` group list comes back empty.  Rendering the HSRP fixture
+      emits the `/interface vrrp` section header and then only a
+      `# review: ... has mode='hsrp' which RouterOS does not natively
+      support` comment — no `add` line.  Declared unsupported rather than
+      lossy for exactly that reason: the record vanishes.  The SVI keeps its
+      own address, so the box answers on its physical IP while the virtual
+      gateway address that hosts point at no longer exists anywhere.
+      Re-create as a native `/interface vrrp` instance.
+    references: [nxos-routeros-surface]
+
+  # -- VLANs.  Top-level key omitted: the VLAN records themselves survive on
+  # every cell (`vlans[].id` is preserved 13/13) and the loss is confined to
+  # the five sub-fields below. --
+
+  "vlans[].id":
+    disposition: good
+    note: >
+      Every VLAN id round-trips (preserved on 13 of 13 cells).  The VLAN
+      objects exist on the target; what they no longer carry is below.
+    references: [nxos-routeros-surface]
+
+  "vlans[].name":
+    disposition: lossy
+    reason: >
+      The operator's VLAN name is replaced, not merely dropped: 41 records
+      show `user_svi_1_vrf_service_cust_1` -> `Vlan10`.  The matrix reason:
+      "MikroTik stores a VLAN's name as the L3 interface name (e.g. vlan10),
+      NOT a separate descriptive name field."  The re-parse therefore recovers
+      the interface name.  Documentation value is lost and any name-driven
+      automation (NetBox sync, ACL naming) stops matching.
+    references: [nxos-routeros-surface]
+
+  "vlans[].description":
+    disposition: lossy
+    reason: >
+      Drifts on 9 records, and in the surprising direction: source `''`
+      re-parses as `IBGP connection`.  RouterOS exposes a single per-VLAN
+      `comment` field which the parser maps to the VLAN name/description, so
+      the SVI's interface description leaks onto the VLAN record.  The matrix
+      declares `/vlans/vlan/description` lossy for this conflation.  Nothing
+      is destroyed, but the VLAN inventory on the target carries text the
+      source never had there.
+    references: [nxos-routeros-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      The L3 address carried on the VLAN record itself — the SVI-on-VLAN
+      shape — empties on 14 records.  Matrix: this codec "renders VLAN SVI /
+      management L3 only from a sibling interface stanza".  The address is NOT
+      lost from the migration: it survives on the sibling `interfaces[]`
+      record for the same SVI.  What is lost is the VLAN-record mount of it,
+      so a consumer that reads addressing off `intent.vlans` sees nothing.
+    references: [nxos-routeros-surface]
+
+  "vlans[].tagged_ports":
+    disposition: unsupported
+    reason: >
+      Tagged membership empties on 8 records
+      (`['Ethernet1/1', 'Ethernet1/2', 'port-channel1']` -> `[]`).  Matrix:
+      "RouterOS binds a VLAN interface to a single parent; multi-port tagged
+      membership (switchport's VLAN-centric twin) is dropped on render."
+      Together with `interfaces[].trunk_allowed_vlans` this means the
+      VLAN-to-port mapping is gone from BOTH sides of the canonical model.
+    references: [nxos-routeros-surface]
+
+  "vlans[].untagged_ports":
+    disposition: unsupported
+    reason: >
+      Untagged membership empties on 12 records
+      (`['Ethernet1/5', 'Ethernet1/6', 'port-channel2002']` -> `[]`), same
+      root cause as `tagged_ports`.  Rebuild membership as
+      `/interface bridge vlan` tagged/untagged lists before the target carries
+      any user traffic.
+    references: [nxos-routeros-surface]
+
+  # -- Static routes.  Top-level key omitted: routes survive (4 cells fully
+  # preserved) and only the VRF binding drops. --
+
+  "static_routes[].destination":
+    disposition: good
+    note: "Preserved on all 8 populated records; NX-OS `ip route` -> `/ip route`."
+    references: [nxos-routeros-surface]
+
+  "static_routes[].gateway":
+    disposition: good
+    note: "Next-hop preserved on all 8 populated records."
+    references: [nxos-routeros-surface]
+
+  "static_routes[].metric":
+    disposition: good
+    note: >
+      Administrative distance round-trips onto RouterOS `distance=`;
+      preserved on the one cell that sets a non-default value.
+    references: [nxos-routeros-surface]
+
+  "static_routes[].interface":
+    disposition: good
+    note: >
+      Interface-scoped next-hops are not populated by any NX-OS fixture on
+      this pair, and neither matrix declares the path unsupported, so nothing
+      here is measured — stated so the coverage gap is explicit rather than
+      implied by the field's absence.
+    references: [nxos-routeros-surface]
+
+  "static_routes[].description":
+    disposition: good
+    note: >
+      Untested: no NX-OS fixture carries a route description, and the
+      mikrotik_routeros matrix does not declare the path unsupported (RouterOS
+      `/ip route` takes a `comment=`).  The cisco_nxos matrix declares
+      `/routing/static-route/description` lossy on its OWN render, which is a
+      target-side concern for the reverse direction, not this one.
+    references: [nxos-routeros-surface]
+
+  "static_routes[].vrf":
+    disposition: unsupported
+    reason: >
+      The VRF binding blanks on 6 records (`management` -> `''`) while the
+      route itself survives — so a route that was confined to the management
+      VRF is installed in the GLOBAL table on the target.  Matrix:
+      "Per-VRF static-route binding parses-and-ignores in v1" (wire-up
+      scheduled for v0.2.0).  This is the dangerous shape of loss: the config
+      looks complete and the route is present, but its scope silently
+      widened.  Review every route that had a VRF before enabling forwarding.
+    references: [nxos-routeros-surface]
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence, not a target gap: the cisco_nxos codec never
+      populates `intent.dhcp_servers` (0 of 13 cells; its matrix declares
+      `/dhcp-servers/pool` unsupported), so there is nothing for the RouterOS
+      target to lose.  RouterOS *does* render pools — its matrix declares only
+      `/dhcp-servers/pool/lease-time` lossy — so closing the NX-OS parse side
+      would move this row to `good` or `lossy`, not leave it here.
+    references: [nxos-routeros-surface]
+
+  # -- Tier 2 -- translatable with caveats.  SNMP top-level key omitted: the
+  # snmp object survives on every populated cell and only v3_users drifts. --
+
+  "snmp.community":
+    disposition: good
+    note: >
+      Preserved on all 11 populated cells — the Phase-1 dict diff never names
+      `community` as a value-drift key.
+    references: [nxos-routeros-surface]
+
+  "snmp.location":
+    disposition: good
+    references: [nxos-routeros-surface]
+
+  "snmp.contact":
+    disposition: good
+    references: [nxos-routeros-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    references: [nxos-routeros-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      The sole SNMP attribute that drifts — `v3_users` is the only entry in
+      `value_drift_keys` on all 11 populated cells.  The USM user itself
+      survives (name and auth protocol intact); its VACM group binding does
+      not (`network-admin` -> `''`), because "RouterOS overloads
+      `/snmp community` for v3 users and carries no VACM group binding there".
+      The target matrix additionally declares algorithm substitution lossy —
+      sha224 -> SHA256, sha384 -> SHA512, 3des -> DES (a strength DOWNGRADE) —
+      which this corpus does not exercise (every fixture user is md5, no
+      privacy), but which applies to any real config that uses those
+      algorithms.  Re-authorise v3 users into groups on the target and check
+      the negotiated algorithms against what the NMS expects.
+    references: [nxos-routeros-surface]
+
+  lags:
+    disposition: good
+    note: >
+      Measured, not assumed: 5 populated cells, 0 drifted — name, members and
+      LACP mode all round-trip onto RouterOS `/interface bonding`.  The
+      mikrotik_routeros matrix declares `/lags/lag/mode` lossy because
+      `mode=802.3ad` has no passive variant, so a `passive` bundle re-parses
+      as `active`; no NX-OS fixture carries a passive bundle, so that caveat
+      is real but unexercised here.  If your source uses LACP passive, expect
+      it to come back active.
+    references: [nxos-routeros-surface]
+
+  # -- Local users.  Top-level key omitted: the accounts survive and only two
+  # attributes drop. --
+
+  "local_users[].name":
+    disposition: good
+    note: "Account names preserved on all 9 populated cells."
+    references: [nxos-routeros-surface]
+
+  "local_users[].privilege_level":
+    disposition: good
+    note: >
+      Preserved on all 9 populated cells: an NX-OS privilege 15 account maps
+      to RouterOS group `full` and re-parses back to 15.  The cisco_nxos
+      matrix declares `/local-users/user/privilege-level` lossy on its own
+      render, but that is a reverse-direction concern; on this pair the value
+      survives every time, so declaring it lossy would be an unevidenced
+      claim.
+    references: [nxos-routeros-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on all 10 populated records: the named NX-OS role collapses onto
+      RouterOS's built-in group vocabulary (`network-admin` -> group `full` ->
+      `admin`).  Privilege is equivalent, but a CUSTOM NX-OS role with
+      scoped rules flattens to a built-in group and loses its restrictions —
+      an account that could only run a narrow command set on the Nexus becomes
+      a full administrator on the RouterOS box.  Re-create custom roles as
+      RouterOS groups with explicit policies.
+    references: [nxos-routeros-surface]
+
+  "local_users[].hashed_password":
+    disposition: unsupported
+    reason: >
+      The credential does not survive at all — 10 records go from an NX-OS
+      type-5 hash (shape `5 $5$<salt>$<digest>`) to `''`.  This is deliberate,
+      not a bug: RouterOS accepts plaintext only, so the renderer refuses to
+      emit a foreign hash as `password=` (doing so would set the password TO
+      the hash string, an auth bypass for anyone who can read the old config)
+      and instead writes a `# password manager ... -- review:` comment above a
+      password-less `/user add`.  RouterOS `/export` omits hashes, so the
+      re-parse confirms the empty field.  EVERY account arrives on the target
+      without a password: set each one by hand at cutover and do not put the
+      device on a reachable network before you do.
+    references: [nxos-routeros-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos codec never populates
+      `intent.radius_servers` (0 of 13 cells) — its matrix declares both
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported and no fixture exercises a parse side.  RouterOS models
+      RADIUS natively, so this row is about the NX-OS parser, not the target.
+    references: [nxos-routeros-surface]
+
+  # -- EVPN-VXLAN fabric surface --
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      The whole record vanishes: "all N vxlan_vnis dropped" on all 8 cells
+      that populate it.  The mikrotik_routeros matrix declares
+      `/vxlan-vnis/vni`, `/vxlan-vnis/source-interface` and
+      `/vxlan-vnis/udp-port` all unsupported — "RouterOS VXLAN exists but is
+      rare in canonical scope and not modelled in v1."  A leaf migrated this
+      way keeps its VLANs as local L2 and loses every VNI binding, its VTEP
+      source interface and its multicast replication group, so it is no longer
+      part of the fabric in any sense.  If overlay membership matters, this
+      pair is the wrong migration.
+    references: [nxos-routeros-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells).  The cisco_nxos codec models
+      EVPN Type-5 IP-prefix advertisement as a VRF property via
+      `CanonicalRoutingInstance.l3_vni` rather than as standalone route
+      records — its matrix declares `/evpn-type5-routes/route` lossy with that
+      rationale — so the surface is carried under `routing_instances`, which
+      this target drops wholesale.
+    references: [nxos-routeros-surface]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      The whole record vanishes: "all N routing_instances dropped" on 12 of
+      13 cells.  Matrix: "Render emits no VRF/routing-instance construct;
+      intent.routing_instances are dropped on migration", and the instance-type
+      discriminator with it.  Everything the VRFs carried — name, RD, route
+      targets, L3 VNI, description — is gone, and the interfaces and static
+      routes that were bound to them land in the global table (see
+      `interfaces[].vrf` and `static_routes[].vrf`).  Tenant separation that
+      existed on the Nexus does not exist on the RouterOS box; it must be
+      re-built with RouterOS VRFs, or the design re-scoped, before the device
+      forwards production traffic.
+    references: [nxos-routeros-surface]
+
+  # -- Vendor-specific / structural surfaces --
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells).  The cisco_nxos matrix
+      declares two raw-section surfaces lossy — `vdc` (N7K virtualisation
+      grammar with no canonical primitive) and `features` (derived on render
+      from the canonical tree shape rather than carried) — but neither reaches
+      the RouterOS target as canonical data.
+    references: [nxos-routeros-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-only concept (`apply-groups` configuration inheritance); an NX-OS
+      source never populates it.
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-only companion to `apply_groups`."
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Drops to empty on all 7 cells that populate it
+      (`fabric forwarding anycast-gateway-mac <mac>` -> `''`).  Matrix:
+      "System-wide anycast-gateway MAC parses-and-ignores in v1" (schema
+      exists on CanonicalIntent; wire-up scheduled for v0.2.0 Wave C).  With
+      the per-address `virtual_gateway_address` companion also dropped (see
+      `interfaces[].ipv4_addresses`), the distributed gateway is gone
+      end-to-end: hosts keep their configured default-gateway IP, but no
+      interface on the target answers for it as an anycast address.
+    references: [nxos-routeros-surface]

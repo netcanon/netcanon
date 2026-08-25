@@ -1,0 +1,658 @@
+# Cross-vendor fidelity expectations: cisco_nxos -> juniper_junos
+#
+# Source: cisco_nxos codec — NX-OS `show running-config` text.
+# Target: juniper_junos codec — Junos `set`-form render.
+#
+# Both codecs are switch-primary (cisco_nxos = switch/router, juniper_junos =
+# switch/router/firewall), so the shared canonical surface is wide: L2/L3
+# interfaces, VLANs + SVIs, VXLAN-EVPN, VRFs with L3 VNIs, LAGs, SNMP, static
+# routes. The realistic migration is a Nexus 9000 leaf replaced by a QFX leaf
+# in the same EVPN-VXLAN fabric role.
+#
+# Every disposition below is authored from MEASUREMENT, not from the two
+# capability matrices: a full in-process `tools/run_full_mesh.py` pass over the
+# committed corpus (13 fixture cells, 0 render errors, 0 re-parse errors),
+# filtered to this ordered pair, with the per-field and per-sub-field counts
+# cached in
+# `docs/vendor-references/cisco_nxos_to_juniper_junos/canonical_surface.md`.
+# The matrices are cited where they EXPLAIN a measured result, never as a
+# substitute for one.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_nxos_to_juniper_junos/
+#
+# Authored 2026-08-20 as the third pair of the cisco_nxos expectation mesh,
+# after cisco_nxos__arista_eos and cisco_nxos__cisco_iosxe_cli.
+
+meta:
+  source_vendor: cisco_nxos
+  target_vendor: juniper_junos
+  primary_use_case: >
+    DC leaf refresh across vendors: a Cisco Nexus 9000 leaf replaced by a
+    Juniper QFX in the same EVPN-VXLAN fabric role.  The fabric surface
+    migrates well — VLAN ids, SVI addressing, VXLAN VNI bindings, VRFs with
+    their RD/RT and L3 VNI, LAG membership and LACP mode, static routes and
+    SNMP all round-trip.  The losses cluster in three places: device
+    ADMINISTRATION (every local user is dropped because NX-OS SHA-256 crypt
+    hashes cannot be re-used on Junos), fabric UNDERLAY detail Junos models
+    differently (per-VNI multicast group, chassis-wide anycast-gateway MAC),
+    and first-hop redundancy (NX-OS HSRP has no Junos render path).
+  certainty: medium
+  references:
+    - id: nxos-junos-surface
+      path: docs/vendor-references/cisco_nxos_to_juniper_junos/canonical_surface.md
+      title: "NX-OS -> Juniper Junos: measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-20"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field audited
+# by tools/run_full_mesh.py (_AUDITED_FIELDS).  Sub-field keys are used
+# wherever the RECORD survives and only an attribute drops; a top-level key is
+# kept only where the disposition applies to the whole record.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- auto-translatable scalars / lists --
+
+  hostname:
+    disposition: good
+    note: >
+      NX-OS `hostname <name>` maps to Junos `set system host-name <name>`;
+      preserved on 13 of 13 cells.
+    references: [nxos-junos-surface]
+
+  domain:
+    disposition: good
+    note: >
+      NX-OS `ip domain-name` maps to `set system domain-name`; preserved on
+      both cells that populate it.
+    references: [nxos-junos-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      NX-OS `ip name-server <ip>` maps to `set system name-server <ip>`, which
+      the Junos parser reads back.  No committed fixture on this pair
+      populates the field, so this rests on the render/parse path rather than
+      an observed round-trip -- stated rather than left implicit.  The Junos
+      matrix does not ENUMERATE `/system/dns-server`; that is an enumeration
+      gap, not a declared unsupported, and `domain` + `ntp_servers` are both
+      observed preserved through the same un-enumerated path.
+    references: [nxos-junos-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      NX-OS `ntp server <ip>` maps to `set system ntp server <ip>`; preserved
+      on the one cell exercising it.
+    references: [nxos-junos-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported with the identical
+      reason -- "Render emits no clock/timezone stanza; intent.timezone is
+      dropped on migration" -- so this is a symmetric gap in the pair rather
+      than a Junos limitation.  No fixture on this pair populates it, so the
+      declaration rests on the two matrices.  Set `set system time-zone
+      <Olson-id>` on the target by hand; log timestamps and scheduled commits
+      read the device default until you do.
+    references: [nxos-junos-surface]
+
+  syslog_servers:
+    disposition: good
+    note: >
+      NX-OS `logging server <ip>` maps to `set system syslog host <ip>` (the
+      Junos matrix declares `/system/syslog-server` supported); preserved on
+      the one cell exercising it.  Per-host severity/facility filters are not
+      modelled canonically on either side -- out of scope for this surface,
+      not a loss of it.
+    references: [nxos-junos-surface]
+
+  # -- Interfaces.  The top-level key is KEPT here (unlike the other list
+  # fields) because the loss really is whole-record: the row SET shrinks.  The
+  # sub-field keys below then cover the attribute-level losses on the rows
+  # that do survive.  `interfaces[].interface_type` is listed FIRST among them
+  # on purpose -- on the cells where the whole list drifts by row count it is
+  # the sub-field that carries the structural signal, and that signal must
+  # land on a key that declares a loss. --
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface ROW SET shrinks on 11 of 13 cells (worst case 134 -> 9).
+      Cause: an NX-OS `show running-config` capture materialises every chassis
+      port plus the default `Vlan1` SVI at factory state, and the Junos render
+      emits no `set interfaces` line for a record that carries no
+      configuration, so those rows never re-appear on re-parse.  Counted
+      across the corpus: 1001 rows dropped, 0 of which carried ANY
+      configuration (description, address, MTU, switchport mode, trunk list,
+      LAG membership, VRF, or a non-default admin state).  No operator intent
+      is lost -- what is lost is the port INVENTORY, so anything downstream
+      that enumerates unconfigured ports from the migrated intent (capacity
+      reports, patch-panel reconciliation, "which ports are free") must read
+      them from the SOURCE config instead of the target.
+    references: [nxos-junos-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The IANA ifType hint (`ianaift:ethernetCsmacd`) is dropped on every cell.
+      Junos infers interface type from the name prefix (`ge-` / `xe-` / `et-`)
+      and emits no type leaf, and the NX-OS matrix already declares
+      `/interfaces/interface/config/type` lossy on its own side.  Cosmetic:
+      interface identity, addressing and admin state all survive, and the type
+      is re-derivable from the name on the target.
+    references: [nxos-junos-surface]
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Names are carried verbatim by design -- the cross-mesh audit scores name
+      STABILITY; native translation (`Ethernet1/1` -> `xe-0/0/0`) belongs to
+      the orchestrator's port-rename layer, which this path does not engage.
+      No name drift on either cell where the row set is stable.
+    references: [nxos-junos-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: "Free-form descriptions round-trip; Junos quotes when whitespace is present."
+    references: [nxos-junos-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state round-trips, including the negated form: NX-OS `shutdown`
+      maps to `set interfaces <name> disable`.
+    references: [nxos-junos-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    references: [nxos-junos-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Addresses on the surviving rows round-trip, including the per-address
+      anycast companions: Junos declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address` and
+      `.../virtual-gateway-mac` supported and folds an SVI onto an `irb` unit
+      without losing the value.  (The chassis-wide `anycast_gateway_mac` is a
+      SEPARATE surface and does not survive -- see that entry.)
+    references: [nxos-junos-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: "Rendered via `family inet6`; the link-local vs global scope discriminator survives."
+    references: [nxos-junos-surface]
+
+  "interfaces[].switchport_mode":
+    disposition: good
+    note: >
+      NX-OS `switchport mode access|trunk` maps to Junos `family
+      ethernet-switching interface-mode {access | trunk}`; preserved on every
+      cell with a stable row set.
+    references: [nxos-junos-surface]
+
+  "interfaces[].access_vlan":
+    disposition: good
+    note: >
+      `switchport access vlan <N>` maps to `family ethernet-switching vlan
+      members <name>`, where `<name>` is the VLAN's canonical name (see
+      `vlans[].name` for how an unnamed VLAN acquires one).
+    references: [nxos-junos-surface]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: good
+    note: "The allowed-VLAN list survives as `vlan members [ ... ]`."
+    references: [nxos-junos-surface]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: good
+    note: >
+      NX-OS `switchport trunk native vlan <N>` maps to Junos
+      `set interfaces <name> native-vlan-id <N>`, which lives at the
+      parent-interface hierarchy rather than the unit; the value round-trips.
+    references: [nxos-junos-surface]
+
+  "interfaces[].voice_vlan":
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/interfaces/interface/voice-vlan` unsupported:
+      the NX-OS codec does not parse it and the Junos codec does not model it
+      (Junos advertises a voice VLAN through `protocols lldp-med`, with
+      different semantics).  No fixture on this pair populates the field, so
+      this rests on the two matrices rather than an observed drop.  If your
+      source uses `switchport voice vlan`, re-create it as LLDP-MED on the
+      target by hand -- IP phones will otherwise land in the data VLAN.
+    references: [nxos-junos-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts wherever a member port exists (`port-channel1` -> `ae1`).  The
+      membership SURVIVES -- the member is re-attached to the renamed bundle
+      via `gigether-options 802.3ad ae<N>` -- but the token changes, because
+      Junos's mandated bundle name is `ae<N>` while NX-OS spells it
+      `port-channel<N>`.  The reconciler's cross-vendor LAG-name equivalence
+      does not absorb it here: its table matches `Port-channel<N>` / `Po<N>`,
+      not the lower-case `port-channel<N>` the NX-OS parser produces.
+      Operationally a rename, not a loss -- but tooling that diffs membership
+      strings across the migration reports every member port as changed.
+    references: [nxos-junos-surface]
+
+  "interfaces[].dhcp_client":
+    disposition: good
+    note: "`ip address dhcp` maps to `family inet dhcp` on unit 0."
+    references: [nxos-junos-surface]
+
+  "interfaces[].vrf":
+    disposition: good
+    note: >
+      VRF membership survives; Junos pivots it onto the routing-instance side
+      (`set routing-instances <X> interface <name>.0`) rather than the
+      interface side, and the canonical binding re-parses either way.
+    references: [nxos-junos-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      First-hop redundancy does not arrive.  The cisco_nxos parser builds FHRP
+      groups only from `hsrp <N>` blocks, so `mode` is always `"hsrp"` on this
+      ordered pair, and the Junos matrix declares
+      `/interfaces/interface/vrrp-groups/group/mode` lossy -- "a cross-family
+      source mode (HSRP / CARP) is skipped on render".  The measured effect is
+      that the whole group vanishes: the kitchen-sink `Vlan10` group (VIP,
+      priority 110, preempt, MD5 auth) renders to no VRRP stanza at all, and
+      the target interface comes back with an empty `vrrp_groups` list.
+      `unsupported` rather than `lossy` because the record does not survive in
+      any form.  Re-create every HSRP group as a Junos VRRP group by hand and
+      re-check VIP, priority, preempt and authentication against the source --
+      until you do, the SVIs have no shared gateway and the fabric's
+      first-hop redundancy is gone.
+    references: [nxos-junos-surface]
+
+  # -- VLANs.  Top-level key omitted: the record survives on every cell (id,
+  # membership and SVI addressing all round-trip) and only `name` moves. --
+
+  "vlans[].id":
+    disposition: good
+    note: "`vlan <N>` maps to `set vlans <name> vlan-id <N>`; preserved on 13 of 13 cells."
+    references: [nxos-junos-surface]
+
+  "vlans[].name":
+    disposition: lossy
+    reason: >
+      Drifts on all 13 cells (23 records), always in the same direction: an
+      NX-OS VLAN declared without a `name` carries an empty canonical name,
+      and Junos keys its VLANs BY name, so the render synthesises `VLAN-<id>`
+      and that placeholder is what re-parses.  Operator-authored names survive
+      verbatim -- on `busterswt_spine_leaf_xk32_1` only ids 1 and 999 (both
+      unnamed) gain a name while the named VLANs round-trip untouched.  Treat
+      any `VLAN-<id>` on the target as generated, not inherited, and rename it
+      before it becomes the name your automation keys on.
+    references: [nxos-junos-surface]
+
+  "vlans[].description":
+    disposition: lossy
+    reason: >
+      Junos renders the VLAN name but not a separate `description` line, so a
+      canonical VLAN description (distinct from the name) drops -- its matrix
+      declares `/vlans/vlan/description` lossy, and the NX-OS matrix declares
+      the same path lossy on its side.  No fixture on this pair populates a
+      VLAN description, so this rests on the two matrices rather than an
+      observed drop.  Re-add per-VLAN descriptions on the target if you rely
+      on them for documentation.
+    references: [nxos-junos-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      The VLAN-centric port list round-trips; Junos transposes it back to
+      per-interface `family ethernet-switching vlan members` on render.
+    references: [nxos-junos-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    references: [nxos-junos-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      The SVI-on-VLAN shape survives -- Junos mounts it as `set interfaces irb
+      unit <vid> family inet address <ip>/<len>` plus `set vlans <name>
+      l3-interface irb.<vid>` -- preserved on all 6 cells that populate it.
+      The one sub-attribute Junos declares lossy is `is_secondary` (its `irb`
+      addresses are co-equal, with no primary/secondary distinction); no
+      fixture on this pair carries a secondary address.
+    references: [nxos-junos-surface]
+
+  # -- Static routes.  Top-level key omitted: the routes survive; only the
+  # administrative distance drops. --
+
+  "static_routes[].destination":
+    disposition: good
+    note: "`ip route <dest> <next-hop>` maps to `set routing-options static route <dest> next-hop <gw>`."
+    references: [nxos-junos-surface]
+
+  "static_routes[].gateway":
+    disposition: good
+    references: [nxos-junos-surface]
+
+  "static_routes[].vrf":
+    disposition: good
+    note: >
+      The per-VRF form survives: `ip route vrf <X> ...` maps to
+      `set routing-instances <X> routing-options static route ...`.  Preserved
+      on all 4 cells that carry one.
+    references: [nxos-junos-surface]
+
+  "static_routes[].metric":
+    disposition: lossy
+    reason: >
+      Junos renders destination + next-hop only, so the administrative
+      distance is dropped and re-parses as 0 (kitchen-sink: 200 -> 0); its
+      matrix declares `/routing/static-route/metric` lossy.  This changes
+      forwarding, not just documentation: a FLOATING static route authored as
+      a backup path arrives with default preference and competes with the
+      primary instead of standing by.  Re-apply `preference <N>` on the target
+      for every route whose source metric was non-default.
+    references: [nxos-junos-surface]
+
+  "static_routes[].interface":
+    disposition: unsupported
+    reason: >
+      The Junos matrix declares `/routing/static-route/interface` unsupported
+      -- the render emits `next-hop <gateway>` only, so a gateway-less
+      interface-only (connected) static route produces no output at all and
+      the ROUTE disappears, not just its interface attribute.  No fixture on
+      this pair carries one.  If your NX-OS source has
+      `ip route <prefix> <interface>`, that route will NOT arrive: re-declare
+      it on the target with a next-hop address or as a `qualified-next-hop`.
+    references: [nxos-junos-surface]
+
+  "static_routes[].description":
+    disposition: lossy
+    reason: >
+      Both matrices declare `/routing/static-route/description` lossy -- NX-OS
+      carries the route name, Junos renders destination + next-hop only.  No
+      fixture on this pair populates it, so this rests on the two matrices.
+      Operator-authored route names will not survive the migration.
+    references: [nxos-junos-surface]
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence, not a target gap: the cisco_nxos matrix declares
+      `/dhcp-servers/pool` unsupported, so the codec never populates
+      `intent.dhcp_servers` (0 of 13 cells) and there is nothing for the Junos
+      target to lose.  Junos *can* render DHCP pools -- its matrix declares
+      `/dhcp-servers/pool` supported -- so closing the NX-OS parse side would
+      move this row to `good` or `lossy`, not leave it here.
+    references: [nxos-junos-surface]
+
+  # -- Tier 2 -- SNMP --
+
+  "snmp.community":
+    disposition: good
+    note: "`snmp-server community <c> ro` maps to `set snmp community <c> authorization read-only`."
+    references: [nxos-junos-surface]
+
+  "snmp.location":
+    disposition: good
+    references: [nxos-junos-surface]
+
+  "snmp.contact":
+    disposition: good
+    references: [nxos-junos-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: "`snmp-server host <ip>` maps to `set snmp trap-group <name> targets <ip>`."
+    references: [nxos-junos-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      The only SNMP attribute that drifts (4 of 11 populated cells; the
+      Phase-1 dict diff names `v3_users` as the sole value-drift key).  The
+      USM user itself survives -- name, group and auth protocol all round-trip
+      -- but the per-user SNMPv3 engineID is dropped, because Junos treats
+      engineIDs as device-assigned/global and emits no per-user value (its
+      matrix declares `/snmp/v3-user/engine-id` lossy; the NX-OS matrix
+      declares the same path lossy for the mirror-image reason, that its
+      colon-decimal spelling does not survive cross-vendor).  A manager pinned
+      to the source device's engineID will not authenticate against the target
+      until it is re-pointed.  Auth/priv passphrases are opaque localized keys
+      excluded from this comparison by design -- plan on re-keying v3 users on
+      the target regardless.  v1/v2c is unaffected.
+    references: [nxos-junos-surface]
+
+  # -- Tier 2 -- LAGs.  Top-level key omitted: the bundle survives with its
+  # members and LACP mode; only the name is re-spelled. --
+
+  "lags[].name":
+    disposition: lossy
+    reason: >
+      Drifts on all 5 cells that carry a LAG (`port-channel1` -> `ae1`,
+      `port-channel2002` -> `ae2002`).  `ae<N>` is Junos's mandated name for
+      an aggregated-ethernet bundle, so this is a vendor-correct rename rather
+      than lost data -- the bundle keeps its members and its LACP mode.  The
+      reconciler's LAG-name equivalence does not collapse the two here because
+      its table matches `Port-channel<N>`, not the lower-case
+      `port-channel<N>` the NX-OS parser produces.  Re-point any monitoring,
+      interface-description convention or automation that keys on the bundle
+      name before cutover.
+    references: [nxos-junos-surface]
+
+  "lags[].members":
+    disposition: good
+    note: >
+      Member lists round-trip on all 5 cells that carry a LAG -- the bundle
+      keeps its ports even though its name changes (see `lags[].name`).
+    references: [nxos-junos-surface]
+
+  "lags[].mode":
+    disposition: good
+    note: >
+      LACP mode round-trips: active/passive emit a `lacp` line and a static
+      (non-LACP) bundle emits none and re-parses as static.
+    references: [nxos-junos-surface]
+
+  # -- Tier 2 -- device administration --
+
+  local_users:
+    disposition: unsupported
+    reason: >
+      THE headline loss for this pair, and it is total: every NX-OS local user
+      is dropped -- 9 of 9 populated cells, every user, "all N local_users
+      dropped".  NX-OS stores `username <name> password 5 $5$<salt>$<digest>`
+      (SHA-256 crypt); the hashes Junos can consume are plaintext, its own
+      `junos:` form, `$6$` SHA-512 and `$1$` md5crypt.  Every NX-OS user
+      therefore fails the render's migratability gate, and the render
+      deliberately skips the ENTIRE user rather than emitting a bare
+      `set system login user <name> class <role>` line -- that form would
+      commit as a PASSWORDLESS account on Junos, strictly worse than the
+      source.  What lands in the output instead is a review comment naming
+      each account.  Consequence: the migrated config has NO local login
+      accounts.  Re-create every user on the target with a fresh password
+      before you commit, or the device is reachable only through whatever
+      out-of-band or factory credential the platform already has.
+      `unsupported` rather than `lossy` because the record does not survive in
+      any form -- name, role and privilege level all go with the hash.
+    references: [nxos-junos-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos matrix declares both
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported, so the codec never populates `intent.radius_servers` (0 of
+      13 cells) and no fixture exercises a parse side.  Worth reading next to
+      `local_users`: with neither RADIUS nor local accounts carried across,
+      the migrated config arrives with no authentication source at all.
+    references: [nxos-junos-surface]
+
+  # -- EVPN-VXLAN fabric surface --
+
+  "vxlan_vnis[].vni":
+    disposition: good
+    note: "Preserved on all 8 cells that populate it."
+    references: [nxos-junos-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: >
+      The VLAN-to-VNI binding survives: NX-OS `vlan <V> / vn-segment <N>` maps
+      to `set vlans <name> vxlan vni <N>`.
+    references: [nxos-junos-surface]
+
+  "vxlan_vnis[].source_interface":
+    disposition: good
+    note: >
+      The VTEP source loopback survives as
+      `set switch-options vtep-source-interface <name>`; the canonical value
+      is the operator-form name, and the port-rename layer (not this path)
+      handles `loopback1` -> `lo0.1`.
+    references: [nxos-junos-surface]
+
+  "vxlan_vnis[].udp_port":
+    disposition: good
+    note: "Both default to 4789 (IANA); an explicit override round-trips via `vxlan-port`."
+    references: [nxos-junos-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: lossy
+    reason: >
+      The per-VNI underlay multicast replication group an NX-OS
+      multicast-mode fabric binds (e.g. `239.11.11.10`) is dropped on both
+      cells that carry one.  Junos's matrix declares `/vxlan-vnis/mcast-group`
+      lossy: the render emits the VLAN<->VNI bindings plus `switch-options
+      vtep-source-interface` / `vxlan-port`, but no multicast underlay --
+      Junos expects BGP-EVPN-signalled ingress replication.  A multicast-mode
+      fabric re-renders without its replication group and will not forward BUM
+      traffic (ARP, unknown-unicast flooding) until you either re-declare the
+      underlay group or convert the fabric to ingress replication.  Ingress-
+      replication fabrics are unaffected.
+    references: [nxos-junos-surface]
+
+  "vxlan_vnis[].flood_list":
+    disposition: lossy
+    reason: >
+      Companion to `mcast_group`, declared lossy by the Junos matrix for the
+      same reason: static ingress-replication / head-end flood VTEP lists are
+      not emitted, so a source carrying explicit remote VTEPs loses them while
+      the VLAN<->VNI binding survives.  No fixture on this pair populates the
+      field, so this rests on the target matrix rather than an observed drop.
+      Re-declare static remote VTEPs on the target (or let BGP-EVPN discover
+      them) before expecting BUM traffic to flood.
+    references: [nxos-junos-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells).  Both codecs model EVPN
+      Type-5 IP-prefix advertisement as a VRF property via
+      `CanonicalRoutingInstance.l3_vni` rather than as standalone route
+      records -- both matrices declare `/evpn-type5-routes/route` lossy with
+      that same rationale -- so the surface is carried under
+      `routing_instances[].l3_vni`, which is preserved on all 6 cells that
+      populate it, not here.
+    references: [nxos-junos-surface]
+
+  # -- VRF / routing-instance surface.  Top-level key omitted: nothing on this
+  # record drifts anywhere in the corpus. --
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      NX-OS `vrf context <X>` maps to `set routing-instances <X> instance-type
+      vrf`; preserved on all 12 cells that populate it.
+    references: [nxos-junos-surface]
+
+  "routing_instances[].instance_type":
+    disposition: good
+    note: >
+      Preserved on all 12 populated cells.  The NX-OS matrix declares
+      `/routing-instances/instance/instance-type` lossy on its own side, but
+      measured against this target it round-trips -- Junos models the
+      discriminator natively.
+    references: [nxos-junos-surface]
+
+  "routing_instances[].route_distinguisher":
+    disposition: good
+    note: >
+      Both accept the `<asn>:<nn>` and `<ip>:<nn>` forms; Junos emits it as
+      `set routing-instances <X> route-distinguisher <rd>`.  Preserved on all
+      6 cells that populate it.
+    references: [nxos-junos-surface]
+
+  "routing_instances[].rt_imports":
+    disposition: good
+    references: [nxos-junos-surface]
+
+  "routing_instances[].rt_exports":
+    disposition: good
+    references: [nxos-junos-surface]
+
+  "routing_instances[].description":
+    disposition: good
+    note: >
+      The VRF description survives into Junos (preserved on the one cell that
+      populates it) -- worth noting because it does NOT survive on the sibling
+      cisco_nxos -> arista_eos pair.
+    references: [nxos-junos-surface]
+
+  "routing_instances[].l3_vni":
+    disposition: good
+    note: >
+      The symmetric-IRB L3 VNI survives: NX-OS `vrf context <X> / vni <N>`
+      maps to `set routing-instances <X> protocols evpn ip-prefix-routes vni
+      <N>`.  Preserved on all 6 cells that populate it -- this is the surface
+      that carries EVPN Type-5 for this pair.
+    references: [nxos-junos-surface]
+
+  # -- Vendor-specific / structural surfaces --
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells) and Tier 3 by design -- raw
+      sections are vendor-private and never auto-rendered cross-vendor.  The
+      NX-OS matrix declares two raw-section surfaces lossy (`vdc`, the N7K
+      virtualisation grammar with no canonical primitive, and `features`,
+      derived on render from the canonical tree shape rather than carried),
+      but neither reaches the Junos target as canonical data.
+    references: [nxos-junos-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-only configuration-inheritance concept (`set apply-groups <G>`).
+      It is the TARGET's native concept here, but the field is populated on
+      PARSE -- an NX-OS source has no equivalent and never populates it.
+    references: [nxos-junos-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-only companion to `apply_groups`; same source-side absence."
+    references: [nxos-junos-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Dropped to an empty string on all 7 cells that populate it.  Junos has
+      no chassis-wide anycast-gateway MAC: its matrix declares
+      `/anycast-gateway-mac` unsupported and models the equivalent per IRB
+      unit (`set interfaces irb unit <vid> virtual-gateway-v4-mac <mac>`).
+      The single MAC an NX-OS fabric sets once with `fabric forwarding
+      anycast-gateway-mac` must be re-declared per IRB unit on the target;
+      until it is, leaves disagree on the gateway MAC and hosts that move
+      between leaves keep ARPing a MAC that is no longer there.  Note this is
+      independent of the PER-ADDRESS anycast companions
+      (`virtual_gateway_address` / `virtual_gateway_mac` on
+      `CanonicalIPv4Address`), which Junos declares supported and which do
+      survive -- see `interfaces[].ipv4_addresses`.
+    references: [nxos-junos-surface]

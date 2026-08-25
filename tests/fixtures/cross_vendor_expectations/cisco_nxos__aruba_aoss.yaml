@@ -1,0 +1,515 @@
+# Cross-vendor fidelity expectations: cisco_nxos -> aruba_aoss
+#
+# Source: cisco_nxos codec — NX-OS `show running-config` text.
+# Target: aruba_aoss codec — AOS-S (ProVision) CLI render.
+#
+# This is the rich-source / narrow-target shape.  cisco_nxos declares
+# `device_classes = [switch, router]` and models the full DC leaf surface —
+# VXLAN VNIs, VRFs with L3 VNIs, HSRP, a distributed anycast gateway MAC,
+# per-VRF static routes.  aruba_aoss is a campus L2 / basic-L3 codec with ONE
+# global routing table.  The campus overlap (hostname, VLANs + their SVI
+# addressing, switchport membership, LAG bundles, SNMP, default-table static
+# routes) lands cleanly; everything above it has nowhere to go.
+#
+# Dispositions here are grounded in two in-repo sources rather than asserted:
+# each codec's `CapabilityMatrix`, and a full `run_full_mesh.py` pass over the
+# committed corpus (13 fixture cells, 0 render errors, 0 re-parse errors).  The
+# per-field and per-sub-field measurement is cached in
+# `docs/vendor-references/cisco_nxos_to_aruba_aoss/canonical_surface.md`.
+# Where the two disagree the MEASUREMENT wins and the entry says so — see
+# `static_routes[].metric`.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_nxos_to_aruba_aoss/
+
+meta:
+  source_vendor: cisco_nxos
+  target_vendor: aruba_aoss
+  primary_use_case: >
+    Campus demotion: a Cisco Nexus 9000 that has been serving an access or
+    small-aggregation role is replaced by an Aruba AOS-S 2930F / 3810 / 5400R.
+    The L2 surface (VLANs, tagged/untagged membership, LAG bundles, SVI
+    addressing, default-table static routes, SNMP v1/v2c) transfers well.  The
+    fabric surface does not: VXLAN VNIs, VRFs, HSRP groups and the anycast
+    gateway MAC have no AOS-S grammar and are dropped wholesale, and the AOS-S
+    codec renders no local-user stanza at all — so the operator must re-create
+    device credentials before cutover.
+  certainty: medium
+  references:
+    - id: nxos-aoss-surface
+      path: docs/vendor-references/cisco_nxos_to_aruba_aoss/canonical_surface.md
+      title: "NX-OS -> Aruba AOS-S: measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-20"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field audited
+# by tools/run_full_mesh.py (_AUDITED_FIELDS).  Fields whose RECORD survives
+# and where only an attribute drops are addressed by sub-field key and carry
+# no top-level entry, per the house pattern.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars / lists --
+
+  hostname:
+    disposition: good
+    note: "`hostname <name>` on both platforms; preserved on 13 of 13 cells."
+    references: [nxos-aoss-surface]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      The aruba_aoss matrix declares `/system/domain` unsupported — "Render
+      emits no system domain-name; intent.domain is dropped on migration" —
+      and the corpus agrees: on both cells that populate it the value goes to
+      `''`.  AOS-S folds the FQDN into the hostname rather than carrying a
+      separate directive, so re-set the domain suffix by hand (or fold it into
+      `hostname`) on the target, and check anything that builds short-name
+      lookups from it (DNS search, syslog identity).
+    references: [nxos-aoss-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Both matrices declare `/system/dns-server` supported; the NX-OS `ip
+      name-server <ip>` list maps onto the AOS-S `ip dns server-address
+      priority N <ip>` form.  Stated rather than left implicit: NO committed
+      fixture on this pair populates the field (0 preserved / 0 drifted / 13
+      untested), so this rests on the two declarations, not on an observed
+      round-trip.
+    references: [nxos-aoss-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Preserved on the one cell that exercises it.  The canonical model
+      carries the server address list only, which is exactly the surface AOS-S
+      re-emits (as SNTP); per-server modifiers such as `prefer` are not
+      modelled on either side, so nothing measurable is lost.
+    references: [nxos-aoss-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      The aruba_aoss matrix declares `/system/timezone` unsupported — "Render
+      emits no clock/timezone stanza; intent.timezone is dropped on
+      migration" — and the cisco_nxos matrix carries the identical
+      declaration, so this is a symmetric gap in the pair rather than an AOS-S
+      limitation.  No fixture populates it, so the drop is declared rather
+      than observed.  Set `time timezone` (and the daylight-time rule) on the
+      target by hand; log and certificate timestamps depend on it.
+    references: [nxos-aoss-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      The aruba_aoss matrix declares `/system/syslog-server` unsupported
+      ("Render emits no logging/syslog config"), and the one cell that
+      populates the field loses the whole record — "all 1 syslog_servers
+      dropped".  The migrated switch will log to console only: re-add
+      `logging <ip>` for every collector before cutover or the device goes
+      dark to the SIEM.
+    references: [nxos-aoss-surface]
+
+  # -- Interfaces.  The top-level key is kept because the LIST itself loses
+  # records (not just attributes); the sub-field keys below then split the
+  # attribute-level story.  The sub-field block deliberately leads with the
+  # losses: on the 11 cells where the list drifts structurally the reconciler
+  # attributes that structural signal to the FIRST sub-field key of the parent,
+  # and `vrf` is the attribute whose loss is genuinely record-wide here. --
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface LIST loses records on 11 of 13 cells, and the loss is
+      large: 134 -> 8, 132 -> 4, 129 -> 3, 70 -> 7, 19 -> 16.  Two causes,
+      confirmed by direct parse -> render -> re-parse probe.  (1) NX-OS `show
+      running-config` emits a stanza for every physical port on the chassis
+      including ports in pure default state; the AOS-S render only emits ports
+      that carry configuration, so default-state `Ethernet1/N` records do not
+      survive.  That part is benign — no configured intent is lost.  (2) SVIs
+      that carry no IPv4 address DO get dropped and that part is not benign:
+      `Vlan1` and an L3VNI-only `Vlan100` disappear, because AOS-S cannot
+      express a VLAN interface that exists solely to host a VRF / VNI binding.
+      Configured ports, configured SVIs, `loopback0`, `mgmt0` and
+      `port-channel1` all survive by name.  After migration, diff the port
+      inventory and re-create any SVI whose only purpose was routing-instance
+      attachment.
+    references: [nxos-aoss-surface]
+
+  "interfaces[].vrf":
+    disposition: unsupported
+    reason: >
+      AOS-S has no VRF construct at all (see `routing_instances`), so the
+      per-interface VRF membership cannot be represented: `TENANT-A` -> `''`,
+      `management` -> `''`.  Every interface lands in the single global
+      routing table.  This is the silent half of the VRF collapse — the
+      interface and its address survive and look correct, while the isolation
+      that kept two tenants (or the management network) apart is gone.  Verify
+      the target's reachability model before connecting it.
+    references: [nxos-aoss-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      The NX-OS sources carry HSRP groups.  AOS-S renders only IETF VRRP, and
+      its matrix records that a cross-family source mode drops to a review
+      comment rather than a stanza — so the measurement shows the whole group
+      record removed (`[]`), taking the virtual IP, priority, preempt flag,
+      advertisement interval and authentication scheme with it.  Unsupported
+      rather than lossy because nothing of the group survives.  First-hop
+      redundancy must be rebuilt natively as VRRP on the target, and the
+      gateway address re-assigned, before hosts on that SVI have a default
+      gateway.
+    references: [nxos-aoss-surface]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      `9216` -> `null`: the aruba_aoss codec neither parses nor renders a
+      per-interface MTU, so jumbo-frame configuration is dropped while the
+      interface and its addressing survive intact.  AOS-S sizes jumbo frames
+      per-VLAN (`jumbo` on the VLAN) rather than per-port, so this cannot be a
+      mechanical copy — re-declare jumbo support on the VLANs that need it, or
+      storage / VXLAN-adjacent traffic will silently fragment.
+    references: [nxos-aoss-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The IANA ifType is re-derived, not carried: `ianaift:softwareLoopback`
+      (on `loopback0`) and `ianaift:ieee8023adLag` (on `port-channel1`) both
+      come back as `ianaift:ethernetCsmacd`.  The aruba_aoss matrix declares
+      `/interfaces/interface/config/type` lossy for exactly this reason — the
+      codec infers the type from the interface-name shape (bare number ->
+      ethernet, `Trk` -> port-channel, `Vlan` -> l3ipvlan), and NX-OS's
+      lowercase `loopback0` / `port-channel1` match none of those.  Cosmetic
+      for forwarding; it matters to inventory tooling that groups ports by
+      type.
+    references: [nxos-aoss-surface]
+
+  "interfaces[].description":
+    disposition: lossy
+    reason: >
+      On a VLAN SVI the operator description is overwritten by the VLAN name:
+      `PROD gateway SVI` -> `PROD`, `tenant-a anycast gateway SVI` -> `VOICE`.
+      AOS-S mounts SVI L3 on the VLAN record, so the reparse recovers the VLAN
+      name into the interface description slot.  Physical-port descriptions
+      are unaffected.  The replacement text is plausible, so this loss will
+      not look like a loss — re-apply SVI descriptions from the source if they
+      carry circuit or tenant identifiers.
+    references: [nxos-aoss-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      `port-channel1` -> `trk1`: the member port stays in the same bundle with
+      the same peers, but the bundle it names is spelled the AOS-S way.  The
+      aggregation is intact; what breaks is anything keyed on the old string —
+      interface descriptions, monitoring templates, NetBox / Nautobot LAG
+      records and rename maps that expect `port-channel<N>`.  See `lags[].name`
+      for the bundle side of the same rename.
+    references: [nxos-aoss-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      The address itself survives — `ip` and `prefix_length` round-trip — but
+      the distributed anycast-gateway companion is blanked
+      (`virtual_gateway_address` -> `''`).  The aruba_aoss matrix declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address`
+      unsupported: AOS-S has no anycast-gateway / VARP grammar.  The SVI keeps
+      its unique address and loses the shared gateway address the fabric's
+      hosts actually point at, so plan the first-hop gateway (VRRP, or a
+      single routed switch) explicitly on the target.
+    references: [nxos-aoss-surface]
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      For every interface that survives the render, the name is carried
+      verbatim — no per-record name drift on any cell.  Native translation
+      (`Ethernet1/3` -> `3`) belongs to the orchestrator's port-rename layer,
+      which this path does not engage; the record-level losses are declared on
+      the `interfaces` entry above.
+    references: [nxos-aoss-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: "Admin state round-trips, including the negated (`shutdown`) form."
+    references: [nxos-aoss-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "interfaces[].switchport_mode":
+    disposition: good
+    note: >
+      Access / trunk mode survives; AOS-S expresses it VLAN-side as
+      untagged / tagged membership and the codec re-projects it back onto the
+      interface on re-parse.
+    references: [nxos-aoss-surface]
+
+  "interfaces[].access_vlan":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "interfaces[].dhcp_client":
+    disposition: good
+    note: "`ip address dhcp` maps onto the AOS-S `ip address dhcp-bootp` form."
+    references: [nxos-aoss-surface]
+
+  # -- VLANs.  Top-level key omitted: the record survives on every cell
+  # (9 preserved / 4 drifted) and only one sub-field drops. --
+
+  "vlans[].id":
+    disposition: good
+    note: "Preserved on 13 of 13 cells."
+    references: [nxos-aoss-surface]
+
+  "vlans[].name":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Trunk membership re-projected from the NX-OS per-port `switchport trunk
+      allowed vlan` lines onto the VLAN-centric AOS-S `tagged <ports>` form.
+    references: [nxos-aoss-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Drifts on 4 of 6 populated cells, and identically to the interface-mount
+      twin: `ip` and `prefix_length` survive, the anycast
+      `virtual_gateway_address` companion is blanked.  The aruba_aoss matrix
+      declares `/vlans/vlan/ipv4/address/virtual-gateway-address` (and its
+      `virtual-gateway-mac` sibling) unsupported — a campus L2/L3 codec has no
+      VARP grammar.  Every SVI in a distributed-anycast fabric therefore comes
+      out of the migration owning its unique address and no shared gateway.
+    references: [nxos-aoss-surface]
+
+  # -- Static routes.  Top-level key omitted: the record survives and only the
+  # VRF binding drops. --
+
+  "static_routes[].vrf":
+    disposition: unsupported
+    reason: >
+      `management` -> `''` on all 4 cells that carry per-VRF routes.  The
+      aruba_aoss matrix declares `/routing/static-route/vrf` unsupported, so
+      routes that were scoped to a VRF are re-emitted into the single global
+      table.  A management-VRF default route and a tenant default route both
+      land as `ip route 0.0.0.0/0 ...` in the same table — read the rendered
+      routes before deploying, because two defaults that never met on the
+      source now compete.
+    references: [nxos-aoss-surface]
+
+  "static_routes[].destination":
+    disposition: good
+    note: "CIDR on both platforms; preserved on all 8 populated cells."
+    references: [nxos-aoss-surface]
+
+  "static_routes[].gateway":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "static_routes[].metric":
+    disposition: good
+    note: >
+      Recorded from the MEASUREMENT against the target matrix, which declares
+      `/routing/static-route/metric` lossy ("render emits destination +
+      next-hop only").  The one fixture carrying a non-default administrative
+      distance (`10.100.0.0/16`, metric 200) round-trips it intact, and no
+      cell shows metric drift, so the declared loss does not reproduce on this
+      corpus.
+    references: [nxos-aoss-surface]
+
+  # -- LAGs.  Top-level key omitted: members and mode survive on every
+  # populated cell; only the bundle name is rewritten. --
+
+  "lags[].name":
+    disposition: lossy
+    reason: >
+      `port-channel1` -> `trk1`, `port-channel2002` -> `trk2002` on all 5
+      populated cells.  The bundle lands with the right members and the right
+      LACP mode; it is the operator-facing name that changes to the AOS-S
+      `trk<N>` form.  Anything addressing the bundle by name — monitoring,
+      IPAM/NetBox LAG objects, peer-side descriptions, the port-rename map —
+      needs remapping.  Lossy, not unsupported: the aggregation itself is
+      fully modelled by the target.
+    references: [nxos-aoss-surface]
+
+  "lags[].members":
+    disposition: good
+    note: >
+      Member port lists round-trip; the NX-OS per-member `channel-group N mode
+      active` lines collapse to one AOS-S `trunk <port-list> trk<N> lacp` line
+      and back.
+    references: [nxos-aoss-surface]
+
+  "lags[].mode":
+    disposition: good
+    note: >
+      Preserved on all 5 populated cells.  The aruba_aoss matrix declares
+      `/lags/lag/mode` lossy because a `passive` bundle re-parses as `active`;
+      every NX-OS bundle in this corpus is `active`, so the declared loss is
+      not reachable here.  A passive-LACP source WILL hit it.
+    references: [nxos-aoss-surface]
+
+  # -- SNMP.  Top-level key omitted: the record survives (7 preserved /
+  # 4 drifted) and only the v3 user list drops an attribute. --
+
+  "snmp.community":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "snmp.location":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "snmp.contact":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    references: [nxos-aoss-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      The sole SNMP attribute that drifts (4 of 11 populated cells; the
+      Phase-1 dict diff names `v3_users` as the only value-drift key).  The
+      USM user survives with its name, group and auth protocol; the per-user
+      `engine_id` is blanked, matching the target's own
+      `/snmp/v3-user/engine-id` declaration — AOS-S treats the engineID as
+      device-assigned rather than per-user.  A v3 manager whose credentials
+      were localized against the source engineID will not authenticate to the
+      new switch, so re-key v3 users (and re-localize on the NMS) as part of
+      cutover.  v1/v2c is unaffected.
+    references: [nxos-aoss-surface]
+
+  # -- Records the target cannot represent at all --
+
+  local_users:
+    disposition: unsupported
+    reason: >
+      The whole record vanishes on all 9 cells that populate it — "all N
+      local_users dropped".  The aruba_aoss matrix declares no `/local-users`
+      path at all, so the render emits nothing and the account name, its role
+      and its NX-OS type-5 hash (shape `5 $5$<salt>$<digest>`, which AOS-S
+      could not consume anyway) go together.  This is the pair's most
+      operator-significant loss: deploy the rendered config as-is and the
+      target comes up with no local credentials from this source.  Create the
+      manager / operator accounts and set their passwords on the target BEFORE
+      cutover, and confirm the console / out-of-band path still works.
+    references: [nxos-aoss-surface]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      "all N routing_instances dropped" on 12 of 13 cells.  AOS-S is a
+      single-global-table campus platform with no VRF / routing-instance
+      construct, so the VRF name, its route-distinguisher, its route targets
+      and its L3 VNI are all dropped, and the aruba_aoss matrix declares
+      `/routing-instances/instance` unsupported to say so.  Read this together
+      with `interfaces[].vrf` and `static_routes[].vrf`: the containers vanish
+      AND their members silently join the global table, so tenant separation
+      that was enforced by the source config is simply absent on the target.
+      Where isolation must survive the move, re-implement it with VLANs plus
+      ACLs, or keep a routing platform in that role.
+    references: [nxos-aoss-surface]
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      "all N vxlan_vnis dropped" on all 8 cells that populate the field (up to
+      5 VNI records per cell).  The aruba_aoss matrix declares
+      `/vxlan-vnis/vni`, `/vxlan-vnis/source-interface` and
+      `/vxlan-vnis/udp-port` unsupported — "VXLAN not modelled — AOS-S is a
+      campus L2/L3 codec".  Expected for the demotion use case, but it means
+      an AOS-S switch cannot take over a leaf's VTEP role: keep the VXLAN
+      termination on a fabric-capable device and hand the AOS-S box plain
+      tagged VLANs.
+    references: [nxos-aoss-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      The chassis-wide distributed-anycast-gateway MAC blanks on all 7 cells
+      that populate it.  The aruba_aoss matrix declares `/anycast-gateway-mac`
+      unsupported (schema exists on CanonicalIntent; wire-up scheduled for
+      v0.2.0 Wave C), consistent with the two per-address companions.  With
+      both the shared MAC and the per-SVI virtual address gone, nothing of the
+      fabric's distributed default gateway reaches the target — hosts keep
+      ARPing a MAC the new switch never claims until a replacement first-hop
+      design is in place.
+    references: [nxos-aoss-surface]
+
+  # -- Source never populates these on this pair --
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence, not a target gap: the cisco_nxos codec declares
+      `/dhcp-servers/pool` unsupported and never populates
+      `intent.dhcp_servers` (0 of 13 cells), so there is nothing for the AOS-S
+      target to lose.  The target declares the same path unsupported, so
+      closing the NX-OS parse side alone would not move this row.
+    references: [nxos-aoss-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side absence: the cisco_nxos matrix declares both
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported and no fixture exercises a parse side (0 of 13 cells).
+      AOS-S itself renders RADIUS well, so wiring the NX-OS parse side would
+      move this row to `good` or `lossy` rather than leave it here.
+    references: [nxos-aoss-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells).  The cisco_nxos codec models
+      EVPN Type-5 IP-prefix advertisement as a VRF property via
+      `CanonicalRoutingInstance.l3_vni` rather than as standalone route
+      records, so the surface is carried under `routing_instances` — where it
+      is declared `unsupported` — not here.
+    references: [nxos-aoss-surface]
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on this pair (0 of 13 cells).  The cisco_nxos matrix
+      declares two raw-section surfaces lossy — `vdc` (N7K virtualisation
+      grammar with no canonical primitive) and `features` (derived on render
+      from the canonical tree shape rather than carried) — but neither reaches
+      the AOS-S target as canonical data.  Tier 3 is never auto-rendered.
+    references: [nxos-aoss-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-only concept (`apply-groups` configuration inheritance); an NX-OS
+      source never populates it (0 of 13 cells).
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-only companion to `apply_groups`; empty on this pair."
