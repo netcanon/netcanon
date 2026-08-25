@@ -1,0 +1,637 @@
+# Cross-vendor fidelity expectations: aruba_aoscx -> fortigate_cli
+#
+# Source: aruba_aoscx codec — ArubaOS-CX `show running-config` text.
+# Target: fortigate_cli codec — FortiOS CLI render.
+#
+# Asymmetric by device class, and more so than any switch-to-switch pair.
+# AOS-CX in the committed corpus is a campus / small-DC access-aggregation
+# switch: VLANs, SVIs, LACP uplinks, a switchport on every port.  FortiOS is a
+# firewall edge — no switchport at all, every port routed, tenancy expressed as
+# a VDOM rather than a VRF, no fabric surface.  The realistic migration is an
+# AOS-CX aggregation switch replaced at the L3 boundary by a FortiGate that
+# inherits the SVI subnets, the LACP uplinks, the default route, SNMP polling
+# and admin identity — while the L2 switching underneath stays behind.
+#
+# The dominant drift on this pair is structural, and it is the INVERSE of
+# aruba_aoscx__arista_eos.  There the interface list shrinks; here it GROWS
+# (9 -> 11 on the representative cell, 30 records added corpus-wide, ZERO lost)
+# because the FortiOS renderer synthesises an 802.1Q child interface `vlan<id>`
+# for every canonical VLAN and the re-parse reads each one back as a new
+# interface record.  The comparator sees a record-count change on the parent
+# list, so EVERY `interfaces[].*` sub-field is measured as drifted — declaring
+# any of them `good` would manufacture a CODEC_BUG.  But the operator story is
+# "the record set is inflated and needs review", not "your ports were deleted",
+# and each key below says which of the two it is carrying.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations, a
+# full `run_full_mesh.py` pass over the committed corpus (7 fixture cells, 0
+# render errors, 0 re-parse errors), and direct
+# parse -> render -> re-parse round-trips over all 7 cells for the calls the
+# drift shape alone could not settle.  Every key was resolved through the
+# audit's own `actual_disposition()` so this file and the ratchet cannot
+# disagree.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoscx_to_fortigate_cli/
+#
+# Authored 2026-08-25 as part of the aruba_aoscx expectation mesh (A6 wave 2).
+
+meta:
+  source_vendor: aruba_aoscx
+  target_vendor: fortigate_cli
+  primary_use_case: >
+    Campus/aggregation-to-firewall-edge re-home: an ArubaOS-CX switch replaced
+    by a FortiGate that takes over the routed L3 boundary.  Hostname, LACP
+    aggregates and their member ports, VLAN IDs, static routes (including
+    metric), SNMP scalars and local usernames survive.  SVI subnets survive but
+    relocate onto synthesised `vlan<id>` child interfaces.  What does not
+    survive: port-to-VLAN membership, VLAN names and descriptions, anycast /
+    virtual-gateway addressing, VRFs, VXLAN, SNMPv3 users, syslog, and every
+    local password.
+  certainty: medium
+  references:
+    - id: aoscx-fortigate-surface
+      path: docs/vendor-references/aruba_aoscx_to_fortigate_cli/canonical_surface.md
+      title: "AOS-CX -> FortiGate CLI: measured canonical surface (7 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- scalars the AOS-CX parser does not produce at all -----------
+  #
+  # AOS-CX declares `/system/domain`, `/system/dns-server`,
+  # `/system/ntp-server`, `/system/syslog-server`, `/dhcp-servers/pool` and the
+  # `/radius-servers/server/*` children UNSUPPORTED at the exact path — as
+  # SOURCE it never emits them.  Most are `not_applicable` (a source-side gap).
+  # `timezone` and `syslog_servers` are NOT: fortigate_cli declares those
+  # unsupported too, so the gap is symmetric and re-authoring on the target
+  # would not help either.  Read the target column before copying a
+  # disposition across from the arista_eos pair, where syslog goes the other
+  # way.
+
+  hostname:
+    disposition: good
+    note: >
+      `hostname <name>` -> `config system global / set hostname`; preserved
+      byte-for-byte on 7 of 7 cells, verified on the re-parse rather than the
+      render text.
+    references: [aoscx-fortigate-surface]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/system/domain` unsupported, so
+      the source intent never carries a domain for this pair to migrate.
+      fortigate_cli declares nothing for the field either, so this is not a
+      FortiGate limitation being reported — there is simply no data.
+    references: [aoscx-fortigate-surface]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/system/dns-server` unsupported,
+      so nothing reaches the target.  fortigate_cli declares the field
+      SUPPORTED, so re-authoring resolvers under `config system dns` on the
+      FortiGate will stick — worth doing by hand as part of the cutover.
+    references: [aoscx-fortigate-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap, same shape as `dns_servers`: aruba_aoscx declares
+      `/system/ntp-server` unsupported while fortigate_cli supports the field.
+      Re-author NTP peers on the target.
+    references: [aoscx-fortigate-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than a FortiGate limitation — neither
+      codec parses nor renders a clock/timezone stanza, and fortigate_cli says
+      so in its own words ("Render emits no clock/timezone stanza;
+      intent.timezone is dropped on migration").  Set the timezone on the
+      target by hand; nothing in the migration will carry it.
+    references: [aoscx-fortigate-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap, and this is where the pair diverges from
+      aruba_aoscx__arista_eos.  aruba_aoscx declares `/system/syslog-server`
+      unsupported as a source, AND fortigate_cli declares the same path
+      unsupported as a target ("Render emits no logging/syslog config;
+      intent.syslog_servers are dropped on migration").  Recorded `unsupported`
+      rather than `not_applicable` because "re-author it on the target and it
+      will stick" — the advice `not_applicable` implies — is false here: the
+      renderer would drop it again.  Configure `config log syslogd setting` on
+      the FortiGate outside the migration.
+    references: [aoscx-fortigate-surface]
+
+  # -- Interfaces -- the structural drift on this pair -----------------------
+  #
+  # One cause hits all nine keys at once: the record count grows.  Citing one
+  # of these keys as corroboration for another would be double-counting the
+  # same event, so each entry states separately whether it has INDEPENDENT
+  # per-record evidence (measured on records present on both sides) or whether
+  # the count inflation is the whole story.
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      Measured across all 7 cells: ZERO interface records are lost, and 30 are
+      added (9 -> 11, 18 -> 22, 42 -> 46, 22 -> 30, 44 -> 50, 13 -> 17 on the
+      real cells plus the synthetic kitchen sink).  Surviving names come back
+      verbatim; the additions are the FortiOS renderer synthesising an 802.1Q
+      child `edit "vlan<id>" / set type vlan / set vlanid <id> / set interface
+      "<parent>"` for every canonical VLAN, which the re-parse reads back as a
+      new interface record.  That count change is why every `interfaces[].*`
+      key below is also a loss.
+      Recorded `lossy` rather than `unsupported` deliberately: nothing is
+      dropped or blocked, so the migration stays compatible — but the inventory
+      an operator reviews is not the inventory they wrote.  Two consequences to
+      act on before pushing the render.  First, on 3 of 7 cells
+      (`aoscx_dcn_arch4_core1_1`, `aoscx_dcn_arch4_core1_2`, `kitchen_sink`)
+      the same IPv4 address lands on BOTH the passthrough SVI record and the
+      synthesised child, which a real FortiGate rejects as a duplicate subnet —
+      delete one copy.  Second, every child is parented to the FIRST
+      CanonicalLAG on the tree regardless of the VLAN's real membership, so
+      re-parent them by hand.
+    references: [aoscx-fortigate-surface]
+
+  "interfaces[].description":
+    disposition: lossy
+    reason: >
+      This key has INDEPENDENT evidence on top of the record-count inflation:
+      6 descriptions on records present on both sides come back truncated to 25
+      characters, all on `canu_csm17_spine001_ipv6_vrf`, matching the
+      fortigate_cli declaration that `/interfaces/interface/config/description`
+      is lossy ("FortiOS limits alias to 25 characters").  AOS-CX campus
+      port descriptions routinely encode the far-end device and port, which is
+      exactly the part that falls off the end.  Shorten descriptions on the
+      source before migrating if they carry patching information.
+    references: [aoscx-fortigate-surface]
+
+  "interfaces[].enabled":
+    disposition: lossy
+    reason: >
+      No independent signal: admin state is identical on every record present
+      on both sides, on all 7 cells (0 drifting records measured).  This key is
+      lossy solely because the parent record list changes size — see
+      `interfaces[].name`.  Stated plainly rather than implied, because a
+      reader could otherwise take this as evidence that shutdown state is at
+      risk.  The one thing to check is the 30 synthesised `vlan<id>` children,
+      which are emitted enabled regardless of the SVI they were derived from.
+    references: [aoscx-fortigate-surface]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      No independent signal either: 0 MTU values drift on records present on
+      both sides across all 7 cells.  Lossy only through the record-count
+      inflation described in `interfaces[].name`.  The synthesised `vlan<id>`
+      children carry no MTU at all, so any jumbo-frame setting an operator
+      expects on an SVI must be re-applied on the child interface after
+      cutover.
+    references: [aoscx-fortigate-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Independent evidence, measured on records present on both sides: 15
+      records lose their address list, and in every case the round-trip shows
+      the same prefix reappearing on the synthesised `vlan<id>` child — the
+      address moves mounts, it is not deleted.  What IS deleted is the anycast
+      companion: 15 of 15 `virtual_gateway_address` values are gone, and
+      fortigate_cli declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address` unsupported
+      (parses-and-ignores in v1, wire-up scheduled for v0.2.0 Wave C).
+      So the subnet migrates and first-hop redundancy does not.  Re-author the
+      gateway addressing on the FortiGate explicitly, and reconcile the
+      duplicate-address hazard flagged under `interfaces[].name`.
+    references: [aoscx-fortigate-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      No independent signal, and the corpus is too thin to produce one: only 2
+      interface records in the whole 7-cell corpus carry an IPv6 address, and
+      neither drifts on the round-trip.  This key follows the parent record
+      list's fate (`interfaces[].name`) rather than an observed IPv6 failure,
+      and is stated that way rather than implied.  Worth knowing for planning:
+      fortigate_cli declares `/interfaces/interface/ipv6/address/scope` lossy
+      (parse hardcodes scope=global, so the link-local discriminator is lost)
+      and `.../secondary-ip` unsupported (one IPv6 address per interface), so a
+      genuinely IPv6-heavy source would degrade on those paths — this corpus
+      simply does not exercise them.
+    references: [aoscx-fortigate-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Independent evidence: 18 records across 5 cells change type on the
+      round-trip, all the same way — the AOS-CX `vlan N` SVI arrives as
+      `ianaift:l3ipvlan` and comes back `ianaift:ethernetCsmacd`.  Both
+      matrices declare `/interfaces/interface/config/type` lossy in their own
+      right; fortigate_cli's reason is explicit ("FortiOS has no IANA ifType;
+      inferred from 'type vlan' sub-setting or name shape"), and the
+      passthrough SVI copy has no `type vlan` sub-setting to infer from.  Two
+      independent causes with the record inflation, one disposition.
+    references: [aoscx-fortigate-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      This key carries NO independent signal and the measurement is worth
+      reading carefully, because on the arista_eos pair the same key is a real
+      membership loss.  Here it is not: all 44 LAG member ports across all 7
+      cells come back with an identical `lag_member_of`, and the `lags` field
+      itself is preserved on 7 of 7 cells (see `lags`).  The key is lossy only
+      because the parent interface list grows.  Aggregation membership does not
+      need rebuilding on this pair.
+    references: [aoscx-fortigate-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      aruba_aoscx declares the whole `/interfaces/interface/vrrp-groups/group`
+      subtree unsupported — mode, priority, preempt, advertisement-interval,
+      authentication, virtual-ipv6s and description — so no committed cell
+      carries a VRRP group and none can.  AOS-CX expresses first-hop redundancy
+      as VSX active-gateway, which is dropped separately (see
+      `anycast_gateway_mac` and `vlans[].ipv4_addresses`).  Recorded
+      `unsupported` because there is no round-trip to be lossy about: nothing
+      is emitted, nothing arrives.
+      Relevant when planning rather than when reading the drift: fortigate_cli
+      DOES render IETF VRRP, but declares mode, description, virtual-ips,
+      virtual-mac and track-interfaces lossy — multi-IP and multi-track groups
+      collapse to one entry each.  Re-author first-hop redundancy on the
+      FortiGate from the source config by hand and verify against those limits.
+    references: [aoscx-fortigate-surface]
+
+  # -- VLANs -- the campus surface, and most of it does not arrive -----------
+
+  "vlans[].id":
+    disposition: good
+    note: >
+      All 30 VLAN records across the 7 cells keep their id — the VLAN survives
+      as a FortiOS `set vlanid <id>` on the synthesised child interface.  This
+      is the only part of the VLAN record that round-trips intact.
+    references: [aoscx-fortigate-surface]
+
+  "vlans[].name":
+    disposition: lossy
+    reason: >
+      Drifts on 7 of 7 cells and on 30 of 30 VLAN records — every operator name
+      is replaced by a synthetic `vlan<id>` derived from the child-interface
+      identifier on re-parse.  Measured examples: `PROD-WEB` -> `vlan101`,
+      `NMN` -> `vlan2`, and an unnamed VLAN 1 arrives *named* `vlan1`.  Lossy
+      rather than unsupported because the VLAN record survives and forwards;
+      only the label is substituted.
+      Note for a codec follow-up rather than for this file: fortigate_cli
+      declares `/vlans/vlan/name` SUPPORTED, which the measurement contradicts
+      on every record.  That is a target matrix over-declaration, left for a
+      codec change.  Capture VLAN names before cutover — on a campus switch
+      they are usually the only record of what a VLAN is for.
+    references: [aoscx-fortigate-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      The VLAN mount is empty on the target for all 18 populated records
+      (5 cells), which reads as a total drop — it is not, and this one was
+      settled by round-tripping rather than by the drift shape.  Re-parsing the
+      render shows the same prefix on the synthesised `vlan<id>` interface
+      record: the subnet is still in the config, it changed mounts.  Recorded
+      `lossy` because `unsupported` would tell an operator the SVI subnet does
+      not migrate, which is false and would be the more damaging error.
+      What genuinely vanishes is the anycast companion: 15 of 15
+      `virtual_gateway_address` values are gone on both mounts, and
+      fortigate_cli declares
+      `/vlans/vlan/ipv4/address/virtual-gateway-address` unsupported
+      ("FortiGate is a firewall/edge platform with no anycast-gateway fabric
+      primitive"), along with `.../virtual-gateway-mac` and `.../secondary-ip`.
+      This is the field most likely to break first-hop reachability: the
+      FortiGate arrives holding the SVI's own address but not the gateway
+      address hosts point at.
+    references: [aoscx-fortigate-surface]
+
+  "vlans[].untagged_ports":
+    disposition: unsupported
+    reason: >
+      A total drop, and proven independently of the VLAN-record drift: 13
+      untagged-port lists on the source become 0 on the target, AND 64
+      interface records across all 7 cells lose their entire switchport surface
+      (`switchport_mode`, `access_vlan`, `trunk_allowed_vlans`,
+      `trunk_native_vlan` all emptied) on records that exist on both sides.
+      fortigate_cli declares `/vlans/vlan/untagged-ports` unsupported ("FortiOS
+      binds a VLAN to a single parent child-interface") and the four
+      per-interface twins unsupported as well ("FortiOS has no switchport
+      access/trunk mode — every port is L3").
+      Recorded `unsupported` rather than `lossy` because a vanished record is
+      not lossy (#436): `lossy` warns and stays compatible, which would badly
+      understate a firewall arriving with no access-port assignment at all.
+      Access-port membership cannot be migrated — it has to live on whatever L2
+      switch remains behind the FortiGate.
+    references: [aoscx-fortigate-surface]
+
+  "vlans[].tagged_ports":
+    disposition: unsupported
+    reason: >
+      Same mechanism and the same total drop as `vlans[].untagged_ports`: 11
+      tagged-port lists become 0, and `/vlans/vlan/tagged-ports` is declared
+      unsupported by fortigate_cli.  The renderer expresses a VLAN as ONE
+      child interface on ONE parent, so multi-port trunk membership has nowhere
+      to go — measured on `aoscx_dcn_arch4_core1_1`, VLAN 4000 tagged on
+      `lag 101` and `lag 102` renders as a single child parented to `lag 1`.
+      Rebuild trunk membership on the surviving L2 switching, and re-parent the
+      FortiGate's VLAN children deliberately.
+    references: [aoscx-fortigate-surface]
+
+  "vlans[].description":
+    disposition: lossy
+    reason: >
+      Drifts on the 4 cells that populate it — 6 descriptions on the source, 0
+      on the target.  The vanish classifier reads that as a total drop, but the
+      VLAN record itself survives with its id, so nothing is blocked, and
+      fortigate_cli declares `/vlans/vlan/description` LOSSY in its own matrix
+      ("Render emits the VLAN name but not a separate description line").  The
+      two signals only appear to disagree: the classifier is record-blind.
+      Recorded `lossy`.  Nothing breaks, but on a campus switch the VLAN
+      description is routinely how a VLAN is tied to a department or a site —
+      capture it before migrating.
+    references: [aoscx-fortigate-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on both cells that populate it (3 routes total), including a
+      non-default metric — `10.99.0.0/16` at metric 200 on the kitchen sink
+      round-trips exactly.  Both matrices declare `/routing/static-route`
+      supported.  One caveat that this corpus does not exercise: both sides
+      declare `/routing/static-route/vrf` unsupported, so a VRF-bound static
+      route would lose its binding; no committed cell has one.
+    references: [aoscx-fortigate-surface]
+
+  "routing_instances[].name":
+    disposition: unsupported
+    reason: >
+      A total drop, measured on 3 of 7 cells — "all 2 routing_instances
+      dropped" on each, and re-parsing the render yields zero routing
+      instances.  fortigate_cli declares `/routing-instances/instance`
+      unsupported in exactly those terms ("Render emits no VRF/routing-instance
+      construct (VDOMs not modelled); intent.routing_instances are dropped on
+      migration"), so the measurement and the declaration agree.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      (#436).  FortiGate expresses tenancy as VDOMs, which netcanon does not
+      model, so VRF separation must be re-designed rather than translated —
+      this is a design decision on the cutover, not a post-cutover fix-up.
+    references: [aoscx-fortigate-surface]
+
+  "routing_instances[].description":
+    disposition: unsupported
+    reason: >
+      Doubly gapped, and both halves are worth knowing.  aruba_aoscx declares
+      `/routing-instances/instance/description` unsupported as a SOURCE, so no
+      committed cell carries a VRF description to begin with; and fortigate_cli
+      drops the whole enclosing instance anyway (see
+      `routing_instances[].name`), which is why the key measures as drifted on
+      the same 3 cells.  Recorded `unsupported` for the enclosing-record drop;
+      there is no route by which a VRF description could reach the target.
+    references: [aoscx-fortigate-surface]
+
+  # -- Services -------------------------------------------------------------
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/dhcp-servers/pool` unsupported.
+      A campus AOS-CX switch relays DHCP rather than serving it, so the
+      canonical pool is never populated from this source and no cell exercises
+      it.  fortigate_cli declares nothing for the field, so treat DHCP scopes
+      on the FortiGate as greenfield work outside the migration.
+    references: [aoscx-fortigate-surface]
+
+  "snmp.community":
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate the SNMP record.  Read that
+      precisely: a NON-empty community is observed and preserved on 1 cell
+      (the synthetic kitchen sink); on the other 3 the scalar is empty on both
+      sides and the audit scores "unchanged" as preserved.  Both matrices
+      declare the community path supported.
+    references: [aoscx-fortigate-surface]
+
+  "snmp.location":
+    disposition: good
+    note: >
+      Preserved on all 4 populated cells, with a non-empty value observed and
+      round-tripped on 3 of them — this one is a genuine measurement, not an
+      empty-on-both-sides artefact.  Renders under `config system snmp
+      sysinfo`.
+    references: [aoscx-fortigate-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: >
+      Preserved on all 4 populated cells, non-empty and round-tripped on 3,
+      alongside `snmp.location` in the same `config system snmp sysinfo` block.
+    references: [aoscx-fortigate-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: >
+      `good` for the weaker of the two possible reasons, stated rather than
+      glossed: aruba_aoscx declares `/snmp/trap-host` UNSUPPORTED, so as a
+      source it never emits trap destinations, and the list is empty on both
+      sides on all 4 populated cells.  The audit scores that as preserved.  It
+      means "no divergence", NOT "trap receivers migrate".  Re-author SNMP trap
+      destinations on the FortiGate by hand.
+    references: [aoscx-fortigate-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      Drifts on 1 of the 4 cells that populate SNMP.  The single
+      comparator-visible drift is the privacy cipher being normalised `aes` ->
+      `aes128`; the USM user name, group and auth protocol survive, and
+      fortigate_cli additionally declares `/snmp/v3-user/priv-protocol`,
+      `/snmp/v3-user/engine-id` and `/snmp/v3-user/group` lossy in its own
+      matrix.
+      The drift count understates the real position and that is deliberate on
+      the harness's part: `tools/run_full_mesh.py` blanks `auth_passphrase` and
+      `priv_passphrase` as opaque per-vendor digests, so a passphrase-only
+      difference reads as preserved.  There IS one — both passphrases acquire a
+      FortiOS `ENC` marker on render, the same re-labelling that breaks
+      `local_users[].hashed_password`.  SNMPv3 users must be re-created on the
+      FortiGate with fresh passphrases regardless of what the drift count
+      shows.
+    references: [aoscx-fortigate-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares both `/radius-servers/server/host`
+      and `/radius-servers/server/key` unsupported, so nothing reaches the
+      target and no committed cell populates the field.  Re-author RADIUS under
+      `config user radius` on the FortiGate; note the key would arrive as an
+      un-decryptable blob even if the source did emit it, for the same reason
+      local passwords do.
+    references: [aoscx-fortigate-surface]
+
+  # -- LAGs -- the surface that survives best, against expectation -----------
+
+  lags:
+    disposition: good
+    note: >
+      Preserved on 7 of 7 cells: 34 LAG records and 44 member ports across the
+      corpus round-trip byte-identical on name, members AND LACP mode, verified
+      by re-parsing the render rather than by the drift counter alone.  The
+      names match literally, so the audit's LAG-name canonicalisation (which
+      covers `lags[].name` and `interfaces[].lag_member_of`) never even
+      engages — there is no rename to forgive.  AOS-CX `lag N` renders as
+      `config system interface / edit "lag N" / set type aggregate / set member
+      ... / set lacp-mode ...`.  `interfaces[].lag_member_of` is identical on
+      every member port.
+      Two things worth carrying forward.  First, this is the exact mirror of
+      the arista_eos pair, where LAGs are dropped entirely — do not generalise
+      "AOS-CX LAGs migrate" from one pair to the other.  Second, fortigate_cli
+      declares NOTHING for `/lags/lag` — not supported, not lossy, not
+      unsupported — while rendering the surface faithfully.  That is a target
+      matrix under-declaration, left for a codec change rather than fixed here.
+    references: [aoscx-fortigate-surface]
+
+  # -- Identity -------------------------------------------------------------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Usernames preserved on all 6 cells that populate local users, rendering
+      as `config system admin / edit "<name>"`.  The account arrives; see
+      `local_users[].role` and `local_users[].hashed_password` for what it
+      arrives with.
+    references: [aoscx-fortigate-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on all 6 populated cells, and the mechanism is a deliberate
+      remap rather than a loss: the AOS-CX `administrators` role renders to the
+      FortiOS `super_admin` accessprofile.  It is scoped, not blanket —
+      `operators` passes through unchanged, measured on the kitchen sink, which
+      carries both roles.  aruba_aoscx also declares
+      `/local-users/user/privilege-level` lossy in its own right.
+      The privilege intent is preserved and arguably correct, but two things
+      follow: any downstream tooling keyed on the literal role string will stop
+      matching, and `super_admin` on a FortiGate is unrestricted access.
+      Review the mapping before the account becomes production.
+    references: [aoscx-fortigate-surface]
+
+  "local_users[].hashed_password":
+    disposition: lossy
+    reason: >
+      Drifts on all 6 cells that populate local users.  AOS-CX stores the user
+      secret in its own encrypted form — an `AQB...`-prefixed ciphertext blob —
+      and the FortiOS render re-emits that same blob behind a `set password
+      ENC` marker; measured, the canonical string grows by exactly the 12
+      characters of the `fortios:ENC ` prefix on every cell and is otherwise
+      unchanged.
+      So nothing is deleted, which is why this is `lossy` and not
+      `unsupported` — but the bytes surviving is not the credential surviving.
+      A FortiGate decrypts `ENC` material with FortiOS-internal key material,
+      so an ArubaOS-CX ciphertext presented as a FortiOS `ENC` blob is not a
+      password any FortiGate can authenticate.  Every migrated account arrives
+      without a working credential: set passwords on the target before cutover,
+      or you will be locked out of the box you just migrated.
+      The ciphertext is deliberately NOT quoted here — it is operator-traceable
+      key material even though it is encrypted (AGENTS.md).
+    references: [aoscx-fortigate-surface]
+
+  # -- Fabric ---------------------------------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      A total drop, measured on the 3 cells that populate VXLAN — "all 1
+      vxlan_vnis dropped" / "all 2 vxlan_vnis dropped", and re-parsing the
+      render yields zero VNIs.  fortigate_cli declares `/vxlan-vnis/vni`
+      unsupported with the reason stated plainly: "VXLAN not modelled —
+      FortiGate is a firewall codec."  Recorded `unsupported` rather than
+      `lossy` because the record vanishes (#436).  There is no FortiGate-side
+      re-authoring that recovers this; an overlay terminating on the AOS-CX
+      switch needs a different landing point.
+    references: [aoscx-fortigate-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: unsupported
+    reason: >
+      Same total drop as `vxlan_vnis[].vni` — the VNI-to-VLAN binding goes with
+      the record it lives on, on the same 3 cells.  The VLAN itself still
+      arrives (see `vlans[].id`); what is gone is any statement that it was
+      stretched over an overlay.  Do not read the surviving VLAN id as evidence
+      the L2 extension migrated.
+    references: [aoscx-fortigate-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: unsupported
+    reason: >
+      Recorded `unsupported` for the enclosing-record drop, not for a measured
+      multicast failure: no committed cell on this pair sets a replication
+      group — the AOS-CX fixtures that carry VXLAN use ingress replication with
+      a source interface — so the sub-field is empty on the source too.  It
+      measures as drifted on the same 3 cells purely because the whole
+      `vxlan_vnis` record is dropped by the target.  Stated rather than
+      implied.
+    references: [aoscx-fortigate-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair, and neither codec declares a
+      single path under it — aruba_aoscx because a campus switch is not an EVPN
+      border-leaf, fortigate_cli because it is a firewall codec.  Nothing to
+      measure and nothing to migrate.
+    references: [aoscx-fortigate-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      A total drop of a top-level scalar, measured on all 5 cells that populate
+      it — the VSX active-gateway MAC arrives and comes back empty.
+      fortigate_cli declares `/anycast-gateway-mac` unsupported ("System-wide
+      anycast-gateway MAC parses-and-ignores in v1; schema exists on
+      CanonicalIntent, wire-up scheduled for v0.2.0 Wave C").
+      Note the contrast with the arista_eos pair, where this same field is
+      `good`: on that pair the fabric-wide MAC survives while the per-SVI
+      gateway address does not.  Here BOTH halves are gone — the MAC here and
+      the address under `vlans[].ipv4_addresses` — so first-hop redundancy
+      migrates not at all and must be re-designed on the FortiGate (VRRP under
+      `config system interface / config vrrp`, within the limits noted on
+      `interfaces[].vrrp_groups`).
+    references: [aoscx-fortigate-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair.  aruba_aoscx declares a lossy
+      child path `/system/raw-sections/version-banner`, but no committed AOS-CX
+      fixture carries an unparsed block that survives to render, and
+      fortigate_cli declares nothing under the field at all.
+    references: [aoscx-fortigate-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoscx-fortigate-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoscx-fortigate-surface]

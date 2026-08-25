@@ -1,0 +1,581 @@
+# Cross-vendor fidelity expectations: aruba_aoscx -> cisco_iosxe_cli
+#
+# Source: aruba_aoscx codec — ArubaOS-CX `show running-config` text.
+# Target: cisco_iosxe_cli codec — IOS-XE `show running-config` text render.
+#
+# The most symmetric device-class pairing AOS-CX has in the mesh: campus
+# access/aggregation on both sides.  Both codecs model VLANs, SVIs,
+# access/trunk ports, port-channels, local users, SNMP and static routes at
+# the same altitude, and 14 of the 43 keys below are `good` — every VLAN
+# identity field, both VXLAN bindings, VRF names, the anycast MAC, hostname,
+# static routes and the SNMP scalars.
+#
+# The dominant loss is structural and has ONE cause: the fidelity mesh
+# renders bare (`target_codec.render(intent)`), which does not engage the
+# cross-vendor port-name bridge, so AOS-CX port names (`1/1/49`, `lag 1`,
+# `vlan 101`, `loopback 0`) reach the IOS-XE render verbatim.  On re-parse the
+# IOS-XE line scanner truncates them at the first space and
+# `synthesize_svis_from_vlan_l3` adds duplicate `Vlan<N>` records, so the
+# interface record sets never align — count drift on all 7 cells, in both
+# directions (9 -> 8 on the two leaf cells, 18 -> 20 / 42 -> 44 / 22 -> 27 /
+# 44 -> 49 / 13 -> 14 on the rest).  EVERY `interfaces[].*` key is therefore
+# measured as drifted for that single reason.  Declaring any of them `good`
+# would manufacture a false CODEC_BUG; none of them is independent evidence
+# for another.  (`interfaces[].vrrp_groups` is `unsupported` on its own
+# merits — AOS-CX declares that whole subtree unsupported.)
+#
+# A control run with `translate_port_names` engaged is recorded in the vendor
+# reference: the same fixtures then align record-for-record (8 -> 8, 17 -> 17)
+# and every interface attribute round-trips.  That changes no disposition here
+# — the ratchet measures the bare path — but it does tell an operator that the
+# port-name mapping, not a codec-model gap, is what to fix first.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
+# and a full `run_full_mesh.py` pass over the committed corpus (7 fixture
+# cells, 0 render errors, 0 re-parse errors), resolved through the audit's
+# own `actual_disposition()` so this file and the ratchet cannot disagree.
+# Every mechanism claim was re-derived by round-tripping the named fixture,
+# not reasoned from grammar.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoscx_to_cisco_iosxe_cli/
+#
+# Authored 2026-08-25 as part of the aruba_aoscx expectation mesh (A6 wave 2),
+# alongside the aruba_aoscx -> arista_eos pair.  Read the two together: they
+# share a source codec and a corpus, and they disagree on `lags`,
+# `vlans[].name`, `local_users[].role` and `local_users[].hashed_password` —
+# each disagreement is a measured target-codec difference, not an authoring
+# inconsistency.
+
+meta:
+  source_vendor: aruba_aoscx
+  target_vendor: cisco_iosxe_cli
+  primary_use_case: >
+    Campus like-for-like replacement: an ArubaOS-CX access/aggregation switch
+    swapped for a Catalyst-class IOS-XE switch carrying the same VLANs, SVI
+    addressing, trunk/access membership and uplink port-channels.  Hostname,
+    VLAN IDs and names, static routes, SNMP scalars, usernames, VRF names,
+    VXLAN VNI bindings and the anycast gateway MAC all survive.  What does not
+    is the port-name form (AOS-CX `1/1/x` is not an IOS-XE interface name), the
+    per-SVI active-gateway address, VLAN descriptions, the AOS-CX role
+    vocabulary, and the out-of-band `mgmt` port.
+  certainty: medium
+  references:
+    - id: aoscx-iosxecli-surface
+      path: docs/vendor-references/aruba_aoscx_to_cisco_iosxe_cli/canonical_surface.md
+      title: "AOS-CX -> Cisco IOS-XE CLI: measured canonical surface (7 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- scalars the AOS-CX parser does not produce at all -----------
+  #
+  # AOS-CX declares `/system/domain`, `/system/dns-server`,
+  # `/system/ntp-server`, `/system/syslog-server`, `/dhcp-servers/pool` and
+  # both `/radius-servers/server/*` children UNSUPPORTED at the exact path —
+  # as SOURCE it never emits them, so there is nothing for IOS-XE to lose.
+  # These are `not_applicable` (a source-side gap) rather than `unsupported`
+  # (a target-side drop); the distinction is what tells a reader whether
+  # re-authoring on the target would help.
+
+  hostname:
+    disposition: good
+    note: "`hostname <name>` on both platforms; preserved on 7 of 7 cells."
+    references: [aoscx-iosxecli-surface]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Source-side gap: the aruba_aoscx matrix declares `/system/domain`
+      unsupported, so the source intent never carries a domain for this pair
+      to migrate.  cisco_iosxe_cli declares nothing at that path either —
+      neither supported nor unsupported — so this pair has measured nothing
+      about `ip domain name` in either direction, and this entry claims
+      nothing about it.
+    references: [aoscx-iosxecli-surface]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/system/dns-server` unsupported,
+      so nothing reaches the target; empty on all 7 cells.  Unlike the
+      arista_eos pair, cisco_iosxe_cli carries no declaration at this path, so
+      whether re-authored name-servers survive a later round-trip is not
+      something this pair has measured.  Re-author them by hand and verify.
+    references: [aoscx-iosxecli-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap, same shape as `dns_servers`: aruba_aoscx declares
+      `/system/ntp-server` unsupported and cisco_iosxe_cli declares nothing at
+      the path.  Re-author `ntp server <ip>` on the target as a manual step.
+    references: [aoscx-iosxecli-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than an IOS-XE limitation.  The target's
+      own declared reason is explicit — "Render emits no clock/timezone
+      stanza; intent.timezone is dropped on migration" — and the AOS-CX parser
+      never populates the field in the first place, so it is empty on all 7
+      cells.  Set the clock/timezone on the target by hand; nothing in the
+      migration will carry it.
+    references: [aoscx-iosxecli-surface]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/system/syslog-server`
+      unsupported, so the field is empty on all 7 cells.  This is the one
+      Tier-1 scalar where re-authoring definitely pays: cisco_iosxe_cli
+      declares `/system/syslog-server` SUPPORTED, so `logging host <ip>`
+      added on the target will stick.
+    references: [aoscx-iosxecli-surface]
+
+  # -- Interfaces -- the structural loss on this pair ------------------------
+  #
+  # All nine keys below drift on all 7 cells because of ONE comparator
+  # observation: `count drift: N -> M (interfaces)`.  They are one measurement
+  # counted nine times, not nine corroborating measurements.  Where a key ALSO
+  # has an independently observed loss, the reason says so and names it.
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      The interface record sets never align — all 7 cells drift on record
+      count, and in both directions: 9 -> 8 on the two `aoscx_dcn_arch3_*leaf1a`
+      cells, 18 -> 20, 42 -> 44, 22 -> 27, 44 -> 49 and 13 -> 14 on the rest.
+      Round-tripping `aoscx_dcn_arch3_ebgp_leaf1a.cfg` shows why: the bare
+      render emits AOS-CX names verbatim (`interface lag 1`,
+      `interface loopback 0`, `interface 1/1/49`), the IOS-XE re-parse
+      truncates each at the first space so `lag 1`/`lag 2`/`lag 101` collapse
+      onto one record named `lag` and `loopback 0`/`loopback 1` both become
+      `loopback`, and `synthesize_svis_from_vlan_l3` adds `Vlan101`-style
+      records alongside the passthrough `vlan 101` stanzas.  The AOS-CX `mgmt`
+      OOB port is not emitted at all on any cell.  Build the port-name mapping
+      before cutover — AOS-CX `1/1/49` is not an IOS-XE interface name — and
+      plan the out-of-band management port separately.
+    references: [aoscx-iosxecli-surface]
+
+  "interfaces[].description":
+    disposition: lossy
+    reason: >
+      Both matrices declare `/interfaces/interface/config/description`
+      supported, and every record that keeps its name keeps its description
+      intact on the round-trip.  It is lossy here only because the record it
+      belongs to may not survive under its own name — see `interfaces[].name`.
+      One independent gap: the synthesized `interface Vlan<N>` carries only
+      ip + prefix_length, so the SVI description survives on the passthrough
+      stanza and is absent on the synthesized duplicate.
+    references: [aoscx-iosxecli-surface]
+
+  "interfaces[].enabled":
+    disposition: lossy
+    reason: >
+      Admin state is declared supported on both sides and survives on every
+      name-preserving record; lossy on this pair because the interface list
+      does not align (`interfaces[].name`).  The concrete hazard is the
+      duplicated SVI: on `aoscx_dcn_arch4_core1_1.cfg` the render emits
+      `interface vlan 101` WITH `shutdown` and `interface Vlan101` WITHOUT it,
+      for the same SVI.  An operator pasting that render configures the
+      interface twice with contradictory admin state.  Reconcile shut/no-shut
+      per SVI by hand after cutover.
+    references: [aoscx-iosxecli-surface]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      `/interfaces/interface/config/mtu` is supported on both sides and the
+      jumbo values in the corpus (9198 on the uplink and ISL ports) survive on
+      every name-preserving record; lossy here for the same single structural
+      reason as the rest of the interface sub-fields.  Note the synthesized
+      SVI records carry no MTU at all, so re-check MTU on any SVI or uplink
+      after cutover — an unaligned record silently leaves the target at its
+      default.
+    references: [aoscx-iosxecli-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Two causes, one disposition.  Structural: routed-port addressing rides
+      the interface record, which does not align.  Independent and declared:
+      cisco_iosxe_cli lists
+      `/interfaces/interface/ipv4/address/virtual-gateway-address` as a
+      LossyPath — the synthesized SVI carries only ip + prefix_length — so an
+      AOS-CX active-gateway address on an SVI is dropped even when the record
+      DOES align.  Verified on `aoscx_dcn_arch4_core1_1.cfg`: with port-name
+      translation engaged and every other attribute matching, `Vlan101` still
+      arrives with `virtual_gateway_address` empty.  The render flags it in
+      band with a `! review:` comment naming the dropped address — grep the
+      output for `! review:` before cutover.
+    references: [aoscx-iosxecli-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      Same single structural cause as the rest of the interface sub-fields;
+      no independent IPv6 loss was observed.  Exactly one record in the corpus
+      carries IPv6 (`vlan 6` on `canu_csm17_spine001_ipv6_vrf.cfg`) and its
+      address round-trips intact — only the record's NAME mangles.  The
+      target declares `/interfaces/interface/subinterfaces/subinterface/ipv6`
+      unsupported ("Phase 0.5 scope — IPv4 only"), but no AOS-CX cell carries
+      a sub-interface, so that declaration is untested on this pair and is
+      stated rather than relied on.
+    references: [aoscx-iosxecli-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The only interface sub-field with an independently OBSERVED loss.  Both
+      matrices declare `/interfaces/interface/config/type` lossy, and the
+      target's reason names the mechanism: the CLI parser infers type from the
+      IOS-XE name prefix (`GigabitEthernet` -> ethernetCsmacd, `Loopback` ->
+      softwareLoopback).  An AOS-CX name has no such prefix, so on the bare
+      path EVERY name-preserving physical port degrades
+      `ianaift:ethernetCsmacd` -> `ianaift:other` — measured on all 8 ports of
+      `aoscx_dcn_arch4_core1_1.cfg`.  With port-name translation engaged the
+      type round-trips, which confirms the cause is the name form.  Nothing
+      forwards differently because of this; it matters for downstream tooling
+      that keys off interface type.
+    references: [aoscx-iosxecli-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Lossy from the shared record-alignment cause, and this key carries no
+      independent signal — every `interfaces[].*` key drifts on this pair for
+      that one reason, so its drift is not proof of membership loss.  The
+      round-trip says the opposite: on `aoscx_dcn_arch4_core1_1.cfg` all eight
+      member ports keep their binding, renamed `lag 1` -> `Port-channel1` etc.,
+      and `channel-group N mode active` is emitted on each member.  Treat this
+      as a naming change to reconcile, not lost membership — and confirm
+      against the `lags` entry, which measures the LAG surface directly.
+    references: [aoscx-iosxecli-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      aruba_aoscx declares the whole `/interfaces/interface/vrrp-groups/group/*`
+      subtree unsupported — the group node itself plus mode, priority, preempt,
+      advertisement-interval, authentication, virtual-ipv6s and description.
+      AOS-CX expresses first-hop redundancy as VSX active-gateway rather than
+      VRRP, so the group vanishes at parse time and there is no round-trip to
+      be lossy about.  Recorded `unsupported` on that declaration, not on an
+      observation: no committed cell populates a VRRP group, and the measured
+      drift on this key is the shared interface record drift, nothing more.
+      For a source that DOES emit FHRP groups the target is only partly able
+      to help — cisco_iosxe_cli declares `.../group/mode` lossy ("renders only
+      IETF VRRP; a cross-family source mode (HSRP / CARP) drops to a review
+      comment").  Re-author first-hop redundancy on the IOS-XE side by hand.
+    references: [aoscx-iosxecli-surface]
+
+  # -- VLANs -- the campus surface that mostly survives ----------------------
+
+  "vlans[].id":
+    disposition: good
+    note: "VLAN IDs preserved on 7 of 7 cells."
+    references: [aoscx-iosxecli-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      Preserved on 7 of 7 cells, including the awkward ones — `PROD-WEB`,
+      `CORE-ROUTING`, `NULL2701`, `test_vlan`.  The IOS-XE render emits
+      `vlan <id>` + ` name <name>` and re-parses it unchanged.  This is where
+      the pair diverges from aruba_aoscx -> arista_eos, where VLAN names drift
+      on 2 of the same 7 cells; the campus-to-campus pairing genuinely does
+      better here.
+    references: [aoscx-iosxecli-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Drifts on all 5 cells that populate it, always the same way: `ip` and
+      `prefix_length` survive, `virtual_gateway_address` goes from an address
+      to empty.  This is a declared loss on both sides — AOS-CX lists four
+      `/vlans/vlan/ipv4/address/*` children lossy, and cisco_iosxe_cli declares
+      `.../virtual-gateway-address` and `.../virtual-gateway-mac` lossy with
+      the reason "the synthesized `interface Vlan<N>` carries only
+      ip+prefix_length".  It survives the port-name control run too, so it is a
+      real model gap rather than a naming artifact.  This is the field most
+      likely to break first-hop reachability on cutover: the SVI arrives with
+      its own address but no shared gateway.  Re-author HSRP, VRRP or
+      `fabric forwarding mode anycast-gateway` on the target SVIs.
+    references: [aoscx-iosxecli-surface]
+
+  "vlans[].untagged_ports":
+    disposition: lossy
+    reason: >
+      Drifts on all 7 cells.  The membership itself is not lost — the port
+      NAMES are, along with the identities they distinguish.  Measured on
+      `aoscx_dcn_arch4_core1_2.cfg`, VLAN 1: 29 untagged ports in, 25 out; the
+      24 physical `1/1/x` ports all survive and the five distinct entries
+      `lag 1`, `lag 2`, `lag 101`, `lag 102`, `lag 256` collapse into one
+      entry `lag`.  Every LAG on that VLAN becomes indistinguishable from
+      every other.  With port-name translation engaged the same cell
+      round-trips the full list.  Re-apply access/native VLAN assignment per
+      port-channel on the target and verify it explicitly.
+    references: [aoscx-iosxecli-surface]
+
+  "vlans[].tagged_ports":
+    disposition: lossy
+    reason: >
+      Drifts on 4 cells and survives on 1, same mechanism as
+      `vlans[].untagged_ports` — trunk membership survives for physical ports
+      and collapses for LAG members (`["lag 101", "lag 102"] -> ["lag"]` on
+      `aoscx_dcn_arch4_core1_1.cfg`, VLAN 4000).  The cell that survives is the
+      one whose trunk lists contain no LAG.
+    references: [aoscx-iosxecli-surface]
+
+  "vlans[].description":
+    disposition: lossy
+    reason: >
+      Drops to empty on all 4 cells that populate it — a declared target
+      loss, not an artifact: cisco_iosxe_cli lists `/vlans/vlan/description`
+      lossy because "Render emits the VLAN name but not a separate description
+      line".  The name survives (`vlans[].name` is good), so what is lost is
+      the longer operator label — "Server VLAN", "Black hole VLAN 2701" — and
+      it survives no control run.  On a campus switch that text is routinely
+      how a VLAN is tied to a department or a site: capture it out of the
+      source config before migrating.
+    references: [aoscx-iosxecli-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on both cells that populate it (`canu_csm17_spine001_ipv6_vrf`
+      and the synthetic kitchen sink).  Destination, next hop and the
+      administrative distance all survive — `ip route 10.99.0.0 255.255.0.0
+      <next-hop> 200` re-parses to the same record.  One caveat that is a
+      source-side gap rather than a pair loss: AOS-CX declares
+      `/routing/static-route/vrf` unsupported, so a VRF-scoped static route
+      never leaves the source at all, and `/routing/static-route/description`
+      is declared lossy on both sides.
+    references: [aoscx-iosxecli-surface]
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      VRF names preserved on all 3 cells that populate them (`CSM`,
+      `keepalive`, `test`, `RED`, `BLUE`).  Only the name: AOS-CX declares
+      route-distinguisher, rt-imports, rt-exports and l3-vni unsupported, so
+      the VRF arrives as an empty container and its import/export policy must
+      be re-authored on the target.
+    references: [aoscx-iosxecli-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares
+      `/routing-instances/instance/description` unsupported, so no cell
+      populates it and nothing reaches the target.
+    references: [aoscx-iosxecli-surface]
+
+  # -- Services -------------------------------------------------------------
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/dhcp-servers/pool` unsupported.
+      A campus AOS-CX switch relays DHCP rather than serving it, so the
+      canonical pool is never populated from this source.
+    references: [aoscx-iosxecli-surface]
+
+  "snmp.community":
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate SNMP.  The community string is
+      re-emitted verbatim as `snmp-server community <community> RO`; the value
+      is deliberately not reproduced here.  Note that on 2 of those 4 cells the
+      source carries no community at all, so "preserved" partly means "empty on
+      both sides".
+    references: [aoscx-iosxecli-surface]
+
+  "snmp.location":
+    disposition: good
+    note: "Preserved on all 4 cells that populate SNMP; re-emitted as `snmp-server location <text>`."
+    references: [aoscx-iosxecli-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: "Preserved on all 4 cells that populate SNMP; re-emitted as `snmp-server contact <text>`."
+    references: [aoscx-iosxecli-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: >
+      Measured preserved on all 4 cells that populate SNMP — but read it
+      precisely: aruba_aoscx declares `/snmp/trap-host` UNSUPPORTED, so the
+      source never emits a trap host and both sides are empty on every cell.
+      `good` here means "no divergence", not "trap hosts migrate".  Re-author
+      `snmp-server host` on the target.
+    references: [aoscx-iosxecli-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      Drifts on 2 of the 4 cells that populate SNMP, and the divergence runs
+      the other way from most losses on this pair: round-tripping
+      `netutils_aoscx_snmpv3_glcx1009.cfg` shows the user name, auth protocol,
+      priv protocol and both passphrase fields surviving, while the target
+      GAINS a USM group name (`v3group`) the source never carried — IOS-XE has
+      no groupless form of `snmp-server user <name> <group> v3 ...`.  Nothing
+      vanished, so `lossy` (warns, stays compatible) is the honest severity,
+      but the group is a placeholder: set the real USM group and views on the
+      target.  Independently, aruba_aoscx declares six `/snmp/v3-user/*` child
+      paths lossy (engine-id, auth/priv protocol and passphrase, group), so
+      v3 credential material should be re-created on the target rather than
+      trusted to migrate, whatever the comparator scores on sanitized
+      fixtures.
+    references: [aoscx-iosxecli-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares both `/radius-servers/server/host`
+      and `/radius-servers/server/key` unsupported and no committed cell
+      populates the field, so nothing reaches the target.  Re-author RADIUS on
+      the IOS-XE side — and note the server key is a secret that would not have
+      migrated even if the path were supported.
+    references: [aoscx-iosxecli-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      A degradation, not a vanished surface — the opposite call from
+      aruba_aoscx -> arista_eos on the same corpus, and verified by
+      round-tripping rather than inferred from the drift shape.  On 6 of 7
+      cells the ONLY divergence is the name form: `lag 1` -> `Port-channel1`.
+      `aoscx_dcn_arch4_core1_1.cfg` returns all five port-channels with
+      byte-identical member lists (`Port-channel256` keeps `1/1/31` + `1/1/32`)
+      and the render carries `channel-group N mode active` on every member.
+      The 7th cell (synthetic kitchen sink) loses one record, 2 -> 1: `lag 2`
+      has NO members, renderers materialise port-channels from
+      `CanonicalInterface.lag_member_of`, and its passthrough stanza
+      `interface lag 2` is not recognisable as a port-channel on re-parse —
+      with port-name translation engaged that cell round-trips both LAGs.
+      Recorded `lossy` because the port-channel surface survives and `lossy`
+      warns while staying compatible; `unsupported` would block and overstate
+      it (#436).  Worth noting separately: the cisco_iosxe_cli matrix declares
+      NOTHING for `/lags/lag` — neither supported, lossy nor unsupported —
+      while its renderer emits channel-groups and its parser reconstructs
+      `Port-channelN`.  That is a matrix under-declaration, not a pair-specific
+      fact, and is left for a codec change rather than fixed here.
+    references: [aoscx-iosxecli-surface]
+
+  # -- Identity -------------------------------------------------------------
+
+  "local_users[].name":
+    disposition: good
+    note: "Usernames preserved on all 6 cells that populate local users."
+    references: [aoscx-iosxecli-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on all 6 cells that populate local users, and the mapping is
+      visible in the render: AOS-CX `administrators` becomes
+      `username <name> privilege 15 ...` and re-parses as `admin`, while
+      `operators` renders with no privilege keyword and re-parses as
+      `operator`.  The privilege INTENT survives for both built-in AOS-CX
+      roles in this corpus; the role string does not, and aruba_aoscx
+      separately declares `/local-users/user/privilege-level` lossy.  No cell
+      carries a custom AOS-CX RBAC role, so how one of those lands is not
+      something this pair has measured — check the resulting privilege level
+      of every migrated account before cutover, especially any role that is
+      not one of the two built-ins.
+    references: [aoscx-iosxecli-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Preserved byte-for-byte on all 6 cells that populate local users — and
+      this `good` is a hazard, not a reassurance.  It survives because the
+      IOS-XE render emits it under the TYPE-0 keyword
+      (`username <name> privilege 15 secret 0 <blob>`), and type 0 is IOS-XE's
+      plaintext marker.  What round-trips is the string, not a credential: the
+      AOS-CX secret is stored in Aruba's own encrypted form (an `AQB...`-prefixed
+      ciphertext blob, neither a crypt(3) hash nor anything IOS-XE can
+      validate), so pasted onto a real Catalyst that line would set the user's
+      literal password to the ciphertext.  The fidelity harness scores
+      preservation, not target-syntax validity.  Set passwords on the target
+      before cutover, or the accounts are unusable.  The ciphertext is
+      deliberately NOT quoted here — it is operator-traceable key material even
+      though it is encrypted.
+    references: [aoscx-iosxecli-surface]
+
+  # -- Fabric ---------------------------------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: good
+    note: >
+      VNI preserved on all 3 cells that populate VXLAN.  The render emits
+      `interface nve1` with a source-interface and per-VNI `member vni`
+      bindings, which re-parse unchanged.
+    references: [aoscx-iosxecli-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: >
+      VNI-to-VLAN binding preserved on all 3 populated cells, carried by the
+      `vlan configuration <id>` / `member evpn-instance <n> vni <vni>` stanza.
+    references: [aoscx-iosxecli-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: not_applicable
+    note: >
+      No committed cell on this pair sets a multicast replication group — the
+      AOS-CX fixtures that carry VXLAN use ingress replication — so the
+      sub-field has no data on either side.  Both codecs declare a path for it
+      (aruba_aoscx lossy on `/vxlan-vnis/mcast-group`, cisco_iosxe_cli lossy on
+      `/vxlan-vnis/flood-list`), so a flood-and-learn source would need its own
+      measurement.
+    references: [aoscx-iosxecli-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair.  aruba_aoscx declares nothing at
+      the path and never emits type-5 records; cisco_iosxe_cli declares
+      `/evpn-type5-routes/route` lossy, which would matter only for a source
+      that actually emits them.
+    references: [aoscx-iosxecli-surface]
+
+  anycast_gateway_mac:
+    disposition: good
+    note: >
+      Preserved on all 5 cells that populate it.  Do not read this as "anycast
+      gateway works end-to-end after migration": the chassis-wide MAC
+      round-trips while the per-SVI `virtual_gateway_address` does NOT
+      (`vlans[].ipv4_addresses` drifts on all 5 cells that populate it).  The
+      MAC survives; the gateway addressing it is supposed to serve does not.
+    references: [aoscx-iosxecli-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair.  aruba_aoscx declares
+      `/system/raw-sections/version-banner` lossy, but no committed AOS-CX
+      fixture carries an unparsed block that survives to render.
+    references: [aoscx-iosxecli-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoscx-iosxecli-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoscx-iosxecli-surface]
