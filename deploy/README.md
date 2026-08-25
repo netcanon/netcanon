@@ -16,7 +16,7 @@ warden/shim live in [`demo/warden/`](../demo/warden/).
 | `nftables/demo-int.nft` | The demo-int isolation rules (warden→instance ALLOW, instance→instance DENY, instance→warden DENY). |
 | `Makefile` | `verify` / `verify-bundle` (Gate 4) / `whitepaper` / `deploy` / `down` + `dev-up` / `dev-down` / `smoke-*`. ⚠️ `drain` is **not implemented** and exits non-zero — the warden has no drain sentinel. |
 | `demo.env.example` | Env template (image digests + ACME email). Copy → `demo.env` (**gitignored**; real values never commit). |
-| `PINNED_PRODUCT_TAG` | The netcanon version the demo pins (`v0.6.1`). Bumped by ordinary PR. |
+| `PINNED_PRODUCT_TAG` | The netcanon version the demo pins (`v0.6.3`). Bumped by ordinary PR. |
 
 ## Local Gate-1 (needs Docker)
 
@@ -24,11 +24,11 @@ warden/shim live in [`demo/warden/`](../demo/warden/).
 cd deploy
 cp demo.env.example demo.env    # edit: CADDY_IMAGE=caddy:2, ACME_EMAIL=...
                                 #       SOCKET_PROXY_IMAGE=ghcr.io/tecnativa/docker-socket-proxy:v0.4.2
-                                #       NETCANON_INSTANCE_IMAGE=ghcr.io/netcanon/netcanon:0.6.1
+                                #       NETCANON_INSTANCE_IMAGE=ghcr.io/netcanon/netcanon:0.6.3
                                 # socket-proxy must be v0.4.0+ — older tags render
                                 # haproxy.cfg outside the tmpfs and crash-loop
                                 # against the service's read-only rootfs.
-docker pull ghcr.io/netcanon/netcanon:0.6.1
+docker pull ghcr.io/netcanon/netcanon:0.6.3
 make dev-up
 ```
 

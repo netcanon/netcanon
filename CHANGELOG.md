@@ -26,6 +26,20 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Changed
+
+- **The public demo now serves netcanon v0.6.3, not v0.6.1.**
+  `deploy/PINNED_PRODUCT_TAG` had sat at `v0.6.1` since the demo stack landed
+  (#393) and was never bumped through two releases, so demo.netcanon.net served
+  a product image two versions behind.  Confirmed inside a running instance
+  rather than inferred from the tag: the image label reported `0.6.1`,
+  `palette-popover.js` (#392) was absent, and `MGMT-PROTECT` (#421) was absent
+  from `demo.py`.  That last one is the pointed case -- #421 exists precisely to
+  make the Tier-3 refusal visible in the demo, so the demo was missing the
+  feature written for it.  Because `make promote` copies pins from the verified
+  bundle, the same bundle rebuild also re-resolves the Caddy and socket-proxy
+  digests, which had drifted two months stale.
+
 ## [0.6.3] - 2026-08-24
 
 ### Added
