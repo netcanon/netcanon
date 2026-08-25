@@ -1,0 +1,654 @@
+# Cross-vendor fidelity expectations: juniper_junos -> aruba_aoscx
+#
+# Source: juniper_junos codec — Junos `set`-form configuration.
+# Target: aruba_aoscx codec — ArubaOS-CX `show running-config` render.
+#
+# Asymmetric by model width. The Junos corpus here spans QFX leaf/spine, an
+# EX4550 campus aggregation switch, an MX-class L3VPN PE and a vSRX;
+# aruba_aoscx is a campus access/aggregation switch with a Phase-1
+# EVPN/VXLAN surface. Junos models more than AOS-CX renders, so nearly every
+# loss below is a TARGET-side drop rather than a source-side gap — the
+# opposite shape to the aruba_aoscx-source pairs.
+#
+# The structural finding is the INVERSE of `aruba_aoscx__arista_eos`: no
+# interface record vanishes on this pair. 151 source interface records
+# re-parse as 151 target records across all 11 cells, with empty
+# only_in_source / only_in_target sets. Every `interfaces[].*` sub-field
+# therefore carries INDEPENDENT signal and was judged on its own evidence —
+# four are `good`, and the two that drift do so for two unrelated reasons.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
+# and the committed mesh corpus for this pair (11 fixture cells, 0 render
+# errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree. Where
+# the drift shape and the target's declaration disagreed, the round-trip was
+# re-driven by hand and the OUTPUT decided — noted per key where it applied.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/juniper_junos_to_aruba_aoscx/
+#
+# Authored 2026-08-25, extending the aruba_aoscx expectation mesh to its
+# inbound direction (A6 wave 2). juniper_junos is the widest source codec in
+# the corpus, so this pair exercises more of the aruba_aoscx render surface
+# than any other aruba_aoscx-target pair.
+
+meta:
+  source_vendor: juniper_junos
+  target_vendor: aruba_aoscx
+  primary_use_case: >
+    Junos-to-Aruba refresh: a QFX or EX switch replaced by an ArubaOS-CX
+    switch carrying the same VLAN IDs and names, interface inventory,
+    addressing, LAG bundles, default-VRF static routes, SNMP scalars and
+    local user identities.  All of those survive.  What does not is VLAN
+    trunk membership, every system service (DNS / NTP / syslog / domain /
+    DHCP), SNMP trap receivers, everything about a VRF except its name, and
+    the Junos apply-groups structure.
+  certainty: medium
+  references:
+    - id: junos-aoscx-surface
+      path: docs/vendor-references/juniper_junos_to_aruba_aoscx/canonical_surface.md
+      title: "Junos -> AOS-CX: measured canonical surface (11 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars and services --------------------------------
+  #
+  # aruba_aoscx declares `/system/domain`, `/system/dns-server`,
+  # `/system/ntp-server`, `/system/syslog-server` and `/dhcp-servers/pool`
+  # UNSUPPORTED at the exact path, each with the same stated reason shape:
+  # "Render emits no ... config; intent.<field> are dropped on migration."
+  # juniper_junos populates all five.  These are TARGET-side drops, so they
+  # are `unsupported` (the target blocks them) and not `not_applicable`
+  # (which would say the source never emitted them).  The distinction tells
+  # a reader whether re-authoring on the target would help: here it would
+  # not, until the AOS-CX codec grows those stanzas.
+
+  hostname:
+    disposition: lossy
+    reason: >
+      Preserved verbatim on 10 of 11 cells; drifts on exactly one.  Both
+      matrices declare `/system/hostname` supported and no hostname is ever
+      lost — the single drift runs the other way.  On
+      `tsg8139_evpn_leaf_dhcpv6_junos232.set` the Junos source sets no
+      `system host-name` at all, and the AOS-CX render emits its default
+      `hostname switch`, which re-parses as a hostname the source never had.
+      Nothing is destroyed, but a fabricated identity is manufactured: strip
+      or replace the synthesized `switch` before any rendered config reaches
+      a device, or two migrated boxes will answer to the same name.
+    references: [junos-aoscx-surface]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      A total drop on both cells that populate it, verified on the
+      kitchen-sink round-trip: `lab.example.net` renders as nothing and
+      re-parses as the empty string.  aruba_aoscx declares `/system/domain`
+      unsupported — "Render emits no system domain-name" — so this is a
+      target-side block, not a degradation, and `lossy` (warn +
+      compatible=True) would understate it.  Re-author the domain name on the
+      target by hand; the migration will never carry it.
+    references: [junos-aoscx-surface]
+
+  dns_servers:
+    disposition: unsupported
+    reason: >
+      Total drop on all 6 cells that populate it — the kitchen sink's two
+      resolvers render as no `name-server` line at all and re-parse as an
+      empty list.  aruba_aoscx declares `/system/dns-server` unsupported;
+      juniper_junos emits it freely.  Name resolution must be re-authored on
+      the target before cutover, and note that nothing in the validation
+      output distinguishes "no resolvers configured" from "resolvers
+      dropped".
+    references: [junos-aoscx-surface]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      Total drop on all 6 cells that populate it, same shape as
+      `dns_servers`: aruba_aoscx declares `/system/ntp-server` unsupported
+      and the render emits no NTP configuration.  Re-author time sources on
+      the target — an unsynchronised switch will invalidate every log
+      timestamp you would use to debug the cutover.
+    references: [junos-aoscx-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Trivially empty on all 11 cells, so there is no observation here and
+      this disposition rests entirely on the two matrices — stated plainly
+      rather than implied.  BOTH declare `/system/timezone` unsupported, so
+      it is a symmetric gap in the pair rather than an Aruba limitation:
+      neither codec parses nor renders a clock/timezone stanza.  Set the
+      timezone on the target by hand.
+    references: [junos-aoscx-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Total drop on all 6 cells that populate it — the kitchen sink's three
+      log hosts render as nothing.  Notable because the asymmetry is
+      explicit in the matrices: juniper_junos declares
+      `/system/syslog-server` SUPPORTED while aruba_aoscx declares it
+      unsupported, so this is squarely a target-side block.  Re-author
+      logging destinations on the target.
+    references: [junos-aoscx-surface]
+
+  # -- Interfaces -- no record loss, so each sub-field stands alone ---------
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      151 source interface records re-parse as 151 target records across all
+      11 cells, with `only_in_source` and `only_in_target` both empty on
+      every cell.  Junos names (`ge-`, `xe-`, `et-`, `ae`, `irb`, `lo0`,
+      `em0`, `fxp0`) are carried through verbatim rather than translated to
+      AOS-CX `1/1/N` form, so the inventory is complete but foreign-looking.
+      That is what makes the rest of the `interfaces[].*` keys below
+      independent: a drift there is a real attribute loss, not a dropped
+      record dragging its attributes with it.
+    references: [junos-aoscx-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 9 cells that populate it.  Both matrices declare
+      `/interfaces/interface/config/description` supported and the AOS-CX
+      render emits a literal `description` line per interface.  Includes
+      descriptions the Junos two-pass parse inherited from an apply-group.
+    references: [junos-aoscx-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on all 11 cells.  The render emits explicit
+      `no shutdown` / `shutdown` per interface, so a port that was disabled
+      on Junos arrives disabled rather than silently absent.
+    references: [junos-aoscx-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on all 5 cells that populate it, including the inherited
+      `mtu 9000` the kitchen sink's apply-group contributes to `ge-0/0/0`.
+      Worth knowing precisely because MTU is the field most often lost to a
+      dropped record on other pairs; here the record survives, so the MTU
+      does.
+    references: [junos-aoscx-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      A narrow, well-understood degradation: preserved on 9 cells and
+      drifting on exactly one (`ksator_labmgmt_qfx10k2_junos173.set`), where
+      6 `irb.<vlan>` records are affected.  On every one of those the IP,
+      prefix length AND the anycast `virtual_gateway_address` all survive —
+      only the per-address `virtual_gateway_mac` is blanked.  aruba_aoscx
+      declares `/interfaces/interface/ipv4/address/virtual-gateway-mac`
+      lossy because the render emits the per-address VIP but hoists the
+      anycast MAC to the switch-wide `active-gateway ip mac`.  On this pair
+      that hoist has nowhere to land — `anycast_gateway_mac` is empty on
+      both sides of every cell, because juniper_junos declares
+      `/anycast-gateway-mac` unsupported as a source — so the MAC is not
+      relocated, it is gone.  Re-author the switch-wide anycast MAC on the
+      target if the SVIs are meant to share one.
+    references: [junos-aoscx-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      Preserved on 5 cells, drifting on one — the same qfx10k2 cell and the
+      same 6 `irb.<vlan>` records as `interfaces[].ipv4_addresses`, but a
+      DIFFERENT and more severe sub-loss, so it is measured separately
+      rather than inferred from its IPv4 sibling.  The IPv6 address and
+      prefix length survive; both the anycast `virtual_gateway_address` and
+      its MAC are blanked.  aruba_aoscx declares
+      `/interfaces/interface/ipv6/address/virtual-gateway-address`
+      UNSUPPORTED — "IPv4 active-gateway is supported; the IPv6 anycast
+      companion parses-and-ignores in v1" — so IPv6 first-hop redundancy
+      does not migrate at all, while IPv4's VIP does.  Recorded `lossy`
+      rather than `unsupported` because the address records themselves
+      survive intact; only the anycast companion vanishes.  Any dual-stack
+      SVI will come up IPv4-redundant and IPv6-not.
+    references: [junos-aoscx-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The widest drift on the pair: all 151 interface records on all 11
+      cells.  aruba_aoscx declares `/interfaces/interface/config/type` lossy
+      because AOS-CX carries no IANA ifType and the codec infers it from the
+      interface-NAME shape (`1/1/1` -> ethernetCsmacd, `vlan N` ->
+      l3ipvlan, `lag N` -> ieee8023adLag, `loopback N` -> softwareLoopback).
+      No Junos name matches any of those shapes, so `ge-0/0/1`, `ae0`,
+      `irb.100` and `lo0` alike collapse to `ianaift:other`.  Nothing
+      forwarding-relevant changes — this is a metadata collapse, and it is
+      the single reason the raw `interfaces` drift count on this pair looks
+      alarming.  Do not spend cutover time on it; spend it on
+      `vlans[].tagged_ports`.
+    references: [junos-aoscx-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts on 5 cells / 25 of 151 records, and every one of the 25 is a
+      pure `ae<N>` -> `lag <N>` rename with the membership intact — verified
+      by round-trip, not inferred: `ae1[et-0/0/48, et-0/0/49]` re-parses as
+      `lag 1[et-0/0/48, et-0/0/49]`, member for member.  The audit DOES
+      canonicalise LAG names (`_canonical_lag_name` in
+      `tools/run_phase4_reconciliation.py`) but its anchored regex admits
+      `ae|Po|Port-channel|trk|agg|bond` followed by digits and does not
+      admit AOS-CX's space-separated `lag 1`, so the rename registers as
+      drift and this key must declare a loss.  Stated plainly: the loss
+      recorded here is a naming-vocabulary artifact of the audit, NOT
+      observed membership loss.  The real LAG loss on this pair is the LACP
+      mode — see `lags`.
+    references: [junos-aoscx-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      Trivially empty on all 11 cells — no committed Junos fixture in this
+      corpus configures VRRP — so this rests on the matrices rather than on
+      an observed round-trip, and is stated that way.  aruba_aoscx declares
+      the whole `/interfaces/interface/vrrp-groups/group` subtree
+      unsupported (anchor, mode, priority, preempt,
+      advertisement-interval, authentication, virtual-ipv6s, description),
+      because AOS-CX expresses first-hop redundancy as VSX active-gateway
+      rather than VRRP.  juniper_junos models VRRP and declares only
+      `.../group/mode` lossy, so the gap is entirely target-side: a Junos
+      VRRP group would vanish whole rather than degrade.  Re-author FHRP on
+      the AOS-CX side from the source config by hand.
+    references: [junos-aoscx-surface]
+
+  # -- VLANs -- identity survives, membership does not ----------------------
+
+  "vlans[].id":
+    disposition: good
+    note: >
+      Preserved on all 7 cells that populate VLANs — 120-plus records across
+      the corpus, including the 87-VLAN `saidvandeklundert` capture.  The
+      render emits a `vlan <id>` stanza per record.
+    references: [junos-aoscx-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      Preserved on all 7 populated cells.  Junos `vlans <name> vlan-id <n>`
+      maps cleanly onto the AOS-CX `vlan <id>` / `name <name>` pair with no
+      normalisation, so operator labelling survives even where membership
+      does not.
+    references: [junos-aoscx-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: unsupported
+    reason: >
+      Exactly one VLAN record in the corpus carries L3 on the VLAN record
+      itself (VLAN 698 on `saidvandeklundert_snmpv3_junos172.set`,
+      `10.200.1.1/22`) and it is dropped in full.  The two signals disagreed
+      here — the drift shape says total-drop, the aruba_aoscx matrix
+      declares `/vlans/vlan/ipv4/address/ip` LOSSY — so the round-trip was
+      re-driven and the render inspected: the address string appears nowhere
+      in the rendered configuration, and no target interface record picks it
+      up either.  The VLAN survives as `vlan 698` / `name VLAN698` with no
+      SVI at all.  Recorded `unsupported` on the measured behaviour: a
+      vanished gateway is not lossy (#436), and `lossy` would warn while
+      reporting compatible.  Note the loss only bites the Junos irb-folded
+      shape — SVIs mounted on an `irb.<n>` INTERFACE record migrate fine
+      (see `interfaces[].ipv4_addresses`), so audit which shape your source
+      uses before assuming either result.
+    references: [junos-aoscx-surface]
+
+  "vlans[].untagged_ports":
+    disposition: not_applicable
+    note: >
+      Trivially empty on all 11 cells — no Junos fixture in this corpus
+      populates VLAN untagged/access membership, and juniper_junos declares
+      nothing at `/vlans/vlan/untagged-ports`.  A source-side absence, so
+      there is no observation and no loss to record.  aruba_aoscx DOES
+      declare the path supported, so access-port membership authored
+      directly on the target will stick — which makes this the one part of
+      the L2 edge worth re-authoring rather than working around.
+    references: [junos-aoscx-surface]
+
+  "vlans[].tagged_ports":
+    disposition: unsupported
+    reason: >
+      The most consequential loss on this pair, and a silent one.  All 120
+      VLAN records that carry `tagged_ports` on the source lose them —
+      6 cells, 120 of 120 records, target list empty every time.  Verified
+      against the rendered text rather than the drift summary: the AOS-CX
+      render emits `vlan <id>` / `name <name>` and no `vlan trunk allowed`
+      line anywhere in the file.  The same loss appears a second time on the
+      interface side (`switchport_mode: trunk -> None` and
+      `trunk_allowed_vlans -> []` on 25 records), so an operator checking
+      only one of the two surfaces would still miss it.  Recorded
+      `unsupported`, which contradicts the aruba_aoscx matrix — that codec
+      declares `/vlans/vlan/tagged-ports` SUPPORTED.  The declaration is
+      defensible same-vendor and is an over-declaration for this pair; the
+      measured behaviour decides here, and `lossy` (warn + compatible=True)
+      would badly understate a change that black-holes every trunk.
+      Re-apply trunk membership on the target by hand and treat the
+      migration output as L2-incomplete until you have.
+    references: [junos-aoscx-surface]
+
+  "vlans[].description":
+    disposition: not_applicable
+    note: >
+      Trivially empty on all 11 cells: no Junos fixture sets a VLAN
+      description distinct from the VLAN name, so there is no observation
+      and the disposition rests on that absence.  Recorded `not_applicable`
+      rather than `good` because the matrices do not support a `good` claim
+      either — aruba_aoscx declares `/vlans/vlan/description` supported but
+      juniper_junos declares its own path LOSSY, so the pair has never been
+      exercised in this direction.
+    references: [junos-aoscx-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Preserved on 5 cells and drifting on 4 — a conditional loss with a
+      clean rule behind it.  aruba_aoscx declares `/routing/static-route/vrf`
+      unsupported ("Per-VRF static-route binding parses-and-ignores in
+      Phase 1; only default-VRF `ip route` is wired"), and the kitchen-sink
+      round-trip shows exactly that: 4 source routes become 3, and the one
+      that disappears is `10.99.0.0/16` bound to VRF `TENANT_A`, while
+      `0.0.0.0/0`, `10.50.0.0/16` and `::/0` all render as plain
+      `ip route` lines with destination and next-hop intact.  Recorded
+      `lossy` rather than `unsupported` because default-VRF routing genuinely
+      survives; the loss is scoped to VRF-bound routes.  Inventory your
+      per-VRF static routes before cutover — they will be missing, not
+      mis-rendered.
+    references: [junos-aoscx-surface]
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      VRF names preserved on all 6 cells that populate them, rendered as a
+      bare `vrf <name>` stanza.  Read this as "the anchor exists" and
+      nothing more — every other attribute of the instance is dropped or
+      downgraded (see `routing_instances[].description`), so a `good` here
+      does not mean the VRF migrates usefully.
+    references: [junos-aoscx-surface]
+
+  "routing_instances[].description":
+    disposition: unsupported
+    reason: >
+      Drifts on both cells that populate it, 4 records total, and never
+      survives: `MANAGEMENT_VRF` and the kitchen sink's three tenant
+      descriptions all render as the empty string.  aruba_aoscx declares
+      `/routing-instances/instance/description` unsupported — "The AOS-CX
+      `vrf <name>` stanza is a bare name in v1; VRF descriptions / RD /
+      route-target live under the deferred `evpn` / `router bgp` blocks" —
+      and the drift signal agrees, so this is a total drop rather than a
+      degradation.  The same deferral takes `route_distinguisher`,
+      `rt_imports`, `rt_exports` and `l3_vni` with it (all declared
+      unsupported, all measured empty on the target) and downgrades
+      `instance_type` from `mac-vrf` / `virtual-router` to `vrf`.  Treat VRF
+      configuration on the target as an entirely manual step.
+    references: [junos-aoscx-surface]
+
+  # -- Services -------------------------------------------------------------
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Total drop on both cells that populate it — the kitchen sink's single
+      pool renders as nothing.  aruba_aoscx declares `/dhcp-servers/pool`
+      unsupported ("Render emits no DHCP server pool"); juniper_junos
+      declares it supported and parses it.  Another target-side block:
+      re-authoring on the AOS-CX side will not help until that codec grows
+      the stanza, so plan to keep DHCP on a relay target elsewhere.
+    references: [junos-aoscx-surface]
+
+  "snmp.community":
+    disposition: good
+    note: "Preserved on all 6 cells that populate SNMP; both matrices declare `/snmp/community` supported."
+    references: [junos-aoscx-surface]
+
+  "snmp.location":
+    disposition: good
+    note: "Preserved on all 6 cells that populate SNMP; both matrices declare `/snmp/location` supported."
+    references: [junos-aoscx-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: "Preserved on all 6 cells that populate SNMP; both matrices declare `/snmp/contact` supported."
+    references: [junos-aoscx-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      One cell populates trap receivers and loses all of them: the kitchen
+      sink's two trap hosts render as no `snmp-server host` line at all.
+      aruba_aoscx declares `/snmp/trap-host` unsupported — the
+      trap-receiver grammar is explicitly deferred while community,
+      location, contact and v3 USM users are supported — so this is a hard
+      target-side block and `unsupported` is the honest severity.  Read the
+      5 "preserved" cells with care: on those, trap_hosts is an EMPTY list
+      on both sides, i.e. there was nothing to lose, not evidence that trap
+      hosts migrate.  Re-create trap receivers on the target, and expect
+      monitoring to go quiet rather than to alarm if you forget.
+    references: [junos-aoscx-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      Drifts on 2 of the 6 cells that populate SNMP.  The users themselves
+      survive — all 4 v3 users across those two cells re-parse by name — but
+      every one loses its VACM `group` binding, and 3 of the 4 are
+      algorithm-downgraded: `sha256 -> sha`, `aes256 -> aes`, `aes128 ->
+      aes`.  aruba_aoscx declares `/snmp/v3-user/group`,
+      `/snmp/v3-user/auth-protocol`, `/snmp/v3-user/priv-protocol`,
+      `/snmp/v3-user/auth-passphrase`, `/snmp/v3-user/priv-passphrase` and
+      `/snmp/v3-user/engine-id` lossy, and is explicit that the protocol
+      change is "a cryptographic downgrade, not just a re-key".  Note the
+      measurement is conservative in the source's favour: the mesh blanks
+      auth/priv passphrases before comparing
+      (`_COSMETIC_SNMP_V3_SUBFIELDS`), so the key material never counts as
+      drift even though it does not port.  RE-KEY every SNMPv3 user on the
+      target and re-check the resulting security level before you accept it.
+    references: [junos-aoscx-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Trivially empty on all 11 cells, so no observation exists and this
+      rests on the matrices — stated plainly.  BOTH codecs declare
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported, aruba_aoscx with the reason "Render emits no AAA
+      radius-server config".  A symmetric gap: neither side parses nor
+      renders AAA server configuration, so RADIUS is outside the migration
+      entirely.  Carry it across by hand, and treat the shared secret as
+      needing rotation regardless.
+    references: [junos-aoscx-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      Drifts on all 5 cells that populate LAGs, 18 bundles in total, and the
+      loss is the LACP MODE, not the bundle.  Every one of the 18 goes
+      `active -> static`; every one keeps its member list byte-identical.
+      aruba_aoscx declares `/lags/lag/mode` lossy for precisely this
+      cross-vendor case: it emits `lacp mode` only for a kind-`lag`
+      interface present in the tree, and a foreign-named bundle has no
+      matching `interface lag N` stanza, so no `lacp mode` line renders and
+      the mode re-parses as `static` from the surviving member reference.
+      The accompanying `ae<N>` -> `lag <N>` name change is a vendor-correct
+      rename, not a loss — see `interfaces[].lag_member_of` for why the
+      audit still counts it.  Operator action is narrow and important: every
+      migrated bundle comes up as a STATIC aggregation.  Re-enable LACP on
+      the target before bringing links up, or you will bundle links whose
+      peer expects LACP negotiation.
+    references: [junos-aoscx-surface]
+
+  # -- Identity -------------------------------------------------------------
+  #
+  # All three `local_users[].*` keys below drift for ONE reason on ONE cell.
+  # They are recorded separately because the schema requires it, not because
+  # there are three independent findings — the cause is stated once under
+  # `local_users[].name` and cross-referenced.
+
+  "local_users[].name":
+    disposition: lossy
+    reason: >
+      Preserved on 7 of the 8 cells that populate local users; drifts on
+      one.  Of 13 user records in the corpus, 12 round-trip intact and one
+      vanishes: the kitchen sink's `readonly` account, which carries an
+      EMPTY password on the source, is not rendered at all (3 users in,
+      2 out).  The AOS-CX render emits a `user <name> group <role> password
+      ciphertext <...>` line and has no form for a passwordless account, so
+      such an account disappears rather than degrading.  Recorded `lossy`
+      rather than `unsupported` because this is a single record on a single
+      cell, not a category the target refuses — accounts WITH credentials
+      migrate.  Before cutover, list any source account with no configured
+      password; those are the ones that will silently not exist.
+    references: [junos-aoscx-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: >
+      The role survives intact on every account that survives.
+      Role is preserved on every surviving record — `super-user`,
+      `operator`, `read-only` and a custom `READ` class all round-trip
+      unchanged into the AOS-CX `group` keyword, and both matrices declare
+      `/local-users/user/role` supported.  This key drifts on the same one
+      cell for the same one reason as `local_users[].name`: the passwordless
+      `readonly` record vanishes and takes its role with it.  Stated
+      explicitly so the drift is not mistaken for corroborating evidence of
+      a role-mapping problem — there isn't one.  What DOES change and is not
+      measured by this key: `privilege_level` collapses to 1 on 9 of 13
+      records, because AOS-CX maps `administrators -> 15` and every other
+      named group -> 1.  Authorisation intent survives in the group name,
+      not in the number.  Recorded `good` rather than `lossy`: the only drift on this key is the parent record-count collapse, which the audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could never be evidenced by any cell.  The account vanishing is a real loss and is recorded against `local_users[].name`; this key is about what happens to the VALUE when the account survives.
+    references: [junos-aoscx-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      The stored secret survives intact on every account that survives.
+      12 of 13 user records round-trip byte-identical.  The Junos secret is
+      a crypt-style hash carrying a `junos:` marker prefix (both `$1$` and
+      `$6$` forms occur in this corpus) and the render re-emits it verbatim
+      behind the AOS-CX `password ciphertext` keyword.  The measured drift is
+      again the single vanished passwordless record from
+      `local_users[].name`, not a hash-format failure.
+      The operational caution is declaration-grounded rather than measured,
+      and is the more important half: AOS-CX's native `password ciphertext`
+      payload is an AES blob encrypted with the DEVICE key, and the
+      aruba_aoscx matrix states it is "portable same-device only" and that
+      "cross-vendor migration requires re-keying on the target".  A Junos
+      crypt hash placed behind that keyword is syntactically accepted by the
+      render and should not be expected to authenticate on real hardware.
+      Set passwords on the target before cutover.
+      No hash, blob or passphrase value is reproduced here or in the
+      research note — shapes only; a document that quotes the secret it
+      claims to redact defeats its own redaction.  Recorded `good` rather than `lossy`: the only drift on this key is the parent record-count collapse, which the audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could never be evidenced by any cell.  The account vanishing is a real loss and is recorded against `local_users[].name`; this key is about what happens to the VALUE when the account survives.
+    references: [junos-aoscx-surface]
+
+  # -- Fabric ---------------------------------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate VXLAN.  aruba_aoscx declares
+      `/vxlan-vnis/vni` supported and renders per-VNI `vni <n>` bindings
+      under an `interface vxlan 1` VTEP.
+    references: [junos-aoscx-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: >
+      The VLAN-to-VNI binding is preserved on all 3 populated cells — the
+      nested `vlan <v>` under each `vni <n>`.  Worth reading alongside
+      `routing_instances[].description`: the L2VNI binding survives while the
+      symmetric-IRB L3VNI (`routing_instances[].l3_vni`) does not, so an EVPN
+      source migrates as L2-only.
+    references: [junos-aoscx-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: not_applicable
+    note: >
+      Trivially empty on all 11 cells — the Junos fixtures that carry VXLAN
+      use ingress replication, so no BUM multicast group is ever set and
+      there is no observation to base a disposition on.  Both matrices
+      declare `/vxlan-vnis/mcast-group` LOSSY, so a source that did carry
+      one would lose it on render; that is recorded here as context, not as
+      a measured claim.
+    references: [junos-aoscx-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair, so nothing is observed.
+      juniper_junos declares `/evpn-type5-routes/route` lossy and aruba_aoscx
+      declares nothing at all for the field — a source that emitted type-5
+      routes would be migrating into an undeclared surface, which is a
+      matrix gap worth closing in the codec rather than asserting here.
+    references: [junos-aoscx-surface]
+
+  anycast_gateway_mac:
+    disposition: not_applicable
+    note: >
+      A genuine SOURCE-side gap, and one of only two on this pair:
+      juniper_junos declares `/anycast-gateway-mac` UNSUPPORTED, so the
+      canonical field is empty on all 11 cells and nothing reaches the
+      target.  aruba_aoscx declares it SUPPORTED, so re-authoring
+      `active-gateway ip mac <mac>` on the AOS-CX side will stick and is
+      worth doing by hand — see `interfaces[].ipv4_addresses`, where the
+      per-address anycast MAC is dropped precisely because there is no
+      switch-wide MAC for the render to hoist it onto.
+    references: [junos-aoscx-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Trivially empty on all 11 cells.  The second genuine source-side gap:
+      juniper_junos declares nothing under raw sections and never populates
+      the field, so the aruba_aoscx `/system/raw-sections/version-banner`
+      lossy declaration is never exercised in this direction.
+    references: [junos-aoscx-surface]
+
+  apply_groups:
+    disposition: unsupported
+    reason: >
+      A total drop on all 6 cells that populate it — the kitchen sink's
+      `['GLOBAL-SETTINGS']` renders as nothing and re-parses as an empty
+      list.  The important nuance, verified on the round-trip rather than
+      assumed: the FLATTENED content mostly still arrives.  The Junos
+      two-pass parse folds group-scoped statements into the canonical tree
+      before render, so the description and `mtu 9000` that GLOBAL-SETTINGS
+      contributes to `ge-0/0/0` appear as literal AOS-CX interface lines.
+      What is lost is the group STRUCTURE — after migration those settings
+      are per-interface literals with no shared definition to edit — plus
+      any group content whose destination field is itself dropped (that same
+      group's `system syslog host`, which goes with `syslog_servers`).
+      Worth noting separately: NEITHER matrix declares anything for
+      `/apply-groups`, so this loss is entirely undeclared.  That is a
+      matrix under-declaration, not a pair-specific fact, and is left for a
+      codec change rather than fixed here.  Re-establish a configuration
+      template on the target if the source relied on groups for consistency.
+    references: [junos-aoscx-surface]
+
+  group_content:
+    disposition: unsupported
+    reason: >
+      Companion to `apply_groups`, and drops on the same 6 cells: every
+      group key present on the source (`MNHA-SYNC`, `GLOBAL-SETTINGS`) is
+      absent on the target, with nothing added and nothing merely altered —
+      a total drop, not a degradation.  The original group-scoped set-line
+      tails have no AOS-CX analogue and the render emits none.  Same
+      undeclared status as `apply_groups`: neither matrix names
+      `/group-content`.  See `apply_groups` for the flattening behaviour
+      that preserves most of the operator's intent even though the
+      construct does not survive.
+    references: [junos-aoscx-surface]

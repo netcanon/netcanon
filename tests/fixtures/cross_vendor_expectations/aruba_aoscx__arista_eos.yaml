@@ -1,0 +1,440 @@
+# Cross-vendor fidelity expectations: aruba_aoscx -> arista_eos
+#
+# Source: aruba_aoscx codec — ArubaOS-CX `show running-config` text.
+# Target: arista_eos codec — EOS CLI render.
+#
+# Asymmetric by device class. AOS-CX in the committed corpus is a campus
+# access/aggregation switch; arista_eos is a DC leaf/spine. The realistic
+# migration is a campus closet or small-aggregation AOS-CX switch being
+# re-homed onto EOS, so the shared surface is the L2/L3 edge — VLANs, SVI
+# addressing, port membership, LAGs, local users, SNMP — and NOT the fabric
+# surface EOS is built around.
+#
+# The dominant loss on this pair is structural, not per-attribute: the
+# interface list shrinks (9 -> 5 on the representative cell), so EVERY
+# `interfaces[].*` sub-field is measured as drifted. Declaring any of them
+# `good` would manufacture a CODEC_BUG — that is why each one below records a
+# loss even where the surviving records keep the attribute intact. (The one
+# exception is `interfaces[].vrrp_groups`, which is `unsupported` on its own
+# merits: AOS-CX declares that whole subtree unsupported.)
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
+# and a full `run_full_mesh.py` pass over the committed corpus (7 fixture
+# cells, 0 render errors, 0 re-parse errors), resolved through the audit's
+# own `actual_disposition()` so this file and the ratchet cannot disagree.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoscx_to_arista_eos/
+#
+# Authored 2026-08-25 opening the aruba_aoscx expectation mesh (A6 wave 2).
+# aruba_aoscx was chosen over cisco_iosxr and vyos on measurement: it leads
+# the three remaining blind codecs on total unexplained drift (430 vs 341 vs
+# 312), on drift density (3.23/cell vs 1.92 and 1.67) AND on signal quality
+# (34% known-artifact vs 46% and 47%). It trades ~29% less coverage for ~38%
+# more real drift.
+
+meta:
+  source_vendor: aruba_aoscx
+  target_vendor: arista_eos
+  primary_use_case: >
+    Campus-edge re-home: an ArubaOS-CX access/aggregation switch replaced by
+    an Arista EOS switch carrying the same VLANs, SVI addressing and uplink
+    LAGs.  Hostname, VLAN IDs, static routes, SNMP scalars, local user
+    identity, VRF names, VXLAN VNI bindings and the anycast gateway MAC all
+    survive.  What does not is the interface inventory (AOS-CX carries more
+    physical ports than the EOS render emits), VLAN port membership, and the
+    AOS-CX encrypted user-password form.
+  certainty: medium
+  references:
+    - id: aoscx-arista-surface
+      path: docs/vendor-references/aruba_aoscx_to_arista_eos/canonical_surface.md
+      title: "AOS-CX -> Arista EOS: measured canonical surface (7 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- scalars the AOS-CX parser does not produce at all -----------
+  #
+  # AOS-CX declares `/system/domain`, `/system/dns-server`,
+  # `/system/ntp-server`, `/system/syslog-server` and `/dhcp-servers/pool`
+  # UNSUPPORTED at the exact path — as SOURCE it never emits them, so there
+  # is nothing for EOS to lose.  These are `not_applicable` (a source-side
+  # gap) rather than `unsupported` (a target-side drop); the distinction is
+  # what tells a reader whether re-authoring on the target would help.
+
+  hostname:
+    disposition: good
+    note: "`hostname <name>` on both platforms; preserved on 7 of 7 cells."
+    references: [aoscx-arista-surface]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      The aruba_aoscx matrix declares `/system/domain` unsupported, so the
+      source intent never carries a domain for this pair to migrate.  Not a
+      loss against EOS — EOS has no declaration for it either.
+    references: [aoscx-arista-surface]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/system/dns-server` unsupported,
+      so nothing reaches the target.  arista_eos declares it SUPPORTED, so
+      re-authoring name-servers on the EOS side will stick — worth doing by
+      hand as part of the cutover.
+    references: [aoscx-arista-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap, same shape as `dns_servers`: aruba_aoscx declares
+      `/system/ntp-server` unsupported while arista_eos supports it.
+      Re-author `ntp server <ip>` on the target.
+    references: [aoscx-arista-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than an Arista limitation — neither
+      codec parses nor renders a clock/timezone stanza.  Set the timezone on
+      the target by hand; nothing in the migration will carry it.
+    references: [aoscx-arista-surface]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/system/syslog-server`
+      unsupported; arista_eos supports it.  Re-author logging hosts on the
+      target.
+    references: [aoscx-arista-surface]
+
+  # -- Interfaces -- the structural loss on this pair ------------------------
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      The interface inventory shrinks across this pair — 9 interfaces in the
+      AOS-CX source against 5 in the EOS render on the representative cell.
+      AOS-CX enumerates every physical campus port in `show running-config`,
+      including ports carrying only default configuration; the EOS render
+      emits the interfaces the canonical model considers configured.  Ports
+      that vanish take their whole record with them, which is why every
+      `interfaces[].*` sub-field below is also lossy rather than good.
+      Inventory the source port list before cutover if port-by-port parity
+      matters.
+    references: [aoscx-arista-surface]
+
+  "interfaces[].description":
+    disposition: lossy
+    reason: >
+      Both matrices declare `/interfaces/interface/config/description`
+      supported, so a description that survives is intact.  It is lossy here
+      only because the record it belongs to may not survive — see
+      `interfaces[].name`.
+    references: [aoscx-arista-surface]
+
+  "interfaces[].enabled":
+    disposition: lossy
+    reason: >
+      Admin state is declared supported on both sides and is preserved on
+      every surviving record; lossy on this pair because the interface list
+      itself shrinks (`interfaces[].name`).  A dropped port takes its
+      shutdown/no-shutdown state with it, so a port that was administratively
+      down on AOS-CX is simply absent on EOS rather than down.
+    references: [aoscx-arista-surface]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      `/interfaces/interface/config/mtu` is supported on both sides; lossy
+      here for the same structural reason as the rest of the interface
+      sub-fields.  Re-check MTU on any uplink after cutover — a dropped
+      record silently reverts the target to its default.
+    references: [aoscx-arista-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Routed-port addressing is declared supported on both sides
+      (`/interfaces/interface/ipv4/address/ip` + `prefix-length`) but rides
+      on the interface record.  AOS-CX additionally declares
+      `.../virtual-gateway-mac` LOSSY, so active-gateway VARP-style
+      addressing on a routed port degrades independently of the record drop.
+    references: [aoscx-arista-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      Same structural cause as `interfaces[].ipv4_addresses`.  No committed
+      cell on this pair carries IPv6 on a surviving record, so the specific
+      failure has not been observed in isolation — the declaration follows
+      the parent record's fate rather than an independent measurement, and
+      is stated that way rather than implied.
+    references: [aoscx-arista-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      aruba_aoscx declares `/interfaces/interface/config/type` LOSSY in its
+      own right — the AOS-CX port-type distinction does not survive the
+      canonical round-trip intact — and the record drop compounds it.  Two
+      independent causes, one disposition.
+    references: [aoscx-arista-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      The audit applies LAG-name canonicalisation to this key, so a pure
+      `lag1` <-> `Port-Channel1` rename would NOT count as drift.  It drifts
+      anyway on all 7 cells.  Note the drift alone is not proof of membership
+      loss here — every `interfaces[].*` key drifts on this pair because the
+      record count shrinks, so this key carries no independent signal.  The
+      proof is the round-trip in `lags`: the member interface `1/1/32` is not
+      among the 5 survivors and the render emits no channel-group.
+    references: [aoscx-arista-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      aruba_aoscx declares the whole `/interfaces/interface/vrrp-groups/group/*`
+      subtree unsupported — mode, priority, preempt, advertisement-interval
+      and authentication are all dropped.  AOS-CX expresses first-hop
+      redundancy as VSX active-gateway rather than VRRP, so there is no
+      round-trip to be lossy about: the group vanishes entirely.  Re-author
+      VRRP on the EOS side from the source config by hand.
+    references: [aoscx-arista-surface]
+
+  # -- VLANs -- the campus surface that mostly survives ----------------------
+
+  "vlans[].id":
+    disposition: good
+    note: "VLAN IDs preserved on 7 of 7 cells — the one part of the L2 edge that round-trips cleanly."
+    references: [aoscx-arista-surface]
+
+  "vlans[].name":
+    disposition: lossy
+    reason: >
+      Drifts on 2 of 7 cells and is preserved on the other 5, so this is a
+      conditional loss rather than a blanket one — the names that fail are
+      those the EOS render normalises.  Check VLAN names after cutover; most
+      will be intact.
+    references: [aoscx-arista-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      SVI addressing drifts on all 5 cells that populate it.  AOS-CX carries
+      an active-gateway address alongside the interface address on a VLAN
+      SVI; the canonical `virtual_gateway_address` / `virtual_gateway_mac`
+      pair does not survive into the EOS render, so the SVI arrives with its
+      own address but without the shared gateway.  This is the field most
+      likely to break first-hop reachability on cutover — re-author the
+      EOS-side virtual-router addressing explicitly.
+    references: [aoscx-arista-surface]
+
+  "vlans[].untagged_ports":
+    disposition: lossy
+    reason: >
+      Drifts on all 7 cells.  VLAN port membership is expressed per-port on
+      AOS-CX (`vlan access <id>` under the interface) and is rebuilt from the
+      interface list on render — so the interface records that vanish
+      (`interfaces[].name`) take their VLAN membership with them.  Access-port
+      assignment must be re-applied on the target.
+    references: [aoscx-arista-surface]
+
+  "vlans[].tagged_ports":
+    disposition: lossy
+    reason: >
+      Drifts on 4 cells and survives on 1, same mechanism as
+      `vlans[].untagged_ports`.  Trunk membership survives only where the
+      member interface survives.
+    references: [aoscx-arista-surface]
+
+  "vlans[].description":
+    disposition: lossy
+    reason: >
+      Drifts on the 4 cells that populate it.  The VLAN description is
+      operator labelling rather than forwarding state, so nothing breaks —
+      but on a campus switch it is routinely how a VLAN is tied to a
+      department or a site, so capture it before migrating.
+    references: [aoscx-arista-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on both cells that populate it.  Both matrices declare
+      `/routing/static-route` supported at the exact path, and destination /
+      next-hop survive intact.
+    references: [aoscx-arista-surface]
+
+  "routing_instances[].name":
+    disposition: good
+    note: "VRF names preserved on all 3 cells that populate them."
+    references: [aoscx-arista-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      No committed cell on this pair sets a VRF description, so there is no
+      observation to base a disposition on.  Stated rather than guessed at.
+    references: [aoscx-arista-surface]
+
+  # -- Services -------------------------------------------------------------
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/dhcp-servers/pool` unsupported.
+      A campus AOS-CX switch relays DHCP rather than serving it, so the
+      canonical pool is never populated from this source.
+    references: [aoscx-arista-surface]
+
+  "snmp.community":
+    disposition: good
+    note: "Preserved on all 4 cells that populate SNMP."
+    references: [aoscx-arista-surface]
+
+  "snmp.location":
+    disposition: good
+    note: "Preserved on all 4 cells that populate SNMP."
+    references: [aoscx-arista-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: "Preserved on all 4 cells that populate SNMP."
+    references: [aoscx-arista-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: "Preserved on all 4 cells that populate SNMP."
+    references: [aoscx-arista-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      Drifts on 2 of the 4 cells that populate SNMP.  aruba_aoscx declares
+      several `/snmp/*` child paths lossy and one unsupported; v3 user
+      material is the part that does not survive, which is consistent with
+      credential-bearing surface being dropped rather than re-encoded.  SNMPv3
+      users must be re-created on the target — they cannot be migrated.
+    references: [aoscx-arista-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares its `/radius-servers/server`
+      child paths unsupported and no committed cell populates the field, so
+      nothing reaches the target.  Re-author RADIUS on the EOS side.
+    references: [aoscx-arista-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: unsupported
+    reason: >
+      A total drop, not a degradation — verified by round-tripping
+      `aoscx_dcn_arch3_ebgp_leaf1a.cfg` rather than inferred from the drift
+      shape: the source intent carries `lag 1` with member `1/1/32`, and the
+      rendered EOS config contains NO `Port-Channel` or `channel-group` line
+      at all.  Re-parsing the render yields zero LAGs and zero interfaces with
+      `lag_member_of`.  Recorded `unsupported` rather than `lossy` because a
+      vanished record is not lossy (#436) — `lossy` warns and stays
+      compatible, which would understate this.
+      Worth noting separately: the arista_eos matrix declares NOTHING for
+      `/lags/lag` — neither supported, lossy nor unsupported — while dropping
+      LAGs entirely.  That is a matrix under-declaration, not a pair-specific
+      fact, and is left for a codec change rather than fixed here.
+      Re-create port-channels and re-add members on the target by hand.
+    references: [aoscx-arista-surface]
+
+  # -- Identity -------------------------------------------------------------
+
+  "local_users[].name":
+    disposition: good
+    note: "Usernames preserved on all 6 cells that populate local users."
+    references: [aoscx-arista-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: >
+      Role preserved on all 6 populated cells — AOS-CX `user ... role ...`
+      maps onto the EOS privilege model without loss on this corpus.
+    references: [aoscx-arista-surface]
+
+  "local_users[].hashed_password":
+    disposition: lossy
+    reason: >
+      Drifts on all 6 cells that populate local users.  AOS-CX stores the
+      user secret in its own encrypted form (an `AQB...` ciphertext blob),
+      which is neither a crypt(3) hash nor anything the EOS render can
+      re-emit, so the password does not survive the migration.  Every
+      migrated account arrives without a working credential: set passwords on
+      the target before cutover, or the accounts are unusable.
+      The ciphertext is deliberately NOT quoted here — it is operator-
+      traceable key material even though it is encrypted.
+    references: [aoscx-arista-surface]
+
+  # -- Fabric ---------------------------------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: good
+    note: "VNI preserved on all 3 cells that populate VXLAN."
+    references: [aoscx-arista-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: "VNI-to-VLAN binding preserved on all 3 populated cells."
+    references: [aoscx-arista-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: not_applicable
+    note: >
+      No committed cell on this pair sets a multicast replication group —
+      the AOS-CX fixtures that carry VXLAN use ingress replication — so the
+      sub-field has no data on either side.
+    references: [aoscx-arista-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair.  A campus AOS-CX switch is not
+      an EVPN border-leaf, so the canonical field stays empty; arista_eos
+      declares a lossy child path for it, which would matter only for a
+      source that actually emits type-5 routes.
+    references: [aoscx-arista-surface]
+
+  anycast_gateway_mac:
+    disposition: good
+    note: >
+      Preserved on all 5 cells that populate it.  Notable given that the
+      per-SVI `virtual_gateway_address` does NOT survive
+      (`vlans[].ipv4_addresses`) — the fabric-wide MAC round-trips while the
+      per-VLAN gateway address does not, so do not read this `good` as
+      meaning anycast gateway works end-to-end after migration.
+    references: [aoscx-arista-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair.  aruba_aoscx declares a lossy
+      child path under raw sections, but no committed AOS-CX fixture carries
+      an unparsed block that survives to render.
+    references: [aoscx-arista-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoscx-arista-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoscx-arista-surface]

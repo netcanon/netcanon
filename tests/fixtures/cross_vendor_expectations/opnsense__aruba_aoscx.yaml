@@ -1,0 +1,614 @@
+# Cross-vendor fidelity expectations: opnsense -> aruba_aoscx
+#
+# Source: opnsense codec — OPNsense `config.xml`.
+# Target: aruba_aoscx codec — ArubaOS-CX `show running-config` render.
+#
+# Asymmetric by device class.  opnsense in the committed corpus is a
+# FreeBSD-based edge firewall/router: it owns WAN termination, DHCP service,
+# DNS resolvers, CARP first-hop redundancy and a local account database.
+# aruba_aoscx is a campus access/aggregation switch.  The realistic migration
+# is the L2/L3 plumbing underneath a firewall being re-homed onto a switch —
+# so the shared surface is interfaces, VLANs, static routes and SNMP polling,
+# and NOT the service surface (DHCP/DNS/RADIUS) or the firewall's redundancy
+# surface (CARP), both of which the switch simply does not render.
+#
+# The dominant loss on this pair is NOT structural.  This is the inverse of
+# the aruba_aoscx -> arista_eos pair: the interface inventory is preserved
+# exactly on all 8 cells (2->2, 3->3, 7->7, 8->8), so every `interfaces[].*`
+# key was measured INDEPENDENTLY and six of the nine are honestly `good`.
+# The losses here are whole subsystems that the AOS-CX render never emits at
+# all (domain, DNS, DHCP, RADIUS, SNMP trap receivers, CARP/VRRP) plus three
+# genuine per-attribute degradations (`interface_type`, LAG mode/name,
+# static-route description).
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
+# and a full `run_full_mesh.py` pass over the committed corpus (8 fixture
+# cells, 0 render errors, 0 re-parse errors), resolved through the audit's
+# own `actual_disposition()` so this file and the ratchet cannot disagree.
+# Four calls where the drift shape and the matrices disagreed were settled by
+# round-tripping the fixture and reading the render, not by reasoning from
+# grammar: `static_routes`, `snmp.trap_hosts`, `interfaces[].vrrp_groups` and
+# `lags`.  Each says so in its own `reason`.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/opnsense_to_aruba_aoscx/
+#
+# Authored 2026-08-25 extending the aruba_aoscx expectation mesh (A6 wave 2).
+
+meta:
+  source_vendor: opnsense
+  target_vendor: aruba_aoscx
+  primary_use_case: >
+    Edge-to-campus re-home: the L2/L3 plumbing behind an OPNsense firewall
+    re-expressed on an ArubaOS-CX switch.  Interface inventory, descriptions,
+    admin state, MTU, IPv4/IPv6 addressing, VLAN IDs and names, SNMP polling
+    scalars and static-route destination/next-hop all survive intact.  What
+    does not survive is everything the switch has no stanza for — the system
+    domain, DNS resolvers, DHCP pools, RADIUS servers, SNMP trap receivers
+    and CARP first-hop redundancy — plus the LACP mode of a bundle, the
+    static-route description, and the IANA interface type.
+  certainty: medium
+  references:
+    - id: opnsense-aoscx-surface
+      path: docs/vendor-references/opnsense_to_aruba_aoscx/canonical_surface.md
+      title: "OPNsense -> AOS-CX: measured canonical surface (8 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars ---------------------------------------------
+  #
+  # Three shapes live in this block and they are deliberately given three
+  # different dispositions, because the operator action differs:
+  #   * `domain` / `dns_servers` — the SOURCE emits them and the TARGET drops
+  #     them whole.  Target-side drop => `unsupported` (blocks).
+  #   * `ntp_servers` / `timezone` / `syslog_servers` — BOTH matrices declare
+  #     the path unsupported.  Symmetric gap => `unsupported`, but nothing was
+  #     lost in the migration because nothing was ever carried.
+  #   * `hostname` — survives, with one fabricated value.  See below.
+
+  hostname:
+    disposition: lossy
+    reason: >
+      Preserved on 7 of 8 cells and drifts on exactly 1.  The drift is not a
+      drop — it is a fabrication in the other direction.  On
+      `opnsense_service_test_config.xml` the OPNsense config carries no
+      hostname at all (empty string) and the AOS-CX render emits a placeholder
+      `hostname switch`, which re-parses as a real hostname.  Verified by
+      round-tripping that fixture rather than inferred from the drift count.
+      Nothing an operator configured was lost; the risk is the opposite —
+      a migrated device silently acquires a generic name.  Set the hostname
+      explicitly on the target rather than trusting the carried value.
+    references: [opnsense-aoscx-surface]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      A total drop on every cell that carries a domain: 7 of 8 cells populate
+      `domain` and all 7 arrive empty at the target.  aruba_aoscx declares
+      `/system/domain` unsupported at the exact path — "Render emits no system
+      domain-name; intent.domain is dropped on migration" — and the round-trip
+      confirms it.  Recorded `unsupported` rather than `lossy` because the
+      value vanishes entirely; `lossy` warns and stays compatible, which would
+      understate a whole-value drop (#436).  Re-author the domain name on the
+      AOS-CX side by hand.
+    references: [opnsense-aoscx-surface]
+
+  dns_servers:
+    disposition: unsupported
+    reason: >
+      A total drop on all 4 cells that populate resolvers — the source
+      resolver list arrives as an empty list at the target, verified on the
+      round-trip.  aruba_aoscx declares `/system/dns-server` unsupported:
+      "Render emits no name-server config; intent.dns_servers are dropped on
+      migration."  This is a target-side drop, not a source-side gap: OPNsense
+      emits the resolvers cleanly, the switch render has nowhere to put them.
+      Capture the resolver list before cutover — it is not recoverable from
+      the migrated config.
+    references: [opnsense-aoscx-surface]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap rather than a migration loss: BOTH matrices declare
+      `/system/ntp-server` unsupported, so the source never emits NTP servers
+      and the target would not render them either.  No committed cell
+      populates the field, so there is no observation behind this — the
+      disposition rests on the two declarations, stated plainly rather than
+      dressed up as a measurement.  Configure NTP on the target by hand.
+    references: [opnsense-aoscx-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Symmetric gap, same shape as `ntp_servers`: both matrices declare
+      `/system/timezone` unsupported — neither codec parses nor renders a
+      clock/timezone stanza.  Not populated on any of the 8 cells, so this
+      rests on the declarations rather than an observed round-trip.  Set the
+      timezone on the target by hand; nothing in the migration carries it.
+    references: [opnsense-aoscx-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/system/syslog-server`
+      unsupported, and no committed cell populates the field.  Declaration-
+      based, not measured.  An OPNsense firewall is normally a busy syslog
+      source, so re-authoring logging hosts on the target is worth putting on
+      the cutover checklist even though this pair records no loss for it.
+    references: [opnsense-aoscx-surface]
+
+  # -- Interfaces -- measured independently, and mostly clean ---------------
+  #
+  # Read this block against the aruba_aoscx -> arista_eos pair, where the
+  # interface record count shrank and forced every sub-field to `lossy`.  That
+  # does NOT happen here.  Interface counts match exactly on all 8 cells, so
+  # each sub-field below carries its own signal and the six `good` entries are
+  # real observations, not inherited optimism.
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Preserved on 8 of 8 cells with no record loss — the source and target
+      interface inventories are the same size on every cell (2->2, 3->3, 7->7,
+      8->8).  This is the load-bearing fact for the whole block: because no
+      record vanishes, the sub-fields below were each measured on their own
+      merits.  OPNsense-native names (`em0`, `vlan0.20`, `lagg0`) survive the
+      render verbatim rather than being re-shaped into AOS-CX `1/1/N` form.
+    references: [opnsense-aoscx-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 5 cells that populate descriptions, and verbatim on
+      every record of the representative cell (all 7 interface descriptions
+      compared byte-identical after the round trip).  Worth flagging that the
+      opnsense matrix declares `/interfaces/interface/config/description`
+      LOSSY in its own right — the measurement contradicts its own source
+      matrix here, so this `good` is grounded in the observed round-trip, not
+      in the declaration.  That over-declaration is a codec-matrix matter, not
+      a pair-specific fact, and is left for a codec change rather than fixed
+      here.
+    references: [opnsense-aoscx-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on 8 of 8 cells.  Both an administratively
+      enabled and an administratively disabled port were exercised on the
+      representative cell and both round-tripped with their state intact, so
+      a shut port arrives shut rather than silently coming up.
+    references: [opnsense-aoscx-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on the 1 cell that sets a non-default MTU; the other 7 cells
+      carry no MTU on either side.  A single populated cell is thin evidence —
+      it is enough to keep this out of the loss column but not enough to
+      promise jumbo-frame fidelity, so re-check MTU on any uplink after
+      cutover.
+    references: [opnsense-aoscx-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on 8 of 8 cells — routed-interface IPv4 addressing is the
+      most reliably migrated surface on this pair.  Two limits worth stating
+      so this is not over-read.  First, opnsense declares
+      `/interfaces/interface/ipv4/address/secondary-ip` and
+      `.../virtual-gateway-address` unsupported, so secondary and anycast
+      addressing never reach the target and this `good` says nothing about
+      them.  Second, the CARP virtual IP does NOT live here — it lives on
+      `interfaces[].vrrp_groups`, which is a total drop.  A surviving
+      interface address is not a surviving first-hop gateway.
+    references: [opnsense-aoscx-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on the 2 cells that carry IPv6; the other 6 carry none on
+      either side.  Narrow evidence, stated as such.  Note separately that
+      the canonical `dhcp_client_v6` flag — which the audit's key list does
+      not cover — drifts on 7 interface records across the corpus, so a
+      DHCPv6-configured WAN loses its client flag even though its static
+      IPv6 addresses survive.
+    references: [opnsense-aoscx-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on 8 of 8 cells — 30 interface records across the corpus, the
+      single most-drifting sub-field on this pair.  The direction is
+      fabrication, not loss: OPNsense declares no IANA ifType so the source
+      value is empty, and the AOS-CX codec infers a type from the interface-
+      name shape.  OPNsense-native names (`em0`, `vlan0.20`) match none of the
+      shapes it knows (`1/1/1`, `vlan N`, `lag N`, `loopback N`), so all 30
+      records land on `ianaift:other`.  aruba_aoscx declares
+      `/interfaces/interface/config/type` lossy for exactly this reason.
+      Harmless on the wire — nothing keys off the canonical ifType — but do
+      not use a post-migration type inventory to classify ports.
+    references: [opnsense-aoscx-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts on the 1 cell that has a bundle, on both member interfaces:
+      `lagg0` becomes `lag 0`.  Membership is NOT lost — both members are
+      present on the target and both still point at the bundle.  This is a
+      pure rename that the audit's LAG-name canonicaliser does not cover: its
+      regex accepts `ae<N>` / `Po<N>` / `Port-channel<N>` / `trk<N>` /
+      `agg<N>` / `bond<N>`, and neither the FreeBSD `lagg0` form nor the
+      AOS-CX `lag 0` form (which contains a space) matches, so both sides fall
+      through to raw equality and the rename surfaces as drift.  Recorded
+      lossy because the string genuinely differs, but an operator should read
+      this as cosmetic.  Note this drift and the `lags` drift below are the
+      SAME rename on the SAME single cell — neither corroborates the other.
+    references: [opnsense-aoscx-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      A total drop, proven by round-tripping the two CARP fixtures rather than
+      inferred from the drift shape.  The source carries two CARP groups
+      (VRIDs 1 and 3, each with a virtual IP, priority 254 and preempt set);
+      the rendered AOS-CX config contains no `vrrp`, no `active-gateway` and
+      no CARP line of any kind, and re-parsing it yields zero interfaces with
+      a VRRP group.  aruba_aoscx declares the whole
+      `/interfaces/interface/vrrp-groups/group` subtree unsupported — "AOS-CX
+      VRRP is a deferred phase (the group anchor is unsupported)" — along with
+      every child (mode, priority, preempt, advertisement-interval,
+      authentication, virtual-ipv6s, description).  `unsupported` rather than
+      `lossy` because the record vanishes entirely (#436).  This is the
+      highest-impact loss on the pair: an OPNsense HA pair migrated as-is
+      arrives with no first-hop redundancy at all.  Re-author the target's
+      redundancy (AOS-CX active-gateway or a later VRRP phase) by hand and
+      treat it as a cutover blocker, not a warning.
+    references: [opnsense-aoscx-surface]
+
+  # -- VLANs ----------------------------------------------------------------
+  #
+  # Only 2 of the 8 cells carry VLANs at all, and on both the VLAN record
+  # itself carries nothing but an ID and a name — OPNsense expresses the SVI
+  # as a separate `vlan0.N` interface, not as L3 mounted on the VLAN record.
+  # That is why four of the six VLAN keys below are `not_applicable`: the
+  # source never populates them, so there is no observation to disposition.
+
+  "vlans[].id":
+    disposition: good
+    note: >
+      VLAN IDs preserved on both cells that define VLANs (5 VLANs each); the
+      other 6 cells define none.  The VLAN record count is also preserved
+      (5->5 on both), so no VLAN vanishes.
+    references: [opnsense-aoscx-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      VLAN names preserved on both populated cells, alongside the IDs.  Note
+      this is the same 2 cells and the same 5 records as `vlans[].id` — one
+      observation, reported against two keys, not two independent
+      confirmations.
+    references: [opnsense-aoscx-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: not_applicable
+    note: >
+      Not populated on either side of any of the 8 cells.  OPNsense mounts
+      VLAN L3 on a `vlan0.<id>` interface record rather than on the VLAN
+      record, so the canonical VLAN-SVI address stays empty and the addressing
+      migrates through `interfaces[].ipv4_addresses` instead.  Both matrices
+      declare `/vlans/vlan/ipv4/address/ip` lossy, so a source that DID mount
+      L3 on the VLAN record would degrade — but no committed cell exercises
+      that, and this file does not claim a loss it has not seen.
+    references: [opnsense-aoscx-surface]
+
+  "vlans[].untagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side gap: opnsense declares `/vlans/vlan/untagged-ports`
+      unsupported, so port membership never reaches the target and no cell
+      populates the field.  aruba_aoscx declares no loss for it, so
+      re-authoring access-port assignment on the switch will stick — and it
+      will have to be re-authored, because a firewall config carries no
+      switch-port membership to migrate in the first place.
+    references: [opnsense-aoscx-surface]
+
+  "vlans[].tagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side gap, identical shape to `vlans[].untagged_ports`: opnsense
+      declares `/vlans/vlan/tagged-ports` unsupported and no cell populates
+      it.  Trunk membership must be built on the target from scratch.
+    references: [opnsense-aoscx-surface]
+
+  "vlans[].description":
+    disposition: not_applicable
+    note: >
+      Not populated on either side of any cell — the OPNsense VLAN records in
+      this corpus carry an ID and a name and nothing else.  aruba_aoscx
+      declares no loss for a VLAN description, so a future source that
+      populated it would likely carry it; that is a prediction from the
+      target's declaration, not something this corpus measured.
+    references: [opnsense-aoscx-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      A partial degradation, not a drop — and this is a call where the two
+      signals disagreed, so it was settled by round-tripping the fixtures.
+      The whole-drop heuristic classified this pair's `static_routes` as a
+      TOTAL drop; the measurement says otherwise (2 of 3 populated cells
+      preserved, 1 drifted) and the round-trip confirms the measurement.  On
+      all 3 cells the route count is 1 in and 1 out, and destination plus
+      next-hop gateway compare byte-identical.  The single drift is the
+      route's description field, which arrives empty; aruba_aoscx declares
+      `/routing/static-route/description` lossy — "Render emits destination +
+      next-hop only".  Forwarding is intact after cutover; the operator
+      labelling on each route is not, so capture route descriptions before
+      migrating if they encode intent.  Separately, aruba_aoscx declares
+      `/routing/static-route/vrf` unsupported, but no cell on this pair binds
+      a route to a VRF, so that path is untested here.
+    references: [opnsense-aoscx-surface]
+
+  "routing_instances[].name":
+    disposition: not_applicable
+    note: >
+      Source-side gap: opnsense declares `/routing-instances/instance`
+      unsupported — OPNsense has no VRF construct in this codec — so nothing
+      reaches the target on any of the 8 cells.  aruba_aoscx declares the VRF
+      anchor SUPPORTED, so VRFs re-authored on the switch side will stick.
+      This rests on the two declarations plus the empty measurement, not on an
+      observed round-trip.
+    references: [opnsense-aoscx-surface]
+
+  "routing_instances[].description":
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both sides declare the path unsupported — opnsense at the
+      `/routing-instances/instance` anchor, aruba_aoscx at
+      `/routing-instances/instance/description` exactly ("The AOS-CX
+      `vrf <name>` stanza is a bare name in v1").  No cell populates the
+      field, so this rests on the two declarations rather than an observed
+      round-trip.  The reason it is recorded `unsupported` while
+      `routing_instances[].name` above is `not_applicable` is operational:
+      the VRF name re-authored on the target WILL hold, and a VRF description
+      re-authored on the target will NOT survive a subsequent netcanon
+      round-trip.
+    references: [opnsense-aoscx-surface]
+
+  # -- Services -- the firewall surface the switch does not have ------------
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      A total drop on all 4 cells that define a pool: one DHCP server in,
+      zero out, verified on the round-trip.  aruba_aoscx declares
+      `/dhcp-servers/pool` unsupported — "Render emits no DHCP server pool".
+      This is the most predictable loss on the pair and the one most likely to
+      be forgotten: an OPNsense firewall is usually the DHCP server for the
+      segments behind it, and a campus switch is not.  Plan where DHCP will
+      live before cutover — the switch config carries no trace of the pools.
+      `unsupported` rather than `lossy` because the pool vanishes whole.
+    references: [opnsense-aoscx-surface]
+
+  "snmp.community":
+    disposition: good
+    note: "Preserved on all 3 cells that populate SNMP; the render emits `snmp-server community <name>` and it re-parses intact."
+    references: [opnsense-aoscx-surface]
+
+  "snmp.location":
+    disposition: good
+    note: "Preserved on all 3 cells that populate SNMP — rendered as `snmp-server system-location`."
+    references: [opnsense-aoscx-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: "Preserved on all 3 cells that populate SNMP — rendered as `snmp-server system-contact`."
+    references: [opnsense-aoscx-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      A total drop of the trap-receiver list, proven by round-trip rather than
+      read off the counts.  The raw numbers look mild — 2 cells "preserved",
+      1 drifted — but the 2 preserved cells carry an EMPTY trap-host list on
+      both sides, so they confirm nothing.  On the one cell that actually
+      defines trap receivers, both of them are gone: the rendered AOS-CX
+      config contains only `snmp-server community`, `system-location` and
+      `system-contact`, with no trap-receiver line at all.  aruba_aoscx
+      declares `/snmp/trap-host` unsupported ("the `snmp-server host <ip> trap
+      version ... community ...` trap-receiver grammar is deferred").
+      `unsupported` because the entries vanish whole.  Polling survives this
+      migration; trapping does not — re-add trap receivers on the target or
+      the NMS goes quiet without any config diff explaining why.
+    references: [opnsense-aoscx-surface]
+
+  "snmp.v3_users":
+    disposition: good
+    note: >
+      Recorded `good` because it is preserved on all 3 cells that populate
+      SNMP — but this `good` must not be read as "SNMPv3 credentials migrate".
+      opnsense declares `/snmp/v3-user` and its child paths UNSUPPORTED, so
+      the source emits no v3 users at all; the round-trip confirms zero users
+      on both sides of every cell.  "Preserved" here means both sides are
+      empty, which is a vacuous agreement, and it is stated that way rather
+      than implied.  If a future OPNsense source did carry v3 USM users, the
+      aruba_aoscx matrix declares six of the v3-user child paths lossy —
+      including auth and privacy protocol downgrades — so expect degradation,
+      not fidelity.
+    references: [opnsense-aoscx-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      A total drop on the 1 cell that defines RADIUS: two servers in, zero
+      out.  aruba_aoscx declares both `/radius-servers/server/host` and
+      `/radius-servers/server/key` unsupported — "Render emits no AAA
+      radius-server config" — so the host AND the shared secret are dropped.
+      `unsupported` because the servers vanish whole.  Two consequences worth
+      separating: the AAA topology must be rebuilt on the target, and the
+      shared secrets are not in the migrated config, so they must come from
+      the source config or a password store, not from the switch.
+    references: [opnsense-aoscx-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      A degradation, not a drop — and worth reading carefully, because the
+      cosmetic half of this drift is loud and the real half is quiet.  On the
+      1 cell with a bundle, the LAG survives with both members intact
+      (`em2` and `em3` are present on the target and still bound to the
+      bundle).  Two things change.  The name goes `lagg0` -> `lag 0`, which
+      is a rename the audit's LAG-name canonicaliser does not normalise and
+      which costs nothing operationally.  The mode goes `active` -> `static`,
+      and THAT is the real loss: the render emits the per-member `lag 0`
+      binding but no `interface lag 0` stanza, so no `lacp mode active` line
+      is written and the bundle re-parses as a static bundle.  aruba_aoscx
+      declares `/lags/lag/mode` lossy for exactly this cause — a source whose
+      LAG lives only in `intent.lags`, with no matching `lag N` interface
+      record, loses the mode.  A static bundle facing an LACP-speaking peer
+      will not come up cleanly, so re-apply `lacp mode active` on the target
+      before turning the link up.  Recorded `lossy` and not `unsupported`
+      because the bundle and its membership do survive.
+    references: [opnsense-aoscx-surface]
+
+  # -- Identity -------------------------------------------------------------
+  #
+  # All three `local_users[].*` keys drift on exactly ONE cell and for exactly
+  # ONE reason — the account record count collapses 5 -> 1 on that cell.  They
+  # are three views of a single observation, not three independent losses, and
+  # none of them corroborates the others.
+
+  "local_users[].name":
+    disposition: lossy
+    reason: >
+      Preserved on 6 of 8 cells and drifts on 1 (the eighth defines no users).
+      The drift is a record collapse, 5 accounts in and 1 out, and the
+      mechanism was confirmed by reading the render: the four accounts that
+      vanish are the four with an EMPTY password.  AOS-CX renders them as bare
+      `user <name> group <group>` lines with no credential clause, and the
+      AOS-CX parser does not recover an account from a line with no password,
+      so they are lost on re-parse.  `lossy` rather than `unsupported` because
+      this is a partial collapse — the account WITH a password survives, so
+      the field stays compatible.  Operationally: OPNsense accounts that
+      authenticate by certificate or API key, and disabled placeholder
+      accounts, will not appear on the target.  Inventory the source account
+      list before cutover instead of diffing the migrated one.
+    references: [opnsense-aoscx-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: >
+      The role survives intact on every account that survives.
+      Drifts on the same 1 cell, for the same single reason as
+      `local_users[].name` — the 5 -> 1 record collapse — and carries no
+      independent signal of its own.  On every surviving account the role
+      itself is exact: `admin` -> `admin` and `user` -> `user` on all 6
+      populated cells.  Worth separating from a neighbouring field the audit
+      does not key on: `privilege_level` drifts on all 8 accounts across the
+      corpus (15 -> 1), because aruba_aoscx maps its named groups back to a
+      numeric privilege and declares `/local-users/user/privilege-level`
+      lossy.  So the role NAME survives while the numeric privilege behind it
+      does not — check any automation that keys off privilege level.  Recorded `good` rather than `lossy`: the only drift on this key is the parent record-count collapse, which the audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could never be evidenced by any cell.  The account vanishing is a real loss and is recorded against `local_users[].name`; this key is about what happens to the VALUE when the account survives.
+    references: [opnsense-aoscx-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      The stored secret survives intact on every account that survives.
+      Drifts on the same 1 cell and for the same 5 -> 1 record collapse, NOT
+      because the secret itself is mangled — on all 6 populated cells the
+      stored secret compares byte-identical after the round trip, and it was
+      confirmed to appear verbatim in the render.  That verbatim carry is the
+      thing to be careful about.  The OPNsense secret is a fixed-length opaque
+      string with no crypt(3) `$`-delimited prefix; the AOS-CX render places
+      it into a `user <name> group <group> password ciphertext <blob>` line,
+      i.e. it is presented to the switch as an AOS-CX `ciphertext` value.  The
+      aruba_aoscx matrix states elsewhere that a `ciphertext` blob is
+      encrypted with the device key and is "portable same-device only", so a
+      byte-perfect canonical round-trip is NOT evidence of a working
+      credential on the target device.  Set passwords on the target before
+      cutover and treat every migrated account as unusable until you have.
+      No secret value is quoted in this file or in the reference doc — only
+      its shape — because an encrypted secret is still operator-traceable.  Recorded `good` rather than `lossy`: the only drift on this key is the parent record-count collapse, which the audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could never be evidenced by any cell.  The account vanishing is a real loss and is recorded against `local_users[].name`; this key is about what happens to the VALUE when the account survives.
+    references: [opnsense-aoscx-surface]
+
+  # -- Fabric -- absent on both ends of this pair ---------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: not_applicable
+    note: >
+      Source-side gap: opnsense declares `/vxlan-vnis/vni` unsupported (an
+      edge firewall is not a VTEP), so nothing reaches the target and no cell
+      populates the field.  aruba_aoscx declares the VNI binding supported, so
+      a VXLAN overlay authored on the switch afterwards would hold — but that
+      is the target's declaration, not something this pair measured.
+    references: [opnsense-aoscx-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: not_applicable
+    note: >
+      Same source-side gap as `vxlan_vnis[].vni` — the VNI anchor is
+      unsupported on the source, so the VLAN-to-VNI binding is never
+      populated on any of the 8 cells.
+    references: [opnsense-aoscx-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: not_applicable
+    note: >
+      Same source-side gap.  Recorded separately because the target's
+      declaration differs from the two keys above: aruba_aoscx declares
+      `/vxlan-vnis/mcast-group` LOSSY (the BUM-replication underlay is not
+      emitted), so this sub-field would degrade even if a source populated it.
+      Nothing on this pair does.
+    references: [opnsense-aoscx-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on any of the 8 cells, and neither codec declares
+      anything for it — no supported, lossy or unsupported path on either
+      side.  An OPNsense firewall is not an EVPN speaker, so the canonical
+      field stays empty.
+    references: [opnsense-aoscx-surface]
+
+  anycast_gateway_mac:
+    disposition: not_applicable
+    note: >
+      Source-side gap: opnsense declares `/anycast-gateway-mac` unsupported,
+      so the field is empty on every cell.  aruba_aoscx declares it supported
+      — it is the switch-wide `active-gateway ip mac` anchor — so a value
+      authored on the target would hold.  Do not confuse this with the CARP
+      redundancy that DOES exist on the source: that lives on
+      `interfaces[].vrrp_groups` and is a total drop.
+    references: [opnsense-aoscx-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any of the 8 cells.  The opnsense codec declares
+      nothing for raw sections; aruba_aoscx declares
+      `/system/raw-sections/version-banner` lossy, which would matter only for
+      a source that carries an unparsed block surviving to render.  None here
+      does.
+    references: [opnsense-aoscx-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [opnsense-aoscx-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [opnsense-aoscx-surface]

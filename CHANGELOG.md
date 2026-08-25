@@ -28,6 +28,37 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+- **A6 wave 2: `aruba_aoscx` cross-vendor expectation coverage, all 18 pairs.**
+  Coverage **560 -> 693 of 1224 cells (+133)**; ALIGNED 3743 -> 4890;
+  **`CODEC_BUG` unchanged at 5** and **`METHODOLOGY_ISSUE_over` unchanged at
+  21**.  `aruba_aoscx` was chosen over `cisco_iosxr` and `vyos` by
+  re-measuring after wave 1 -- adding `cisco_nxos` to the covered set changes
+  every candidate's coverage number, so the old ranking was stale.  It leads
+  on total drift (430 vs 341 and 312), density (3.23/cell vs 1.92 and 1.67)
+  and signal quality (34% known-artifact vs 46% and 47%), trading ~29% less
+  coverage for ~38% more real drift.
+
+  Six declarations across four pairs initially failed the per-pair
+  unevidenced ratchet and were **repaired rather than excused** --
+  `_UNEVIDENCED_BASELINE` is untouched.  The cause was a defect in the
+  authoring aid, not hedging: the answer table applied "drifted > 0 -> declare
+  a loss", which cannot see the reconciler's `STRUCTURAL_ONLY` collapse.  When
+  a list's row count changes, only the FIRST sub-field of that parent keeps
+  its real class and the rest are reclassified so one structural signal does
+  not multiply -- so `local_users[].name` carries the `EXPECTED_LOSSY` for a
+  vanishing account while `role` and `hashed_password` are collapsed and can
+  never be evidenced.  All six now record `good`, which is what the authoring
+  prose already argued: the value survives intact whenever the account does.
+
+  Six **capability-matrix under-declarations** surfaced and were verified,
+  then deliberately left for a codec change rather than patched here:
+  `arista_eos` and `cisco_iosxe` declare NOTHING for `/lags/lag` while
+  dropping LAGs entirely; `aruba_aoss` declares nothing for
+  `/interfaces/interface/config/mtu` or `/local-users/*` while re-mapping
+  roles and re-typing secrets; `aruba_aoss` declares only `/lags/lag/mode`.
+
+  Still blind, and unfunded: `vyos` (258 cell appearances) and `cisco_iosxr`
+  (246).
 - **A6 complete for `cisco_nxos`: the remaining 15 cross-vendor expectation
   pairs.**  The audit can only classify a cell that HAS a pair YAML, so
   `CODEC_BUG = 5` was a count over the covered subset rather than over the

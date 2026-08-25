@@ -1,0 +1,576 @@
+# Cross-vendor fidelity expectations: mikrotik_routeros -> aruba_aoscx
+#
+# Source: mikrotik_routeros codec — RouterOS `/export` (.rsc) script.
+# Target: aruba_aoscx codec — ArubaOS-CX `show running-config` render.
+#
+# Asymmetric by device class. mikrotik_routeros in the committed corpus is an
+# SMB / branch edge ROUTER — a RouterBoard or CRS terminating a WAN link,
+# bridging a LAN, serving DHCP and resolving DNS for the site. aruba_aoscx is a
+# campus access/aggregation SWITCH. The realistic migration is a MikroTik-run
+# branch or small campus being re-homed onto an AOS-CX switch, so the shared
+# surface is the L2/L3 edge — interface inventory, interface addressing, the
+# VLAN dictionary, static routes, SNMP scalars, LAG bundles — and NOT the
+# router-services surface RouterOS is built around.
+#
+# The dominant loss on this pair is that router-services cliff, not a
+# structural record drop. The interface list does NOT shrink (2->2, 7->7,
+# 9->9, 12->12, 16->16 across the five cells; 46 records, zero vanished), so
+# each `interfaces[].*` sub-key is judged on its own merits — six of the eight
+# are `good`. What is dropped whole is DHCP, DNS, NTP, RADIUS, SNMP trap hosts
+# and every local account.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
+# a full `run_full_mesh.py` pass over the committed corpus (5 fixture cells, 0
+# render errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree. Every
+# ambiguous lossy-vs-unsupported call was additionally proved by round-tripping
+# the fixture and reading the emitted AOS-CX text.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/mikrotik_routeros_to_aruba_aoscx/
+#
+# Authored 2026-08-25 extending the aruba_aoscx expectation mesh (A6 wave 2).
+
+meta:
+  source_vendor: mikrotik_routeros
+  target_vendor: aruba_aoscx
+  primary_use_case: >
+    Branch-edge re-home: a MikroTik RouterOS box replaced by an ArubaOS-CX
+    switch carrying the same ports, port addressing, VLAN dictionary, static
+    routes and SNMP identity.  The interface inventory survives intact —
+    names, descriptions, admin state, MTU and both address families — as do
+    VLAN IDs, VLAN names and descriptions, and the SNMP community / location
+    / contact scalars.  What does not is the whole router-services layer
+    (DHCP server, DNS resolvers, NTP, RADIUS), every local account, SNMP trap
+    receivers, the IANA interface type, and the LACP mode of a bundle.
+  certainty: medium
+  references:
+    - id: mikrotik-aoscx-surface
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoscx/canonical_surface.md
+      title: "RouterOS -> ArubaOS-CX: measured canonical surface (5 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars ---------------------------------------------
+
+  hostname:
+    disposition: lossy
+    reason: >
+      Drifts on 3 of 5 cells, by two different mechanisms — neither of them a
+      plain dropped value, and each needing a different response.  On 2 cells
+      the RouterOS export carries no `/system identity` line, the canonical
+      hostname is empty, and the AOS-CX renderer substitutes its platform
+      default (`hostname = tree.hostname or "switch"`), so the re-parse reads
+      back `switch`: a name was INVENTED, not lost.  On the third cell the
+      identity contains a space; the render emits it verbatim and the AOS-CX
+      parser's `^hostname\s+(\S+)` stops at the space, truncating a two-word
+      identity to its first word.  That one is a real loss and it generalises
+      — RouterOS identities routinely contain spaces and AOS-CX hostnames
+      cannot.  Audit source identities for whitespace, and set the hostname
+      explicitly rather than accepting a device called `switch`.
+    references: [mikrotik-aoscx-surface]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/domain` unsupported, so this is a
+      symmetric gap in the pair rather than an Aruba limitation — neither
+      codec parses nor renders a domain-name stanza.  Trivially empty on all
+      5 cells, so this rests on the declarations rather than on an observed
+      round-trip.  Set the domain name on the target by hand.
+    references: [mikrotik-aoscx-surface]
+
+  dns_servers:
+    disposition: unsupported
+    reason: >
+      A total drop, not a degradation.  Measured on the one cell that
+      populates it: both resolvers vanish, and the round-trip confirms the
+      rendered AOS-CX config contains no name-server line at all.  The target
+      matrix declares `/system/dns-server` unsupported at the exact path
+      ("Render emits no name-server config").  Recorded `unsupported` rather
+      than `lossy` because a vanished record is not lossy (#436) — `lossy`
+      warns and stays compatible, which would understate this.  A MikroTik
+      branch router is usually the site resolver; point the LAN at an upstream
+      resolver before the cutover.
+    references: [mikrotik-aoscx-surface]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      Total drop on all 3 cells that populate it (1-2 servers each, none
+      surviving); the render emits no NTP line.  Target matrix declares
+      `/system/ntp-server` unsupported.  Time sync must be re-authored on the
+      AOS-CX side — worth doing early, because SNMPv3 and log correlation
+      both depend on it.
+    references: [mikrotik-aoscx-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported — a symmetric gap
+      in the pair.  Trivially empty on all 5 cells, so this rests on the
+      declarations, not on an observation.  Set the clock/timezone on the
+      target by hand; nothing in the migration will carry it.
+    references: [mikrotik-aoscx-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/syslog-server` unsupported, so neither
+      side of this pair models logging hosts — a symmetric gap, and one that
+      no committed cell exercises.  Stated from the declarations rather than
+      an observed round-trip.  Re-author logging destinations on the target.
+    references: [mikrotik-aoscx-surface]
+
+  # -- Interfaces -- the surface that mostly survives ------------------------
+  #
+  # Unlike the sibling AOS-CX pairs, the interface record count is identical
+  # on every cell (46 records in, 46 out), so no sub-key inherits a record
+  # drop.  Exactly two keys drift, each with its own single cause.
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Preserved on all 5 cells; no interface record is dropped anywhere on
+      this pair (2->2, 7->7, 9->9, 12->12, 16->16).  Read this as "the
+      canonical string survived intact", NOT as target-syntax validity: the
+      round-trip does not run `translate_port_names`, and the rendered config
+      contains stanzas like `interface ether1` and `interface bond1`, which
+      are not configurable interface names on an AOS-CX switch.  A port-rename
+      map is a mandatory separate cutover step.
+    references: [mikrotik-aoscx-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate it.  Both matrices declare
+      `/interfaces/interface/config/description` supported and the record it
+      rides on never vanishes, so the description arrives intact.
+    references: [mikrotik-aoscx-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on all 5 cells.  Verified on the round-trip: a
+      port disabled on the RouterOS side renders as `shutdown` and re-parses
+      disabled, while enabled ports render `no shutdown`.
+    references: [mikrotik-aoscx-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: "Preserved on all 3 cells that populate it; rendered as a plain `mtu <n>` line under the interface."
+    references: [mikrotik-aoscx-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on all 5 cells — the strongest result on the pair.  This is
+      also where RouterOS VLAN L3 lands (an address on the `vlanN` interface
+      rather than on the VLAN record), so SVI addressing migrates through this
+      key rather than through `vlans[].ipv4_addresses`.
+    references: [mikrotik-aoscx-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on the single cell that populates it, where multiple global
+      and link-local addresses on one port all round-trip.  One populated cell
+      is thin evidence and is stated as such rather than implied — but it is
+      an observation, not a declaration.
+    references: [mikrotik-aoscx-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on all 5 cells, and on all 46 interface records.  The AOS-CX
+      matrix declares `/interfaces/interface/config/type` lossy and gives the
+      mechanism: AOS-CX carries no IANA ifType, so the codec infers it from
+      the interface-NAME shape (`1/1/1` -> ethernetCsmacd, `vlan N` ->
+      l3ipvlan, `lag N` -> ieee8023adLag, `loopback N` -> softwareLoopback).
+      RouterOS names match none of those shapes, so `ether1`, `bridge1`,
+      `vlan100`, `bond1` and `sfp-sfpplus1` all collapse to `ianaift:other` —
+      ethernetCsmacd, bridge, l3ipvlan and ieee8023adLag alike.  Records that
+      carried no source type gain `ianaift:other`, which is an invention
+      rather than a loss.  One cause, 46 records: this is NOT independent
+      evidence for any other interface key.  It resolves itself once the ports
+      are renamed to AOS-CX shapes.
+    references: [mikrotik-aoscx-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts on the one cell that has bundles, and the drift is a rename, not
+      a membership loss — proved on the round-trip rather than inferred.  The
+      audit canonicalises LAG names before comparing (`_LAG_NAME_FIELDS` /
+      `_canonical_lag_name`, regex
+      `^(?:ae|Po|Port-channel|Port-Channel|trk|Trk|agg|bond)(\d+)$`), so a
+      vendor-native rename normally does not fire.  Here the SOURCE name
+      `bond1` canonicalises to `LAG1` but the TARGET name is `lag 1` —
+      space-separated, and `lag` is not in the prefix set — which
+      canonicalises to `None`, so the comparison falls back to raw equality
+      and the rename surfaces as drift.  Membership itself is intact: all four
+      member ports still point at the right bundle after the round-trip.
+      Recorded `lossy` because the audit measures drift here; treat it as a
+      naming artifact of the canonicaliser, and see `lags` for the loss on
+      this surface that IS real.
+    references: [mikrotik-aoscx-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      The target declares the whole `/interfaces/interface/vrrp-groups/group`
+      subtree unsupported — anchor, mode, priority, preempt,
+      advertisement-interval, authentication, virtual-IPv6s and description
+      all dropped.  AOS-CX VRRP is not wired in this codec phase; its
+      first-hop-redundancy surface is the `active-gateway` anycast construct
+      instead.  The source DOES model VRRP groups (it declares mode and
+      description lossy), so this is a target-side block, not a symmetric
+      gap.  No committed cell on this pair carries a group, so the
+      disposition rests on the target declaration rather than an observed
+      round-trip — stated rather than implied.  Re-author first-hop redundancy
+      on the AOS-CX side by hand.
+    references: [mikrotik-aoscx-surface]
+
+  # -- VLANs ----------------------------------------------------------------
+
+  "vlans[].id":
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate VLANs, including a 5-VLAN cell
+      where source and render list them in different orders — the comparator
+      keys on ID, so ordering is not drift.
+    references: [mikrotik-aoscx-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      Preserved on all 3 populated cells.  Notable because the SOURCE matrix
+      declares `/vlans/vlan/name` lossy in its own right: the declared
+      degradation does not materialise against this target on any committed
+      cell, and the measurement is what this file records.
+    references: [mikrotik-aoscx-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: not_applicable
+    note: >
+      Empty on both sides of all 5 cells — a source-SHAPE gap rather than a
+      declared one.  RouterOS expresses VLAN L3 as an address on the `vlanN`
+      interface, which lands on `interfaces[].ipv4_addresses` (preserved on
+      all 5 cells), leaving the VLAN record's own address list unpopulated.
+      Both matrices declare `/vlans/vlan/ipv4/address/ip` lossy, so a source
+      that DID mount an address on the VLAN record would degrade — but no
+      committed cell does, so there is no observation to record.
+    references: [mikrotik-aoscx-surface]
+
+  "vlans[].untagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side gap: mikrotik_routeros declares `/vlans/vlan/untagged-ports`
+      unsupported, so RouterOS bridge-VLAN membership is never folded onto the
+      VLAN record and nothing reaches the target.  aruba_aoscx declares VLAN
+      port membership SUPPORTED, so re-authoring access-port assignment on the
+      AOS-CX side will stick — worth doing by hand as part of the cutover
+      rather than expecting it to migrate.
+    references: [mikrotik-aoscx-surface]
+
+  "vlans[].tagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side gap, same shape as `vlans[].untagged_ports`:
+      mikrotik_routeros declares `/vlans/vlan/tagged-ports` unsupported while
+      aruba_aoscx supports it.  Re-author trunk membership on the target.
+    references: [mikrotik-aoscx-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Preserved on both cells that populate it.  As with `vlans[].name`, the
+      source matrix declares `/vlans/vlan/description` lossy and the
+      degradation does not appear against this target on any committed cell.
+    references: [mikrotik-aoscx-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      A partial loss, not a drop — proved on the round-trip: 4 routes in, 4
+      routes out, with destination and next-hop intact on every one
+      (`ip route 0.0.0.0/0 198.51.100.1` and its IPv6 sibling both survive).
+      Two things change.  The route DESCRIPTION is dropped on all 4 routes —
+      the target declares `/routing/static-route/description` lossy ("Render
+      emits destination + next-hop only") — so operator labelling such as
+      which route is the ISP default is lost; capture it before migrating.
+      And on the one route whose next-hop is an interface name rather than an
+      address, the value moves from the canonical `gateway` slot to the
+      `interface` slot; the next-hop itself is retained.  Both matrices also
+      declare `/routing/static-route/vrf` unsupported, so a per-VRF route
+      would lose its VRF binding — no committed cell exercises that.
+    references: [mikrotik-aoscx-surface]
+
+  "routing_instances[].name":
+    disposition: not_applicable
+    note: >
+      Source-side gap: mikrotik_routeros declares the
+      `/routing-instances/instance` anchor unsupported, so no VRF record is
+      ever created from this source and nothing reaches the target.
+      aruba_aoscx SUPPORTS the `vrf <name>` anchor, so VRFs re-authored on the
+      AOS-CX side will stick.  Trivially empty on all 5 cells.
+    references: [mikrotik-aoscx-surface]
+
+  "routing_instances[].description":
+    disposition: unsupported
+    reason: >
+      Blocked at both ends: the source declares the whole
+      `/routing-instances/instance` anchor unsupported and the target declares
+      `/routing-instances/instance/description` unsupported in its own right
+      (the AOS-CX `vrf <name>` stanza is a bare name in this phase).  A
+      symmetric gap, so unlike `routing_instances[].name` re-authoring on the
+      target will NOT hold a description.  Trivially empty on all 5 cells —
+      this rests on the two declarations, not on an observation.
+    references: [mikrotik-aoscx-surface]
+
+  # -- Services -------------------------------------------------------------
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      A total drop on all 3 cells that populate it — every pool vanishes, and
+      the round-trip confirms the rendered AOS-CX config contains no DHCP
+      line at all.  The target declares `/dhcp-servers/pool` unsupported
+      ("Render emits no DHCP server pool").  Recorded `unsupported` rather
+      than `lossy` because the records vanish (#436).  This is the single most
+      important planning item on the pair: a MikroTik branch router is usually
+      the site's DHCP server and an AOS-CX access switch is not, so every pool
+      needs a new home — a relay pointing at a central server — before the
+      MikroTik is switched off.  Note the SOURCE declares only
+      `/dhcp-servers/pool/lease-time` lossy, i.e. it models pools fully; the
+      loss is entirely target-side.
+    references: [mikrotik-aoscx-surface]
+
+  "snmp.community":
+    disposition: good
+    note: "Preserved on all 3 cells that populate SNMP; rendered as `snmp-server community <name>`."
+    references: [mikrotik-aoscx-surface]
+
+  "snmp.location":
+    disposition: good
+    note: >
+      Preserved on all 3 populated cells, including a multi-word value —
+      `snmp-server system-location` is parsed with a greedy `(.+)$` capture,
+      so unlike `hostname` it does not truncate at the first space.
+    references: [mikrotik-aoscx-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: "Preserved on all 3 populated cells, rendered as `snmp-server system-contact`."
+    references: [mikrotik-aoscx-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      A total drop, verified by round-trip rather than inferred: the source
+      trap receiver vanishes and the rendered AOS-CX config contains no
+      `snmp-server host` line anywhere.  The target declares `/snmp/trap-host`
+      unsupported — the trap-receiver grammar is not wired in this codec
+      phase, while v2c community, system-location / system-contact and v3 USM
+      users are.  Recorded `unsupported` rather than `lossy` because the
+      record vanishes (#436).  Re-point trap receivers at the NMS by hand, or
+      the switch will go quiet after cutover.
+    references: [mikrotik-aoscx-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      Drifts on all 3 cells that populate SNMP, and the users SURVIVE as
+      records on every one — this is degradation, not a drop, which is why it
+      is `lossy` where `snmp.trap_hosts` is `unsupported`.  Two distinct
+      mechanisms were observed.  (1) Cryptographic downgrade: AOS-CX renders
+      SHA-1 auth and AES-128 privacy only, so a user configured with SHA-256
+      and AES-256 re-parses as sha / aes.  The target declares this on four
+      `/snmp/v3-user/*` paths and it reproduced exactly.  (2) Empty-passphrase
+      mis-tokenisation: where the source USM user carries no passphrase, the
+      rendered line leaves an empty slot after `auth-pass ciphertext`, the
+      parser's `(\S+)` capture swallows the FOLLOWING KEYWORD as the
+      passphrase, and the privacy clause then fails to match so the privacy
+      protocol is lost.  That second case produces a record that looks
+      populated but is not usable.  SNMPv3 users must be re-created on the
+      target with fresh credentials — they cannot be migrated.  No secret
+      value is reproduced here or in the reference doc.
+    references: [mikrotik-aoscx-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      A total drop on the one cell that populates it: both servers vanish and
+      the render emits no AAA line.  The target declares BOTH
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported ("Render emits no AAA radius-server config").  Recorded
+      `unsupported` rather than `lossy` because the records vanish (#436).
+      The shared secret is dropped with the host, so re-author RADIUS on the
+      AOS-CX side and re-key it — the secret is not recoverable from the
+      migration output.
+    references: [mikrotik-aoscx-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      A partial loss, verified by round-tripping
+      `tests/fixtures/synthetic/mikrotik_routeros/kitchen_sink.rsc`: 2 bundles
+      in, 2 bundles out, with both members attached to each.  Two things
+      drift and only one of them is a real loss.  The NAME drift (`bond1` ->
+      `lag 1`) is the cross-vendor naming artifact — see
+      `interfaces[].lag_member_of` for why `_canonical_lag_name` does not
+      collapse it — and carries no data loss.  The MODE drift is real: a
+      bundle configured LACP `active` re-parses as `static`.  The target
+      declares `/lags/lag/mode` lossy and gives the mechanism — the `lacp
+      mode` line is emitted only for a kind-`lag` interface present in the
+      tree, and here the bundle renders as `interface bond1` (a RouterOS
+      name), so there is no `interface lag 1` anchor to hang it on.  That is
+      the operationally dangerous half: an LACP bundle that silently becomes a
+      static bundle will not negotiate with a peer still running LACP.
+      The same render also splits the bundle's identity — `interface bond1`
+      holds the description and the bundle's IP address while the member ports
+      reference `lag 1`, so anchor and members disagree by name in the emitted
+      text.  Re-create the bundle as `interface lag <N>` with `lacp mode
+      active` explicitly before cutover.
+    references: [mikrotik-aoscx-surface]
+
+  # -- Identity -------------------------------------------------------------
+  #
+  # All three local_users keys drift for ONE reason — the record vanishes —
+  # so the cause is stated once below and cross-referenced.  They are not
+  # three independent findings.
+
+  "local_users[].name":
+    disposition: unsupported
+    reason: >
+      Every local account vanishes: 3 users in, 0 users out on the one cell
+      that populates them.  Proved by round-trip, and the mechanism is a
+      three-step interaction the target matrix does not predict.  (1) The
+      RouterOS parser sets `hashed_password` empty unconditionally — its own
+      comment records that `/export` omits hashes, so this source can never
+      carry a user secret.  (2) The AOS-CX renderer emits the SHORT form
+      `user <name> group <role>` when there is no stored secret, with no
+      password clause.  (3) The AOS-CX parser's user pattern REQUIRES the
+      password clause (`^user\s+(\S+)\s+group\s+(\S+)\s+password\s+ciphertext\s+(\S+)`),
+      so the short form matches nothing and the account is dropped.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      entirely (#436) — `lossy` warns and stays compatible, which would badly
+      understate "no accounts exist on the new switch".
+      Worth noting separately: the aruba_aoscx matrix declares `local_users`
+      SUPPORTED (three supported paths) while dropping every account from a
+      passwordless source.  That is a matrix under-declaration conditional on
+      the source carrying no secret — a codec change rather than something to
+      fix here.
+      Re-create every account on the target by hand before cutover.
+    references: [mikrotik-aoscx-surface]
+
+  "local_users[].role":
+    disposition: unsupported
+    reason: >
+      Drifts for exactly the same single reason as `local_users[].name` — the
+      whole user record is dropped on re-parse — and carries no independent
+      signal of its own.  Recorded separately because the key is declared
+      separately, not because it is a second finding.
+      One detail that matters if the record drop is ever fixed: the renderer
+      emits the canonical role verbatim as the AOS-CX group token (`group
+      admin`, `group operator`), not one of the AOS-CX group names
+      (administrators / operators / auditors), so the line would re-parse
+      cleanly and still need editing before a real switch accepts it.  The
+      target additionally declares `/local-users/user/privilege-level` lossy,
+      mapping administrators -> 15 and everything else -> 1.
+    references: [mikrotik-aoscx-surface]
+
+  "local_users[].hashed_password":
+    disposition: unsupported
+    reason: >
+      Drifts for the same single reason as `local_users[].name` — the record
+      vanishes — and NOT because of a hash-format incompatibility: RouterOS
+      `/export` omits password hashes entirely, so the source side of this key
+      is empty on every cell of the corpus.  There is no credential to
+      migrate, in either direction, on this pair.  Every account must be
+      created with a fresh password on the AOS-CX side.
+      AOS-CX stores user secrets as device-key ciphertext blobs with a
+      distinctive three-letter prefix; only the shape is described here and in
+      the reference doc, never the value — an encrypted secret is still
+      operator-traceable, and a document that quotes what it claims to redact
+      defeats its own redaction.
+    references: [mikrotik-aoscx-surface]
+
+  # -- Fabric ---------------------------------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: not_applicable
+    note: >
+      Source-side gap: mikrotik_routeros declares `/vxlan-vnis/vni`
+      unsupported, so no VNI record is ever created from this source and
+      nothing reaches the target.  aruba_aoscx SUPPORTS the VNI, so a fabric
+      re-authored on the AOS-CX side will hold it.  Trivially empty on all 5
+      cells — a branch RouterOS box is not a VTEP.
+    references: [mikrotik-aoscx-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: not_applicable
+    note: >
+      Source-side gap inherited from the anchor: with `/vxlan-vnis/vni`
+      unsupported on the source, no record exists to carry a VLAN binding.
+      aruba_aoscx does render the VLAN-to-VNI binding, so it is available on
+      the target if re-authored.
+    references: [mikrotik-aoscx-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: not_applicable
+    note: >
+      Source-side gap inherited from the same unsupported VNI anchor.  Unlike
+      `vlan_id`, this one would ALSO degrade if it ever were populated —
+      aruba_aoscx declares `/vxlan-vnis/mcast-group` lossy, emitting the VTEP
+      source and the per-VNI bindings but not the BUM-replication underlay.
+      Trivially empty on all 5 cells, so that stays a declaration.
+    references: [mikrotik-aoscx-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Neither codec declares anything for this field and no cell populates
+      it.  A branch RouterOS router is not an EVPN border-leaf, so the
+      canonical field stays empty on every cell of this pair.
+    references: [mikrotik-aoscx-surface]
+
+  anycast_gateway_mac:
+    disposition: not_applicable
+    note: >
+      Source-side gap: mikrotik_routeros declares `/anycast-gateway-mac`
+      unsupported, so the source intent never carries a fabric-wide anycast
+      MAC.  aruba_aoscx SUPPORTS it (`active-gateway ip mac`), so it is
+      available on the target if the distributed gateway is re-authored there.
+      Trivially empty on all 5 cells.
+    references: [mikrotik-aoscx-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell.  mikrotik_routeros declares nothing for raw
+      sections, so no unparsed block is carried across.  The target declares
+      `/system/raw-sections/version-banner` lossy — it synthesises its own
+      `!Version ArubaOS-CX` banner and service footer on render — but with no
+      source-side content there is nothing for that to degrade.
+    references: [mikrotik-aoscx-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair declares or populates it."
+    references: [mikrotik-aoscx-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair declares or populates it."
+    references: [mikrotik-aoscx-surface]

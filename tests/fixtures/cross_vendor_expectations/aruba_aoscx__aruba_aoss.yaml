@@ -1,0 +1,598 @@
+# Cross-vendor fidelity expectations: aruba_aoscx -> aruba_aoss
+#
+# Source: aruba_aoscx codec — ArubaOS-CX `show running-config` text.
+# Target: aruba_aoss codec — ArubaOS-Switch (ProVision lineage) CLI render.
+#
+# The one SAME-VENDOR, CROSS-GENERATION pair in the aruba_aoscx mesh, and it
+# runs in the harder direction.  AOS-CX is the modern campus/DC switch (`1/1/x`
+# ports, `lag N` bundles, VSX active-gateway, VRFs, VXLAN); AOS-S is the legacy
+# campus L2/L3 switch (`trkN` trunks, a two-level manager/operator privilege
+# model, no VRF, no VXLAN).  The realistic migration is a DOWNGRADE — an AOS-CX
+# config re-homed onto surviving AOS-S hardware during a staged refresh — so the
+# campus L2 edge survives almost completely while everything AOS-CX gained over
+# AOS-S is dropped whole.
+#
+# The dominant structural effect is the same as on every aruba_aoscx pair: the
+# interface record list shrinks on all 7 cells, so EVERY `interfaces[].*`
+# sub-field is measured as drifted and declaring any of them `good` would
+# manufacture a false CODEC_BUG.  What differs here is WHICH records vanish —
+# no physical port is ever dropped.  The 49 lost records are 34 `lag N` bundle
+# pseudo-interfaces, 10 `loopback N` and 5 `mgmt`; 18 SVIs are renamed
+# (`vlan 101` -> `Vlan101`) rather than dropped.  Because that one cause is
+# shared, the reasons below say per key whether it ALSO fails on records that
+# survive, instead of citing the eight sibling keys as if they corroborated
+# each other.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and a
+# full `run_full_mesh.py` pass over the committed corpus (7 fixture cells, 0
+# render errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree.  Claims
+# that go beyond the mesh counters were re-measured by running
+# `aruba_aoss.parse(aruba_aoss.render(aruba_aoscx.parse(raw)))` over all seven
+# cells and diffing record by record.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoscx_to_aruba_aoss/
+#
+# Authored 2026-08-25 as part of the aruba_aoscx expectation mesh (A6 wave 2).
+
+meta:
+  source_vendor: aruba_aoscx
+  target_vendor: aruba_aoss
+  primary_use_case: >
+    Staged-refresh downgrade: an ArubaOS-CX campus switch re-homed onto
+    ArubaOS-Switch hardware carrying the same VLANs, VLAN port membership, SVI
+    addressing and uplink bundles.  The campus L2 edge is the strong surface —
+    hostname, VLAN IDs, VLAN names, tagged and untagged port membership, static
+    routes, SNMP scalars and usernames all survive.  What does not is
+    everything AOS-CX models and AOS-S does not: VRFs, VXLAN and the anycast
+    gateway are dropped whole; loopbacks disappear; jumbo MTU, IPv6 addressing
+    and a shut SVI's admin state are lost on records that otherwise survive;
+    and the encrypted user secret is re-typed as a cleartext password.
+  certainty: medium
+  references:
+    - id: aoscx-aoss-surface
+      path: docs/vendor-references/aruba_aoscx_to_aruba_aoss/canonical_surface.md
+      title: "AOS-CX -> AOS-S: measured canonical surface (7 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars ---------------------------------------------
+  #
+  # Three different things produce an empty scalar here and the operator action
+  # differs for each, so they are recorded differently.  A SOURCE-side gap
+  # (aruba_aoscx declares the path unsupported, target supports it) is
+  # `not_applicable` and re-authoring on the target will stick.  A SYMMETRIC gap
+  # (both matrices declare it unsupported) is `unsupported` — nothing in the
+  # migration will ever carry it.
+
+  hostname:
+    disposition: good
+    note: >
+      `hostname <name>` on both platforms; preserved on 7 of 7 cells, including
+      the mixed-case and hyphenated forms in the committed corpus.
+    references: [aoscx-aoss-surface]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: BOTH matrices declare `/system/domain` unsupported — the
+      aruba_aoss reason is "Render emits no system domain-name; intent.domain is
+      dropped on migration", and aruba_aoscx never parses one to begin with.  No
+      committed cell populates the field.  Set the domain name on the target by
+      hand; no part of this migration carries it.
+    references: [aoscx-aoss-surface]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/system/dns-server` unsupported, so
+      nothing reaches the target.  aruba_aoss declares it SUPPORTED, so
+      re-authoring name-servers on the AOS-S side will stick — worth doing by
+      hand as part of the cutover rather than assuming the field is unavailable.
+    references: [aoscx-aoss-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap, same shape as `dns_servers`: aruba_aoscx declares
+      `/system/ntp-server` unsupported while aruba_aoss declares it SUPPORTED.
+      Re-author the NTP peers on the target.
+    references: [aoscx-aoss-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/system/timezone` unsupported
+      (aruba_aoss: "Render emits no clock/timezone stanza; intent.timezone is
+      dropped on migration").  Neither codec parses nor renders a clock stanza,
+      so this is a pair-wide blind spot rather than an AOS-S limitation.  Set the
+      timezone on the target by hand.
+    references: [aoscx-aoss-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/system/syslog-server` unsupported
+      (aruba_aoss: "Render emits no logging/syslog config; intent.syslog_servers
+      are dropped on migration").  Unlike `dns_servers` and `ntp_servers`, there
+      is no target-side declaration to fall back on, so logging hosts must be
+      re-authored outside the migration entirely.
+    references: [aoscx-aoss-surface]
+
+  # -- Interfaces -- the structural loss on this pair ------------------------
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      The interface record list shrinks on all 7 cells (9->5, 9->5, 18->11,
+      42->35, 22->17, 44->27, 13->8).  Measured by re-running the round trip and
+      diffing record by record, the 49 lost records are exactly three kinds and
+      NO physical port is among them: 34 `lag N` bundle pseudo-interfaces, 10
+      `loopback N`, and `mgmt` on 5 of 7 cells.  A further 18 SVI records are
+      renamed rather than dropped (`vlan 101` -> `Vlan101`), which the
+      name-keyed comparator sees as one record leaving and another arriving.
+      Only the loopbacks are an unambiguous loss — the bundles reappear as
+      `trunk ... trkN lacp` lines and the SVI is re-mounted from the VLAN record.
+      On a routed leaf or spine the loopback is the BGP router-id and
+      update-source, so re-author loopbacks and `mgmt` on the target explicitly.
+    references: [aoscx-aoss-surface]
+
+  "interfaces[].description":
+    disposition: lossy
+    reason: >
+      Both matrices declare `/interfaces/interface/config/description` supported
+      and 96 of the 108 surviving records agree.  The 12 that do not are ALL SVI
+      records: AOS-S re-mounts the SVI from the VLAN record, so the SVI's own
+      description is replaced by the VLAN name (measured: `PROD-WEB-SVI` ->
+      `PROD-WEB`).  Physical-port descriptions survive intact.  Capture SVI
+      descriptions before migrating; port descriptions need no action.
+    references: [aoscx-aoss-surface]
+
+  "interfaces[].enabled":
+    disposition: lossy
+    reason: >
+      This is the most dangerous change on the pair and it is NOT the
+      record-count effect.  Of the 108 surviving records, 16 disagree on admin
+      state and every one of them moves the same way — `False` -> `True`.  All 16
+      are SVI records: an SVI deliberately left `shutdown` on AOS-CX arrives
+      administratively UP on AOS-S, because the re-mounted SVI is synthesised
+      from the VLAN record and carries no admin state with it.  A fail-open.
+      Diff admin state on every SVI before committing the target config.
+    references: [aoscx-aoss-surface]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      An independent loss, not the record-count effect: 50 of the 108 surviving
+      records disagree, and all 50 are the same transition on a physical port —
+      MTU `9198` arrives unset.  Every jumbo-framed uplink in the corpus silently
+      reverts to the target default.  Note the aruba_aoss matrix declares NOTHING
+      for `/interfaces/interface/config/mtu` — not supported, not lossy, not
+      unsupported — while dropping it on every record; that is a matrix
+      under-declaration recorded here and left for a codec change.  Re-apply
+      jumbo MTU on every uplink after cutover.
+    references: [aoscx-aoss-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Declared supported on both sides at `/interfaces/interface/ipv4/address/ip`
+      + `prefix-length`, and all 31 addresses on surviving records round-trip
+      intact — so this key carries NO independent failure and is lossy purely
+      because it rides a record list that lost coherence (see
+      `interfaces[].name`).  Stated that way rather than implied.  One caveat
+      from the declarations rather than an observation: aruba_aoss declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address` unsupported,
+      so an interface-mounted anycast companion would drop — no committed cell
+      exercises that mount, the VLAN-mounted twin does (see
+      `vlans[].ipv4_addresses`).
+    references: [aoscx-aoss-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      An independent, total loss: the corpus carries 2 interface IPv6 addresses
+      and the target intent carries 0.  Both sit on SVI records that otherwise
+      survive, and the AOS-S VLAN render emits only an `ip address` line, so the
+      v6 address has nowhere to go even though aruba_aoss declares
+      `/interfaces/interface/ipv6/address/ip` SUPPORTED.  Any dual-stack SVI must
+      be re-addressed by hand on the target.
+    references: [aoscx-aoss-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      All 108 surviving records agree on the inferred type, so this key carries
+      no independent failure — it is lossy solely because the parent record list
+      lost coherence on all 7 cells.  Worth knowing WHY it still agrees:
+      aruba_aoss declares `/interfaces/interface/config/type` lossy and infers
+      the type from the name shape (bare number -> ethernet, `Trk` ->
+      port-channel, `Vlan` -> l3ipvlan), which happens to reproduce the AOS-CX
+      value on every surviving record in this corpus.  Do not read that as a
+      guarantee for names outside those three shapes.
+    references: [aoscx-aoss-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      44 of the 108 surviving records disagree, and every difference is the same
+      rename: `lag 1` -> `trk1`.  The membership itself is intact — no port loses
+      its bundle.  `tools/run_phase4_reconciliation.py::_canonical_lag_name`
+      exists to forgive exactly this class of rename on this key, but its regex
+      accepts `trk<N>` and not AOS-CX's native `lag <N>` spelling with the space,
+      so the pair falls through to raw equality; and in any case the parent
+      record list drifts on all 7 cells, which forces every sub-field drifted
+      regardless of the equivalence.  Treat this as a naming-shape finding, not
+      lost membership.
+    references: [aoscx-aoss-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      A source-side block, and total: aruba_aoscx declares the whole
+      `/interfaces/interface/vrrp-groups/group/*` subtree unsupported — mode,
+      priority, preempt, advertisement-interval, authentication, description and
+      virtual-ipv6s — because AOS-CX expresses first-hop redundancy as VSX
+      active-gateway rather than VRRP.  Measured: no committed AOS-CX cell yields
+      a single VRRP group, so nothing reaches the target to degrade.  Recorded
+      `unsupported` rather than `lossy` because a vanished record is not lossy
+      (#436).  The good news is that the block is on the SOURCE side —
+      aruba_aoss declares `/interfaces/interface/vrrp-groups/group` SUPPORTED, so
+      re-authoring VRRP on the target will stick, and it is the natural
+      replacement for the anycast gateway this pair also loses.
+    references: [aoscx-aoss-surface]
+
+  # -- VLANs -- the campus surface that mostly survives ----------------------
+
+  "vlans[].id":
+    disposition: good
+    note: "VLAN IDs preserved on 7 of 7 cells."
+    references: [aoscx-aoss-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      Preserved on 7 of 7 cells — a genuine same-vendor advantage.  The VLAN
+      name survives against `arista_eos` on only 5 of 7 because that render
+      normalises it; the AOS-S `vlan <id> / name "<name>"` form takes it
+      verbatim.
+    references: [aoscx-aoss-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Drifts on all 5 cells that populate it, and the measured difference is the
+      same every time across 15 address records: the SVI's own address and
+      prefix survive intact, and the `virtual_gateway_address` companion is
+      emptied (e.g. `10.12.101.2/24` keeps its address and loses gateway
+      `10.12.101.1`).  aruba_aoss declares both
+      `/vlans/vlan/ipv4/address/virtual-gateway-address` and `.../virtual-
+      gateway-mac` unsupported — "AOS-S is a campus L2/L3 codec with no
+      anycast-gateway / VARP grammar" — which matches the measurement exactly.
+      The SVI arrives with its own address but no shared first-hop gateway, so
+      this is the field most likely to break first-hop reachability at cutover:
+      rebuild FHRP on the target (VRRP is declared supported there).
+      aruba_aoss additionally declares `/vlans/vlan/ipv4/address/secondary-ip`
+      lossy — the address value survives but the is_secondary flag drops.  No
+      committed cell carries a secondary, so that half is a declaration, not an
+      observation.
+    references: [aoscx-aoss-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Preserved on 7 of 7 cells — untagged membership survives against AOS-S
+      where it fails against every non-Aruba target, because AOS-S carries port
+      membership on the VLAN record (`vlan <id> / untagged <ports>`) exactly as
+      AOS-CX's canonical form does.  Read the `good` narrowly, though: the token
+      LISTS are preserved verbatim, including AOS-CX-style `lag N` members, while
+      the same render names those bundles `trkN` on its `trunk` lines.  Measured:
+      63 member tokens across the 7 cells name a bundle that does not exist in
+      the target's own LAG list.  Port-to-VLAN membership on physical ports is
+      safe; LAG-attached membership needs re-authoring despite this disposition.
+    references: [aoscx-aoss-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Preserved on all 5 cells that populate it (2 cells carry no trunk
+      membership at all).  Same mechanism and the same `lag N` / `trkN` caveat as
+      `vlans[].untagged_ports`.
+    references: [aoscx-aoss-surface]
+
+  "vlans[].description":
+    disposition: lossy
+    reason: >
+      Drifts on the 4 cells that populate it — 6 records, every one going to
+      empty (measured: `Server VLAN` -> ``, `User access VLAN` -> ``,
+      `Out-of-band management` -> ``).  aruba_aoss declares
+      `/vlans/vlan/description` LOSSY rather than unsupported and the reason
+      names the mechanism: "Render emits the VLAN name but not a separate
+      description line".  Recorded lossy to match — the VLAN record and its name
+      survive, only the separate description field empties, so this is a
+      degradation inside a surviving record and not a vanished record (#436).
+      Nothing forwards differently, but on a campus switch the description is
+      routinely how a VLAN is tied to a department or a site, so capture it
+      before migrating.
+    references: [aoscx-aoss-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on both cells that populate it (3 routes total).  Destination,
+      gateway and administrative distance all survive — including the one route
+      carrying a non-default metric of 200, which is notable because aruba_aoss
+      declares `/routing/static-route/metric` lossy ("Render emits destination +
+      next-hop only").  On this corpus the declared loss does not fire.  Two
+      caveats that rest on declarations rather than observations, because no
+      committed route exercises them: `/routing/static-route/description` is
+      declared lossy on BOTH sides, and `/routing/static-route/vrf` is declared
+      unsupported on both — a per-VRF static route would lose its VRF binding on
+      top of the whole-VRF drop recorded under `routing_instances[].name`.
+    references: [aoscx-aoss-surface]
+
+  "routing_instances[].name":
+    disposition: unsupported
+    reason: >
+      A total drop, verified against the round trip rather than inferred from the
+      drift shape: on all 3 cells that carry VRFs, both instances are gone from
+      the re-parsed target (measured "all 2 routing_instances dropped" on each,
+      e.g. `CSM` and `keepalive` -> nothing).  aruba_aoss declares
+      `/routing-instances/instance` unsupported — "Render emits no
+      VRF/routing-instance construct; intent.routing_instances are dropped on
+      migration".  Recorded `unsupported` not `lossy` because a vanished record is
+      not lossy (#436): `lossy` warns and stays compatible, which would badly
+      understate a config losing its entire VRF separation.  Anything relying on
+      VRF isolation must be redesigned before this migration, not fixed after it.
+    references: [aoscx-aoss-surface]
+
+  "routing_instances[].description":
+    disposition: unsupported
+    reason: >
+      Blocked on both sides independently.  aruba_aoscx declares
+      `/routing-instances/instance/description` unsupported, so the source never
+      emits one; and aruba_aoss drops the entire enclosing instance anyway (see
+      `routing_instances[].name`).  The key measures as drifted only because the
+      parent record list vanishes on those 3 cells — that is correlated with the
+      instance drop, not independent evidence of a description-specific loss.
+      Two causes, one disposition, and neither is fixable inside the migration.
+    references: [aoscx-aoss-surface]
+
+  # -- Services -------------------------------------------------------------
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/dhcp-servers/pool` unsupported
+      (aruba_aoss: "Render emits no DHCP server pool; intent.dhcp_servers are
+      dropped on migration").  No committed cell populates it — a campus switch
+      of either generation relays DHCP rather than serving it — so this is a
+      declaration-level statement, not an observed drop.
+    references: [aoscx-aoss-surface]
+
+  "snmp.community":
+    disposition: good
+    note: >
+      No drift on any of the 4 cells that populate an SNMP block.  Be precise
+      about what that means: only 1 of those 4 cells actually carries a community
+      string, and it round-trips; on the other 3 both sides agree the field is
+      empty.  Both matrices declare `/snmp/community` supported.
+    references: [aoscx-aoss-surface]
+
+  "snmp.location":
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate an SNMP block; 3 of them carry an
+      actual location string and it round-trips through
+      `snmp-server location "<value>"` intact.
+    references: [aoscx-aoss-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate an SNMP block; 3 carry an actual
+      contact string and it round-trips through `snmp-server contact "<value>"`
+      intact.
+    references: [aoscx-aoss-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: >
+      No drift on any of the 4 cells that populate an SNMP block — but this
+      `good` records agreement, not migration.  aruba_aoscx declares
+      `/snmp/trap-host` UNSUPPORTED as a source path, so the canonical trap-host
+      list is empty on every committed cell and both sides trivially agree.
+      aruba_aoss declares `/snmp/trap-host` supported, so trap destinations
+      re-authored on the target will stick; they will simply never arrive from an
+      AOS-CX source.
+    references: [aoscx-aoss-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      Drifts on 1 of the 4 cells that populate SNMP, and the measured difference
+      is narrow: the privacy-protocol designation changes from a bare `aes` to
+      `aes128` on re-parse.  Everything else about the USM user survives — the
+      username, the auth protocol, the presence of both passphrases, the
+      engine-id state and the group.  aruba_aoss declares
+      `/snmp/v3-user/priv-protocol` lossy for exactly this ("emits aes128 as bare
+      `aes`, losing the key-length designation, and has no representation for
+      aes192 / aes256") plus `/snmp/v3-user/engine-id` and `.../auth-protocol`.
+      aruba_aoscx additionally declares 6 `/snmp/v3-user/*` child paths lossy on
+      the source side, so a v3 user with sha224/384/512 auth or aes192/256
+      privacy — none in this corpus — would degrade further.  The passphrases
+      themselves are blanked by the audit as cosmetic before comparison and are
+      not evidence either way; re-create SNMPv3 users on the target rather than
+      trusting the migration with credential material.
+    references: [aoscx-aoss-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares both `/radius-servers/server/host`
+      and `/radius-servers/server/key` unsupported and no committed cell
+      populates the field, so nothing reaches the target.  aruba_aoss declares
+      nothing for the path either way, so there is no target-side statement to
+      lean on — re-author RADIUS on the AOS-S side and verify it by hand.
+    references: [aoscx-aoss-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      Drifts on all 7 cells, but the round trip shows two very different causes
+      and only one is a real loss.  On 6 of 7 cells the ONLY difference is the
+      name — `lag 1` -> `trk1` — with members and LACP mode identical; the
+      reconciler's `_canonical_lag_name` is built to forgive that class of rename
+      but its regex accepts `trk<N>` and not AOS-CX's native `lag <N>` spelling
+      with the space, so it falls through to raw equality.  The 7th cell
+      (`kitchen_sink.cfg`) is genuine: a memberless `lag 2` with `mode static`
+      disappears and the count drops 2 -> 1, because the AOS-S render keys off
+      `CanonicalInterface.lag_member_of` and a bundle with no member port has
+      nothing to render from.  Recorded `lossy` and not `unsupported` because
+      bundles that carry members do survive, with members and mode intact — this
+      warns without blocking, correctly.  Two things to do at cutover anyway:
+      re-create any bundle that is currently memberless, and re-point VLAN
+      membership, which the same render still writes as `lag N` (see
+      `vlans[].untagged_ports`).
+    references: [aoscx-aoss-surface]
+
+  # -- Identity -------------------------------------------------------------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Usernames preserved on all 6 cells that populate local users, including
+      the 2-user cell.  Note that the aruba_aoss matrix declares NOTHING for
+      `/local-users/*` — no supported, lossy or unsupported path — while plainly
+      rendering the accounts; this `good` rests on the measurement, not on a
+      target declaration.  The under-declaration is recorded in the reference
+      note and left for a codec change.
+    references: [aoscx-aoss-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on all 6 cells that populate local users, as a consistent
+      re-mapping rather than a drop: `administrators` -> `manager` and
+      `operators` -> `operator`.  The account keeps a privilege level; the
+      canonical string changes to the AOS-S two-level vocabulary, which is why
+      this is lossy (warns, stays compatible) and not unsupported.  Verify the
+      mapping if any source account carries a role outside those two — the
+      aruba_aoss matrix declares nothing at all for `/local-users/*`, so there is
+      no declared behaviour to fall back on.  aruba_aoscx separately declares
+      `/local-users/user/privilege-level` lossy on the source side.
+    references: [aoscx-aoss-surface]
+
+  "local_users[].hashed_password":
+    disposition: lossy
+    reason: >
+      Drifts on all 6 cells that populate local users, and the failure mode is
+      worse than a drop.  AOS-CX stores the user secret in its own encrypted
+      form — an `AQB`-prefixed ciphertext blob, 184 characters on each of the
+      four real-capture fixtures that carry one (the sanitised and synthetic
+      cells carry short placeholders and behave identically).  The AOS-S render
+      emits the value as `password manager user-name "<user>" plaintext
+      "<secret>"`, and the re-parse returns it tagged `plaintext:`.  Nothing is
+      lost; the secret is RE-TYPED as a literal cleartext password.  Two
+      consequences: no migrated account authenticates with its original password,
+      because the target now treats the ciphertext as the password string itself;
+      and the rendered config carries the source's encrypted secret on a line
+      marked plaintext, so treat any AOS-S render from an AOS-CX source as
+      secret-bearing.  Set passwords on the target by hand before cutover.
+      The ciphertext is deliberately NOT quoted here — only its prefix marker and
+      length class — because it is operator-traceable key material even encrypted.
+    references: [aoscx-aoss-surface]
+
+  # -- Fabric -- everything AOS-CX has and AOS-S does not --------------------
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      A total drop, verified on the round trip: on all 3 cells that carry VXLAN
+      the entire VNI list is gone from the re-parsed target (measured "all 1
+      vxlan_vnis dropped" and "all 2 vxlan_vnis dropped").  aruba_aoss declares
+      `/vxlan-vnis/vni` unsupported with the plainest reason in either matrix —
+      "VXLAN not modelled — AOS-S is a campus L2/L3 codec".  Recorded
+      `unsupported` rather than `lossy` because a vanished record is not lossy
+      (#436).  There is no AOS-S-side re-authoring that recovers this; an
+      overlay-carrying AOS-CX switch cannot be re-homed onto AOS-S without a
+      design change.
+    references: [aoscx-aoss-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: unsupported
+    reason: >
+      Vanishes with its parent record on the same 3 cells — the VNI-to-VLAN
+      binding cannot survive when the VNI record does not.  Same declaration and
+      the same total-drop measurement as `vxlan_vnis[].vni`; this is correlated
+      with that drop rather than independent evidence of a binding-specific loss.
+      The VLAN itself survives (see `vlans[].id`); only its overlay association
+      is gone.
+    references: [aoscx-aoss-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: unsupported
+    reason: >
+      Also vanishes with the parent record.  Stated precisely because it is easy
+      to over-read: the one committed VNI that reaches this pair carries an EMPTY
+      multicast replication group, so no group value has ever been observed to
+      drop — the key measures as drifted purely because the enclosing record is
+      dropped whole.  aruba_aoscx declares `/vxlan-vnis/mcast-group` lossy on the
+      source side; that declaration is untested on this corpus.
+    references: [aoscx-aoss-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair, and neither codec declares any path
+      under it.  A campus AOS-CX switch is not an EVPN border-leaf and AOS-S has
+      no overlay surface at all, so the canonical field stays empty on both
+      sides.
+    references: [aoscx-aoss-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      A total drop on all 5 cells that set it — the fabric-wide MAC goes to empty
+      (measured, e.g. an `02:00:0a:...`-shaped value -> ``).  aruba_aoss declares
+      `/anycast-gateway-mac` unsupported: "System-wide anycast-gateway MAC
+      parses-and-ignores in v1.  Schema exists on CanonicalIntent; wire-up
+      scheduled for v0.2.0 Wave C."  Recorded `unsupported` because the value
+      vanishes rather than degrades (#436).  Worth contrasting with the
+      `arista_eos` pair, where this MAC survives while the per-SVI gateway
+      address does not: against AOS-S BOTH halves of the anycast gateway are
+      lost, this key and the `virtual_gateway_address` under
+      `vlans[].ipv4_addresses`.  Plan a VRRP replacement — aruba_aoss declares
+      `/interfaces/interface/vrrp-groups/group` supported — rather than expecting
+      any part of the active-gateway design to carry over.
+    references: [aoscx-aoss-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair.  aruba_aoscx declares
+      `/system/raw-sections/version-banner` lossy, but no committed AOS-CX
+      fixture carries an unparsed block that survives to render, and aruba_aoss
+      declares nothing under the path.
+    references: [aoscx-aoss-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoscx-aoss-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoscx-aoss-surface]
