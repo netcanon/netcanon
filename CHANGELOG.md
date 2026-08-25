@@ -40,6 +40,18 @@ timestamp if your timezone matters for an audit.
   bundle, the same bundle rebuild also re-resolves the Caddy and socket-proxy
   digests, which had drifted two months stale.
 
+### Fixed
+
+- **The landing page claimed a demo bundle two versions older than the one
+  deployed.**  `site/index.html` read `demo-v0.1.3 - deployed 2026-07-28`
+  while the host has run `demo-v0.1.4` since 2026-08-01 and `demo-v0.1.5`
+  since 2026-08-25.  Nothing ties the page's version claim to the deployed
+  bundle, so it went stale silently -- the page's other claims (the printed
+  serve commands, the capability-matrix excerpt) each have a guard in
+  `tests/demo/test_demo_docs_truth.py`, but the version line has none.
+  The date now matches what `make whitepaper` stamps (`date -u`), so
+  `/whitepaper` and the landing page agree.
+
 ## [0.6.3] - 2026-08-24
 
 ### Added
