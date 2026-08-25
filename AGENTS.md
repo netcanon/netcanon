@@ -319,8 +319,12 @@ tests use these exclusively — never CSS classes or element structure.  See
   Code Scanning outage alone was sufficient to ship an unsigned release
   (#441).  Note `if: always()` does NOT make a step non-fatal — it governs
   whether the step RUNS after an earlier failure, not whether its own
-  failure propagates.  Guarded by
-  `tests/unit/test_docker_publish_signing_window.py`.
+  failure propagates.  This rule is GENERAL, not about one file:
+  `demo-publish.yml` had drifted into all three violations while the
+  guard named only `docker-publish.yml`, so nothing caught it.  Guarded
+  by `tests/unit/test_docker_publish_signing_window.py`, which is
+  parametrised over both workflows — add any new publishing workflow to
+  its `_CASES` table in the same PR that creates it.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts
