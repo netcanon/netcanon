@@ -1,0 +1,730 @@
+# Cross-vendor fidelity expectations: vyos -> cisco_iosxr
+#
+# Source: vyos codec — curly-brace `config.boot` (set-form input is converted
+#         to brace form via `_setform_to_brace` before parsing).
+# Target: cisco_iosxr codec — IOS-XR `show running-config` text render.
+#
+# Asymmetric by device class.  `vyos` in the committed corpus is a Linux
+# SOFTWARE ROUTER — `ethN` NICs, `ethN.NNN` dot1q sub-interfaces, `bondN`
+# aggregates, `dumN` and `lo` — captured as lab/CI gateways, a small-site edge
+# and one synthetic kitchen-sink.  `cisco_iosxr` is a service-provider
+# edge/core router.  The realistic migration is a software router promoted onto
+# SP iron, so the shared surface is the routed edge — interface names,
+# descriptions, admin state, IPv4/IPv6 addressing, static routes, VRF identity,
+# local-user identity — and NOT the overlay or the management plane.
+#
+# THE STRUCTURAL HEADLINE, stated once so no key has to re-argue it: the
+# interface inventory is FULLY PRESERVED.  55 interface records in, 55 out,
+# identical name sets on all 13 cells.  Nothing in the `interfaces[]` block
+# below is correlated drift — every interface loss stands on its own
+# measurement, and every interface sub-field that survives is `good` on merit
+# rather than dragged down by a vanishing parent.
+#
+# Exactly THREE structural changes happen on this pair, and each is claimed
+# once, on the identity key of its list:
+#   * `vxlan_vnis`  — 1 record on each of 3 cells drops to 0   -> unsupported
+#   * `snmp`        — the whole block drops to None on 4 cells -> unsupported
+#   * `vlans`       — the target GAINS 2 records on 1 cell     -> lossy
+# Everything else that drifts is a per-attribute drift: the fabricated
+# `interface_type` hint, the `bond0` -> `Bundle-Ether0` LAG rename (ONE
+# mechanism spanning two keys), and one NTP cell whose drift is a source-side
+# parse artifact.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
+# a full `run_full_mesh.py` pass over the committed corpus (13 fixture cells,
+# 0 render errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree.  Every
+# loss recorded below was additionally re-derived by hand, by parsing the
+# fixture with vyos, rendering with cisco_iosxr and re-parsing the render —
+# not inferred from the drift shape.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/vyos_to_cisco_iosxr/
+#
+# Authored 2026-08-25, closing the last blind codec pair in the mesh audit.
+
+meta:
+  source_vendor: vyos
+  target_vendor: cisco_iosxr
+  primary_use_case: >
+    A VyOS software router re-homed onto a Cisco IOS-XR platform carrying the
+    same routed edge.  Hostname, domain, DNS servers, the full interface
+    inventory with its descriptions, admin state, MTU and IPv4/IPv6
+    addressing, static routes, the VRF and every local-user account with its
+    role and password hash all survive.  What does not is the whole SNMP
+    block (dropped outright, communities and SNMPv3 USM users with it), the
+    VXLAN overlay (dropped outright), the DHCP-client addressing method on
+    WAN ports, and the identity of the LAG — which arrives renamed
+    `Bundle-Ether0` while the interface holding its addressing is still
+    called `bond0`.  The rendered `username` lines additionally label each
+    hash with the IOS-XR type-0 (cleartext) marker; set passwords on the
+    target before cutover.
+  certainty: medium
+  references:
+    - id: vyos-iosxr-surface
+      path: docs/vendor-references/vyos_to_cisco_iosxr/canonical_surface.md
+      title: "VyOS -> Cisco IOS-XR: measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- management-plane scalars ------------------------------------
+
+  hostname:
+    disposition: good
+    note: >
+      `hostname <name>` on both platforms; preserved on 13 of 13 cells, zero
+      drift.  Both matrices declare `/system/hostname` supported.
+    references: [vyos-iosxr-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on the single cell that populates it
+      (`scottlaird-vyos-parser.conf`); the other 12 carry no domain.  Worth
+      stating precisely: vyos declares `/system/domain` supported but
+      cisco_iosxr declares NO path for it at any level, so this `good` rests
+      on the measured round-trip alone, not on a target declaration.  The
+      render emits `domain name <value>` and the re-parse recovers it intact.
+    references: [vyos-iosxr-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Preserved on the single cell that populates it — three name-servers in,
+      the same three out, in order.  Both matrices declare
+      `/system/dns-server` supported; the render emits one
+      `domain name-server <ip>` line per entry.  One populated cell is thin
+      coverage and the declaration carries the rest of the weight.
+    references: [vyos-iosxr-surface]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Drifts on exactly 1 of 13 cells
+      (`houdev_vyos_dhcpv6_pd_client.conf`), and the cause is a SOURCE-side
+      parse artifact rather than an IOS-XR drop.  That fixture writes its
+      servers with an inline empty brace block —
+      `server         time1.vyos.net { }` — and the vyos brace parser carries
+      the whole remainder into the canonical value, so the source list is
+      `['time1.vyos.net { }', …]`.  The IOS-XR render emits the value
+      verbatim and its NTP line regex captures only the first token, so the
+      target list is the clean `['time1.vyos.net', …]`.
+      All three server hostnames survive; what disappears is the trailing
+      ` { }` token, and the target value is the usable one.  Recorded `lossy`
+      rather than waved through because the audit compares strings and a real
+      value difference exists on that cell — but the punctuation is what
+      changed, not the content, and no operator-authored server was lost.
+      The other 11 populated cells round-trip byte-exact.  Both matrices
+      declare `/system/ntp-server` supported.
+    references: [vyos-iosxr-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than an IOS-XR limitation — neither
+      codec parses nor renders a clock/timezone stanza, and cisco_iosxr says
+      so outright ("Render emits no clock/timezone stanza; intent.timezone is
+      dropped on migration").  No committed cell populates it, so the gap is
+      declared rather than observed.  Set the timezone on the target by hand.
+    references: [vyos-iosxr-surface]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares `/system/syslog-server` unsupported, so
+      logging hosts never enter the canonical tree from this source and
+      nothing reaches the target.  Measured empty on all 13 cells.
+      cisco_iosxr declares `/system/syslog-server` SUPPORTED, so re-authoring
+      logging on the IOS-XR side will stick — the migration report should say
+      that rather than implying the target cannot hold it.
+    references: [vyos-iosxr-surface]
+
+  # -- Interfaces -- inventory intact, three attributes affected -------------
+  #
+  # The measured record count is the headline: 55 interface records across the
+  # 13 cells, 55 after parse -> render -> re-parse, with identical name sets on
+  # every cell.  VyOS `ethN`, `ethN.NNN` dot1q sub-interfaces, `bondN`, `dumN`
+  # and `lo` all survive the IOS-XR render verbatim (the mesh renders without
+  # port translation, so names cross unrenamed rather than being re-shaped into
+  # IOS-XR 4-segment form).  Nothing below is a knock-on effect of a vanishing
+  # parent record — each entry was measured on its own.
+  #
+  # Two further interface sub-fields DO drift and are deliberately not claimed
+  # here, because the audited key set has no key for them: `dhcp_client`
+  # (True -> False on 3 records) and `dhcp_client_v6` (`dhcpv6` -> empty on 1).
+  # The IOS-XR render emits no address line for a DHCP-addressed port, so those
+  # interfaces arrive with a name and no addressing method.  Measured, recorded
+  # in the reference doc, and NOT turned into an unevidenceable YAML key.
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Preserved on 13 of 13 cells: 55 source interface records, 55 after
+      parse -> render -> re-parse, identical name sets on every cell.  The
+      IOS-XR render does not collapse `ethN.NNN` dot1q sub-interfaces, does
+      not drop `dumN` or `lo`, and does not renumber `bondN`.  Both matrices
+      declare `/interfaces/interface/name` supported.
+    references: [vyos-iosxr-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Zero drift on 55 of 55 records; 15 of them carry a description and all
+      15 round-trip byte-exact.  Both matrices declare
+      `/interfaces/interface/config/description` supported.  Note that the
+      vyos double-quote rewrite (embedded `"` replaced with `'`, per
+      vyos.dev/T1246) is a vyos-as-TARGET behaviour and does not apply here —
+      vyos is the source on this pair, and the IOS-XR render neither adds nor
+      strips quoting.
+    references: [vyos-iosxr-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on 55 of 55 records — zero differing.  53 are up
+      and 2 are `shutdown`; both shut ports arrive shut on the target,
+      rendered as a ` shutdown` line inside the interface stanza.  Both
+      matrices declare `/interfaces/interface/config/enabled` supported.
+    references: [vyos-iosxr-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on 55 of 55 records.  MTU is actually populated on exactly 1
+      of them (`kitchen_sink.conf` `eth0`, 1500) and it round-trips
+      unchanged.  Both matrices declare `/interfaces/interface/config/mtu`
+      supported, so the declaration carries most of the weight here — one
+      populated record is thin coverage, but the measurement is clean.
+    references: [vyos-iosxr-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on 55 of 55 records: 20 IPv6 addresses in, 20 out, address
+      and prefix-length intact.  Both matrices declare
+      `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
+      supported.
+    references: [vyos-iosxr-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on 55 of 55 records: 21 IPv4 addresses in, 21 out.  The
+      IOS-XR render emits dotted-mask form (`ipv4 address 10.10.10.1
+      255.255.255.0`) and the re-parse converts it back to prefix-length
+      without loss.  Both matrices declare
+      `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
+      supported.  This is the field the migration most depends on and it is
+      clean.
+    references: [vyos-iosxr-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The widest drift on the pair — all 55 records on all 13 cells — and it
+      runs in the GAIN direction, which is worth stating plainly because the
+      opposite reading is the intuitive one.
+      The SOURCE value is the empty string on all 55 records: the vyos parser
+      never populates `interface_type` (the strings `interface_type` and
+      `ianaift` do not appear anywhere in
+      `netcanon/migration/codecs/vyos/*.py`).  The TARGET value is
+      `ianaift:other` on all 55: `cisco_iosxr/parse.py` infers a type from
+      the interface-name prefix via `_TYPE_HINTS`, and `ethN` / `bondN` /
+      `dumN` / `lo` match no IOS-XR prefix, so `_infer_type` returns its
+      fallback.
+      So the round-trip invents a hint the source never asserted, and it is
+      the uninformative one.  The interface record, its addressing and its
+      admin state are unaffected — this is a fabricated hint, not lost
+      forwarding state, which is why it is `lossy` and not `unsupported`.
+      Both matrices already declare `/interfaces/interface/config/type`
+      lossy.  Standing observation, left for a codec change rather than fixed
+      here: the vyos declaration's reason claims the codec infers ifType from
+      the name shape; measured, it does not.  That is a matrix-vs-code
+      mismatch on the vyos side, not a pair-specific fact.
+    references: [vyos-iosxr-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts on 1 of 13 cells, on the 2 records that carry a value:
+      `kitchen_sink.conf` `eth4` and `eth5` both go from `bond0` to
+      `Bundle-Ether0`.  Verified by round-trip rather than inferred — the
+      render emits ` bundle id 0 mode active` on each member port, and
+      `cisco_iosxr/parse.py` reconstructs the aggregate name as
+      `f"Bundle-Ether{int(bm.group(1))}"`.
+      Recorded `lossy`, not `unsupported`: the membership pointer does not
+      vanish, it is relabelled.  Both member ports still point at an
+      aggregate, and both still point at the SAME aggregate — so the ports do
+      not come up standalone.  #436 forces `unsupported` where the target
+      cannot express the thing at all, and IOS-XR expresses this one fine.
+      This and `lags` are ONE mechanism, not two independent findings —
+      neither corroborates the other, and this entry exists because the
+      attribute is measured on the interface record, not because `lags` also
+      drifts.
+      Rename the bundle on the target before cutover so the aggregate's
+      identity and its addressing agree.
+    references: [vyos-iosxr-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      Symmetric declared gap: BOTH matrices declare the whole
+      `/interfaces/interface/vrrp-groups/group/*` subtree unsupported — group,
+      mode, priority, preempt, advertisement-interval, authentication,
+      virtual-IPv6 and description.  vyos drops FHRP at parse, and cisco_iosxr
+      states its side outright ("VRRP / FHRP redundancy groups are out of the
+      v1 IOS-XR scope; the group is dropped on migration").
+      Measured: 0 differing of 55 records, because both sides are empty on all
+      of them — no committed cell populates it, so the gap is declared rather
+      than observed.  Recover first-hop redundancy from the source config by
+      hand; nothing in this migration will carry it, in either direction.
+    references: [vyos-iosxr-surface]
+
+  # -- VLANs -- the target MATERIALISES a dot1q registry the source lacks ----
+  #
+  # VyOS has no VLAN database — it expresses tagging as an `ethN.NNN`
+  # sub-interface — and its matrix declares `/vlans/vlan/id` unsupported.
+  # Source `vlans` is empty on all 13 cells.  On `kitchen_sink.conf` the
+  # IOS-XR render emits `encapsulation dot1q 100` / `200` on eth1.100 /
+  # eth1.200 and the IOS-XR parser materialises one bare `CanonicalVlan` per
+  # distinct tag, so the list goes 0 -> 2.  The structural change is claimed
+  # ONCE, on `vlans[].id`; the five sibling keys below are `good`.
+
+  "vlans[].id":
+    disposition: lossy
+    reason: >
+      The VLAN list is not identical after the round-trip: on 1 of 13 cells
+      (`kitchen_sink.conf`) it goes from 0 records to 2, ids 100 and 200.
+      Verified in the render and in the target codec's own docstring —
+      "IOS-XR routers have no classic `vlan N / name X` stanza — VLAN ids
+      appear only on sub-interfaces via `encapsulation dot1q <vid>`.  Each
+      distinct tag becomes a bare `CanonicalVlan`."
+      Recorded `lossy`, deliberately not `unsupported`: nothing vanished.  The
+      drift runs in the ADDING direction, and the two ids are faithful
+      re-derivations of tags the source genuinely carried on `eth1.100` and
+      `eth1.200`.  Calling it `unsupported` would claim a vanished concept
+      that did not vanish, and would block a migration that is in fact
+      compatible.
+      This key carries the whole record-count change for the `vlans` list;
+      its five sibling keys are `good` and say so.
+      Operationally: expect the target-side tree to show VLANs the source
+      config never named.  They are the dot1q tags, re-surfaced.
+    references: [vyos-iosxr-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      This key measures what happens to the VALUE when a VLAN record exists,
+      and the answer is: nothing.  Name is empty on both sides of every cell —
+      vyos emits no VLAN record at all, and the records IOS-XR materialises
+      from `encapsulation dot1q` are bare by construction (`CanonicalVlan(id=vid,
+      name="")`).
+      The record-count change on `kitchen_sink.conf` is real and is claimed
+      exactly once, under `vlans[].id`.  Recording it a second time here would
+      double-count one mechanism, and a loss on this key could never be
+      evidenced independently.
+    references: [vyos-iosxr-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      Empty on both sides of every cell.  Neither side mounts L3 on the VLAN
+      record: vyos puts addressing on the `ethN.NNN` sub-interface, and IOS-XR
+      renders SVI/management L3 only from a sibling interface stanza — its
+      matrix declares `/vlans/vlan/ipv4/address/ip` lossy for exactly that
+      reason, but no committed cell on this pair ever reaches that path.
+      The matching addressing lives in `interfaces[].ipv4_addresses`, which is
+      `good` on 21 of 21 addresses.  The list-length change belongs to
+      `vlans[].id`.
+    references: [vyos-iosxr-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Empty on both sides of every cell.  vyos declares the entire campus
+      port-membership surface unsupported —
+      `/interfaces/interface/switchport-mode`, `/access-vlan`,
+      `/trunk-allowed-vlans`, `/trunk-native-vlan`, `/voice-vlan` — and VLAN
+      membership is rebuilt from exactly those, so the canonical field is never
+      populated; cisco_iosxr declares the same five unsupported on its own
+      side ("IOS-XR is SP-routing with no L2 switchport model").
+      Neither device class in this pair has access ports to migrate.  The
+      list-length change belongs to `vlans[].id`.
+    references: [vyos-iosxr-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Same shape as `vlans[].untagged_ports`, same measurement: empty on both
+      sides of every cell.  Both codecs express tagging as a dot1q
+      sub-interface, which lands in `interfaces[]`, not as trunk membership on
+      a VLAN record.  The list-length change belongs to `vlans[].id`.
+    references: [vyos-iosxr-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Empty on both sides of every cell — neither codec declares any path
+      under `/vlans/vlan/` beyond id and name, and the records IOS-XR
+      materialises from `encapsulation dot1q` carry no description by
+      construction.  The list-length change belongs to `vlans[].id`.
+    references: [vyos-iosxr-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate it — 7 routes in, 7 out, with
+      destination, next-hop and metric intact, and IPv4 and IPv6 routes split
+      correctly into `router static / address-family ipv4|ipv6 unicast`.
+      Both matrices declare `/routing/static-route` supported.
+      Two caveats that are declared rather than observed, stated so a
+      migration report can repeat them: both codecs declare
+      `/routing/static-route/description` LOSSY, and vyos additionally
+      declares `/routing/static-route/vrf` unsupported.  No committed cell
+      sets a route description or a per-VRF route, so neither sub-loss is
+      exercised here.  A source that used VRF-scoped statics would not be
+      covered by this measurement.
+    references: [vyos-iosxr-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric declared gap: both matrices declare `/dhcp-servers/pool`
+      unsupported.  vyos never populates the canonical pool from a
+      `service dhcp-server` stanza, and cisco_iosxr states its side outright
+      ("Render emits no DHCP server pool; intent.dhcp_servers are dropped on
+      migration").  Measured empty on all 13 cells, so the gap is declared
+      rather than observed.  A VyOS box that is serving DHCP will stop doing
+      so; re-author the pools on the target, or keep the DHCP role on a
+      separate host.
+    references: [vyos-iosxr-surface]
+
+  # -- SNMP -- a total block drop on the target side -------------------------
+  #
+  # 4 of 13 cells populate SNMP (kitchen_sink, metasploit-vyos-config,
+  # scottlaird-vyos-parser, vyos_forum_snmpv3_user_eq13).  On every one the
+  # rendered IOS-XR config contains ZERO lines matching `snmp` and the
+  # re-parsed `intent.snmp` is None.  The block does not degrade — it vanishes,
+  # which is why the four populated keys below are `unsupported` and not
+  # `lossy` (#436).  vyos is the well-declared side here: it declares
+  # `/snmp/community`, `/snmp/location`, `/snmp/contact` and `/snmp/v3-user`
+  # supported, and only the v3 USM secret material lossy.  Neither codec
+  # declares a `/snmp/trap-host` path at all.
+
+  "snmp.community":
+    disposition: unsupported
+    reason: >
+      Drops with the whole SNMP block on all 3 cells that set a community
+      (`kitchen_sink.conf`, `metasploit-vyos-config.conf`,
+      `scottlaird-vyos-parser.conf`).  Verified on the rendered config, not
+      inferred: the IOS-XR render emits no `snmp-server` line anywhere and
+      the re-parse yields `intent.snmp is None`.
+      cisco_iosxr declares `/snmp/community` unsupported with the reason
+      "SNMP parse + render is out of the v1 XR scope", and anchors the rest
+      of its SNMP declarations to this path.  Recorded `unsupported` rather
+      than `lossy` because a vanished record is not lossy — `lossy` warns and
+      stays compatible, which would understate losing the entire management
+      plane on a device that is monitored.
+      This key carries the concept-level drop for the whole `snmp` block; the
+      sibling keys record their own measurement and do not re-claim it.
+      Community strings must be re-entered on the target.  Their values are
+      deliberately not reproduced in this file or its reference doc.
+    references: [vyos-iosxr-surface]
+
+  "snmp.location":
+    disposition: unsupported
+    reason: >
+      Drops with the whole SNMP block on both cells that set it
+      (`kitchen_sink.conf`, `vyos_forum_snmpv3_user_eq13.conf`); measured, not
+      assumed — the render contains no SNMP stanza at all.
+      Worth being precise about the declaration: cisco_iosxr carries NO path
+      of its own for `/snmp/location`.  It rides the whole-block v1-scope gap
+      anchored at `/snmp/community`, so this disposition rests on the
+      measurement plus that scope statement rather than on a per-path
+      declaration.  vyos declares `/snmp/location` supported, so the source
+      side is not the problem.  Re-author it on the target.
+    references: [vyos-iosxr-surface]
+
+  "snmp.contact":
+    disposition: unsupported
+    reason: >
+      Same mechanism and same measurement as `snmp.location`: set on 2 cells
+      (`kitchen_sink.conf`, `vyos_forum_snmpv3_user_eq13.conf`), gone on both
+      because the entire SNMP block is dropped on render.  cisco_iosxr
+      declares no `/snmp/contact` path of its own and rides the v1-scope gap
+      anchored at `/snmp/community`; vyos declares it supported.  Re-author it
+      on the target.
+    references: [vyos-iosxr-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: >
+      Recorded `good` on the measurement, and the measurement needs its
+      caveat stated rather than implied: NO committed cell populates trap
+      hosts.  On all 4 SNMP-carrying cells the source list is empty, which
+      matches the absent target block, so the comparator sees zero drift on 4
+      of 4.  That is an empty-to-empty match — it is NOT evidence that trap
+      destinations survive.  A source that carried them would lose them with
+      the block, and that concept-level drop is claimed exactly once, under
+      `snmp.community`.  Recording a second loss here would double-count one
+      event on evidence that does not exist.
+      Neither matrix declares a `/snmp/trap-host` path: vyos declares
+      `/snmp/community`, `/snmp/location`, `/snmp/contact` and `/snmp/v3-user`
+      supported and stops there, and cisco_iosxr declares nothing under
+      `/snmp/` except the unsupported anchors.  So this key has neither a
+      round-trip nor a declaration behind it — only the absence of data.
+    references: [vyos-iosxr-surface]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      Drops with the whole SNMP block on both cells that define a USM user
+      (`kitchen_sink.conf`, `vyos_forum_snmpv3_user_eq13.conf`).  Both source
+      records carry a group, an auth protocol with passphrase, a privacy
+      protocol with passphrase and an engine-ID; none of it reaches the
+      target, because the render emits no SNMP stanza at all.
+      cisco_iosxr declares `/snmp/v3-user/auth-protocol`, `/priv-protocol`,
+      `/priv-passphrase` and `/group` all unsupported, each anchored to
+      `/snmp/community` ("SNMP is out of the v1 XR scope").  vyos declares the
+      users supported and only their secret material lossy, so again the
+      source side is not the problem.
+      SNMPv3 users must be re-created on the target regardless — credentials
+      do not migrate.  No passphrase, engine-ID body or other secret value is
+      reproduced in this file or its reference doc; only the shape of the
+      records and where they stop.
+    references: [vyos-iosxr-surface]
+
+  # -- LAGs -- renamed, not lost --------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      Drifts on the 1 cell that carries an aggregate (`kitchen_sink.conf`),
+      and the drift is a RENAME, not a drop — verified by round-trip rather
+      than read off the drift shape, because a bare `lags` drift on this mesh
+      is usually the cross-vendor naming artifact.  Measured: 1 LAG record in,
+      1 LAG record out; `members` `['eth4', 'eth5']` identical on both sides;
+      `mode` `active` identical on both sides; `name` `bond0` ->
+      `Bundle-Ether0`.  The render emits ` bundle id 0 mode active` on each
+      member port and the IOS-XR parser rebuilds the name as
+      `f"Bundle-Ether{int(bm.group(1))}"`.
+      Recorded `lossy`, not `unsupported`: #436 reserves `unsupported` for a
+      vanished record, and this record survives with its membership and its
+      LACP mode.  vyos declares `/lags/lag/name` and `/lags/lag/members`
+      supported (mode lossy); cisco_iosxr declares all three supported.
+      This and `interfaces[].lag_member_of` are ONE mechanism, not two
+      independent findings.  Neither is cited as evidence for the other.
+      The operator-visible consequence, which is the part worth acting on:
+      the target tree ends up with an interface still named `bond0` — rendered
+      as a plain `interface bond0` stanza carrying the aggregate's description
+      and IPv4 address — alongside a LAG record named `Bundle-Ether0`.  The
+      aggregate's identity and its addressing no longer agree by name.  Rename
+      the bundle and re-home its addressing before cutover.
+    references: [vyos-iosxr-surface]
+
+  # -- Identity -- clean at the canonical level, with one render caveat ------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Zero accounts dropped: 17 user records across all 13 cells, 17 after the
+      round-trip, identical name sets on every cell.  Both matrices declare
+      `/local-users/user/name` supported.  Unlike several other pairs in this
+      mesh there is no hash-format-dependent account loss here — every vyos
+      account is SHA-512 crypt and every one survives.
+    references: [vyos-iosxr-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: >
+      Preserved on 17 of 17 records — `admin` in, `admin` out, zero drift on
+      any cell.  Both matrices declare `/local-users/user/role` supported; the
+      render emits ` group <role>` and the IOS-XR parser maps the task-group
+      back to `role` verbatim.
+      One thing this key does NOT cover, said here so the `good` is not read
+      as broader than it is: the numeric `privilege_level` DOES degrade, 15 ->
+      1 on all 17 records, because the IOS-XR parser maps only `root-lr` and
+      `root-system` to privilege 15.  The audited key set has no key for
+      `privilege_level`, so it is documented in the reference doc rather than
+      claimed here.  An operator diffing roles will see nothing wrong; check
+      privilege on the target too.
+    references: [vyos-iosxr-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Preserved byte-identical on all 16 populated records across 12 cells;
+      the 17th account (`netadmin` on `houdev_vyos_dhcpv6_pd_client.conf`) has
+      no password on either side, and 1 cell is therefore trivially empty.
+      All 16 are SHA-512 crypt (`$6$`).  `_fmt_secret` on the IOS-XR side
+      stores a type-0 payload bare, so the canonical value survives the
+      round-trip unchanged — which is what this key measures, and why it is
+      honestly `good`.
+      ONE OPERATIONAL CAVEAT that does not change the disposition, because it
+      lives in the rendered artifact rather than in the canonical tree: the
+      render emits each account as `username <name> / group admin / secret 0
+      <hash>`, and `secret 0` is the IOS-XR type-0 CLEARTEXT marker.
+      `cisco_iosxr/render.py` documents the fallback — a bare value renders as
+      the type-0 form — and vyos-origin hashes carry no IOS-XR type digit, so
+      every account lands on that branch.  Do not paste the render at a device
+      and expect the accounts to work; set passwords on the target before
+      cutover.
+      No hash body is quoted in this file or its reference doc — only the
+      crypt-scheme marker and the fact of preservation.
+    references: [vyos-iosxr-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric declared gap: both matrices declare
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported.  cisco_iosxr states it outright ("Render emits no AAA
+      radius-server config; RADIUS host is dropped on migration" / "the RADIUS
+      shared secret is dropped on migration"), and vyos does not populate the
+      field from a `system login radius` stanza either.  Measured empty on all
+      13 cells, so the gap is declared rather than observed.
+      Re-author RADIUS on the IOS-XR side — and note that the shared key could
+      not have migrated even if the server list had.
+    references: [vyos-iosxr-surface]
+
+  # -- Fabric -- the overlay does not cross ---------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      A total concept drop, verified by round-trip rather than inferred: 3 of
+      13 cells carry exactly one VXLAN VNI each (`kitchen_sink.conf` vni
+      10100, `wcni-kind-gw0.conf` and `wcni-kind-gw1.conf` vni 10), and after
+      the round-trip all three lists are EMPTY.  The rendered IOS-XR config
+      contains no `nve`, `vxlan` or `vni` line anywhere.
+      cisco_iosxr declares `/vxlan-vnis/vni`, `/vxlan-vnis/source-interface`
+      and `/vxlan-vnis/udp-port` unsupported — "IOS-XR VXLAN (NCS 5500 / 540
+      `nve` interfaces) is rare in the SP corpus; no canonical demand
+      surfaced.  Parse-and-ignore in v1."  vyos declares the VNI supported, so
+      the source side is not the problem.
+      Recorded `unsupported` rather than `lossy` because a vanished record is
+      not lossy (#436): `lossy` warns and stays compatible, which would badly
+      understate losing an entire overlay.
+      This key carries the record-level drop for the whole `vxlan_vnis` list;
+      its two sibling keys are `good` and say so.  Rebuild the overlay on the
+      target from scratch, or keep it on the VyOS side.
+    references: [vyos-iosxr-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: >
+      This key measures what happens to the VALUE when a VNI record exists.
+      The whole-record drop is real and is claimed exactly once, under
+      `vxlan_vnis[].vni`; recording it again here would double-count one
+      mechanism, and a loss on this key could never be evidenced
+      independently.
+      Two further facts support the `good` rather than merely permitting it:
+      the value is not operator-authored at all — the vyos parser SYNTHESISES
+      it from the VNI as `((vni - 1) % 4094) + 1`, because VyOS carries no
+      VLAN on the vxlan netdev (the L2 binding lives on a separate bridge) —
+      and vyos declares `/vxlan-vnis/vlan-id` lossy on its own side for
+      exactly that reason.  There is no source VLAN binding here to lose.
+    references: [vyos-iosxr-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: good
+    note: >
+      Same reading as `vxlan_vnis[].vlan_id`: the record-level drop belongs to
+      `vxlan_vnis[].vni` and is claimed there once.  Measured additionally on
+      the value itself — `mcast_group` is EMPTY on all 3 source records; the
+      corpus uses head-end replication (`flood_list`) rather than a multicast
+      underlay.  So there is no multicast group on this pair for the target to
+      drop, and neither codec declares a `/vxlan-vnis/mcast-group` path.
+    references: [vyos-iosxr-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares no path under `/evpn-type5-routes/` at
+      any level and never populates the field —
+      `protocols bgp … address-family l2vpn-evpn` is Tier-3 on that codec —
+      so nothing reaches the target.  Measured empty on all 13 cells.
+      cisco_iosxr declares `/evpn-type5-routes/route` unsupported in its own
+      right ("IOS-XR EVPN runs under top-level `l2vpn` + `evpn` + `bridge
+      group` stanzas — grammatically distant … No canonical mapping in v1"),
+      which would matter only for a source that actually produced one.
+    references: [vyos-iosxr-surface]
+
+  # -- VRFs -----------------------------------------------------------------
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      Preserved on the single cell that populates it — `kitchen_sink.conf`
+      carries one VRF, `BLUE`, and it round-trips with its name intact and the
+      record count unchanged.  The render emits a top-level `vrf BLUE` stanza
+      plus per-interface `vrf BLUE` membership on `eth0`, and the interface's
+      `vrf` attribute round-trips too.
+      Notable because cisco_iosxr declares `/routing-instances/instance` LOSSY
+      on its own side — the lossiness that declaration warns about is in the
+      RD / route-target plumbing (RD is harvested from `router bgp` rather
+      than read from a VRF stanza), not in the instance identity, which is
+      what this key measures.  Neither side populates a route-distinguisher on
+      this corpus, so that sub-loss is untested here.
+    references: [vyos-iosxr-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      Source-side gap, verified in the codec rather than assumed:
+      `vyos/parse.py` builds VRFs as
+      `CanonicalRoutingInstance(name=name) for name in vrf_order` — name only
+      — so the description is structurally always empty and no committed cell
+      populates it.  Neither matrix declares a path for it.
+      cisco_iosxr does render a VRF `description` line when one is present, so
+      re-authoring the customer/label text on the target will stick; the
+      migration simply has nothing to carry.
+    references: [vyos-iosxr-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Source-side gap, and vyos says so itself: it declares
+      `/system/raw-sections/version-banner` LOSSY with the reason that the
+      `// vyos-config-version` trailer and the not-yet-modelled `service` /
+      `system` management blocks are "discarded on parse and a synthesised
+      trailer is emitted on render".  Discarded at parse means nothing ever
+      enters the canonical tree, so there is nothing for IOS-XR to lose.
+      Measured empty on all 13 cells; cisco_iosxr declares no raw-section path
+      either way.  The practical consequence belongs to the source
+      declaration, not to this pair: SSH, syslog and DNS service blocks must
+      be re-applied on the target by hand.
+    references: [vyos-iosxr-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair declares a path for it or populates it on any of the 13 cells."
+    references: [vyos-iosxr-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair declares a path for it or populates it on any of the 13 cells."
+    references: [vyos-iosxr-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Symmetric declared gap: both matrices declare `/anycast-gateway-mac`
+      unsupported.  vyos never populates the chassis-wide MAC, and cisco_iosxr
+      states its side outright — "IOS-XR has no VARP / distributed-anycast-
+      gateway grammar, so the chassis-wide anycast-gateway MAC is dropped on
+      render", the companion to its two
+      `/interfaces/interface/ipv{4,6}/address/virtual-gateway-address`
+      unsupported declarations.  Measured empty on all 13 cells, so the gap is
+      declared rather than observed.  Neither device class in this pair runs a
+      distributed anycast gateway.
+    references: [vyos-iosxr-surface]

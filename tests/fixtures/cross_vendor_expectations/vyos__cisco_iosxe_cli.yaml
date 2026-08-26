@@ -1,0 +1,703 @@
+# Cross-vendor fidelity expectations: vyos -> cisco_iosxe_cli
+#
+# Source: vyos codec — curly-brace `config.boot` (set-form input is converted
+#         via `_setform_to_brace` before parsing).
+# Target: cisco_iosxe_cli codec — IOS-XE `show running-config` CLI render.
+#
+# Asymmetric by device class. vyos in the committed corpus is a Linux-based
+# software edge router — Debian netdev names (`eth0`…`eth5`, `lo`, `bond0`),
+# dual-stack addressing, a handful of static routes, one VRF and a small VXLAN
+# netdev surface. cisco_iosxe_cli is a classic enterprise branch/campus router.
+# The realistic migration is a VyOS edge box being replaced by an IOS-XE
+# router, so the shared surface is the routed edge — interface addressing,
+# admin state, static routes, VRF identity, SNMP and local users.
+#
+# THIS IS ONE OF THE CLEANEST PAIRS IN THE MESH. Addressing, descriptions,
+# admin state, MTU, static routes, SNMP scalars, VRF identity and user
+# credentials all round-trip with ZERO drift. There are six losses and each
+# has a single identified mechanism, none of them a concept-level gap.
+#
+# READ THIS BEFORE READING THE INTERFACE BLOCK: the interface inventory does
+# shrink, 55 records -> 46 on 5 of 13 cells, but NOT by renaming and NOT by
+# losing configured state. Every one of the 9 vanished records is
+# attribute-free — no address, no description, no MTU, no VRF, no LAG
+# membership, not shut — and the IOS-XE CLI render emits no `interface`
+# stanza for a record with nothing to write inside it. Tested falsifiably:
+# 0 non-bare records vanished and 0 bare records survived. The control case
+# is `lo`, which vanishes on 5 cells and SURVIVES on `kitchen_sink.conf`,
+# the one cell where it carries addresses. The prune is attribute-driven,
+# not name-driven. VyOS names pass through verbatim — 0 surviving records
+# were renamed.
+#
+# Because 5 cells change interface-record count, every `interfaces[].*`
+# sub-field reports drift on those cells for that ONE reason. That signal is
+# claimed exactly once, by `interfaces[].name`. The other interface sub-fields
+# are `good` because they measure what happens to the VALUE when the record
+# survives, and on all 46 surviving records they drift zero times.
+# `interfaces[].interface_type` is the one exception and stands on its own
+# measurement — it drifts on all 46 SURVIVING records, including on the 8
+# cells with no structural change at all.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
+# a full mesh pass over the committed corpus (13 fixture cells, 0 render
+# errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` with the reconciler's STRUCTURAL_ONLY collapse
+# replayed, so this file and the ratchet cannot disagree. Every loss recorded
+# below was additionally re-derived by hand, by parsing the fixture with vyos,
+# rendering with cisco_iosxe_cli and re-parsing the render — not inferred from
+# the drift shape.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/vyos_to_cisco_iosxe_cli/
+#
+# Authored 2026-08-25 closing the mesh audit — vyos was the last blind codec.
+
+meta:
+  source_vendor: vyos
+  target_vendor: cisco_iosxe_cli
+  primary_use_case: >
+    Software-edge replacement: a VyOS router replaced by a Cisco IOS-XE
+    branch/edge router carrying the same routed interfaces, addressing,
+    static routes, VRF and management plane.  Hostname, domain, DNS, the
+    surviving interface inventory with all of its addressing, description,
+    MTU and admin state, static routes, SNMP scalars, VRF identity, VXLAN
+    VNI bindings and local-user roles and credentials all survive unchanged.
+    What does not: attribute-free interface records are pruned; the one
+    passwordless account is lost; the IANA type hint is manufactured rather
+    than carried; the SNMPv3 engine ID is dropped; the LAG is renamed to its
+    IOS-XE-native form; and one fixture's NTP list is rewritten — in that
+    case to REMOVE a defect the VyOS parser introduced.
+  certainty: medium
+  references:
+    - id: vyos-iosxe-cli-surface
+      path: docs/vendor-references/vyos_to_cisco_iosxe_cli/canonical_surface.md
+      title: "VyOS -> Cisco IOS-XE (CLI): measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- management-plane scalars ------------------------------------
+
+  hostname:
+    disposition: good
+    note: >
+      `set system host-name <name>` -> `hostname <name>`; preserved on 13 of
+      13 cells with zero drift.  Both matrices declare `/system/hostname`
+      supported.  The widest-covered clean field on the pair.
+    references: [vyos-iosxe-cli-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on the single cell that populates it
+      (`scottlaird-vyos-parser.conf`, `internal.sigkill.org`); the other 12
+      carry no domain.  Worth stating precisely: vyos declares
+      `/system/domain` supported but cisco_iosxe_cli declares NOTHING for it
+      at any level, so this `good` rests on the measured round-trip alone,
+      not on a target declaration.  The value survives anyway.  See the
+      matrix under-declaration note in the reference doc.
+    references: [vyos-iosxe-cli-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Preserved on the single cell that populates it — three name-servers in,
+      the same three out, in order.  Same declaration asymmetry as `domain`:
+      vyos declares `/system/dns-server` supported, cisco_iosxe_cli declares
+      nothing.  Measured, not declared.  One cell is thin coverage and this
+      file does not pretend otherwise.
+    references: [vyos-iosxe-cli-surface]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Populated on 12 of 13 cells and drifts on exactly one,
+      `houdev_vyos_dhcpv6_pd_client.conf` — and the direction is favourable
+      enough that mis-reading it would be worse than missing it.
+      That fixture uses the VyOS 1.4-era `server <host> { }` form (an empty
+      options block on the same line).  The vyos PARSER captures the brace
+      residue into the hostname, producing canonical values of the shape
+      `time1.vyos.net { }`.  The render passes that through and the IOS-XE
+      CLI re-parse takes the first whitespace-delimited token, returning the
+      clean `time1.vyos.net`.  So the canonical value differs — which is why
+      this is recorded as a loss — but the round-trip STRIPS a defect the
+      source introduced, and all three NTP servers are correct on the target.
+      The other 11 populated cells use the bare `server <host>` form and
+      round-trip untouched.
+      Recorded `lossy` and not `unsupported`: no record vanishes (3 servers
+      in, 3 out) and cisco_iosxe_cli does render NTP servers, despite
+      declaring nothing for the field.  The underlying vyos brace-residue bug
+      belongs to a codec change, not to this file; it is written down here so
+      the next reader does not re-hunt it as an IOS-XE rendering problem.
+    references: [vyos-iosxe-cli-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than an IOS-XE limitation — neither
+      codec parses nor renders a clock/timezone stanza, and cisco_iosxe_cli
+      states it outright ("Render emits no clock/timezone stanza;
+      intent.timezone is dropped on migration").  No committed cell populates
+      it, so the gap is declared rather than observed.  Set the timezone on
+      the target by hand; nothing in the migration will carry it.
+    references: [vyos-iosxe-cli-surface]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares `/system/syslog-server` unsupported, so
+      logging hosts never enter the canonical tree from this source and
+      nothing reaches the target.  Measured empty on all 13 cells.
+      cisco_iosxe_cli declares `/system/syslog-server` SUPPORTED, so
+      `logging host` re-authored on the target will stick — recover the
+      VyOS `system syslog host` stanzas from the source config by hand.
+    references: [vyos-iosxe-cli-surface]
+
+  # -- Interfaces -- an empty-record prune, then a very clean surface --------
+  #
+  # 55 source interface records across 13 cells, 46 after the round-trip.
+  # The 9 that vanish are ALL attribute-free; 0 non-bare records vanished and
+  # 0 bare records survived.  Of the 46 that survive, ZERO were renamed —
+  # `eth0`/`eth1`/`eth5` come back verbatim, not re-shaped into
+  # `GigabitEthernet0/0`.  `interfaces[].name` claims the structural signal
+  # for the whole list; every sub-field below it measures the VALUE on a
+  # surviving record, and all but `interface_type` drift zero times.
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      9 of 55 interface records vanish, on 5 of 13 cells: `eth1` + `lo`
+      (`metasploit-vyos-config.conf`), `eth2` + `eth3` + `eth4` + `lo`
+      (`scottlaird-vyos-parser.conf`), and `lo` on
+      `vyos_forum_snmpv3_user_eq13.conf`, `wcni-kind-gw0.conf` and
+      `wcni-kind-gw1.conf`.
+      The mechanism is an EMPTY-RECORD PRUNE, verified falsifiably rather
+      than inferred: every vanished record is attribute-free (no IPv4, no
+      IPv6, no description, no MTU, no VRF, no LAG membership, no DHCP
+      client, not shut, no VRRP), 0 non-bare records vanished, and 0 bare
+      records survived.  The IOS-XE CLI render emits an `interface <name>`
+      stanza only when there is something to write inside it, so a record
+      with no attributes produces no text and the re-parse never sees it.
+      The control case settles the tempting wrong reading, "loopbacks are
+      dropped": `lo` vanishes on 5 cells and SURVIVES on `kitchen_sink.conf`,
+      the one cell where `lo` carries an IPv4 and an IPv6 address.  The prune
+      is attribute-driven, not name-driven.
+      Recorded `lossy` rather than `unsupported`: cisco_iosxe_cli plainly
+      models interfaces — 46 of 55 records survive with every attribute
+      intact and no name rewritten — so this is a partial record loss inside
+      a concept the target models, not the concept-level gap that
+      `unsupported` blocks for (#436).  Recorded rather than waved through
+      because a port present in the source inventory and absent from the
+      target inventory is a real difference, even when it carried no config.
+      Diff the two interface lists before cutover.
+      This key carries the record-level signal for the whole `interfaces`
+      list; the sub-fields below are scored on surviving records only, so no
+      sibling re-counts this one disappearance.
+    references: [vyos-iosxe-cli-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      15 of the 46 surviving records carry a non-empty description and all 15
+      round-trip BYTE-IDENTICAL — zero drift, zero punctuation change.  Both
+      matrices declare `/interfaces/interface/config/description` supported.
+      Checked rather than assumed: the vyos RENDER rewrites free text,
+      replacing embedded double quotes with apostrophes because VyOS rejects
+      embedded quotes in value strings.  That mechanism applies only when
+      vyos is the TARGET.  Here vyos is the SOURCE, so it is not in play, and
+      the measurement confirms it — no description came back with altered
+      punctuation.
+    references: [vyos-iosxe-cli-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on all 46 surviving records — zero differing; 44
+      of them carry an explicit state.  A VyOS interface marked `disable`
+      arrives `shutdown` on IOS-XE.  Both matrices declare
+      `/interfaces/interface/config/enabled` supported.
+      The 5 cells where this key also reports drift are the 5 where the
+      interface list changes length; that is the prune recorded under
+      `interfaces[].name`, not an admin-state loss.
+    references: [vyos-iosxe-cli-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on all 46 surviving records.  Coverage is thin and stated as
+      such: MTU is actually populated on exactly 1 record in the whole
+      corpus, and it round-trips unchanged.  Both codecs declare
+      `/interfaces/interface/config/mtu` supported.  The measurement is clean
+      but one record is one record.
+    references: [vyos-iosxe-cli-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on all 46 surviving records; IPv6 is populated on 20 of them
+      and every address + prefix-length survives.  Both matrices declare
+      `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
+      supported.
+      One declared-but-untested caveat: cisco_iosxe_cli declares
+      `/interfaces/interface/subinterfaces/subinterface/ipv6` unsupported
+      ("Phase 0.5 scope — IPv4 only"), so IPv6 on a sub-interface would not
+      survive.  No committed cell on this pair reaches that path, so the gap
+      is declared, not observed.
+    references: [vyos-iosxe-cli-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on all 46 surviving records, the widest-populated interface
+      field on the pair at 21 records.  Both matrices declare
+      `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
+      supported.  This is the field the migration most depends on and it is
+      clean.
+    references: [vyos-iosxe-cli-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on all 46 SURVIVING records, across all 13 cells — including the
+      8 cells with no structural change — so this measurement stands on its
+      own and is not a knock-on effect of the record prune.
+      The direction matters and is the opposite of the usual reading:
+      source-empty -> target-populated on 46 records, source-populated ->
+      target-empty on 0, both-populated-and-differing on 0.  The vyos parser
+      emits `interface_type = ""` on every record (it does not derive an IANA
+      type from a Linux netdev name), and the IOS-XE CLI re-parse
+      MANUFACTURES `ianaift:other` from the interface name.  Nothing the
+      source carried was dropped — a value the source never had was invented.
+      Both matrices already declare `/interfaces/interface/config/type` lossy
+      in their own right, and cisco_iosxe_cli states the cause: its CLI
+      parser "infers interface type from the name prefix (GigabitEthernet ->
+      ethernetCsmacd, Loopback -> softwareLoopback) but cannot detect all
+      IANA types".  `eth0` matches no IOS-XE prefix, so it falls through to
+      `ianaift:other`.
+      Recorded `lossy` because the canonical value after the round-trip is
+      not the canonical value before it.  NOT `unsupported`: no interface
+      record, address or admin state is affected — this is a manufactured
+      hint, not lost forwarding state.  Do not read this row as "the
+      migration lost the interface types"; there were none to lose.
+    references: [vyos-iosxe-cli-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: good
+    note: >
+      The membership pointer is not lost.  2 of the 46 surviving records
+      carry one (`eth4` and `eth5` on `kitchen_sink.conf`) and both come back
+      populated, re-spelled from `bond0` to `Port-channel0` to match the LAG
+      they still point at — the correct IOS-XE-native form.  The render emits
+      `channel-group 0 mode active` on both ports, so they come up bundled,
+      not standalone.
+      That rename is ONE mechanism with `lags`, not two independent findings.
+      It is claimed once, under `lags`, where the record itself is measured.
+      Recording it a second time here would double-count a single naming
+      artifact — and this key is about what happens to the VALUE when the
+      record survives, which is that it keeps pointing at the right LAG.
+      The 5 cells where this key also reports drift are the 5 where the
+      interface list changes length; none of them populate `lag_member_of` at
+      all.  That is the prune recorded under `interfaces[].name`.
+    references: [vyos-iosxe-cli-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: good
+    note: >
+      Nothing is lost because nothing arrives.  vyos declares the entire
+      `/interfaces/interface/vrrp-groups/group/*` subtree unsupported — mode,
+      priority, preempt, advertisement-interval, authentication, virtual-IPv6
+      and description are all dropped at parse — so the canonical field is
+      empty on all 55 source records and on all 46 that survive.  Measured:
+      0 populated, 0 differing.
+      cisco_iosxe_cli declares `/interfaces/interface/vrrp-groups/group`
+      SUPPORTED (with `.../mode` and `.../address-family` lossy), so
+      re-authoring first-hop redundancy on the IOS-XE side will stick.
+      Recover it from the VyOS `vrrp sync-group` / `vrrp-group` stanzas by
+      hand; the migration will not carry it.
+    references: [vyos-iosxe-cli-surface]
+
+  # -- VLANs -- the source never produces a single VLAN record ---------------
+  #
+  # Measured, not merely declared: ZERO of the 13 cells produce a canonical
+  # VLAN record, because vyos declares `/vlans/vlan/id` unsupported outright.
+  # A VyOS box expresses tagging as an `ethN.<vid>` netdev, which lands in
+  # `interfaces[]`.  All six keys below are therefore source-side gaps.
+
+  "vlans[].id":
+    disposition: not_applicable
+    note: >
+      Source-side gap, declared and measured: vyos declares `/vlans/vlan/id`
+      UNSUPPORTED and produces no VLAN record on any of the 13 cells.
+      cisco_iosxe_cli declares `/vlans/vlan/id` supported, so a VLAN database
+      built on the target will stick — it just cannot be migrated from here.
+    references: [vyos-iosxe-cli-surface]
+
+  "vlans[].name":
+    disposition: not_applicable
+    note: >
+      Same source-side gap: the VLAN name rides on a VLAN record that vyos
+      never produces.  cisco_iosxe_cli declares `/vlans/vlan/name` supported
+      and renders `vlan <id> / name <X>`, which is moot when the source emits
+      nothing.
+    references: [vyos-iosxe-cli-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: not_applicable
+    note: >
+      Source-side gap on two counts: vyos produces no VLAN record at all, and
+      it separately declares
+      `/vlans/vlan/ipv4/address/{secondary-ip,virtual-gateway-address,virtual-gateway-mac}`
+      unsupported.  VyOS mounts L3 on the interface record (an `ethN.<vid>`
+      netdev), never on a VLAN record.  The corresponding addressing lives in
+      `interfaces[].ipv4_addresses`, which is `good`.
+    references: [vyos-iosxe-cli-surface]
+
+  "vlans[].untagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side gap.  vyos declares the entire campus port-membership
+      surface unsupported — `/interfaces/interface/switchport-mode`,
+      `/access-vlan`, `/trunk-allowed-vlans`, `/trunk-native-vlan`,
+      `/voice-vlan` — and VLAN membership is rebuilt from exactly those, so
+      the canonical field is never populated.  Measured empty on all 13
+      cells.  A VyOS software router has no access ports to migrate.
+    references: [vyos-iosxe-cli-surface]
+
+  "vlans[].tagged_ports":
+    disposition: not_applicable
+    note: >
+      Same source-side gap as `vlans[].untagged_ports`, same measurement:
+      empty on all 13 cells.  vyos additionally declares
+      `/interfaces/interface/dot1q-vlan` unsupported, so even the sub-netdev
+      tag does not surface as trunk membership on a VLAN record.
+    references: [vyos-iosxe-cli-surface]
+
+  "vlans[].description":
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares no path under `/vlans/vlan/` beyond the
+      unsupported ones, and emits no VLAN description on any committed cell.
+      cisco_iosxe_cli declares `/vlans/vlan/description` LOSSY ("Render emits
+      the VLAN name but not a separate description line"), which would matter
+      only for a source that actually produces one.  vyos does not.
+    references: [vyos-iosxe-cli-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate it — 7 routes in, 7 out, and the
+      full record compares equal: destination, gateway, interface, metric,
+      description and VRF.  IPv4 and IPv6 destinations both survive
+      (`0.0.0.0/0`, `10.99.0.0/16` with metric 20, `2001:db8:ffff::/48`).
+      Both matrices declare `/routing/static-route` supported.
+      Two caveats that are declared rather than observed, stated so this
+      `good` is not read wider than it is measured.  vyos declares
+      `/routing/static-route/vrf` UNSUPPORTED — no committed cell sets a
+      route VRF (all 7 carry `vrf=""`), so per-VRF static routing is untested
+      on this pair and would not survive if it were exercised.  Both codecs
+      also declare `/routing/static-route/description` lossy, and no
+      committed cell sets a route description, so that sub-loss is untested
+      too.
+    references: [vyos-iosxe-cli-surface]
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares `/dhcp-servers/pool` unsupported, so the
+      canonical pool is never populated from this source and nothing reaches
+      the target.  Measured empty on all 13 cells.  cisco_iosxe_cli declares
+      no path for it either, so neither side of this pair carries a DHCP
+      server surface — re-author `ip dhcp pool` on the target by hand if the
+      box needs it.
+    references: [vyos-iosxe-cli-surface]
+
+  # -- SNMP -- scalars clean, USM material degrades --------------------------
+  #
+  # 4 of 13 cells produce an SNMP block.  The scalars round-trip perfectly;
+  # the only loss on the whole SNMP surface is inside the v3 user record.
+
+  "snmp.community":
+    disposition: good
+    note: >
+      Preserved on all 3 cells that set a community — `ro`, `public` and the
+      synthetic `FAKEPUBLIC` all round-trip unchanged.  Both matrices declare
+      `/snmp/community` supported.
+    references: [vyos-iosxe-cli-surface]
+
+  "snmp.location":
+    disposition: good
+    note: >
+      Preserved on both cells that set it, including the space-bearing
+      `rack 4 / row B` — so the IOS-XE `snmp-server location` render does not
+      truncate at whitespace.  Both matrices declare `/snmp/location`
+      supported.
+    references: [vyos-iosxe-cli-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: >
+      Preserved on both cells that set it.  Both matrices declare
+      `/snmp/contact` supported.  Same shape as `snmp.location`, measured
+      independently rather than assumed to follow it.
+    references: [vyos-iosxe-cli-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: >
+      No committed cell populates trap hosts — the list is empty on both
+      sides of all 4 cells that carry an SNMP block, so the zero drift here
+      is the trivial kind and this file says so rather than implying
+      coverage.  The reason is a source-side gap: vyos declares NO
+      `/snmp/trap-host` path at all (its SNMP surface is community, location,
+      contact and v3-user).  cisco_iosxe_cli declares `/snmp/trap-host`
+      SUPPORTED, so `snmp-server host` re-authored on the target will stick.
+    references: [vyos-iosxe-cli-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      Drifts on both cells that carry a USM user
+      (`vyos_forum_snmpv3_user_eq13.conf`, `kitchen_sink.conf`).  The record
+      SURVIVES on both; two of its sub-values change.
+      The real loss is `engine_id`, which is populated on the source and
+      returns EMPTY on both cells.  cisco_iosxe_cli declares
+      `/snmp/v3-user/engine-id` lossy and states the cause — engine IDs are
+      device-assigned or global, so no per-user engine ID is emitted on
+      render.  vyos declares the same path lossy from its side.
+      The second change is a normalisation, not a downgrade: `priv_protocol`
+      goes `aes` -> `aes128`, the IOS-XE-native spelling of the same cipher.
+      Everything else on the record is unchanged: `name`, `group`,
+      `auth_protocol`, and both the auth and priv passphrases (preserved,
+      length unchanged — no passphrase value is quoted in this file or its
+      reference doc).
+      Recorded `lossy` and not `unsupported`: the USM user does not vanish,
+      it arrives with its identity and both passphrases intact and one field
+      emptied.  Re-pin the engine ID on the target if the deployment depends
+      on a non-default one.
+    references: [vyos-iosxe-cli-surface]
+
+  # -- LAG -- renamed, not lost ----------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      One cell (`kitchen_sink.conf`) carries a LAG and it SURVIVES the
+      round-trip — this is a rename, not a drop, and the difference decides
+      the disposition.
+      `bond0` comes back as `Port-channel0` with its members (`eth4`, `eth5`)
+      and its mode (`active`) intact, and the render emits
+      `channel-group 0 mode active` on both member ports.  vyos declares
+      `/lags/lag/name` and `/lags/lag/members` supported (and
+      `/lags/lag/mode` lossy), and the mode survived anyway.
+      Recorded `lossy` rather than `unsupported` precisely because a vanished
+      record is not lossy (#436) and the inverse holds too: nothing vanished
+      here.  The record count is 1 -> 1.  `unsupported` blocks, and blocking
+      a migration over a LAG that arrives correctly bundled under its
+      target-native name would be wrong.  This is the known cross-vendor LAG
+      naming artifact the audit warns about, confirmed by round-trip rather
+      than assumed.
+      This and `interfaces[].lag_member_of` are ONE mechanism, not two
+      findings.  The signal is claimed here, where the record is measured;
+      the interface-side pointer is `good` because it still points at the
+      right LAG.  Neither corroborates the other.
+      Standing observation, not a pair-specific fact: the cisco_iosxe_cli
+      matrix declares NOTHING for `/lags/lag` — neither supported, lossy nor
+      unsupported — while demonstrably rendering `channel-group` and
+      re-parsing a LAG record.  That is a matrix under-declaration and
+      belongs to a codec change rather than being fixed here.
+    references: [vyos-iosxe-cli-surface]
+
+  # -- Identity -- one account lost, every surviving credential intact -------
+
+  "local_users[].name":
+    disposition: lossy
+    reason: >
+      17 local-user records across 13 cells; 16 survive.  The single loss is
+      `netadmin` on `houdev_vyos_dhcpv6_pd_client.conf` — the one account in
+      the corpus with NO password.  The render emits
+      `username netadmin privilege 15 nopassword`, and the IOS-XE CLI
+      re-parser does not recognise the `nopassword` form, so the account is
+      not recovered.  That is the only cell where the user list changes
+      length (1 -> 0).
+      Recorded `lossy`, not `unsupported`, and the vanish classifier
+      disagrees — it reports this field `TOTAL -> unsupported` because on
+      that one cell the count goes 1 -> 0, which looks total in isolation.
+      Resolved by round-tripping all 13 cells rather than trusting the
+      per-cell verdict: cisco_iosxe_cli emits `username` lines on ALL 13
+      cells and 16 of 17 accounts survive with role and credential intact.
+      This is a partial record loss inside a concept the target models, not
+      the concept-level gap `unsupported` blocks for (#436).
+      Before cutover, list the source accounts and diff them against the
+      render — a silently missing admin account is how a migration locks you
+      out, and the account this pair drops is precisely the one with no
+      password to fall back on.
+      This key carries the record-level signal for the whole `local_users`
+      list; the two sub-fields below are scored on surviving records only.
+    references: [vyos-iosxe-cli-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: >
+      Role is preserved on every one of the 16 user records that survive the
+      round-trip — `admin` stays `admin`, zero role drift on any cell.  vyos
+      declares `/local-users/user/role` supported (and
+      `/local-users/user/privilege-level` lossy, which no cell exercises
+      distinctly).
+      This key measures what happens to the VALUE when the record survives,
+      and the answer is: nothing.  The one account that vanishes entirely is
+      accounted for once, under `local_users[].name`; recording the same
+      disappearance again here would double-count a single loss.
+    references: [vyos-iosxe-cli-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      The credential survives.  All 16 surviving accounts carry a SHA-512
+      crypt secret (scheme marker `$6$`) and the canonical value round-trips
+      with ZERO drift on every one — unusual for this mesh, where credential
+      material is normally the first thing to degrade.  No hash body is
+      quoted in this file or its reference doc; only the scheme marker and
+      record counts are described.
+      One deployability caveat, recorded because it is real and measured, and
+      explicitly NOT scored as a fidelity loss: the IOS-XE CLI render places
+      every surviving secret behind `secret 0`, and on IOS-XE `secret 0` is
+      the CLEARTEXT marker.  The canonical round-trip is clean because the
+      re-parser reads the same string back, which is why this key is `good`.
+      But a real IOS-XE box fed that line would treat the crypt-hash text as
+      a literal plaintext password.  Set passwords on the target before
+      cutover rather than trusting the rendered `username` lines.
+    references: [vyos-iosxe-cli-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares `/radius-servers/server/host` and
+      `/radius-servers/server/key` unsupported and no committed cell
+      populates the field, so nothing reaches the target.  Measured empty on
+      all 13 cells.  cisco_iosxe_cli declares no path for it either.
+      Re-author RADIUS on the IOS-XE side — and note that the shared key
+      could not have migrated even if the server list had.
+    references: [vyos-iosxe-cli-surface]
+
+  # -- Fabric -- the VNI identity survives -----------------------------------
+  #
+  # 3 of 13 cells carry a VXLAN netdev, one VNI each.  The VNI record survives
+  # on all three; what degrades inside it (source-interface, udp-port,
+  # flood-list) is outside the three keys scored here and is declared lossy by
+  # one or both codecs.
+
+  "vxlan_vnis[].vni":
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate VXLAN — VNIs 10, 10 and 10100
+      round-trip unchanged, and the record count is 1 -> 1 on each.  Both
+      matrices declare `/vxlan-vnis/vni` supported.  The VNI identity, which
+      is the part a migration most depends on, is clean.
+    references: [vyos-iosxe-cli-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: >
+      Preserved on all 3 cells — the VNI-to-VLAN bindings 10->10, 10->10 and
+      10100->1912 all survive.  Notable because vyos declares
+      `/vxlan-vnis/vlan-id` LOSSY on its own side; the measurement is cleaner
+      than the declaration on this pair, and this `good` rests on the
+      measured round-trip rather than on that declaration.
+    references: [vyos-iosxe-cli-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: good
+    note: >
+      No committed cell populates a multicast group — it is empty on both
+      sides of all 3 VNI records — so this rests on declarations, not a
+      round-trip, and is stated that way rather than implied.  BOTH codecs
+      declare `/vxlan-vnis/mcast-group` supported at the exact path: vyos
+      parses `set interfaces vxlan vxlanN group <addr>` and cisco_iosxe_cli
+      renders `member vni <N> mcast-group <addr>`.
+      Adjacent and untested here: cisco_iosxe_cli declares
+      `/vxlan-vnis/flood-list` and `/vxlan-vnis/udp-port` lossy, and the
+      corpus does exercise both — but neither is one of the keys scored on
+      this row.
+    references: [vyos-iosxe-cli-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares no path under `/evpn-type5-routes/` and
+      produces no type-5 record on any of the 13 cells.  cisco_iosxe_cli
+      declares `/evpn-type5-routes/route` lossy — noting that type-5 intent
+      is a VRF property derived from `CanonicalRoutingInstance.l3_vni` rather
+      than a per-prefix record — which is moot when the source emits nothing.
+      vyos separately declares `/routing-instances/instance/l3-vni`
+      unsupported, so the L3VNI that would drive it never arrives either.
+    references: [vyos-iosxe-cli-surface]
+
+  # -- VRFs ------------------------------------------------------------------
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      The VRF identity survives.  One cell (`kitchen_sink.conf`) populates a
+      routing instance and the record round-trips whole — name `BLUE`,
+      instance-type `vrf`, record count 1 -> 1.  Both matrices declare the
+      instance surface supported (vyos at
+      `/routing-instances/instance/name`).
+      Notable because cisco_iosxe_cli declares `/routing-instances/instance`
+      itself LOSSY on its own side — the lossiness that declaration warns
+      about is in the RD / route-target plumbing, not in the instance
+      identity, which is what this key measures.  Both codecs also declare
+      `/routing-instances/instance/instance-type` lossy; the corpus's only
+      instance is a plain `vrf`, so that discriminator is untested here.
+      One cell is thin coverage and this file does not claim more.
+    references: [vyos-iosxe-cli-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      Neither codec declares a path under
+      `/routing-instances/instance/description`, and the corpus's single VRF
+      record carries an empty description on both sides — so there is no
+      round-trip to point at and nothing on either side to carry one.
+      Distinct from the IOS-XR pairs, where the VRF description is the only
+      place a customer name is written down: a VyOS `vrf name <X>` stanza has
+      no description sub-node for the parser to reach.
+    references: [vyos-iosxe-cli-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any of the 13 cells.  vyos declares exactly one
+      raw-section path, `/system/raw-sections/version-banner`, as lossy, and
+      no committed fixture reaches it; cisco_iosxe_cli declares no
+      raw-section path at all, so there is nothing on the target side for a
+      passthrough block to land in.
+    references: [vyos-iosxe-cli-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair declares or populates it."
+    references: [vyos-iosxe-cli-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair declares or populates it."
+    references: [vyos-iosxe-cli-surface]
+
+  anycast_gateway_mac:
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares `/anycast-gateway-mac` unsupported, so
+      the fabric-wide MAC never enters the canonical tree from this source;
+      measured empty on all 13 cells.  cisco_iosxe_cli declares it SUPPORTED
+      (it rides the chassis-wide `fabric forwarding` surface), so an IOS-XE
+      anycast gateway is something to build after the migration rather than
+      something the migration loses.
+    references: [vyos-iosxe-cli-surface]

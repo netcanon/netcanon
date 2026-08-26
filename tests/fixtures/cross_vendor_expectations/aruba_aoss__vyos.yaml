@@ -1,0 +1,733 @@
+# Cross-vendor fidelity expectations: aruba_aoss -> vyos
+#
+# Source: aruba_aoss codec — AOS-S / ProCurve `show running-config` text.
+# Target: vyos codec — curly-brace `config.boot` render.
+#
+# Asymmetric by device class.  aruba_aoss in the committed corpus is a campus
+# access switch (HPE/Aruba 2920 / 2930F / 2930M / 5406R plus an Aruba
+# Central-rendered 5-member stack) whose centre of gravity is the VLAN
+# database — 32 VLAN records carrying 357 port-membership entries and 18 SVI
+# addresses.  vyos is a Linux software router with NO VLAN database at all:
+# 802.1Q is a `vif <vid>` sub-interface on a device, and interface names are
+# kernel device names (`eth0`, `bond0`, `lo`, `dum0`).  The realistic
+# migration is a campus edge being re-homed behind a VyOS router, so the
+# shared surface is the routed edge — interface addressing, admin state,
+# descriptions, static routes, SNMP, local-user identity — and NOT the campus
+# L2 surface, which has nowhere to land.
+#
+# READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: there the
+# interface inventory was fully preserved and every interface loss stood on
+# its own measurement.  Here the inventory does not shrink either — it GROWS,
+# 85 source records to 88, with ZERO source names missing.  The three extra
+# records are phantom LAG stanzas.  Because the count moves on 2 of 7 cells,
+# the audit routes those cells' `interfaces` compare to STRUCTURAL_ONLY and
+# lets `interfaces[].name` carry the signal, which is why several interface
+# sub-fields below are `good` with a measurement attached rather than dragged
+# into `lossy` by their parent.
+#
+# The real losses on this pair are the VLAN database (a total record drop),
+# the interface type hint (85 of 85 records), the local-user role (which
+# fails OPEN), SNMP trap destinations, RADIUS, and — path-dependently — the
+# LAG surface.
+#
+# The mesh path is a bare parse -> render -> parse: no port-rename step, no
+# orchestrator overrides.  That distinction is load-bearing exactly once, on
+# `lags`, and the entry says so.  It scores PRESERVATION of canonical content,
+# not target-syntax validity.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
+# a per-cell in-process `aruba_aoss.parse()` -> `vyos.render()` ->
+# `vyos.parse()` pass over the committed corpus (7 fixture cells, 0 render
+# errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` — including its STRUCTURAL_ONLY collapse — so this
+# file and the ratchet cannot disagree.  Every loss recorded below was
+# additionally re-derived by reading the rendered VyOS config, not inferred
+# from the drift shape.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoss_to_vyos/
+#
+# Authored 2026-08-25 closing the last blind pair in the cross-vendor mesh
+# audit.
+
+meta:
+  source_vendor: aruba_aoss
+  target_vendor: vyos
+  primary_use_case: >
+    Campus-edge re-home: an Aruba AOS-S access switch replaced by (or
+    re-cabled behind) a VyOS software router carrying the same routed edge.
+    Hostname, DNS, NTP, the full interface inventory with its addressing,
+    descriptions and admin state, static routes, SNMP v1/v2c community
+    /contact/location and local-user identity all survive.  What does not is
+    the entire VLAN database with its port membership, the IANA interface
+    type hint on every port, SNMP trap destinations, RADIUS, and the
+    administrative role of every local user — which does not merely degrade,
+    it fails OPEN, arriving as `admin` on the target.
+  certainty: medium
+  references:
+    - id: aoss-vyos-surface
+      path: docs/vendor-references/aruba_aoss_to_vyos/canonical_surface.md
+      title: "Aruba AOS-S -> VyOS: measured canonical surface (7 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- management-plane scalars ------------------------------------
+
+  hostname:
+    disposition: good
+    note: >
+      `hostname <name>` on AOS-S, `system host-name <name>` on VyOS;
+      preserved on 7 of 7 cells.  Both matrices declare `/system/hostname`
+      supported.
+    references: [aoss-vyos-surface]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoss declares `/system/domain` unsupported and
+      emits no domain on any of the 7 cells, so nothing reaches the target.
+      Stated precisely because the asymmetry matters operationally — vyos
+      declares `/system/domain` SUPPORTED, so a domain name re-authored on
+      the VyOS side will stick.  The migration is not what loses it; the
+      AOS-S source never carried it.
+    references: [aoss-vyos-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate name-servers — 4 servers in, the
+      same 4 out, rendered as `system name-server <ip>`.  Both matrices
+      declare `/system/dns-server` supported.  The other 4 cells carry none.
+    references: [aoss-vyos-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Preserved on the single cell that populates it (`kitchen_sink.cfg`) —
+      two servers in, the same two out under `system ntp`.  Both matrices
+      declare `/system/ntp-server` supported.  One cell is thin coverage; the
+      declaration carries the rest of the weight, and that is worth saying
+      rather than implying seven cells of evidence.
+    references: [aoss-vyos-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than a VyOS limitation — aruba_aoss
+      parses no clock stanza and the vyos render emits no time-zone stanza
+      ("intent.timezone is dropped on migration").  No committed cell
+      populates it, so the gap is declared rather than observed.  Set the
+      timezone on the target by hand.
+    references: [aoss-vyos-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap, same shape as `timezone`: aruba_aoss declares
+      `/system/syslog-server` unsupported and so does vyos, whose stated
+      reason is that the render emits no syslog config at all.  Measured
+      empty on both sides of all 7 cells, so this is a declared gap, not an
+      observed loss.  Logging destinations must be re-entered on the target.
+    references: [aoss-vyos-surface]
+
+  # -- Interfaces -- inventory intact, two attributes lost --------------------
+  #
+  # The measured record count is the headline, and it moves the OPPOSITE way
+  # from most pairs: 85 source interface records across the 7 cells, 88 after
+  # the round-trip, with ZERO source names missing.  Every AOS-S port —
+  # `1/25`, `A1`, `23`, `Vlan10`, `Trk1` — survives the VyOS render verbatim.
+  # The 3 extra records are phantom LAG stanzas (see `lags`).
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      The interface record SET drifts on 2 of 7 cells, and the direction is
+      unusual enough to state plainly: nothing is lost, something is added.
+      `aruba_central_5memberstack_rendered.cfg` goes 49 -> 50 records and
+      `kitchen_sink.cfg` goes 13 -> 15; all 85 source names are present in
+      the target on every cell.  The extra records are the AOS-S trunks
+      (`trk1`, `trk1`, `trk2`) materialising as bare `ethernet trk1 { }`
+      stanzas, because the vyos renderer only treats a name matching
+      `^bond\d+$` as a bonding interface — everything else falls through to
+      `ethernet <name>`.  Re-parsing that empty stanza yields a plain
+      interface record.
+      Recorded `lossy`, NOT `unsupported`: no source interface vanishes and
+      every attribute of every source port survives, so the migration stays
+      compatible; the operator simply inherits one phantom netdev per trunk
+      that has no members and no purpose.  #436's rule that forces
+      `unsupported` is for a vanished record, and nothing vanished here.
+      This key also carries the structural signal for the whole `interfaces`
+      list on those 2 cells, which is why the sub-fields below are recorded
+      on their own measurements rather than dragged down with it.
+      Delete the phantom stanzas after cutover, or run the port-rename step
+      first (see `lags`), which makes them real bonds instead.
+    references: [aoss-vyos-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on 39 of 39 populated records — zero drift across all 85
+      matched records.  Both matrices declare
+      `/interfaces/interface/config/description` supported.
+      Worth stating because the opposite is easy to assume on a vyos target:
+      the VyOS render rewrites embedded double-quotes into apostrophes
+      (vyos.dev/T1246), so a description COULD come back with altered
+      punctuation.  On this corpus none does — no AOS-S interface description
+      contains a double-quote, and the rewrite fires exactly once on the
+      whole pair, on `snmp.contact`.  Measured, not assumed.
+    references: [aoss-vyos-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on 85 of 85 records — zero differing.  The 3
+      administratively-down ports on this corpus (`1/47`, `1/48`, `21`) all
+      render as `disable` and come back down.  Both matrices declare
+      `/interfaces/interface/config/enabled` supported.
+    references: [aoss-vyos-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Zero drift on 85 of 85 records — but the honest reading is that this
+      field is untested here, not proven.  NO source record on any of the 7
+      cells carries an MTU, so both sides are empty everywhere and the
+      measurement is trivially clean.  The disposition therefore rests on
+      declarations: vyos declares `/interfaces/interface/config/mtu`
+      supported and its renderer emits an `mtu <n>` leaf; aruba_aoss declares
+      no path for it either way.  Stated that way rather than implied.
+    references: [aoss-vyos-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on 85 of 85 records; IPv6 is populated on 2 of them
+      (`kitchen_sink.cfg` uplinks A1 and A2) carrying 3 addresses, and every
+      address, prefix-length AND scope survives — including the `fe80::/64`
+      link-local, which matters because vyos declares
+      `/interfaces/interface/ipv6/address/scope` supported and this is the
+      only cell that exercises it.  Narrow coverage, clean result.
+    references: [aoss-vyos-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on 85 of 85 records — 20 populated records, 20 addresses, all
+      round-tripping through `address "<ip>/<plen>"`.  Both matrices declare
+      `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
+      supported.
+      This is where the AOS-S SVI addressing lands, and it is the reason the
+      VLAN drop below is survivable: 18 of those 20 addresses are SVI
+      addresses absorbed onto a sibling `Vlan<N>` interface record by the
+      AOS-S parser, and all 18 were verified present after the round-trip.
+      The VLAN records die; the L3 does not.
+    references: [aoss-vyos-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      A clean sweep: all 85 of 85 records lose the IANA type hint entirely,
+      going to the empty string.  Zero records keep it.  The breakdown is
+      uniform by type — 65 `ianaift:ethernetCsmacd`, 18 `ianaift:l3ipvlan`
+      and 2 `ianaift:ieee8023adLag` all drop.
+      Both matrices declare `/interfaces/interface/config/type` LOSSY in
+      their own right, and vyos states exactly why: it declares no IANA
+      ifType and its parser infers one from the interface-name shape (`ethN`
+      -> ethernetCsmacd, `lo`/`dumN` -> softwareLoopback, `bondN` ->
+      ieee8023adLag).  No AOS-S name — `1/25`, `A1`, `Vlan10` — matches any
+      of those patterns, so nothing is recovered and the sweep is total
+      rather than partial.
+      The interface record, its addressing, its description and its admin
+      state are unaffected — this is a lost hint, not lost forwarding state,
+      which is why it is `lossy` and not `unsupported`.  Running the
+      port-rename step first would put names in `ethN` / `bondN` shape and
+      recover most of it.
+    references: [aoss-vyos-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: good
+    note: >
+      Recorded `good` deliberately, and the measurement is stated in full
+      rather than glossed: the membership pointer IS null after the
+      round-trip on the 4 records that carry one (`1/25`, `1/26` on the
+      Central stack; `23`, `24` on the kitchen sink).  Those 4 records sit on
+      exactly the 2 cells where the interface record count itself moves, so
+      the audit attributes that whole signal to `interfaces[].name` and a
+      loss declared here could never be evidenced.
+      More to the point, it would be the same finding twice.  The vanished
+      LAG record, the phantom `ethernet trk1` stanza and this null pointer
+      are ONE mechanism — the trunk name not matching `^bond\d+$` — and that
+      mechanism is recorded where it is caused, under `lags`, which also
+      carries the reproduction that makes all three survive.  Nothing here
+      corroborates anything there; they are the same event seen from three
+      angles.
+      vyos declares `/interfaces/interface/lag-member-of` SUPPORTED, and with
+      port-renamed input it holds.
+    references: [aoss-vyos-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: good
+    note: >
+      No committed cell exercises this — 0 of 85 source records carry a VRRP
+      group, so zero drift is measured and there is no round-trip to point
+      at.  Recorded `good` because the key's only drift signal on this pair
+      is its parent list's count moving, which `interfaces[].name` already
+      claims.
+      One caveat stated rather than buried, because it is a declaration-level
+      fact this corpus cannot evidence: aruba_aoss declares
+      `/interfaces/interface/vrrp-groups/group` SUPPORTED while vyos declares
+      the whole group subtree UNSUPPORTED ("VyOS VRRP / VRRPv3 is not
+      modelled by the codec; the group is dropped on migration").  An AOS-S
+      config that DID carry first-hop redundancy would lose it on render.
+      Re-author FHRP on the target and verify it; do not assume the
+      migration carried it.
+    references: [aoss-vyos-surface]
+
+  # -- VLANs -- the campus surface the target has no shape for ----------------
+  #
+  # All 7 cells populate `vlans`, and all 7 lose the whole list: 32 records
+  # in, 0 out.  Those records carried 29 names, 18 SVI addresses, 196
+  # untagged-port entries and 161 tagged-port entries.  The record itself
+  # vanishes, so the disappearance is recorded ONCE below and the five
+  # sibling keys are `good` — see each note for why that is not a whitewash.
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      A total concept drop, verified by reading the render rather than
+      inferred from a count: 32 VLAN records across all 7 cells become 0, and
+      the rendered VyOS config contains NO vlan stanza of any kind.
+      vyos declares `/vlans/vlan/id` unsupported and states the cause
+      exactly: VyOS has no top-level VLAN database — 802.1Q VLANs are
+      modelled as `vif <vid>` sub-interfaces (rendered as `ethN.<vid>`
+      interfaces), which ARE supported.  aruba_aoss declares `/vlans/vlan/id`
+      supported, so the source side is not the problem.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      rather than degrading (#436) — `lossy` warns and stays compatible,
+      which would badly understate losing the entire VLAN database of a
+      campus access switch.
+      This key carries the structural loss for the whole `vlans` list.  The
+      operational half worth knowing: the SVI L3 does NOT go with it.  All 18
+      SVI addresses were verified intact on their sibling `Vlan<N>` interface
+      records after the round-trip, so what must be re-authored on VyOS is
+      VLAN identity and port membership, not addressing.
+    references: [aoss-vyos-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      29 of the 32 source VLAN records carry a name, and none of them
+      survives — but that is not a loss belonging to this key.  The VLAN
+      RECORD vanishes wholesale, and a record that no longer exists takes
+      every sub-field with it.  That single event is recorded once, on
+      `vlans[].id`.
+      This key measures what happens to the VALUE when the record survives.
+      No VLAN record survives on this pair, so the key carries no independent
+      measurement, and a loss declared here could never be evidenced — it
+      would report one structural drop as two.
+    references: [aoss-vyos-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      18 of the 32 VLAN records carry an SVI address and none of the VLAN
+      records survives — but the addresses do.  The AOS-S parser absorbs each
+      SVI onto a sibling `Vlan<N>` interface record, and all 18 addresses
+      were verified present, with matching prefix-length, on a surviving
+      interface after the round-trip.  The correct place to read that result
+      is `interfaces[].ipv4_addresses`, which is `good` on its own
+      measurement.
+      Recorded `good` here for the same reason as the other VLAN sub-keys:
+      the record-level disappearance belongs to `vlans[].id`.  vyos declares
+      `/vlans/vlan/ipv4/address/secondary-ip` unsupported, which would matter
+      only for a source that reached VLAN-record L3 on a target that emitted
+      it; this one does neither.
+    references: [aoss-vyos-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      This is the one that stings, so state it precisely.  196 untagged-port
+      entries across the 32 source VLAN records are gone after the
+      round-trip, and they are NOT recoverable from anything else in the
+      target tree — vyos declares `/interfaces/interface/switchport-mode` and
+      `/interfaces/interface/access-vlan` unsupported too, because VyOS
+      models L2 as bridges and `vif` sub-interfaces rather than per-port VLAN
+      membership.
+      It is nonetheless recorded `good`, because the mechanism is the VLAN
+      record vanishing and that event is recorded once, on `vlans[].id`.  A
+      loss here would be the same drop counted twice and could never be
+      evidenced separately.  Read `vlans[].id` for the consequence; port
+      membership is the largest single item of hand work this migration
+      leaves behind.
+    references: [aoss-vyos-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Same mechanism and same accounting as `vlans[].untagged_ports`: 161
+      tagged-port entries ride on VLAN records that vanish, so the loss is
+      recorded once on `vlans[].id` rather than a second time here.  VyOS
+      expresses trunk tagging as `vif <vid>` sub-interfaces on the port,
+      which is a different model, not a narrower one — rebuild it there.
+    references: [aoss-vyos-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Not exercised at all: 0 of the 32 source VLAN records carries a
+      description on this corpus, so there is nothing to lose even before the
+      record vanishes.  aruba_aoss declares `/vlans/vlan/description` LOSSY
+      on its own side; vyos declares no path under `/vlans/vlan/` beyond the
+      unsupported `id` and address leaves.  Recorded `good` on the same
+      accounting as its siblings.
+    references: [aoss-vyos-surface]
+
+  # -- Routing ---------------------------------------------------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on all 5 cells that populate it — 12 routes in, 12 out, and
+      the records compare byte-identical, not merely equal in count.
+      Destination, gateway, metric and VRF all survive.  Both matrices
+      declare `/routing/static-route` supported.
+      Two caveats that are declared rather than observed: both codecs declare
+      `/routing/static-route/description` LOSSY and both declare
+      `/routing/static-route/vrf` UNSUPPORTED, and no committed cell sets
+      either — every route on this corpus carries an empty description and an
+      empty VRF, so those sub-losses are untested here.  aruba_aoss also
+      declares `/routing/static-route/metric` lossy on its own side; every
+      measured route carries metric 0, so that too is untested rather than
+      proven.
+    references: [aoss-vyos-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: BOTH matrices declare `/dhcp-servers/pool` unsupported —
+      aruba_aoss never populates the canonical pool from an AOS-S `dhcp-server
+      pool` stanza, and the vyos render emits no DHCP server pool
+      ("intent.dhcp_servers are dropped on migration").  Measured empty on
+      both sides of all 7 cells, so this is declared rather than observed.
+      Recorded `unsupported` rather than `not_applicable` precisely because
+      the target gap is real too: unlike `domain`, re-authoring DHCP will not
+      be carried by this codec pair in either direction, so it is bare-metal
+      hand work on the VyOS side.
+    references: [aoss-vyos-surface]
+
+  # -- SNMP -- three keys clean, three losses of three different kinds -------
+
+  "snmp.community":
+    disposition: good
+    note: >
+      Preserved on all 6 cells that carry an SNMP block (the seventh,
+      `aruba_central_5memberstack_rendered.cfg`, parses `intent.snmp` as
+      None).  Both matrices declare `/snmp/community` supported and the
+      string round-trips through `service snmp community <name>` unchanged.
+      The community string is a shared secret; it is neither quoted here nor
+      in the reference note.
+    references: [aoss-vyos-surface]
+
+  "snmp.location":
+    disposition: good
+    note: >
+      Zero drift on every cell.  Only `kitchen_sink.cfg` actually populates a
+      location, and it survives verbatim through `service snmp location`;
+      the other five SNMP-carrying cells leave it empty on both sides.  Both
+      matrices declare `/snmp/location` supported.  Thin but clean — one
+      populated cell, stated as one.
+    references: [aoss-vyos-surface]
+
+  "snmp.contact":
+    disposition: lossy
+    reason: >
+      Drifts on 1 of the 3 cells that populate a contact
+      (`hpe_community_2920_wb1608_dhcp_snooping.cfg`), and the loss is a
+      punctuation rewrite, not a content loss — say which one you mean.
+      The source is a combined AOS-S `snmp-server contact "..." location
+      "..."` line, so the parsed contact string carries two embedded
+      double-quote characters.  The VyOS render replaces both with
+      apostrophes and warns as it does so: VyOS rejects embedded quotes in
+      value strings even when escaped (vyos.dev/T1246).  Every other
+      character round-trips; only the two `"` become `'`.
+      The text survives; its punctuation does not.  Recorded as a loss rather
+      than waved through because the audit compares strings and because an
+      operator diffing the two configs deserves to know why the field moved —
+      but it is `lossy`, not `unsupported`, because nothing is dropped and
+      the contact remains usable.
+      The other two populated cells
+      (`hpe_community_2930f_wc1607_intervlan.cfg`, `kitchen_sink.cfg`)
+      contain no quote character and round-trip exactly.  Both matrices
+      declare `/snmp/contact` supported.
+    references: [aoss-vyos-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      A total drop, verified by reading the rendered `service snmp` block
+      rather than inferred: 3 trap-host records across the 2 cells that carry
+      them become 0, and the render contains no trap target of any kind — the
+      block emits `community`, `contact`, `location` and the `v3` users and
+      stops there.
+      aruba_aoss declares `/snmp/trap-host` SUPPORTED, so the source side is
+      not the problem.  Recorded `unsupported` rather than `lossy` because
+      the records vanish and the target has no grammar they land in (#436).
+      Standing observation, recorded because it is a matrix fact rather than
+      a pair-specific one: the vyos matrix declares NOTHING for
+      `/snmp/trap-host` — neither supported, lossy nor unsupported — while
+      dropping trap hosts entirely.  That is a target-side under-declaration
+      of the same shape as the arista_eos `/lags/lag` case, and it belongs to
+      a codec change rather than to this file.
+      Re-enter every trap destination on the target; nothing will warn you
+      that monitoring went silent.
+    references: [aoss-vyos-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      Much narrower than the trap-host drop above, and the two are unrelated
+      mechanisms despite sharing a parent — neither is evidence for the
+      other.  Both USM users on the single cell that carries them
+      (`kitchen_sink.cfg`) survive the round-trip with their names, group and
+      auth protocol intact.  The single measured drift is one user's
+      `priv_protocol` collapsing from `aes128` to bare `aes`.
+      vyos declares `/snmp/v3-user/priv-protocol` LOSSY and names the cause:
+      its `privacy type` node renders only bare `des` / `aes`, so AES
+      key-length variants (AES-192/256) and 3DES lose their exact strength on
+      render.  It declares `/snmp/v3-user/auth-protocol` lossy for the mirror
+      reason (SHA-224/256/384/512 collapse to `sha`); this corpus does not
+      exercise that one — its users are `sha` and `md5` already.
+      This is a cryptographic-strength MARKER downgrade, not a lost user,
+      which is why it is `lossy`.  The auth and privacy passphrases
+      round-trip verbatim as opaque blobs and are stripped by the mesh
+      comparator as target-determined cosmetics, so they do not contribute
+      either way; no passphrase value appears in this file or its reference
+      note.  Re-key v3 users on the target regardless — vyos declares both
+      passphrases lossy on the grounds that cross-vendor migration requires
+      it.
+    references: [aoss-vyos-surface]
+
+  # -- LAGs -- a name-shape artifact, and it is recoverable -------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      On the measured bare path this looks like a total drop — 3 LAG records
+      across the 2 trunk-carrying cells become 0 — but the vanish shape and
+      the target matrix disagree, so it was probed rather than declared, and
+      the probe changes the answer.
+      MECHANISM: `netcanon/migration/codecs/vyos/render.py` maps a name to a
+      `bonding <name>` block ONLY when it matches `^bond\d+$`, and the helper
+      that emits `mode 802.3ad` and the `member { interface ... }` list runs
+      only for that block type.  An AOS-S trunk is called `trk1`, so it falls
+      through to a bare `ethernet trk1 { }` stanza with no mode and no
+      members, which re-parses as a plain interface and no LAG at all.
+      PROOF IT IS RECOVERABLE: running the standard cross-vendor
+      `translate_port_names(intent, aruba_aoss, vyos)` step first renames
+      `trk1 -> bond1` and `trk2 -> bond2`, after which the render emits
+      `bonding bond1 { mode 802.3ad member { interface eth23 ... } }` and BOTH
+      LAG records survive the round-trip with members and mode intact.  The
+      mesh measures the bare render path, which skips that step by design.
+      Recorded `lossy` and NOT `unsupported` on that basis.  `unsupported`
+      asserts the target cannot express the concept and blocks the migration;
+      vyos declares `/lags/lag/name` and `/lags/lag/members` SUPPORTED and
+      the renderer demonstrably honours them.  #436's vanished-record rule
+      exists to stop a real concept gap being downgraded to a warning — it is
+      not a licence to call a name-shape artifact a concept gap.
+      This entry, the phantom record under `interfaces[].name` and the null
+      `interfaces[].lag_member_of` are ONE mechanism seen three ways, not
+      three findings.  vyos additionally declares `/lags/lag/mode` lossy:
+      non-LACP modes collapse to `static` on render, which is untested here
+      because the port-renamed proof carried `active` and `static` cleanly.
+      Engage port translation, or re-create the bonds and re-add members by
+      hand.
+    references: [aoss-vyos-surface]
+
+  # -- Identity -- credentials survive, authority does not --------------------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Every account survives: 5 user records across the 3 cells that populate
+      local users, 5 present after the round-trip, zero dropped.  vyos
+      declares `/local-users/user/name` supported and renders each account as
+      `system login user <name> { ... }`.
+      Notable because the reverse is the common failure on this mesh — pairs
+      where accounts silently disappear.  Here nothing disappears, and the
+      loss on this surface is entirely about what authority the surviving
+      accounts arrive with.  See `local_users[].role`.
+    references: [aoss-vyos-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Every account arrives as an administrator.  Measured across all 5 user
+      records on the 3 populated cells: role preserved on 0 of 5, with
+      transitions `manager -> admin` on 4 records and `operator -> admin` on
+      1.  That last record also moves `privilege_level` from 1 to 15
+      (privilege level is otherwise preserved on 4 of 5).
+      CAUSE, read from the render: the VyOS `system login` block emits only
+      `user <name> { authentication { encrypted-password ... } }` — no role,
+      no level — and the vyos parser then assigns every login user
+      `role="admin"`, `privilege_level=15`.  vyos declares
+      `/local-users/user/privilege-level` LOSSY and documents exactly this
+      mapping ("configured users have full operator/admin access").
+      The direction matters more than the count: this FAILS OPEN.  A
+      read-only AOS-S `operator` becomes a full VyOS administrator.  Recorded
+      `lossy` rather than `unsupported` because the account record and its
+      credential both survive intact — it is the authority attached to them
+      that is wrong, not the account — but treat the `lossy` warning as a
+      floor, not a ceiling.  Re-assert every account's authority on the
+      target before cutover, and delete any account that was only ever meant
+      to look.
+    references: [aoss-vyos-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Preserved byte-identical on 5 of 5 records — the credential is carried
+      into `authentication { encrypted-password <value> }` and re-parses
+      unchanged.  vyos declares `/local-users/user/hashed-password`
+      supported.  aruba_aoss declares nothing under `/local-users/`, so the
+      clean result here is measured rather than promised.
+      Two shape observations, no value quoted here or in the reference note:
+      4 of the 5 credentials carry a `sha1:` scheme marker and 1 carries a
+      `plaintext:` scheme marker.  The plaintext-scheme credential is written
+      verbatim into a VyOS node whose name promises a hash — nothing is lost,
+      which is why this key is `good`, but a cleartext secret lands in the
+      target config.  Re-set that account's password rather than migrating
+      it, and treat the rendered config as secret-bearing until you have.
+    references: [aoss-vyos-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      A total drop: the 2 RADIUS servers on the single cell that carries them
+      (`kitchen_sink.cfg`) become 0, and the rendered config contains no
+      RADIUS configuration at all.
+      vyos declares BOTH `/radius-servers/server/host` and
+      `/radius-servers/server/key` unsupported and states the reason for each
+      ("Render emits no RADIUS config"; "the RADIUS shared secret is dropped
+      on migration").  Recorded `unsupported` rather than `lossy` because the
+      records vanish into a target with no grammar for them (#436).
+      Re-author RADIUS on the VyOS side — and note that the shared key could
+      not have migrated even if the server list had, so it must be re-issued
+      rather than copied.  aruba_aoss declares nothing under
+      `/radius-servers/` while parsing them, which is a source-side
+      under-declaration worth a codec change, not a pair-specific fact.
+    references: [aoss-vyos-surface]
+
+  # -- Fabric -- absent on the source side ------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoss declares `/vxlan-vnis/vni`,
+      `/vxlan-vnis/source-interface` and `/vxlan-vnis/udp-port` unsupported,
+      so no VNI ever enters the canonical tree from this source.  Measured
+      empty on all 7 cells.  A campus access switch has no overlay.
+      vyos declares `/vxlan-vnis/vni`, `/vxlan-vnis/udp-port`,
+      `/vxlan-vnis/mcast-group` and `/vxlan-vnis/flood-list` SUPPORTED, so an
+      overlay built on the target afterwards will stick — this is something
+      the migration never had, not something it lost.
+    references: [aoss-vyos-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: not_applicable
+    note: >
+      Same source-side gap as `vxlan_vnis[].vni` — the VNI-to-VLAN binding
+      rides on a VNI record aruba_aoss never produces.  Recorded separately
+      because vyos declares `/vxlan-vnis/vlan-id` LOSSY on its own merits
+      (VyOS models one VNI per `vxlan vxlanN` netdev with no VLAN on the
+      device, so the canonical `vlan_id` is synthesised), which would matter
+      for a source that actually carried one.  This one does not.
+    references: [aoss-vyos-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: not_applicable
+    note: >
+      Same source-side gap.  Measured empty on all 7 cells.  vyos declares
+      `/vxlan-vnis/mcast-group` supported, so the multicast underlay is
+      target-side new work rather than a migration casualty.
+    references: [aoss-vyos-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Structurally absent on both sides and declared by neither codec:
+      aruba_aoss has no EVPN control plane to parse and no committed cell
+      populates the field.  Recorded `not_applicable` rather than
+      `unsupported` because the source is what cannot produce it — there is
+      no target drop to warn about.
+    references: [aoss-vyos-surface]
+
+  # -- VRFs -- absent on the source side --------------------------------------
+
+  "routing_instances[].name":
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoss declares BOTH `/routing-instances/instance`
+      and `/routing-instances/instance/instance-type` unsupported, so no VRF
+      ever enters the canonical tree from this source.  Measured empty on all
+      7 cells.
+      vyos declares `/routing-instances/instance/name` SUPPORTED and renders
+      `set vrf name <name>`, so VRFs authored on the target will stick.  Two
+      of its own caveats are moot here for want of a source: it declares
+      `/routing-instances/instance/table` lossy (it synthesises a
+      deterministic table id) and `/routing-instances/instance/l3-vni`
+      unsupported.
+    references: [aoss-vyos-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      Same source-side gap: the description rides on an instance record
+      aruba_aoss never produces, and neither codec declares a path for it.
+      Measured empty on all 7 cells.
+    references: [aoss-vyos-surface]
+
+  # -- Passthrough / vendor-specific -----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on either side of any cell.  aruba_aoss declares no path
+      under raw sections and no committed AOS-S fixture carries an unparsed
+      block that survives to render.
+      vyos declares `/system/raw-sections/version-banner` LOSSY on its own
+      side — the render appends a synthesised `// vyos-config-version`
+      trailer and discards the component-version block on parse — but with an
+      AOS-S source there is no raw section entering the pipeline for that to
+      act on.
+    references: [aoss-vyos-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoss-vyos-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoss-vyos-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: BOTH matrices declare `/anycast-gateway-mac`
+      unsupported.  aruba_aoss parses-and-ignores a system-wide anycast
+      gateway MAC (ship-before-wire, v0.2.0) and vyos has no VARP /
+      distributed-anycast-gateway grammar to render one into.  Measured empty
+      on both sides of all 7 cells, so this is declared rather than observed.
+      Both codecs also declare the per-address twins
+      `/interfaces/interface/ipv4/address/virtual-gateway-address` and its
+      IPv6 mirror unsupported, so there is no partial path either — a
+      distributed anycast gateway does not migrate across this pair in any
+      form.
+    references: [aoss-vyos-surface]

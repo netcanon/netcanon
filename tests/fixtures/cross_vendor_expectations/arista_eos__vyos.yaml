@@ -1,0 +1,744 @@
+# Cross-vendor fidelity expectations: arista_eos -> vyos
+#
+# Source: arista_eos codec — EOS `show running-config` text.
+# Target: vyos codec — VyOS curly-brace `config.boot` render.
+#
+# Asymmetric by device class. arista_eos in the committed corpus is a DC
+# leaf / campus L3 switch — EVPN/VXLAN leaves with VARP anycast gateways,
+# Port-Channel bundles, a populated top-level VLAN database with trunk
+# membership, and one 66-port access switch. vyos is a Linux software
+# router. The realistic migration is a leaf or L3 switch being replaced by
+# a VyOS appliance, so the shared surface is the ROUTED plane — interface
+# inventory and addressing, static routes, VRF identity, local accounts,
+# SNMP — and NOT the L2 fabric.
+#
+# READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: the
+# interface half of this pair has the same shape as that one — the
+# inventory is FULLY PRESERVED, 169 interface records in and 169 out with
+# identical name sets on all 6 cells — so every `interfaces[].*` loss below
+# is a genuine per-attribute loss standing on its own measurement, and the
+# interface sub-fields that survive are `good` rather than dragged down by a
+# vanishing parent. The VLAN half is the opposite: all 29 VLAN records
+# vanish together, so that ONE disappearance is claimed exactly once, under
+# `vlans[].id`, and the five sibling `vlans[].*` keys are `good` so a single
+# structural loss is not counted five times.
+#
+# The real losses on this pair are the LAG surface (a total concept drop),
+# the VLAN database, the VARP anycast triad, the IANA interface type hint,
+# the VXLAN VLAN binding (which returns WRONG rather than empty), the
+# static-route VRF scope, SNMPv3 algorithm strength, trap hosts, syslog,
+# DHCP pools — and local-user roles, which fail OPEN.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
+# and hand round-trips of the committed corpus (6 fixture cells, 0 render
+# errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree.
+# Every loss recorded below was re-derived by parsing the fixture with
+# arista_eos, rendering with vyos and re-parsing the render — not inferred
+# from the drift shape. Two fields where the drift shape actively lies
+# (`static_routes`, `lags`) are called out in the reference doc.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/arista_eos_to_vyos/
+#
+# Authored 2026-08-25 closing the cross-vendor expectation mesh.
+
+meta:
+  source_vendor: arista_eos
+  target_vendor: vyos
+  primary_use_case: >
+    DC leaf / campus L3 switch replaced by a VyOS software router carrying
+    the same routed interfaces, addressing, static routing and VRFs.
+    Hostname, domain, DNS and NTP, the full interface inventory with its
+    descriptions, MTU, admin state and IPv4/IPv6 addressing, VRF names,
+    VXLAN VNI numbers, local account names and their password hashes all
+    survive. What does not is the entire L2 fabric — the VLAN database, the
+    LAG/bonding surface, and the VARP anycast gateway — plus syslog
+    destinations, DHCP pools, SNMP trap hosts, the static-route VRF scope,
+    SNMPv3 algorithm strength, the VXLAN VLAN binding, and every local-user
+    role, which is flattened to `admin`.
+  certainty: medium
+  references:
+    - id: arista-vyos-surface
+      path: docs/vendor-references/arista_eos_to_vyos/canonical_surface.md
+      title: "Arista EOS -> VyOS: measured canonical surface (6 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- management-plane scalars ------------------------------------
+
+  hostname:
+    disposition: good
+    note: >
+      `hostname <name>` on both platforms; preserved on 6 of 6 cells.  Both
+      matrices declare `/system/hostname` supported.
+    references: [arista-vyos-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on both cells that populate it (`lab.local`,
+      `example.net`); the other 4 carry no domain.  Worth stating
+      precisely: arista_eos declares NO `/system/domain` path at any level,
+      so the source side of this `good` rests on the measured round-trip
+      alone rather than a declaration.  vyos declares it supported.  The
+      value survives either way.
+    references: [arista-vyos-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate name-servers — 1 or 2 servers
+      in, the same servers out, zero drift.  Both codecs declare
+      `/system/dns-server` supported at the exact path.
+    references: [arista-vyos-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate it, zero drift.  Both matrices
+      declare `/system/ntp-server` supported.
+    references: [arista-vyos-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than a VyOS limitation — neither
+      codec parses nor renders a clock/timezone stanza, and vyos states it
+      plainly ("Render emits no time-zone stanza; intent.timezone is
+      dropped on migration").  No committed cell populates it, so the gap is
+      declared rather than observed.  Set the timezone on the target by
+      hand; nothing in the migration will carry it.
+    references: [arista-vyos-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Measured, not inferred: the single logging host on
+      `ksator_dcs_7150s64_eos4224.txt` becomes zero after
+      parse -> render -> re-parse, and the rendered `config.boot` contains
+      no syslog node.  arista_eos declares `/system/syslog-server`
+      SUPPORTED; vyos declares it UNSUPPORTED and says why ("Render emits no
+      syslog config; intent.syslog_servers are dropped on migration").
+      Recorded `unsupported` rather than `lossy` because the record
+      vanishes, it does not degrade, and the target render has no grammar it
+      lands in (#436).  Re-author logging destinations on the target — and
+      do it before cutover, because a box that has silently stopped shipping
+      logs looks healthy.
+    references: [arista-vyos-surface]
+
+  # -- Interfaces -- inventory intact, three attributes lost -----------------
+  #
+  # The measured record count is the headline: 169 interface records across
+  # the 6 cells, 169 after the round-trip, with identical name sets on every
+  # cell.  `Ethernet1`, `Loopback0`, `Management1`, `Vlan110` and
+  # `Port-Channel3` all survive the VyOS render under the same name.
+  # Nothing below is a knock-on effect of a vanishing parent record — each
+  # loss was measured on its own.
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Preserved on 6 of 6 cells: 169 source interface records, 169 after
+      parse -> render -> re-parse, identical name SETS.  Only the ordering
+      of the list changes, which is why an index-zipped comparison
+      misleadingly reports ~147 "renames"; keyed by name, zero interfaces
+      are added, dropped or renamed on any cell.
+    references: [arista-vyos-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      73 interface records carry a description and all 73 round-trip
+      byte-identical — zero drift on any cell.  Both matrices declare
+      `/interfaces/interface/config/description` supported.
+      Specifically checked, because it is the known hazard on a vyos
+      TARGET: the vyos render replaces embedded double-quotes in free text
+      with apostrophes (VyOS rejects embedded quotes in value strings even
+      when escaped, vyos.dev/T1246), so a description can return with
+      altered punctuation.  It does not fire here — 0 of the 73
+      descriptions contain an embedded double quote, so this pair is clean
+      for both content AND punctuation.  The hazard is real for other
+      sources; it simply has no material to act on in these 6 fixtures.
+    references: [arista-vyos-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on 169 of 169 records — zero differing.  Both
+      matrices declare `/interfaces/interface/config/enabled` supported.  A
+      port that was `shutdown` on EOS arrives disabled on VyOS.
+    references: [arista-vyos-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on 169 of 169 records.  Honest about coverage: MTU is
+      actually populated on only ONE record in the whole corpus, and that
+      one round-trips unchanged.  Both codecs declare
+      `/interfaces/interface/config/mtu` supported, and the declaration
+      carries most of the weight here — a single record is thin evidence.
+    references: [arista-vyos-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on 169 of 169 records; IPv6 is populated on 5 of them and
+      every address + prefix-length survives.  Both matrices declare
+      `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
+      supported.  Note the asymmetry with the IPv4 key below: vyos declares
+      the IPv6 anycast virtual-gateway address unsupported too, but no
+      committed cell mounts one on IPv6, so unlike IPv4 there is nothing
+      here to lose.
+    references: [arista-vyos-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Drifts on 14 of the 57 interface records that carry IPv4, across 2
+      cells.  The measurement matters more than the headline, because the
+      loss is narrow in one sense and severe in another.
+      What does NOT happen: zero real `ip address` values are lost.  Every
+      conventional address and prefix length on all 57 records survives.
+      What DOES happen: 15 address entries lose the VARP anycast
+      `virtual_gateway_address`, and 1 entry additionally loses its
+      `is_secondary` flag (true -> false).  arista_eos declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address`
+      SUPPORTED; vyos declares it UNSUPPORTED — "VyOS has no
+      anycast-gateway / VARP grammar; render emits only the
+      `address <ip>/<plen>` line".
+      The severity lands on the SVIs whose ONLY address was the virtual
+      gateway: an EOS `ip address virtual 10.1.10.1/24` parses with an empty
+      `ip` and the address in `virtual_gateway_address`, so after the
+      round-trip that entry comes back carrying a prefix length and NO
+      address at all.  The distributed gateway is gone and the SVI is
+      unusable until re-addressed.
+      Recorded `lossy`, not `unsupported`: the address list keeps its entry
+      count and its prefix lengths, the primary addressing surface is 100%
+      clean, and blocking the whole IPv4 surface would misdescribe a field
+      that is correct on 43 of 57 records.  This and `anycast_gateway_mac`
+      are ONE absent grammar, not two independent findings — neither
+      corroborates the other; each is recorded where it is measured.
+    references: [arista-vyos-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on all 6 cells and, unusually, on every single record: all 169
+      lose the IANA type hint entirely, going to the empty string.  The
+      breakdown is uniform with ZERO survivors of any type — 118
+      `ianaift:ethernetCsmacd`, 24 `ianaift:l3ipvlan`, 17
+      `ianaift:softwareLoopback` and 10 `ianaift:ieee8023adLag` all drop.
+      Both matrices declare `/interfaces/interface/config/type` LOSSY in
+      their own right, and vyos states the mechanism: it declares no IANA
+      ifType and re-derives one from the interface-NAME shape (`ethN` ->
+      ethernetCsmacd, `lo`/`dumN` -> softwareLoopback, `bondN` ->
+      ieee8023adLag).  Because the render preserves EOS names verbatim, none
+      of `Ethernet1` / `Loopback0` / `Vlan110` / `Port-Channel3` matches
+      those shapes, so nothing is re-derived.  This is the INVERSE of the
+      IOS-XR -> EOS pair, where every loopback survived because EOS does
+      re-derive from `interface Loopback<N>`.
+      The interface record, its addressing and its admin state are
+      unaffected — this is a lost hint, not lost forwarding state, which is
+      why it is `lossy` and not `unsupported`.
+    references: [arista-vyos-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: unsupported
+    reason: >
+      A total drop of the attribute, verified by inspecting the render
+      rather than inferred from the drift shape: on the 3 cells that carry
+      bundles, all 15 records with a `lag_member_of` value (`Port-Channel3`,
+      `5`, `6`, `7`, `10`, `11`, `20`) come back null, and the rendered
+      `config.boot` contains no `bond-group` line anywhere.  The member
+      interfaces themselves survive intact — it is the membership pointer
+      that is gone, which is the dangerous shape: the ports come up
+      standalone rather than bundled.
+      Recorded `unsupported` rather than `lossy` because the value never
+      degrades, it vanishes, and the target render has no grammar it lands
+      in (#436).  This and `lags` are ONE mechanism, not two independent
+      findings — neither corroborates the other, and this entry is here
+      because the attribute is measured on the interface record, not because
+      `lags` also drifts.
+      Re-create bonding interfaces and re-add members on the target by hand.
+    references: [arista-vyos-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      Target-side block, and a broad one.  vyos declares the ENTIRE
+      `/interfaces/interface/vrrp-groups/group` subtree unsupported — the
+      group anchor plus mode, priority, preempt, advertisement-interval,
+      authentication, virtual-IPv6 and description — with the reason "VyOS
+      VRRP / VRRPv3 is not modelled by the codec; the group is dropped on
+      migration".  arista_eos declares `/interfaces/interface/vrrp-groups/group`
+      SUPPORTED, so the source side can emit first-hop redundancy even
+      though no committed cell does.
+      Stated plainly: no cell on this pair populates VRRP, so this rests on
+      the declarations, not on a measured round-trip — 0 differing of 169
+      records simply because both sides are empty on all of them.  Recover
+      first-hop redundancy from the source config by hand; the migration
+      will not carry it, and unlike most gaps on this pair, re-authoring it
+      on the target will not stick either.
+    references: [arista-vyos-surface]
+
+  # -- VLANs -- a real L2 database, and it does not cross --------------------
+  #
+  # 4 of 6 cells populate `vlans`, 29 records in total, and they are richly
+  # populated: 28 carry a name, 27 carry tagged ports, 24 carry IPv4
+  # addressing, 3 carry untagged ports.  All 29 vanish.  That is ONE
+  # structural loss with ONE cause, so it is claimed exactly once — here, on
+  # `vlans[].id` — and the five sibling keys below are `good`.  Recording a
+  # loss on each of them would count one disappearance six times and could
+  # never be evidenced independently.
+  #
+  # Worth being precise about what DOES survive: the EOS SVI named `Vlan110`
+  # comes back as an interface record called `Vlan110` with its prefix
+  # intact.  The INTERFACE survives; the VLAN DATABASE RECORD does not.
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      A total drop, measured: 29 VLAN records across the 4 cells that carry
+      them become 0 after parse -> render -> re-parse.  arista_eos declares
+      `/vlans/vlan/id` SUPPORTED; vyos declares it UNSUPPORTED and states
+      the cause — "VyOS has no top-level VLAN database; 802.1Q VLANs are
+      modelled as `vif <vid>` sub-interfaces (rendered as `ethN.<vid>`
+      CanonicalInterfaces), which ARE supported".
+      Recorded `unsupported` rather than `lossy` because a vanished record
+      is not lossy (#436): `lossy` warns and stays compatible, which would
+      badly understate losing the entire VLAN database of a leaf switch.
+      This key carries the record-level loss for the whole `vlans` list; the
+      five sibling keys below are deliberately `good` so this one
+      disappearance is not counted six times.
+      Rebuild the L2 topology on the target as `vif` sub-interfaces and
+      bridges; nothing in the VLAN block migrates.
+    references: [arista-vyos-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      28 of the 29 source VLAN records carry a name, and they do go away —
+      but they go away because the VLAN RECORD goes away, which is claimed
+      once under `vlans[].id`.  This key measures what happens to the VALUE
+      when the record survives, and no VLAN record survives on this pair for
+      the value to be degraded in.  Both codecs declare `/vlans/vlan/name`
+      at the exact path, and there is no name-specific loss to record here.
+      Recording one would double-count the structural loss above.
+    references: [arista-vyos-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      24 of the 29 source VLAN records carry IPv4 addressing, which
+      disappears with its parent record — claimed once under `vlans[].id`.
+      No VLAN-mount-specific loss is recorded here.
+      Two things are worth knowing anyway.  vyos does declare
+      `/vlans/vlan/ipv4/address/{secondary-ip,virtual-gateway-address,
+      virtual-gateway-mac}` unsupported on their own merits, which would
+      matter for a source whose VLAN records survived.  And the addressing
+      that operationally matters is NOT lost: the EOS SVI carrying it is an
+      interface record (`Vlan110`), which survives — see
+      `interfaces[].ipv4_addresses`, where the real addresses round-trip
+      cleanly and only the VARP anycast attribute drops.
+    references: [arista-vyos-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Populated on only 3 of the 29 source VLAN records, and lost with the
+      parent record rather than on its own account — claimed once under
+      `vlans[].id`.  Access-port membership has no per-VLAN home on VyOS at
+      all (`/interfaces/interface/access-vlan` is separately declared
+      unsupported: "VyOS models VLANs as vif <vid> sub-interfaces, not a
+      per-port access-VLAN"), so there is no surviving record for a value
+      loss to be measured in.  Recorded `good` to keep the structural loss
+      counted once.
+    references: [arista-vyos-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      The most populated VLAN sub-field — 27 of 29 records carry trunk
+      membership — and the same reasoning applies: it disappears with the
+      VLAN record, which `vlans[].id` claims.  vyos separately declares
+      `/interfaces/interface/trunk-allowed-vlans` unsupported ("VyOS has no
+      switchport trunk allowed-list; tagged VLANs are vif sub-ifaces"), so
+      the trunk surface has no target home on either mount.  No independent
+      per-value loss exists to record here.
+    references: [arista-vyos-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Measured empty on all 29 source VLAN records — no committed EOS cell
+      sets a VLAN description — so there is nothing for VyOS to lose even
+      before the parent record vanishes.  arista_eos declares
+      `/vlans/vlan/description` LOSSY on its own side, which would matter
+      for a corpus that populated it.  Recorded `good` rather than
+      `not_applicable` so that the structural loss stays claimed once, on
+      `vlans[].id`.
+    references: [arista-vyos-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      This is the field most likely to be misread on this pair, so the
+      measurement comes first: all 7 routes across the 5 cells that populate
+      them SURVIVE — destination, gateway and metric intact, 7 in and 7 out.
+      A mechanical "do the records match?" pass reports the whole field
+      vanishing; that is an artifact of identity-matching, not a real drop.
+      What actually drifts is one attribute on 2 of the 7 routes, on 2
+      cells: `vrf` goes from `MGMT` to the empty string.  arista_eos
+      declares `/routing/static-route/vrf` SUPPORTED; vyos declares it
+      UNSUPPORTED because per-VRF static routes
+      (`vrf name <X> { protocols static route ... }`) are deferred past the
+      Phase-3 VRF wire-up, while the `vrf name` instances themselves are
+      supported.
+      The consequence is worse than the size of the drift suggests: a
+      default route that was scoped to the MANAGEMENT VRF re-appears in the
+      GLOBAL table.  That is not a lost route, it is a route pointed
+      somewhere else — a routing-correctness hazard on a device whose
+      management network was deliberately isolated.
+      Recorded `lossy`, not `unsupported`: the route records survive, 5 of
+      the 7 are untouched, and blocking the entire static-routing surface
+      would misdescribe a field that is mostly clean.  One caveat that is
+      declared rather than observed: both codecs also declare
+      `/routing/static-route/description` LOSSY, and no committed cell sets
+      a route description, so that sub-loss is untested here.
+      Audit the VRF column of every migrated route before cutover.
+    references: [arista-vyos-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      A total drop, measured on the one cell that carries pools
+      (`kitchen_sink.txt`): 2 DHCP pools (`USERS` on 10.100.0.0/24 and
+      `VOICE` on 10.100.20.0/24, with ranges, gateways, lease times and
+      per-pool DNS) become 0 after the round-trip.  arista_eos declares
+      `/dhcp-servers/pool` SUPPORTED; vyos declares it UNSUPPORTED ("Render
+      emits no DHCP server pool; intent.dhcp_servers are dropped on
+      migration").
+      Verified against a false positive: the string `dhcp-server` DOES
+      appear in the rendered output, but only inside the
+      `// vyos-config-version` component-version trailer — there is no DHCP
+      configuration node.  Recorded `unsupported` because the records vanish
+      with no target grammar (#436).  Re-author DHCP scopes on the target;
+      an address pool that silently stops serving is a next-morning outage.
+    references: [arista-vyos-surface]
+
+  # -- SNMP -- three keys clean, two lost in different ways ------------------
+  #
+  # 2 of the 6 cells carry an SNMP block: `ksator_dcs_7150s64_eos4224.txt`
+  # (community only) and `kitchen_sink.txt` (the full surface).  The
+  # rendered VyOS `service snmp` node emits community, contact, location and
+  # both v3 users — and no trap target at all.
+
+  "snmp.community":
+    disposition: good
+    note: >
+      Preserved on both cells that carry an SNMP block, zero drift.  Both
+      matrices declare `/snmp/community` supported, and the render emits a
+      `community <name> { authorization ro }` node.  Thin coverage — 2
+      cells — but clean where measured.
+    references: [arista-vyos-surface]
+
+  "snmp.location":
+    disposition: good
+    note: >
+      Preserved on the cell that sets it, round-tripping through the
+      rendered `location` node unchanged.  Both matrices declare
+      `/snmp/location` supported.
+    references: [arista-vyos-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: >
+      Preserved on the cell that sets it, same shape as `snmp.location`.
+      Both matrices declare `/snmp/contact` supported.
+    references: [arista-vyos-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      The single trap destination on the one cell that sets one goes to
+      zero.  Verified by reading the render rather than the drift counts:
+      the emitted `service snmp` block contains community, contact, location
+      and both v3 users, and NO trap-target node of any kind.
+      arista_eos declares `/snmp/trap-host` SUPPORTED.  vyos declares NO
+      path for trap hosts at any level — not supported, not lossy, not
+      unsupported — while dropping them entirely.  That is a target matrix
+      under-declaration, the same shape as the `/lags/lag` gap noted below,
+      and it belongs to a codec change rather than being fixed here.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      and there is no grammar it lands in (#436).  Re-point trap
+      destinations on the target, and verify the NMS is actually receiving
+      them — this failure is invisible from the device.
+    references: [arista-vyos-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      Both v3 users survive the round-trip with their names, their groups
+      and their opaque auth/privacy key blobs carried verbatim.  What
+      degrades is the ALGORITHM, in the unsafe direction:
+      `auth_protocol` sha256 -> sha (SHA-1), and `priv_protocol` aes256 ->
+      aes and aes128 -> aes.  vyos declares
+      `/snmp/v3-user/auth-protocol` and `/snmp/v3-user/priv-protocol` LOSSY
+      and names it exactly that — a cryptographic downgrade, because
+      `auth type` renders only md5/sha and `privacy type` only bare
+      des/aes, so key-length variants lose their strength on render.
+      It also declares `/snmp/v3-user/auth-passphrase`,
+      `/priv-passphrase` and `/engine-id` lossy: the VyOS keys are opaque
+      `encrypted-password` blobs that round-trip verbatim same-vendor but
+      require re-keying cross-vendor, and the single config-wide `engineid`
+      is mapped onto every user.
+      Recorded `lossy` rather than `unsupported`: the user records survive
+      and the target models v3 — the strength degrades, it does not vanish.
+      Treat the carried key material as non-functional and re-key every v3
+      user on the target.  No key value is reproduced in this file or its
+      reference doc; only the algorithm labels and the blob SHAPE are
+      described.
+    references: [arista-vyos-surface]
+
+  # -- LAGs -- the concept the target renders but does not model -------------
+
+  lags:
+    disposition: unsupported
+    reason: >
+      A total drop, not a degradation — verified by reading the rendered
+      configuration rather than inferred from the drift shape, because
+      `lags` is the known trap on this mesh (renderers key off
+      `CanonicalInterface.lag_member_of`, not `CanonicalLAG.members`, so a
+      bare `lags` drift is often a naming artifact).  Probed here, it is
+      real: 10 LAG records across the 3 bundle-carrying cells become 0.
+      The render shows precisely why.  A source LAG `Port-Channel10` with
+      members `Ethernet4`, `Ethernet5` and mode `active` is emitted as
+      `ethernet Port-Channel10 { ... }` — an ordinary PHYSICAL interface
+      under a name that will not exist on a VyOS box.  There is no
+      `interfaces bonding bondN` node and no `bond-group` line anywhere, and
+      the vyos parser builds `CanonicalLAG` only from `interfaces bonding`,
+      so it finds nothing to re-parse.
+      Recorded `unsupported` rather than `lossy` because a vanished record
+      is not lossy (#436) — `lossy` warns and stays compatible, which would
+      badly understate losing every bundle on a leaf switch.
+      Two matrix observations in opposite directions, both left to a codec
+      change rather than fixed here: arista_eos declares NOTHING for
+      `/lags/lag` as a source (the same standing under-declaration recorded
+      on the IOS-XR pair), while vyos declares `/lags/lag/name` and
+      `/lags/lag/members` SUPPORTED and `/lags/lag/mode` lossy — and then
+      delivers zero.  That second one is a target OVER-declaration: the
+      matrix promises a surface the render does not emit.
+      Re-create bonding interfaces and re-add members on the target by hand.
+    references: [arista-vyos-surface]
+
+  # -- Identity -- names and credentials cross; authority does not ----------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      All 12 accounts across all 6 cells survive with their names intact —
+      zero accounts dropped, zero added, on any cell.  Both matrices declare
+      `/local-users/user/name` supported.  Notable because account loss is
+      the common failure on this mesh; it does not happen on this pair.  The
+      losses that DO occur are on the role, below.
+    references: [arista-vyos-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on all 6 cells and on every one of the 12 accounts, and it
+      fails OPEN.  Every role collapses to `admin`: 6 records go
+      `network-admin` -> `admin`, 5 go empty -> `admin`, and 1 goes
+      `network-operator` -> `admin`.  That last record is the one that
+      matters — a read-only operator on the EOS side arrives on VyOS as a
+      full administrator.
+      The companion `privilege_level` field moves the same way on the same
+      records (1 -> 15 on 4 of them).  That is the SAME mechanism, stated
+      for completeness, not independent corroboration of it.
+      vyos declares `/local-users/user/role` SUPPORTED while flattening
+      every role — an under-declaration on the target — and separately
+      declares `/local-users/user/privilege-level` LOSSY with the honest
+      reason that the codec maps every login user to one privilege level
+      because VyOS `system login user` accounts have no numeric privilege in
+      the common case.
+      Recorded `lossy` rather than `unsupported`: the account record
+      survives and the target models roles, so the value degrades rather
+      than vanishing (#436).  Review every migrated account's authority
+      before cutover.  A migration that silently PROMOTES a read-only
+      operator is more dangerous than one that drops the account, because
+      nothing looks wrong afterwards.
+    references: [arista-vyos-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Credentials survive this pair intact, which is rare enough in this
+      mesh to be worth stating plainly.  Of the 12 accounts, 9 carry a
+      credential and all 9 round-trip BYTE-IDENTICAL; the remaining 3 carry
+      no credential in the source at all.  Zero drift on any cell — no
+      re-encoding, no scheme downgrade, no cleartext marker.  Both matrices
+      declare `/local-users/user/hashed-password` supported.
+      Read this together with `local_users[].role`: the accounts arrive with
+      WORKING passwords and with `admin` rights they may not have had.  This
+      key being `good` is what makes that one dangerous.
+      Only the shape is described here and in the reference doc — the values
+      are carried under the codec's own vendor tag prefix, and no hash body
+      is reproduced anywhere.
+    references: [arista-vyos-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: arista_eos declares NO `/radius-servers/*` path at
+      any level and produced zero RADIUS records on all 6 cells, so nothing
+      reaches the target.  Recorded `not_applicable` on that basis rather
+      than on the target's declaration.
+      Stated for the migration report: unlike most gaps on this pair,
+      re-authoring RADIUS on the VyOS side will NOT stick either — vyos
+      declares `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported ("Render emits no RADIUS config; the RADIUS shared secret
+      is dropped on migration").  Configure AAA outside the migration path.
+    references: [arista-vyos-surface]
+
+  # -- Fabric -- VNIs cross, their VLAN binding does not --------------------
+
+  "vxlan_vnis[].vni":
+    disposition: good
+    note: >
+      All 19 VNI records across the 4 cells that carry an overlay survive
+      with their VNI numbers intact — zero drift.  Both matrices declare
+      `/vxlan-vnis/vni` supported.  The VNI numbering is the half of the
+      overlay that migrates cleanly; the VLAN binding below is the half that
+      does not.
+    references: [arista-vyos-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: lossy
+    reason: >
+      The worst-SHAPED loss on this pair, because the value comes back
+      WRONG rather than empty.  18 of the 19 VNI records return a different
+      VLAN id, and the substitution is systematic: a constant offset of
+      +1812 on every drifting record (10 -> 1822, 110 -> 1922, 210 -> 2022,
+      310 -> 2122, and so on).  The single remaining record — VNI 100 on
+      `karneliuk_a_eos1_eos4260.txt` — returns its source VLAN 100
+      unchanged.
+      vyos declares `/vxlan-vnis/vlan-id` LOSSY and states the cause: VyOS
+      models ONE VNI per `vxlan vxlanN` netdev with no VLAN on the device
+      (the L2 VLAN binding lives on a separate `bridge`), so the required
+      canonical `vlan_id` is SYNTHESISED rather than carried.
+      Recorded `lossy` rather than `unsupported`: the VNI record survives
+      and the target models the binding — the value degrades.  But treat
+      this as the most urgent item on the pair.  An absent binding is caught
+      by the first test; a silently plausible WRONG binding maps tenant
+      traffic into the wrong segment and can survive into production.
+      Re-derive every VNI-to-VLAN binding on the target from the source
+      config.
+    references: [arista-vyos-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: not_applicable
+    note: >
+      Source-side gap: arista_eos declares `/vxlan-vnis/mcast-group` LOSSY
+      on its own side and 0 of the 19 VNI records carry one on any cell, so
+      nothing reaches the target.  These EOS leaves use ingress replication
+      rather than a multicast underlay.
+      Recorded separately from the two keys above because vyos declares
+      `/vxlan-vnis/mcast-group` SUPPORTED — re-authoring a multicast
+      underlay on the target will stick if the design needs one.  The
+      migration is not losing it; the source never had it.
+    references: [arista-vyos-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap: arista_eos declares `/evpn-type5-routes/route` LOSSY
+      on its own side and no committed cell populates the field — the EVPN
+      leaves carry their overlay as VNI records and BGP policy, not as
+      canonical type-5 records.  vyos declares no path for it either way, so
+      there is nothing on either side of this key to measure.
+    references: [arista-vyos-surface]
+
+  # -- VRFs -----------------------------------------------------------------
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      VRF names preserved on all 4 cells that populate them — 18 instance
+      records in, 18 out, names intact, record count never changes.  Both
+      codecs declare `/routing-instances/instance` supported, and vyos
+      renders each as `set vrf name <name>`.
+      One thing this key deliberately does NOT claim: the RD, route-target
+      import/export, L3VNI and mac-vrf-vs-vrf instance-type discriminator DO
+      drift on this pair, and vyos declares the reasons
+      (`/routing-instances/instance/instance-type` and `/table` lossy,
+      `/l3-vni` unsupported — symmetric-IRB L3VNI is out of scope for the
+      Phase-5 per-netdev L2-VNI model, and VyOS requires a numeric `table
+      <id>` the canonical model does not carry, so one is synthesised).
+      Those are sub-fields this key does not measure.  This key measures
+      instance IDENTITY, and identity is clean.
+    references: [arista-vyos-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      Source-side gap, measured: 0 of the 18 VRF records carry a description
+      on any cell, and arista_eos declares
+      `/routing-instances/instance/description` LOSSY on its own side — it
+      harvests the VRF with its RD and route-targets and has no description
+      emit path.  So nothing reaches the target and there is no round-trip
+      to point at.  vyos declares no path for a VRF description either way.
+    references: [arista-vyos-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair — arista_eos declares no path
+      under raw sections and no committed EOS fixture carries an unparsed
+      block that survives to render.  vyos declares
+      `/system/raw-sections/version-banner` LOSSY on its own side (the
+      `// vyos-config-version` trailer and the not-yet-modelled service/system
+      blocks are discarded on parse and a synthesised trailer emitted), which
+      would matter for a vyos SOURCE, not for this direction.
+    references: [arista-vyos-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [arista-vyos-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [arista-vyos-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Measured on the 2 cells that set it: the chassis-wide anycast gateway
+      MAC is present on the source and empty after the round-trip on both
+      (`batfish_eos_evpn_vlan_based_leaf.txt` and
+      `batfish_labval_dc1_leaf2a_eos4230.txt`).  arista_eos declares
+      `/anycast-gateway-mac` SUPPORTED; vyos declares it UNSUPPORTED —
+      "VyOS has no VARP / distributed-anycast-gateway grammar, so the
+      chassis-wide anycast-gateway MAC is dropped on render".
+      Recorded `unsupported` rather than `lossy` because the value vanishes
+      with no target grammar to land in (#436), and because a leaf that
+      thinks it still has a distributed gateway when it does not is a
+      first-hop blackhole.
+      This and the VARP loss inside `interfaces[].ipv4_addresses` are ONE
+      absent grammar, not two independent findings.  Neither is cited as
+      evidence for the other; each is recorded on the field where it is
+      measured.  Re-design first-hop redundancy on the target — and note
+      that VyOS VRRP is not modelled by the codec either, so the usual
+      substitute has to be configured outside the migration.
+    references: [arista-vyos-surface]
