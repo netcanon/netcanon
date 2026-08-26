@@ -1,0 +1,660 @@
+# Cross-vendor fidelity expectations: arista_eos -> cisco_iosxr
+#
+# Source: arista_eos codec — EOS `show running-config` text.
+# Target: cisco_iosxr codec — IOS-XR CLI render.
+#
+# Asymmetric by device class. arista_eos in the committed corpus is a DC
+# leaf/spine — EVPN/VXLAN fabric, VLANs, SVIs, MLAG port-channels, anycast
+# gateway. cisco_iosxr is a service-provider edge/core router: 4-segment port
+# names, a heavy VRF surface, and no campus L2 model at all. The realistic
+# migration is a DC leaf being re-homed onto an SP router, so the shared
+# surface is the L3 routed edge — interfaces, addressing, static routes, VRFs,
+# local users — and NOT the fabric or campus surface EOS is built around.
+#
+# The asymmetry runs along one clean seam, which is why the dispositions below
+# cluster at `good` and `unsupported` with only five `lossy` keys: the L3
+# routed surface crosses almost intact, and the L2 / fabric surface does not
+# cross at all.
+#
+# Note the contrast with the campus-to-DC pairs, because it changes how this
+# file must be read: the interface INVENTORY does NOT shrink here. Interface
+# counts are preserved on every cell (17->17, 30->30, 39->39, 4->4, 13->13),
+# so `interfaces[].name` / `.description` / `.enabled` / `.mtu` /
+# `.ipv6_addresses` are honestly `good` rather than collateral damage from a
+# vanishing record. The interface losses on this pair are per-attribute and
+# each is declared on its own measured merits. The structural drops happen one
+# level up, at whole top-level lists — vlans, vxlan_vnis, dhcp_servers, snmp,
+# anycast_gateway_mac — every one of which the IOS-XR render omits entirely.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
+# the committed cross-mesh run over the corpus (6 fixture cells, 0 render
+# errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree. Every
+# non-count claim was additionally re-derived by hand — parse with arista_eos,
+# render with cisco_iosxr, re-parse, compare — and where a disposition rests on
+# a declaration or a hand-built config rather than a committed cell, the entry
+# says which.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/arista_eos_to_cisco_iosxr/
+#
+# Authored 2026-08-25 extending the cisco_iosxr expectation mesh.
+
+meta:
+  source_vendor: arista_eos
+  target_vendor: cisco_iosxr
+  primary_use_case: >
+    DC-leaf to SP-edge re-home: an Arista EOS leaf replaced by a Cisco IOS-XR
+    router carrying the same routed interfaces, addressing, VRFs and static
+    routing.  Hostname, domain, DNS/NTP/syslog targets, the whole interface
+    inventory with its descriptions, admin state, MTU and IPv6 addressing,
+    static routes, VRF names, usernames and stored password hashes all
+    survive.  What does not survive is everything below the routed layer:
+    the VLAN database, VXLAN VNIs, the anycast gateway MAC, switchport
+    membership, SNMP, DHCP pools and RADIUS are dropped outright, and
+    interface type, LAG naming, VARP anycast SVI addressing and implicit user
+    roles degrade.
+  certainty: medium
+  references:
+    - id: arista-iosxr-surface
+      path: docs/vendor-references/arista_eos_to_cisco_iosxr/canonical_surface.md
+      title: "Arista EOS -> Cisco IOS-XR: measured canonical surface (6 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars, the cleanest part of the pair ---------------
+  #
+  # Every scalar here that is populated by any cell is preserved by every cell
+  # that populates it.  Worth stating loudly because two of them round-trip
+  # despite NEITHER matrix declaring them: see `domain`.
+
+  hostname:
+    disposition: good
+    note: "`hostname <name>` on both platforms; preserved on 6 of 6 cells."
+    references: [arista-iosxr-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on both cells that populate it — EOS `dns domain <name>` is
+      re-emitted as the IOS-XR domain stanza and re-parses identically.
+      Recorded on the measurement rather than the matrices, because NEITHER
+      codec declares `/system/domain` at all: arista_eos and cisco_iosxr both
+      carry zero supported, lossy and unsupported entries for that path while
+      demonstrably handling it.  A symmetric under-declaration with a benign
+      outcome, flagged in the reference note for a codec change.
+    references: [arista-iosxr-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate it.  Both matrices declare
+      `/system/dns-server` supported and the round-trip agrees — name-server
+      lists cross unchanged.
+    references: [arista-iosxr-surface]
+
+  ntp_servers:
+    disposition: good
+    note: "Preserved on all 4 cells that populate it; `/system/ntp-server` supported on both sides."
+    references: [arista-iosxr-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than an IOS-XR limitation — neither
+      codec parses nor renders a clock/timezone stanza, and the cisco_iosxr
+      declaration says so in as many words ("Render emits no clock/timezone
+      stanza; intent.timezone is dropped on migration").  No committed cell
+      populates the field, so this rests on the two declarations rather than
+      on an observed round-trip.  Set the timezone on the target by hand.
+    references: [arista-iosxr-surface]
+
+  syslog_servers:
+    disposition: good
+    note: >
+      Preserved on the single cell that populates it (`logging host` →
+      intact).  `/system/syslog-server` is declared supported on both sides.
+      One populated cell is thin evidence, and is stated as one rather than
+      generalised.
+    references: [arista-iosxr-surface]
+
+  # -- Interfaces -- inventory intact, three attributes degrade -------------
+  #
+  # The interface record survives on every cell of this pair.  That is the
+  # single most important fact about this pair and it is why the five keys
+  # below are `good`: they are measured preserved, not "intact on the
+  # survivors of a shrinking list".
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      The interface inventory does NOT shrink across this pair.  Counts are
+      preserved on every cell — 17->17, 30->30, 39->39, 4->4 and 13->13 on the
+      synthetic kitchen sink — and the IOS-XR render keeps the Arista names
+      verbatim (`interface Ethernet1`, `interface Port-Channel10`) rather than
+      re-spelling them into XR 4-segment form.  Name preservation is what
+      makes the rest of the interface sub-fields independently measurable.
+      It is also the direct cause of the `interfaces[].interface_type`
+      degradation below — the XR parser infers type from an XR name prefix,
+      and an Arista name matches none.
+    references: [arista-iosxr-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate descriptions; declared supported
+      on both sides.  Unlike the campus-to-DC pairs, this is a real
+      preservation rather than a record that happened to survive.
+    references: [arista-iosxr-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: "Admin state preserved on 6 of 6 cells; `shutdown` / no-shutdown crosses cleanly."
+    references: [arista-iosxr-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on the single cell that sets a non-default MTU (a 9214-byte
+      jumbo uplink survives byte-exact).  `/interfaces/interface/config/mtu`
+      is supported on both sides.  One populated cell only, stated as such.
+    references: [arista-iosxr-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on both cells that carry IPv6, including link-local and /128
+      loopback forms, and including IPv6 on a VLAN SVI.  Contrast
+      `interfaces[].ipv4_addresses` below: IPv6 survives on an SVI precisely
+      because the corpus's IPv6 SVI addressing is ordinary addressing, not the
+      VARP anycast form that IOS-XR cannot express.
+    references: [arista-iosxr-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Conditional, and the condition is the addressing FORM rather than the
+      interface.  Ordinary `ip address` survives everywhere — routed ports,
+      loopbacks, management and SVIs with a real address are byte-identical on
+      all 6 cells.  What vanishes is Arista VARP anycast-gateway addressing:
+      on the two EVPN leaf cells the tenant SVIs carry an address whose
+      canonical `ip` is empty and whose only content is
+      `virtual_gateway_address`, and cisco_iosxr declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address`
+      unsupported ("IOS-XR has no VARP / anycast-gateway grammar").  With
+      nothing else in the entry, the whole address list on those SVIs
+      re-parses EMPTY — e.g. Vlan110 goes from two virtual-gateway addresses
+      to none while the interface record itself survives.
+      Recorded `lossy` rather than `unsupported` because the field stays
+      compatible for the dominant form; but this is the highest-risk item on
+      the pair, because a tenant gateway that silently arrives with no IPv4 at
+      all breaks first-hop reachability.  Inventory every VARP SVI before
+      cutover and re-author its addressing on the target explicitly.
+    references: [arista-iosxr-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Degrades on 100% of records — 152 interfaces across all 6 cells, without
+      exception: `ianaift:ethernetCsmacd` and `ianaift:ieee8023adLag` both
+      collapse to `ianaift:other`.
+      The mechanism is declared, not mysterious.  cisco_iosxr states that its
+      CLI parser infers interface type from an XR name prefix
+      (`GigabitEthernet`, `Loopback`, `Bundle-Ether`, `MgmtEth`, `tunnel-*`),
+      and the render keeps the Arista names verbatim, so `Ethernet1` matches
+      no XR prefix and the type falls through to `other`.  Both codecs already
+      declare `/interfaces/interface/config/type` lossy in their own right, so
+      declaration and measurement agree.
+      Nothing forwarding-related breaks — address, description and admin state
+      on those same records all survive — but any consumer that filters or
+      reports on interface type sees an undifferentiated pile of `other`.
+    references: [arista-iosxr-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts on all 3 cells that carry LAGs, as a NAME-FORM change and nothing
+      more: `Port-Channel3` -> `Bundle-Ether3`, which is the correct IOS-XR
+      spelling.  Membership is intact — the render emits
+      `bundle id 3 mode active` on each member interface and every member
+      re-parses onto the right bundle.
+      The reason it registers as drift is a gap in the audit's own alias list
+      rather than a codec fault: `_canonical_lag_name()` collapses documented
+      LAG spellings to a stable `LAG<N>` token so vendor renames do not fire
+      CODEC_BUG, and its regex admits `ae|Po|Port-channel|Port-Channel|trk|
+      Trk|agg|bond` but NOT `Bundle-Ether`.  Verified directly:
+      `_canonical_lag_name('Port-Channel3')` returns `'LAG3'` while
+      `_canonical_lag_name('Bundle-Ether3')` returns `None`, so the
+      comparison falls through to raw equality and the rename surfaces.
+      `lossy` rather than `unsupported`: the canonical name genuinely does not
+      round-trip as a value, but nothing vanishes.  Adding `Bundle-Ether` to
+      the alias regex would retire this declaration; that is a tool change and
+      is deliberately not made here.
+    references: [arista-iosxr-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      cisco_iosxr declares the whole
+      `/interfaces/interface/vrrp-groups/group/*` subtree unsupported — group,
+      mode, priority, preempt, advertisement-interval, authentication,
+      virtual-ipv6s and description are each declared dropped, with the shared
+      reason that VRRP / FHRP redundancy is out of the v1 IOS-XR scope.
+      arista_eos, by contrast, declares `/interfaces/interface/vrrp-groups/
+      group` SUPPORTED, so this is a target-side drop and not a symmetric gap:
+      the source really can carry the group, and the target really does bin
+      it.
+      No committed cell on this pair populates VRRP, so rather than guess, a
+      minimal EOS config with `vrrp 7 priority 200` + `vrrp 7 ip` was parsed,
+      rendered and re-parsed by hand: 1 group in, 0 groups out, and zero
+      `vrrp` lines in the render.  A vanished record is not lossy (#436), so
+      this blocks rather than warns.  Re-author FHRP on the IOS-XR side by
+      hand.
+    references: [arista-iosxr-surface]
+
+  # -- VLANs -- the campus surface, dropped entire ---------------------------
+  #
+  # Every VLAN record disappears, so the mesh measures all six `vlans[].*`
+  # keys as drifted on the same 4 cells.  That is ONE signal, not six.  The
+  # reconciler collapses a wholesale list-length change onto the first key of
+  # the parent in canonical key order; `vlans[].id` carries it, and a loss
+  # declared on any sibling could never be evidenced by any cell.  Declaring
+  # six losses here would be the correlated-drift error the ratchet exists to
+  # reject.
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      A total drop of the VLAN database, verified by round-trip on four cells
+      rather than inferred from the drift shape: 5->0, 8->0, 15->0 and 1->0
+      VLANs, with NO `vlan` line of any kind in the IOS-XR render.  IOS-XR is
+      SP-routing with no campus L2 model — its own matrix says as much for the
+      companion switchport paths ("IOS-XR has no per-port access-VLAN; VLANs
+      are dot1q sub-interfaces").  Recorded `unsupported` rather than `lossy`
+      because a vanished record is not lossy (#436): `lossy` warns and stays
+      compatible, which would badly understate a database that is simply gone.
+      This key also carries the structural loss for the whole `vlans[]` list —
+      the five sibling keys below are `good` for that reason, not because
+      their values survive.
+      Worth recording separately: cisco_iosxr declares `/vlans/vlan/id` and
+      `/vlans/vlan/name` SUPPORTED while dropping every VLAN in the corpus.
+      That is a target matrix under-declaration, not a pair-specific fact, and
+      is left for a codec change rather than fixed here.  This file follows
+      the measurement.
+      Re-model the L2 edge as IOS-XR dot1q sub-interfaces or L2VPN by hand.
+    references: [arista-iosxr-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      Structural-only drift, claimed by `vlans[].id`.  Read this carefully: it
+      is NOT a claim that VLAN names survive — no VLAN record survives on any
+      cell of this pair.  It is the statement that the record vanishing is one
+      signal that belongs to `vlans[].id`, and that this key is about what
+      happens to the NAME when a VLAN record survives, which no cell exercises.
+      A loss declared here would be reclassified STRUCTURAL_ONLY and could
+      never be evidenced.
+    references: [arista-iosxr-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      Structural-only drift, claimed by `vlans[].id` — same reasoning as
+      `vlans[].name`.  For the record, both codecs also declare VLAN-mounted
+      L3 degraded on their own: arista_eos marks the secondary IP and
+      virtual-gateway paths lossy, and cisco_iosxr marks
+      `/vlans/vlan/ipv4/address/ip` itself lossy because it renders an SVI
+      only from a sibling interface stanza.  Neither declaration can be tested
+      here, because the VLAN record never reaches the target to carry an
+      address.  The SVI addressing that DOES exist on this corpus lives on
+      `interfaces[].ipv4_addresses`, which is where the measured loss is
+      declared.
+    references: [arista-iosxr-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Structural-only drift, claimed by `vlans[].id`.  Access-port membership
+      is genuinely absent after migration, but the signal for that is the VLAN
+      record dropping, and it is declared once.  The per-port half of the same
+      loss shows up on the interface records — cisco_iosxr declares
+      `/interfaces/interface/access-vlan` and `/switchport-mode` unsupported —
+      but neither is a schema field key on this pair.
+    references: [arista-iosxr-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Structural-only drift, claimed by `vlans[].id`; same mechanism as
+      `vlans[].untagged_ports`.  Trunk membership does not reach IOS-XR
+      (`/interfaces/interface/trunk-allowed-vlans` is declared unsupported on
+      the target), and the loss is declared once at the VLAN record.
+    references: [arista-iosxr-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Structural-only drift, claimed by `vlans[].id`.  arista_eos declares
+      `/vlans/vlan/description` lossy in its own right, so even a surviving
+      VLAN record would not be a clean carrier — but no VLAN record survives
+      on this pair, so the declaration cannot be exercised and a loss here
+      could not be evidenced.  Capture VLAN descriptions from the source
+      before migrating; nothing in the pipeline will carry them.
+    references: [arista-iosxr-surface]
+
+  # -- Routing -- the surface this pair is actually for ----------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on all 5 cells that populate it, IPv4 and IPv6 alike — a
+      `::/0` default survives alongside `0.0.0.0/0` and a
+      longer-prefix route.  Both matrices declare `/routing/static-route`
+      supported at the exact path.  Both ALSO declare
+      `/routing/static-route/description` lossy, so a named/described static
+      route arrives without its label; that sub-path has no schema field key
+      on this pair and is recorded here rather than declared.
+    references: [arista-iosxr-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      A total drop, verified by round-trip on the one cell that populates it:
+      2 DHCP pools in, 0 out, and no pool stanza in the render.  cisco_iosxr
+      declares `/dhcp-servers/pool` unsupported in as many words ("Render
+      emits no DHCP server pool; intent.dhcp_servers are dropped on
+      migration"), while arista_eos declares it supported — so this is a clean
+      target-side drop.  `unsupported` rather than `lossy` because nothing
+      degraded survives (#436).  Re-author DHCP pools, or move the service off
+      the router entirely, which is the usual SP answer.
+    references: [arista-iosxr-surface]
+
+  # -- SNMP -- out of scope on the target, dropped whole ---------------------
+  #
+  # All five keys below describe ONE behaviour: cisco_iosxr emits no SNMP at
+  # all, so the entire canonical `snmp` object re-parses as None.  They are
+  # declared separately because the schema keys them separately, not because
+  # five independent losses were observed.
+
+  "snmp.community":
+    disposition: unsupported
+    reason: >
+      The whole SNMP subtree is dropped, not degraded.  Verified by round-trip
+      on both cells that populate it: the canonical `snmp` object goes to
+      `None` and the IOS-XR render contains ZERO lines matching `snmp`.
+      cisco_iosxr declares `/snmp/community` unsupported with the reason
+      "SNMP parse + render is out of the v1 XR scope"; arista_eos declares 5
+      supported `/snmp/*` paths, so the source carries the data and the target
+      bins it.
+      Recorded `unsupported` rather than `lossy` on the round-trip, against
+      the drift-shape heuristic which classes this `partial` — that heuristic
+      keys off the drift summary's trailing token and the summary here ends in
+      `None` rather than in an empty-string marker.  The observed behaviour
+      is a total drop, so it blocks.  Community strings must be re-created on
+      the target.
+    references: [arista-iosxr-surface]
+
+  "snmp.location":
+    disposition: unsupported
+    reason: >
+      Same single cause as `snmp.community`: the entire `snmp` object is
+      dropped by the IOS-XR render, taking `location` with it.  This is not
+      independent corroboration of the community finding — it is the same
+      observation keyed differently.
+      One caveat stated plainly: of the two cells that populate SNMP, only one
+      sets a location, so this key measures drifted on one cell and
+      "preserved" on the other purely because the source location was empty
+      there and an empty value cannot be seen to vanish.
+    references: [arista-iosxr-surface]
+
+  "snmp.contact":
+    disposition: unsupported
+    reason: >
+      Same single cause as `snmp.community` — the whole `snmp` object is
+      dropped on render, so the contact string never reaches the target.  Same
+      caveat as `snmp.location`: only one of the two SNMP-populated cells sets
+      a contact.
+    references: [arista-iosxr-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      Same single cause as `snmp.community`.  Trap destinations are dropped
+      entirely — no `snmp-server host` equivalent is emitted — so a migrated
+      device goes silent to the NMS rather than trapping to a wrong target.
+      Re-create trap hosts on IOS-XR before cutover if alerting depends on
+      them.
+    references: [arista-iosxr-surface]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      Same single cause as `snmp.community`, and the most consequential
+      instance of it: cisco_iosxr declares
+      `/snmp/v3-user/auth-protocol`, `/priv-protocol`, `/priv-passphrase` and
+      `/group` each individually unsupported, and the whole `snmp` object is
+      dropped regardless.  SNMPv3 users, their auth and privacy algorithms and
+      their key material do not migrate and must be re-created on the target.
+      The passphrase values carried by the corpus are deliberately NOT quoted
+      here or in the reference note — they are operator-traceable key material
+      even where the fixture value is synthetic.
+    references: [arista-iosxr-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      The aggregation survives; only the operator-facing name changes.
+      Verified by round-tripping `batfish_eos_evpn_vlan_based_leaf.txt`:
+      `Port-Channel3` with members `['Ethernet3','Ethernet4']` becomes
+      `Bundle-Ether3` with members `['Ethernet3','Ethernet4']` — bundle
+      numbers identical, member lists identical, and the render emits
+      `bundle id 3 mode active` on each member.  `Bundle-Ether<N>` is the
+      correct IOS-XR spelling, and cisco_iosxr declares `/lags/lag/name`,
+      `/members` and `/mode` all supported.
+      It registers as drift on all 3 LAG-carrying cells only because the
+      audit's `_canonical_lag_name()` alias regex does not include
+      `Bundle-Ether` — see `interfaces[].lag_member_of` for the confirming
+      probe.  Recorded `lossy` because the canonical name does not survive as
+      a value, and explicitly NOT `unsupported`: no LAG record vanishes, so
+      blocking the migration on this would be wrong.
+      Worth noting separately: the arista_eos matrix declares NOTHING for
+      `/lags/lag` — neither supported, lossy nor unsupported — while parsing
+      and rendering port-channels.  That is a source-side under-declaration,
+      not a pair-specific fact, and is left for a codec change.
+    references: [arista-iosxr-surface]
+
+  # -- Identity -------------------------------------------------------------
+
+  "local_users[].name":
+    disposition: good
+    note: "Usernames preserved on 6 of 6 cells; `/local-users/user/name` supported on both sides."
+    references: [arista-iosxr-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      The role is MATERIALISED, not dropped, and the distinction matters at
+      review time.  IOS-XR renders the canonical role as `group <role>`, and
+      when the source user carries no role at all the codec derives one from
+      `privilege_level`.  Reproduced with a hand-built config: a privilege-15
+      user with an empty role renders `username X` + `group root-lr` and
+      re-parses as role `root-lr`; a privilege-1 user with an empty role
+      renders `group operator`.  That is exactly what the two drifting cells
+      show — one user on `karneliuk_a_eos1_eos4260` and four on
+      `ksator_dcs_7150s64_eos4224`.
+      Read precisely: this is NOT a privilege escalation.  An EOS
+      `username X privilege 15` already carries full authority and `root-lr`
+      is the faithful IOS-XR spelling of it.  What changes is that an implicit
+      authority becomes an explicit named grant written into the target
+      config, which an operator reviewing the migrated file should see and
+      confirm.  Roles that were explicitly set survive as group names.
+      One adjacent observation on the same records, recorded rather than
+      declared because `privilege_level` has no schema field key: a surviving
+      group name can re-derive a different privilege number
+      (`network-admin` 15 -> 1).
+    references: [arista-iosxr-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Preserved on 6 of 6 cells — the stored secret survives byte-identical
+      and `/local-users/user/hashed-password` is declared supported on both
+      sides.  This is the good outcome and it is unusual across the mesh;
+      most pairs lose the credential and leave every migrated account
+      unusable.  Only the shape was inspected (length and leading marker);
+      hash values are deliberately not quoted here or in the reference note,
+      since a stored secret stays operator-traceable even when hashed.
+    references: [arista-iosxr-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      A target-side total drop.  cisco_iosxr declares
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported ("Render emits no AAA radius-server config"), and no
+      committed cell on this pair populates the field — so rather than guess,
+      a minimal EOS `radius-server host <ip> ... key ...` line was parsed,
+      rendered and re-parsed by hand: 1 server in, 0 out, and zero `radius`
+      lines in the render.
+      This one cannot be read off the source matrix.  arista_eos declares
+      NOTHING under `/radius-servers/*` — no supported, lossy or unsupported
+      entry — which would make it look like a source-side gap and therefore
+      `not_applicable`.  It is not: the arista_eos parser demonstrably
+      populates `radius_servers`, so the source carries the data and IOS-XR
+      drops it.  The shared secret is dropped with the host; re-author AAA on
+      the target and treat the secret as needing rotation.
+    references: [arista-iosxr-surface]
+
+  # -- Fabric -- the EVPN/VXLAN surface, dropped entire ----------------------
+  #
+  # Same collapse rule as `vlans[]`: the whole list vanishes, so all three
+  # sub-keys measure drifted for one reason.  `vxlan_vnis[].vni` carries it.
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      A total drop of the VXLAN surface, verified by round-trip on four cells:
+      3->0, 6->0, 9->0 and 1->0 VNIs, with no `nve` or VXLAN stanza emitted.
+      cisco_iosxr declares `/vxlan-vnis/vni`, `/source-interface` and
+      `/udp-port` all unsupported, with the scope note that IOS-XR VXLAN
+      (NCS 5500 / 540 `nve` interfaces) is rare in the SP corpus and is
+      parse-and-ignore in v1.  `unsupported` rather than `lossy` because
+      nothing degraded survives (#436).
+      This key also carries the structural loss for the whole `vxlan_vnis[]`
+      list; the two sibling keys below are `good` for that reason.
+      A leaf migrated this way stops being a VTEP.  If the fabric role must
+      move with the device, this pair is the wrong migration.
+    references: [arista-iosxr-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: >
+      Structural-only drift, claimed by `vxlan_vnis[].vni`.  Not a claim that
+      the VNI-to-VLAN binding survives — no VXLAN record survives on any cell
+      of this pair.  The binding is gone with the record, and that single loss
+      is declared once on `vxlan_vnis[].vni`; a loss declared here would be
+      reclassified STRUCTURAL_ONLY and could never be evidenced.
+    references: [arista-iosxr-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: good
+    note: >
+      Structural-only drift, claimed by `vxlan_vnis[].vni`; same reasoning as
+      `vxlan_vnis[].vlan_id`.  arista_eos separately declares
+      `/vxlan-vnis/mcast-group` lossy on its own merits, so multicast
+      replication would degrade even on a target that kept the record — but
+      that declaration cannot be exercised here, because no record reaches the
+      target.
+    references: [arista-iosxr-surface]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      cisco_iosxr declares `/evpn-type5-routes/route` unsupported: IOS-XR EVPN
+      runs under top-level `l2vpn` + `evpn` + `bridge group` stanzas,
+      grammatically distant from the IOS-XE / Arista / NX-OS EVPN model, with
+      no canonical mapping in v1.  arista_eos declares the same path LOSSY —
+      it emits the route in degraded form — so the source can carry data the
+      target refuses, making this a target-side drop rather than a symmetric
+      gap.
+      No committed cell on this pair populates the field, so this rests on the
+      two declarations rather than on an observed round-trip, and is stated
+      that way rather than implied.  Consistent with the VXLAN drop above:
+      the whole overlay control plane must be rebuilt on IOS-XR terms.
+    references: [arista-iosxr-surface]
+
+  # -- VRFs -- the surface IOS-XR is strongest on ---------------------------
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      VRF names preserved on all 4 cells that populate them, including a
+      10-VRF EVPN leaf.  The target renders each as a plain `vrf <name>`
+      block and re-parses it identically.
+      Two adjacent degradations on the same records are recorded here rather
+      than declared, because neither has a schema field key on this pair:
+      `instance_type` downgrades `mac-vrf` to `vrf` (cisco_iosxr declares
+      `/routing-instances/instance/instance-type` lossy because a plain
+      `vrf` block has no mac-vrf form), and `l3_vni` drops to null with the
+      VXLAN surface.  A migrated VRF keeps its identity and loses its fabric
+      role.
+    references: [arista-iosxr-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      No committed cell on this pair sets a VRF description, so there is no
+      corpus observation to base a disposition on.  Rather than guess, a
+      hand-built EOS `vrf instance` + `description` was round-tripped: the
+      description survived intact inside the rendered IOS-XR `vrf` block.
+      Left `not_applicable` rather than promoted to `good` on that basis —
+      arista_eos declares its own `/routing-instances/instance/description`
+      path lossy, and one hand-built shape is not grounds for overriding a
+      source codec's deliberate declaration.  Stated rather than guessed at.
+    references: [arista-iosxr-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair, and neither codec declares
+      anything under the raw-sections paths.  No EOS fixture carries an
+      unparsed block that survives to render.
+    references: [arista-iosxr-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates or declares it."
+    references: [arista-iosxr-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates or declares it."
+    references: [arista-iosxr-surface]
+
+  # -- Anycast gateway ------------------------------------------------------
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      A total drop, verified by round-trip on both cells that populate it: the
+      chassis-wide MAC goes to an empty string, and the IOS-XR render carries
+      no anycast-gateway line.  cisco_iosxr declares `/anycast-gateway-mac`
+      unsupported — "IOS-XR has no VARP / distributed-anycast-gateway
+      grammar" — while arista_eos declares it supported, so this is a clean
+      target-side drop and `unsupported` rather than `lossy` (#436).
+      Read this together with `interfaces[].ipv4_addresses`: the fabric-wide
+      MAC and the per-SVI virtual-gateway addresses it serves are dropped by
+      the SAME missing VARP grammar, and they are declared separately only
+      because the schema keys them separately.  Distributed anycast gateway
+      does not survive this migration in any form; the first-hop redundancy
+      design has to be rebuilt on IOS-XR terms before cutover.
+    references: [arista-iosxr-surface]

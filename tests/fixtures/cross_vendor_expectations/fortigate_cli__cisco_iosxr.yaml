@@ -1,0 +1,602 @@
+# Cross-vendor fidelity expectations: fortigate_cli -> cisco_iosxr
+#
+# Source: fortigate_cli codec — FortiOS `show full-configuration` CLI text.
+# Target: cisco_iosxr codec — IOS-XR CLI render.
+#
+# Asymmetric by device class, and asymmetric in an unusual direction. The
+# FortiGate corpus here is a branch/hub NGFW (70G branch, VM hub, 100E,
+# synthetic kitchen-sink); cisco_iosxr is a service-provider edge/core
+# router with 4-segment port names, a heavy VRF surface, and no campus L2
+# model.  The realistic migration is a branch firewall's ROUTING role being
+# re-homed onto an SP router while its firewall role goes elsewhere.
+#
+# The shared surface is narrow but clean: hostname, DNS, NTP, interface
+# addressing, static routes and local-user identity all round-trip intact.
+# The interface inventory does NOT shrink on this pair — all 86 source
+# interface records across the 4 cells survive, and description / enabled /
+# mtu / ipv4 / ipv6 drift on zero of them.  That is measured, not assumed.
+#
+# What is lost is what makes a FortiGate a firewall rather than a router:
+# DHCP service, SNMP, RADIUS, VLAN tags and most LAG membership.  And the
+# target's own strength — VRFs — receives nothing, because fortigate_cli
+# models no routing instances at all (VDOMs are not mapped).
+#
+# The dominant structural loss is the VLAN record vanishing whole (2 -> 0,
+# 5 -> 0, 3 -> 0).  Under the reconciler's structural-collapse rule the
+# first `vlans[].*` key in FILE ORDER carries that record-level signal, so
+# `vlans[].id` records it and the remaining `vlans[].*` keys are `good`:
+# their VALUES never degrade, and a loss declared on them could not be
+# evidenced by any cell.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations,
+# the committed `run_full_mesh.py` pass over the corpus (4 fixture cells,
+# 0 render errors, 0 re-parse errors), and a hand-run parse/render/re-parse
+# of every non-trivial claim.  Resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/fortigate_cli_to_cisco_iosxr/
+#
+# Authored 2026-08-25 as part of the cisco_iosxr expectation mesh.
+
+meta:
+  source_vendor: fortigate_cli
+  target_vendor: cisco_iosxr
+  primary_use_case: >
+    Branch-router re-home: the routing role of a FortiGate branch or hub
+    firewall moved onto an IOS-XR edge router.  Hostname, DNS and NTP
+    scalars, the whole interface inventory with its IPv4/IPv6 addressing,
+    descriptions, admin state and MTU, static routes with gateway /
+    outgoing interface / metric, and local-user names and roles all
+    survive.  What does not is the firewall-side service surface — DHCP
+    pools, SNMP, RADIUS — plus every 802.1Q VLAN tag, LAG membership whose
+    FortiGate name is not digit-suffixed, and the admin password material.
+  certainty: medium
+  references:
+    - id: fortigate-iosxr-surface
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxr/canonical_surface.md
+      title: "FortiGate CLI -> Cisco IOS-XR: measured canonical surface (4 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars ---------------------------------------------
+
+  hostname:
+    disposition: good
+    note: "`config system global / set hostname` -> `hostname <name>`; preserved on 4 of 4 cells."
+    references: [fortigate-iosxr-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Neither matrix declares `/system/domain` at all, so both treat it as
+      implicitly supported.  Measured rather than assumed: the one cell that
+      carries a domain preserves it through `domain name <name>`; the other
+      three carry none.
+    references: [fortigate-iosxr-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Both matrices declare `/system/dns-server` supported and the round-trip
+      agrees on 4 of 4 cells: FortiOS `config system dns / set primary` +
+      `set secondary` becomes one `domain name-server <ip>` line per server,
+      order preserved.
+    references: [fortigate-iosxr-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Both matrices declare `/system/ntp-server` supported; preserved on the
+      one cell that populates it (2 servers).  The other three are genuinely
+      empty rather than silently dropped — those fixtures run FortiGuard NTP
+      (`config system ntp` with `set ntpsync enable` and no `ntpserver`
+      entries), so there is nothing to carry.
+    references: [fortigate-iosxr-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/system/timezone` unsupported —
+      fortigate_cli because it lifts no timezone into the canonical intent,
+      cisco_iosxr because "Render emits no clock/timezone stanza".  Worth
+      being explicit that the DEVICE config does carry one (`set timezone
+      "Europe/Amsterdam"` on two cells, `set timezone 04` on a third) while
+      `intent.timezone` is empty on all 4 — the loss happens at parse, so
+      re-authoring on the target is the only route.  Set the clock by hand.
+    references: [fortigate-iosxr-surface]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: fortigate_cli declares `/system/syslog-server`
+      unsupported and lifts no host out of the `config log syslogd setting`
+      blocks three fixtures carry, so `intent.syslog_servers` is empty on all
+      4 cells and nothing reaches the target.  Not a target limitation —
+      cisco_iosxr declares syslog SUPPORTED, so re-authoring logging hosts on
+      the XR side will stick.  Worth doing by hand as part of the cutover.
+    references: [fortigate-iosxr-surface]
+
+  # -- Interfaces -- the surface that survives on this pair ------------------
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      Not an inventory loss: all 86 source interface records across the 4
+      cells reach the render and re-parse (21 -> 21, 19 -> 19, 34 -> 34,
+      12 -> 12).  Exactly one record does not survive INTACT — a FortiGate
+      interface whose name contains a space (`lacp trunk`) renders verbatim
+      as `interface lacp trunk` and re-parses as `lacp`, because the IOS-XR
+      interface name is a single token.  1 record of 86, on
+      `user_contrib_fg100e_fos7213.conf`.  Rename any FortiGate interface
+      carrying whitespace before cutover; the truncated name also silently
+      breaks anything that referenced it (see `interfaces[].lag_member_of`).
+    references: [fortigate-iosxr-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on every one of the 86 records — 0 drifts.  Recorded on
+      measurement, not on declaration: fortigate_cli declares
+      `/interfaces/interface/config/description` LOSSY in its own right (and
+      cisco_iosxr declares it supported), but nothing on this pair exercises
+      that loss.  FortiOS `set alias "..."` lands here and survives as
+      ` description ...`.
+    references: [fortigate-iosxr-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state is declared supported on both sides and drifts on 0 of 86
+      records: `set status down` becomes ` shutdown` and re-parses back.
+      Unlike the campus pairs in this audit, no interface record vanishes
+      here, so a down port stays a down port rather than disappearing.
+    references: [fortigate-iosxr-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      `/interfaces/interface/config/mtu` is supported on both sides and
+      drifts on 0 of 86 records.  Only the kitchen-sink cell sets an explicit
+      MTU (` mtu 1500` on the WAN uplink); it round-trips.  The other three
+      cells set none, so the field is empty on both sides rather than
+      defaulted away.
+    references: [fortigate-iosxr-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on every record that carries one (0 drifts of 86); XR emits
+      the CIDR form ` ipv6 address <addr>/<len>`.  One caveat that belongs to
+      a DIFFERENT canonical field and so is not scored here: the companion
+      `dhcp_client_v6` drops `dhcp6` -> empty on 2 records (`wan1`, `wan2` on
+      the branch cell), so an interface that took its v6 address from DHCPv6
+      arrives with neither address nor client.  Check WAN v6 after cutover.
+    references: [fortigate-iosxr-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Routed-port addressing is declared supported on both sides and drifts
+      on 0 of 86 records; XR renders the dotted-mask form ` ipv4 address
+      <ip> <mask>`.  This is also where FortiGate SVI addressing survives —
+      an L3 VLAN interface such as `user-vlan` keeps its address here even
+      though its VLAN record is dropped (see `vlans[].id`).  Cosmetic note:
+      unconfigured FortiGate ports carry `set ip 0.0.0.0 0.0.0.0`, which
+      round-trips verbatim into ` ipv4 address 0.0.0.0 0.0.0.0` — preserved,
+      but worth stripping before the config is applied.
+    references: [fortigate-iosxr-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on 84 of the 85 records that survive by name, uniformly and in
+      one direction: 68 `ianaift:ethernetCsmacd`, 10 `ianaift:l3ipvlan` and 6
+      `ianaift:ieee8023adLag` all collapse to `ianaift:other`.  Only
+      `loopback0` keeps `softwareLoopback`.  Both matrices declare
+      `/interfaces/interface/config/type` LOSSY, and the target's own reason
+      explains the shape: the XR CLI parser infers type from the name prefix
+      (GigabitEthernet / Loopback / Bundle-Ether / MgmtEth / tunnel-*), and
+      FortiGate names (`port1`, `dmz`, `wan1`, `agg1`, `VL_200`) match none
+      of them.  Type is metadata rather than forwarding state, so nothing
+      breaks on the box — but any tooling keyed off interface_type sees
+      `other` for the whole inventory.
+    references: [fortigate-iosxr-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts on 12 of 86 records, with two distinct outcomes, both verified
+      by round-trip.  Where the FortiGate aggregate name ends in digits
+      (`agg1`, `agg2`), the member re-emits ` bundle id <N> mode <m>` and
+      re-parses as `Bundle-Ether<N>` — membership intact, name changed (4
+      records).  Where it does not (`fortilink`, `LAG_INTERNAL`, `lacp
+      trunk`), the render emits NO bundle line at all and the membership is
+      lost outright (8 records).  The render helper emits the line only when
+      a trailing-digit match against the LAG name succeeds.  This key and
+      `lags` below record the SAME mechanism from two sides — one root
+      cause, two keys, not two independent pieces of evidence.
+    references: [fortigate-iosxr-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      cisco_iosxr declares the whole `/interfaces/interface/vrrp-groups/group`
+      subtree unsupported — group, mode, priority, preempt,
+      advertisement-interval, authentication, virtual-IPv6s and description —
+      on the stated grounds that FHRP is out of the v1 IOS-XR scope and the
+      group is dropped on migration.  fortigate_cli, by contrast, declares
+      five of those child paths LOSSY, i.e. it does lift FortiOS `config
+      vrrp`.  So the source can emit and the target blocks: a vanished group,
+      not a degraded one.  No committed cell on this pair carries a VRRP
+      group, so this disposition rests on the two declarations rather than on
+      an observed round-trip, and is stated that way rather than implied.
+      Re-author first-hop redundancy on the XR side by hand.
+    references: [fortigate-iosxr-surface]
+
+  # -- VLANs -- the structural loss on this pair -----------------------------
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      The whole VLAN record vanishes: 2 -> 0, 5 -> 0 and 3 -> 0 on the three
+      cells that carry VLANs (the fourth carries none).  Verified by
+      round-tripping rather than inferred from the drift shape — the rendered
+      IOS-XR config contains no `vlan` construct of any kind.  The mechanism
+      is a two-sided declaration mismatch in which both matrices are
+      individually truthful: cisco_iosxr declares `/vlans/vlan/id` and
+      `/vlans/vlan/name` supported but scopes that, in its own supported-path
+      comment, to VLANs SYNTHESISED from `encapsulation dot1q <tag>` on a
+      routed sub-interface; fortigate_cli declares
+      `/interfaces/interface/dot1q-vlan` unsupported and sets `dot1q_vlan` on
+      none of the 86 source interface records.  FortiOS carries the tag on
+      the VLAN record itself (`set type vlan` + `set vlanid <N>`), so the
+      only path by which XR could re-emit a VLAN is the one the source never
+      populates.  Recorded `unsupported` rather than `lossy` because a
+      vanished record is not lossy (#436) — `lossy` warns and stays
+      compatible, which would understate a total drop.  This key also carries
+      the record-level loss for the whole `vlans` list: the reconciler's
+      structural collapse attributes that signal to the first `vlans[].*` key
+      in file order, which is this one.  Re-author the 802.1Q tags on XR as
+      `encapsulation dot1q` on the routed sub-interfaces.
+    references: [fortigate-iosxr-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      Deliberately `good`, and worth reading twice.  The VLAN name is not
+      what is lost on this pair: a VLAN record either survives with its name
+      intact or vanishes whole, and the vanishing belongs to `vlans[].id`
+      above.  Every VLAN in the corpus carries a name mirroring its FortiOS
+      interface (`VL_100`, `user-vlan`, `agg1.100`), and nothing in the
+      round-trip renames or normalises it.  A loss declared here could never
+      be evidenced by a cell — the only drift this key ever shows is its
+      parent list changing length, which an earlier sibling already claims.
+    references: [fortigate-iosxr-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      No VLAN record in this corpus carries an L3 address, so there is no
+      value here to degrade.  fortigate_cli declares the
+      `/vlans/vlan/ipv4/address/*` children (secondary-ip,
+      virtual-gateway-address, virtual-gateway-mac) unsupported and mounts
+      SVI addressing on the interface record instead, which is where it
+      survives — see `interfaces[].ipv4_addresses`.  The record-level loss
+      belongs to `vlans[].id`.
+    references: [fortigate-iosxr-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Empty on every VLAN record in the corpus and structurally so on both
+      sides: fortigate_cli declares `/vlans/vlan/untagged-ports` unsupported,
+      and cisco_iosxr's synthesised VLANs carry no port membership by
+      construction (its own supported-path comment says "no port
+      membership").  Nothing to lose; the record-level loss belongs to
+      `vlans[].id`.
+    references: [fortigate-iosxr-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Same shape as `vlans[].untagged_ports` — fortigate_cli declares
+      `/vlans/vlan/tagged-ports` unsupported, no cell populates it, and the
+      target models no VLAN port membership at all.  The record-level loss
+      belongs to `vlans[].id`.
+    references: [fortigate-iosxr-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      fortigate_cli declares `/vlans/vlan/description` LOSSY, but no VLAN
+      record in this corpus populates it: FortiOS `set alias` lands on the
+      INTERFACE description, which survives intact (see
+      `interfaces[].description`).  No measured degradation, and the
+      record-level loss belongs to `vlans[].id`.
+    references: [fortigate-iosxr-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate them — destination, gateway,
+      outgoing interface and metric all survive into `router static /
+      address-family ipv4 unicast / <prefix> <iface> <gw>`, including the
+      metric 254 route on the branch cell.  Two declared caveats that this
+      corpus does not exercise: cisco_iosxr declares
+      `/routing/static-route/description` lossy, and fortigate_cli declares
+      `/routing/static-route/vrf` unsupported.  No cell carries a named or
+      per-VRF static route, so neither was tested here.
+    references: [fortigate-iosxr-surface]
+
+  # -- Services -------------------------------------------------------------
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Total drop on all 4 cells — 1, 1, 6 and 2 pools all render to nothing,
+      and the rendered config contains no DHCP lines at all.  cisco_iosxr
+      declares `/dhcp-servers/pool` unsupported ("Render emits no DHCP server
+      pool; intent.dhcp_servers are dropped on migration").  This is the
+      largest functional loss on a branch-firewall migration: the FortiGate
+      serves DHCP for the LANs it terminates and none of that reaches the
+      router, so address assignment has to be re-homed onto a relay or a
+      separate server before cutover.  `unsupported` rather than `lossy`
+      because the records vanish (#436).
+    references: [fortigate-iosxr-surface]
+
+  "snmp.community":
+    disposition: unsupported
+    reason: >
+      The ENTIRE snmp object is dropped, not this field individually: on both
+      cells that populate SNMP the re-parse yields `snmp = None` and the
+      render contains zero snmp lines.  cisco_iosxr declares `/snmp/community`
+      unsupported — "SNMP parse + render is out of the v1 XR scope".  Noted
+      because the two in-repo signals disagreed: the wave's drift-shape probe
+      classified this as a partial degradation, because the drift is recorded
+      as `snmp: {...} -> None` rather than the "all N dropped" phrasing it
+      looks for.  The round-trip settles it as a total drop.  The four
+      `snmp.*` keys below drift for this ONE reason and do not corroborate
+      each other.  Re-author SNMP on the target.
+    references: [fortigate-iosxr-surface]
+
+  "snmp.location":
+    disposition: unsupported
+    reason: >
+      Carried away by the whole-object drop described under
+      `snmp.community` — the location string is not separately degraded, it
+      simply has no object left to live on.  Cited as one mechanism rather
+      than as independent evidence.
+    references: [fortigate-iosxr-surface]
+
+  "snmp.contact":
+    disposition: unsupported
+    reason: >
+      Same single mechanism as `snmp.community`: the snmp object is dropped
+      whole, so the contact string goes with it.  Not independent evidence of
+      a second loss.
+    references: [fortigate-iosxr-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      Same single mechanism as `snmp.community`.  Called out separately only
+      because the operational consequence is the quietest one on this pair: a
+      migrated router with no trap destinations does not fail, it simply
+      stops telling anyone.  Re-author trap hosts explicitly and verify a
+      test trap after cutover.
+    references: [fortigate-iosxr-surface]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      Goes with the whole-object drop (`snmp.community`), and is additionally
+      unsupported on its own terms: cisco_iosxr declares
+      `/snmp/v3-user/auth-protocol`, `/priv-protocol`, `/priv-passphrase` and
+      `/group` unsupported, so even a target that grew an SNMP renderer would
+      not carry v3 credential material.  One corpus cell carries two v3
+      users, each with an auth passphrase and a privacy passphrase; the other
+      SNMP cell has an empty v3 list, which is why this key drifts on one
+      cell where its siblings drift on two.  These are credentials: they must
+      be re-created on the target, they cannot be migrated, and their values
+      are deliberately described by shape only and never quoted.
+    references: [fortigate-iosxr-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      The only key on this pair whose outcome depends on the SOURCE name, and
+      `lossy` rather than `unsupported` for exactly that reason.  Where the
+      FortiGate aggregate name ends in digits (`agg1`, `agg2` on the
+      kitchen-sink cell) the bundle survives: members re-emit ` bundle id 1
+      mode active`, and the re-parse reconstructs `Bundle-Ether1` with
+      members `['port2', 'port3']` and the LACP mode intact — a vendor-correct
+      rename.  Where it does not (`fortilink`, `LAG_INTERNAL`, `lacp trunk`)
+      the LAG vanishes entirely: 2 -> 0, 1 -> 0, 2 -> 0 on the three real
+      cells, with no `bundle` line emitted anywhere.  The render helper emits
+      membership only when a trailing-digit match against the LAG name
+      succeeds, which FortiGate's default `fortilink` and operator-chosen
+      names do not meet.  Recorded `lossy` because the target genuinely
+      models bundles and carries them when the name allows — the loss is
+      conditional on the source name, not on the target's grammar.  Rename
+      FortiGate aggregates to a digit-suffixed form, or re-create the bundles
+      by hand, before cutover.
+      Two notes on reading the numbers.  First, the surviving case still
+      scores as drift because the audit canonicalises `agg<N>` to a stable
+      LAG token but has no `Bundle-Ether<N>` shape — a scoring artifact on
+      that one cell; the operative loss is the non-digit case.  Second, and
+      separately: fortigate_cli declares NOTHING for `/lags/lag` — neither
+      supported, lossy nor unsupported — while its parser plainly produces
+      LAG records (2, 1, 2 and 2 across the corpus).  That is a source-side
+      matrix under-declaration, not a pair-specific fact, and is left for a
+      codec change rather than fixed here.
+    references: [fortigate-iosxr-surface]
+
+  # -- Identity -------------------------------------------------------------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Preserved on all 8 user records across the 4 cells — FortiOS `config
+      system admin / edit "<name>"` becomes `username <name>` and re-parses
+      unchanged.
+    references: [fortigate-iosxr-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: >
+      The role STRING round-trips on all 8 records, 0 drifts: FortiOS `set
+      accprofile "super_admin"` renders as ` group super_admin` and re-parses
+      back.  Do not read that as authorisation surviving — the render emits
+      the FortiGate profile name verbatim into the XR task-group slot, so
+      what is preserved is a label, not a privilege the target is known to
+      have.  A neighbouring field the audit does not score makes the same
+      point: `privilege_level` collapses 15 -> 1 on every admin record (4
+      records), because IOS-XR carries no numeric privilege.  Map profiles to
+      real XR task-groups by hand.
+    references: [fortigate-iosxr-surface]
+
+  "local_users[].hashed_password":
+    disposition: lossy
+    reason: >
+      Drifts on all 6 populated records (of 8 — the fg100e cell's two
+      RADIUS-backed accounts carry no local secret).  FortiOS stores the
+      admin secret as a `fortios:ENC`-prefixed ciphertext blob; because that
+      canonical value contains a space and the XR `secret <type> <hash>`
+      grammar is single-token, the re-parse recovers only the bare
+      `fortios:ENC` marker — a 226-character source value comes back as 11
+      characters.  Two consequences worth separating.  Every migrated account
+      arrives WITHOUT a usable credential, so set passwords on the target
+      before cutover or the accounts are unusable.  And the intermediate
+      render places the FortiGate ciphertext in the ` secret 0 ` slot — the
+      type-0, plaintext-marker form per the codec's own docstring — so the
+      rendered config should be handled as sensitive material rather than
+      circulated freely.
+      The ciphertext is deliberately NOT quoted here or in the reference
+      note: an encrypted secret is operator-traceable key material, and a
+      document that quotes the value it describes defeats its own redaction.
+    references: [fortigate-iosxr-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Total drop on both cells that carry RADIUS servers — 1 -> 0 and 2 -> 0
+      — with no AAA or radius-server line anywhere in the render.
+      cisco_iosxr declares `/radius-servers/server/host` and
+      `/radius-servers/server/key` unsupported ("Render emits no AAA
+      radius-server config").  The operationally sharp part is the
+      interaction with local users: on the fg100e cell the two RADIUS-backed
+      admin accounts (`radius_super_admin`, `radius_ro_admin`) DO survive as
+      `username` blocks, with no local secret and now no RADIUS server to
+      authenticate them against.  Re-author AAA on the target before cutover
+      or those accounts are inert.  The shared secret is dropped with the
+      server and must be re-entered by hand.
+    references: [fortigate-iosxr-surface]
+
+  # -- Fabric ---------------------------------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      Symmetric declared gap: both matrices declare `/vxlan-vnis/vni`,
+      `/vxlan-vnis/source-interface` and `/vxlan-vnis/udp-port` unsupported —
+      cisco_iosxr on the grounds that NCS-style `nve` VXLAN is rare in the SP
+      corpus and is parse-and-ignore in v1.  No cell on this pair populates
+      VXLAN (a FortiGate branch firewall is not a VTEP), so this rests on the
+      two declarations rather than on a round-trip, and is stated that way.
+    references: [fortigate-iosxr-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: unsupported
+    reason: >
+      Rides on the VXLAN record neither side models — see `vxlan_vnis[].vni`
+      for the symmetric declaration.  Not populated on any cell, so this too
+      rests on declarations rather than an observed round-trip.
+    references: [fortigate-iosxr-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: unsupported
+    reason: >
+      Same symmetric gap as `vxlan_vnis[].vni`: neither codec models the
+      VXLAN record that would carry a replication group, and no cell
+      populates it.  Declaration-based, not measured.
+    references: [fortigate-iosxr-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap: fortigate_cli declares nothing at all for the EVPN
+      surface and populates it on no cell — a branch firewall is not an EVPN
+      border leaf.  Recorded `not_applicable` rather than `unsupported`
+      because nothing reaches the target to be dropped.  For the reverse
+      direction it is worth knowing that cisco_iosxr declares
+      `/evpn-type5-routes/route` unsupported: XR's EVPN lives under top-level
+      `l2vpn` / `evpn` / `bridge group` stanzas with no canonical mapping in
+      v1, so re-authoring on the target would not round-trip either.
+    references: [fortigate-iosxr-surface]
+
+  # -- Routing instances ----------------------------------------------------
+
+  "routing_instances[].name":
+    disposition: not_applicable
+    note: >
+      Source-side gap, and the most consequential one on this pair given the
+      target's device class.  fortigate_cli declares
+      `/routing-instances/instance` unsupported — "Render emits no
+      VRF/routing-instance construct (VDOMs not modelled)" — so FortiOS VDOMs
+      never become canonical routing instances, and all 4 cells parse zero of
+      them.  Nothing is lost in transit because nothing sets out.  The
+      asymmetry is worth stating plainly: IOS-XR is a VRF-heavy platform and
+      cisco_iosxr declares the instance container only LOSSY (it renders
+      `vrf <name>` with address-family and route-target cleanly; only the
+      route-distinguisher has to be read from the `router bgp` block), so the
+      target would carry VRFs well.  The whole VRF design has to be authored
+      on the XR side.
+    references: [fortigate-iosxr-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      Same source-side gap as `routing_instances[].name`: with no instance
+      parsed on any cell there is no description to carry.  Stated rather
+      than guessed at.
+    references: [fortigate-iosxr-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Neither codec declares anything for the raw-section passthrough and no
+      cell on this pair populates it, so there is no observation to base a
+      disposition on.
+    references: [fortigate-iosxr-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [fortigate-iosxr-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [fortigate-iosxr-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Symmetric declared gap: both matrices declare `/anycast-gateway-mac`
+      unsupported, cisco_iosxr because it has no VARP / distributed-anycast-
+      gateway grammar and drops the chassis-wide MAC on render.  Consistent
+      with the per-interface and per-VLAN `virtual-gateway-address` paths,
+      which the target also declares unsupported.  Not populated on any cell,
+      so this rests on the declarations rather than on a measured round-trip.
+    references: [fortigate-iosxr-surface]

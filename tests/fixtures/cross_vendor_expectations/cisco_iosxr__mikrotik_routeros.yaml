@@ -1,0 +1,621 @@
+# Cross-vendor fidelity expectations: cisco_iosxr -> mikrotik_routeros
+#
+# Source: cisco_iosxr codec — IOS-XR `show running-config` text.
+# Target: mikrotik_routeros codec — RouterOS `/export` render.
+#
+# cisco_iosxr in the committed corpus is a service-provider edge/core router
+# (MPLS L3VPN PEs, iBGP route-reflectors, eBGP borders, SR/SRv6 lab nodes, plus
+# one 55-interface aggregation chassis); mikrotik_routeros is a small-router /
+# ISP-edge OS whose canonical surface is `/interface ethernet`, `/interface
+# bridge`, `/interface vlan`, `/interface bonding`, `/ip address`, `/ip route`,
+# `/user` and `/system identity`.  The two classes overlap on exactly one thing
+# and it is the thing that survives: the routed L3 skeleton.
+#
+# READ THIS BEFORE COPYING THE SHAPE OF A NEIGHBOURING FILE.  On the AOS-CX-
+# sourced pairs the dominant loss is the interface list SHRINKING, and every
+# `interfaces[].*` key is declared lossy to cover records that vanish.  This
+# pair is the exact inverse.  Across all 12 cells NOT ONE source interface is
+# lost.  On 8 cells the count is identical; on the other 4 — precisely the 4
+# that carry a VLAN — the list GROWS by exactly two, because the RouterOS
+# renderer materialises `bridge1` plus one `vlan<id>` L3 interface for each
+# canonical VLAN record.  So `interfaces[].name` is lossy (the name list does
+# not round-trip, and nothing afterwards distinguishes an operator-authored
+# interface from one the renderer invented), while the sub-fields riding on the
+# record are `good`: the record always survives, so their only drift is the
+# parent list changing length, which `interfaces[].name` already claims.
+#
+# The real losses are the SP surfaces RouterOS has no home for — every VRF, the
+# VRF-bound half of the static-route table, IANA interface type, MTU on a
+# bundle — plus the whole credential plane.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and a
+# full `run_full_mesh.py` pass over the committed corpus (12 fixture cells,
+# 0 render errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree.  Every
+# mechanism cited below was additionally re-derived by hand-parsing each fixture
+# with cisco_iosxr and rendering it with mikrotik_routeros.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_iosxr_to_mikrotik_routeros/
+#
+# Authored 2026-08-25 extending the cisco_iosxr expectation mesh.
+
+meta:
+  source_vendor: cisco_iosxr
+  target_vendor: mikrotik_routeros
+  primary_use_case: >
+    SP-edge downsize onto a MikroTik router: an IOS-XR PE or border router's
+    routed skeleton re-landed on RouterOS.  Hostname, the full interface
+    inventory with its descriptions, admin state and IPv4/IPv6 addressing,
+    LACP bundles with their members and modes, default-VRF static routes, VLAN
+    IDs, NTP servers and local-user identity all survive.  What does not is
+    every VRF and the VRF-bound half of the routing table (which lands in the
+    global table without warning), IANA interface type, MTU set on a bundle
+    rather than on its members, the domain name, and every user credential.
+    Read the routing-instance and static-route entries before planning a
+    cutover — they are where this migration changes meaning rather than
+    losing detail.
+  certainty: medium
+  references:
+    - id: iosxr-routeros-surface
+      path: docs/vendor-references/cisco_iosxr_to_mikrotik_routeros/canonical_surface.md
+      title: "IOS-XR -> RouterOS: measured canonical surface (12 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars and the management plane ---------------------
+  #
+  # Two different shapes live in this block and the difference is operational.
+  # `domain` and `syslog_servers` are TARGET-side drops: cisco_iosxr declares
+  # both supported and parses them, RouterOS declares them unsupported and has
+  # nowhere to put them — so `unsupported`.  `timezone` is a SYMMETRIC gap,
+  # both matrices declare `/system/timezone` unsupported.  `dns_servers` and
+  # `ntp_servers` are declared supported on BOTH sides and are the only
+  # management-plane fields that carry across.
+
+  hostname:
+    disposition: good
+    note: >
+      `hostname <name>` on IOS-XR becomes a `/system identity` section with
+      `set name=<name>` on RouterOS; preserved on 12 of 12 cells.
+    references: [iosxr-routeros-surface]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      A total drop, not a degradation.  cisco_iosxr parses the domain on 8 of
+      12 cells and mikrotik_routeros declares `/system/domain` UNSUPPORTED —
+      "Render emits no system domain-name; intent.domain is dropped on
+      migration."  Verified by round-trip: the render contains no domain line
+      at all and the re-parsed intent carries an empty domain on every one of
+      those 8 cells.  Set the domain on the target by hand.
+    references: [iosxr-routeros-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Both matrices declare `/system/dns-server` SUPPORTED.  No committed cell
+      on this pair populates it, so this rests on the two declarations rather
+      than on an observed round-trip, and is stated that way rather than
+      implied — but nothing about the pair suggests name-servers would fail to
+      carry.
+    references: [iosxr-routeros-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Declared supported on both sides and confirmed by round-trip: the one
+      cell that populates it (`iosxr_design_cst_pa3_xr752.cfg`, two servers)
+      renders a `/system ntp client` stanza and re-parses with both server
+      addresses intact.  The other 11 cells are empty on both sides.
+    references: [iosxr-routeros-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than a RouterOS limitation — neither
+      codec parses nor renders a clock/timezone stanza.  Recorded `unsupported`
+      rather than `not_applicable` because re-authoring on the target would not
+      stick either.  Set the timezone by hand after cutover.
+    references: [iosxr-routeros-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Target-side drop.  cisco_iosxr declares `/system/syslog-server` SUPPORTED
+      and parses it; mikrotik_routeros declares it UNSUPPORTED — "Render emits
+      no logging/syslog config; intent.syslog_servers are dropped on
+      migration."  No committed cell populates it, so the disposition rests on
+      the declarations, not on an observed round-trip.  Re-author logging hosts
+      on the RouterOS side.
+    references: [iosxr-routeros-surface]
+
+  # -- Interfaces -- the surface that mostly survives ------------------------
+  #
+  # The `interfaces` field measures as drifted on 12 of 12 cells, which looks
+  # alarming and is not.  One attribute — `interface_type` — drifts on 146 of
+  # the 156 surviving interface records, which alone is enough to mark the
+  # parent drifted everywhere.  That is correlated drift, not independent
+  # evidence: no key below may be cited as corroborating another.  Each of the
+  # three keys that records a loss here was checked against surviving records
+  # on cells with NO structural change.
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      The interface inventory does not round-trip, but it GROWS rather than
+      shrinks — the opposite of the AOS-CX-sourced pairs, so do not read this
+      entry as covering vanished records.  Measured across all 12 cells, zero
+      source interfaces are lost.  On the 4 VLAN-bearing cells the list gains
+      exactly two records (15->17, 15->17, 55->57, 9->11), always the same
+      pair: `bridge1` and `vlan<id>`, synthesised by the RouterOS renderer
+      because RouterOS can only express a VLAN as an interface.  Recorded
+      `lossy` rather than `unsupported` because nothing is blocked and nothing
+      is dropped — the render stays compatible; what is lost is the ability to
+      tell an operator-authored interface from a renderer-invented one.  This
+      key carries the record-level signal for the whole `interfaces` list; the
+      sub-fields below are judged on what happens to a SURVIVING record.
+    references: [iosxr-routeros-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Descriptions round-trip as RouterOS `comment=` on the interface row.  The
+      key drifts on the 4 VLAN-bearing cells, but that is the parent list
+      changing length — already claimed by `interfaces[].name` — so a loss
+      declared here could never be evidenced by a cell and would fail the
+      per-pair ratchet by construction.  One genuine artefact is recorded in
+      the reference note rather than swept into a disposition: three routed
+      dot1q sub-interfaces (`GigabitEthernet0/0/0/1.35` on both
+      `batfish_ebgp_border*`, `GigabitEthernet0/0/0/1.100` on `kitchen_sink`)
+      lose their description because the render emits a sub-interface only as
+      the target of an `/ip address` row, with no interface row to hang a
+      comment on.  All three fall on the same VLAN-bearing cells — one root
+      cause with the count growth, not a second independent one.  The other 153
+      surviving records keep their description exactly.
+    references: [iosxr-routeros-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Verified positively rather than assumed: 74 administratively-down source
+      interfaces across the corpus, and all 74 are still disabled after the
+      round-trip (`shutdown` -> `disabled=yes`).  The key drifts only on the 4
+      cells whose interface list changes length, which `interfaces[].name`
+      claims.
+    references: [iosxr-routeros-surface]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      A real per-record loss, independent of the structural signal.  8 surviving
+      records lose their MTU, all of them `Bundle-Ether*` carrying `mtu 9216`,
+      and 2 of the 3 affected cells (`batfish_ibgp_border01` 17->17,
+      `batfish_ibgp_rr` 16->16) have no interface-count change at all.  The
+      mechanism is in the render: `/interface ethernet` rows carry `mtu=`
+      (`set [ find name=TenGigE0/0/0/20 ] disabled=no mtu=9216` survives) while
+      `/interface bonding` rows do not, so MTU on a physical port survives and
+      MTU on a bundle does not.  On an SP box where the jumbo setting lives on
+      the bundle rather than its members, that is the entire jumbo
+      configuration reverting to default with no warning.  Re-apply MTU on
+      every bonded interface after cutover.
+    references: [iosxr-routeros-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Verified positively: 3 cells carry IPv6 on an interface and all three
+      round-trip exactly.  The key drifts on the 4 cells whose interface list
+      changes length; that signal belongs to `interfaces[].name`, and a loss
+      declared here could never be evidenced.
+    references: [iosxr-routeros-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Routed-port addressing round-trips through `/ip address add
+      address=<cidr> interface=<name>`; no surviving record in the corpus loses
+      or alters an IPv4 address.  Both matrices declare
+      `/interfaces/interface/ipv4/address/virtual-gateway-address` unsupported,
+      but cisco_iosxr never populates it, so nothing degrades on that path
+      here.  Drifts only where the parent list changes length.
+    references: [iosxr-routeros-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The one interface attribute that fails everywhere on its own merits, and
+      the reason the parent field measures drifted on all 12 cells: 146 of the
+      156 surviving interface records lose or change their IANA type, including
+      on the 8 cells with no structural change.  Both matrices declare
+      `/interfaces/interface/config/type` LOSSY, and the target's reason is
+      exact — "RouterOS does not expose IANA ifType; the codec infers it from
+      the interface-name prefix (etherN -> ethernetCsmacd, vlanN -> l3ipvlan)."
+      IOS-XR names (`GigabitEthernet0/0/0/0`, `TenGigE0/0/0/20`,
+      `Bundle-Ether321`, `MgmtEth0/RP0/CPU0/0`) match none of those prefixes, so
+      the type comes back empty; `Loopback0` comes back as `ianaift:bridge`
+      instead of `ianaift:softwareLoopback`, because RouterOS expresses a
+      loopback as a bridge.  Nothing forwarding-affecting depends on this, but
+      any inventory or classification keyed on interface type must be rebuilt.
+    references: [iosxr-routeros-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: good
+    note: >
+      Verified positively by round-trip rather than inferred: bundle membership
+      survives exactly — 5 members on `iosxr_design_cst_pa3_xr752.cfg`
+      (TenGigE0/0/0/18, /19, /26, /30, /31 onto Bundle-Ether321/421/500) and 2
+      on `kitchen_sink.cfg`, each mapping onto the same bundle name after the
+      round-trip.  The audit canonicalises LAG names on this key, so a bare
+      rename would not have counted as drift anyway; it drifts only on the 4
+      cells whose interface list changes length, and that signal belongs to
+      `interfaces[].name`.
+    references: [iosxr-routeros-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: good
+    note: >
+      Empty on both sides of every cell.  cisco_iosxr declares the whole
+      `/interfaces/interface/vrrp-groups/group/*` subtree UNSUPPORTED, so this
+      source never populates a VRRP group and there is nothing for RouterOS to
+      lose.  The key drifts on 4 cells purely because its parent list changes
+      length — a loss declared here could never be evidenced.  Worth knowing
+      for a source that DOES emit groups: RouterOS declares
+      `.../group/mode` and `.../group/description` lossy, so a cross-family
+      FHRP (HSRP / CARP) silently becomes IETF VRRP and the group description
+      is dropped.
+    references: [iosxr-routeros-surface]
+
+  # -- VLANs -- thin by construction on this source --------------------------
+  #
+  # `_parse_dot1q_vlans` in the IOS-XR codec is explicit: "IOS-XR routers have
+  # no classic `vlan N / name X` stanza — VLAN ids appear only on
+  # sub-interfaces via `encapsulation dot1q <vid>`.  Each distinct tag becomes
+  # a bare CanonicalVlan (`name` always empty; no port membership)."  So the
+  # whole VLAN body is structurally empty from this source BY CONSTRUCTION,
+  # not by corpus accident — which is what makes the `not_applicable` entries
+  # below safe rather than lazy.
+
+  "vlans[].id":
+    disposition: good
+    note: >
+      VLAN IDs preserved on all 4 cells that populate them (35, 35, 200, 100).
+      The id survives as `vlan-id=` on the synthesised `/interface vlan` row.
+    references: [iosxr-routeros-surface]
+
+  "vlans[].name":
+    disposition: lossy
+    reason: >
+      Read the direction carefully: the name is FABRICATED, not destroyed.
+      IOS-XR always produces `CanonicalVlan(name="")`; the RouterOS render names
+      the VLAN interface `vlan<id>` and re-parses that back as the VLAN name, so
+      the round-trip shows '' -> 'vlan35', '' -> 'vlan200', '' -> 'vlan100' on
+      the 4 VLAN-bearing cells.  The target declares `/vlans/vlan/name` LOSSY
+      for exactly this — "MikroTik stores a VLAN's name as the L3 interface
+      name (e.g. vlan10), NOT a separate descriptive name field.  Cross-vendor
+      rendering may conflate the two."  Recorded `lossy` because the canonical
+      value does not round-trip; the practical consequence is that any
+      post-migration config diff or inventory reconciliation reports VLAN names
+      no operator ever authored.
+    references: [iosxr-routeros-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: not_applicable
+    note: >
+      Source-side gap, by construction rather than by corpus accident: the
+      IOS-XR codec synthesises VLAN records from `encapsulation dot1q` tags and
+      never mounts L3 on them — the addressing lives on the sub-interface
+      record, which round-trips (`interfaces[].ipv4_addresses`).  Empty on all
+      12 cells.  Worth knowing if a future source does populate it: BOTH
+      matrices declare `/vlans/vlan/ipv4/address/ip` lossy, and the RouterOS
+      reason is that it "renders VLAN SVI / management L3 only from a sibling
+      interface stanza", so a VLAN-mounted address would be dropped.
+    references: [iosxr-routeros-surface]
+
+  "vlans[].untagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side gap: the IOS-XR codec produces VLAN records with "no port
+      membership", and the matrix declares the whole switchport family
+      (`/interfaces/interface/switchport-mode`, `access-vlan`,
+      `trunk-allowed-vlans`, `trunk-native-vlan`, `voice-vlan`) unsupported —
+      an SP router has no campus L2 to describe.  Empty on all 12 cells.
+      Unlike the source-side gaps in the management plane, re-authoring on the
+      target would NOT help: RouterOS also declares `/vlans/vlan/untagged-ports`
+      unsupported, because it binds a VLAN interface to a single parent.
+    references: [iosxr-routeros-surface]
+
+  "vlans[].tagged_ports":
+    disposition: not_applicable
+    note: >
+      Identical shape to `vlans[].untagged_ports` — never populated from this
+      source, and declared unsupported on the target as well
+      (`/vlans/vlan/tagged-ports`, same single-parent limitation).  Multi-port
+      VLAN membership has no representation on either side of this pair.
+    references: [iosxr-routeros-surface]
+
+  "vlans[].description":
+    disposition: not_applicable
+    note: >
+      Source-side gap: the synthesised VLAN record carries no description, so
+      the field is empty on all 12 cells.  If it were populated, RouterOS
+      declares `/vlans/vlan/description` LOSSY — RouterOS exposes a single
+      per-VLAN `comment` which the parser maps to the VLAN name, so a
+      description would collide with the fabricated name described under
+      `vlans[].name`.
+    references: [iosxr-routeros-surface]
+
+  # -- Routing -- where this migration changes meaning -----------------------
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      The records all survive — no route is dropped and no count changes — but
+      three attributes drift across the 6 cells that populate the table, and
+      one of them changes what the configuration MEANS.  (1) VRF binding:
+      RouterOS declares `/routing/static-route/vrf` UNSUPPORTED
+      (parses-and-ignores; wire-up scheduled for v0.2.0), so a VRF-scoped route
+      renders into the GLOBAL table with a byte-identical destination and
+      gateway — `10.99.0.0/16 via 203.0.113.2 vrf=CUSTOMER-A` re-parses as the
+      same route with `vrf=''`.  A customer VPN route silently becomes a global
+      route; nothing warns.  Verified by round-trip on `kitchen_sink.cfg` and
+      `batfish_vpnv4_pe1.txt`.  (2) An interface-only next hop moves into the
+      gateway slot (`interface='Null0'` -> `gateway='Null0'`), so the canonical
+      route stops distinguishing "via interface" from "via gateway address".
+      (3) cisco_iosxr declares `/routing/static-route/description` lossy in its
+      own right.  A combined `gateway%interface` next hop round-trips intact.
+      Recorded `lossy` rather than `unsupported` because every route arrives —
+      the danger is that they arrive in the wrong table.
+    references: [iosxr-routeros-surface]
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/dhcp-servers/pool` unsupported and
+      no committed cell populates it — an SP edge router relays DHCP rather than
+      serving it.  RouterOS DOES render pools, so re-authoring on the target
+      will stick, with one caveat it declares itself: `/dhcp-servers/pool/
+      lease-time` is lossy, because RouterOS keeps lease-time on the
+      `/ip dhcp-server` instance rather than the `/ip dhcp-server network` row
+      the codec renders.
+    references: [iosxr-routeros-surface]
+
+  # -- SNMP -- a whole-subsystem source-side gap ----------------------------
+  #
+  # This block is `not_applicable` five times over for one hard reason, and it
+  # is a codec fact rather than a corpus fact: `netcanon/migration/codecs/
+  # cisco_iosxr/parse.py` contains NO SNMP handling at all, and `intent.snmp`
+  # is None on all 12 cells.  `iosxr_design_cst_pa3_xr752.cfg` carries three
+  # `snmp-server` lines that the source codec discards before this pair is
+  # involved.  RouterOS is the stronger side here (supported=5), so every one
+  # of these will stick if re-authored on the target.
+
+  "snmp.community":
+    disposition: not_applicable
+    note: >
+      Source-side gap: the IOS-XR codec parses no SNMP, and its matrix
+      additionally declares `/snmp/community` unsupported.  RouterOS supports
+      it — re-author the community on the target.
+    references: [iosxr-routeros-surface]
+
+  "snmp.location":
+    disposition: not_applicable
+    note: >
+      Source-side gap — never parsed by cisco_iosxr, so nothing reaches the
+      target.  RouterOS declares no loss on it; re-author `/snmp set location`
+      by hand.
+    references: [iosxr-routeros-surface]
+
+  "snmp.contact":
+    disposition: not_applicable
+    note: >
+      Source-side gap, same shape as `snmp.location`.  Re-author
+      `/snmp set contact` on the target.
+    references: [iosxr-routeros-surface]
+
+  "snmp.trap_hosts":
+    disposition: not_applicable
+    note: >
+      Source-side gap — cisco_iosxr never populates trap targets.  RouterOS
+      declares no loss on trap hosts; re-author them on the target.
+    references: [iosxr-routeros-surface]
+
+  "snmp.v3_users":
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr parses no SNMP and declares
+      `/snmp/v3-user/auth-protocol`, `/priv-protocol`, `/priv-passphrase` and
+      `/group` unsupported.  Re-authoring on the target is possible but
+      degrades — RouterOS declares four v3-user paths lossy, including a
+      CRYPTO DOWNGRADE (3des -> DES, unknown -> AES; sha224 -> SHA256,
+      sha384 -> SHA512, unknown -> SHA1) and a dropped VACM group binding.
+      Choose target-supported algorithms explicitly rather than porting the
+      source's.
+    references: [iosxr-routeros-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: good
+    note: >
+      The dossier warns that a bare `lags` drift is usually the cross-vendor
+      naming artefact.  On this pair it does not drift at all: 4 cells populate
+      it, all 4 preserved, with `Bundle-Ether*` names, member lists and modes
+      intact — both `active` and `static` round-trip, verified by hand on
+      `iosxr_design_cst_pa3_xr752.cfg` (5 bundles) and `kitchen_sink.cfg`.
+      `interfaces[].lag_member_of` round-trips on the same cells.  One caveat
+      that belongs to the target matrix rather than to this corpus: RouterOS
+      declares `/lags/lag/mode` lossy because MikroTik `mode=802.3ad` has no
+      passive variant, so a PASSIVE bundle would re-parse as `active`.  No
+      committed IOS-XR fixture carries a passive bundle, so that path is
+      undeclared-by-observation here — check it if your source has one.
+    references: [iosxr-routeros-surface]
+
+  # -- Identity -- nothing arrives usable -----------------------------------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Usernames preserved on all 9 cells that populate local users; the account
+      records themselves survive the round-trip intact.  That is precisely why
+      the two keys below are `lossy` rather than `unsupported` — the user
+      arrives, just not usably.
+    references: [iosxr-routeros-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Privilege is coerced through RouterOS's fixed group set on 9 of 12 cells.
+      The IOS-XR task-group `root-lr` renders as `group=full` and re-parses as
+      `admin`, so the source's task-group identity is gone even though an
+      administrative account remains administrative.  `operator` happens to
+      survive as `operator`.  Verified by round-trip on `kitchen_sink.cfg`
+      (netops root-lr -> admin, readonly operator -> operator) and
+      `iosxr_design_cst_pa3_xr752.cfg` (all three users root-lr -> admin).
+      Recorded `lossy` because the record survives with a coerced value.
+      Re-check every account's privileges on the target before cutover;
+      IOS-XR task-group granularity has no RouterOS equivalent.
+    references: [iosxr-routeros-surface]
+
+  "local_users[].hashed_password":
+    disposition: lossy
+    reason: >
+      Every migrated account arrives WITHOUT a working credential — the field is
+      empty after the round-trip on all 9 cells that populate users.  The
+      mechanism is structural in the target parser and documented in its own
+      source (`mikrotik_routeros/parse.py`): "RouterOS `/export` intentionally
+      omits password hashes ... `hashed_password` will be empty from this
+      parser."  The render side behaves well and this is worth stating: when the
+      source hash is not re-usable on RouterOS it deliberately does NOT emit it
+      as `password=` — that would set the account's password to the literal hash
+      string — and instead emits a `# password manager user-name "..." --
+      review: ... reset this user password manually` comment.  So the loss is
+      loud, not silent.  Recorded `lossy` rather than `unsupported` because the
+      account record itself survives (`local_users[].name`); only the credential
+      is emptied.  Set passwords on the target before cutover or the accounts
+      are unusable.  The source hash values are deliberately NOT quoted here —
+      they are IOS-XR type-tagged crypt strings and remain operator-traceable
+      even hashed.
+    references: [iosxr-routeros-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/radius-servers/server/host` and
+      `/key` unsupported, and no committed cell populates the field, so nothing
+      reaches the target.  Re-author RADIUS on the RouterOS side — and note
+      that with `local_users[].hashed_password` also lost, a config migrated
+      as-is has no working authentication path of any kind.
+    references: [iosxr-routeros-surface]
+
+  # -- Fabric -- symmetric gaps ---------------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      Symmetric gap: BOTH matrices declare `/vxlan-vnis/vni` (plus
+      `/source-interface` and `/udp-port`) unsupported.  cisco_iosxr does not
+      model VXLAN; RouterOS's reason is "RouterOS VXLAN exists but is rare in
+      canonical scope and not modelled in v1."  Recorded `unsupported` rather
+      than `not_applicable` because re-authoring on the target would not stick
+      either.  Empty on all 12 cells, so this rests on the two declarations
+      rather than on an observed round-trip.
+    references: [iosxr-routeros-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: unsupported
+    reason: >
+      Rides on the `/vxlan-vnis/vni` record that neither side emits, so the
+      VNI-to-VLAN binding has nowhere to live.  Neither matrix declares this
+      exact sub-path — the disposition follows the symmetric unsupported parent
+      rather than an independent declaration, and is stated that way rather
+      than implied.
+    references: [iosxr-routeros-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: unsupported
+    reason: >
+      Same shape as `vxlan_vnis[].vlan_id`: it rides on a record neither codec
+      emits.  Not separately declared by either matrix; the disposition follows
+      the symmetrically-unsupported `/vxlan-vnis/vni` parent.
+    references: [iosxr-routeros-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap rather than a symmetric one: cisco_iosxr declares
+      `/evpn-type5-routes/route` unsupported and never populates the field,
+      while mikrotik_routeros declares nothing for it at all.  Not populated on
+      any of the 12 cells.
+    references: [iosxr-routeros-surface]
+
+  # -- Routing instances -- the headline loss -------------------------------
+
+  "routing_instances[].name":
+    disposition: unsupported
+    reason: >
+      Every VRF disappears.  All 8 cells that populate routing instances render
+      to an empty list — `['AZURE']`, `['red','blue','management']`,
+      `['CUSTOMER-A','MGMT']`, `['CUSTOMER']` and `['100']` all become `[]` —
+      and mikrotik_routeros declares `/routing-instances/instance` UNSUPPORTED:
+      "Render emits no VRF/routing-instance construct; intent.routing_instances
+      are dropped on migration."  It also declares
+      `/routing-instances/instance/instance-type` unsupported.  Recorded
+      `unsupported` rather than `lossy` because a vanished record is not lossy
+      (#436): `lossy` warns and stays compatible, which would badly understate a
+      total drop of the source's defining construct.  This key carries the
+      record-level loss for the whole list.  The knock-on effect is under
+      `static_routes` and is the more dangerous half: with no VRF to bind to,
+      VRF-scoped routes land in the global table instead of disappearing.
+      An IOS-XR PE cannot be migrated to RouterOS as an L3VPN PE.
+    references: [iosxr-routeros-surface]
+
+  "routing_instances[].description":
+    disposition: good
+    note: >
+      Declared `good` deliberately, and the reasoning is worth spelling out
+      because the raw drift looks like a loss.  `kitchen_sink.cfg` does set VRF
+      descriptions and they do not come back — but the reason is that the whole
+      routing-instance record is dropped, which `routing_instances[].name`
+      already claims as `unsupported`.  This key's own question is what happens
+      to a description when the record SURVIVES, and on this pair no record ever
+      survives, so there is no independent signal for it to carry.  A loss
+      declared here could never be evidenced by any cell and would fail the
+      per-pair ratchet by construction.  Read the VRF loss off
+      `routing_instances[].name`, not off this key.
+    references: [iosxr-routeros-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any of the 12 cells, and neither matrix declares
+      anything under raw sections for this pair.
+    references: [iosxr-routeros-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [iosxr-routeros-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [iosxr-routeros-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/anycast-gateway-mac` unsupported —
+      it parses-and-ignores in v1 on both sides, with wire-up scheduled for
+      v0.2.0 Wave C.  Empty on all 12 cells, so this rests on the two
+      declarations rather than on an observed round-trip.  Recorded
+      `unsupported` rather than `not_applicable` because the target could not
+      hold it either.
+    references: [iosxr-routeros-surface]

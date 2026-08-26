@@ -1,0 +1,556 @@
+# Cross-vendor fidelity expectations: cisco_iosxr -> juniper_junos
+#
+# Source: cisco_iosxr codec — IOS-XR `show running-config` text.
+# Target: juniper_junos codec — Junos `set`-form render.
+#
+# The closest device-class match in the mesh. cisco_iosxr in the committed
+# corpus is a service-provider edge/core router — 4-segment interface names,
+# `Bundle-Ether` LAGs, VPNv4 PEs, IS-IS / SR / SRv6 labs, RD-from-`router bgp`
+# VRFs — and juniper_junos is a general-purpose Junos router. The realistic
+# migration is a PE or P router being re-homed, so the shared surface is the
+# routing edge: interfaces, addressing, VRFs, static routes, bundles.
+#
+# The campus L2 surface is not thin here so much as structurally absent on the
+# SOURCE. cisco_iosxr declares `/interfaces/interface/switchport-mode`,
+# `/access-vlan`, `/trunk-allowed-vlans` and `/trunk-native-vlan` unsupported,
+# so VLAN port membership, VLAN SVI addressing and VLAN descriptions never
+# enter the canonical intent and Junos cannot lose them.
+#
+# Unlike the campus pairs, the dominant loss on this pair is NOT structural.
+# The interface inventory does not shrink: all 156 source interface records
+# survive by name on all 12 cells, and per-record comparison finds zero
+# mismatches on name, description, enabled, mtu, ipv4_addresses and
+# ipv6_addresses. Every `interfaces[].*` key below is therefore an independent
+# measurement of the attribute itself, and the two that record a loss each
+# have their own cause. Neither is cited as evidence for the other.
+#
+# The one structural loss on this pair is in `local_users`: accounts whose
+# IOS-XR secret is not an encrypted/crypt-hashed form are dropped wholesale by
+# the Junos render on 4 of 12 cells. That record-level signal belongs to
+# `local_users[].name`, which is why the key order below is not alphabetical —
+# it follows the order the reconciler iterates, so the first sub-field of a
+# list claims its parent's structural drift before its siblings are judged.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
+# a full `run_full_mesh.py` pass over the committed corpus (12 fixture cells,
+# 0 render errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree. Every
+# record-level count was re-derived by round-tripping each fixture directly
+# rather than read off a single sampled drift entry.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_iosxr_to_juniper_junos/
+#
+# Authored 2026-08-25 continuing the cisco_iosxr expectation mesh (A6 wave 2).
+
+meta:
+  source_vendor: cisco_iosxr
+  target_vendor: juniper_junos
+  primary_use_case: >
+    Service-provider edge re-home: a Cisco IOS-XR PE / P router replaced by a
+    Junos router carrying the same interfaces, addressing, VRFs, static routing
+    and LACP bundles.  Hostname, domain, NTP, interface inventory, interface
+    descriptions, admin state, MTU, IPv4 and IPv6 addressing, VLAN IDs, VRF
+    names and VRF descriptions all survive.  What does not is the interface
+    type token on anything that is not a loopback, the `Bundle-Ether` bundle
+    name, gateway-less discard routes, the VLAN name (which Junos invents), and
+    any local account whose IOS-XR secret is not a crypt hash.
+  certainty: medium
+  references:
+    - id: iosxr-junos-surface
+      path: docs/vendor-references/cisco_iosxr_to_juniper_junos/canonical_surface.md
+      title: "IOS-XR -> Junos: measured canonical surface (12 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars ---------------------------------------------
+
+  hostname:
+    disposition: good
+    note: "`hostname <name>` -> `set system host-name <name>`; preserved on 12 of 12 cells."
+    references: [iosxr-junos-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on all 8 cells that populate it.  Worth recording that NEITHER
+      matrix declares `/system/domain` — not cisco_iosxr, not juniper_junos —
+      yet the value round-trips on every populated cell.  That is a matrix
+      under-declaration on both codecs, not a pair-specific fact; it is left
+      for a codec change rather than fixed here.
+    references: [iosxr-junos-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      No committed cell on this pair populates DNS, so this rests on an
+      injection probe rather than a corpus observation, and is stated that way
+      rather than implied: setting `dns_servers` on a parsed IOS-XR intent and
+      rendering produces `set system name-server <ip>` lines that re-parse
+      identically.  cisco_iosxr declares `/system/dns-server` supported;
+      juniper_junos declares nothing for it, so the target matrix
+      under-declares a field it demonstrably handles.
+    references: [iosxr-junos-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Preserved on the 1 cell that populates it (two servers, both intact).
+      Same under-declaration shape as `dns_servers`: cisco_iosxr declares
+      `/system/ntp-server` supported and juniper_junos declares nothing, but
+      the round-trip is clean.
+    references: [iosxr-junos-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than a Junos limitation.  Confirmed by
+      injection rather than left on the declarations: setting
+      `intent.timezone = "UTC"` on a parsed fixture and rendering emits no
+      `set system time-zone` line at all, and the value re-parses empty.  Set
+      the timezone on the target by hand; nothing in the migration carries it.
+    references: [iosxr-junos-surface]
+
+  syslog_servers:
+    disposition: good
+    note: >
+      Declared supported on both sides (`/system/syslog-server`).  No committed
+      cell populates it, so this rests on the declarations plus an injection
+      probe — a syslog host set on a parsed intent renders as
+      `set system syslog host <ip> any any` and re-parses identically — not on
+      an observed corpus round-trip.
+    references: [iosxr-junos-surface]
+
+  # -- Interfaces -- attribute-level losses, no record loss ------------------
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      The interface inventory does NOT shrink on this pair — the finding that
+      makes every sibling key below an independent measurement.  All 156 source
+      interface records survive by name across all 12 cells (15 -> 15,
+      17 -> 17, 55 -> 55, ...), including 4-segment IOS-XR names
+      (`TenGigE0/0/0/18`), dotted subinterfaces
+      (`GigabitEthernet0/0/0/1.100`) and BVIs.
+    references: [iosxr-junos-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 9 cells that populate it, and on every one of the 156
+      records compared individually.  Declared supported on both sides.
+    references: [iosxr-junos-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on 12 of 12 cells.  Because the record itself
+      survives (see `interfaces[].name`), an interface that was shut on IOS-XR
+      arrives shut on Junos rather than merely absent.
+    references: [iosxr-junos-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: "Preserved on all 4 cells that set a non-default MTU; supported on both sides."
+    references: [iosxr-junos-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on all 3 cells that carry IPv6 on an interface.  Measured
+      independently rather than inherited from the IPv4 result: per-record
+      comparison across all 156 records finds zero IPv6 mismatches.
+    references: [iosxr-junos-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on 12 of 12 cells, including addresses on dotted subinterfaces
+      and on `Bundle-Ether` parents.  Note the caveat under `lags`: a bundle's
+      address survives, but it lands on an interface named `Bundle-Ether<N>`
+      while the member ports bind to `ae<N>`.
+    references: [iosxr-junos-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on 12 of 12 cells, and the shape matters more than the count.  Of
+      the 156 records, 18 preserve the type and all 18 are
+      `ianaift:softwareLoopback`; the 138 that drift to `""` are 126
+      `ianaift:ethernetCsmacd`, 10 `ianaift:ieee8023adLag` and 2
+      `ianaift:other`.  The Junos render carries the loopback type through and
+      emits nothing a re-parse can use to recover a physical or bundle type.
+      cisco_iosxr independently declares
+      `/interfaces/interface/config/type` lossy in its own matrix, which
+      agrees.  Recorded `lossy` rather than `unsupported` because the interface
+      record survives intact — only the type token is emptied.
+    references: [iosxr-junos-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts on the 4 cells that carry bundles — 15 member records in total —
+      as `Bundle-Ether23` -> `ae23`.  The membership itself is NOT lost: every
+      member interface still names a bundle on the target, and the bundle count
+      is identical on all 4 cells.  The audit applies LAG-name canonicalisation
+      to this key, but its regex admits only
+      `ae|Po|Port-channel|Port-Channel|trk|Trk|agg|bond`, and IOS-XR's
+      `Bundle-Ether<N>` is not in that set, so a vendor-correct rename scores
+      as drift.  This and the `lags` entry are the same mechanism observed
+      twice; neither corroborates the other.  What DOES need operator attention
+      is described under `lags`: the rename splits the bundle across two
+      interface names on the target.
+    references: [iosxr-junos-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares the whole
+      `/interfaces/interface/vrrp-groups/group/*` subtree unsupported — mode,
+      priority, preempt, advertisement-interval, authentication, virtual-IPv6s
+      and description.  No committed cell carries a single VRRP group, so
+      nothing reaches the target.  juniper_junos declares only
+      `.../group/mode` lossy and models the rest, so re-authoring VRRP on the
+      Junos side from the source config by hand will stick.
+    references: [iosxr-junos-surface]
+
+  # -- VLANs -- derived from dot1q encapsulation, not from a campus L2 model --
+
+  "vlans[].id":
+    disposition: good
+    note: >
+      Preserved on all 4 cells that carry a VLAN.  IOS-XR VLANs in this corpus
+      are derived from 802.1Q subinterface encapsulation plus one BVI, not from
+      a campus VLAN database, and the id is the part that survives.
+    references: [iosxr-junos-surface]
+
+  "vlans[].name":
+    disposition: lossy
+    reason: >
+      Drifts on all 4 cells that carry a VLAN, and the direction is the
+      opposite of the usual one: the name is INVENTED on the target, not
+      dropped on the source.  The IOS-XR source carries a VLAN id with an empty
+      name; Junos has no anonymous VLAN object — `set vlans <name> vlan-id
+      <id>` requires a name — so the render synthesises `VLAN-<id>`
+      (`set vlans VLAN-35 vlan-id 35`) and the re-parse reads that back.  It is
+      still a fidelity drift: the canonical value changed, so a later diff or a
+      reverse migration will not see the source's naming.  `lossy` (warns,
+      stays compatible) rather than `unsupported` — the VLAN object itself
+      round-trips.
+    references: [iosxr-junos-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: not_applicable
+    note: >
+      Source-side gap, and a modelling one rather than a coverage one: on
+      IOS-XR the SVI is a BVI, which the codec models as a routed
+      `CanonicalInterface`, so VLAN-mounted addressing is never populated from
+      this source.  Trivially empty on all 12 cells; the one fixture carrying a
+      BVI puts its address on `interfaces[]` instead.  cisco_iosxr does declare
+      `/vlans/vlan/ipv4/address/*` lossy, which would matter only for a source
+      that actually mounts an address on a VLAN.
+    references: [iosxr-junos-surface]
+
+  "vlans[].untagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares
+      `/interfaces/interface/switchport-mode` and `/access-vlan` unsupported.
+      IOS-XR has no campus access-port model, so VLAN membership is never built
+      and is empty on all 12 cells.
+    references: [iosxr-junos-surface]
+
+  "vlans[].tagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side gap, same cause as `vlans[].untagged_ports`: cisco_iosxr
+      declares `/trunk-allowed-vlans` and `/trunk-native-vlan` unsupported.
+      Trunk membership on IOS-XR is expressed as per-subinterface dot1q
+      encapsulation, which the canonical model carries on
+      `interfaces[].dot1q_vlan`, not as VLAN port lists.
+    references: [iosxr-junos-surface]
+
+  "vlans[].description":
+    disposition: not_applicable
+    note: >
+      Empty on all 12 cells — the IOS-XR codec harvests no VLAN description
+      distinct from the name.  Recorded as a source-side gap rather than a
+      Junos limitation, though juniper_junos does declare
+      `/vlans/vlan/description` lossy, so a source that populated it would lose
+      it on render as well.
+    references: [iosxr-junos-surface]
+
+  # -- Routing ---------------------------------------------------------------
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Drifts on 5 of the 6 cells that populate it.  juniper_junos declares
+      `/routing/static-route/interface` unsupported ("render emits `next-hop
+      <gateway>` only; a gateway-less / interface-only route is dropped") and
+      the corpus behaves exactly that way: `batfish_ibgp_border01` 1 -> 0
+      (`192.0.2.1/32` via `Null0`), `xrdtools_sr_xrd1` 1 -> 0 (`0.0.0.0/1` via
+      `Null0`), `kitchen_sink` 4 -> 3 (`192.0.2.0/24` via `Null0`),
+      `iosxr_design_cst_pa3_xr752` 12 -> 10 (an interface-only IPv6 route via
+      `BVI500`, plus one exact-duplicate route collapsing), and
+      `batfish_vpnv4_pe1` keeps its route but empties the `interface`
+      attribute.  The routes that vanish are discard/blackhole routes — the
+      security-relevant case, since traffic the source deliberately null-routed
+      is forwarded by the target.  Routes carrying a gateway survive with
+      destination, gateway and VRF intact, which is why this is `lossy` at the
+      list level rather than `unsupported`.  juniper_junos additionally
+      declares `/routing/static-route/metric` and `/description` lossy; no
+      committed cell sets either, so those are declared rather than observed.
+    references: [iosxr-junos-surface]
+
+  # -- Services --------------------------------------------------------------
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/dhcp-servers/pool` unsupported.
+      An SP edge router relays DHCP rather than serving it, so the canonical
+      pool is never populated from this source.  juniper_junos declares the
+      path SUPPORTED, so re-authoring pools on the target will stick.
+    references: [iosxr-junos-surface]
+
+  "snmp.community":
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/snmp/community` unsupported, and
+      the parser produced `snmp = None` on all 12 cells.  juniper_junos
+      declares four `/snmp/*` child paths supported, so SNMP re-authored on the
+      target will stick — worth doing by hand as part of the cutover.
+    references: [iosxr-junos-surface]
+
+  "snmp.location":
+    disposition: not_applicable
+    note: >
+      No SNMP block is produced from any committed IOS-XR fixture, so location
+      never reaches the target.  juniper_junos models it; re-author on the
+      target.
+    references: [iosxr-junos-surface]
+
+  "snmp.contact":
+    disposition: not_applicable
+    note: >
+      Same shape as `snmp.location`: absent on the source side of all 12 cells,
+      modelled by juniper_junos, re-author on the target.
+    references: [iosxr-junos-surface]
+
+  "snmp.trap_hosts":
+    disposition: not_applicable
+    note: >
+      Same shape as `snmp.location`: absent on the source side of all 12 cells,
+      modelled by juniper_junos, re-author on the target.
+    references: [iosxr-junos-surface]
+
+  "snmp.v3_users":
+    disposition: not_applicable
+    note: >
+      Source-side gap with an explicit declaration behind it: cisco_iosxr
+      declares `/snmp/v3-user/auth-protocol`, `/priv-protocol`,
+      `/priv-passphrase` and `/group` unsupported, so USM users never enter the
+      canonical intent.  juniper_junos round-trips v3 users but declares
+      `/snmp/v3-user/engine-id` lossy, so a re-authored user will keep its
+      identity and lose a per-user engineID.  SNMPv3 users must be created on
+      the target regardless — they cannot be migrated.
+    references: [iosxr-junos-surface]
+
+  # -- LAGs ------------------------------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      Drifts on the 4 cells that carry bundles.  This is the naming artifact
+      the evidence dossier warns about, and it was probed rather than assumed:
+      the LAG count is identical on every one of those cells (2 -> 2, 2 -> 2,
+      5 -> 5, 1 -> 1) and every member keeps its membership; what changes is
+      `CanonicalLAG.name`, `Bundle-Ether23` -> `ae23`.  Recorded `lossy` rather
+      than `unsupported` because nothing vanishes (#436) — both matrices
+      declare `/lags/lag` supported and the bundle survives.
+      The operational hazard is not the rename itself but what it splits.
+      Reading the render shows the bundle landing on TWO interface names at
+      once: `set interfaces Bundle-Ether1 description ...` and
+      `set interfaces Bundle-Ether1 unit 0 family inet address ...` carry the
+      bundle's L3 configuration, while
+      `set interfaces ae1 aggregated-ether-options lacp active` and
+      `set interfaces GigabitEthernet0/0/0/3 ether-options 802.3ad ae1` bind
+      LACP and the members to `ae1`.  Re-home the bundle addressing onto
+      `ae<N>` by hand after cutover.
+    references: [iosxr-junos-surface]
+
+  # -- Identity --------------------------------------------------------------
+
+  "local_users[].name":
+    disposition: lossy
+    reason: >
+      This key carries the record-level loss for the whole `local_users` list,
+      and it is a real drop rather than a rename.  Accounts whose IOS-XR secret
+      is a bare plaintext token — no crypt(3) marker — are omitted entirely by
+      the Junos render: on `batfish_vpnv4_pe1` the source's single account
+      produces NO `set system login user` line at all and the target parses
+      zero users.  The same happens to 1 of 2 accounts on `batfish_vpnv4_pe2`
+      and `batfish_vpnv4_pe3`, and 2 of 3 on
+      `iosxr_design_cst_pa3_xr752` — 4 of 12 cells, and on one of them the
+      device's only login.  The account name, class and privilege go with the
+      record.  Recorded `lossy` rather than `unsupported` because the list is
+      only partially dropped: crypt-hashed accounts survive by name on every
+      cell that has one, and both matrices declare `/local-users/user`
+      supported.  Audit the source for plaintext-secret accounts before cutover
+      — they will not appear on the target at all.
+    references: [iosxr-junos-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: >
+      Deliberately `good` even though the mesh records drift on 4 cells.  That
+      drift is purely the parent list changing length — the dropped accounts
+      described under `local_users[].name`, which owns the structural signal —
+      and the reconciler's structural-only collapse means a loss declared here
+      could never be evidenced by any cell.  On every account that SURVIVES the
+      role is intact: IOS-XR `group root-lr` / `group operator` map onto Junos
+      `class root-lr` / `class operator` unchanged on all 5 cells that preserve
+      the list.  Separately, `privilege_level` re-parses as 1 regardless of its
+      source value because Junos carries authorisation in `class`; there is no
+      audited key for it, so that drift is recorded in the reference note
+      rather than declared here.
+    references: [iosxr-junos-surface]
+
+  "local_users[].hashed_password":
+    disposition: lossy
+    reason: >
+      Drifts on 9 of 12 cells — 5 on their own merits, 4 because the account
+      was dropped outright (see `local_users[].name`).  On the 5 independent
+      cells the CRYPT BODY SURVIVES BYTE FOR BYTE; what changes is the vendor
+      type marker wrapped around it.  The IOS-XR side carries a numeric type
+      marker ahead of the crypt string, the render passes that marker through
+      into the Junos `encrypted-password` value, and the Junos parser prefixes
+      its own `junos:` tag, so the canonical field differs while the key
+      material does not.  Verified by substring-testing the stripped crypt body
+      against the target value rather than by printing it.
+      Two cautions.  The render writes the IOS-XR numeric type marker INSIDE
+      the Junos `encrypted-password` string; whether a real Junos device
+      accepts that form was not tested and is not claimed here.  And for the 4
+      cells with a dropped account, the credential is gone with the account
+      rather than re-encoded.
+      No hash, ciphertext or plaintext secret is reproduced in this file or in
+      the reference note — only the shape.
+    references: [iosxr-junos-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      A symmetric gap, not a target limitation: BOTH matrices declare
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported, and juniper_junos states the reason outright ("render emits
+      no AAA radius-server config; the RADIUS shared secret is dropped on
+      migration").  Neither codec parses nor renders AAA RADIUS, so the shared
+      secret cannot survive because it never enters the canonical intent.
+      Trivially empty on all 12 cells.  Re-author RADIUS on the target and
+      re-key it there.
+    references: [iosxr-junos-surface]
+
+  # -- Fabric ----------------------------------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/vxlan-vnis/vni`,
+      `/source-interface` and `/udp-port` unsupported — the codec does not
+      model VXLAN on an SP edge router — so the field is empty on all 12 cells.
+      juniper_junos declares three `/vxlan-vnis/*` paths supported, so VNI
+      bindings re-authored on the target will stick.
+    references: [iosxr-junos-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: not_applicable
+    note: >
+      Same source-side gap as `vxlan_vnis[].vni` — the whole VXLAN surface is
+      absent from the IOS-XR codec, so there is no VNI-to-VLAN binding to
+      migrate.
+    references: [iosxr-junos-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: not_applicable
+    note: >
+      Source-side gap, with a target-side caveat worth carrying: even if VXLAN
+      were re-authored on the Junos side, juniper_junos declares
+      `/vxlan-vnis/mcast-group` and `/flood-list` lossy — it emits the
+      VLAN<->VNI bindings and the VTEP source interface but not the multicast
+      underlay.  Nothing is measured here; the field is empty on all 12 cells.
+    references: [iosxr-junos-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/evpn-type5-routes/route`
+      unsupported, so no committed cell populates it.  juniper_junos declares
+      the same path lossy — it models Type-5 IP-prefix advertisement as a VRF
+      property via `CanonicalRoutingInstance.l3_vni` — which would matter only
+      for a source that actually emits type-5 routes.
+    references: [iosxr-junos-surface]
+
+  # -- VRFs -- the surface this pair exists for -------------------------------
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      VRF names preserved on all 8 cells that populate them, covering the
+      VPNv4 PE fixtures (`red` / `blue` / `management`), a numeric instance
+      (`100`), and the kitchen sink (`CUSTOMER-A` / `MGMT`).  Recorded `good`
+      on measurement even though cisco_iosxr declares
+      `/routing-instances/instance` and `/instance-type` LOSSY as a source: the
+      corpus preserves the name on every populated cell, so declaring a loss
+      here would be an unevidenced over-claim.  The source declaration is about
+      instance-type nuance, not the name.
+    references: [iosxr-junos-surface]
+
+  "routing_instances[].description":
+    disposition: good
+    note: >
+      Preserved on the single cell that sets a VRF description — both
+      descriptions on that cell survive verbatim.  One cell is thin evidence
+      and is stated as such rather than generalised; juniper_junos declares
+      `/routing-instances/instance` supported with no lossy child for
+      description.
+    references: [iosxr-junos-surface]
+
+  # -- Passthrough / vendor-specific ------------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Empty on all 12 cells — no committed IOS-XR fixture leaves an unparsed
+      block that survives to render.  Neither matrix declares the path.
+    references: [iosxr-junos-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific canonical surface, populated only when juniper_junos is
+      the SOURCE.  Here it is the target, so an IOS-XR source never fills it.
+    references: [iosxr-junos-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Companion to `apply_groups` and the same reasoning: a Junos-source-only
+      surface, empty on all 12 cells of this direction.
+    references: [iosxr-junos-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      A symmetric gap: both matrices declare `/anycast-gateway-mac`
+      unsupported.  juniper_junos states why — Junos has no system-wide
+      anycast-gateway MAC, expressing per-IRB-unit overrides on
+      `CanonicalIPv4Address.virtual_gateway_mac` instead — and cisco_iosxr does
+      not model the concept at all on an SP edge router.  Trivially empty on
+      all 12 cells; nothing to migrate in either direction.
+    references: [iosxr-junos-surface]
