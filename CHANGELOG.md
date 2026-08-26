@@ -28,6 +28,51 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+- **A6 COMPLETE: `vyos` was the last blind codec, and the mesh audit now has
+  zero blind spots.**  22 pairs; coverage **890 -> 1122 of 1224 cells
+  (+232)**; ALIGNED 6314 -> 7995; **`CODEC_BUG` unchanged at 5** and
+  **`METHODOLOGY_ISSUE_over` unchanged at 21**.
+
+  `cells_without_expectation_yaml` is now **0**.  132 pair YAMLs = 12 codecs
+  x 11 targets, i.e. every ordered cross-vendor pair.  The 102 remaining
+  cells are intra-vendor (codec -> itself) and are skipped by design.  This
+  matters beyond coverage: `CODEC_BUG = 5` has always been a count over the
+  pairs that HAD a YAML, so for the first time it is a statement about the
+  whole mesh rather than a subset of it.
+
+  Passed the per-pair unevidenced ratchet on the first aggregate run, as wave
+  3 did, with 146 `STRUCT-rest` keys in play -- the largest such class of any
+  wave.
+
+### Security
+
+- **`classify_hash()` fails OPEN on unrecognised credential material, and the
+  blast radius is systemic.**  Its final branch treats any shape it does not
+  recognise as a literal plaintext password.  A **bare Unix crypt string** --
+  the form VyOS stores natively -- matches none of its three tagged forms, so
+  `$6$...` classifies as `plaintext`, `is_migratable()` returns True, and the
+  Arista render maps plaintext to `secret 0`, EOS's CLEARTEXT marker.  The
+  digest is then re-emitted as the password itself.
+
+  Measured: **14 of 14 password-bearing records across 11 vyos fixtures --
+  100%, no exception.**  Both matrices declare
+  `/local-users/user/hashed-password` SUPPORTED, so the declarations disagree
+  with the behaviour on every populated record and the migration reports no
+  loss at all.
+
+  **6 of 8 secret forms fail open** this way: bare `$1$`, `$5$`, `$6$`,
+  `$2y$`, `$y$`, and the IOS-XR `10 $6$...` form whose symptom was recorded
+  separately in the previous wave -- that was the same defect seen through
+  one codec.  Only Cisco's bare-digit form and vendor-tagged forms classify
+  correctly.  An `sha512` route exists in the same Arista dispatch table and
+  is never reached.
+
+  Surfaced by an audit agent, then **reproduced independently at both the
+  mechanism and round-trip level before being recorded**.  No digest body is
+  quoted anywhere in the expectation YAMLs or reference docs.  **The fix is
+  NOT in this change** -- this wave documents behaviour and touches no codec.
+  The safe default for an unrecognised secret is to refuse migration, not to
+  declare it plaintext.
 - **A6 wave 3: `cisco_iosxr` cross-vendor expectation coverage, all 20 pairs.**
   Coverage **693 -> 890 of 1224 cells (+197)**; ALIGNED 4890 -> 6314;
   **`CODEC_BUG` unchanged at 5** and **`METHODOLOGY_ISSUE_over` unchanged at

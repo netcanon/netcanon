@@ -1,0 +1,823 @@
+# Cross-vendor fidelity expectations: cisco_nxos -> vyos
+#
+# Source: cisco_nxos codec — NX-OS `show running-config` text.
+# Target: vyos codec — curly-brace `config.boot` render.
+#
+# Asymmetric by device class.  cisco_nxos in the committed corpus is a
+# VXLAN/EVPN datacentre leaf-spine switch: `Ethernet1/N` ports, `port-channel`
+# bundles, a VLAN database with `Vlan<N>` SVIs, HSRP, distributed anycast
+# gateway (per-SVI virtual-gateway address plus a chassis-wide anycast MAC),
+# `nve1` VNI bindings, and per-tenant VRFs carrying RD / route-targets / L3VNI.
+# vyos is a Linux software router / firewall appliance.  There is no switch
+# inside VyOS: no top-level VLAN database, no `switchport` mode, no VARP, no
+# VRRP in this codec, and no bundle it can name from an NX-OS `port-channel`.
+#
+# So the pair splits cleanly, and the split is the whole finding.  The ROUTED
+# edge and the management plane migrate intact — interface identity, IPv4/IPv6
+# addressing, MTU, admin state, description, per-interface VRF binding, static
+# route destination + next-hop, hostname, domain, NTP, SNMP scalars, user
+# identity and the stored password hash.  The FABRIC and SWITCHING planes do
+# not migrate at all — the VLAN database, every LAG and its membership
+# pointers, HSRP, the anycast gateway surface, the VNI-to-VLAN binding, the
+# VRF's RD / route-target / L3VNI plumbing, SNMP trap destinations and syslog.
+#
+# READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: same
+# "interface inventory survives" shape, opposite structural loss.  Here the
+# interface inventory is FULLY PRESERVED — 1102 records in, 1102 out, identical
+# name sets on all 13 cells — so every interface loss below is a genuine
+# per-attribute loss standing on its own measurement.  The list that vanishes
+# is `vlans`: 84 records to 0 on 13 of 13 cells.  That single structural loss
+# is claimed ONCE, at `vlans[].id`; the five sibling `vlans[].*` keys are
+# `good` so one drop is counted once.
+#
+# One pair-wide caveat, stated once here rather than repeated on 22 keys: the
+# fidelity harness scores canonical PRESERVATION, not target-syntax VALIDITY.
+# The vyos render emits NX-OS names verbatim (`ethernet Ethernet1/1`,
+# `ethernet port-channel1`, `ethernet Vlan10`), which are not loadable VyOS
+# interface names.  `good` means "the canonical value survived the round-trip".
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
+# a full `run_full_mesh.py` pass over the committed corpus (13 fixture cells,
+# 0 render errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree.  Every
+# loss recorded below was additionally re-derived by hand, by parsing the
+# fixture with cisco_nxos, rendering with vyos and re-parsing the render — not
+# inferred from the drift shape.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_nxos_to_vyos/
+#
+# Authored 2026-08-25 closing the cross-vendor expectation mesh — this was the
+# last blind pair, so after it every codec has audit coverage.
+
+meta:
+  source_vendor: cisco_nxos
+  target_vendor: vyos
+  primary_use_case: >
+    DC-leaf-to-software-router re-home: a Cisco Nexus VXLAN/EVPN leaf replaced
+    by a VyOS appliance carrying the same routed edge.  Hostname, domain, NTP,
+    the full 1102-record interface inventory with its addressing, MTU,
+    descriptions, admin state and VRF binding, static-route destinations and
+    next-hops, SNMP community/location/contact, VRF names, VNI numbers and
+    multicast groups, and local-user identity with its stored crypt hash all
+    survive.  What does not is the entire switching and fabric plane — the
+    84-record VLAN database, every port-channel and its membership pointers,
+    HSRP, the anycast gateway MAC and per-SVI virtual-gateway address, the
+    VNI-to-VLAN binding (rewritten, not dropped), the VRF's RD / route-target
+    / L3VNI plumbing and description, the SNMP trap destination, the syslog
+    target, the static route's VRF scope, and the local-user role, which
+    collapses to `admin` on every account.
+  certainty: medium
+  references:
+    - id: nxos-vyos-surface
+      path: docs/vendor-references/cisco_nxos_to_vyos/canonical_surface.md
+      title: "NX-OS -> VyOS: measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- management-plane scalars ------------------------------------
+
+  hostname:
+    disposition: good
+    note: >
+      `hostname <name>` on NX-OS becomes `system { host-name <name> }` on
+      VyOS; preserved on 13 of 13 cells.  Both matrices declare
+      `/system/hostname` supported.
+    references: [nxos-vyos-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on both cells that populate it (`lab.karneliuk.com` and
+      `infra.ntc.com`); the other 11 carry no domain.  Both matrices declare
+      `/system/domain` supported.  Two cells is thin coverage and the
+      declaration carries the rest of the weight — said plainly rather than
+      implied.
+    references: [nxos-vyos-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      No committed cell on this pair populates name-servers, so there is no
+      round-trip to point at.  This rests on declarations: both codecs declare
+      `/system/dns-server` supported at the exact path.  Stated that way
+      rather than implied.
+    references: [nxos-vyos-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Preserved on the single cell that populates it
+      (`nautobot_gc_nxos_snmp_spine01_nxos933.txt`) — two servers in, the same
+      two out, same order.  Both matrices declare `/system/ntp-server`
+      supported.  One cell is thin coverage; the declaration carries the rest.
+    references: [nxos-vyos-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: BOTH matrices declare `/system/timezone` unsupported, and
+      vyos states its render emits no time-zone stanza at all.  No committed
+      cell populates it, so the gap is declared rather than observed — this is
+      not an NX-OS-specific limitation, neither codec parses or renders a
+      clock stanza.  Set the time zone on the target by hand; nothing in the
+      migration carries it.
+    references: [nxos-vyos-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      A total drop, measured on the one cell that carries a logging host:
+      `nautobot_gc_nxos_snmp_spine01_nxos933.txt` has exactly one syslog
+      server in the canonical tree and zero after
+      parse -> render -> re-parse, and the rendered config contains no logging
+      configuration of any kind.
+      This is a one-sided target drop, not a shared gap: cisco_nxos declares
+      `/system/syslog-server` SUPPORTED and does emit the server, while vyos
+      declares the same path UNSUPPORTED and states the cause — its render
+      emits no syslog config, so `intent.syslog_servers` is dropped on
+      migration.
+      Recorded `unsupported` rather than `lossy` because the value does not
+      degrade, it vanishes, and the target has no grammar it lands in (#436).
+      Re-point logging on the VyOS side before cutover; a box that has stopped
+      shipping logs looks exactly like a box that has stopped having problems.
+    references: [nxos-vyos-surface]
+
+  # -- Interfaces -- inventory intact, four attributes lost -------------------
+  #
+  # The measured record count is the headline: 1102 interface records across
+  # the 13 cells, 1102 after the round-trip, with identical name sets on EVERY
+  # cell.  `Ethernet1/N`, `port-channel<N>`, `loopback0`, `mgmt0` and the
+  # `Vlan<N>` SVIs all survive the VyOS render with their names intact.
+  # Nothing below is a knock-on effect of a vanishing parent record — each
+  # loss was measured on its own.
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Preserved on 13 of 13 cells: 1102 source interface records, 1102 after
+      parse -> render -> re-parse, and zero cells where the name set differs.
+      The VyOS render does not collapse, rename or drop any port — NX-OS
+      slot/port names, the management port and the SVI pseudo-interfaces all
+      come through.
+      Caveat repeated from the file header because it belongs on this key:
+      the render emits `ethernet Ethernet1/1`, which is not a loadable VyOS
+      interface name.  The canonical value survives; the rendered config would
+      need re-naming before it boots.
+    references: [nxos-vyos-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 9 cells that populate it — 33 descriptions in, 33 out,
+      byte-identical.  Both matrices declare
+      `/interfaces/interface/config/description` supported.
+      One VyOS-specific hazard, declared and checked rather than assumed: the
+      vyos render replaces an embedded double-quote in a free-text value with
+      an apostrophe, because VyOS rejects embedded quotes in value strings
+      even when backslash-escaped (`vyos.dev/T1246`).  That would alter a
+      description's PUNCTUATION while keeping its TEXT.  It never fires here —
+      0 of the 33 descriptions contains a double-quote character — so this
+      `good` is a measured round-trip, not a lucky one.  If a description ever
+      drifts on a vyos-target pair, check this cause first and say which of
+      the two you mean.
+    references: [nxos-vyos-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on 1102 of 1102 records — zero differing on any
+      cell.  The 3 source records that are `shutdown` render as VyOS
+      `disable` and re-parse shut.  Both matrices declare
+      `/interfaces/interface/config/enabled` supported.
+    references: [nxos-vyos-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on 1102 of 1102 records; MTU is actually populated on 11 of
+      them (jumbo-frame uplinks, `mtu 9216`), and all 11 round-trip unchanged
+      as a VyOS `mtu` leaf.  Both matrices declare
+      `/interfaces/interface/config/mtu` supported.
+    references: [nxos-vyos-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on 1102 of 1102 records; IPv6 is populated on 3 cells and
+      every address + prefix-length survives.  Both matrices declare
+      `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
+      supported.  Narrow coverage, clean measurement.
+    references: [nxos-vyos-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Read the shape before the count: every IPv4 address SURVIVES.  All 1102
+      interface records keep their address list, with `ip` and
+      `prefix_length` intact on every one.  What drops is one attribute on the
+      address record — `virtual_gateway_address` — on 7 records across 4 cells
+      (`akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt`,
+      `busterswt_spine_leaf_xk32_1_nxos9312.txt`,
+      `networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg`,
+      `kitchen_sink.cfg`), each an NX-OS distributed anycast gateway SVI.
+      cisco_nxos declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address` LOSSY; vyos
+      declares the same path UNSUPPORTED and states the cause — VyOS has no
+      anycast-gateway / VARP grammar, so the render emits only the
+      `address <ip>/<plen>` line.
+      The operational consequence is specific: the SVI keeps its gateway IP
+      but loses the "this address is shared fabric-wide" property, so bringing
+      up two migrated leaves with the same rendered config is a duplicate-IP
+      collision rather than a redundant gateway.
+      Recorded `lossy` rather than `unsupported` because the key's records do
+      not vanish — declaring the whole IPv4 addressing surface unsupported
+      would say VyOS cannot hold an IP address, which is flatly false.
+      This and `anycast_gateway_mac` are ONE mechanism measured in two places
+      — the per-SVI gateway IP here, the chassis-wide MAC there.  Neither is
+      cited as evidence for the other.
+      Recorded for completeness and deliberately NOT counted: 2 further
+      address records flip `is_secondary` True -> False.  The harness strips
+      `is_secondary` as a target-determined rendering artifact
+      (`_COSMETIC_LIST_SUBFIELDS`), so it is not part of this disposition's
+      evidence.
+    references: [nxos-vyos-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on all 13 cells and, unusually, on ALL 1102 records: every
+      interface loses the IANA type hint to the empty string.  The source
+      breakdown is 1053 `ianaift:ethernetCsmacd`, 29 `ianaift:l3ipvlan`, 12
+      `ianaift:softwareLoopback` and 8 `ianaift:ieee8023adLag`; none survives.
+      Both matrices declare `/interfaces/interface/config/type` LOSSY in their
+      own right, and vyos states why: VyOS declares no IANA ifType, so the
+      codec infers it from the interface-NAME shape (`ethN` ->
+      ethernetCsmacd, `lo` / `dumN` -> softwareLoopback, `bondN` ->
+      ieee8023adLag) — best-effort.  NX-OS names match none of those shapes:
+      `Ethernet1/1` is not `ethN` and `loopback0` is not `lo`.
+      Worth contrasting with `cisco_iosxr__arista_eos.yaml`, where the
+      loopbacks kept their type because EOS re-derives it from
+      `interface Loopback<N>`.  Here even the loopbacks lose it, which is why
+      the record count is 1102 of 1102 and not a partial figure.
+      The interface record, its addressing, MTU and admin state are
+      unaffected — this is a lost hint, not lost forwarding state, which is
+      why it is `lossy` and not `unsupported`.
+    references: [nxos-vyos-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: unsupported
+    reason: >
+      A total drop of the attribute, verified by round-trip rather than
+      inferred: on the 5 cells that carry bundles, all 13 interface records
+      with a `lag_member_of` value (`port-channel1`, `port-channel10` and
+      siblings) come back with it null, and no rendered config contains a
+      `bonding` block or a member list anywhere.
+      The mechanism, read out of `netcanon/migration/codecs/vyos/render.py`:
+      `_vyos_type_and_name` maps a canonical interface name to its VyOS block
+      type — `lo` -> `loopback`, `dumN` -> `dummy`, `bondN` -> `bonding`, and
+      anything else -> `ethernet <name>`.  The bond-specific emit path runs
+      only for the `bonding` type, and no NX-OS `port-channel<N>` matches
+      `bondN`.  The bundle therefore renders as
+      `ethernet port-channel1 { description "uplink bundle" }` and re-parses
+      as a plain interface.
+      The member interfaces themselves survive intact — it is the membership
+      pointer that is gone, which is the dangerous shape: the ports come up
+      standalone rather than bundled.
+      Recorded `unsupported` rather than `lossy` because the value never
+      degrades, it vanishes, and the target has no grammar it lands in (#436).
+      This and `lags` are ONE mechanism, not two independent findings —
+      neither corroborates the other, and this entry exists because the
+      attribute is measured on the interface record.
+      Re-create the bonds and re-add members on the target by hand.
+    references: [nxos-vyos-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      A total concept drop, measured on every cell that carries first-hop
+      redundancy: 4 HSRP groups across 4 cells
+      (`batfish_nxos_hsrp_nxos1.txt`, `batfish_nxos_hsrp_nxos2.txt`,
+      `busterswt_spine_leaf_xk32_1_nxos9312.txt`, `kitchen_sink.cfg`) go in
+      with `mode: hsrp`, a group id, a virtual IP and a priority, and come
+      back as an empty list on the same interface record.
+      cisco_nxos declares `/interfaces/interface/vrrp-groups/group` LOSSY on
+      its own side (HSRP is harvested into the canonical VRRP surface); vyos
+      declares the whole `/interfaces/interface/vrrp-groups/group/*` subtree
+      UNSUPPORTED and states it plainly — VyOS VRRP / VRRPv3 is not modelled
+      by the codec, so the group is dropped on migration.
+      Recorded `unsupported` rather than `lossy` because the group record
+      vanishes rather than degrading (#436), and because losing first-hop
+      redundancy silently is a gateway outage waiting for the next failover
+      test.  The rendered config carries no redundancy stanza of any kind, so
+      first-hop redundancy has to be re-authored on the target by hand.
+    references: [nxos-vyos-surface]
+
+  # -- VLANs -- the list that vanishes ---------------------------------------
+  #
+  # 13 of 13 cells populate `vlans`, 84 records in total, and ALL of them are
+  # gone after the round-trip.  That single structural event is claimed once,
+  # at `vlans[].id`.  The five sibling keys below are `good` — a loss on any
+  # of them would be correlated drift from the same event and could never be
+  # evidenced independently.
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      A total concept drop, verified by round-trip on every cell: 84 VLAN
+      records in, 0 out, on 13 of 13 cells.  cisco_nxos declares
+      `/vlans/vlan/id` SUPPORTED, so the source side is not the problem; vyos
+      declares the same path UNSUPPORTED and gives the reason — VyOS has no
+      top-level VLAN database, and 802.1Q VLANs are modelled as `vif <vid>`
+      sub-interfaces "which ARE supported".
+      That declared mitigation does NOT fire on this pair, and the check is
+      worth recording: 0 of the 13 rendered configs contains a `vif` node.
+      NX-OS expresses VLANs as a database plus per-port `switchport`
+      membership, and none of that converts into a routed sub-interface.
+      What survives instead is the SVI's layer 3 — `Vlan10` arrives as an
+      interface record with its address, description and VRF binding, which is
+      why `interfaces[].ipv4_addresses` is not implicated here.  The VLAN's
+      identity, name, port membership and bridging domain do not survive.
+      Recorded `unsupported` rather than `lossy` because a vanished record is
+      not lossy (#436) — `lossy` warns and stays compatible, which would badly
+      understate losing every VLAN on a datacentre leaf.
+      This key carries the structural loss for the whole `vlans` list.
+      Rebuild the VLANs on the target as `vif` sub-interfaces plus a bridge.
+    references: [nxos-vyos-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      No VLAN record survives the round-trip, so there is no surviving record
+      on which a name could be measured — and that is precisely why this key
+      is `good`.  The disappearance is a single structural event, already
+      claimed at `vlans[].id`; recording it a second time here would
+      double-count one loss and could never be evidenced independently, since
+      every sub-field of a list drifts for the one reason when the list
+      empties.
+      What is true and worth writing down: 61 of the 84 VLAN records carry a
+      real operator label, and both matrices declare `/vlans/vlan/name`
+      supported — cisco_nxos emits them faithfully.  They are gone with the
+      record.  Recover them from the source config when rebuilding the `vif`
+      sub-interfaces.
+    references: [nxos-vyos-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      Same single structural event as `vlans[].name`, claimed once at
+      `vlans[].id`; a second loss here would be correlated drift, not
+      independent evidence.
+      The measurement that makes this benign rather than merely bookkeeping:
+      14 of the 84 VLAN records carry L3 on the VLAN mount, and cisco_nxos
+      declares `/vlans/vlan/ipv4/address/ip` LOSSY on its own side.  The same
+      addressing also lands on the `Vlan<N>` interface record, and THAT
+      survives — see `interfaces[].ipv4_addresses`, which is where the
+      SVI-mounted address is measured and where its one real loss (the anycast
+      virtual-gateway attribute) is recorded.
+    references: [nxos-vyos-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Same single structural event, claimed once at `vlans[].id`.  12 of the
+      84 VLAN records carry untagged (access) port membership; none survives,
+      because no VLAN record survives.
+      Recorded separately so it is not lost, and explicitly NOT as evidence
+      for this key: the per-port L2 attributes that VLAN membership is
+      rebuilt from are dropped by the same target gap — `switchport_mode` on
+      29 interface records, `access_vlan` on 13 — and vyos declares
+      `/interfaces/interface/switchport-mode` and `/access-vlan` unsupported,
+      since VyOS models L2 via bridge/vif rather than per-port access VLANs.
+      That is one mechanism seen from two angles, not two findings.
+    references: [nxos-vyos-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Same single structural event, claimed once at `vlans[].id`.  8 of the 84
+      VLAN records carry tagged (trunk) membership.
+      The matching per-port surface goes the same way and for the same reason:
+      `trunk_allowed_vlans` on 10 interface records and `trunk_native_vlan` on
+      4, both declared unsupported by vyos because it has no switchport trunk
+      allowed-list or native VLAN.  Cited as context, never as corroboration.
+    references: [nxos-vyos-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Same single structural event, claimed once at `vlans[].id`.  This key is
+      the cleanest illustration of why the sibling keys are `good`: the field
+      is populated on 0 of the 84 VLAN records — cisco_nxos declares
+      `/vlans/vlan/description` LOSSY and no committed cell sets one — yet a
+      mechanical drift reading still marks it drifted on all 13 cells, purely
+      because the parent list emptied.  There is nothing here to lose, and
+      claiming a loss would manufacture a finding out of correlated drift.
+    references: [nxos-vyos-surface]
+
+  # -- Routing ---------------------------------------------------------------
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      This is the field most likely to be misread on this pair, so the
+      measurement comes first: all 13 routes across the 8 cells that populate
+      them SURVIVE — destination, next-hop and distance intact, 13 in and 13
+      out.  A mechanical "did the records match?" pass reports the whole field
+      vanishing; that is an artifact of identity-matching, not a real drop.
+      What actually drifts is one attribute on 6 of the 13 routes, across 4
+      cells: `vrf` goes from a named instance (`management`, `TENANT-A`) to
+      the empty string, and the render places the route under the global
+      `protocols static` block.  cisco_nxos declares
+      `/routing/static-route/vrf` SUPPORTED; vyos declares it UNSUPPORTED
+      because per-VRF static routes
+      (`vrf name <X> { protocols static route ... }`) are deferred past the
+      Phase-3 VRF wire-up, while the `vrf name` instances themselves are
+      supported.
+      The consequence is worse than the size of the drift suggests: a default
+      route that was scoped to the out-of-band management VRF re-appears in
+      the GLOBAL table.  That is not a lost route, it is a route pointed
+      somewhere else — a routing-correctness hazard on a device whose
+      management network was deliberately isolated.
+      Recorded `lossy`, not `unsupported`: the route records survive, 7 of the
+      13 are untouched, and blocking the entire static-routing surface would
+      misdescribe a field that is mostly clean.  One caveat that is declared
+      rather than observed: BOTH codecs declare
+      `/routing/static-route/description` LOSSY and no committed route sets
+      one, so that sub-loss is untested here.
+    references: [nxos-vyos-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: BOTH matrices declare `/dhcp-servers/pool` unsupported,
+      and vyos states that its render emits no DHCP server pool at all.  No
+      committed cell populates the field, so this is declared on both sides
+      rather than observed.  VyOS is perfectly capable of serving DHCP
+      on-device — the codec simply does not model it — so this is a
+      re-authoring task on the target, not a platform limitation.
+    references: [nxos-vyos-surface]
+
+  # -- SNMP -- scalars survive, the trap destination does not -----------------
+  #
+  # 11 of the 13 cells produce an SNMP block; 2 of those actually set the
+  # scalars.  The three scalar keys below are clean; the two record-carrying
+  # keys are not, and they fail in different ways — one vanishes, one degrades.
+
+  "snmp.community":
+    disposition: good
+    note: >
+      Preserved on both cells that set it — the community string and its
+      read-only authorization survive as VyOS
+      `service { snmp { community <name> { authorization ro } } }`.  Both
+      matrices declare `/snmp/community` supported.  The other 9 cells that
+      produce an SNMP block leave the community empty on both sides.
+    references: [nxos-vyos-surface]
+
+  "snmp.location":
+    disposition: good
+    note: >
+      Preserved on both cells that set it, including a value containing spaces
+      and a pipe character, which survives VyOS quoting intact.  Both matrices
+      declare `/snmp/location` supported.
+    references: [nxos-vyos-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: >
+      Preserved on both cells that set it.  Both matrices declare
+      `/snmp/contact` supported.  Same shape as `snmp.location`; recorded
+      separately because the audit measures them separately.
+    references: [nxos-vyos-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      A total drop of the record, measured on both cells that carry a trap
+      destination (`nautobot_gc_nxos_snmp_spine01_nxos933.txt` and
+      `kitchen_sink.cfg`): 1 trap host in, 0 out on each, and neither rendered
+      config contains a trap-target line of any kind.
+      This is a one-sided target drop.  cisco_nxos declares `/snmp/trap-host`
+      SUPPORTED and does emit the destination.
+      Standing observation, left for a codec change rather than fixed here:
+      the vyos matrix declares NOTHING for `/snmp/trap-host` — not supported,
+      not lossy, not unsupported — while dropping every one.  That is a matrix
+      under-declaration, not a pair-specific fact, and it is why this loss is
+      invisible to a declaration-only reading of the pair.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      rather than degrading (#436).  Re-enter trap destinations on the target;
+      an SNMP agent that answers polls but sends no traps looks healthy from
+      the NMS until something breaks.
+    references: [nxos-vyos-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      The v3 user RECORDS survive — 1 in / 1 out on ten cells, 2 in / 2 out on
+      `nautobot_gc_nxos_snmp_spine01_nxos933.txt` — with name and group
+      intact.  Both matrices declare `/snmp/v3-user` supported.  What drifts
+      is the USM crypto description, on 4 cells, in two distinct ways:
+      (1) `priv_protocol` collapses `aes128` -> `aes` on 3 cells
+      (`batfish_nxos_n9kv_ebgp_r1.txt`,
+      `networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg`,
+      `kitchen_sink.cfg`).  vyos declares `/snmp/v3-user/priv-protocol` LOSSY
+      and names this exact failure: `privacy type` renders only bare `des` /
+      `aes`, so AES key-length variants lose their exact strength — a
+      cryptographic downgrade in the description of the key, on render.
+      (2) `engine_id` goes from empty to a synthesised value on 1 cell
+      (`nautobot_...`), because vyos carries ONE config-wide `engineid` and
+      maps it onto every user.  A source that set none comes back with one.
+      Recorded separately because it is real but deliberately NOT counted as
+      evidence: the privacy passphrase goes from a 34-character opaque value
+      to empty on 8 records.  The harness blanks `auth_passphrase` and
+      `priv_passphrase` on both sides before comparing
+      (`_COSMETIC_SNMP_V3_SUBFIELDS`), so it cannot ground this disposition —
+      but it is the reason the advice is RE-KEY SNMPv3 on the target rather
+      than merely check the protocol.  No passphrase, hash body or ciphertext
+      is quoted anywhere in this file or its reference doc; only the field
+      length and the drift shape are described.
+      Recorded `lossy` rather than `unsupported`: the user records survive
+      with their identity, and only the crypto description degrades.
+    references: [nxos-vyos-surface]
+
+  # -- LAGs -- the concept the target cannot name ----------------------------
+
+  lags:
+    disposition: unsupported
+    reason: >
+      A total drop, not a degradation, and verified by round-trip rather than
+      inferred from the drift shape — which matters here, because a bare
+      `lags` drift on a VyOS target is usually a cross-vendor naming artifact.
+      It is not: 8 LAG records across the 5 bundle-carrying cells become 0,
+      and NO rendered config on any cell contains a `bonding` block.
+      cisco_nxos declares `/lags/lag/name`, `/lags/lag/members` and
+      `/lags/lag/mode` supported, so the source side is not the problem.  The
+      mechanism is the `_vyos_type_and_name` name-shape mapping described
+      under `interfaces[].lag_member_of`: an NX-OS `port-channel<N>` does not
+      match `bondN`, so it renders as `ethernet port-channel1 { }` — carrying
+      its description and addressing but neither its mode nor its members —
+      and re-parses as a plain interface.
+      Recorded `unsupported` rather than `lossy` because a vanished record is
+      not lossy (#436), and because `lossy` — which warns and stays
+      compatible — would badly understate losing every uplink bundle on a
+      datacentre leaf.
+      Standing observation, left for a codec change rather than fixed here:
+      the vyos matrix declares `/lags/lag/name`, `/lags/lag/members` AND
+      `/interfaces/interface/lag-member-of` SUPPORTED, with only
+      `/lags/lag/mode` lossy, while dropping 8 of 8 LAGs on this pair.  That
+      declaration is honest for a same-vendor round-trip, where LAGs are
+      already named `bondN`; it is silently wrong for any source whose LAG
+      names have another shape.  The same observation is recorded
+      independently on `aruba_aoscx__vyos.yaml`.
+      Re-create the bonds and re-add members on the target by hand.
+    references: [nxos-vyos-surface]
+
+  # -- Identity -- the account and its secret arrive; its authority does not --
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Every account arrives: 10 user records across the 9 cells that populate
+      local users, 10 out, same names, zero dropped on any cell.  Both
+      matrices declare `/local-users/user/name` supported, and the render
+      emits `system { login { user <name> { ... } } }` for each.
+      Worth stating because the neighbouring pairs differ: on
+      `cisco_iosxr__arista_eos.yaml` accounts vanish based on their secret
+      type.  Nothing of the sort happens here — no account is filtered by
+      credential form.
+    references: [nxos-vyos-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on every populated record: 10 of 10 user records across 9 cells.
+      Nine go `network-admin` -> `admin`; one goes `network-operator` ->
+      `admin`.
+      The mechanism is a constant, not a mapping table.  The vyos render emits
+      `user <name> { authentication { encrypted-password <hash> } }` and no
+      role or level at all — the VyOS `system login user` grammar carries none
+      in the common case — and on re-parse the vyos parser assigns every login
+      user `role="admin"` and `privilege_level=15` unconditionally.
+      The consequence is a FAIL-OPEN, and it is the finding to act on: the
+      corpus's one read-only account (`netops` on `kitchen_sink.cfg`) goes in
+      with role `network-operator` and privilege level 1 and comes back with
+      role `admin` and privilege level 15.  Measured on exactly 1 record on 1
+      cell — the other 9 were already administrators, so only their role
+      STRING changes.  Role and privilege level are ONE mechanism; the
+      privilege-level side is not cited as separate evidence.
+      Recorded `lossy` rather than `unsupported`: the record survives with its
+      name and its stored secret, and only the value collapses.
+      Before cutover, diff the source account list against the render and
+      re-apply least privilege by hand.  A read-only operator silently
+      promoted to administrator is a worse outcome than an account that fails
+      to arrive.
+      Standing observation: BOTH matrices declare `/local-users/user/role`
+      supported while it drifts on 10 of 10 records.  The adjacent
+      `/local-users/user/privilege-level` IS declared lossy on both sides,
+      with vyos's reason describing the same collapse.  The role path is
+      under-declared — a codec change, not a fix for this file.  Independently
+      reproduced on `aruba_aoscx__vyos.yaml`.
+    references: [nxos-vyos-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Preserved on 10 of 10 records across all 9 populated cells — the stored
+      credential arrives byte-for-byte.  This is the rare cross-vendor pair
+      where the stored secret actually migrates: all 10 canonical values are
+      crypt(3) material (scheme marker `$5$`) and the render drops each one
+      unchanged into
+      `system login user <name> { authentication { encrypted-password ... } }`
+      with no re-encoding on either side.  Both matrices declare
+      `/local-users/user/hashed-password` supported.
+      Three things follow.  First — and this is where the file-header caveat
+      about PRESERVATION vs target-syntax VALIDITY bites hardest — the
+      canonical value on all 10 records is the NX-OS type marker `5 ` followed
+      by the `$5$` crypt string, and the vyos render emits that whole string,
+      marker included, into the `encrypted-password` leaf.  The canonical
+      round-trip is genuinely clean, which is what this key measures and why
+      it is `good`; the rendered leaf would still need the leading type marker
+      stripped before a VyOS box would read it as a hash.  Second, `good` here
+      means the hash TRANSFERS, not that it is safe to transfer: a hash that
+      migrates is a hash that now exists on a second box, and the source
+      device's password policy does not come with it.  Third, it does not
+      rescue the account's authority — see `local_users[].role`, where every
+      account arrives as an administrator.
+      No hash body is quoted anywhere in this file or its reference doc; only
+      the crypt-scheme marker, the type marker and the drift shape are
+      described.
+    references: [nxos-vyos-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: BOTH matrices declare `/radius-servers/server/host` and
+      `/radius-servers/server/key` unsupported, and vyos states that its
+      render emits no RADIUS config, so both the host and the shared secret
+      are dropped on migration.  No committed cell populates the field, so
+      this is declared on both sides rather than observed.
+      Re-author RADIUS on the VyOS side — and note that the shared key could
+      not have migrated even if the server list had, which is the correct
+      outcome for a secret rather than a gap to close.
+    references: [nxos-vyos-surface]
+
+  # -- Fabric -- the VNIs arrive, their VLAN binding is rewritten -------------
+
+  "vxlan_vnis[].vni":
+    disposition: good
+    note: >
+      Preserved on all 8 cells that populate the fabric — 17 VNI records in,
+      17 out, every VNI number intact, rendered as
+      `interfaces { vxlan vxlanN { vni <n> ... } }`.  vyos declares
+      `/vxlan-vnis/vni` supported.
+      Notable because cisco_nxos declares `/vxlan-vnis/vni` LOSSY on its own
+      side; the measured round-trip is clean regardless, and this key records
+      what was measured rather than what was declared.
+    references: [nxos-vyos-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: lossy
+    reason: >
+      The VNI records survive — see `vxlan_vnis[].vni` — but EVERY one of the
+      17 records across all 8 populated cells comes back with a DIFFERENT
+      `vlan_id`.  The binding is not dropped, it is rewritten: 10 -> 1822,
+      20 -> 1832, 1001 -> 321, 777 -> 2521, 600 -> 3052, and so on.
+      vyos declares `/vxlan-vnis/vlan-id` LOSSY and states the cause: VyOS
+      models ONE VNI per `vxlan vxlanN` netdev with no VLAN on the device (the
+      L2 VLAN binding lives on a separate `bridge`), so the required canonical
+      `vlan_id` is synthesised on re-parse rather than read back.
+      This is the most dangerous shape on the pair, and it is worth naming as
+      such: a field that returns a PLAUSIBLE WRONG NUMBER is harder to catch
+      than one that returns empty, because nothing downstream flags it and the
+      value passes a non-null check.  The VLAN-to-VNI mapping is the thing an
+      EVPN fabric is built out of; treat every mapping as unverified and
+      rebuild it from the source config plus a bridge on the target.
+      Recorded `lossy` rather than `unsupported`: the record survives and the
+      target does model a VNI — it is the binding attribute that is
+      unreliable.  Note the interaction, stated once and not used as
+      corroboration: the VLAN records this binding refers to are gone
+      entirely (see `vlans[].id`), so there is nothing on the target to check
+      the synthesised number against.
+    references: [nxos-vyos-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: good
+    note: >
+      Preserved on both cells that populate it
+      (`akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt`, 3 records, and
+      `networklessons_clab_vxlan_mcast_leaf2_nxos.cfg`, 1 record) — 4 of 4
+      multicast groups survive with their addresses intact.  Both matrices
+      declare `/vxlan-vnis/mcast-group` supported.
+      Two cells is thin coverage and the underlay these groups belong to is
+      not itself modelled, so this measures the field, not the working
+      multicast fabric.  Said plainly rather than implied.
+    references: [nxos-vyos-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap, grounded in measurement rather than declaration alone:
+      cisco_nxos declares `/evpn-type5-routes/route` LOSSY with zero supported
+      paths under it, and produces 0 type-5 records on all 13 cells — the
+      EVPN fixtures carry their tenant prefixes as VRF static routes and BGP
+      policy, not as canonical type-5 records.  vyos declares no path here
+      either way, so there is nothing on the target side to lose.
+      Recorded `not_applicable` rather than `unsupported` because neither
+      matrix declares the path unsupported; this is an unpopulated surface,
+      not a blocked one.
+    references: [nxos-vyos-surface]
+
+  # -- VRFs -- identity survives, the control-plane plumbing does not ---------
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      VRF names preserved on all 12 cells that populate them — 19 records in,
+      19 out.  `TENANT-A`, `management`, `CUST1`, `PUBLIC`, `TENANT-777`,
+      `VRF_SERVICE_CUST_1` and `VRF_SERVICE_CUST_2` all round-trip, rendered
+      as `vrf { name <X> { table <n> } }`.  Both matrices declare
+      `/routing-instances/instance/name` supported.
+      This is the key a mechanical drift reading gets most wrong on this pair:
+      because the VRF's RD, route-targets and L3VNI all empty, an
+      "is the target side empty?" pass calls `routing_instances` a total drop.
+      It is not — the instance identity is intact, and the per-interface VRF
+      binding (`/interfaces/interface/config/vrf`, supported on both sides)
+      comes with it.
+      Declared caveats that are real but belong to other keys: vyos declares
+      `/routing-instances/instance/l3-vni` UNSUPPORTED (symmetric-IRB L3VNI is
+      out of scope for its per-netdev L2-VNI model) and
+      `/routing-instances/instance/table` LOSSY (it synthesises a deterministic
+      table id, since the canonical model carries none).  Measured: `l3_vni`,
+      `route_distinguisher`, `rt_imports` and `rt_exports` empty on 7 records.
+      Those are sub-fields of the instance, not its identity, and are not
+      cited as evidence against this key.
+    references: [nxos-vyos-surface]
+
+  "routing_instances[].description":
+    disposition: lossy
+    reason: >
+      Drops to the empty string on both records of the single cell that
+      populates it (`kitchen_sink.cfg`): `out-of-band management` and
+      `tenant a routing instance` both return empty while the VRF records
+      themselves survive with their names.
+      cisco_nxos declares `/routing-instances/instance/description` SUPPORTED
+      and emits it; vyos declares no path for it at all and its `vrf name`
+      render emits only `table <n>`, so there is nowhere for the label to
+      land.
+      Recorded `lossy`, not `unsupported`: the instance is not vanishing, only
+      its label — the round-trip shows 2 VRFs in and 2 VRFs out on that cell.
+      One cell is thin coverage and this is said rather than implied.  It
+      still matters: on a multi-tenant leaf the VRF description is usually the
+      only place the tenant's name is written down.  Capture it before
+      cutover.
+    references: [nxos-vyos-surface]
+
+  # -- Passthrough / vendor-specific -----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any of the 13 cells — the cisco_nxos parser produced an
+      empty `raw_sections` on every fixture, so nothing reaches the target.
+      Both codecs declare only LOSSY paths here and neither declares one
+      supported: cisco_nxos on `/system/raw-sections/vdc` and `/features`,
+      vyos on `/system/raw-sections/version-banner`.  With no source content
+      there is nothing for either declaration to act on.
+    references: [nxos-vyos-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific canonical surface; neither codec in this pair declares a
+      path for it and neither populates it.  Measured empty on all 13 cells.
+    references: [nxos-vyos-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific canonical surface; neither codec in this pair declares a
+      path for it and neither populates it.  Measured empty on all 13 cells.
+    references: [nxos-vyos-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      A total drop of the scalar, measured on every cell that carries one: 7
+      of 13 cells populate `anycast_gateway_mac` and all 7 return the empty
+      string.  cisco_nxos declares `/anycast-gateway-mac` SUPPORTED, so the
+      source side is not the problem; vyos declares the same path UNSUPPORTED
+      and states the cause — VyOS has no VARP / distributed-anycast-gateway
+      grammar, so the chassis-wide MAC is dropped on render.
+      Recorded `unsupported` rather than `lossy` because the value does not
+      degrade, it vanishes, and the target has no grammar it lands in (#436).
+      This and the `virtual_gateway_address` loss recorded under
+      `interfaces[].ipv4_addresses` are ONE mechanism measured in two places —
+      the chassis-wide MAC here, the per-SVI gateway IP there.  Neither is
+      cited as evidence for the other.  Together with `interfaces[].vrrp_groups`
+      they are the reason a leaf-to-VyOS migration needs a first-hop-redundancy
+      design of its own rather than a translation.
+    references: [nxos-vyos-surface]

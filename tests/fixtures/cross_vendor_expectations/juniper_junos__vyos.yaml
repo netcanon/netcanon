@@ -1,0 +1,898 @@
+# Cross-vendor fidelity expectations: juniper_junos -> vyos
+#
+# Source: juniper_junos codec — Junos `set`-form configuration.
+# Target: vyos codec — VyOS curly-brace `config.boot` render.
+#
+# Asymmetric by device class.  juniper_junos in the committed corpus is
+# mixed but campus/DC-leaning: EX/QFX switches with large VLAN databases
+# and `aeN` aggregates, EVPN/VXLAN leaves, one L3VPN PE and one SRX-style
+# HA firewall.  vyos is a Linux software router with no top-level VLAN
+# database, no switchport model, no VRRP model and no anycast-gateway
+# grammar.  The realistic migration is a Junos routed edge being re-homed
+# onto VyOS, so the shared surface is interface identity and addressing,
+# VRF names, static-route destinations, DNS/NTP, SNMP v1/v2c and local
+# accounts — NOT the campus L2 estate, which VyOS does not model.
+#
+# READ THIS BEFORE COMPARING WITH `arista_eos__vyos.yaml`: this pair is
+# shaped like `cisco_iosxr__arista_eos.yaml`, not like the AOS-CX pairs.
+# The interface inventory is FULLY PRESERVED — 151 interface records in,
+# 151 out, identical name sets on all 11 cells.  Every interface loss
+# below is therefore a genuine per-attribute loss that stands on its own
+# measurement, and the interface sub-fields that survive are declared
+# `good` rather than dragged down by a vanishing parent.
+#
+# Two parents DO vanish wholesale — `vlans` (126 records -> 0) and `lags`
+# (18 -> 0).  Each is claimed exactly once, at `vlans[].id` and at `lags`.
+# The remaining five `vlans[].*` keys are `good` by the reconciler's
+# STRUCTURAL_ONLY rule, and each says plainly that this is bookkeeping and
+# not a claim that VLAN names survive.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
+# and a full `run_full_mesh.py` pass over the committed corpus (11 fixture
+# cells, 0 render errors, 0 re-parse errors), resolved through the audit's
+# own `actual_disposition()` and the reconciler's STRUCTURAL_ONLY collapse
+# so this file and the ratchet cannot disagree.  Every loss recorded below
+# was additionally re-derived by hand, by parsing the fixture with
+# juniper_junos, rendering with vyos and re-parsing the render — not
+# inferred from the drift shape.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/juniper_junos_to_vyos/
+#
+# Authored 2026-08-25 closing the cross-vendor expectation mesh — this was
+# the last codec pair without authored expectations.
+
+meta:
+  source_vendor: juniper_junos
+  target_vendor: vyos
+  primary_use_case: >
+    Junos routed edge re-homed onto a VyOS software router: the full
+    interface inventory with its addressing, MTU, description and admin
+    state, hostname, domain, DNS and NTP servers, SNMP v1/v2c scalars,
+    VRF names, static-route destinations, local account names and their
+    password material, and the VXLAN VNIs all survive.  What does not is
+    the campus L2 estate (126 VLAN records dropped outright), the whole
+    link-aggregation surface (18 LAGs and 25 member pointers), syslog
+    destinations, DHCP pools, the Junos apply-groups factoring, the
+    per-route VRF binding, the anycast virtual-gateway addresses on IRB
+    interfaces, the VXLAN-to-VLAN binding, and every account's Junos
+    login class — which collapses to `admin`, promoting three restricted
+    accounts to full administrator.
+  certainty: medium
+  references:
+    - id: junos-vyos-surface
+      path: docs/vendor-references/juniper_junos_to_vyos/canonical_surface.md
+      title: "Junos -> VyOS: measured canonical surface (11 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- management-plane scalars ------------------------------------
+
+  hostname:
+    disposition: lossy
+    reason: >
+      Drifts on 1 of 11 cells, and the direction is the opposite of a
+      loss: on `tsg8139_evpn_leaf_dhcpv6_junos232.set` the Junos source
+      sets no `host-name` at all, and the VyOS render emits the literal
+      line `host-name vyos`, which the re-parse reads back.  No source
+      data was destroyed — a vendor default was MANUFACTURED where the
+      source was silent.  Stated that way deliberately, because "the
+      hostname was lost" would be false.
+      The other 10 cells preserve the hostname exactly, including
+      dotted forms (`netlab-ns-junos.es.net`) and values inherited from
+      an apply-group (`QFX5110-169`).  Both matrices declare
+      `/system/hostname` supported.
+      Operationally minor, but worth catching: a device that arrives on
+      the network answering to `vyos` is indistinguishable from every
+      other un-named VyOS box.  Set the hostname explicitly on any
+      source that did not carry one.
+    references: [junos-vyos-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on both cells that populate it — `example.com` and
+      `lab.example.net` — with zero drift.  Worth stating precisely:
+      juniper_junos declares NO `/system/domain` path at any level,
+      while vyos declares it supported, so the source side of this is
+      measured rather than declared.  The value survives anyway.
+    references: [junos-vyos-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Preserved on all 6 cells that populate name-servers, including the
+      two-server list on `saidvandeklundert_snmpv3_junos172.set` and the
+      single server the `POC_Lab` apply-group contributes on four
+      ksator cells.  vyos declares `/system/dns-server` supported;
+      juniper_junos declares no path either way, so as with `domain`
+      this rests on the measurement.
+    references: [junos-vyos-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Preserved on all 6 cells that populate it, order included — the
+      12-server list on `saidvandeklundert_snmpv3_junos172.set` returns
+      as the same 12 in the same order.  vyos declares
+      `/system/ntp-server` supported; juniper_junos declares no path, so
+      this is measured rather than declared on the source side.
+    references: [junos-vyos-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported with the same
+      stated cause — neither codec renders a clock/timezone stanza — so
+      this is a symmetric gap in the pair rather than a VyOS limitation.
+      No committed cell populates it (trivially empty on 11 of 11), so
+      the gap is declared rather than observed.  Set the time zone on the
+      target by hand; nothing in the migration will carry it.
+    references: [junos-vyos-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      A total concept drop, measured rather than inferred: 12 syslog
+      destinations across 6 cells become 0, and the rendered VyOS config
+      contains no syslog stanza anywhere.  juniper_junos declares
+      `/system/syslog-server` SUPPORTED, so the source side is not the
+      problem; vyos declares the same path UNSUPPORTED and says why —
+      "Render emits no syslog config; intent.syslog_servers are dropped
+      on migration."
+      Recorded `unsupported` rather than `lossy` because the records
+      vanish rather than degrade and the target has no grammar they land
+      in (#436) — `lossy` warns but stays compatible, which would
+      understate a device arriving with no logging destination at all.
+      Re-author `system syslog host` on the VyOS side before cutover; a
+      box that logs nowhere fails silently.
+    references: [junos-vyos-surface]
+
+  # -- Interfaces -- inventory intact, four attributes lost ------------------
+  #
+  # The measured record count is the headline: 151 interface records across
+  # the 11 cells, 151 after the round-trip, with identical name sets on every
+  # cell.  Junos 3-segment names (`ge-0/0/0`), unit-qualified names
+  # (`irb.100`, `st0.100`), `lo0`, `fxp0` and even `aeN` all survive the VyOS
+  # render verbatim, because the VyOS block-type dispatch falls through to
+  # `ethernet <name>` for anything it does not recognise.  Nothing below is a
+  # knock-on effect of a vanishing parent record — each loss was measured on
+  # its own.
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Preserved on 11 of 11 cells: 151 source interface records, 151
+      after parse -> render -> re-parse, identical name sets on every
+      cell.  The VyOS render does not re-shape Junos 3-segment naming,
+      does not collapse unit-qualified names such as `irb.100` or
+      `st0.100`, and does not drop management (`fxp0`) or loopback
+      (`lo0`) ports.  Both matrices declare
+      `/interfaces/interface/name` supported.
+    references: [junos-vyos-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Zero drift: 84 populated descriptions across the corpus, 0 of 151
+      records differing on any cell.  Both matrices declare
+      `/interfaces/interface/config/description` supported.
+      Stated explicitly because there is a known VyOS behaviour that
+      makes descriptions the first thing to suspect on this target: the
+      render replaces embedded double quotes in a free-text value with
+      apostrophes, since VyOS rejects embedded quotes in value strings
+      even when escaped (vyos.dev/T1246).  On this corpus it never
+      fires — 0 of the 84 populated descriptions contain an embedded
+      double quote.  So `good` here is a measurement, not an assumption,
+      and a description drifting on some future Junos capture would most
+      likely be that punctuation rewrite (the text survives, its
+      punctuation does not) rather than a content loss.
+    references: [junos-vyos-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on 151 of 151 records — zero differing.  The
+      2 records that are administratively down on the source arrive
+      disabled on the target.  Both matrices declare
+      `/interfaces/interface/config/enabled` supported.
+    references: [junos-vyos-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on 151 of 151 records; MTU is actually populated on 18
+      of them and all 18 round-trip unchanged.  vyos declares
+      `/interfaces/interface/config/mtu` supported; juniper_junos
+      declares no path for it either way, so the declaration coverage is
+      one-sided — but the measurement is clean.
+    references: [junos-vyos-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      Every IPv6 address and prefix-length survives.  What drops is the
+      anycast virtual-gateway attribute carried inside the address
+      record.  Measured on 1 cell
+      (`ksator_labmgmt_qfx10k2_junos173.set`): 6 of the 18 populated
+      records lose both `virtual_gateway_address` and
+      `virtual_gateway_mac`, on the `irb.20xx` IRB units — the global
+      `fd20:20xx::5/64` address returns intact, the `fd20:20xx::1`
+      gateway VIP and its `02:00:xx:06:00:01` virtual MAC return empty.
+      The 12 remaining populated records, including every `fe80::`
+      link-local, are untouched, scope included.
+      vyos declares
+      `/interfaces/interface/ipv6/address/virtual-gateway-address`
+      UNSUPPORTED and states the cause — no VyOS IPv6 anycast-gateway
+      grammar, so render emits only the `address <ip>/<plen>` line.
+      juniper_junos declares both the address and the virtual-gateway
+      pair supported, so the gap is entirely on the target side.
+      Recorded `lossy`, not `unsupported`: the address record does not
+      vanish and the interface's own IPv6 reachability is intact, so
+      calling the whole field unsupported would falsely claim VyOS
+      cannot hold IPv6 addresses.  The operational consequence is still
+      sharp — hosts on that segment point their default route at a VIP
+      the target will not answer for.  Re-author first-hop redundancy on
+      the VyOS side before cutover.
+    references: [junos-vyos-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Same mechanism as the IPv6 case and measured separately, on its own
+      records: 59 interface records carry IPv4, 10 of them across 2 cells
+      (`batfish_evpntype5_router1_junos2541.set`,
+      `ksator_labmgmt_qfx10k2_junos173.set`) lose
+      `virtual_gateway_address`, and 6 of those 10 also lose
+      `virtual_gateway_mac`.  Every `ip` and `prefix_length` survives —
+      `172.16.100.3/24` returns as `172.16.100.3/24` while the
+      `172.16.100.100` gateway VIP returns empty.  The other 49
+      populated records are byte-identical.
+      vyos declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address`
+      UNSUPPORTED: "VyOS has no anycast-gateway / VARP grammar; render
+      emits only the `address <ip>/<plen>` line".
+      Recorded `lossy` for the same reason as the IPv6 twin — the address
+      record survives, so `unsupported` on the whole field would be a
+      false claim about VyOS interface addressing.  This is the field a
+      migration most depends on and its core is clean; it is the anycast
+      overlay on the IRB units that has to be rebuilt by hand.
+    references: [junos-vyos-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on all 11 cells: 149 of 151 records lose the IANA type hint
+      entirely, going to the empty string.  The 2 that "survive" carried
+      no type on the source side to begin with, so the honest reading is
+      that every typed record loses it.  The breakdown is uniform across
+      types — 99 `ianaift:ethernetCsmacd`, 18 `ianaift:ieee8023adLag`,
+      16 `ianaift:l3ipvlan`, 13 `ianaift:softwareLoopback` and 3
+      `ianaift:tunnel`.
+      vyos declares `/interfaces/interface/config/type` LOSSY and states
+      why: VyOS has no IANA ifType, so its parser infers the type from
+      the netdev-name shape (`ethN`, `lo`/`dumN`, `bondN`).  Junos names
+      match none of those shapes, so nothing is recoverable — note that
+      even `lo0` drops, because VyOS re-derives `softwareLoopback` only
+      from the exact name `lo`.
+      The interface record, its addressing and its admin state are
+      unaffected — this is a lost hint, not lost forwarding state, which
+      is why it is `lossy` and not `unsupported`.
+    references: [junos-vyos-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: unsupported
+    reason: >
+      A total drop of the attribute, verified by round-trip rather than
+      inferred: on the 5 cells that carry aggregates, all 25 records with
+      a `lag_member_of` value (`ae0`, `ae1`, `ae2`, `ae3`, `ae4`, `ae5`,
+      `ae6`, `ae101`, `ae102`, `ae111`, `ae201`, `ae202`) come back with
+      it null, and the rendered VyOS config contains no `bond-group` line
+      and no `member { interface ... }` block anywhere.  The member ports
+      themselves survive intact — it is the membership pointer that is
+      gone, which is the dangerous shape: the ports come up standalone
+      rather than bundled.
+      The cause is exact and reproducible.  `vyos/render.py` maps a
+      canonical interface to a VyOS block header with
+      `re.match(r"^bond\d+$", name)`; Junos aggregates are named `aeN`,
+      which does not match, so they render as `ethernet ae1 { ... }` and
+      the bonding emit path is never entered.
+      Recorded `unsupported` rather than `lossy` because the value never
+      degrades, it vanishes, and on the bare render path the target has
+      no grammar it lands in (#436).  This and `lags` are ONE mechanism,
+      not two independent findings — neither corroborates the other, and
+      this entry exists because the attribute is measured on the
+      interface record.
+      One qualifier stated honestly: the mesh renders bare, and
+      `translate_port_names` — which would rewrite `ae1` to `bond1` — is
+      not engaged on a bare `run_plan`.  A migration driven through
+      `run_plan_with_overrides` may keep the bundles.  The bare path is
+      what the audit scores and what this file records.
+    references: [junos-vyos-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      A hard target-side gap, declared rather than observed: vyos
+      declares the ENTIRE `/interfaces/interface/vrrp-groups/group`
+      subtree unsupported — the group anchor plus mode, priority,
+      preempt, advertisement-interval, authentication, virtual-IPv6s and
+      description — with the stated cause "VyOS VRRP / VRRPv3 is not
+      modelled by the codec; the group is dropped on migration."
+      juniper_junos declares `/interfaces/interface/vrrp-groups/group`
+      SUPPORTED (with `/mode` lossy), so this is NOT a source-side gap
+      and `not_applicable` would be the wrong call: a Junos config with
+      `family inet address ... vrrp-group` would populate the field and
+      lose it entirely on render.  No committed cell exercises it —
+      measured 0 populated records of 151 on all 11 cells — so the
+      disposition rests on the declarations.
+      First-hop redundancy has to be rebuilt on the VyOS side by hand,
+      and it will not be flagged by the round-trip because the source
+      corpus happens not to carry any.
+    references: [junos-vyos-surface]
+
+  # -- VLANs -- a real campus estate, and none of it survives -----------------
+  #
+  # 7 of 11 cells populate `vlans`, with 126 records between them (87 on
+  # `saidvandeklundert_snmpv3_junos172.set` alone).  These are genuine campus
+  # VLAN databases, not a thin dot1q registry: 126 of 126 carry a name and
+  # 120 carry trunk membership.  Every one of them disappears.
+  #
+  # `vlans[].id` claims that structural loss for the whole parent list — it is
+  # the first sub-field the reconciler reaches, and `structural_parent_claimed`
+  # awards the signal to the first claimant.  The five siblings below it are
+  # `good` BY CONSTRUCTION, and each says so plainly rather than implying the
+  # data survives.
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      A total concept drop, measured across the whole corpus: 126 VLAN
+      records on 7 cells become 0, and the rendered VyOS config contains
+      no VLAN database of any kind.  Per cell — 87
+      (`saidvandeklundert_snmpv3_junos172.set`), 16
+      (`ksator_labmgmt_qfx5100_junos173.set`), 6
+      (`ksator_labmgmt_ex4550_junos151.set`), 6
+      (`ksator_labmgmt_qfx10k2_junos173.set`), 4
+      (`batfish_evpntype5_router1_junos2541.set`), 4 (`kitchen_sink.set`),
+      3 (`ksator_labmgmt_qfx5110_junos173.set`).
+      juniper_junos declares `/vlans/vlan/id` and `/vlans/vlan/name`
+      supported, so the source side is not the problem.  vyos declares
+      `/vlans/vlan/id` UNSUPPORTED and explains the model difference:
+      "VyOS has no top-level VLAN database; 802.1Q VLANs are modelled as
+      `vif <vid>` sub-interfaces".  The matching Junos port surface goes
+      with it — `switchport_mode` on 25 interface records and
+      `trunk_allowed_vlans` on the same 25 — which vyos declares
+      unsupported at four separate interface paths.
+      Recorded `unsupported`, not `lossy`: the records vanish rather than
+      degrade and the target has no grammar for them (#436).
+      This key carries the record-level loss for the whole `vlans` list.
+      The five sibling keys below are `good` because the reconciler
+      collapses their drift to STRUCTURAL_ONLY once this one has claimed
+      it — read the operational consequence HERE, not there.
+      Rebuild the L2 estate on the target as `ethN.<vid>` sub-interfaces
+      and bridges.  It will not migrate.
+    references: [junos-vyos-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      `good` here is a bookkeeping decision, NOT a claim that VLAN names
+      survive — they do not.  All 126 source records carry a name
+      (`VLAN101`, `V2021`, `USERS`, `TENANT_A_DATA` ...) and all 126
+      records disappear with their parent list.
+      That single disappearance is claimed once, at `vlans[].id`.  The
+      reconciler awards a parent list's structural signal to the first
+      sub-field that reaches it and reclassifies every later sibling as
+      STRUCTURAL_ONLY, so a loss declared here could never be evidenced
+      and would fail the per-pair ratchet by construction.  This key is
+      about what happens to the VALUE when a record survives; no VLAN
+      record survives on this pair, so there is no independent per-value
+      loss to record and recording the vanishing a second time would
+      double-count one mechanism.
+    references: [junos-vyos-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      Same bookkeeping as `vlans[].name`, and here the sub-field is
+      almost unexercised on its own terms: exactly 1 of the 126 source
+      VLAN records carries a VLAN-mount address (VLAN 698 on
+      `saidvandeklundert_snmpv3_junos172.set`, `10.200.1.1/22`).  It
+      disappears with its parent record, and that disappearance is
+      claimed at `vlans[].id`.
+      Worth noting for a future source that does mount L3 on VLAN
+      records: vyos declares `/vlans/vlan/ipv4/address/secondary-ip`,
+      `/virtual-gateway-address` and `/virtual-gateway-mac` all
+      unsupported, stating that render never emits VLAN-record L3 at all.
+      Junos' own IRB addressing lands in `interfaces[].ipv4_addresses`,
+      which is recorded on its own measurement.
+    references: [junos-vyos-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Same bookkeeping as `vlans[].name`, and the least consequential of
+      the five: 0 of the 126 source VLAN records carry any untagged port
+      membership, so this sub-field is empty on both sides of every
+      record even before the parent list vanishes.  Junos expresses
+      access-port membership through
+      `/interfaces/interface/access-vlan`, which vyos declares
+      unsupported separately.
+    references: [junos-vyos-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Same bookkeeping as `vlans[].name`, and unlike `untagged_ports`
+      this one IS heavily populated on the source: 120 of the 126 VLAN
+      records carry trunk membership, mostly lists of `aeN` aggregates.
+      All of it disappears with the parent list, and that disappearance
+      is claimed once at `vlans[].id`.  Declaring a loss here could never
+      be evidenced independently — the record count is the only signal,
+      and it is already spoken for.
+    references: [junos-vyos-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Same bookkeeping as `vlans[].name`, and unexercised: 0 of the 126
+      source VLAN records carry a description distinct from the name.
+      juniper_junos declares `/vlans/vlan/description` LOSSY on its own
+      render side, which would matter only for a pair where Junos is the
+      TARGET.  Here the field is empty on every record before the parent
+      list vanishes.
+    references: [junos-vyos-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      A raw drift-shape reading calls this a total drop.  It is not: 23
+      routes in, 23 routes out, on all 9 cells that carry any, with
+      destination and next-hop intact.  What empties is the VRF binding,
+      on 5 records across 4 cells — `0.0.0.0/0 -> 10.0.0.2` out of
+      `mgmt_junos` on two cells, `0.0.0.0/0 -> 192.168.100.1` out of
+      `mgmt_junos` and `10.0.0.3/32 -> 192.168.98.1` out of `ISP-2` on
+      `jnprautomate_mnha_vsrx_a_junos.set`, and
+      `10.99.0.0/16 -> 10.0.0.99` out of `TENANT_A` on
+      `kitchen_sink.set`.
+      juniper_junos declares `/routing/static-route` and
+      `/routing/static-route/vrf` supported.  vyos declares the route
+      itself supported and `/routing/static-route/vrf` UNSUPPORTED,
+      stating that per-VRF statics are deferred past the Phase-3 VRF
+      wire-up while `vrf name` instances themselves are supported.  So
+      the VRFs arrive and their routes arrive in the wrong table.
+      Recorded `lossy` rather than `unsupported` because the record
+      survives and the part the target genuinely models is intact —
+      calling the whole field unsupported would falsely claim VyOS
+      cannot hold static routes.  The consequence is not minor: three of
+      those five are a management-VRF default route landing in the global
+      table, which is a route leak, not a cosmetic loss.  Diff the
+      target's global table against the source's before cutover.
+      Two further cells (`ksator_labmgmt_qfx10k2_junos173.set`,
+      `ksator_labmgmt_qfx5100_junos173.set`) differ only in route
+      ORDERING; the comparator normalises that and it is not counted as
+      drift here either.
+      Declared but untested on this corpus: both codecs declare
+      `/routing/static-route/description` lossy and juniper_junos also
+      declares `/metric` lossy and `/interface` unsupported.  No
+      committed cell sets a route description, metric or
+      interface-only next hop, so those sub-losses are unexercised.
+    references: [junos-vyos-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      A total concept drop: 5 DHCP pools across 2 cells (4 on
+      `jnprautomate_mnha_vsrx_a_junos.set`, 1 on `kitchen_sink.set`)
+      become 0, and the render emits no DHCP stanza.  juniper_junos
+      declares `/dhcp-servers/pool` SUPPORTED, so the source side is not
+      the problem; vyos declares the same path UNSUPPORTED — "Render
+      emits no DHCP server pool; intent.dhcp_servers are dropped on
+      migration."
+      Recorded `unsupported` rather than `lossy` because the pools vanish
+      rather than degrade and the target renders no grammar they land in
+      (#436).  On the SRX-style HA firewall cell those four pools are the
+      device's whole address-assignment role — re-author
+      `service dhcp-server` on the VyOS side before cutover or the
+      segment goes dark.
+    references: [junos-vyos-surface]
+
+  # -- SNMP -- the scalars are clean, the credentials are not ----------------
+
+  "snmp.community":
+    disposition: good
+    note: >
+      Preserved on all 6 cells that produce an SNMP block — `public` on
+      five of them, including the value inherited from the `POC_Lab`
+      apply-group on four ksator cells.  Both matrices declare
+      `/snmp/community` supported.
+    references: [junos-vyos-surface]
+
+  "snmp.location":
+    disposition: good
+    note: >
+      Preserved with zero drift on the cells that set it (`DAL09`,
+      `Synthetic Lab Rack 7`).  Both matrices declare `/snmp/location`
+      supported.
+    references: [junos-vyos-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: >
+      Preserved with zero drift on the single cell that sets it
+      (`noc@example.net`).  Both matrices declare `/snmp/contact`
+      supported.  One cell is thin coverage; the two-sided declaration
+      carries the rest of the weight, and it is stated that way rather
+      than implied.
+    references: [junos-vyos-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      A total drop on the one cell that populates it: 2 trap
+      destinations on `kitchen_sink.set` become 0, and the render emits
+      no trap-target line.  Every other SNMP-bearing cell carries an
+      empty trap-host list on both sides.
+      NEITHER matrix declares `/snmp/trap-host` at any level — not
+      supported, not lossy, not unsupported — so unlike every other
+      target-side drop on this pair there is no declaration behind it,
+      only the round-trip.  That silence is a matrix under-declaration on
+      the vyos side; it is a codec-level fact rather than a pair-specific
+      one and is left for a codec change rather than fixed here.
+      Recorded `unsupported` rather than `lossy` because the records
+      vanish rather than degrade (#436).  Re-enter trap destinations on
+      the target; nothing in the migration carries them, and the
+      capability report will not warn you either.
+    references: [junos-vyos-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      4 USM users across 2 cells; the user records themselves, their
+      names and their group bindings all survive.  Two things degrade.
+      CRYPTOGRAPHIC STRENGTH — 3 of the 4 records lose it.  On
+      `saidvandeklundert_snmpv3_junos172.set` both POLLER accounts go
+      `aes128` -> `aes`; on `kitchen_sink.set` `readonly_v3` goes
+      `sha256` -> `sha` AND `aes256` -> `aes`.  `sha256` -> `sha` is
+      SHA-256 down to SHA-1.  The fourth record (`monitor`, md5/des) is
+      unchanged.  vyos declares `/snmp/v3-user/auth-protocol` and
+      `/priv-protocol` LOSSY and names this exact downgrade — its render
+      emits only `md5`/`sha` and bare `des`/`aes`.
+      KEY MATERIAL — the auth and privacy passphrases round-trip
+      verbatim, which sounds like a win and is not: they are opaque
+      Junos `$9$` vendor-reversible blobs, and a `$9$` blob is not a
+      valid VyOS `encrypted-password`, so v3 polling will fail on the
+      target until the users are re-keyed.  vyos declares
+      `/snmp/v3-user/auth-passphrase` and `/priv-passphrase` lossy for
+      precisely this reason, and `/engine-id` lossy on top.
+      Recorded `lossy` rather than `unsupported`: the user record
+      survives inside a concept the target models, so this is
+      degradation, not a concept gap.  Re-create SNMPv3 users on the
+      target and choose the algorithms explicitly.  No passphrase blob
+      or hash body is quoted in this file or its reference doc — only
+      the scheme marker.
+    references: [junos-vyos-surface]
+
+  # -- LAGs -- dropped by a name shape the target does not recognise ---------
+
+  lags:
+    disposition: unsupported
+    reason: >
+      A total drop, not a degradation — verified by round-tripping the
+      five aggregate-bearing fixtures rather than inferred from the drift
+      shape.  18 LAG records across those 5 cells (`ae0`, `ae1`, `ae2`,
+      `ae3`, `ae4`, `ae5`, `ae6`, `ae101`, `ae102`, `ae111`, `ae201`,
+      `ae202`) become 0 after parse -> render -> re-parse, and the
+      rendered VyOS config contains NO `bonding` block, NO `mode 802.3ad`
+      line and NO `member { interface ... }` list anywhere.
+      The cause is a name-shape mismatch, not a missing concept.
+      `vyos/render.py` selects the bonding block header with
+      `re.match(r"^bond\d+$", name)`; Junos aggregates are `aeN`, so they
+      fall through to `ethernet aeN { ... }` and the bond emit path never
+      runs.  Every rendered aggregate line in the corpus is of the form
+      `    ethernet aeN {`.
+      juniper_junos declares `/lags/lag/mode` supported and populates
+      name + members on every record, so the source side is not the
+      problem.
+      Recorded `unsupported` rather than `lossy` because a vanished
+      record is not lossy (#436) — `lossy` warns and stays compatible,
+      which would badly understate losing every aggregate on a
+      switch-class device.
+      Worth stating separately, because it inverts the standing
+      observation carried on the arista_eos pairs: the vyos matrix
+      declares `/lags/lag/name`, `/lags/lag/members` AND
+      `/interfaces/interface/lag-member-of` all SUPPORTED while dropping
+      every LAG whose name is not `bondN`.  That is a matrix
+      OVER-declaration affecting every non-VyOS source, not a
+      pair-specific fact, and is left for a codec change rather than
+      fixed here.
+      Honest qualifier, same as on `interfaces[].lag_member_of`: the mesh
+      renders bare and does not engage `translate_port_names`, which
+      would rewrite `ae1` to `bond1`.  A migration driven through
+      `run_plan_with_overrides` may keep the bundles.  Until then,
+      re-create bonds and re-add members on the target by hand.
+    references: [junos-vyos-surface]
+
+  # -- Identity -- names and secrets survive, authorisation does not ---------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Every account survives: 13 source user records on 8 cells, 13 after
+      the round-trip, same names on every cell (`admin`, `lab`,
+      `engineer`, `noc-auto`, `noc-write`, `noc-read`, `operator`,
+      `readonly`), including the `lab` account inherited from the
+      `POC_Lab` apply-group on four ksator cells.  Both matrices declare
+      `/local-users/user/name` supported.
+      This pair does NOT show the account-vanishing behaviour seen on the
+      arista_eos targets — no account is dropped for its secret format.
+      What does degrade is the role, recorded once under
+      `local_users[].role`.
+    references: [junos-vyos-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on all 8 cells that populate users: 13 of 13 records lose
+      their Junos login class, and every one becomes `admin`.  For the
+      `super-user` accounts that is a fair mapping.  For three records it
+      is a PRIVILEGE ESCALATION, measured per record:
+      `noc-read` (class `READ`, privilege level 1) on
+      `saidvandeklundert_snmpv3_junos172.set`, and `operator` (class
+      `operator`, level 1) and `readonly` (class `read-only`, level 1) on
+      `kitchen_sink.set` — all three arrive as `admin` at privilege
+      level 15.
+      vyos declares `/local-users/user/privilege-level` LOSSY, stating
+      that VyOS login accounts have no numeric privilege level in the
+      common case so the codec maps every login user to one value.  It
+      declares `/local-users/user/role` SUPPORTED, which this
+      measurement contradicts — the role is not preserved on a single
+      record.
+      Recorded `lossy` rather than `unsupported`: the account record
+      survives inside a concept the target models, so this is value
+      degradation, not a concept-level gap.  The DIRECTION is what
+      matters, and a `lossy` badge alone does not convey it: a read-only
+      NOC account arriving as a full administrator is a fail-open.  Audit
+      the account list on the target and demote by hand before cutover.
+      The account names and their password material are unaffected and
+      are recorded on their own measurements — this entry is not
+      evidence for either of them, nor they for it.
+    references: [junos-vyos-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Zero drift: all 13 secrets round-trip byte-identical on all 8 cells
+      that populate users.  Both matrices declare
+      `/local-users/user/hashed-password` supported.
+      Shape only, never the value: the corpus carries 4 records with a
+      `$1$` crypt-MD5 body, 4 with a `$6$` SHA-512-crypt body, 1 empty,
+      and 4 whose committed capture holds a sanitisation placeholder
+      rather than a real hash.  All are wrapped in the canonical
+      `junos:` envelope and all come back unchanged.
+      Notable because this is the opposite of the arista_eos targets,
+      where type-marker handling silently degrades a credential into a
+      cleartext token.  Nothing of that kind happens here — but the
+      accounts still arrive over-privileged, which is recorded under
+      `local_users[].role`, and the SNMPv3 keys still need re-keying,
+      which is recorded under `snmp.v3_users`.
+    references: [junos-vyos-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      A symmetric gap, declared on both sides at both paths: juniper_junos
+      AND vyos each declare `/radius-servers/server/host` and
+      `/radius-servers/server/key` unsupported, both stating that render
+      emits no RADIUS configuration.  No committed cell populates the
+      field (trivially empty on 11 of 11), so this rests on the
+      declarations rather than a round-trip, and it is stated that way.
+      Re-author RADIUS on the VyOS side — and note that the shared secret
+      could not have migrated even if the server list had.
+    references: [junos-vyos-surface]
+
+  # -- Fabric -- VNIs survive, their VLAN binding is synthesised -------------
+
+  "vxlan_vnis[].vni":
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate VNIs — 13 records in, 13
+      out, every VNI number intact (10100-10400, 22021-22031,
+      10010/10020/10100).  `source_interface` (`lo0.0`) and `udp_port`
+      (4789) survive with them.  Both matrices declare `/vxlan-vnis/vni`
+      supported.
+      The VLAN binding on those same records does NOT survive; that is
+      recorded on its own measurement at `vxlan_vnis[].vlan_id`.
+    references: [junos-vyos-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: lossy
+    reason: >
+      Drifts on all 3 cells that populate VNIs — 13 of 13 records — and
+      the replacement value is an arithmetic artifact, not an empty
+      field.  The returned `vlan_id` is exactly `vni mod 4094` on every
+      record, verified: VNI 10100 / VLAN 100 comes back as VLAN 1912,
+      VNI 22021 / VLAN 2021 as 1551, VNI 10010 / VLAN 10 as 1822.
+      vyos declares `/vxlan-vnis/vlan-id` LOSSY and states the cause:
+      VyOS models ONE VNI per `vxlan vxlanN` netdev with no VLAN on the
+      device (the L2 binding lives on a separate bridge), so the required
+      canonical `vlan_id` is synthesised from the VNI.
+      Recorded `lossy` rather than `unsupported`: the VNI record survives
+      and carries a value.  That is precisely what makes it worth
+      flagging loudly — 1912 is a legal VLAN ID and reads like real
+      configuration, so a reviewer skimming the render will not notice.
+      Rebuild the VLAN-to-VNI bindings from the source, never from the
+      render.
+      Related and separately declared: vyos declares
+      `/vxlan-vnis/l2vni-route-target` unsupported, so per-VNI EVPN
+      RD/RT plumbing is dropped too.  No committed cell populates it.
+    references: [junos-vyos-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: not_applicable
+    note: >
+      Source-side gap, verified in the parser rather than assumed:
+      `netcanon/migration/codecs/juniper_junos/parse.py` contains no
+      `multicast-group` handling at all, and 0 of the 13 VNI records
+      across the corpus carry a multicast group.  juniper_junos does
+      declare `/vxlan-vnis/mcast-group` lossy, but that declaration
+      describes its own RENDER side — it matters for a pair where Junos
+      is the target.
+      vyos declares `/vxlan-vnis/mcast-group` SUPPORTED, so a multicast
+      underlay re-authored on the VyOS side will stick.  Nothing reaches
+      it from this source.
+    references: [junos-vyos-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap by deliberate design, not omission.  juniper_junos
+      declares `/evpn-type5-routes/route` lossy and states the model
+      choice: EVPN Type-5 IP-prefix advertisements are carried as a VRF
+      property (`CanonicalRoutingInstance.l3_vni`) rather than as
+      canonical route records.  `evpn_type5` appears nowhere in the Junos
+      parser, and the field measured empty on all 11 cells including the
+      two EVPN leaf fixtures.  vyos declares nothing for the path either
+      way.
+      Context, not a claim recorded anywhere as a loss: the `l3_vni` that
+      actually carries this information does empty on the VyOS side —
+      vyos declares `/routing-instances/instance/l3-vni` unsupported.
+      That lands on a sub-field with no key in this file, so it is
+      described in the reference doc and left uncounted here rather than
+      attached to a key it does not belong to.
+    references: [junos-vyos-surface]
+
+  # -- VRFs -- identity survives, the control plane does not -----------------
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      A raw "is the target side empty?" reading calls `routing_instances`
+      a total drop.  It is not: 19 instances in, 19 out, names preserved
+      on all 6 cells that populate them — `TENANT-A`, `TENANT-B`,
+      `CUSTOMERS`, `mgmt_junos`, `HA-ICD`, `ISP-2`, `PROD`, `VPN`,
+      `APP3`, `DCI-VRF`, `INTERNET`, `Cluster1_ICL`, `Tenant-A-1`,
+      `Tenant-A-2`, `TENANT_A`, `TENANT_B`, `RTR_C`.  juniper_junos
+      declares `/routing-instances/instance` supported; vyos declares
+      `/routing-instances/instance/name` supported and renders each as
+      `set vrf name <name>`.
+      What empties INSIDE those surviving records is the L3VPN control
+      plane — route-distinguisher and both route-target lists on 10
+      records, `l3_vni` on 6, and `instance_type` (`virtual-router` and
+      `mac-vrf` both flattened to `vrf`) on 7.  vyos declares
+      `/routing-instances/instance/instance-type` and `/table` lossy and
+      `/l3-vni` unsupported.  None of those is this key, and only the
+      description has a key of its own in this file; the rest is
+      described in the reference doc rather than attached to a key it
+      does not measure.  Instance IDENTITY, which is what this key
+      measures, is clean.
+    references: [junos-vyos-surface]
+
+  "routing_instances[].description":
+    disposition: lossy
+    reason: >
+      Drops to the empty string on 4 records across the 2 cells that
+      populate it: `MANAGEMENT_VRF` on
+      `jnprautomate_mnha_vsrx_a_junos.set`, and `Tenant A L3 VRF`,
+      `Tenant B L2 mac-vrf` and `Lightweight virtual router for transit`
+      on `kitchen_sink.set`.  The instances themselves survive with their
+      names in every case.
+      NEITHER matrix declares a `/routing-instances/instance/description`
+      path at any level, so this disposition rests on the measurement
+      rather than a declaration — stated plainly rather than implied.
+      The VyOS render emits `set vrf name <name>` with a synthesised
+      numeric `table <id>` and no description line.
+      Recorded `lossy`, not `unsupported`: the instance is not vanishing,
+      only its label.  It still matters — on a PE or a multi-tenant
+      firewall the VRF description is usually the only place the customer
+      or the intent is written down.  Capture it before cutover.
+    references: [junos-vyos-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Source-side gap, verified rather than assumed: the string
+      `raw_sections` appears in
+      `netcanon/migration/codecs/juniper_junos/parse.py` only inside a
+      docstring, nothing assigns it, and the field measured empty on both
+      sides of all 11 cells.  juniper_junos declares no path under raw
+      sections.
+      vyos declares `/system/raw-sections/version-banner` lossy — the
+      `// vyos-config-version` trailer and the not-yet-modelled
+      management-plane blocks are discarded on parse — but that bites
+      only with VyOS as the SOURCE, which is the reverse pair.
+    references: [junos-vyos-surface]
+
+  apply_groups:
+    disposition: unsupported
+    reason: >
+      A total drop: 6 apply-group references across 6 cells
+      (`MNHA-SYNC`, `POC_Lab` on four ksator cells, `GLOBAL-SETTINGS`)
+      become 0, and the rendered VyOS config contains no `groups` or
+      `apply-groups` construct — VyOS has no equivalent grammar and
+      neither matrix declares a path for one.
+      What is lost is the FACTORING, not the configuration.  juniper_junos
+      declares `/groups` lossy and states that apply-group inheritance is
+      wired through a two-pass parse; it is, and the inherited values do
+      reach the target.  Verified on
+      `ksator_labmgmt_qfx5110_junos173.set`, whose entire management
+      plane is defined inside `groups POC_Lab`: after the round-trip the
+      target carries hostname `QFX5110-169`, name-server `172.29.131.60`,
+      NTP server `66.129.255.62`, SNMP community `public`, the `lab`
+      login account and the `0.0.0.0/0` static route.  The config arrives
+      flattened, which is a maintainability loss rather than a
+      functional one.
+      Recorded `unsupported` rather than `lossy` because the records
+      vanish and the target has no grammar for them (#436).
+      This and `group_content` are ONE Junos mechanism seen through two
+      canonical fields.  Neither is cited as evidence for the other.
+      One inherited item genuinely does NOT arrive — the group's syslog
+      host — but that is the separately-measured `syslog_servers` gap,
+      not evidence about apply-groups.
+    references: [junos-vyos-surface]
+
+  group_content:
+    disposition: unsupported
+    reason: >
+      Measured on its own terms: the group-body map empties on the same 6
+      cells, with `only_in_source` carrying the group name
+      (`MNHA-SYNC`, `POC_Lab`, `GLOBAL-SETTINGS`) and the target side
+      returning an empty map.  VyOS has no construct that holds a named,
+      re-usable configuration fragment, and neither matrix declares a
+      path for one.
+      Recorded `unsupported` rather than `lossy` for the same reason as
+      `apply_groups` — the content vanishes rather than degrades (#436).
+      Recorded as its own entry because the canonical field is its own
+      surface, NOT because `apply_groups` also drifts; the two are one
+      mechanism and neither corroborates the other.
+      Practical consequence: a Junos config that is 30 lines of group
+      plus one `apply-groups` line becomes a fully-expanded VyOS config.
+      Nothing is missing, but the next operator has to re-derive the
+      shared baseline by hand.
+    references: [junos-vyos-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      A symmetric gap, declared on both sides.  juniper_junos declares
+      `/anycast-gateway-mac` unsupported because Junos has no
+      system-wide anycast-gateway MAC — per-IRB-unit overrides live on
+      `CanonicalIPv4Address.virtual_gateway_mac` instead.  vyos declares
+      the same path unsupported because VyOS has no VARP /
+      distributed-anycast-gateway grammar at all.  Measured empty on both
+      sides of all 11 cells, so this rests on the declarations rather
+      than a round-trip.
+      The per-address anycast material Junos DOES carry is measured and
+      recorded separately under `interfaces[].ipv4_addresses` and
+      `interfaces[].ipv6_addresses`; those entries stand on their own
+      records and are not cited here, nor this there.
+    references: [junos-vyos-surface]

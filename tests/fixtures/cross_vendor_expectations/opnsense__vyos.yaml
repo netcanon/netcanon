@@ -1,0 +1,790 @@
+# Cross-vendor fidelity expectations: opnsense -> vyos
+#
+# Source: opnsense codec — OPNsense `config.xml`.
+# Target: vyos codec — VyOS curly-brace `config.boot` render.
+#
+# Both sides are edge devices, which makes this one of the better-matched
+# pairs in the mesh: a FreeBSD perimeter firewall (em/igc/ixl NICs, CARP
+# VIPs, a DHCP server, `lagg` bundles, a VLAN database) replaced by a
+# Debian+FRR software router.  The routed edge — addressing, hostname,
+# domain, DNS, static routing, the SNMP agent, local login identity —
+# migrates well.
+#
+# READ THIS FIRST, because it is bigger than anything recorded below:
+# `CanonicalIntent` models NO firewall rules, NO NAT and NO aliases.  This
+# pair moves the plumbing of an OPNsense box and leaves its entire reason
+# for existing behind.  That is a netcanon scope fact, not a loss any key
+# here can carry, and it belongs at the top of any cutover plan.
+#
+# STRUCTURALLY this pair is the inverse of the usual shape: the interface
+# inventory does not shrink, it GROWS — 30 source records across the 8
+# cells, 31 after the round-trip, and zero source interface names dropped
+# on any cell.  The one differing cell gains `lagg0`, the LAG netdev
+# materialised as its own interface record.  Because the list changes
+# length there, the reconciler routes that list's record-level signal to
+# `interfaces[].name`; every surviving `interfaces[].*` sub-field below is
+# `good` on its own separate measurement, not by inheritance.
+#
+# The real losses are: the CARP high-availability surface, the VLAN
+# database, the DHCP server, RADIUS, SNMP trap destinations, the LAG (for
+# a name-shape reason that one rename fixes), the static-route
+# description, and local-user authority — which fails OPEN.
+#
+# Dispositions are grounded in the two codecs' `CapabilityMatrix`
+# declarations and in hand round-trips of all 8 committed fixtures
+# (`opnsense.parse()` -> `vyos.render()` -> `vyos.parse()`, 0 render
+# errors, 0 re-parse errors), then resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree.
+# No loss below was inferred from the drift shape; where a claim needed a
+# mechanism, a targeted probe was run and the reference doc describes it.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/opnsense_to_vyos/
+#
+# Authored 2026-08-25 closing the cross-vendor expectation mesh.
+
+meta:
+  source_vendor: opnsense
+  target_vendor: vyos
+  primary_use_case: >
+    Edge-firewall re-home: an OPNsense perimeter box replaced by a VyOS
+    software router carrying the same routed edge.  Hostname, domain,
+    name-servers, the full interface inventory with its addressing, MTU,
+    admin state and descriptions, static-route destinations and next-hops,
+    the SNMP community/location/contact, and local account names and
+    password hashes all survive.  What does not: the CARP
+    high-availability VIPs, the VLAN database, the DHCP server, RADIUS,
+    SNMP trap destinations, the LAG bundle, and the static-route
+    description.  Local-user authority survives in the wrong direction —
+    restricted accounts arrive as administrators.  And the firewall
+    ruleset is not in the canonical model at all, so it is not migrated,
+    not lost, simply absent.
+  certainty: medium
+  references:
+    - id: opnsense-vyos-surface
+      path: docs/vendor-references/opnsense_to_vyos/canonical_surface.md
+      title: "OPNsense -> VyOS: measured canonical surface (8 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- management-plane scalars ------------------------------------
+
+  hostname:
+    disposition: lossy
+    reason: >
+      Preserved exactly on 7 of 8 cells (`OPNsense`, `supergate`,
+      `fw-kitchensink`).  The single drift runs the OPPOSITE direction from
+      a loss and is worth stating precisely:
+      `opnsense_service_test_config.xml` sets no system hostname, so the
+      source parses to the empty string, and the VyOS render emits a
+      literal `host-name vyos` which re-parses as `vyos`.  Nothing was
+      dropped — a value was INVENTED, and it is the vendor default.
+      Both matrices declare `/system/hostname` supported, and every cell
+      that actually sets a hostname round-trips it byte-for-byte.
+      Recorded `lossy` rather than `unsupported`: the field is modelled and
+      carried on both sides, and this is a value substitution on one cell,
+      not a concept gap.  The failure mode is a config pushed unreviewed
+      that names the device `vyos`, colliding with every other unnamed VyOS
+      box on the network — set the hostname explicitly on the target.
+    references: [opnsense-vyos-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on all 7 cells that populate it (`localdomain`, `internal`,
+      `example.test`, `example.net`); the 8th carries no domain.  Both
+      matrices declare `/system/domain` supported, and the VyOS render
+      emits it as `system domain-name`.
+    references: [opnsense-vyos-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate name-servers — `8.8.8.8`,
+      `9.9.9.9` + `1.1.1.2`, `1.1.1.1` + `9.9.9.9` — with list order
+      intact.  Both matrices declare `/system/dns-server` supported; the
+      render emits one `system name-server <ip>` line per entry.
+    references: [opnsense-vyos-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap, declared and measured: opnsense declares
+      `/system/ntp-server` UNSUPPORTED and emits no NTP server on any of
+      the 8 cells, so nothing reaches the target.  vyos declares the same
+      path SUPPORTED, so NTP re-authored on the VyOS side will stick — this
+      is something to rebuild after the migration, not something the
+      migration destroys.
+    references: [opnsense-vyos-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than a VyOS limitation — neither
+      codec parses nor renders a time-zone stanza, and vyos states it
+      outright ("Render emits no time-zone stanza; intent.timezone is
+      dropped on migration").  No committed cell populates it, so the gap
+      is declared rather than observed.  Set the time zone on the target by
+      hand; nothing in the migration will carry it, and a firewall with the
+      wrong clock produces logs nobody can correlate.
+    references: [opnsense-vyos-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric declared gap, same shape as `timezone`: both matrices
+      declare `/system/syslog-server` unsupported, and vyos states the
+      cause ("Render emits no syslog config; intent.syslog_servers are
+      dropped on migration").  No committed cell populates it, so this is
+      declared rather than observed.  Re-point remote logging on the target
+      before the old box is decommissioned — on an edge firewall the
+      syslog destination is often the only durable record of what the
+      device saw.
+    references: [opnsense-vyos-surface]
+
+  # -- Interfaces -- inventory grows by one, three attributes at issue -------
+  #
+  # 30 source interface records across the 8 cells, 31 after the round-trip,
+  # and ZERO source interface names dropped on any cell.  `em0`-`em4`,
+  # `igc0`, `ixl0`, `lo0`, `vlan0.10`…`vlan0.150`, `mismatch0`/`mismatch1`
+  # all survive.  The one cell whose record set differs (`kitchen_sink.xml`,
+  # 7 -> 8) GAINS `lagg0`, the LAG netdev rendered as its own interface.
+  #
+  # One sub-field drifts that this key list has no slot for:
+  # `interfaces[].dhcp_client_v6` moves on 7 of 8 cells (five `dhcp6` ->
+  # `dhcpv6`, two `track6` -> `dhcpv6`).  The `track6` pair is a real
+  # semantic change — OPNsense prefix-delegation tracking arrives as a
+  # plain stateful DHCPv6 client.  It is recorded in the reference doc
+  # because no audited key can carry it.
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      This key carries the interfaces list's record-level signal for the
+      pair, and the honest description of that signal is an ADDITION, not a
+      loss.  On 7 of 8 cells the source and round-tripped name sets are
+      identical.  On `kitchen_sink.xml` the count goes 7 -> 8: every source
+      name survives and `lagg0` appears alongside them, because the VyOS
+      render materialises the LAG netdev as its own interface stanza —
+      here as an empty `ethernet lagg0 { }`, since `lagg0` does not match
+      the `^bond\d+$` shape the render uses to pick the `bonding` block
+      type.
+      Recorded `lossy` and deliberately NOT `unsupported`: no interface
+      record vanishes anywhere on this pair, so the #436 rule that forces
+      `unsupported` on a vanished record does not apply.  What drifts is
+      the shape of the inventory, not its contents.
+      One operational caveat that does not change the disposition: those
+      names are preserved, not translated.  `ethernet em0`, `ethernet
+      igc0`, `ethernet vlan0.20` are FreeBSD device names rendered into
+      VyOS grammar, and the fidelity harness scores PRESERVATION, not
+      target-syntax validity.  Run the port-name translator before applying
+      the output — a bare `run_plan` skips it by design.
+    references: [opnsense-vyos-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Populated on 16 of the 30 interface records and preserved on all 16,
+      byte-for-byte, across every cell.
+      Worth recording because the hazard is real on other `*__vyos` pairs
+      and was checked here: the VyOS render replaces an embedded double
+      quote with an apostrophe (`vyos/render.py::_q()`), because VyOS
+      rejects embedded quotes in a value string even when escaped
+      (vyos.dev/T1246) — the TEXT survives, the PUNCTUATION does not.  Zero
+      of the 16 OPNsense descriptions contain an embedded double quote, so
+      the sanitiser never fires on this pair.  vyos declares
+      `/interfaces/interface/config/description` SUPPORTED; opnsense
+      declares the same path LOSSY, but on its own render path as a
+      target, which does not bear on it as a source here.
+    references: [opnsense-vyos-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on 30 of 30 records — zero differing on any
+      cell.  Exercised rather than merely empty: `em4` on
+      `kitchen_sink.xml` is administratively down on the source, renders as
+      a `disable` line inside `ethernet em4 { … }`, and re-parses down.
+      Both matrices declare `/interfaces/interface/config/enabled`
+      supported.
+    references: [opnsense-vyos-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on 30 of 30 records.  Coverage is thin and the declaration
+      does not make up for it, so both halves are stated plainly: MTU is
+      populated on exactly ONE record across the whole corpus (`em0` =
+      1500 on `kitchen_sink.xml`), it renders as an `mtu 1500` line and
+      re-parses unchanged.  vyos declares
+      `/interfaces/interface/config/mtu` SUPPORTED; opnsense declares
+      nothing for the path at any level — neither supported, lossy nor
+      unsupported — so this `good` rests on a single clean measurement plus
+      a one-sided declaration.  A jumbo-frame MTU is untested on this pair.
+    references: [opnsense-vyos-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on 30 of 30 records; IPv6 is populated on 3 of them and
+      every address + prefix-length survives, including the link-local
+      `fe80::1/64` on `vlan0.30` and the global `2001:db8:10::1/64` on
+      `em1`.  Both matrices declare `/interfaces/interface/ipv6/address/ip`
+      and `.../prefix-length` supported.
+      Separately, and NOT a claim about this key: the DHCPv6 client MODE on
+      those interfaces does drift — see the reference doc's note on
+      `dhcp_client_v6`, which this key list cannot address.
+    references: [opnsense-vyos-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on 30 of 30 records and the widest-populated field on the
+      pair — 22 of the 30 records carry IPv4, every address and
+      prefix-length survives, and multi-address interfaces keep both
+      entries.  Both matrices declare `/interfaces/interface/ipv4/address/ip`
+      and `.../prefix-length` supported.  This is the field the migration
+      most depends on and it is clean.
+      One thing it does NOT carry: the CARP virtual IPs.  Those live on
+      `interfaces[].vrrp_groups`, which is `unsupported` below — the real
+      addresses survive, the virtual ones do not.
+    references: [opnsense-vyos-surface]
+
+  "interfaces[].interface_type":
+    disposition: good
+    note: >
+      Nothing to lose: the OPNsense parser populates the IANA type hint on
+      ZERO of the 30 interface records, so the field is empty on both sides
+      of every cell.
+      Recorded as measurement rather than as a pass: vyos DOES declare
+      `/interfaces/interface/config/type` LOSSY on its own side, with the
+      honest reason that VyOS has no IANA ifType and the codec infers it
+      from the name shape (`ethN` -> ethernetCsmacd, `lo`/`dumN` ->
+      softwareLoopback, `bondN` -> ieee8023adLag).  That declaration is
+      real and bites other sources; on this pair it has nothing to bite on.
+    references: [opnsense-vyos-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: good
+    note: >
+      This key measures what happens to the membership pointer on a record
+      that survives, and it is populated on exactly 2 of the 30 records —
+      `em2` and `em3` on `kitchen_sink.xml`, the single LAG-carrying cell,
+      which is also the single cell whose interface list changes length.
+      Both pointers do go null there.  That is not a second finding: it is
+      the same bundle disappearing that the interfaces list's structural
+      signal already claims at `interfaces[].name`, and that `lags` records
+      once more where the bundle itself is measured.  Declaring a loss here
+      too would count one mechanism three times.
+      On the other 7 cells no interface carries a `lag_member_of` value at
+      all, so there is nothing to preserve or drop.
+      For the record, vyos declares `/interfaces/interface/lag-member-of`
+      SUPPORTED and does honour it — a probe that renames the bundle to
+      `bond0` recovers both pointers cleanly, which is what identifies the
+      cause as the name shape rather than the attribute.
+      The operational consequence is real and is stated in full under
+      `lags` — read that entry before migrating a box with a bundle.
+    references: [opnsense-vyos-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      The CARP high-availability surface disappears completely, measured by
+      round-trip on both HA fixtures rather than inferred: 4 CARP groups
+      across 2 cells (`opnsense_docs_carp_ha_master.xml` and
+      `…_backup.xml`, one group on `em0` and one on `em1` in each) become 0
+      after parse -> render -> re-parse, and the rendered VyOS config
+      contains no `high-availability` block and no `vrrp` line anywhere.
+      Everything on the group goes with it — group id, the virtual IP
+      (`172.18.0.100`, `192.168.1.1`), the election priority that
+      distinguishes master (254) from backup (154), preempt, the
+      advertisement interval, the CARP authentication key and the group
+      description.
+      vyos declares `/interfaces/interface/vrrp-groups/group` UNSUPPORTED
+      and the whole sub-tree with it (mode, priority, preempt,
+      advertisement-interval, authentication, virtual-ipv6s, description),
+      stating plainly that VyOS VRRP / VRRPv3 is not modelled by the codec.
+      opnsense declares the group and its mode / preempt LOSSY on its own
+      side, so the source is not the problem.
+      Recorded `unsupported` rather than `lossy` because the group record
+      vanishes rather than degrading (#436), and because `lossy` — which
+      warns and stays compatible — would badly understate it: migrating an
+      HA pair this way produces two boxes that both think they own nothing.
+      The interfaces keep their REAL addresses; only the shared virtual
+      address is gone.  Rebuild VRRP on the target before cutover, and note
+      that the CARP authentication key must be re-entered because it is not
+      carried either.
+    references: [opnsense-vyos-surface]
+
+  # -- VLANs -- a real VLAN database meeting a target that has none ----------
+  #
+  # 2 of 8 cells populate `vlans`, 5 records each, 10 in total.  Every one
+  # carries `id` + `name` and nothing else: description, addressing and
+  # port membership are empty on all 10 (opnsense declares
+  # `/vlans/vlan/tagged-ports` and `/vlans/vlan/untagged-ports`
+  # unsupported, so the latter two can never be populated from this
+  # source).  All 10 records go to zero on the target.
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      A total record drop, and the target says why in its own matrix: vyos
+      declares `/vlans/vlan/id` UNSUPPORTED because "VyOS has no top-level
+      VLAN database; 802.1Q VLANs are modelled as `vif <vid>`
+      sub-interfaces".  Measured: 10 VLAN records across the 2 populated
+      cells become 0, and the rendered config contains no VLAN stanza of
+      any kind.  opnsense declares `/vlans/vlan/id` and `/vlans/vlan/name`
+      SUPPORTED, so the source side is not the problem.
+      This key carries the record-level loss for the whole `vlans` list.
+      Recorded `unsupported` rather than `lossy` because the record
+      vanishes rather than degrading (#436).
+      What partly rescues this in practice, and is worth checking per
+      device: the routed sub-interface that carries the tag is a separate
+      canonical record and DOES survive.  7 of the 10 VLANs have a
+      `vlan0.<vid>` twin in `interfaces[]` that round-trips with its
+      addressing and description intact.  The other 3 (VLANs 10, 100 and
+      200 on `kitchen_sink.xml`) have no sub-interface and leave no trace
+      at all.  Export the id->name table before cutover.
+    references: [opnsense-vyos-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      Stated honestly rather than optimistically: no VLAN record survives
+      the round-trip on either populated cell, so there is no surviving
+      record on which to measure whether this VALUE degrades.  The record's
+      disappearance — and the VLAN name that rides on it — is claimed once,
+      at `vlans[].id`, where the loss is measured.  Recording it again here
+      would count one drop twice and could never be evidenced separately.
+      The operational point still needs saying, and it lives in the
+      reference doc: the VLAN name (`USER VLAN`, `MGMT VLAN`, `IOT VLAN`,
+      …) is the only operator-authored value in these records, and the
+      surviving `vlan0.<vid>` sub-interface carries its own description,
+      not the VLAN's name.
+    references: [opnsense-vyos-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      Nothing to lose on this pair, measured: all 10 source VLAN records
+      carry an empty address list, because OPNsense mounts L3 on the
+      `vlan0.<vid>` interface record rather than on the VLAN record.
+      opnsense does declare `/vlans/vlan/ipv4/address/ip` LOSSY on its own
+      side, but no committed cell reaches that path.  The corresponding
+      addressing lives in `interfaces[].ipv4_addresses`, which is `good`
+      and preserved on 22 of 30 records.
+      The VLAN record's own disappearance is claimed once at `vlans[].id`.
+    references: [opnsense-vyos-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Nothing to lose: opnsense declares `/vlans/vlan/untagged-ports`
+      UNSUPPORTED, so the canonical field is never populated from this
+      source — measured empty on all 10 VLAN records.  An OPNsense box is a
+      router with tagged sub-interfaces, not a campus switch with access
+      ports, so there is no port-membership surface to migrate.
+      The VLAN record's disappearance is claimed once at `vlans[].id`.
+    references: [opnsense-vyos-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Same source-side gap as `vlans[].untagged_ports`, same measurement:
+      opnsense declares `/vlans/vlan/tagged-ports` UNSUPPORTED and the
+      field is empty on all 10 VLAN records.  OPNsense expresses tagging as
+      a `vlan0.<vid>` sub-interface, which lands in `interfaces[]`, not as
+      trunk membership on a VLAN record.
+    references: [opnsense-vyos-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Empty on all 10 source VLAN records, so there is no value to carry or
+      lose.  opnsense declares `/vlans/vlan/description` LOSSY on its own
+      side and vyos declares nothing for the path — neither declaration
+      bites when the source emits nothing.  The record's disappearance is
+      claimed once at `vlans[].id`.
+    references: [opnsense-vyos-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      The route survives; its label does not.  3 of 8 cells populate static
+      routes, one route each, and all three come back with destination and
+      next-hop intact — `0.0.0.0/0 via 172.18.0.250` on both HA fixtures
+      and `172.16.0.0/12 via 10.0.0.254` on `kitchen_sink.xml`, rendered as
+      a `protocols static route … next-hop …` block.  What empties is the
+      description, on the single cell that sets one: `Corporate transit` ->
+      empty.  vyos declares `/routing/static-route/description` LOSSY with
+      the accurate cause — the render emits destination + next-hop +
+      distance only.
+      Recorded `lossy`, not `unsupported`: the route record is not
+      vanishing, only its label.
+      A drift-shape reading of this pair calls `static_routes` a TOTAL drop.
+      That is wrong, and the mistake is traceable: opnsense declares
+      `/routing/static-route` and its five sub-paths UNSUPPORTED, but that
+      declaration is about opnsense as a TARGET — its own matrix reason
+      says the parse harvests routes (the `<gateways>` default route plus
+      `<staticroutes>/<route>` entries, promotion #15) while its
+      `config.xml` renderer emits no `<staticroutes>` block.  As a SOURCE,
+      opnsense emits static routes just fine, and the round-trip proves it.
+      Read a declaration in the direction it was written.
+      One caveat that is declared rather than observed: vyos declares
+      `/routing/static-route/vrf` UNSUPPORTED (per-VRF static routes are
+      deferred past the Phase-3 VRF wire-up), and no committed cell sets a
+      route VRF, so that particular sub-loss is untested here.
+    references: [opnsense-vyos-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      A total concept drop, measured on every cell that carries a pool: 4
+      DHCP pools across 4 cells (`opnsense_acl_test_config.xml`, both CARP
+      fixtures, `kitchen_sink.xml`) become 0 after the round-trip, and the
+      rendered VyOS config contains no `service dhcp-server` block at all.
+      Everything on the pool goes with it — the range, the gateway, the
+      per-pool DNS servers, the lease time and the domain name.
+      vyos declares `/dhcp-servers/pool` UNSUPPORTED and says so directly
+      ("Render emits no DHCP server pool; intent.dhcp_servers are dropped
+      on migration").  opnsense declares nothing for the path but populates
+      it from the `<dhcpd>` block regardless.
+      Recorded `unsupported` rather than `lossy` because the pool record
+      vanishes rather than degrading (#436) — and because on an edge
+      firewall this is the loss the LAN notices first: nothing on the
+      inside gets an address after cutover.  VyOS has a perfectly good
+      `service dhcp-server`; it simply is not on the render path.
+      Re-author the pool on the target before the old box is turned off.
+    references: [opnsense-vyos-surface]
+
+  # -- SNMP -- three fields clean, one silent drop ---------------------------
+  #
+  # 3 of 8 cells produce an SNMP block.  Both codecs declare
+  # `/snmp/community`, `/snmp/location` and `/snmp/contact` supported and
+  # all three round-trip on every cell that sets them.
+
+  "snmp.community":
+    disposition: good
+    note: >
+      The community string is preserved on all 3 cells that carry an SNMP
+      block — both HA fixtures and the synthetic cell — with zero drift.
+      Both matrices declare `/snmp/community` supported; the render emits
+      `service snmp community <name> { authorization ro }`.  The values are
+      described rather than quoted: an SNMPv2c community IS the
+      authentication token, and a document that reproduces the token it
+      describes defeats its own redaction.
+      Note the authorization mode is synthesised as `ro` on render rather
+      than carried — the canonical model has no per-community access mode
+      to lose, so this is not recorded as a loss, but a read-write
+      community will arrive read-only.
+    references: [opnsense-vyos-surface]
+
+  "snmp.location":
+    disposition: good
+    note: >
+      Preserved on the single cell that sets it (`Synthetic Lab Rack 7` on
+      `kitchen_sink.xml`); empty and unchanged on the other two cells that
+      carry an SNMP block.  Both matrices declare `/snmp/location`
+      supported.  Thin coverage — one cell — with the declaration carrying
+      the rest of the weight.
+    references: [opnsense-vyos-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: >
+      Preserved on the single cell that sets it (`noc@example.net`); empty
+      and unchanged on the other two cells with an SNMP block.  Both
+      matrices declare `/snmp/contact` supported.  Same thin coverage as
+      `snmp.location`, and the same measurement.
+    references: [opnsense-vyos-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      A silent total drop.  On the single cell that sets trap destinations
+      (`kitchen_sink.xml`) both entries — `10.0.0.250` and `10.0.0.251` —
+      become an empty list after the round-trip, while the community,
+      location and contact on the same SNMP block survive.  The rendered
+      `service snmp { … }` stanza contains no `trap-target` line; the VyOS
+      codec contains no trap handling at all, on either the render or the
+      parse side.
+      Recorded `unsupported` rather than `lossy` because the entries vanish
+      rather than degrading (#436).
+      Worth flagging separately as a standing observation, not a
+      pair-specific fact: opnsense declares `/snmp/trap-host` SUPPORTED and
+      vyos declares NOTHING for it — not supported, not lossy, not
+      unsupported — while dropping it entirely.  That is a target-side
+      matrix under-declaration, so nothing in the capability comparison
+      warns an operator here; only the round-trip does.  It belongs to a
+      codec change rather than to this file.
+      Re-point trap destinations on the target, and do it deliberately:
+      losing traps is losing the alarm path, and it fails quietly.
+    references: [opnsense-vyos-surface]
+
+  "snmp.v3_users":
+    disposition: good
+    note: >
+      Nothing to lose: opnsense declares `/snmp/v3-user` and its four
+      sub-paths (auth-protocol, priv-protocol, priv-passphrase, group)
+      UNSUPPORTED, so USM material never enters the canonical tree from
+      this source — measured empty on all 3 cells that carry an SNMP block
+      and on the 5 that do not.
+      Recorded with its context because vyos declares `/snmp/v3-user`
+      SUPPORTED and five of its sub-paths LOSSY on its own side, including
+      two flagged as cryptographic downgrades (a stronger source auth
+      algorithm collapses to `sha`; AES-192/256 and 3DES lose their exact
+      strength).  Those declarations are real and matter for other sources;
+      on this pair they have nothing to act on.  SNMPv3 users must be
+      re-created and re-keyed on the target regardless — credentials do not
+      migrate.
+    references: [opnsense-vyos-surface]
+
+  # -- LAGs -- the target is capable; the NAME is what breaks it -------------
+
+  lags:
+    disposition: unsupported
+    reason: >
+      A total drop, verified by round-trip and then by a second probe that
+      isolates the cause.  The single LAG in the corpus (`lagg0`, members
+      `em2` + `em3`, mode `active`, on `kitchen_sink.xml`) becomes 0 LAG
+      records after parse -> render -> re-parse.  The rendered VyOS config
+      contains no `bonding` block, no `mode` line and no `member interface`
+      line.  What it contains instead is an empty `ethernet lagg0 { }` —
+      the bundle rendered as an ordinary ethernet netdev — while `em2` and
+      `em3` render as plain standalone ports.
+      The mechanism is a NAME SHAPE, not a capability gap.
+      `vyos/render.py::_vyos_type_and_name()` picks the VyOS block type
+      from the device name (`^bond\d+$` -> `bonding`, anything unrecognised
+      -> `ethernet`), so `_bond_extra()` — the function that emits `mode`
+      and `member interface` — is never reached for a FreeBSD `laggN` name.
+      Proved by re-rendering the same canonical intent with the LAG renamed
+      `lagg0` -> `bond0` and the member pointers updated: the render then
+      emits `bonding bond0 { mode 802.3ad member { interface em2 …
+      interface em3 … } }` and the round-trip returns the LAG record with
+      both members and both `lag_member_of` pointers intact.  Nothing else
+      changed.
+      Neither declaration predicts this: vyos declares `/lags/lag/name` and
+      `/lags/lag/members` SUPPORTED (and `/lags/lag/mode` LOSSY, for the
+      non-LACP modes), and honours all of them when the name matches.  It
+      is a measured render-path gap worth a codec issue rather than a
+      matrix edit, and it is the same gap already recorded on
+      `cisco_iosxr__vyos` for `Bundle-EtherN`.
+      Recorded `unsupported` rather than `lossy` because the LAG record
+      vanishes rather than degrading (#436) — `lossy` warns and stays
+      compatible, which would understate two ports silently coming up
+      unbundled.
+      This and `interfaces[].lag_member_of` are ONE mechanism, not two
+      findings; neither corroborates the other, and the member-pointer key
+      is `good` precisely so the same drop is not counted twice.
+      Operator workaround, and it is a small one: rename bundles to `bondN`
+      before migrating, or re-create the bond on the target.
+    references: [opnsense-vyos-surface]
+
+  # -- Identity -- names and hashes survive; authority does not --------------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Every account survives: 14 accounts across the 7 cells that populate
+      local users, 14 after the round-trip, identical name sets on every
+      cell (`root`, `api`, `netops`, `readonly`, `test1`-`test4`).  No
+      account is dropped and none is invented.  Both matrices declare
+      `/local-users/user/name` supported; the render emits
+      `system login user <name> { … }`.
+      The account INVENTORY is clean.  What those accounts are allowed to
+      do is not — see `local_users[].role`.
+    references: [opnsense-vyos-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on 2 of the 7 populated cells, on 5 of the 14 accounts, and it
+      fails OPEN.  Every drifting record moves the same way: `user` ->
+      `admin`, with `privilege_level` 1 -> 15 on the same records —
+      `test1`, `test2`, `test3`, `test4` on
+      `opnsense_acl_test_config.xml`, and `readonly` on
+      `kitchen_sink.xml`.  No account is ever demoted.  The privilege_level
+      movement is the SAME mechanism stated for completeness, not
+      independent corroboration of it.
+      `opnsense_acl_test_config.xml` is the case to look at, because those
+      four escalated accounts also carry NO password hash on the source.
+      The render emits them as bare `user test1 { }` entries — no
+      `authentication` block, no `encrypted-password` — and the re-parse
+      reads each back as `role='admin'`, `privilege_level=15`.  Four
+      credential-less accounts arrive on the target described as
+      administrators.  Whether a real VyOS box would let such an account
+      authenticate is a device question this harness does not answer; what
+      is measured is that the canonical intent says `admin`, and a
+      migration report generated from it would say `admin` too.
+      vyos declares `/local-users/user/role` SUPPORTED while flattening
+      every role — an under-declaration on the target — and separately
+      declares `/local-users/user/privilege-level` LOSSY with the honest
+      reason that VyOS `system login user` accounts have no numeric
+      privilege level in the common case, so the codec maps every login
+      user to privilege 15 / role `admin`.
+      Recorded `lossy` rather than `unsupported`: the account record
+      survives and the target models roles, so the value degrades rather
+      than vanishing (#436).  The severity does not follow the label —
+      review every migrated account's authority on the target, and delete
+      the ones that should not have any, before cutover.
+    references: [opnsense-vyos-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Preserved on every account that has one: 10 of the 14 accounts carry
+      a password hash and all 10 round-trip verbatim — same scheme marker,
+      same length (65-97 characters) — into the VyOS
+      `system login user … authentication { encrypted-password … }` leaf.
+      The other 4 accounts carry no hash on the source and none on the
+      target.  Both matrices declare `/local-users/user/hashed-password`
+      supported.  No hash body is quoted in this file or its reference doc;
+      only the scheme marker and the length are described.
+      Two shape notes that do not change the disposition.  First, the
+      OPNsense parser tags every account password with a literal `bcrypt:`
+      marker unconditionally, so on the two HA fixtures that marker sits in
+      front of a `$6$` SHA-512 crypt body rather than a `$2y$` bcrypt one;
+      the canonical value is carried exactly, the marker just does not
+      describe the body.  That is a source-codec observation, not a loss on
+      this pair.  Second, preservation is not target-syntax validity — the
+      harness scores whether the value survived, not whether the target
+      device would accept the rendered leaf.
+      The credential is carried.  The AUTHORITY attached to it is not —
+      read `local_users[].role`.
+    references: [opnsense-vyos-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      A total drop, measured on the single cell that carries RADIUS: 2
+      server records on `kitchen_sink.xml` (`10.0.0.50`, `10.0.0.51`)
+      become 0 after the round-trip, and the rendered VyOS config contains
+      no RADIUS configuration of any kind.
+      vyos declares BOTH `/radius-servers/server/host` and
+      `/radius-servers/server/key` UNSUPPORTED and states the cause
+      ("Render emits no RADIUS config"), calling out the shared secret
+      separately — correctly, because that is the half that could not have
+      migrated even if the host list had.  opnsense declares nothing for
+      the path but populates it regardless.
+      Recorded `unsupported` rather than `lossy` because the server record
+      vanishes rather than degrading (#436).  The failure mode is the one
+      that strands you: if the target box is cut over with RADIUS gone and
+      local accounts are the fallback, re-read `local_users[].role` before
+      assuming that fallback is safe.  Re-author RADIUS on the target and
+      re-enter the shared secret by hand.
+    references: [opnsense-vyos-surface]
+
+  # -- Fabric -- absent on the source side -----------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: not_applicable
+    note: >
+      Source-side gap: opnsense declares `/vxlan-vnis/vni`,
+      `/vxlan-vnis/source-interface` and `/vxlan-vnis/udp-port`
+      UNSUPPORTED, so no VNI ever enters the canonical tree from this
+      source.  Measured empty on all 8 cells.  A perimeter firewall is not
+      a VTEP.
+      vyos declares four VXLAN paths SUPPORTED (including `/vxlan-vnis/vni`
+      itself), so an overlay can be built on the target from scratch — this
+      is absent, not lost.
+    references: [opnsense-vyos-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: not_applicable
+    note: >
+      Same source-side gap as `vxlan_vnis[].vni` — the VNI-to-VLAN binding
+      rides on a VNI record that opnsense never produces.  Recorded
+      separately because vyos declares `/vxlan-vnis/vlan-id` LOSSY on its
+      own merits (VyOS models one VNI per `vxlan vxlanN` netdev with no
+      VLAN on the device, so the canonical `vlan_id` is synthesised), which
+      would matter for a source that actually carries one.
+    references: [opnsense-vyos-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: not_applicable
+    note: >
+      Same source-side gap: the multicast underlay rides on a VNI record
+      opnsense never emits, and neither matrix declares
+      `/vxlan-vnis/mcast-group` in this pair.  Measured empty on all 8
+      cells.
+    references: [opnsense-vyos-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap, and an unusually clean one: NEITHER codec declares
+      `/evpn-type5-routes/route` at any level, and the field is empty on
+      both sides of all 8 cells.  OPNsense has no EVPN model to parse, so
+      nothing reaches the target.  Stated as a measured absence rather than
+      implied.
+    references: [opnsense-vyos-surface]
+
+  # -- VRFs -- absent on the source side -------------------------------------
+
+  "routing_instances[].name":
+    disposition: not_applicable
+    note: >
+      Source-side gap: opnsense declares `/routing-instances/instance` and
+      `/routing-instances/instance/instance-type` UNSUPPORTED, so no
+      routing instance ever enters the canonical tree from this source.
+      Measured empty on all 8 cells — OPNsense's `config.xml` has no VRF
+      model.
+      vyos declares `/routing-instances/instance/name` SUPPORTED and
+      renders `set vrf name <name>`, so VRFs re-authored on the target will
+      stick.  Absent, not lost.
+    references: [opnsense-vyos-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      Same source-side gap: the description rides on an instance record
+      opnsense never produces.  Measured empty on all 8 cells.  vyos
+      declares `/routing-instances/instance/table` and `/instance-type`
+      LOSSY on its own side, which would matter for a source that emits
+      VRFs; this one does not.
+    references: [opnsense-vyos-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on either side of any cell.  opnsense declares nothing
+      under raw sections and carries no unparsed block through to render.
+      vyos declares `/system/raw-sections/version-banner` LOSSY on its own
+      side — the `// vyos-config-version` component-version trailer it
+      synthesises on every render — but that is a target-authored artefact,
+      not source content passing through, and it never reaches this
+      canonical field.
+    references: [opnsense-vyos-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [opnsense-vyos-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [opnsense-vyos-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/anycast-gateway-mac` unsupported, so this is
+      a symmetric gap in the pair rather than a VyOS limitation, and vyos
+      states the cause — no VARP / distributed-anycast-gateway grammar, so
+      a chassis-wide anycast gateway MAC is dropped on render.  Measured
+      empty on all 8 cells, so the gap is declared rather than observed.
+      Neither device class in this pair is a distributed-gateway fabric
+      leaf, so nothing in the migration wants it; recorded `unsupported`
+      rather than `not_applicable` because the target could not hold it
+      either.
+    references: [opnsense-vyos-surface]

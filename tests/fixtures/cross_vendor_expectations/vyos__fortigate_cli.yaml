@@ -1,0 +1,775 @@
+# Cross-vendor fidelity expectations: vyos -> fortigate_cli
+#
+# Source: vyos codec — curly-brace `config.boot` (set-form input is
+# normalised through `_setform_to_brace` before parsing).
+# Target: fortigate_cli codec — FortiOS CLI render.
+#
+# Asymmetric by device class. vyos in the committed corpus is a Linux-based
+# software router: `ethN` / `bondN` / `dumN` / `lo` names, dot1q
+# sub-interfaces written `ethN.<tag>`, one VRF, a small VXLAN surface on the
+# container-lab fixtures. fortigate_cli is a firewall / security edge — every
+# port is L3, tenancy is VDOMs rather than VRFs, and there is no fabric
+# construct at all. The realistic migration is a VyOS edge router replaced by
+# a FortiGate, so the shared surface is the routed edge: addressing, static
+# routes, DNS/NTP, SNMP, LAG bundles and local administrators.
+#
+# READ THIS FIRST — the pair has ONE structural mechanism and it explains most
+# of the interface block. The FortiGate renderer elides any interface with an
+# empty `interface_type` that carries no address, description, MTU, LAG
+# membership, VRF or DHCP client and is not explicitly shut
+# (`_iface_is_empty_stub`). vyos never populates `interface_type` — 0 of 55
+# source records — so every content-free VyOS port trips it, and `lo` is not a
+# FortiOS-native name shape. Result: 55 interface records in, 46 out, 9 lost
+# on 5 of 13 cells. `interfaces[].name` carries that record-level signal; the
+# surviving sub-fields were each measured on the 46 survivors and are recorded
+# `good` on their own merits, not dragged along by the vanishing parent.
+#
+# The genuine per-attribute losses on this pair are the interface type hint
+# (which is SYNTHESISED by the target rather than lost by the source), the
+# third and later DNS servers, the dot1q tag's canonical home, SNMPv3
+# bookkeeping, and the local-user role vocabulary and password encoding.
+# The total drops are the fabric surface: VXLAN and routing instances.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
+# and a full `run_full_mesh.py` pass over the committed corpus (13 fixture
+# cells, 0 render errors, 0 re-parse errors), resolved through the audit's
+# own `actual_disposition()` so this file and the ratchet cannot disagree.
+# Every loss recorded below was additionally re-derived by hand, by parsing
+# the fixture with vyos, rendering with fortigate_cli and re-parsing the
+# render — not inferred from the drift shape.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/vyos_to_fortigate_cli/
+#
+# Authored 2026-08-25 closing the cross-vendor expectation mesh.
+
+meta:
+  source_vendor: vyos
+  target_vendor: fortigate_cli
+  primary_use_case: >
+    Edge-router replacement: a VyOS software router swapped for a FortiGate
+    security appliance carrying the same routed interfaces, addressing and
+    static routing. Hostname, domain, NTP, interface addressing, admin state,
+    MTU, LAG bundles, static routes, SNMP community/location/contact and the
+    full local-administrator inventory all survive. What does not is any
+    interface with nothing configured on it, the third and later DNS
+    resolvers, the 802.1Q tag's binding to its parent port, SNMPv3 group and
+    engine-id, and the whole fabric surface — VXLAN VNIs and routing
+    instances are dropped outright because a FortiGate models neither.
+  certainty: medium
+  references:
+    - id: vyos-fortigate-surface
+      path: docs/vendor-references/vyos_to_fortigate_cli/canonical_surface.md
+      title: "VyOS -> FortiGate CLI: measured canonical surface (13 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- management-plane scalars ------------------------------------
+
+  hostname:
+    disposition: good
+    note: >
+      `set system host-name <name>` renders as `config system global /
+      set hostname`; preserved on 13 of 13 cells.  Both matrices declare
+      `/system/hostname` supported.
+    references: [vyos-fortigate-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on the single cell that populates it
+      (`scottlaird-vyos-parser.conf`), carried in the rendered
+      `config system dns` block as `set domain`.  Worth stating precisely:
+      the fortigate_cli matrix declares NOTHING for `/system/domain` at any
+      level — neither supported, lossy nor unsupported — while both its
+      render and its parser handle the value.  So this `good` rests on the
+      measured round-trip, not on a declaration.  One cell is thin coverage
+      and the declaration carries none of the weight here.
+    references: [vyos-fortigate-surface]
+
+  dns_servers:
+    disposition: lossy
+    reason: >
+      A capacity limit, not a concept gap.  Drifts on the one cell that sets
+      more than two resolvers (`scottlaird-vyos-parser.conf`): 3 name-servers
+      in, 2 out.  The rendered `config system dns` block carries exactly
+      `set primary` and `set secondary` and nothing else, so the third
+      resolver has no slot and is dropped; the first two survive in order.
+      Both matrices declare `/system/dns-server` supported, which is why this
+      is `lossy` rather than `unsupported` — the target models the concept,
+      it just holds fewer of them.  Check the source resolver list against
+      the render before cutover; a silently missing third resolver only bites
+      when the first two are unreachable, which is exactly the incident you
+      were relying on it for.
+    references: [vyos-fortigate-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Preserved on all 12 cells that populate it, list order included —
+      the rendered `config system ntp / config ntpserver` blocks re-parse to
+      the same servers.  Both matrices declare `/system/ntp-server`
+      supported.  The one unpopulated cell is
+      `vyos_forum_snmpv3_user_eq13.conf`.
+    references: [vyos-fortigate-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than a FortiGate limitation — neither
+      codec parses nor renders a clock/timezone stanza, and fortigate_cli
+      states it outright ("Render emits no clock/timezone stanza;
+      intent.timezone is dropped on migration").  No committed cell populates
+      it, so the gap is declared rather than observed.  Set the timezone on
+      the FortiGate by hand; nothing in the migration will carry it.
+    references: [vyos-fortigate-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap, same shape as `timezone`: both matrices declare
+      `/system/syslog-server` unsupported, and fortigate_cli says why
+      ("Render emits no logging/syslog config; intent.syslog_servers are
+      dropped on migration").  On the VyOS side the loss happens even
+      earlier — the codec's `/system/raw-sections/version-banner` lossy
+      declaration records that the unmodelled `service` / `system` blocks
+      (SSH / syslog / DNS) are discarded at parse.  Measured empty on all 13
+      cells, so this is declared, not observed.  Re-author log forwarding on
+      the target.
+    references: [vyos-fortigate-surface]
+
+  # -- Interfaces -- one structural mechanism, then per-attribute detail -----
+  #
+  # 55 source interface records across the 13 cells, 46 after
+  # parse -> render -> re-parse.  The 9 losses land on 5 cells and every one
+  # of them is an interface with no canonical content: `lo` on five cells,
+  # plus `eth1` on metasploit-vyos-config.conf and `eth2` / `eth3` / `eth4`
+  # on scottlaird-vyos-parser.conf.  `interfaces[].name` below carries that
+  # record-level signal for the whole list.  The sub-field entries after it
+  # were measured on the 46 SURVIVING records only, so none of them is a
+  # knock-on effect of the vanishing parent and none is cited as evidence for
+  # any other.
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      Partial record loss, verified by round-trip and traced to an exact
+      predicate rather than inferred.  55 interface records in, 46 out; 9
+      records disappear on 5 of 13 cells.  The FortiGate renderer's
+      `_iface_is_empty_stub()` elides an interface that has an empty
+      `interface_type` AND no description, no IPv4, no IPv6, no MTU
+      override, no switchport/access-VLAN/trunk state, no `lag_member_of`,
+      no VRF binding and no DHCP client, and is not explicitly shut — unless
+      its name matches a FortiOS-native port shape (`portN`, `mgmt`, `wan`,
+      `lan`, `vlanN`, `loopbackN`, …) or it is a LAG bundle name.  vyos
+      populates `interface_type` on ZERO of its 55 records, so every
+      content-free VyOS port trips the predicate, and `lo` misses the native
+      shape list (which accepts `loopbackN`, not `lo`).
+      `kitchen_sink.conf` confirms the rule from the other side: `eth3`
+      survives because it is explicitly shut, `eth4` / `eth5` survive because
+      they are `bond0` members.
+      Recorded `lossy` rather than `unsupported`: fortigate_cli declares ten
+      supported paths under `/interfaces/interface` and emits interfaces
+      richly, so this is a partial record loss inside a concept the target
+      fully models — not the concept-level gap that `vxlan_vnis` is.  The
+      #436 rule that forces `unsupported` applies where the target cannot
+      express the thing at all.
+      Operationally the elided ports are the ones with nothing on them, so
+      the blast radius is small — but diff the port inventory anyway, because
+      an unconfigured port that a runbook expects to exist is still a
+      surprise on the day someone patches into it.
+    references: [vyos-fortigate-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Recorded `good`, with a caveat that is stated rather than buried.
+      Descriptions are populated on 15 records across 7 cells.  On 13 of
+      those 15 the value round-trips exactly.  On the remaining 2 — both on
+      `scottlaird-vyos-parser.conf` — the FortiGate render truncates to 25
+      characters (`iface.description[:25]`, the FortiOS `set alias` limit the
+      target matrix declares), so a 48-character semicolon-delimited
+      patch-panel string comes back as its first 25 characters: an exact
+      prefix, with the far-end port and circuit speed cut off.
+      That cell is ALSO one of the five whose interface list shrank, so the
+      reconciler classifies this key `STRUCTURAL_ONLY` there and never emits
+      an evidenced-loss class for it anywhere on the pair.  A `lossy`
+      declaration would therefore be an unevidenced claim by construction.
+      The disposition follows the audit; the measurement is recorded here so
+      it is not lost.
+      To name the mechanism precisely, because a VyOS pair invites the wrong
+      guess: this is NOT the VyOS quote rewrite.  The VyOS RENDER replaces
+      embedded double quotes with apostrophes because VyOS rejects embedded
+      quotes in value strings even when escaped (vyos.dev/T1246), which
+      alters punctuation on pairs where VyOS is the TARGET.  VyOS is the
+      SOURCE here.  What was measured is a length cap on the FortiOS side —
+      the punctuation is untouched and the tail of the text is gone.
+    references: [vyos-fortigate-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on 46 of 46 surviving records — zero differing.
+      A port that was `disable`d on VyOS arrives as `set status down` on the
+      FortiGate and re-parses to `enabled=False`.  fortigate_cli declares
+      `/interfaces/interface/config/enabled` supported.  Note the interaction
+      with the elision rule rather than the coincidence: an explicitly shut
+      port is never elided, precisely because the shutdown is meaningful
+      state.
+    references: [vyos-fortigate-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on 46 of 46 surviving records.  MTU is actually populated on
+      exactly 1 of them (`kitchen_sink.conf`), and it round-trips through
+      `set mtu-override enable` / `set mtu 1500` unchanged.  One record is
+      very thin coverage and this note says so rather than implying a broad
+      measurement; fortigate_cli declares `/interfaces/interface/config/mtu`
+      supported, which carries the rest of the weight.
+    references: [vyos-fortigate-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on 46 of 46 surviving records; IPv6 is populated on 20 of
+      them across 5 cells, and every address, prefix-length, `scope` and
+      `is_secondary` flag survives.  Both matrices declare
+      `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
+      supported.
+      One declared risk went untested and should not be mistaken for a clean
+      bill: fortigate_cli declares `/interfaces/interface/ipv6/address/scope`
+      LOSSY because its parser hardcodes `scope=global` and never re-infers
+      link-local from an `fe80::/10` prefix.  No committed VyOS fixture
+      carries a link-local or secondary IPv6 address, so that path was never
+      exercised here.
+    references: [vyos-fortigate-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on 46 of 46 surviving records — populated on 21 of them
+      across 9 cells, the widest-populated interface field on the pair, and
+      the one the migration most depends on.  Address and prefix-length both
+      survive the FortiOS dotted-mask form (`set ip <addr> <mask>`) and come
+      back as the same canonical values.  Both matrices declare
+      `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
+      supported.
+    references: [vyos-fortigate-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The canonical value does not round-trip on any record — but the
+      direction is the inverse of every other pair in this mesh, and saying
+      which way it goes matters more than the count.
+      vyos asserts NO IANA ifType: the source value is the empty string on
+      all 55 records.  After the FortiGate round-trip, all 46 surviving
+      records come back with one — 43 `ianaift:ethernetCsmacd`, 2
+      `ianaift:l3ipvlan` and 1 `ianaift:ieee8023adLag` — because the
+      FortiGate parser infers the type from the rendered name shape and from
+      the `set type vlan` / `set type aggregate` sub-settings.  Nothing was
+      lost; a value the source never claimed was manufactured.
+      Both matrices already declare `/interfaces/interface/config/type`
+      LOSSY and both state the cause: vyos "declares no IANA ifType; the
+      codec infers it from the interface-name shape … Best-effort", and
+      fortigate_cli "has no IANA ifType; inferred from `type vlan`
+      sub-setting or name shape".
+      Recorded `lossy`, not `unsupported`: nothing vanishes and the
+      interface record, its addressing and its admin state are unaffected.
+      The operational consequence is a fidelity one — a downstream consumer
+      reading `interface_type` off the migrated intent is reading the
+      target's guess, not the source config.  Do not treat it as evidence
+      about the physical port.
+    references: [vyos-fortigate-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: good
+    note: >
+      Preserved on 46 of 46 surviving records.  `lag_member_of` is populated
+      on 2 of them (`eth4` and `eth5` on `kitchen_sink.conf`), and both come
+      back pointing at `bond0`: the render emits `set member "eth4" "eth5"`
+      on the bundle and the parser rebuilds the membership pointer.  Two
+      records is thin coverage and this note says so.
+      Note the interaction with the elision rule, stated as a mechanism
+      rather than as corroboration of anything else: a LAG member is never
+      elided even when it is otherwise content-free, because
+      `lag_member_of` is one of the predicate's exemptions.
+    references: [vyos-fortigate-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: good
+    note: >
+      Measured: 0 differing of 46 surviving records — both sides are empty on
+      every one, because vyos declares the whole
+      `/interfaces/interface/vrrp-groups/group/*` subtree unsupported (mode,
+      priority, preempt, advertisement-interval, authentication,
+      virtual-IPv6 and description) and emits zero VRRP groups on any cell.
+      So there is genuinely no value here that could have degraded, and the
+      `good` reflects an untested field rather than a preserved one.
+      Do not read it as a clean bill for FHRP migration.  fortigate_cli
+      declares five paths under the same subtree LOSSY on its own merits — a
+      single `set vrip` per group (so multi-IP groups lose secondaries), a
+      single `set vrdst` (so multi-track groups lose trackers), no per-group
+      description, an interface-wide virtual MAC toggle, and a cross-family
+      mode (HSRP / CARP) silently substituted with IETF VRRP.  None of that
+      was exercised because the source emits nothing.  Recover first-hop
+      redundancy from the VyOS config by hand and re-author it on the
+      FortiGate.
+    references: [vyos-fortigate-surface]
+
+  # -- VLANs -- records that APPEAR, not records that vanish -----------------
+  #
+  # vyos declares `/vlans/vlan/id` unsupported and emits NO VLAN record on
+  # any of the 13 cells: a dot1q sub-interface lands in `interfaces[]` as
+  # `eth1.100` with `dot1q_vlan=100`.  The FortiGate render writes that as a
+  # child interface (`set type vlan` / `set vlanid` / `set interface`), and
+  # the FortiGate parser reconstructs it as a canonical VLAN record.  On
+  # `kitchen_sink.conf` the list therefore goes 0 -> 2.  `vlans[].id` carries
+  # that record-level signal; the five sub-fields after it are `good` because
+  # no source VLAN record exists whose value could have degraded.
+
+  "vlans[].id":
+    disposition: lossy
+    reason: >
+      The canonical VLAN surface does not round-trip: on
+      `kitchen_sink.conf` the list goes from 0 source records to 2 target
+      records (ids 100 and 200).  The 802.1Q tag itself is not lost — it is
+      re-homed.  vyos carries it on the interface record as
+      `interfaces[].dot1q_vlan`; the FortiGate render emits
+      `edit "eth1.100" / set type vlan / set vlanid 100 / set interface
+      "eth1"`, and the re-parse rebuilds it as a `vlans[]` entry while
+      `dot1q_vlan` on those two interface records drops to null.
+      fortigate_cli declares `/interfaces/interface/dot1q-vlan` UNSUPPORTED
+      ("Routed sub-interface 802.1Q tag … is not yet wired for this codec",
+      ship-before-wire GAP 7), which is the other half of the same single
+      mechanism.
+      Recorded `lossy` rather than `unsupported` deliberately: fortigate_cli
+      declares `/vlans/vlan/id` and `/vlans/vlan/name` supported and the
+      records arrive rather than vanish, so the #436 rule that forces
+      `unsupported` for a disappearing record does not apply — the loss is
+      the tag's binding to its parent port and the operator-chosen VLAN name,
+      not the tag.
+      Check the parent-interface binding on the FortiGate after migration:
+      the VLAN name is synthesised from the child-interface name
+      (`eth1.100`), not carried from anything the operator wrote.
+    references: [vyos-fortigate-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      No committed cell exercises this as a round-trip, because vyos produces
+      no VLAN record at all — the only VLAN names that exist after the
+      round-trip are the ones the FortiGate parser synthesised from
+      child-interface names.  There is no source value here that could
+      degrade.  The record-level appearance is accounted for once, under
+      `vlans[].id`; recording it again here would double-count one signal.
+      Both codecs declare `/vlans/vlan/name` supported at the exact path,
+      which is what this `good` rests on.
+    references: [vyos-fortigate-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      Measured empty on both sides of every cell.  vyos mounts L3 on the
+      interface record (`eth1.100` carries the address), never on a VLAN
+      record, and it declares `/vlans/vlan/ipv4/address/secondary-ip`,
+      `/virtual-gateway-address` and `/virtual-gateway-mac` unsupported into
+      the bargain.  The corresponding addressing lives in
+      `interfaces[].ipv4_addresses`, which is `good` on its own measurement.
+      fortigate_cli declares the same three sub-paths unsupported on the
+      VLAN-SVI mount — a secondary IP on a VLAN SVI would be a
+      whole-subnet reachability loss — but none of that is reachable from a
+      VyOS source that never populates the parent.
+    references: [vyos-fortigate-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Measured empty on both sides of every cell.  vyos declares the entire
+      campus port-membership surface unsupported —
+      `/interfaces/interface/switchport-mode`, `/access-vlan`,
+      `/trunk-allowed-vlans`, `/trunk-native-vlan`, `/voice-vlan` — and VLAN
+      membership is rebuilt from exactly those, so the canonical field is
+      never populated.  A VyOS software router has no access ports to
+      migrate, and a FortiGate would have nowhere to put them:
+      fortigate_cli declares `/vlans/vlan/untagged-ports` unsupported
+      because FortiOS binds a VLAN to a single parent child-interface rather
+      than to a port list.
+    references: [vyos-fortigate-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Same source-side gap as `vlans[].untagged_ports`, same measurement:
+      empty on both sides of every cell.  VyOS expresses tagging as an
+      `ethN.<tag>` sub-interface, which lands in `interfaces[]`, not as trunk
+      membership on a VLAN.  fortigate_cli likewise declares
+      `/vlans/vlan/tagged-ports` unsupported (single parent
+      child-interface, no allowed-list).
+    references: [vyos-fortigate-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Measured empty on both sides of every cell — vyos emits no VLAN record
+      and therefore no VLAN description.  Recorded separately because
+      fortigate_cli declares `/vlans/vlan/description` LOSSY on its own
+      merits ("Render emits the VLAN name but not a separate description
+      line"), which would matter for a source that actually produces one.
+      VyOS does not, so the declared loss is untriggered here.
+    references: [vyos-fortigate-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate it — 7 routes in, 7 out,
+      compared field-for-field (destination, gateway, interface, metric,
+      description, vrf) and identical on every one, the IPv6 route on
+      `kitchen_sink.conf` included.  fortigate_cli declares three supported
+      paths under `/routing/static-route`.
+      Two caveats that are declared rather than observed.  Both codecs
+      declare `/routing/static-route/vrf` unsupported — per-VRF static-route
+      binding parses-and-ignores in v1 on the FortiGate side — and no
+      committed cell sets a route VRF, so that gap is untested here.  vyos
+      also declares `/routing/static-route/description` lossy ("Render emits
+      destination + next-hop + distance only"), and no committed cell sets a
+      route description either.
+    references: [vyos-fortigate-surface]
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares `/dhcp-servers/pool` unsupported, so the
+      canonical pool is never populated from this source and nothing reaches
+      the target.  Measured empty on all 13 cells.  fortigate_cli declares
+      nothing for the path either way, so re-authoring DHCP scopes on the
+      FortiGate is a build-it-fresh job rather than something the migration
+      loses — and a VyOS edge router that was serving DHCP will stop doing so
+      the moment it is replaced.
+    references: [vyos-fortigate-surface]
+
+  # -- SNMP -- the record survives, its bookkeeping does not ------------------
+  #
+  # 4 of 13 cells populate SNMP.  Two carry only a community; two carry a
+  # location, a contact and one SNMPv3 USM user.  The four keys below that
+  # are `good` were each measured on the cells that populate them; the fifth
+  # is where the whole SNMP drift on this pair lives.
+
+  "snmp.community":
+    disposition: good
+    note: >
+      Preserved byte-identical on all 3 cells that set a community
+      (`metasploit-vyos-config.conf`, `scottlaird-vyos-parser.conf` and the
+      synthetic kitchen sink) — the render emits `config system snmp
+      community / edit 1 / set name` and the parser reads it straight back.
+      Both matrices declare `/snmp/community` supported.  The value itself is
+      deliberately not quoted here: a community string is a credential, and a
+      document that reproduces what it describes defeats its own redaction.
+    references: [vyos-fortigate-surface]
+
+  "snmp.location":
+    disposition: good
+    note: >
+      Preserved on both cells that set it, via `config system snmp sysinfo /
+      set location`.  Both matrices declare `/snmp/location` supported.  Two
+      cells is thin coverage and the declaration carries the rest.
+    references: [vyos-fortigate-surface]
+
+  "snmp.contact":
+    disposition: good
+    note: >
+      Preserved on both cells that set it, via `set contact-info` in the same
+      `config system snmp sysinfo` block.  Both matrices declare
+      `/snmp/contact` supported.
+    references: [vyos-fortigate-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: >
+      No committed cell populates trap destinations — measured empty on both
+      sides of all 13 cells — so there is no round-trip to point at.  This
+      rests on declarations: both codecs declare `/snmp/trap-host` supported
+      at the exact path.  Stated that way rather than implied.  If the source
+      device has trap receivers configured outside what the VyOS codec
+      models, re-enter them on the target.
+    references: [vyos-fortigate-surface]
+
+  "snmp.v3_users":
+    disposition: lossy
+    reason: >
+      The USM user record SURVIVES — 1 in, 1 out on each of the 2 cells that
+      carry one (`vyos_forum_snmpv3_user_eq13.conf`, `kitchen_sink.conf`) —
+      but four of its fields change, and they need separating because they
+      are not equally serious.
+      LOST OUTRIGHT: `group` goes to empty on both records (fortigate_cli
+      declares `/snmp/v3-user/group` lossy — `config system snmp user`
+      carries no VACM group, users are grouped implicitly by security level),
+      and `engine_id` goes to empty on both (declared lossy — engineIDs are
+      device-assigned, so a per-user one is not emitted).  A 22-character and
+      a 12-character engine id respectively; the values are not reproduced
+      here.
+      RENAMED, NOT DEGRADED: `priv_protocol` goes `aes` -> `aes128`.  This is
+      AES being spelled with its key length, not a cipher substitution.  The
+      distinction matters because fortigate_cli's lossy reason for
+      `/snmp/v3-user/priv-protocol` warns about a `3des` source cipher being
+      replaced with AES — a real security-level change.  Nothing on this
+      corpus uses 3DES, so that declared risk is untriggered here and must
+      not be reported as if it fired.
+      CARRIED: `auth_passphrase` and `priv_passphrase` both gain a literal
+      `ENC ` prefix with the body byte-identical (lengths 40 -> 44 and
+      18 -> 22).  The secret is preserved; only its canonical encoding
+      differs.  No passphrase material is reproduced in this file or its
+      reference doc.
+      Recorded `lossy` rather than `unsupported`: the user record lands on
+      the target and the credential survives, so this is degraded nuance
+      inside a concept fortigate_cli models (it declares five supported SNMP
+      paths), not a vanished record.  Re-attach the VACM group on the
+      FortiGate by hand, and confirm the privacy cipher's key length matches
+      what the NMS expects.
+    references: [vyos-fortigate-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: good
+    note: >
+      Preserved byte-identical on the single cell that populates it:
+      `kitchen_sink.conf` carries one bundle (`bond0`, members `eth4` and
+      `eth5`, mode `active`) and it round-trips with name, member list and
+      LACP mode unchanged.  The render emits `edit "bond0" / set type
+      aggregate / set member "eth4" "eth5" / set lacp-mode active` and the
+      parser reads it straight back — no reliance on the reconciler's
+      `_canonical_lag_name` equivalence shim was needed, because the raw
+      strings match.
+      One cell is thin coverage and this note says so plainly.  Worth
+      recording as a standing observation rather than a pair-specific fact:
+      the fortigate_cli matrix declares NOTHING for `/lags/lag` — neither
+      supported, lossy nor unsupported — while implementing the surface end
+      to end.  That is a matrix under-declaration in the honest direction
+      (the code does more than it claims) and belongs to a codec change, not
+      to this file.  vyos declares `/lags/lag/name` and `/lags/lag/members`
+      supported and `/lags/lag/mode` lossy; the mode survived here anyway.
+    references: [vyos-fortigate-surface]
+
+  # -- Identity -- everyone arrives, renamed and re-encoded -------------------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      The account inventory is intact: 17 local-user records across all 13
+      cells, 17 after parse -> render -> re-parse, zero dropped, same names.
+      The render emits `config system admin / edit "<name>"` for every one.
+      Both matrices declare `/local-users/user/name` supported.
+      Worth stating because a raw drift-shape reading of this pair reports
+      `local_users` as drifting on all 13 cells and invites the wrong
+      conclusion: no account disappears here.  What changes is the role token
+      and the password encoding, and those are recorded once each below,
+      where they are measured.
+    references: [vyos-fortigate-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      The role vocabulary is rewritten on every record: 17 of 17 accounts
+      across all 13 cells go from `admin` to `super_admin`.  That is the
+      FortiOS accprofile namespace and `super_admin` is its full-privilege
+      profile, so this is a translation rather than a privilege escalation —
+      the canonical string no longer matches what the source said, which is
+      what this key measures.  Both matrices declare `/local-users/user/role`
+      supported, and neither declares the mapping.
+      The honest limit of the measurement, stated rather than glossed: EVERY
+      source record on this corpus carries role `admin`.  There is no
+      operator or read-only account in any committed VyOS fixture, so this
+      pair says nothing about whether a lower privilege level maps to a lower
+      accprofile or also flattens to `super_admin`.  Verify that case
+      directly before migrating a device with non-admin accounts — a
+      read-only account arriving as `super_admin` is a privilege escalation,
+      and this corpus cannot tell you whether that happens.
+      Recorded `lossy`, not `unsupported`: the field is populated on the
+      target, the account survives, and the value is transformed rather than
+      dropped.
+    references: [vyos-fortigate-surface]
+
+  "local_users[].hashed_password":
+    disposition: lossy
+    reason: >
+      Drifts on 16 of 17 records across 12 cells — the 17th does not drift
+      only because its source hash is empty.  The transformation is a
+      constant re-encoding and it was verified record by record, not
+      sampled: the target value equals the literal string `fortios:ENC `
+      followed by the source value, byte for byte, on every drifting record.
+      Source values on this corpus are all in the `$6$` crypt scheme and run
+      10 to 106 characters; target values are exactly 12 characters longer.
+      THE CREDENTIAL IS CARRIED.  This is the benign half of the failure mode
+      that Cisco-sourced pairs hit — no hash body is truncated, replaced, or
+      degraded into a cleartext marker, and a FortiGate reading back its own
+      `set password ENC <hash>` line recovers the same digest.  What differs
+      is the canonical string, which is why the audit sees drift and why this
+      is recorded as a loss at all.
+      Still worth an operator check rather than a shrug: confirm one migrated
+      account can actually authenticate on the target before cutover, because
+      a preserved digest is only useful if the target's password subsystem
+      accepts that crypt scheme.
+      `privilege_level` was measured separately and drifts on no record, even
+      though vyos declares `/local-users/user/privilege-level` lossy on its
+      own side.
+      No hash body is quoted anywhere in this file or its reference doc —
+      only the crypt-scheme marker, the constant prefix and the string
+      lengths are described.
+    references: [vyos-fortigate-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: vyos declares `/radius-servers/server/host` and
+      `/radius-servers/server/key` unsupported, and no committed cell
+      populates the field, so nothing reaches the target.  fortigate_cli
+      declares nothing for the path either way.  Re-author RADIUS on the
+      FortiGate — and note that the shared key could not have migrated even
+      if the server list had, which is the correct outcome for a secret.
+    references: [vyos-fortigate-surface]
+
+  # -- Fabric -- the surface a firewall does not have ------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      A total concept drop, verified by round-trip on all three cells that
+      carry an overlay: `wcni-kind-gw0.conf` and `wcni-kind-gw1.conf` each
+      carry VNI 10 and `kitchen_sink.conf` carries VNI 10100, and after
+      parse -> render -> re-parse the `vxlan_vnis` list is EMPTY on every
+      one.  The rendered FortiOS config contains no VXLAN construct at all.
+      fortigate_cli declares `/vxlan-vnis/vni`, `/vxlan-vnis/source-interface`
+      and `/vxlan-vnis/udp-port` unsupported and states the reason without
+      hedging: "VXLAN not modelled — FortiGate is a firewall codec."  vyos
+      declares four supported paths under `/vxlan-vnis`, so the source side
+      is not the problem.
+      Recorded `unsupported` rather than `lossy` because a vanished record is
+      not lossy (#436) — `lossy` warns and stays compatible, which would
+      badly understate losing every overlay segment on a device that was
+      carrying tenant traffic over them.
+      A FortiGate is not a VTEP.  If the VyOS box was terminating an overlay,
+      that function has to be re-homed somewhere else entirely, not
+      re-authored on the target.
+    references: [vyos-fortigate-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: >
+      This key measures what happens to the VNI-to-VLAN binding when the VNI
+      record survives — and on this pair no record survives, so there is
+      nothing here to degrade.  The disappearance is accounted for once,
+      under `vxlan_vnis[].vni`; recording it a second time here would
+      double-count a single mechanism.
+      For completeness: vyos declares `/vxlan-vnis/vlan-id` lossy on its own
+      side, and the binding is populated on 1 of the 3 overlay cells.
+    references: [vyos-fortigate-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: good
+    note: >
+      Measured empty on the source side of every cell — none of the three
+      overlay fixtures configures a multicast underlay, so the field carries
+      no value even before the record is dropped.  As with
+      `vxlan_vnis[].vlan_id`, the record-level loss belongs to
+      `vxlan_vnis[].vni` and is not restated here.
+    references: [vyos-fortigate-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Neither codec declares a path under `/evpn-type5-routes` and no
+      committed cell populates the field — measured empty on both sides of
+      all 13 cells.  The VyOS container-lab fixtures carry their overlay as
+      VXLAN VNIs and static routing rather than as canonical type-5 records,
+      so there is nothing for the FortiGate to lose and nothing to
+      re-author.
+    references: [vyos-fortigate-surface]
+
+  # -- VRFs -- tenancy the target models as something else --------------------
+
+  "routing_instances[].name":
+    disposition: unsupported
+    reason: >
+      A total drop, verified by round-trip on the single cell that populates
+      it: `kitchen_sink.conf` carries one routing instance and the target
+      side comes back with zero.  fortigate_cli declares
+      `/routing-instances/instance` unsupported and says exactly why —
+      "Render emits no VRF/routing-instance construct (VDOMs not modelled);
+      intent.routing_instances are dropped on migration" — because a
+      FortiGate expresses tenancy as VDOMs, which this codec does not model.
+      vyos declares `/routing-instances/instance` supported, so the source
+      side is not the problem.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      rather than degrades (#436), and because `lossy` staying "compatible"
+      would be actively misleading: the VRF's interface binding goes with it.
+      The same cell's one VRF-bound interface comes back with
+      `interfaces[].vrf` empty.  That is ONE mechanism, not two independent
+      findings — it is noted here because it is where the operational
+      consequence lands, not as corroboration.
+      Every prefix that was isolated in a VRF lands in the global table on
+      the target.  Plan the VDOM (or the separate appliance) before cutover;
+      this is the one loss on the pair that changes the forwarding
+      behaviour of traffic that was previously separated.
+    references: [vyos-fortigate-surface]
+
+  "routing_instances[].description":
+    disposition: good
+    note: >
+      Measured empty on the source side: the single routing instance on the
+      one cell that carries one has no description, so there is no label here
+      that could have been lost.  The instance's disappearance is accounted
+      for once, under `routing_instances[].name`.
+      This key is about what happens to the VALUE when the record survives.
+      No record survives on this pair, so the answer is untested rather than
+      clean — and it is recorded `good` because a loss claim here could never
+      be evidenced against a record that was already gone.
+    references: [vyos-fortigate-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Source-side gap, and a near-miss worth naming precisely.  vyos declares
+      `/system/raw-sections/version-banner` LOSSY, which reads like the
+      source populates the field — but the declaration's own reason says the
+      `// vyos-config-version` component-version trailer and the unmodelled
+      `service` / `system` management-plane blocks are "discarded on parse".
+      They never enter the canonical tree, so the field is empty on both
+      sides of all 13 cells.  Recorded `not_applicable` rather than `lossy`
+      on that measurement: there is no raw section for the FortiGate to drop.
+      The services those blocks configured (SSH, syslog, DNS resolution
+      behaviour) still have to be re-applied on the target by hand.
+    references: [vyos-fortigate-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [vyos-fortigate-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [vyos-fortigate-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: BOTH matrices declare `/anycast-gateway-mac`
+      unsupported, so this is not a FortiGate limitation being reported as
+      one.  vyos never puts a fabric-wide MAC into the canonical tree, and
+      fortigate_cli's declaration records that the field
+      "parses-and-ignores in v1" with wire-up scheduled for v0.2.0 Wave C.
+      Measured empty on both sides of all 13 cells, so the gap is declared
+      rather than observed.  A firewall/edge platform has no anycast-gateway
+      fabric primitive to migrate onto in any case.
+    references: [vyos-fortigate-surface]
