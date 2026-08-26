@@ -1,0 +1,619 @@
+# Cross-vendor fidelity expectations: cisco_iosxe -> cisco_iosxr
+#
+# Source: cisco_iosxe codec — NETCONF / OpenConfig XML.  NOT the
+#         `show running-config` codec; that is the cisco_iosxe_cli sibling.
+#         This one is an explicit Phase-0.5 stub that parses ONLY the
+#         /openconfig-interfaces/ subtree.
+# Target: cisco_iosxr codec — IOS-XR CLI render.
+#
+# Asymmetric by device class AND by source coverage.  cisco_iosxr is a
+# service-provider edge/core router: 4-segment port names, RD-from-`router
+# bgp`, a heavy VRF surface and no campus L2 model at all — a VLAN exists on
+# IOS-XR only as `encapsulation dot1q <id>` on a sub-interface.  The source is
+# a branch/campus-edge router described through OpenConfig.  The routed L3
+# surface migrates cleanly; the campus L2 surface does not survive.
+#
+# READ THE CELL COUNT FIRST.  This pair has ONE fixture cell.  The
+# cisco_iosxe codec has no real captures — `tests/fixtures/real/cisco_iosxe/`
+# maps to cisco_iosxe_cli (netcanon/migration/fixture_dirs.py) — so its only
+# fixture is the synthetic kitchen sink.  Three of the twenty-one audited
+# top-level fields carry an observation (`hostname`, `interfaces`, `vlans`);
+# the other eighteen are trivially empty on the source side and their keys are
+# decided by the two capability matrices.  Every such entry below says so in
+# its own text rather than letting a matrix-derived call read as measured.
+#
+# The one structural loss is `vlans`: 1 record in, 0 records out.  Per the
+# reconciler's STRUCTURAL_ONLY collapse that record-level loss is claimed by
+# `vlans[].id`; the five sibling `vlans[].*` keys drift for that one reason
+# and are therefore `good`, not lossy.  A loss declared on any of them could
+# never be evidenced by a cell and would fail the per-pair ratchet by
+# construction.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
+# a full `run_full_mesh.py` pass over the committed corpus (1 fixture cell, 0
+# render errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` so this file and the ratchet cannot disagree.  Every
+# drifting key was additionally re-derived by hand — the reproducing snippet
+# is in the reference note.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_iosxe_to_cisco_iosxr/
+#
+# Authored 2026-08-25 opening the cisco_iosxr expectation mesh (A6 wave 2).
+
+meta:
+  source_vendor: cisco_iosxe
+  target_vendor: cisco_iosxr
+  primary_use_case: >
+    Branch-edge re-home onto SP kit: an IOS-XE router managed over
+    NETCONF/OpenConfig replaced by an IOS-XR edge router carrying the same
+    routed interfaces.  Interface identity, descriptions, admin state and
+    IPv4/IPv6 addressing all survive intact — including multi-address ports.
+    What does not survive is the campus L2 surface (the VLAN record vanishes
+    outright), the interface type discriminator on the three ports whose
+    IOS-XE name prefix has no IOS-XR equivalent, and the hostname — which is
+    not lost so much as invented, since the render substitutes the literal
+    default `Router` for the blank the source hands it.
+  certainty: medium
+  references:
+    - id: iosxe-iosxr-surface
+      path: docs/vendor-references/cisco_iosxe_to_cisco_iosxr/canonical_surface.md
+      title: "IOS-XE (OpenConfig XML) -> IOS-XR: measured canonical surface (1 fixture cell)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars ---------------------------------------------
+  #
+  # The source declares `/system/hostname`, `/system/domain`,
+  # `/system/dns-server`, `/system/ntp-server`, `/system/timezone` and
+  # `/system/syslog-server` unsupported at the exact path, plus blunt
+  # whole-field markers (`/hostname`, `/domain`, ...).  As SOURCE it emits
+  # none of them.  Where the TARGET declares the path supported the entry is
+  # `not_applicable` (a source-side gap worth re-authoring); where BOTH
+  # declare it unsupported it is `unsupported` (a symmetric gap).  Hostname is
+  # the exception and gets its own treatment.
+
+  hostname:
+    disposition: lossy
+    reason: >
+      Drifts on the single cell, and the direction is the interesting part:
+      `'' -> 'Router'`.  The source declares `/system/hostname` unsupported and
+      never parses one, so the intent's hostname is empty; the IOS-XR renderer
+      then substitutes a literal default
+      (`netcanon/migration/codecs/cisco_iosxr/render.py:93` —
+      `hostname = tree.hostname or "Router"`) and the re-parse reads back
+      `Router`.  The target GAINS a value the source never carried rather than
+      losing one.  Recorded `lossy` and not `unsupported` because nothing
+      vanished — `lossy` warns and stays compatible, which is the right
+      severity for a default silently filling a blank (#436 read in the other
+      direction).  Worth a real operational warning even so: migrate several
+      IOS-XE devices through this pair and every one arrives named `Router`,
+      so set the hostname explicitly before cutover.
+    references: [iosxe-iosxr-surface]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxe declares `/system/domain` unsupported (plus
+      the whole-field `/domain`), so nothing reaches the target.  Unlike the
+      DNS/NTP/syslog cases below, cisco_iosxr declares NOTHING for domain
+      either — re-authoring `domain name` on the target will not round-trip
+      through this codec pair.  Stated on the two declarations, not on an
+      observed round-trip; the field is empty on the one cell.
+    references: [iosxe-iosxr-surface]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxe declares `/system/dns-server` unsupported,
+      so nothing reaches the target.  cisco_iosxr declares the same path
+      SUPPORTED, so re-authoring name-servers on the XR side will stick —
+      worth doing by hand as part of the cutover.  This rests on the two
+      matrix declarations, not on a round-trip: the field is empty on the one
+      cell, so nothing was measured either way.
+    references: [iosxe-iosxr-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap, same shape as `dns_servers`: cisco_iosxe declares
+      `/system/ntp-server` unsupported while cisco_iosxr declares it
+      supported.  Re-author `ntp server <ip>` on the target.  Declaration-based
+      — the field is empty on the one cell.
+    references: [iosxe-iosxr-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: BOTH matrices declare `/system/timezone` unsupported, so
+      this is a property of the pair rather than an IOS-XR limitation.  The
+      target's own reason reads "Render emits no clock/timezone stanza;
+      intent.timezone is dropped on migration."  Set the timezone on the
+      target by hand; nothing in the migration will carry it.  Rests on the
+      two declarations — the field is empty on the one cell, so no round-trip
+      was observed.
+    references: [iosxe-iosxr-surface]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxe declares `/system/syslog-server`
+      unsupported; cisco_iosxr declares it supported.  Re-author logging hosts
+      on the target and they will stick.  Declaration-based — the field is
+      empty on the one cell.
+    references: [iosxe-iosxr-surface]
+
+  # -- Interfaces -- the surface that actually migrates ----------------------
+  #
+  # Unusually for this mesh, the interface INVENTORY is intact: 10 records in,
+  # 10 records out, every name verbatim.  There is no structural interface
+  # loss on this pair, so each sub-field below stands on its own measurement
+  # rather than inheriting a record drop.
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      All 10 interface names round-trip verbatim — no record is dropped and no
+      name is rewritten.  Both matrices declare `/interfaces/interface/name`
+      supported.  One caveat that does not bite here: cisco_iosxr declares
+      `/interfaces/interface/4th-port-segment` LOSSY because IOS-XR port names
+      carry 4 segments (rack/slot/instance/port) against the 3 the
+      cross-vendor PortIdentity models.  IOS-XE names are 3-segment, so the
+      4th segment never exists to be lost on this pair; it would matter for an
+      XR-shaped source.
+      Do NOT read this `good` as "the render will load on an XR box".  The
+      names survive precisely because they are copied verbatim, which means
+      `Vlan10`, `Port-channel1` and `Tunnel100` reach the target unchanged and
+      are not IOS-XR spellings.  The fidelity harness scores PRESERVATION, not
+      target-syntax VALIDITY; those three interfaces need renaming by hand.
+    references: [iosxe-iosxr-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 10 records, including the deliberately empty
+      description on `GigabitEthernet0/0/4`.  Both matrices declare
+      `/interfaces/interface/config/description` supported, and here the
+      declaration and the measurement agree.
+    references: [iosxe-iosxr-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on all 10 records.  `GigabitEthernet0/0/2` is
+      `enabled=False` in the source, renders as `shutdown`, and re-parses back
+      to `False` — the one negative case in the fixture, and it survives.
+      Both matrices declare `/interfaces/interface/config/enabled` supported.
+    references: [iosxe-iosxr-surface]
+
+  "interfaces[].mtu":
+    disposition: not_applicable
+    note: >
+      Source-side gap, with a twist worth reading: cisco_iosxe declares
+      `/interfaces/interface/config/mtu` LOSSY rather than unsupported —
+      "parsed into the intermediate dict but NOT carried through to
+      CanonicalInterface in this codec stub".  The effect is identical to a
+      gap.  The kitchen sink sets `<mtu>1500</mtu>` on `GigabitEthernet0/0/0`
+      and the parsed intent shows `mtu=None` on all ten records, so nothing
+      reaches the target to be lost.  cisco_iosxr declares the same path
+      SUPPORTED, so MTU re-authored on the XR side will stick.
+    references: [iosxe-iosxr-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      All 5 IPv6 addresses across 4 records survive with their prefix lengths
+      (`Loopback1` carries two; `GigabitEthernet0/0/0`, `Vlan10` and
+      `Port-channel1` one each).  `scope` is `global` on both sides.  Noting
+      honestly that cisco_iosxe declares `/interfaces/interface/ipv6/address/
+      scope` lossy in its own right — it emits no scope and does not re-infer
+      link-local from `fe80::/10` — so a link-local address WOULD degrade.  No
+      cell on this pair carries one, so that path is undriven here and this
+      `good` should not be read as clearing it.
+    references: [iosxe-iosxr-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      All 10 IPv4 addresses across 7 records survive with their prefix
+      lengths, multi-address ports included — `GigabitEthernet0/0/1` carries
+      three and `GigabitEthernet0/0/3` two, and every one round-trips.  Both
+      matrices declare `/interfaces/interface/ipv4/address/ip` and
+      `/prefix-length` supported.
+    references: [iosxe-iosxr-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on 3 of the 10 interface records: `Port-channel1`
+      (`ianaift:ieee8023adLag`), `Tunnel100` (`ianaift:tunnel`) and `Vlan10`
+      (`ianaift:l2vlan`) all become `ianaift:other`.  The other seven — five
+      GigabitEthernet ports and two loopbacks — keep their type.
+      The mechanism is declared, not accidental: cisco_iosxr lists
+      `/interfaces/interface/config/type` LOSSY precisely because its parser
+      re-infers the type from the interface-name prefix
+      (`codecs/cisco_iosxr/parse.py::_TYPE_HINTS` recognises `bundle-ether`,
+      `loopback`, `mgmteth`, `tunnel-ip`, `tunnel-te` and the ethernet family;
+      `_infer_type()` returns `ianaift:other` otherwise).  IOS-XE spells those
+      same three concepts `Port-channel`, `Tunnel` and `Vlan`, none of which
+      is an IOS-XR prefix.
+      Recorded `lossy` and not `unsupported` because the interface records
+      themselves survive intact — only the type discriminator degrades, and it
+      degrades to a valid-but-vague value rather than vanishing.
+      Note this is an independent measurement, NOT a shadow of a record drop:
+      the interface list does not shrink on this pair.
+    references: [iosxe-iosxr-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxe declares the whole-field `/lags`
+      unsupported and its kitchen sink documents LAG membership as out of
+      scope for the stub.  Verified rather than assumed — `lag_member_of` is
+      `None` on all 10 parsed records, including `Port-channel1` itself.
+      cisco_iosxr declares `/lags/lag/members` SUPPORTED, so bundle membership
+      re-authored on the XR side will hold.  (The dossier's standing `lags`
+      trap — renderers keying off `CanonicalInterface.lag_member_of` rather
+      than `CanonicalLAG.members` — cannot fire here: the source emits
+      neither.)
+    references: [iosxe-iosxr-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare the whole
+      `/interfaces/interface/vrrp-groups/group/*` subtree unsupported — the
+      group anchor plus mode, priority, preempt, advertisement-interval,
+      authentication, virtual-ipv6s and description, eight paths on each side.
+      The target's reason is explicit: "VRRP / FHRP redundancy groups are out
+      of the v1 IOS-XR scope; the group is dropped on migration."  There is no
+      round-trip to be lossy about; the group would vanish entirely.
+      Re-author first-hop redundancy on the XR side by hand.  Rests on the two
+      declarations — no cell on this pair populates VRRP.
+    references: [iosxe-iosxr-surface]
+
+  # -- VLANs -- the total structural loss on this pair -----------------------
+  #
+  # The parent list goes 1 -> 0.  `vlans[].id` claims that record-level loss
+  # for the whole list (the reconciler's STRUCTURAL_ONLY collapse assigns it
+  # to the first sibling).  The five keys after it drift for that ONE reason
+  # and carry no independent signal, so they are `good`.  Correlated drift is
+  # not independent evidence: none of the five corroborates any other, and
+  # none corroborates `vlans[].id`.
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      A total drop, verified by round-trip rather than inferred from the drift
+      shape: the source parse yields one CanonicalVLAN (id=10, name
+      "User VLAN 10 SVI", 10.10.10.1/24) synthesised from the `Vlan10` SVI,
+      and the re-parse yields ZERO.  The rendered IOS-XR config contains no
+      `encapsulation dot1q` line and no VLAN stanza of any kind.
+      The cause is the device-class gap, not a broken target codec.  A control
+      probe on `tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg`
+      confirms cisco_iosxr round-trips a VLAN cleanly (1 -> 1) when it arrives
+      as a sub-interface carrying `encapsulation dot1q 100` — that is the only
+      carrier IOS-XR has.  A VLAN that arrives SVI-shaped, with no
+      dot1q-tagged sub-interface and no member ports, has nowhere to land.
+      Recorded `unsupported` and not `lossy` because the record vanishes
+      entirely: per #436 `lossy` warns and stays compatible, which would
+      understate a total drop that should block.
+      Note what is NOT lost: the SVI's addressing survives on the `Vlan10`
+      INTERFACE record (see `interfaces[].ipv4_addresses`).  What goes is the
+      VLAN record itself — its ID, its name, its L2 identity.  Re-model the
+      VLAN as a dot1q sub-interface on the XR side.
+    references: [iosxe-iosxr-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      Measures as drifted, and is nonetheless `good`.  The only signal here is
+      the parent list changing length, which `vlans[].id` already claims as
+      the record-level loss for the whole list.  This key asks a different
+      question — when a VLAN record survives, does its name survive with it —
+      and on this pair no VLAN record survives at all, so the answer is vacuous
+      rather than negative.  A loss declared here could never be evidenced by
+      any cell and would fail the per-pair ratchet by construction.  Both
+      matrices declare a `/vlans/vlan/name` position; nothing suggests the
+      name degrades independently.
+    references: [iosxe-iosxr-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      Measures as drifted for the same single reason as `vlans[].name` — the
+      parent list going 1 -> 0, claimed by `vlans[].id` — so it is `good`
+      here.  There is a positive fact behind it as well: the SVI's L3
+      addressing is genuinely NOT lost on this pair.  `10.10.10.1/24` and
+      `2001:db8:10::1/64` both round-trip on the `Vlan10` interface record.
+      cisco_iosxr does declare `/vlans/vlan/ipv4/address/ip` LOSSY for
+      addresses mounted on the VLAN record itself, which would matter for a
+      source that carries the Junos-irb / Aruba-SVI-on-VLAN shape; this source
+      does not, so that path is undriven here.
+    references: [iosxe-iosxr-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Empty on both sides of the round-trip.  It measures as drifted only
+      because the parent VLAN list goes 1 -> 0, a loss `vlans[].id` already
+      claims — so declaring a loss here would be an over-claim no cell could
+      ever evidence.  Access-port membership would have to be re-authored on
+      the target regardless, since IOS-XR has no switchport model at all
+      (`/interfaces/interface/access-vlan` is unsupported on both sides).
+    references: [iosxe-iosxr-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Same shape as `vlans[].untagged_ports`: empty on both sides, drifting
+      only as a shadow of the parent list emptying, which `vlans[].id` claims.
+      Trunk membership on IOS-XR is expressed as dot1q sub-interfaces rather
+      than an allowed-VLAN list (`/interfaces/interface/trunk-allowed-vlans`
+      is unsupported on both sides), so it is re-modelled by hand either way.
+    references: [iosxe-iosxr-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Empty on both sides; drifts only because the parent VLAN list empties,
+      a loss already claimed by `vlans[].id`.  Recorded `good` because a loss
+      declared on this key could never be evidenced by a cell.  Nothing here
+      is forwarding state in any case.
+    references: [iosxe-iosxr-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxe declares `/routing/static-route` (the
+      record identity), `/routing/static-route/gateway`,
+      `/routing/static-route/vrf` and the whole-field `/static_routes`
+      unsupported, so the OpenConfig stub never emits a static route.  Verified
+      empty on the one cell.  cisco_iosxr declares `/routing/static-route` and
+      `/routing/static-route/vrf` SUPPORTED, so routes re-authored on the XR
+      side will hold — except the route name, which the target declares lossy
+      ("Render emits destination + next-hop only").
+    references: [iosxe-iosxr-surface]
+
+  # -- Services -------------------------------------------------------------
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/dhcp-servers/pool` unsupported.
+      The target's reason reads "Render emits no DHCP server pool;
+      intent.dhcp_servers are dropped on migration."  Neither side of the pair
+      can carry a pool, so the concept does not survive in either direction.
+      An SP edge router relays DHCP rather than serving it, so this is a
+      reasonable v1 scope call rather than a defect — but it does mean any
+      IOS-XE pool must be re-homed elsewhere.  Rests on the two declarations;
+      the field is empty on the one cell.
+    references: [iosxe-iosxr-surface]
+
+  "snmp.community":
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/snmp/community` unsupported.  The
+      target's reason is categorical — "SNMP parse + render is out of the v1
+      XR scope" — so community strings cannot be carried and cannot be
+      re-authored through this codec either.  Recorded `unsupported` rather
+      than `lossy` because there is no degraded form to warn about; the whole
+      surface is absent.  Declaration-based — the source parses no SNMP at all
+      (`intent.snmp is None` on the one cell).
+    references: [iosxe-iosxr-surface]
+
+  "snmp.location":
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxe declares `/snmp/location` unsupported along
+      with the whole-field `/snmp`, and the parsed intent's `snmp` is None, so
+      nothing reaches the target.  Recorded `not_applicable` rather than
+      `unsupported` because cisco_iosxr declares NO path for location — but
+      read that absence carefully: it is a matrix gap, not latent capability.
+      The target's own reason for `/snmp/community` puts all of SNMP out of
+      the v1 XR scope, so re-authoring `snmp-server location` on the target
+      will not round-trip through this codec.
+    references: [iosxe-iosxr-surface]
+
+  "snmp.contact":
+    disposition: not_applicable
+    note: >
+      Same shape as `snmp.location`: cisco_iosxe declares `/snmp/contact`
+      unsupported and emits no SNMP block; cisco_iosxr declares no path for
+      contact, but has all of SNMP out of v1 scope.  A source-side gap that
+      the target cannot pick up either.
+    references: [iosxe-iosxr-surface]
+
+  "snmp.trap_hosts":
+    disposition: not_applicable
+    note: >
+      Same shape as `snmp.location` and `snmp.contact`: cisco_iosxe declares
+      `/snmp/trap-host` unsupported and emits no SNMP block, and cisco_iosxr
+      declares no trap-host path while having all of SNMP out of v1 scope.
+      Trap receivers must be configured on the target outside this migration.
+    references: [iosxe-iosxr-surface]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      Symmetric gap on the credential-bearing surface: cisco_iosxe declares
+      `/snmp/v3-user` and its auth-protocol, priv-protocol, priv-passphrase
+      and group children unsupported, and cisco_iosxr declares those same four
+      children unsupported ("SNMP is out of the v1 XR scope ... the SNMPv3
+      privacy key is dropped on migration").  Neither side can hold a v3 USM
+      user, so `unsupported` rather than `lossy` — there is no degraded form,
+      the user simply cannot exist.  SNMPv3 users must be re-created on the
+      target from the original config; no key material passes through this
+      pair in either direction.  Declaration-based — the source emits no SNMP.
+    references: [iosxe-iosxr-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxe declares the whole-field `/lags`
+      unsupported and its kitchen sink states LAG mode is not surfaced from
+      the XML.  Verified rather than assumed — `intent.lags == []` on the one
+      cell even though the fixture carries a `Port-channel1` interface typed
+      `ianaift:ieee8023adLag`.  cisco_iosxr declares `/lags/lag/name`,
+      `/members` and `/mode` all SUPPORTED, so bundles re-authored as
+      `interface Bundle-Ether<n>` on the XR side will stick.  Nothing is lost
+      on this pair because nothing is offered.
+    references: [iosxe-iosxr-surface]
+
+  # -- Identity -------------------------------------------------------------
+
+  "local_users[].name":
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxe declares the whole-field `/local_users`
+      unsupported and `intent.local_users == []` on the one cell — the
+      OpenConfig stub parses no AAA subtree.  cisco_iosxr declares
+      `/local-users/user/name` SUPPORTED, so usernames re-authored on the
+      target will hold.  Declaration plus an observed empty list, not a
+      round-trip.
+    references: [iosxe-iosxr-surface]
+
+  "local_users[].role":
+    disposition: not_applicable
+    note: >
+      Same source-side gap as `local_users[].name`.  cisco_iosxr declares
+      `/local-users/user/role` supported and maps its task-groups `root-lr`
+      and `root-system` onto the cross-vendor admin privilege, so roles
+      re-authored on the target are modelled — but nothing arrives from this
+      source to map.
+    references: [iosxe-iosxr-surface]
+
+  "local_users[].hashed_password":
+    disposition: not_applicable
+    note: >
+      Same source-side gap: no user records reach the target, so no credential
+      material enters the canonical intent from this source at all.  The
+      hash-format incompatibility that dominates most pairs in this mesh
+      simply does not arise here — which is a property of the stub source, not
+      evidence that IOS-XR handles credentials well.  cisco_iosxr declares
+      `/local-users/user/hashed-password` supported.  Nothing is quoted here
+      because there is nothing to quote; had there been, only the hash SHAPE
+      would be described, never the value.
+    references: [iosxe-iosxr-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/radius-servers/server/host` and
+      `/radius-servers/server/key` unsupported.  The target's reasons are
+      explicit — "Render emits no AAA radius-server config; the RADIUS shared
+      secret is dropped on migration."  Neither side can carry a RADIUS server
+      or its shared secret, so `unsupported` rather than `lossy`.  Re-author
+      AAA on the target and treat the shared secret as never having been
+      migrated.  Declaration-based — the field is empty on the one cell.
+    references: [iosxe-iosxr-surface]
+
+  # -- Fabric ---------------------------------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      Symmetric gap on the record identity: both matrices declare
+      `/vxlan-vnis/vni` unsupported (along with `/vxlan-vnis/source-interface`
+      and `/vxlan-vnis/udp-port`).  The target's reason is a scope call —
+      IOS-XR VXLAN on NCS 5500/540 `nve` interfaces is rare in the SP corpus,
+      so it is parse-and-ignore in v1.  Neither side can hold a VNI record.
+      Declaration-based; no cell on this pair populates VXLAN.
+    references: [iosxe-iosxr-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: unsupported
+    reason: >
+      Neither matrix declares a VNI-to-VLAN binding path of its own, but the
+      record's identity leaf `/vxlan-vnis/vni` is unsupported on BOTH sides,
+      so no VNI record can exist on either side of this pair and the sub-field
+      has no carrier at all.  A symmetric gap in substance rather than in
+      wording.  Declaration-based; no cell populates VXLAN.
+    references: [iosxe-iosxr-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: unsupported
+    reason: >
+      Same as `vxlan_vnis[].vlan_id` — undeclared on both sides, but hanging
+      off an identity leaf (`/vxlan-vnis/vni`) that both matrices declare
+      unsupported, so the multicast replication group has no record to live on
+      in either direction.  Declaration-based; no cell populates VXLAN.
+    references: [iosxe-iosxr-surface]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/evpn-type5-routes/route`
+      unsupported.  The target's reason is architectural — IOS-XR runs EVPN
+      under top-level `l2vpn` + `evpn` + `bridge group` stanzas, grammatically
+      distant from the IOS-XE / Arista / NX-OS model, with no canonical
+      mapping in v1.  Neither side carries a type-5 route.  Declaration-based;
+      the field is empty on the one cell.
+    references: [iosxe-iosxr-surface]
+
+  # -- VRFs -- the surface IOS-XR is built around, and this source lacks -----
+
+  "routing_instances[].name":
+    disposition: not_applicable
+    note: >
+      Source-side gap, and the most consequential one on this pair given the
+      target's device class.  cisco_iosxe declares `/routing-instances/instance`
+      (the record identity), `/routing-instances/instance/instance-type` and
+      the whole-field `/routing_instances` unsupported; the parsed intent
+      carries `routing_instances == []`.  cisco_iosxr — the heavy-VRF codec of
+      this mesh — declares `/routing-instances/instance` LOSSY, not supported:
+      `vrf <name>` blocks and per-interface `vrf <name>` membership parse and
+      render cleanly while the route-distinguisher does not survive (XR derives
+      the RD from `router bgp`).  So VRFs re-authored on the XR side will
+      largely hold, but re-check the RD afterwards.  Nothing arrives from this
+      source to check.
+    references: [iosxe-iosxr-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      Same source-side gap as `routing_instances[].name` — the source cannot
+      emit a VRF record at all, so there is no description to carry.  Stated
+      on the declarations plus an observed empty list rather than guessed at.
+    references: [iosxe-iosxr-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Neither matrix declares a raw-sections path and neither codec populates
+      the field on this pair — the OpenConfig source has no notion of an
+      unparsed CLI block to carry forward.  Empty on the one cell.
+    references: [iosxe-iosxr-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [iosxe-iosxr-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [iosxe-iosxr-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Symmetric gap: both matrices declare `/anycast-gateway-mac` unsupported.
+      The target's reason ties it to the per-address anycast entries — IOS-XR
+      has no VARP / distributed-anycast-gateway grammar, so the chassis-wide
+      anycast-gateway MAC is dropped on render.  Both codecs also declare
+      `/interfaces/interface/{ipv4,ipv6}/address/virtual-gateway-address`
+      unsupported, so the whole anycast concept is absent from both sides of
+      this pair rather than degraded.  Declaration-based — the field is empty
+      on the one cell.
+    references: [iosxe-iosxr-surface]

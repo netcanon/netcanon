@@ -1,0 +1,624 @@
+# Cross-vendor fidelity expectations: aruba_aoscx -> cisco_iosxr
+#
+# Source: aruba_aoscx codec — ArubaOS-CX `show running-config` text.
+# Target: cisco_iosxr codec — IOS-XR CLI render.
+#
+# The widest device-class gap in the aruba_aoscx expectation mesh.  AOS-CX in
+# the committed corpus is a campus / DC access-aggregation switch; cisco_iosxr
+# is a service-provider edge/core router (ASR 9000, NCS 5500 / 540 / 8000).
+# IOS-XR has no campus L2 model at all, and that single fact decides the shape
+# of this whole file: the routed edge survives (interface addressing, admin
+# state, MTU, LAG membership, VRFs, static routes, local users) while every
+# campus surface — the VLAN table, per-port VLAN membership, SVI anycast
+# gateways, VXLAN, SNMP — is dropped whole.
+#
+# The interface inventory does NOT shrink on this pair: 157 source interface
+# records against 157 re-parsed records over the 7 cells, verified by
+# round-tripping each fixture rather than inferred from the drift shape.  So
+# unlike the arista_eos pair, every interface loss below is declared on its
+# own per-record evidence and none is inherited from a vanishing parent —
+# `description`, `enabled`, `mtu` and `ipv6_addresses` are honestly `good`.
+#
+# Three interface mechanisms, measured separately: two-token AOS-CX names lose
+# their index (`lag 1` -> `lag`), interface_type collapses to `ianaift:other`
+# (the IOS-XR parser infers type from a name prefix AOS-CX names do not have),
+# and the active-gateway virtual address is dropped.  The first two are
+# artifacts of the bare `target.parse(target.render(source.parse()))` path the
+# mesh measures and are closed by re-running through
+# `netcanon.migration.canonical.port_names.translate_port_names`; the third is
+# a real loss that survives that translation.  Each reason below says which it
+# is.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations, the
+# codec source, and a full `run_full_mesh.py` pass over the committed corpus
+# (7 fixture cells, 0 render errors, 0 re-parse errors), resolved through the
+# audit's own `actual_disposition()` so this file and the ratchet cannot
+# disagree.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoscx_to_cisco_iosxr/
+#
+# Authored 2026-08-25, extending the aruba_aoscx expectation mesh to the
+# cisco_iosxr target (A6 wave 2).
+
+meta:
+  source_vendor: aruba_aoscx
+  target_vendor: cisco_iosxr
+  primary_use_case: >
+    Campus/DC switch retired onto SP routing gear: an ArubaOS-CX aggregation
+    or spine switch whose routed uplinks, VRFs and static routes are being
+    re-homed onto an IOS-XR edge router.  Hostname, interface descriptions,
+    admin state, jumbo MTU, IPv4/IPv6 interface addressing, LAG membership,
+    VRF names, static routes and local user identity all survive.  What does
+    not is the entire campus layer — the VLAN table, VLAN port membership,
+    SVI anycast gateways, VXLAN VNIs, the chassis anycast-gateway MAC and the
+    whole SNMP block — plus AOS-CX two-token interface names and the
+    interface type that the IOS-XR parser infers from them.
+  certainty: medium
+  references:
+    - id: aoscx-iosxr-surface
+      path: docs/vendor-references/aruba_aoscx_to_cisco_iosxr/canonical_surface.md
+      title: "AOS-CX -> Cisco IOS-XR: measured canonical surface (7 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- scalars the AOS-CX parser does not produce at all -----------
+  #
+  # AOS-CX declares `/system/domain`, `/system/dns-server`,
+  # `/system/ntp-server` and `/system/syslog-server` UNSUPPORTED at the exact
+  # path — as SOURCE it never emits them, so there is nothing for IOS-XR to
+  # lose.  These are `not_applicable` (a source-side gap) rather than
+  # `unsupported` (a target-side drop); the distinction is what tells a reader
+  # whether re-authoring on the target would help.  `timezone` is different —
+  # both sides declare it unsupported, so it is a symmetric gap.
+
+  hostname:
+    disposition: good
+    note: "`hostname <name>` on both platforms; preserved on 7 of 7 cells."
+    references: [aoscx-iosxr-surface]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      The aruba_aoscx matrix declares `/system/domain` unsupported, so the
+      source intent never carries a domain for this pair to migrate.  Not a
+      loss against IOS-XR — cisco_iosxr has no declaration for it either on
+      this surface, so nothing here is measurable in the first place.
+    references: [aoscx-iosxr-surface]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/system/dns-server` unsupported,
+      so nothing reaches the target.  cisco_iosxr declares it SUPPORTED, so
+      re-authoring `domain name-server <ip>` on the XR side will stick —
+      worth doing by hand as part of the cutover.
+    references: [aoscx-iosxr-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap, same shape as `dns_servers`: aruba_aoscx declares
+      `/system/ntp-server` unsupported while cisco_iosxr supports it — its
+      renderer emits the `ntp` block with an indented ` server <ip>` per
+      host.  Re-author the NTP servers on the target.
+    references: [aoscx-iosxr-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` unsupported, so this is a
+      symmetric gap in the pair rather than an IOS-XR limitation — the XR
+      codec states it plainly ("Render emits no clock/timezone stanza;
+      intent.timezone is dropped on migration") and AOS-CX never parses one.
+      Set the timezone on the target by hand; nothing in the migration will
+      carry it.
+    references: [aoscx-iosxr-surface]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares `/system/syslog-server`
+      unsupported; cisco_iosxr supports it.  Re-author logging hosts on the
+      target.
+    references: [aoscx-iosxr-surface]
+
+  # -- Interfaces -- three independent per-record mechanisms ----------------
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      The interface inventory does NOT shrink — 157 source records against
+      157 re-parsed records over the 7 cells, verified by round-tripping each
+      fixture.  What changes is identity: AOS-CX names logical interfaces with
+      a space, the IOS-XR renderer emits them verbatim (`interface lag 1`),
+      and the IOS-XR parser takes the first whitespace-delimited token as the
+      name — so `lag 1`, `lag 256`, `vlan 101` and `loopback 0` all come back
+      as bare `lag` / `vlan` / `loopback`.  62 of the 157 records are
+      two-token, and 56 of the 157 re-parsed records end up sharing a name
+      with at least one sibling (43 records in excess of the distinct name
+      count), so after cutover an operator diffing by interface name cannot
+      tell one bundle from another.  Physical ports (`1/1/1`) and `mgmt` are
+      unaffected.
+      This is a property of the bare parse-render-parse path the mesh
+      measures, not of the canonical model: re-running the same 7 cells
+      through `translate_port_names` (source aruba_aoscx, target cisco_iosxr,
+      empty rename map) yields IOS-XR-native names — `GigabitEthernet1/1/1/0`,
+      `Bundle-Ether256`, `Loopback0`, `MgmtEth0/RP0/CPU0/0` — with 0
+      duplicates and 0 renamed records on re-parse.  Plan the cutover through
+      the port rename path; do not hand-render from a bare round-trip.
+      Note what that path costs, because it is not free: it auto-drops all 18
+      SVI records (`vlan N`), IOS-XR having no SVI to map them onto.
+    references: [aoscx-iosxr-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 7 cells — 66 descriptions in, 66 out.  Both matrices
+      declare `/interfaces/interface/config/description` supported and the
+      IOS-XR render round-trips it verbatim, including the long CANU-style
+      `sw-leaf-002:53<==sw-spine-001` labels.  The description survives even
+      where the interface NAME does not, so on a name-collapsed record it is
+      the only reliable way back to the source port.
+    references: [aoscx-iosxr-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state preserved on all 7 cells — 19 administratively-down ports
+      in, the same 19 out.  A port shut on AOS-CX arrives with `shutdown` on
+      IOS-XR.
+    references: [aoscx-iosxr-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on all 7 cells — 50 interfaces carry an explicit MTU in and
+      50 out, including the 9198-byte jumbo MTU the DC and CANU fixtures set
+      on every uplink.
+    references: [aoscx-iosxr-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on the 2 cells that populate it (2 address records in, 2 out,
+      prefix length and scope intact).  Both matrices declare
+      `/interfaces/interface/ipv6/address/ip` + `prefix-length` supported.
+      Thin evidence by design — the AOS-CX corpus is almost entirely IPv4 —
+      so this is 2 observed records, not a broad sample, and is stated that
+      way rather than implied.
+    references: [aoscx-iosxr-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: lossy
+    reason: >
+      Drifts on 5 of the 7 cells, and the round-trip shows the drift is
+      entirely the active-gateway virtual address, not the interface's own IP.
+      All 41 address records survive with `ip` and `prefix_length` intact;
+      15 `virtual_gateway_address` values go in and 0 come out across the
+      corpus.  An SVI carrying `10.12.101.2/24` with
+      `active-gateway ip 10.12.101.1` arrives as `10.12.101.2/24` with an
+      empty virtual gateway.
+      cisco_iosxr declares it at the exact path
+      (`/interfaces/interface/ipv4/address/virtual-gateway-address`
+      unsupported, mirrored for IPv6) with the reason stated: IOS-XR has no
+      VARP / anycast-gateway grammar, so the render emits only the standard
+      `ipv4 address` line.  This is the one interface loss the port-rename
+      path does NOT fix — the translated round-trip drops all 15 too.
+      Re-author first-hop redundancy on the target explicitly.
+    references: [aoscx-iosxr-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on all 7 cells, on 147 of the 157 records.  Both matrices declare
+      `/interfaces/interface/config/type` lossy in their own right, and the
+      IOS-XR reason explains the mechanism: its CLI parser infers the type
+      from the name prefix (`GigabitEthernet` -> ethernetCsmacd, `Loopback` ->
+      softwareLoopback, `Bundle-Ether` -> ieee8023adLag, `MgmtEth` ->
+      ethernetCsmacd).  AOS-CX names carry none of those prefixes, so the
+      source distribution — 95 ethernetCsmacd, 34 ieee8023adLag, 18 l3ipvlan,
+      10 softwareLoopback — re-parses as 147 `ianaift:other` plus 10
+      softwareLoopback.  Only `loopback 0` survives, and only because
+      `loopback` happens to match an IOS-XR prefix.
+      Same caveat as `interfaces[].name`: this is the bare-round-trip path.
+      Running the 7 cells through `translate_port_names` first restores the
+      full source distribution (95 + 34 + 10) on the 139 records that survive
+      the rename.  Nothing here is forwarding state, but the type drives how
+      an inventory tool classifies the port after cutover.
+    references: [aoscx-iosxr-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts on all 7 cells.  Membership itself is NOT lost: 44 member ports
+      in and 44 out, each pointing at the right bundle.  What changes is the
+      value — every `lag N` is rewritten to `Bundle-EtherN`, because the
+      IOS-XR renderer expresses membership as `bundle id <N> mode active` on
+      the member port and the parser reconstructs the bundle name from it.
+      Read as a plain rename that is arguably lossless in meaning; read as a
+      config diff it is not, and the bare render is internally inconsistent
+      about it — member ports point at `Bundle-EtherN` while the LAG's own
+      stanza is still emitted as `interface lag N`.
+      This key carries no independent signal about record loss: it is
+      per-value drift on records that all survive.  For the one bundle that
+      genuinely vanishes, see `lags`.
+    references: [aoscx-iosxr-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      A symmetric gap, and total on both sides.  aruba_aoscx declares the
+      whole `/interfaces/interface/vrrp-groups/group/*` subtree unsupported
+      (AOS-CX expresses first-hop redundancy as VSX active-gateway rather than
+      VRRP), and cisco_iosxr declares the identical subtree unsupported with
+      the reason "VRRP / FHRP redundancy groups are out of the v1 IOS-XR
+      scope; the group is dropped on migration".  No committed cell on this
+      pair carries a VRRP group, so nothing was observed — the disposition
+      rests on the two declarations, not on a round-trip, and is stated that
+      way.  Re-author FHRP on the IOS-XR side by hand.
+    references: [aoscx-iosxr-surface]
+
+  # -- VLANs -- the campus surface with no IOS-XR representation ------------
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      A total drop, not a degradation — verified by rendering all 7 fixtures
+      rather than inferred from the drift shape: 30 VLAN records go in and 0
+      come out, on every cell, and not one of the 7 renders contains a
+      top-level `vlan` stanza.  Recorded `unsupported` rather than `lossy`
+      because a vanished record is not lossy (#436) — `lossy` warns and stays
+      compatible, which would badly understate a campus VLAN table arriving
+      empty.
+      Worth reading carefully, because the target matrix disagrees with the
+      behaviour: cisco_iosxr declares `/vlans/vlan/id` and `/vlans/vlan/name`
+      SUPPORTED and four `/vlans/vlan/ipv4/address/*` paths lossy, with no
+      unsupported declaration at all.  Those declarations describe VLANs
+      SYNTHESISED from `encapsulation dot1q` sub-interfaces
+      (`parse.py::_parse_dot1q_vlans`); the renderer emits nothing whatsoever
+      for `intent.vlans`.  IOS-XR is SP routing — VLANs are dot1q
+      sub-interfaces, not a campus VLAN table — so an AOS-CX VLAN record has
+      nowhere to land.  That is a target-matrix over-declaration for
+      non-dot1q sources, not a pair-specific fact, and is left for a codec
+      change rather than fixed here.
+      This key carries the record-level loss for the whole `vlans` list; the
+      sub-fields below are about what happens to a surviving record.
+    references: [aoscx-iosxr-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      The only drift this key shows is the parent list going 30 -> 0, and
+      `vlans[].id` above already declares that record-level loss.  A loss
+      recorded here would be the same single signal counted twice and could
+      never be evidenced by any cell on its own, so it is `good` by the
+      per-pair ratchet's own arithmetic — not because the 23 VLAN names in
+      the corpus reach the target.  They do not.  Re-authoring the VLAN
+      layer is scoped by `vlans[].id`; nothing needs a separate entry here.
+    references: [aoscx-iosxr-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      Same as `vlans[].name`: the drift is the parent list emptying, declared
+      once at `vlans[].id`.  Recorded for completeness — the 18 SVI addresses
+      carried on VLAN records in this corpus reach the target only insofar as
+      the sibling `interface vlan N` stanza carries them, and that path is
+      covered by `interfaces[].ipv4_addresses` (which is where the
+      active-gateway loss is declared, on its own evidence).
+    references: [aoscx-iosxr-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Same structural cause, declared once at `vlans[].id`.  For the operator
+      the consequence is worth naming even though the disposition is `good`:
+      IOS-XR has no per-port access VLAN at all — it declares
+      `/interfaces/interface/access-vlan` unsupported — so the 64 untagged
+      membership entries in this corpus have no target-side equivalent to be
+      lossy about.  Access-port assignment is a redesign, not a migration.
+    references: [aoscx-iosxr-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Same as `vlans[].untagged_ports` — 32 tagged membership entries, no
+      IOS-XR trunk allow-list to hold them
+      (`/interfaces/interface/trunk-allowed-vlans` unsupported).  The
+      record-level loss is declared at `vlans[].id`.
+    references: [aoscx-iosxr-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Same structural cause, declared once at `vlans[].id`.  6 VLAN
+      descriptions exist in the corpus (the CANU black-hole VLANs and the
+      synthetic kitchen sink).  They are operator labelling rather than
+      forwarding state, so nothing breaks — but capture them before migrating,
+      because on a campus switch a VLAN description is routinely how a VLAN
+      is tied to a department or a site.
+    references: [aoscx-iosxr-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on both cells that populate it — 3 routes in, 3 out,
+      destination and gateway intact.  cisco_iosxr declares
+      `/routing/static-route` and `/routing/static-route/vrf` supported and
+      renders them under `router static`.  Two caveats that cost nothing
+      here: aruba_aoscx declares `/routing/static-route/vrf` unsupported as a
+      source, so every route arrives in the global table regardless of the
+      VRF it came from; and both sides declare
+      `/routing/static-route/description` lossy, though no committed cell on
+      this pair sets one.
+    references: [aoscx-iosxr-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      A symmetric gap: both matrices declare `/dhcp-servers/pool`
+      unsupported, cisco_iosxr with the reason "Render emits no DHCP server
+      pool; intent.dhcp_servers are dropped on migration".  No committed cell
+      populates the field — a campus AOS-CX switch relays DHCP rather than
+      serving it — so this rests on the two declarations rather than an
+      observed round-trip.
+    references: [aoscx-iosxr-surface]
+
+  # -- SNMP -- dropped whole ------------------------------------------------
+
+  "snmp.community":
+    disposition: unsupported
+    reason: >
+      The entire SNMP record is dropped, not degraded: on each of the 4 cells
+      that carry SNMP the re-parsed `snmp` is `None`, and all 7 renders
+      contain zero `snmp` lines.  cisco_iosxr declares `/snmp/community`
+      unsupported with the reason "SNMP parse + render is out of the v1 XR
+      scope".  Recorded `unsupported` rather than `lossy` per #436.
+      Flagged because the drift-shape probe and the round-trip disagreed and
+      the round-trip won: the probe classified `snmp` a partial degradation
+      only because its string-drift branch does not recognise `... -> None`
+      as an emptied target.  The community string is set on 1 of the 4 cells
+      and does not survive.  Re-author SNMP on the target from scratch.
+    references: [aoscx-iosxr-surface]
+
+  "snmp.location":
+    disposition: unsupported
+    reason: >
+      Set on 3 of the 4 cells that carry SNMP and gone on all 3 — it vanishes
+      with the whole SNMP record rather than degrading, so the same total-drop
+      reasoning as `snmp.community` applies.  Worth capturing from the source
+      config before cutover, because a chassis location string is rarely
+      recorded anywhere else — and the netcanon IOS-XR renderer emits no SNMP
+      stanza of any kind, so it will not appear in the generated config for
+      an operator to notice and correct.
+    references: [aoscx-iosxr-surface]
+
+  "snmp.contact":
+    disposition: unsupported
+    reason: >
+      Set on 3 of the 4 cells that carry SNMP and gone on all 3, with the
+      whole SNMP record — same mechanism as `snmp.community` and
+      `snmp.location`.  Note the contact string in this corpus is an operator
+      e-mail address, so it is also the kind of field a migration report
+      should carry forward deliberately rather than silently drop.
+    references: [aoscx-iosxr-surface]
+
+  "snmp.trap_hosts":
+    disposition: good
+    note: >
+      `good` in the vacuous sense only, and it would be dishonest not to say
+      so plainly: aruba_aoscx declares `/snmp/trap-host` UNSUPPORTED, so the
+      canonical field is empty on all 4 cells that carry SNMP and empty
+      arrives as empty.  There is no trap-host data on this pair for IOS-XR
+      to lose.  Do not read this as "trap hosts migrate" — the SNMP block
+      itself does not survive at all (see `snmp.community`), and AOS-CX trap
+      destinations must be read out of the source config by hand.
+    references: [aoscx-iosxr-surface]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      Drifts on the 2 cells that define a v3 user, and both users go with the
+      dropped SNMP record.  cisco_iosxr additionally declares
+      `/snmp/v3-user/auth-protocol`, `/priv-protocol`, `/priv-passphrase` and
+      `/group` unsupported in their own right, all pointing at the same
+      out-of-v1-scope anchor.  SNMPv3 users carry auth and privacy
+      passphrases; they must be re-created on the target and cannot be
+      migrated.  The passphrase values are deliberately NOT quoted here — they
+      are operator-traceable key material.
+    references: [aoscx-iosxr-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      33 of 34 LAGs survive across the corpus with all 44 member
+      relationships intact; exactly one record vanishes, and the round-trip
+      shows precisely why.  The IOS-XR renderer writes membership as
+      `bundle id <N> mode active` on the MEMBER port, and the IOS-XR parser
+      reconstructs `CanonicalLAG` records from those member lines — never
+      from the LAG's own stanza.  A LAG with no members therefore cannot be
+      reconstructed at all: the synthetic kitchen-sink fixture's empty
+      `lag 2` is the single lost record.
+      `lossy` rather than `unsupported` because this is a partial loss with
+      the target still compatible — cisco_iosxr declares `/lags/lag/name`,
+      `/lags/lag/members` and its mode path supported, and 33 of 34 arrive.
+      Every surviving name is rewritten `lag N` -> `Bundle-EtherN`; that
+      rename is the bulk of the measured drift and is not itself a loss of
+      membership.  Re-running the 7 cells through `translate_port_names`
+      recovers the missing record too (34 of 34), because the LAG then renders
+      under a name the IOS-XR parser recognises.
+    references: [aoscx-iosxr-surface]
+
+  # -- Identity -------------------------------------------------------------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Usernames preserved on all 6 cells that populate local users — 7 user
+      records in, 7 out.  Both matrices declare the identity leaf supported
+      and the IOS-XR render emits a plain `username <name>` block.
+    references: [aoscx-iosxr-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: >
+      Role preserved on all 7 user records — the IOS-XR renderer emits
+      ` group <role>` verbatim and its parser reads it straight back, so
+      AOS-CX `administrators` / `operators` survive the canonical round-trip.
+      Two things that survival does not mean.  First, `administrators` is not
+      an IOS-XR task-group name; the codec only substitutes an XR-native group
+      (`root-lr` / `operator`) when the canonical role is EMPTY, so a real XR
+      box would need the group re-mapped by hand.  Second, the numeric
+      `privilege_level` beside it does NOT survive (15 -> 1 on 6 records);
+      aruba_aoscx declares `/local-users/user/privilege-level` lossy in its
+      own matrix, and it is not one of the three keys this file declares.
+    references: [aoscx-iosxr-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Preserved byte-for-byte on all 7 user records, which needs reading
+      carefully rather than as good news.  AOS-CX stores the user secret in
+      its own encrypted form — an `AQB`-prefixed ciphertext blob, 184
+      characters on the DC fixtures.  The IOS-XR renderer keeps a hash's
+      type-digit prefix when there is one and otherwise emits the bare value
+      behind type 0 (`render.py::_render_local_user`), which the codec's own
+      parser docstring names "the plaintext marker".  So the canonical field
+      round-trips intact, and what lands in the rendered config is an AOS-CX
+      ciphertext string presented to IOS-XR as a plaintext password.
+      The disposition is `good` because the canonical field genuinely is
+      preserved; the operational advice is unchanged from every other AOS-CX
+      pair — set passwords on the target before cutover.  A preserved field
+      is not a working credential.
+      The ciphertext is deliberately NOT quoted here — it is operator-
+      traceable key material even though it is encrypted.
+    references: [aoscx-iosxr-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      A symmetric gap: both matrices declare `/radius-servers/server/host`
+      and `/radius-servers/server/key` unsupported, cisco_iosxr with the
+      reason "Render emits no AAA radius-server config".  No committed cell
+      on this pair populates the field, so this rests on the two declarations
+      rather than an observed round-trip.  Re-author AAA on the IOS-XR side —
+      and note the shared secret would not have migrated even if the host had.
+    references: [aoscx-iosxr-surface]
+
+  # -- Fabric ---------------------------------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      A total drop: 4 VNI records across the 3 cells that carry VXLAN go in
+      and 0 come out, and no render contains an `nve` / `vxlan` line.
+      cisco_iosxr declares `/vxlan-vnis/vni` (plus source-interface and
+      udp-port) unsupported with the reason stated — IOS-XR VXLAN on NCS 5500
+      / 540 `nve` interfaces is rare in the SP corpus, so it is parse-and-
+      ignore in v1.  Recorded `unsupported` rather than `lossy` per #436;
+      probe and target matrix agree here, so no adjudication was needed.
+      This key carries the record-level loss for the whole `vxlan_vnis` list.
+    references: [aoscx-iosxr-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: >
+      The only drift this key shows is the parent list going 4 -> 0, and
+      `vxlan_vnis[].vni` above already declares that record-level loss.  A
+      loss recorded here would be the same signal counted twice and could
+      never be evidenced independently.  The VNI-to-VLAN binding does not
+      reach the target; that is scoped by `vxlan_vnis[].vni`.
+    references: [aoscx-iosxr-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: good
+    note: >
+      Doubly empty: the parent list is dropped whole (declared at
+      `vxlan_vnis[].vni`), and no committed cell sets a multicast replication
+      group in the first place — all 4 source VNI records use ingress
+      replication, so the sub-field carries no data on either side.
+    references: [aoscx-iosxr-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair, and aruba_aoscx declares
+      nothing at all for the surface — supported, lossy or unsupported — so
+      as a source it never emits type-5 routes.  A source-side gap rather
+      than an IOS-XR drop, though cisco_iosxr does declare
+      `/evpn-type5-routes/route` unsupported (its EVPN lives under top-level
+      `l2vpn` / `evpn` / `bridge group` stanzas with no canonical mapping in
+      v1), so nothing would survive even from a source that did emit them.
+    references: [aoscx-iosxr-surface]
+
+  # -- VRFs -----------------------------------------------------------------
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      VRF names preserved on all 3 cells that populate them — 6 instances in,
+      6 out — and the renders carry both the top-level `vrf <name>` stanza and
+      the per-interface `vrf <name>` membership.  This is the pair's strongest
+      surface, which is unsurprising: IOS-XR is built around VRFs.
+      cisco_iosxr does declare the container `/routing-instances/instance`
+      lossy (the route-distinguisher must be read from and rendered to the
+      `router bgp` block, so RD / RT / L3VNI do not round-trip), but that
+      costs nothing here — aruba_aoscx declares route-distinguisher,
+      rt-imports, rt-exports and l3-vni unsupported as a SOURCE, so none of
+      them is ever populated for IOS-XR to lose.
+    references: [aoscx-iosxr-surface]
+
+  "routing_instances[].description":
+    disposition: not_applicable
+    note: >
+      Source-side gap: aruba_aoscx declares
+      `/routing-instances/instance/description` unsupported, and no committed
+      cell on this pair sets a VRF description, so there is no observation to
+      base a disposition on.  Stated rather than guessed at.
+    references: [aoscx-iosxr-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Empty on all 7 cells.  aruba_aoscx declares a lossy child path
+      (`/system/raw-sections/version-banner`), but no committed AOS-CX fixture
+      carries an unparsed block that survives to render, so the field never
+      populates on this pair.
+    references: [aoscx-iosxr-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoscx-iosxr-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [aoscx-iosxr-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      A total drop on all 5 cells that populate it — the chassis-wide MAC goes
+      in and an empty string comes out, and no render contains an
+      `anycast-gateway` line.  cisco_iosxr declares `/anycast-gateway-mac`
+      unsupported for the same stated reason as the per-address virtual
+      gateway paths: IOS-XR has no VARP / distributed-anycast-gateway grammar.
+      Recorded `unsupported` rather than `lossy` per #436.
+      Worth contrasting with the arista_eos pair, where the chassis MAC
+      survives while the per-SVI address does not: here BOTH halves fail
+      together — 5 of 5 anycast MACs and 15 of 15 `virtual_gateway_address`
+      values (see `interfaces[].ipv4_addresses`).  First-hop redundancy on
+      this pair is redesigned, not migrated.
+    references: [aoscx-iosxr-surface]

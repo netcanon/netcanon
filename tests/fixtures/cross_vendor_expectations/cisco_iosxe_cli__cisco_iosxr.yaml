@@ -1,0 +1,597 @@
+# Cross-vendor fidelity expectations: cisco_iosxe_cli -> cisco_iosxr
+#
+# Source: cisco_iosxe_cli codec — IOS-XE `show running-config` text.
+# Target: cisco_iosxr codec — IOS-XR CLI render.
+#
+# Asymmetric by device class.  cisco_iosxe_cli in the committed corpus is a
+# campus / branch box — Catalyst 9300 access switches, CSR and Cat8000v branch
+# routers, an EVPN leaf, plus the synthetic kitchen sink.  cisco_iosxr is a
+# service-provider edge/core router: 4-segment port names, VRF-heavy, RD
+# derived from `router bgp`, and — the fact that governs this whole pair — no
+# campus L2 model at all.  The realistic migration is a branch or PE-facing
+# IOS-XE router re-homed onto ASR9k / NCS-class XR.
+#
+# Unusually for this mesh, the dominant loss is NOT the interface inventory
+# shrinking.  Across all 15 cells, 144 interface records go in and 144 come
+# out, and the six audited interface sub-fields drift ZERO times over those
+# 144 records.  They are `good` because they are good, not because the
+# matrices flatter them.
+#
+# The structural collapse lands on `vlans` and `vxlan_vnis` instead, where the
+# whole list is emptied.  `vlans[].id` and `vxlan_vnis[].vni` are written FIRST
+# among their siblings on purpose: the reconciler awards a parent list's
+# record-level drift signal to whichever sub-field key appears first in YAML
+# insertion order (`structural_parent_claimed` in
+# tools/run_phase4_reconciliation.py).  Their siblings are `good` — they
+# describe what happens to a value when its record survives, and on this pair
+# no VLAN or VNI record ever survives to contradict them.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
+# a full `run_full_mesh.py` pass over the committed corpus (15 fixture cells,
+# 0 render errors, 0 re-parse errors), resolved through the audit's own
+# `actual_disposition()` and replayed through the `STRUCTURAL_ONLY` collapse,
+# so this file and the ratchet cannot disagree.  Where the mechanical vanish
+# heuristic and the capability matrix disagreed — `static_routes` and `snmp` —
+# the tie was broken by round-tripping the fixture and reading the render, not
+# by preferring a table.  Both corrections are written up in the reference doc.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxr/
+#
+# Authored 2026-08-25, opening the cisco_iosxr expectation mesh.
+
+meta:
+  source_vendor: cisco_iosxe_cli
+  target_vendor: cisco_iosxr
+  primary_use_case: >
+    Branch / PE-facing re-home: an IOS-XE router replaced by an IOS-XR
+    edge router carrying the same interfaces, addressing, VRFs, static
+    routing and local user identity.  The routed surface crosses almost
+    intact — interface records, addressing, MTU, admin state, VRF names,
+    static-route forwarding state and local users all survive.  What does
+    not is everything campus: the VLAN database, VXLAN VNIs, VRRP groups,
+    SNMP, DHCP pools and RADIUS servers are dropped outright, and the
+    port-channel is renamed to a bundle.
+  certainty: medium
+  references:
+    - id: iosxecli-iosxr-surface
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxr/canonical_surface.md
+      title: "IOS-XE CLI -> IOS-XR: measured canonical surface (15 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars ---------------------------------------------
+
+  hostname:
+    disposition: lossy
+    reason: >
+      Preserved on 14 of 15 cells.  The single drift is not a dropped value —
+      it is a fabricated one.  `ntc_carrier_interfaces.txt` carries no
+      hostname, and the IOS-XR renderer substitutes a placeholder:
+      `netcanon/migration/codecs/cisco_iosxr/render.py:93` reads
+      `hostname = tree.hostname or "Router"`, so the render emits
+      `hostname Router` and the re-parse reports a box called `Router`.
+      Recorded `lossy` rather than `unsupported` because nothing vanished and
+      the target plainly supports the field — but an operator diffing the two
+      configs must see the substitution flagged rather than trust it.
+    references: [iosxecli-iosxr-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate it (`test.lab`, `cisco.com`,
+      `kitchensink.example.com`).  Worth stating plainly that NEITHER matrix
+      declares a `/system/domain` path — the source parser emits the value and
+      the XR render carries it through anyway.  The measurement is what this
+      disposition follows; the matrices under-declare here.
+    references: [iosxecli-iosxr-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Preserved on the 1 cell that populates it (`kitchen_sink.txt`, 3
+      servers).  cisco_iosxr declares the field supported; cisco_iosxe_cli
+      declares nothing yet emits it.  Thin coverage — one cell — and stated as
+      such rather than generalised.
+    references: [iosxecli-iosxr-surface]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Preserved on the 1 cell that populates it (`kitchen_sink.txt`, 2
+      servers).  Same shape as `dns_servers`: target declares support, source
+      declares nothing and emits it anyway.
+    references: [iosxecli-iosxr-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Not populated on any of the 15 cells, so this rests on the two
+      capability matrices rather than on an observed round-trip — stated
+      rather than implied.  BOTH declare `/system/timezone` unsupported, the
+      XR reason being "Render emits no clock/timezone stanza; intent.timezone
+      is dropped on migration."  A symmetric gap in the pair, not an XR
+      limitation: set the timezone on the target by hand.
+    references: [iosxecli-iosxr-surface]
+
+  syslog_servers:
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate it (6, 2 and 2 hosts).  Both
+      matrices declare `/system/syslog-server` supported and the round-trip
+      agrees.
+    references: [iosxecli-iosxr-surface]
+
+  # -- Interfaces -- the surface that crosses intact ------------------------
+  #
+  # No structural loss here, which is what makes this pair unusual.  144
+  # interface records in, 144 out, across all 15 cells; the six sub-fields
+  # below drift ZERO times over those records.  Verified by parsing every
+  # fixture with cisco_iosxe_cli, rendering with cisco_iosxr, re-parsing and
+  # diffing record-by-record — not inferred from the matrices.
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Preserved on all 11 populated cells.  Not one interface record vanishes
+      across the corpus, so — unlike most pairs in this mesh — the sub-fields
+      below carry no inherited structural drift and each stands on its own
+      measurement.
+    references: [iosxecli-iosxr-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 8 populated cells, over the 40 interface records that
+      carry a description.  Both matrices declare
+      `/interfaces/interface/config/description` supported.
+    references: [iosxecli-iosxr-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Preserved on all 11 populated cells (139 records).  Admin state survives
+      the round-trip: a shut port on IOS-XE arrives shut on IOS-XR.
+    references: [iosxecli-iosxr-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on all 4 populated cells.  Only 5 interface records in the
+      whole corpus set a non-default MTU, so the coverage is thin — the claim
+      is "never observed to drift", not "proven across a wide sample".
+    references: [iosxecli-iosxr-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on all 3 populated cells.  Thin coverage — 5 interface records
+      corpus-wide carry IPv6 — but every one round-trips byte-identical.  Note
+      the source matrix declares
+      `/interfaces/interface/subinterfaces/subinterface/ipv6` unsupported, so
+      IPv6 on a sub-interface would be lost on the SOURCE side before this
+      pair ever sees it; no committed cell exercises that shape.
+    references: [iosxecli-iosxr-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on all 9 populated cells (40 addressed records).  Routed-port
+      addressing is the core of this migration and it crosses cleanly.  The
+      anycast companion is a different story — the XR matrix declares
+      `/interfaces/interface/ipv4/address/virtual-gateway-address`
+      unsupported, so a VARP-style virtual gateway on a routed port WOULD be
+      dropped; no committed cell on this pair carries one, so that path is
+      undemonstrated here rather than proven safe.
+    references: [iosxecli-iosxr-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on 6 of the 11 populated cells, and the collapse is total in kind
+      rather than partial: every typed interface becomes `ianaift:other`.  On
+      `kitchen_sink.txt`, 11 of 15 records change —
+      `ianaift:ethernetCsmacd`, `ianaift:ieee8023adLag` and `ianaift:l3ipvlan`
+      all flatten to `ianaift:other`.  Both matrices declare
+      `/interfaces/interface/config/type` lossy in their own right; the XR
+      reason records that its CLI parser infers type from the name prefix, so
+      a type that the name does not betray cannot be recovered.  Harmless for
+      forwarding, but any tooling that filters interfaces by canonical type
+      will see one undifferentiated bucket after migration.
+    references: [iosxecli-iosxr-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: lossy
+    reason: >
+      Drifts on all 3 LAG-bearing cells — but the membership is NOT lost.  The
+      round-trip shows every member interface still bound to its bundle, with
+      only the bundle's name changing: `Port-channel1` -> `Bundle-Ether1`,
+      which is the correct IOS-XR name for the same aggregation.  It scores as
+      drift because the audit's LAG-name canonicaliser does not know the XR
+      shape: `_LAG_NAME_RE` in tools/run_phase4_reconciliation.py accepts
+      `ae|Po|Port-channel|Port-Channel|trk|Trk|agg|bond` and nothing else, so
+      `_canonical_lag_name("Bundle-Ether1")` returns None and the comparison
+      falls through to raw string equality.  The loss this declaration covers
+      is therefore the operator-facing NAME, not the aggregation.  Extending
+      the canonicaliser to cover `Bundle-Ether<N>` is the real fix and belongs
+      in a tool change, not in this pair's expectations.
+    references: [iosxecli-iosxr-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: unsupported
+    reason: >
+      A total drop of the group, not a degradation of it.  On
+      `batfish_iosxe_basic_vrrp.txt` the source carries one VRRP group on
+      `GigabitEthernet0/2`; after the round-trip the interface record is still
+      present and its group list is empty.  The XR matrix declares the whole
+      `/interfaces/interface/vrrp-groups/group` subtree unsupported — group,
+      mode, priority, preempt, advertisement-interval, authentication,
+      virtual-ipv6s and description — with the reason "VRRP / FHRP redundancy
+      groups are out of the v1 IOS-XR scope; the group is dropped on
+      migration."  Recorded `unsupported` rather than `lossy` because a
+      vanished record is not lossy (#436): first-hop redundancy must be
+      re-authored on the target before cutover or the gateway simply is not
+      there.
+    references: [iosxecli-iosxr-surface]
+
+  # -- VLANs -- the campus surface that does not survive at all -------------
+  #
+  # `vlans[].id` is written FIRST deliberately: it owns this parent list's
+  # record-level drift signal under the reconciler's STRUCTURAL_ONLY rule.
+  # The five siblings after it are `good` — see the note on each.
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      The VLAN database is emptied.  Four of the five drifting cells lose the
+      whole list and the render contains no `vlan` line at all:
+      `batfish_cisco_interface.txt` 9 -> 0, `user_contrib_cat9300` 6 -> 0,
+      `kitchen_sink` 4 -> 0, `ciscolive_brkops1104_evpn_leaf` 3 -> 0.  This is
+      consistent with IOS-XR having no campus L2 model — the XR matrix
+      declares switchport-mode, access-vlan, trunk-allowed-vlans,
+      trunk-native-vlan and voice-vlan all unsupported, reason "IOS-XR is
+      SP-routing with no L2 switchport model (L2VPN is Tier-3)" — though note
+      the matrix does NOT say the top-level `vlans` list goes with them; the
+      measurement is the authority for that.
+      The fifth drifting cell moves the OTHER way: `ntc_carrier_interfaces.txt`
+      has 0 source VLANs and 1 after the round-trip, because the XR render
+      writes `encapsulation dot1q 2234` on its sub-interfaces and re-parsing
+      that line materialises a VLAN record the source never had.  A fabricated
+      record, not a rescued one.
+      `unsupported` rather than `lossy` per #436 — `lossy` warns and stays
+      compatible, which would badly understate a switch losing its entire VLAN
+      database.
+    references: [iosxecli-iosxr-surface]
+
+  "vlans[].name":
+    disposition: good
+    note: >
+      `good` deliberately, and it needs reading carefully.  This key DOES show
+      drift on 5 cells — but that drift is entirely its parent list changing
+      length, which `vlans[].id` above already claims.  This key is about what
+      happens to the VLAN NAME when a VLAN record survives, and no record on
+      this pair survives to degrade it.  A loss declared here could never be
+      evidenced by any cell.
+    references: [iosxecli-iosxr-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: good
+    note: >
+      Structural-only, same as `vlans[].name`: the SVI address disappears with
+      its VLAN record, and that record loss belongs to `vlans[].id`.  Worth
+      noting the XR matrix independently declares
+      `/vlans/vlan/ipv4/address/ip` lossy ("renders VLAN SVI / management L3
+      only from a sibling interface stanza"), so if a VLAN record ever did
+      survive on this pair its L3 mount would still be at risk — that has not
+      been observed and is not claimed here.
+    references: [iosxecli-iosxr-surface]
+
+  "vlans[].untagged_ports":
+    disposition: good
+    note: >
+      Structural-only.  Access-port membership vanishes with the VLAN record,
+      which is `vlans[].id`'s signal, not this key's.  Independently, the XR
+      matrix declares `/interfaces/interface/access-vlan` unsupported, so
+      nothing on the target could hold this even if the record survived.
+    references: [iosxecli-iosxr-surface]
+
+  "vlans[].tagged_ports":
+    disposition: good
+    note: >
+      Structural-only, mirror of `vlans[].untagged_ports`.  Trunk membership
+      goes with the record; `/interfaces/interface/trunk-allowed-vlans` is
+      declared unsupported on the target in any case.
+    references: [iosxecli-iosxr-surface]
+
+  "vlans[].description":
+    disposition: good
+    note: >
+      Structural-only.  The VLAN description is operator labelling that
+      vanishes with the record it hangs on — a `vlans[].id` consequence.  On a
+      campus switch this text is routinely how a VLAN is tied to a department
+      or site, so capture it before migrating even though the disposition here
+      is `good`.
+    references: [iosxecli-iosxr-surface]
+
+  # -- Routing --------------------------------------------------------------
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Preserved on 5 cells, drifts on 2 — and the drift is confined to
+      `description`.  The mechanical vanish heuristic classified this pair's
+      static routes as a TOTAL drop; that is wrong, and the disagreement was
+      settled by round-tripping rather than by preferring one table.
+      `batfish_cisco_ip_route.txt` carries 16 routes in and 16 out, with the
+      destination / gateway / egress-interface / metric / VRF identity set
+      compared as sets and found EQUAL; the only casualties are the two route
+      descriptions.  `racc_csr1_iosxe173_umbrella_sig.txt` is the same shape:
+      22 routes in, 22 out, one description dropped.  Both matrices already
+      declare `/routing/static-route/description` lossy, the XR reason being
+      "Render emits destination + next-hop only; the static-route name /
+      description is dropped."
+      The heuristic misfired because it flags any sub-field whose target side
+      is empty, and an emptied description looks identical to an emptied
+      record.  `unsupported` here would have blocked a migration that in fact
+      carries the whole forwarding table across.
+    references: [iosxecli-iosxr-surface]
+
+  # -- Services -------------------------------------------------------------
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      A total drop.  `kitchen_sink.txt` carries 2 DHCP pools and the round-trip
+      returns 0; the render contains no pool stanza.  The XR matrix declares
+      `/dhcp-servers/pool` unsupported, reason "Render emits no DHCP server
+      pool; intent.dhcp_servers are dropped on migration."  An SP edge router
+      relays DHCP rather than serving it, so this is a scope decision rather
+      than a defect — but the pools must be re-homed somewhere before cutover.
+    references: [iosxecli-iosxr-surface]
+
+  "snmp.community":
+    disposition: unsupported
+    reason: >
+      SNMP is not degraded on this pair; it is absent.  Rendering
+      `batfish_cisco_snmp.txt` — a fixture whose entire purpose is SNMP —
+      produces a five-line IOS-XR config containing a version banner, the
+      hostname and `end`.  The community is gone, and so is everything else in
+      the block.  The XR matrix is blunt about why: `/snmp/community` is
+      declared unsupported, reason "SNMP parse + render is out of the v1 XR
+      scope."  The mechanical vanish heuristic called this `partial -> lossy`;
+      the render disproves it.
+      Read the five `snmp.*` keys as ONE finding with one cause — the SNMP
+      block is never emitted.  None of them corroborates another.
+    references: [iosxecli-iosxr-surface]
+
+  "snmp.location":
+    disposition: unsupported
+    reason: >
+      Same single cause as `snmp.community` — the whole SNMP block is dropped,
+      not this field in particular.  Cited separately only because the schema
+      addresses it separately: on `batfish_cisco_snmp.txt` the source location
+      string is present and the render carries no SNMP stanza to hold it.
+    references: [iosxecli-iosxr-surface]
+
+  "snmp.contact":
+    disposition: unsupported
+    reason: >
+      Same single cause as `snmp.community`.  The source contact string
+      survives parsing and then has nowhere to go: XR SNMP render is out of v1
+      scope, so the field is dropped with the rest of the block.
+    references: [iosxecli-iosxr-surface]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: >
+      Same single cause as `snmp.community`.  `batfish_cisco_snmp.txt` carries
+      5 trap-host entries and `kitchen_sink.txt` carries 2; both render to
+      nothing.  Trap destinations must be re-authored on the target, and until
+      they are, the migrated box is silent to the NMS.
+    references: [iosxecli-iosxr-surface]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      Same single cause as `snmp.community`: `kitchen_sink.txt` carries 2
+      SNMPv3 users and the round-trip returns none.  The XR matrix declares
+      `/snmp/v3-user/auth-protocol`, `priv-protocol`, `priv-passphrase` and
+      `group` all unsupported for the same v1-scope reason.
+      One artefact stated so nobody re-derives it as a contradiction: this key
+      measures `preserved` on one cell.  That is `batfish_cisco_snmp.txt`,
+      whose source has an EMPTY v3-user list — an empty list survives a
+      wholesale drop trivially.  The cell that actually carries v3 users loses
+      both.  SNMPv3 credentials cannot be migrated and must be re-created.
+    references: [iosxecli-iosxr-surface]
+
+  # -- LAGs -----------------------------------------------------------------
+
+  lags:
+    disposition: lossy
+    reason: >
+      Drifts on all 3 LAG-bearing cells, and — verified by round-trip rather
+      than inferred from the drift shape — the bundle is completely intact.
+      On `user_contrib_cat9300_iosxe1712.txt` three port-channels go in with
+      4 / 2 / 2 members and three bundles come out with exactly the same
+      members in the same grouping; only the name changes,
+      `Port-channel<N>` -> `Bundle-Ether<N>`, which is the correct IOS-XR name
+      for that aggregation.  `kitchen_sink.txt` and
+      `batfish_cisco_interface.txt` behave identically.
+      It registers as drift because `_canonical_lag_name` in
+      tools/run_phase4_reconciliation.py does not recognise `Bundle-Ether<N>`
+      — its regex covers `ae|Po|Port-channel|Port-Channel|trk|Trk|agg|bond`
+      and returns None for the XR form, so the comparison falls back to raw
+      string equality.  That is a gap in the reconciler's canonicaliser, NOT a
+      codec defect; it is recorded here rather than fixed here so the next
+      author does not "repair" a codec that is behaving correctly.
+      `lossy` and not `unsupported`: nothing vanished, so the migration stays
+      compatible — but scripts and monitoring that reference the old
+      `Port-channel` names need updating.
+    references: [iosxecli-iosxr-surface]
+
+  # -- Identity -------------------------------------------------------------
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Preserved on all 7 cells that populate local users.  The XR render emits
+      a `username <name>` block per account and the names round-trip
+      unchanged.
+    references: [iosxecli-iosxr-surface]
+
+  "local_users[].role":
+    disposition: good
+    note: >
+      Preserved on all 7 populated cells — `admin` and `operator` both survive
+      as IOS-XR task groups (` group admin` / ` group operator` under the
+      username block).
+      Not a declared key on this pair but worth knowing when reading this
+      `good`: the adjacent `privilege_level` does NOT survive.  It reads 15 on
+      the source and 1 after the round-trip, on 11 user records across 4
+      cells, because XR expresses authorisation as a task group and the
+      numeric IOS privilege has nowhere to land.  The direction is
+      fail-closed, so nothing is over-granted — but automation keyed on
+      privilege level will break.
+    references: [iosxecli-iosxr-surface]
+
+  "local_users[].hashed_password":
+    disposition: good
+    note: >
+      Preserved on all 7 populated cells, and verified by byte equality rather
+      than by eyeball: the source secret and the re-parsed secret compare
+      equal for every account.  The XR render re-emits the IOS secret form
+      under the username block as `secret <type> <hash>`; the corpus exercises
+      IOS type-5, type-8 and type-9 markers followed by a `$`-prefixed crypt
+      hash.  Both codecs being Cisco is what makes this work — this is one of
+      the few pairs in the mesh where accounts arrive with a working
+      credential.
+      The hash values are deliberately NOT quoted here or in the reference
+      doc: crypt-style secrets are operator-traceable material, and a document
+      that quotes the value it describes defeats its own redaction.
+    references: [iosxecli-iosxr-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      A total drop.  `kitchen_sink.txt` carries 2 RADIUS servers and the
+      round-trip returns 0.  The XR matrix declares both
+      `/radius-servers/server/host` and `/radius-servers/server/key`
+      unsupported, reasons "Render emits no AAA radius-server config; RADIUS
+      host is dropped on migration" and, for the key, that the shared secret
+      is dropped with it.  AAA must be re-authored on the target before
+      cutover, or the migrated box falls back to local accounts only.
+    references: [iosxecli-iosxr-surface]
+
+  # -- Fabric ---------------------------------------------------------------
+  #
+  # `vxlan_vnis[].vni` is written FIRST among its siblings for the same
+  # STRUCTURAL_ONLY reason as `vlans[].id`.
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      A total drop.  `ciscolive_brkops1104_evpn_leaf_iosxe1715.txt` carries 1
+      VXLAN VNI and the round-trip returns 0.  The XR matrix declares
+      `/vxlan-vnis/vni`, `/vxlan-vnis/source-interface` and
+      `/vxlan-vnis/udp-port` all unsupported, reason "IOS-XR VXLAN (NCS 5500 /
+      540 `nve` interfaces) is rare in the SP corpus; no canonical demand
+      surfaced.  Parse-and-ignore in v1."  Consistent with the same fixture
+      losing its `l3_vni` VRF binding.  `unsupported` per #436 — the record
+      vanishes rather than degrading, so an overlay migration cannot be
+      attempted on this path at all.
+    references: [iosxecli-iosxr-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: good
+    note: >
+      Structural-only, exactly as with the `vlans[]` siblings: the VNI-to-VLAN
+      binding disappears with the VNI record, and that record loss is
+      `vxlan_vnis[].vni`'s signal.  This key is about what happens to the
+      binding when the record survives, and none does.
+    references: [iosxecli-iosxr-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: good
+    note: >
+      Structural-only, same as `vxlan_vnis[].vlan_id`.  The one VXLAN-bearing
+      fixture on this pair uses ingress replication rather than a multicast
+      replication group, so there is no group value here even before the
+      record is dropped.
+    references: [iosxecli-iosxr-surface]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Not populated on any of the 15 cells, so this rests on the matrices
+      rather than an observed round-trip — stated rather than implied.  The
+      target declares `/evpn-type5-routes/route` unsupported, reason "IOS-XR
+      EVPN runs under top-level `l2vpn` + `evpn` + `bridge group` stanzas —
+      grammatically distant from the IOS-XE / Arista / NX-OS EVPN model.  No
+      canonical mapping in v1."  Not `not_applicable`: the source declares the
+      path (as lossy) and can emit it, so this is a target-side block rather
+      than a source-side gap.
+    references: [iosxecli-iosxr-surface]
+
+  # -- VRFs -- the surface IOS-XR is actually built for ----------------------
+
+  "routing_instances[].name":
+    disposition: good
+    note: >
+      Preserved on all 3 cells that populate VRFs.  This is the one
+      SP-relevant surface that crosses cleanly, which is what makes the pair
+      worth migrating at all.  Note the XR matrix declares
+      `/routing-instances/instance` lossy in its own right because
+      `route_distinguisher` is re-derived rather than carried — RD is not an
+      audited key on this pair, so that loss is real but invisible to this
+      file.
+    references: [iosxecli-iosxr-surface]
+
+  "routing_instances[].description":
+    disposition: good
+    note: >
+      Preserved on the 1 cell that populates it (`kitchen_sink.txt`, two VRFs
+      with descriptions).  Thin coverage, stated as such.  Separately, the EVPN
+      leaf fixture loses its VRF `l3_vni` binding (100200 -> null), consistent
+      with VXLAN being dropped wholesale — also not an audited key, and it does
+      not touch this one.
+    references: [iosxecli-iosxr-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any of the 15 cells and neither codec declares a path
+      under raw sections.  No committed IOS-XE fixture carries an unparsed
+      block that survives to render.
+    references: [iosxecli-iosxr-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates or declares it."
+    references: [iosxecli-iosxr-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates or declares it."
+    references: [iosxecli-iosxr-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Not populated on any of the 15 cells, so this rests on the matrices
+      rather than an observed round-trip — stated rather than implied.  The
+      source declares `/anycast-gateway-mac` supported; the target declares it
+      unsupported, reason "IOS-XR has no VARP / distributed-anycast-gateway
+      grammar, so the chassis-wide anycast-gateway MAC is dropped on render."
+      A target-side block, not a source-side gap, which is why it is
+      `unsupported` and not `not_applicable`.  It sits alongside the XR
+      matrix's unsupported declarations for the per-interface IPv4 and IPv6
+      `virtual-gateway-address` companions: an IOS-XE box doing distributed
+      anycast gateway loses that whole model on migration, and the loss would
+      be silent.
+    references: [iosxecli-iosxr-surface]

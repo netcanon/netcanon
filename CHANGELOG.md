@@ -28,6 +28,39 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+- **A6 wave 3: `cisco_iosxr` cross-vendor expectation coverage, all 20 pairs.**
+  Coverage **693 -> 890 of 1224 cells (+197)**; ALIGNED 4890 -> 6314;
+  **`CODEC_BUG` unchanged at 5** and **`METHODOLOGY_ISSUE_over` unchanged at
+  21**.  110 pair YAMLs now; **`vyos` is the only blind codec left**.
+
+  Passed the per-pair unevidenced ratchet on the FIRST aggregate run, with
+  no repairs -- because the authoring aid that caused wave 2's six failures
+  was fixed first.  That aid applied "drifted > 0 -> declare a loss", which
+  cannot see the reconciler's `STRUCTURAL_ONLY` collapse; the collapse fires
+  only when a list sub-field's drift carries a `drift_summary` string and NO
+  `per_record` slice, and the FIRST such key per (cell, parent) claims the
+  signal in YAML key order.  The corrected aid replays that logic and emits
+  `STRUCT-rest -> declare good` for keys whose only drift is their parent
+  changing length.  **Back-tested against wave 2 rather than trusted: it
+  predicts `good` for all six keys that failed, and correctly keeps the two
+  that were genuine per-record losses as losses.**  88 keys in this wave fell
+  into that class.
+
+### Security
+
+- **An IOS-XR type-10 secret migrates to Arista EOS as the cleartext password
+  `10`.**  Surfaced by the wave-3 audit and reproduced independently before
+  being recorded.  The EOS render emits
+  `username <name> ... secret 0 10 <hash>`: `secret 0` is the EOS CLEARTEXT
+  marker, so the token EOS reads as the password is the literal string `10` --
+  the leftover IOS-XR type number -- and the SHA-512 body trails as garbage.
+  Re-parsing yields `hashed_password == "arista:0:10"`.  This is not
+  degradation, it is a **predictable weak credential on the target device**.
+  Type-5 accounts carry their hash intact; type-7 accounts are dropped
+  entirely (all 5 dropped records across 4 cells were type-7).
+  Recorded in `cisco_iosxr__arista_eos.yaml` with the operator instruction to
+  set passwords on the target before cutover.  **The codec fix is not in this
+  change** -- this wave documents behaviour and touches no codec.
 - **A6 wave 2: `aruba_aoscx` cross-vendor expectation coverage, all 18 pairs.**
   Coverage **560 -> 693 of 1224 cells (+133)**; ALIGNED 3743 -> 4890;
   **`CODEC_BUG` unchanged at 5** and **`METHODOLOGY_ISSUE_over` unchanged at

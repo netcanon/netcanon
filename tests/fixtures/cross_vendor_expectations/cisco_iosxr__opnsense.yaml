@@ -1,0 +1,620 @@
+# Cross-vendor fidelity expectations: cisco_iosxr -> opnsense
+#
+# Source: cisco_iosxr codec — IOS-XR `show running-config` text.
+# Target: opnsense codec — OPNsense `config.xml` render.
+#
+# Asymmetric by device class, but not in the usual direction.  IOS-XR in the
+# committed corpus is a service-provider edge/core router — 4-segment
+# interface names, `Bundle-Ether` LAGs, per-VRF static routing, MPLS L3VPN PE
+# roles.  OPNsense is a BSD edge firewall whose whole model is `config.xml`.
+# The realistic migration is a small provider edge or lab router being
+# replaced by a firewall doing the same interface-level job, so the shared
+# surface is the INTERFACE plane and almost nothing of the ROUTING plane.
+# There is no campus L2 surface on either side to argue about.
+#
+# The usual structural loss on this mesh — the interface list shrinking, so
+# every `interfaces[].*` sub-field drifts for one shared reason — does NOT
+# happen here.  156 source interface records, 156 survivors, on all 12 cells:
+# name, description, admin state, MTU, IPv4, IPv6 and LAG membership all
+# preserved with zero drift.  Almost every `interfaces[].*` key below is
+# therefore honestly `good`, and the losses that ARE declared each stand on
+# their own measurement rather than corroborating one another.
+#
+# The dominant loss is the routing plane: static routes (20 records / 6
+# cells), routing instances (15 records / 8 cells) and NTP servers (2 records
+# / 1 cell) are whole-record drops, all three declared unsupported at the
+# exact path by the opnsense matrix.
+#
+# Dispositions are grounded in the codecs' `CapabilityMatrix` declarations
+# and a full `run_full_mesh.py` pass over the committed corpus (12 fixture
+# cells, 0 render errors, 0 re-parse errors), resolved through the audit's
+# own `actual_disposition()` and the reconciler's structural-collapse rule so
+# this file and the ratchet cannot disagree.  Every counted claim was
+# additionally re-derived by parsing the fixture with cisco_iosxr and
+# rendering it with opnsense directly.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_iosxr_to_opnsense/
+#
+# Authored 2026-08-25 as part of the cisco_iosxr expectation mesh.
+
+meta:
+  source_vendor: cisco_iosxr
+  target_vendor: opnsense
+  primary_use_case: >
+    Provider-edge downsize: a Cisco IOS-XR edge or lab router replaced by an
+    OPNsense firewall carrying the same physical interface layout, addressing
+    and uplink bundles.  Hostname, domain, the full interface inventory
+    (names, descriptions, admin state, MTU, IPv4 and IPv6 addressing, LAG
+    membership), `Bundle-Ether` LAGs, VLAN ids and local usernames all
+    survive.  What does not is the entire routing plane — static routes and
+    VRFs are dropped wholesale — along with NTP servers, the interface type
+    discriminator, IOS-XR task-group roles and most user password material.
+  certainty: medium
+  references:
+    - id: iosxr-opnsense-surface
+      path: docs/vendor-references/cisco_iosxr_to_opnsense/canonical_surface.md
+      title: "IOS-XR -> OPNsense: measured canonical surface (12 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-08-25"
+
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # -- Tier 1 -- system scalars ---------------------------------------------
+  #
+  # Two different shapes live in this block and the YAML distinguishes them.
+  # `dns_servers` is declared SUPPORTED on both sides but populated by no
+  # committed cell, so its `good` rests on the declarations.  `ntp_servers`
+  # and `syslog_servers` are declared supported on the cisco_iosxr side and
+  # UNSUPPORTED on the opnsense side — target-side drops, one of them
+  # measured and one of them not, and the notes say which is which.
+
+  hostname:
+    disposition: good
+    note: >
+      `hostname <name>` on IOS-XR maps onto OPNsense's `<system><hostname>`;
+      both matrices declare `/system/hostname` supported and the value is
+      preserved on 12 of 12 cells.
+    references: [iosxr-opnsense-surface]
+
+  domain:
+    disposition: good
+    note: >
+      Preserved on all 8 cells that populate it (`test.com`, `lab.com`,
+      `test.lab`, `lab.example.net`); the other 4 carry no domain.  Worth
+      noting the asymmetry in the declarations: opnsense declares
+      `/system/domain` SUPPORTED while cisco_iosxr declares nothing for it at
+      all.  The round-trip works anyway — the gap is in the source matrix,
+      not in the migration.
+    references: [iosxr-opnsense-surface]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Both matrices declare `/system/dns-server` SUPPORTED, and OPNsense has
+      a natural home for it in `<system><dnsserver>`.  No committed IOS-XR
+      fixture populates the field, so this disposition rests on the two
+      declarations and NOT on an observed round-trip — stated plainly rather
+      than implied.
+    references: [iosxr-opnsense-surface]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      A total drop, measured: `iosxr_design_cst_pa3_xr752.cfg` carries 2 NTP
+      servers and the round-trip returns 0.  opnsense declares
+      `/system/ntp-server` UNSUPPORTED with the render behaviour spelled out
+      — it emits no `<system><timeservers>` block, so `intent.ntp_servers`
+      are dropped on migration — while cisco_iosxr declares the same path
+      SUPPORTED.  Recorded `unsupported` rather than `lossy` because the
+      records vanish rather than degrade (#436): `lossy` warns and stays
+      compatible, which would understate a firewall that comes up with no
+      time source.  Re-author the NTP servers on the OPNsense side.
+    references: [iosxr-opnsense-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Both matrices declare `/system/timezone` UNSUPPORTED, so this is a
+      symmetric gap in the pair rather than an OPNsense limitation — neither
+      codec parses nor renders a clock/timezone stanza.  No committed cell
+      populates it, so nothing was measured; the declaration is the whole
+      basis.  Set the timezone on the target by hand.
+    references: [iosxr-opnsense-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      A target-side drop by declaration: cisco_iosxr declares
+      `/system/syslog-server` SUPPORTED while opnsense declares it
+      UNSUPPORTED, with the reason recorded on the matrix entry — the render
+      emits no remote-syslog config, so `intent.syslog_servers` are dropped.
+      No committed IOS-XR fixture populates the field, so unlike
+      `ntp_servers` this one was NOT observed dropping; it rests on the
+      target's declaration and its stated render behaviour.  Re-author
+      logging hosts on the firewall.
+    references: [iosxr-opnsense-surface]
+
+  # -- Interfaces -- the plane that survives ---------------------------------
+  #
+  # The interface RECORD count is preserved on every cell (15/15, 17/17,
+  # 55/55, ...): 156 source records, 156 survivors.  So unlike most pairs in
+  # this mesh, these keys carry independent signal — a `good` here means the
+  # attribute really was measured intact, and the one `lossy` is not
+  # corroborated by its siblings.
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Preserved on 12 of 12 cells.  IOS-XR's 4-segment names
+      (`GigabitEthernet0/0/0/1.35`, `MgmtEth0/RP0/CPU0/0`) come back
+      byte-identical through the OPNsense render — the inventory does not
+      shrink on this pair, which is what makes every other `interfaces[].*`
+      key below an independent measurement rather than an echo of a
+      structural drop.
+    references: [iosxr-opnsense-surface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Preserved on all 9 cells that populate it, with zero drifting records
+      out of 156.  opnsense declares `/interfaces/interface/config/description`
+      LOSSY, but its recorded reason is about length limits OTHER vendors
+      impose (Cisco 240 characters, Juniper 900) — OPNsense itself imposes
+      none, so that declaration does not bite on this pair.
+    references: [iosxr-opnsense-surface]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Admin state is preserved on every one of the 156 interface records.
+      IOS-XR `shutdown` maps onto OPNsense's `<enable>` element cleanly, and
+      because no record is dropped there is no case of a shut port silently
+      arriving as absent rather than disabled.
+    references: [iosxr-opnsense-surface]
+
+  "interfaces[].mtu":
+    disposition: good
+    note: >
+      Preserved on all 4 cells that set an MTU (11 interfaces in total across
+      `batfish_ibgp_border01`, `batfish_ibgp_rr`, `iosxr_design_cst_pa3_xr752`
+      and `kitchen_sink`), zero drifting records.
+    references: [iosxr-opnsense-surface]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      Preserved on all 3 cells that carry IPv6 on an interface
+      (`iosxr_design_cst_pa3_xr752`, `xrdtools_srv6_pe1`, `kitchen_sink` — 11
+      interfaces in total), with matching address counts on both sides.  One
+      caveat that is NOT exercised by this corpus: opnsense declares
+      `/interfaces/interface/ipv6/address/secondary-ip` unsupported because
+      the render emits one IPv6 address per interface.  No committed IOS-XR
+      fixture carries a secondary IPv6 address, so that path was never
+      tested here — check it by hand if the source router uses one.
+    references: [iosxr-opnsense-surface]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Preserved on 12 of 12 cells with matching per-interface address counts.
+      Same untested caveat as the IPv6 key: opnsense declares
+      `/interfaces/interface/ipv4/address/secondary-ip` unsupported (one IPv4
+      address per interface on render, a whole-subnet reachability loss), and
+      no committed IOS-XR fixture carries a secondary address, so the corpus
+      says nothing about it.
+    references: [iosxr-opnsense-surface]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Drifts on 156 of 156 interface records, on all 12 cells:
+      `ianaift:ethernetCsmacd`, `ianaift:softwareLoopback` and
+      `ianaift:ieee8023adLag` all arrive as the empty string, because
+      OPNsense's `config.xml` `<interfaces>` block has no element that
+      carries an ianaift type.  Recorded `lossy` rather than `unsupported`
+      after checking the round-trip rather than reasoning from the drift
+      shape: the interface RECORD survives intact on every one of those 156
+      rows with its name, addressing and admin state, so `unsupported` —
+      which blocks — would overstate an interface plane that is otherwise
+      clean.  Per #436 the rule is that a vanished RECORD is not lossy; here
+      no record vanishes, only the type discriminator on it.  The
+      declarations point the same way: cisco_iosxr declares
+      `/interfaces/interface/config/type` LOSSY in its own matrix and
+      opnsense declares nothing at that path at all.
+    references: [iosxr-opnsense-surface]
+
+  "interfaces[].lag_member_of":
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate it (15 member interfaces in
+      total), zero drifting records.  The audit canonicalises LAG names
+      before comparing, so a pure rename would not count as drift either way
+      — but here nothing drifts at all: the `Bundle-Ether` names survive
+      verbatim and every member interface survives with them.  See `lags` for
+      the bundle-side round-trip that confirms membership is genuinely intact
+      rather than merely un-compared.
+    references: [iosxr-opnsense-surface]
+
+  "interfaces[].vrrp_groups":
+    disposition: not_applicable
+    reason: >
+      Source-side gap.  cisco_iosxr declares the whole
+      `/interfaces/interface/vrrp-groups/group/*` subtree UNSUPPORTED — mode,
+      priority, preempt, advertisement-interval, authentication, virtual
+      IPv6s and description — so the canonical field is never populated from
+      this source, and no committed cell populates it.  Recorded
+      `not_applicable` (a source-side gap) rather than `unsupported` (a
+      target-side drop) because that distinction tells a reader whether
+      re-authoring on the target would help.  Here it only half helps:
+      opnsense's `<virtualip>` hosts CARP-only HA groups, and its matrix
+      declares `/interfaces/interface/vrrp-groups/group` LOSSY precisely
+      because a non-CARP mode is skipped on render.  Re-author first-hop
+      redundancy on the firewall as CARP.
+    references: [iosxr-opnsense-surface]
+
+  # -- VLANs -- one field wide on this pair ----------------------------------
+  #
+  # `cisco_iosxr/parse.py::_parse_dot1q_vlans` synthesises CanonicalVlan
+  # records from `encapsulation dot1q <vid>` and returns
+  # `CanonicalVlan(id=vid, name="")` — name hard-coded empty, no port
+  # membership, no address, no description.  IOS-XR has no `vlan N / name X`
+  # stanza to harvest.  So every VLAN sub-field except `id` is a source-side
+  # gap on this pair, regardless of what either matrix declares.
+
+  "vlans[].id":
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate VLANs — ids 35, 35, 200 and 100,
+      one VLAN per cell, all surviving.  Both matrices declare
+      `/vlans/vlan/id` supported.  Do NOT read this as "the VLAN migrated":
+      on all 4 of those cells the sub-interface tag that GENERATED the record
+      (`interfaces[].dot1q_vlan`) drops to null, because opnsense declares
+      `/interfaces/interface/dot1q-vlan` unsupported.  The id survives as a
+      bare number in a list while the routed sub-interface it belonged to
+      arrives untagged — a reachability change this key cannot show.
+    references: [iosxr-opnsense-surface]
+
+  "vlans[].name":
+    disposition: not_applicable
+    note: >
+      Source-side gap, verified in the codec rather than inferred: the
+      cisco_iosxr parser constructs every VLAN record as
+      `CanonicalVlan(id=vid, name="")`, so no IOS-XR source ever carries a
+      VLAN name for this pair to migrate.  cisco_iosxr does declare
+      `/vlans/vlan/name` supported, but that declaration describes its render
+      side; its parse never produces one.  opnsense declares the same path
+      supported, so a name authored on the firewall will stick.
+    references: [iosxr-opnsense-surface]
+
+  "vlans[].ipv4_addresses":
+    disposition: not_applicable
+    note: >
+      Source-side gap, same cause as `vlans[].name`: the synthesised VLAN
+      record carries only an id, so an SVI-on-VLAN address is never
+      populated from an IOS-XR source.  On this platform L3 lives on the
+      routed sub-interface (`interfaces[].ipv4_addresses`, which is `good`),
+      not on a VLAN record.  Both matrices additionally declare
+      `/vlans/vlan/ipv4/address/ip` LOSSY, so nothing would survive there
+      even if the source did populate it.
+    references: [iosxr-opnsense-surface]
+
+  "vlans[].untagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side gap: an IOS-XR router has no campus access ports and the
+      VLAN synthesiser records no port membership at all, so this is never
+      populated.  Re-authoring on the target would not help either —
+      opnsense declares `/vlans/vlan/untagged-ports` UNSUPPORTED because it
+      binds a VLAN to a single parent sub-interface rather than to a set of
+      member ports.
+    references: [iosxr-opnsense-surface]
+
+  "vlans[].tagged_ports":
+    disposition: not_applicable
+    note: >
+      Source-side gap, identical mechanism to `vlans[].untagged_ports`, and
+      opnsense declares `/vlans/vlan/tagged-ports` UNSUPPORTED for the same
+      single-parent-sub-interface reason.  Neither side of this pair models
+      multi-port VLAN membership.
+    references: [iosxr-opnsense-surface]
+
+  "vlans[].description":
+    disposition: not_applicable
+    note: >
+      Source-side gap: the synthesised VLAN record has no description field
+      populated, and IOS-XR has no VLAN stanza to carry one.  opnsense
+      declares `/vlans/vlan/description` LOSSY — it renders the VLAN name but
+      not a separate description line — so this would degrade on the target
+      even if a source could supply it.
+    references: [iosxr-opnsense-surface]
+
+  # -- Routing -- the dominant loss on this pair -----------------------------
+
+  static_routes:
+    disposition: unsupported
+    reason: >
+      A total drop, measured on every cell that populates it: 20 static-route
+      records across 6 cells (1, 1, 1, 12, 1 and 4) all round-trip to 0, and
+      the rendered `config.xml` contains no `<staticroutes>` block at all.
+      opnsense declares `/routing/static-route` UNSUPPORTED and is explicit
+      about the asymmetry — its parser HARVESTS routes (the `<gateways>`
+      default route plus `<staticroutes>/<route>` entries) but its renderer
+      emits none, so gateway, metric, description, interface and per-VRF
+      binding are all dropped with the route.  cisco_iosxr declares
+      `/routing/static-route` SUPPORTED, so this loss is entirely
+      target-side.  Recorded `unsupported` rather than `lossy` because the
+      records vanish (#436) — an IOS-XR router's whole static-route table
+      arrives empty, which is a reachability failure rather than a
+      degradation.  Re-create the routes on the firewall before cutover.
+    references: [iosxr-opnsense-surface]
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/dhcp-servers/pool` UNSUPPORTED
+      and no committed cell populates it — an IOS-XR edge router relays DHCP
+      rather than serving it.  opnsense declares nothing at that path, so the
+      canonical field is simply never exercised on this pair.  An OPNsense
+      box will normally serve DHCP; that has to be authored on the target.
+    references: [iosxr-opnsense-surface]
+
+  # -- SNMP -- entirely a source-side gap ------------------------------------
+  #
+  # cisco_iosxr populates NO SNMP on any of the 12 cells (`intent.snmp` is
+  # None on every one).  Four of the five keys below are therefore
+  # `not_applicable`; only `snmp.v3_users` is a symmetric declared gap.
+
+  "snmp.community":
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/snmp/community` UNSUPPORTED and
+      populates no SNMP at all on any cell.  opnsense declares the same path
+      SUPPORTED, so community strings authored on the firewall will stick —
+      worth doing by hand as part of the cutover, and worth saying in the
+      migration report rather than implying the target cannot hold them.
+    references: [iosxr-opnsense-surface]
+
+  "snmp.location":
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares nothing for `/snmp/location` and
+      emits no SNMP block on any of the 12 cells, so nothing reaches the
+      target.  opnsense declares `/snmp/location` SUPPORTED — re-author it on
+      the firewall.
+    references: [iosxr-opnsense-surface]
+
+  "snmp.contact":
+    disposition: not_applicable
+    note: >
+      Source-side gap, same shape as `snmp.location`: no declaration on the
+      cisco_iosxr side and no populated cell.  opnsense declares
+      `/snmp/contact` SUPPORTED.
+    references: [iosxr-opnsense-surface]
+
+  "snmp.trap_hosts":
+    disposition: not_applicable
+    note: >
+      Source-side gap, same shape as `snmp.location`: nothing is emitted from
+      the IOS-XR side on any cell.  opnsense declares `/snmp/trap-host`
+      SUPPORTED, so trap destinations re-authored on the firewall will stick.
+    references: [iosxr-opnsense-surface]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      A symmetric declared gap rather than an OPNsense limitation.
+      cisco_iosxr declares `/snmp/v3-user/auth-protocol`, `/priv-protocol`,
+      `/priv-passphrase` and `/group` UNSUPPORTED; opnsense declares
+      `/snmp/v3-user` itself UNSUPPORTED plus the same four children, because
+      its SNMPv3 user store lives in the bsnmpd / net-snmp plugin's own
+      configuration file rather than in the `config.xml` this codec reads and
+      writes.  No committed cell populates the field, so nothing was measured
+      — both declarations are the whole basis.  SNMPv3 users cannot be
+      migrated by either side of this pair and must be re-created on the
+      target.
+    references: [iosxr-opnsense-surface]
+
+  # -- LAGs ------------------------------------------------------------------
+
+  lags:
+    disposition: good
+    note: >
+      Preserved on all 4 cells that populate it — 10 `Bundle-Ether` records
+      in total, every one round-tripping with its name, mode and member list
+      intact.  This was verified by round-trip rather than read off the drift
+      matrix, because a bare `lags` result is often the cross-vendor
+      LAG-naming artifact: OPNsense's `lagg` rendering keeps the
+      `Bundle-Ether<N>` names verbatim and re-parses the same 2-, 1- and
+      0-member bundles.  One declared path is NOT cleared by this result:
+      opnsense declares `/lags/lag/mode` LOSSY because its `lagg` uses a
+      single `lacp` proto with no active/passive distinction, so a `passive`
+      bundle would re-parse as `active`.  The corpus holds 9 `active` and 1
+      `static` bundle and no `passive` one, so that path is simply
+      unexercised here.
+    references: [iosxr-opnsense-surface]
+
+  # -- Identity --------------------------------------------------------------
+  #
+  # The user RECORDS never vanish — 14 source users, 14 survivors across the
+  # 9 populated cells — but both value-bearing sub-fields drift on every
+  # record.  Both matrices declare `/local-users/user/name`, `/role` and
+  # `/hashed-password` SUPPORTED, which makes the target matrix an
+  # under-declaration on this surface; that is a codec-level observation and
+  # is left for a codec change rather than fixed here.
+
+  "local_users[].name":
+    disposition: good
+    note: >
+      Usernames preserved on all 9 cells that populate local users — 14 of 14
+      records survive with the name intact.  The account is created on the
+      target; what it arrives without is covered by the two keys below.
+    references: [iosxr-opnsense-surface]
+
+  "local_users[].role":
+    disposition: lossy
+    reason: >
+      Drifts on 14 of 14 user records across all 9 populated cells, and the
+      value is REWRITTEN rather than dropped, which is what makes this lossy
+      rather than unsupported: the IOS-XR task-group collapses into
+      OPNsense's two-tier model, `root-lr` -> `admin` on 13 records and
+      `operator` -> `user` on 1.  The account keeps a role and stays usable,
+      so `lossy` (warn, stay compatible) is the truthful signal — but any
+      finer IOS-XR task-group grant is gone, and a `root-lr` operator lands
+      with full firewall admin.  Review the privilege of every migrated
+      account.
+    references: [iosxr-opnsense-surface]
+
+  "local_users[].hashed_password":
+    disposition: lossy
+    reason: >
+      Drifts on 14 of 14 user records, and the split is the operationally
+      important part.  11 records LOSE the secret entirely: they carry IOS-XR
+      type-5 (`5 $1$...` md5crypt) or short non-crypt forms, and the OPNsense
+      renderer refuses them by design — `_TARGET_ACCEPTS["opnsense"]` in
+      `netcanon/migration/_user_secrets.py` admits only plaintext and bcrypt,
+      and a non-migratable hash is replaced by an XML review comment inside
+      `<user>` naming the source algorithm, with `<password>` omitted.  Those
+      accounts arrive without a working credential and must have a password
+      set on the target before cutover.  The remaining 3 records carry IOS-XR
+      type-10 (`secret 10 $6$...`) and keep the secret, but re-labelled: the
+      round-tripped value is the source value plus a 7-character `bcrypt:`
+      prefix, with the digest body unchanged.  Recorded `lossy` rather than
+      `unsupported` because the user record itself never vanishes (#436) —
+      the account migrates, the credential does not.
+      No hash value, salt or digest is quoted here or in the reference note:
+      per `AGENTS.md`, `$1$` / `$6$`-form secrets are operator-traceable even
+      though they are one-way, so only lengths, algorithm identifiers and
+      structural prefixes are recorded.
+    references: [iosxr-opnsense-surface]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/radius-servers/server/host` and
+      `/radius-servers/server/key` UNSUPPORTED and no committed cell
+      populates the field, so nothing reaches the target.  opnsense declares
+      nothing at those paths.  Re-author RADIUS on the firewall.
+    references: [iosxr-opnsense-surface]
+
+  # -- Fabric -- neither side models it --------------------------------------
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: >
+      Symmetric declared gap: BOTH matrices declare `/vxlan-vnis/vni`
+      UNSUPPORTED.  opnsense states the reason plainly — VXLAN is not
+      modelled because it is a firewall codec — and cisco_iosxr declares the
+      same path unsupported alongside `/vxlan-vnis/source-interface` and
+      `/vxlan-vnis/udp-port`.  No committed cell populates the field, so
+      nothing was measured; the two declarations are the whole basis.
+      Neither end of this pair can carry a VXLAN overlay.
+    references: [iosxr-opnsense-surface]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: unsupported
+    reason: >
+      Rides on the same unsupported record as `vxlan_vnis[].vni`.  Neither
+      matrix declares `/vxlan-vnis/vlan-id` at its exact path, but both
+      declare the VNI record that would carry it UNSUPPORTED, so the
+      VNI-to-VLAN binding has nowhere to live on either side.  Recorded
+      `unsupported` rather than `not_applicable` to stay coherent with the
+      sibling key — it is the same record, and splitting the two would imply
+      a distinction the codecs do not make.  Not measured: no cell populates
+      VXLAN.
+    references: [iosxr-opnsense-surface]
+
+  "vxlan_vnis[].mcast_group":
+    disposition: unsupported
+    reason: >
+      Same record and same symmetric gap as `vxlan_vnis[].vni` and
+      `vxlan_vnis[].vlan_id`: neither codec models VXLAN, so a multicast
+      replication group has nowhere to live on either side.  Not measured —
+      no committed cell populates VXLAN on this pair.
+    references: [iosxr-opnsense-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Source-side gap: cisco_iosxr declares `/evpn-type5-routes/route`
+      UNSUPPORTED, so even the L3VPN PE fixtures in this corpus never
+      populate the canonical field, and opnsense declares nothing at that
+      path.  An OPNsense firewall is not an EVPN border-leaf, so there is no
+      re-authoring path on the target either.
+    references: [iosxr-opnsense-surface]
+
+  # -- Routing instances -- the second whole-record drop ---------------------
+  #
+  # Key ORDER matters here.  The reconciler collapses per-cell structural
+  # drift onto the FIRST sub-field of each parent list it encounters, so
+  # `routing_instances[].name` carries the record-level loss for the whole
+  # list and `routing_instances[].description` is deliberately `good`.
+
+  "routing_instances[].name":
+    disposition: unsupported
+    reason: >
+      A total drop, measured: 15 routing-instance records across 8 cells
+      (1, 1, 3, 3, 3, 1, 1 and 2) all round-trip to 0, and the rendered
+      `config.xml` contains no VRF construct at all.  opnsense declares
+      `/routing-instances/instance` UNSUPPORTED — the render emits no
+      VRF/routing-instance construct, so `intent.routing_instances` are
+      dropped on migration — while cisco_iosxr declares the same path only
+      LOSSY.  Recorded `unsupported` rather than `lossy` because the records
+      vanish (#436): an IOS-XR PE's customer VRFs arrive as nothing, which is
+      a blocking difference rather than a degradation.  The interface-side
+      view of the same drop is `interfaces[].vrf`, which empties on 16
+      records across 8 cells; that key is outside this file's audited set and
+      is recorded in the reference note.  This key also carries the
+      structural signal for the whole `routing_instances` list — see the
+      sibling below.
+    references: [iosxr-opnsense-surface]
+
+  "routing_instances[].description":
+    disposition: good
+    note: >
+      Deliberately `good`, and the reasoning is worth stating because the raw
+      drift matrix disagrees.  This key does show drift on the same 8 cells —
+      but the drift is purely the parent list changing length, which
+      `routing_instances[].name` above already claims.  The reconciler
+      collapses every subsequent sub-field of the same parent in the same
+      cell to STRUCTURAL_ONLY, so a loss declared HERE could never be
+      evidenced by any cell and would fail the per-pair ratchet by
+      construction.  The record vanishing is real and belongs to the sibling;
+      this key is about what happens to the VRF description when the record
+      SURVIVES — and on this corpus no record survives with a changed
+      description.  No committed cell sets a VRF description that outlives
+      its instance, so there is nothing here to report as lost twice.
+    references: [iosxr-opnsense-surface]
+
+  # -- Passthrough / vendor-specific ----------------------------------------
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Not populated on any cell of this pair, and neither matrix declares
+      anything under raw sections — no committed IOS-XR fixture carries an
+      unparsed block that survives to render.
+    references: [iosxr-opnsense-surface]
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [iosxr-opnsense-surface]
+
+  group_content:
+    disposition: not_applicable
+    note: "Junos-specific canonical surface; neither codec in this pair populates it."
+    references: [iosxr-opnsense-surface]
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Symmetric declared gap: both matrices declare `/anycast-gateway-mac`
+      UNSUPPORTED.  Neither an IOS-XR edge router nor an OPNsense firewall
+      models a fabric-wide anycast gateway MAC in this codec pair, so it is
+      recorded `unsupported` rather than `not_applicable` — the gap is on
+      both sides, and re-authoring on the target would not help.  No
+      committed cell populates it, so nothing was measured.
+    references: [iosxr-opnsense-surface]
