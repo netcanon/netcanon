@@ -276,7 +276,7 @@ jobs:
           cosign sign --yes "${SHIM_REF}"
 
       - name: Generate warden SBOM (SPDX JSON) via syft
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26  # v0.24.2
         with:
           image: ${{ env.REGISTRY }}/${{ env.WARDEN_IMAGE_NAME }}@${{ steps.build_warden.outputs.digest }}
           format: spdx-json
@@ -289,7 +289,7 @@ jobs:
           upload-release-assets: false
 
       - name: Generate shim SBOM (SPDX JSON) via syft
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26  # v0.24.2
         with:
           image: ${{ env.REGISTRY }}/${{ env.SHIM_IMAGE_NAME }}@${{ steps.build_shim.outputs.digest }}
           format: spdx-json
@@ -339,7 +339,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v4.37.7
+        uses: github/codeql-action/upload-sarif@v4.37.9
         continue-on-error: true   # reporting only; never fail a publish (images are signed + verified by now)
         if: always()      # upload even if Trivy failed, so partial findings still surface
         with:
@@ -606,7 +606,7 @@ jobs:
       # mutable, so building the release fully before publishing is the only
       # shape that works both with the setting on and with it off.
       - name: Attach the signed bundle to a DRAFT release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3.0.3
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           draft: true
