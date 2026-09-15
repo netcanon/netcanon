@@ -487,17 +487,20 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      OPNsense bcrypt hashes (``$2a$`` / ``$2b$`` / ``$2y$``) are
-      NOT accepted by Arista's ``secret`` parser (which expects
-      type ``5`` MD5-crypt or ``sha512`` SHA-512-crypt forms);
-      cross-pair render passes the bcrypt blob verbatim and the
-      Arista CLI rejects it on apply.  Operators reset passwords
-      on the Arista target.  Privilege number collapses bidirec-
-      tionally: OPNsense's binary admin / non-admin source maps
-      directly to Arista's privilege 15 / 1 endpoints; mid-range
-      privileges (5, 10) are unrecoverable.  Arista's richer role
-      vocabulary (``network-admin`` / ``network-operator`` /
-      custom roles) is unreachable from an OPNsense source.
+      6 of 14 accounts arrive across the 7 cells that populate local users; the
+      list shrinks on 5 of them. The 8 accounts that vanish carry 8 bcrypt
+      (`$2y$` / `$2b$`). EOS can consume `secret 5` (MD5 crypt), `secret
+      sha512`, or a genuine plaintext password; anything else is refused with a
+      review comment naming the account and no user entry. Before #462 the
+      classifier trusted OPNsense's unconditional `bcrypt:` tag, so the `$6$`
+      SHA-512 crypt secrets on the HA fixtures were refused as if they were
+      bcrypt; it now reads the crypt id inside the tag. The survivors are 2
+      carrying 2 SHA-512 crypt (`$6$`) and 4 with no stored secret. Recorded
+      `lossy` rather than `unsupported`: which account survives is decided by
+      its secret form, and accounts with a consumable secret do arrive. Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a fresh
+      password.
     references: [opnsense-users, arista-user-security]
 
   radius_servers:

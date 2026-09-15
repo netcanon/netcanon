@@ -240,6 +240,9 @@ cannot fire here. A passive-LACP source would hit it.
 
 ## Credential material — a real defect on this pair
 
+<!-- secret-gate-462 -->
+> **Update 2026-09-15 (#462) — the local-user behaviour described in this document has changed.**  The shared secret classifier now reads the crypt id inside a Junos `junos:` envelope or an OPNsense `bcrypt:` tag instead of trusting the tag, and OPNsense accepts SHA-512 crypt.  Measured after the change: **17 of 17** local accounts arrive across the 13 cells that populate users. Secrets that arrive are re-wrapped into the target's native form (16 SHA-512 crypt (`$6$`) as `<password>`); the credential itself is unchanged.  Any statement below that these accounts are refused, arrive without a password, or are classified by that tag describes the behaviour before this change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__opnsense.yaml`.
+
 **No hash body is reproduced in this file or in the expectation YAML.** Only
 the crypt-scheme marker, the scheme tag and record counts are described. The
 `$6$`/`$2y$` strings below are scheme markers, not values.
@@ -274,7 +277,7 @@ This is precisely the outcome `netcanon/migration/codecs/opnsense/render.py`
 says the review-line path exists to prevent — its own comment calls it "a
 broken hash literal masquerading as bcrypt". The policy plainly intends to
 block it: `sha512` is listed in `_UNIVERSALLY_UNMIGRATABLE` and is absent from
-`_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt}`. Tag the identical hash
+`_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt}` at the time (sha512 was added in #462). Tag the identical hash
 `sha512:` and `is_migratable()` correctly returns `False`. **The bypass is
 purely the untagged input shape**, which is the shape vyos produces.
 

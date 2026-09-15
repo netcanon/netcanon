@@ -87,8 +87,8 @@ Aruba -> OPNsense:
   granularity that Cisco-style sources carry has no Aruba
   equivalent in the first place.
 - `local_users[].hashed_password`: **lossy** — Aruba SHA-1 hex,
-  bcrypt, or plaintext are NOT all cross-compatible with OPNsense's
-  bcrypt-only acceptance.  Bcrypt-shape hashes from a recent Aruba
+  bcrypt, or plaintext are NOT all cross-compatible with what OPNsense
+  accepts (bcrypt, and SHA-512 crypt since #462).  Bcrypt-shape hashes from a recent Aruba
   firmware MIGHT round-trip if the prefix matches; plaintext (which
   Aruba accepts on the wire) and SHA-1 hex will be rejected on apply.
   Operators typically reset passwords on the OPNsense target.  Both

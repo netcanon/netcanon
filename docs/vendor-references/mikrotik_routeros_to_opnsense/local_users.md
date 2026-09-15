@@ -62,12 +62,11 @@ OPNsense stores user accounts inside ``<system>/<user>`` blocks.
 Each user has a ``<groupname>`` reference into a ``<system>/<group>``
 block (groups carry GID + member UID list + privilege strings).
 
-Password material is **bcrypt** (FreeBSD ``crypt(3)``-compatible:
-``$2a$`` / ``$2b$`` / ``$2y$`` prefixes accepted interchangeably).
-This is incompatible with most other vendors' hash forms — Cisco
-type-9 / type-8 / type-5, Aruba SHA-1 hex / plaintext, and Junos
-``$1$`` MD5-crypt all fail OPNsense's bcrypt-only validator on
-apply.
+Password material is normally **bcrypt** (``$2a$`` / ``$2b$`` / ``$2y$``),
+verified with PHP ``password_verify()``; real OPNsense HA configs also store
+SHA-512 crypt (``$6$``), which netcanon accepts since #462.  Cisco type-9 /
+type-8 / type-5 wrappers, Aruba SHA-1 hex and ``$1$`` MD5-crypt are still not
+re-used.
 
 ## Cross-vendor mapping
 

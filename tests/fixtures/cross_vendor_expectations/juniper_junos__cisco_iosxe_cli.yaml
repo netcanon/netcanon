@@ -582,16 +582,22 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Hash-format compatibility is partial.  Only ``$1$`` (MD5)
-      crypts cross between Junos's ``encrypted-password`` and
-      Cisco's ``secret 5``.  Junos's ``$6$`` (SHA-512, default
-      since 17.2) is rare on Cisco today — modern IOS-XE may not
-      parse it.  Junos's ``$5$`` (SHA-256) is similarly uncommon
-      on Cisco.  Junos's named ``class super-user / operator /
-      read-only`` and Cisco's numeric ``privilege 1-15`` don't
-      1:1; canonical preserves the source string but operator-
-      curated mapping required.  Re-key after migration is the
-      safe path.
+      4 of 13 accounts arrive across the 8 cells that populate local users; the
+      list shrinks on 4 of them. The 8 accounts that vanish carry 4 SHA-512
+      crypt (`$6$`), 4 `junos:`-wrapped value with no crypt id (a sanitisation
+      placeholder in this corpus). IOS-XE can consume Cisco type 5 / 7 / 8 / 9,
+      or a genuine plaintext password; anything else is refused with a review
+      comment naming the account and no user entry. Before #462 the classifier
+      trusted the `junos:` envelope every Junos secret is stored in instead of
+      the crypt id inside it, so every Junos account was refused on every other
+      vendor; it now reads the id, and the `$1$` / `$6$` secrets route to a form
+      the target consumes. 1 further account with no stored secret also
+      vanishes: the IOS-XE render has no passwordless form its own parser reads
+      back. The survivors are 4 carrying 4 MD5 crypt (`$1$`). Recorded `lossy`
+      rather than `unsupported`: which account survives is decided by its secret
+      form, and accounts with a consumable secret do arrive. Before cutover,
+      list the source accounts, search the render for `review:` comments, and
+      re-create each refused account on the target with a fresh password.
     references: [junos-password-cli, junos-kb-password-format, cisco-username-cli, cisco-password-types]
 
   # ── Tier 2 — RADIUS ──

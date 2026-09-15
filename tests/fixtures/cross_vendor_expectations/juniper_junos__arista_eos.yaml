@@ -390,7 +390,22 @@ per_field_expectation:
 
   local_users:
     disposition: lossy
-    reason: "Junos class tokens map to Arista privilege levels: super-user -> privilege 15, operator -> privilege 7, read-only -> privilege 1. Operator-defined classes collapse to privilege 7 with comment. Hash formats: Junos $6$ (SHA-512, default since 17.2 per KB31903) round-trips losslessly via Arista 'secret sha512 $6$...'. $5$ (SHA-256) and $1$ (MD5) are accepted historically but image-dependent on modern EOS — render emits with comment. Junos SSH-public-key authentication ('set system login user X authentication ssh-rsa \"<key>\"') has no canonical fit in the hash-shaped CanonicalLocalUser.hashed_password field — parse-and-ignore today (deferred). Re-keying caveat: $6$ hashes computed with username-based salt invalidate if the user's name changes between platforms."
+    reason: >
+      9 of 13 accounts arrive across the 8 cells that populate local users; the
+      list shrinks on 1 of them. The 4 accounts that vanish carry 4
+      `junos:`-wrapped value with no crypt id (a sanitisation placeholder in
+      this corpus). EOS can consume `secret 5` (MD5 crypt), `secret sha512`, or
+      a genuine plaintext password; anything else is refused with a review
+      comment naming the account and no user entry. Before #462 the classifier
+      trusted the `junos:` envelope every Junos secret is stored in instead of
+      the crypt id inside it, so every Junos account was refused on every other
+      vendor; it now reads the id, and the `$1$` / `$6$` secrets route to a form
+      the target consumes. The survivors are 8 carrying 4 SHA-512 crypt (`$6$`),
+      4 MD5 crypt (`$1$`) and 1 with no stored secret. Recorded `lossy` rather
+      than `unsupported`: which account survives is decided by its secret form,
+      and accounts with a consumable secret do arrive. Before cutover, list the
+      source accounts, search the render for `review:` comments, and re-create
+      each refused account on the target with a fresh password.
     references: [junos-password-cli, junos-kb-password-format, arista-user-security]
 
   # ── Tier 2 — RADIUS ──

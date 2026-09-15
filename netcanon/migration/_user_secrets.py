@@ -106,7 +106,10 @@ _UNIVERSALLY_UNMIGRATABLE: frozenset[str] = frozenset({
 #: * ``juniper_junos`` accepts crypt-format $1$ (md5) and $6$
 #:   (sha512) — they're recognised by the Junos commit-time hasher.
 #:   Pure ``sha512`` from Arista IS migratable to Junos.
-#: * ``opnsense`` is FreeBSD/PHP-style and accepts bcrypt ($2y$).
+#: * ``opnsense`` verifies local passwords with PHP ``password_verify()``,
+#:   which consumes any crypt(3) hash.  It accepts bcrypt ($2y$) and SHA-512
+#:   crypt ($6$); the latter is evidenced by real OPNsense HA configs in the
+#:   corpus.  MD5 crypt is not accepted: no OPNsense capture carries it.
 #: * ``mikrotik_routeros`` does NOT accept foreign hashes — RouterOS
 #:   re-hashes the supplied password itself.  Plaintext only.
 #: * ``cisco_nxos`` writes every crypt(3) form under ``password 5``:
@@ -160,6 +163,51 @@ _STRUCTURED_PREFIXES: tuple[tuple[str, str], ...] = (
 #: hole.
 _UNKNOWN = "unknown"
 
+#: Tags that are a vendor ENVELOPE rather than an algorithm.  The Junos parser
+#: stores every account secret as ``junos:<value>`` whatever the value is —
+#: ``$1$`` MD5 crypt, ``$6$`` SHA-512 crypt, or a sanitisation placeholder —
+#: so the tag says where the secret came from, not how to consume it.
+_ENVELOPE_TAGS: frozenset[str] = frozenset({"junos"})
+
+#: Tags that DO name a crypt(3) algorithm, but can be wrong.  The OPNsense
+#: parser tags every password ``bcrypt:`` unconditionally, and real HA
+#: fixtures carry a ``$6$`` SHA-512 crypt body behind that tag.
+_CRYPT_FAMILY_TAGS: frozenset[str] = frozenset({
+    "md5crypt", "bcrypt", "sha256crypt", "sha512", "scrypt", "yescrypt",
+})
+
+#: crypt(3) ids whose presence in the payload overrides an envelope or a
+#: contradicting crypt-family tag.  ``$9$`` is deliberately absent: it is
+#: Juniper's reversible form AND Cisco's type-9 scrypt, so the id alone
+#: cannot decide.  ``AQB`` is vendor ciphertext, not crypt(3).
+_CRYPT_ID_PREFIXES: tuple[tuple[str, str], ...] = tuple(
+    (prefix, algorithm) for prefix, algorithm in _STRUCTURED_PREFIXES
+    if prefix.startswith("$") and prefix != "$9$"
+)
+
+
+def _trust_payload_id(tag: str, payload: str) -> str:
+    """Resolve the algorithm of a tagged secret.
+
+    A tag is kept unless it is an envelope (:data:`_ENVELOPE_TAGS`) or a
+    crypt-family name (:data:`_CRYPT_FAMILY_TAGS`), in which case the
+    payload's own crypt(3) id wins.  Before this, ``junos:$6$...`` classified
+    as the algorithm ``junos`` and ``bcrypt:$6$...`` as ``bcrypt``: every
+    target refused the first, and the second was handed to OPNsense and every
+    other bcrypt consumer as if it were bcrypt.  Both failed CLOSED, so this
+    recovers credentials rather than closing a leak.  A payload with no
+    recognisable id keeps its tag, so a sanitisation placeholder behind
+    ``junos:`` is still refused everywhere but Junos.
+    """
+    if tag not in _ENVELOPE_TAGS and tag not in _CRYPT_FAMILY_TAGS:
+        return tag
+    for prefix, algorithm in _CRYPT_ID_PREFIXES:
+        if payload.startswith(prefix):
+            return algorithm
+    if tag in _ENVELOPE_TAGS and payload.startswith("$9$"):
+        return "junos_type9"
+    return tag
+
 
 _TARGET_ACCEPTS: dict[str, frozenset[str]] = {
     "aruba_aoss":        frozenset({"plaintext", "sha1", "sha256"}),
@@ -167,7 +215,7 @@ _TARGET_ACCEPTS: dict[str, frozenset[str]] = {
     "cisco_iosxe_cli":   frozenset({"plaintext", "5", "7", "8", "9", "md5crypt"}),
     "fortigate_cli":     frozenset({"plaintext", "fortios"}),
     "juniper_junos":     frozenset({"plaintext", "junos_type1", "junos_type9", "sha512"}),
-    "opnsense":          frozenset({"plaintext", "bcrypt"}),
+    "opnsense":          frozenset({"plaintext", "bcrypt", "sha512"}),
     "mikrotik_routeros": frozenset({"plaintext"}),
     "cisco_nxos":        frozenset({"plaintext", "5", "md5crypt", "sha256crypt"}),
     "cisco_iosxr":       frozenset({
@@ -211,9 +259,11 @@ def classify_hash(hashed: str) -> tuple[str, str]:
         first, _, rest = hashed.partition(":")
         if rest and ":" in rest:
             alg, _, payload = rest.partition(":")
-            return alg.lower(), payload
-        # Single-colon form: ``alg:<value>``.
-        return first.lower(), rest
+            return _trust_payload_id(alg.lower(), payload), payload
+        # Single-colon form: ``alg:<value>``.  The tag may be an envelope
+        # (``junos:``) or a wrong algorithm name (OPNsense's unconditional
+        # ``bcrypt:``) — see :func:`_trust_payload_id`.
+        return _trust_payload_id(first.lower(), rest), rest
 
     # Bare leading-digit Cisco form: ``5 $1$...`` / ``9 $9$...``.
     # ``10`` is IOS-XR's sha512crypt wrapper.  It is recognised here (rather

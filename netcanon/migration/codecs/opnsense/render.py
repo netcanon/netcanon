@@ -123,17 +123,19 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
             )
 
         # Local users (Tier 2).  Map canonical admin -> admins
-        # group, anything else -> users.  OPNsense's ``<password>``
-        # element only consumes bcrypt (``$2y$10$...``) hashes —
-        # FreeBSD's PHP-side password_verify() rejects everything
-        # else.  Foreign hashes (Cisco type-5/8/9, Arista sha512,
-        # FortiGate ENC, plain md5crypt) cannot be re-used; emitting
+        # group, anything else -> users.  OPNsense verifies the
+        # ``<password>`` element with PHP's password_verify(), and the
+        # forms its configs are observed to store are bcrypt
+        # (``$2y$10$...``) and SHA-512 crypt (``$6$...``, real HA
+        # configs).  Other hashes (Cisco type-5/8/9 wrappers, FortiGate
+        # ENC, md5crypt) are not re-used; emitting
         # them as-is leaks the source hash literal as the password
         # element value (CRITICAL security bug — see
         # tests/fixtures/real/user_smoke_findings.md issue #1).
         #
         # Policy lives in :mod:`netcanon.migration._user_secrets`
-        # (``_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt}``).
+        # (``_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt, sha512}``;
+        # PHP's password_verify() also consumes a ``$6$`` crypt string).
         # When the hash is unmigratable, emit a comment-form review
         # line INSIDE the ``<user>`` element naming the source
         # algorithm so the operator knows what to reset from, and

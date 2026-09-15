@@ -214,7 +214,7 @@ is a genuine `lossy`. Any finer IOS-XR task-group grant does not survive.
 
 - **11 of 14 records lose the secret entirely.** These carry IOS-XR type-5
   (`5 $1$…` md5crypt) or short non-crypt forms. `opnsense/render.py` refuses
-  them by design: `_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt}` in
+  them by design: `_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt, sha512}` (sha512 added in #462; IOS-XR's `5 $1$` and `10 $6$` wrappers are still not accepted) in
   `netcanon/migration/_user_secrets.py`, and a non-migratable hash is replaced
   by an XML review comment inside `<user>` naming the source algorithm, with
   `<password>` omitted. This is the correct, deliberate behaviour — the render
