@@ -443,52 +443,52 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      Drifts on 1 of 4 cells, and the mechanism is worth knowing exactly: on
-      the FG100E fixture the source carries 3 admins and the round-trip
-      recovers 1.  The rendered AOS-CX config contains ALL THREE `user ...
-      group ...` lines — the loss is on re-parse, which admits only the
-      account that also carries a password clause, so the two RADIUS-backed
-      admins (no local secret) do not survive the canonical round-trip.  An
-      operator reading the rendered file sees three accounts; a tool re-reading
-      it sees one.  A partial drop, so `lossy` rather than `unsupported`.
-      Audit the admin list on the target rather than assuming it matches.
+      No account arrives: 0 of 8 across all 4 cells that populate local users.
+      The stored secrets on this corpus: 6 FortiOS `ENC` ciphertext. AOS-CX can
+      consume its own device-keyed `AQB` ciphertext, or a genuine plaintext
+      password under `password plaintext`; anything else is refused on purpose
+      (#461) with a review comment naming the account and no user entry. Before
+      that change the value was written behind `password ciphertext`, a slot
+      that only holds AOS-CX's own device-keyed blob, so the account either
+      carried the source's stored secret as its literal password or could not
+      authenticate at all. 2 further accounts with no stored secret also vanish:
+      the AOS-CX render has no passwordless form its own parser reads back.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      entirely (#436) and a `lossy` warning would understate a target with no
+      local accounts. It is a property of the source's secret form, not a gap in
+      the AOS-CX user model: an account whose secret AOS-CX can consume would
+      still migrate. Create a console admin on the target out of band before
+      cutover, then re-create every account with a native credential.
     references: [fgt-aoscx-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      The role survives intact on every account that survives.
-      Drifts on the SAME single cell as `local_users[].name` and for the same
-      reason — the user list shrinks 3 -> 1 — so this key carries no
-      independent signal and is not evidence of a role-mapping problem.  On
-      every surviving record the role is preserved verbatim (`super_admin`,
-      `prof_admin`, `super_admin_readonly` all round-trip through the AOS-CX
-      `user <name> group <role>` token).  What DOES degrade independently, on
-      records that survive, is the neighbouring privilege level: 15 -> 1 on 3
-      records across 3 cells, because aruba_aoscx maps only the
-      `administrators` group back to 15 (it declares
-      `/local-users/user/privilege-level` lossy).  The account name and its
-      role label arrive intact while its authorisation level does not — check
-      privilege on every migrated admin before trusting it.  Recorded `good` rather than `lossy`: the only drift on this key is the parent record-count collapse, which the audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could never be evidenced by any cell.  The account vanishing is a real loss and is recorded against `local_users[].name`; this key is about what happens to the VALUE when the account survives.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [fgt-aoscx-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on all 4 cells, on every account that has a local secret.  The
-      FortiOS secret is a `fortios:ENC` marker followed by a space and a
-      base64 body; the AOS-CX render writes it into a single-token
-      `password ciphertext <token>` field, so the re-parse keeps the marker
-      and the body is gone.  The record survives, which is why this is `lossy`
-      and not `unsupported` — but every migrated account arrives without a
-      usable credential, and the FortiOS form is encrypted under the source
-      device's key, so it would not authenticate on Aruba hardware even if it
-      survived intact.  Set passwords on the target before cutover or the
-      accounts are unusable.  The ciphertext is deliberately NOT quoted here
-      or in the reference note — it is operator-traceable key material even
-      though it is encrypted.
+    disposition: good
+    note: >
+      No secret is written in a form AOS-CX cannot consume. 6 accounts are
+      refused for their secret (6 FortiOS `ENC` ciphertext) and vanish with it;
+      that loss is recorded once, under `local_users[].name`. No account
+      arrives, so no value reaches the target to compare. Before #461 this key
+      read preserved because the value was written behind `password ciphertext`,
+      a slot that only holds AOS-CX's own device-keyed blob; that preservation
+      was a leak or a dead credential, not a working one. Recorded `good` rather
+      than `lossy`: the only drift on this key is the parent record-count
+      collapse, which the audit attributes to `local_users[].name` and
+      reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could
+      never be evidenced. No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [fgt-aoscx-surface]
 
   # -- Fabric -- a FortiGate is not a VTEP ----------------------------------

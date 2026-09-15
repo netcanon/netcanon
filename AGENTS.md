@@ -340,6 +340,12 @@ tests use these exclusively — never CSS classes or element structure.  See
   so the paired expectation YAMLs must be re-authored in the same change
   (doc-sync 178).  Guarded by
   `tests/unit/migration/test_secret_fail_open.py`.
+  Classification is only half of it: **every codec that renders a local
+  user must call `is_migratable()`**.  Four did not until #461, and two of
+  them wrote foreign digests behind a cleartext marker regardless of how
+  well the secret was classified.  A new user-rendering codec goes in
+  `_USER_RENDERING_TARGETS` in that test file, which fails for any render
+  path that skips the gate.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

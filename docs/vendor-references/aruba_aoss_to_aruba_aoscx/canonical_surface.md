@@ -225,6 +225,9 @@ Two things in `lags` are *not* artifacts:
 
 ## Credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 5** local accounts now arrive across the 3 cells that populate users. 4 are refused for a secret AOS-CX cannot consume (4 AOS-S `sha1:` digest): the render emits a `review:` comment naming the account and no user entry. Surviving secrets are re-wrapped into the target's native form (1 plaintext password as `password plaintext`); the credential itself is unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoss__aruba_aoscx.yaml`.
+
 This pair is the exception in the mesh: **`local_users[].hashed_password` is
 `good`**, preserved on all 3 cells that populate local users (5 accounts). It
 survives because source and target are the same vendor family, so AOS-CX

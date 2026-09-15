@@ -488,57 +488,52 @@ per_field_expectation:
   # none of them corroborates the others.
 
   "local_users[].name":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      Preserved on 6 of 8 cells and drifts on 1 (the eighth defines no users).
-      The drift is a record collapse, 5 accounts in and 1 out, and the
-      mechanism was confirmed by reading the render: the four accounts that
-      vanish are the four with an EMPTY password.  AOS-CX renders them as bare
-      `user <name> group <group>` lines with no credential clause, and the
-      AOS-CX parser does not recover an account from a line with no password,
-      so they are lost on re-parse.  `lossy` rather than `unsupported` because
-      this is a partial collapse — the account WITH a password survives, so
-      the field stays compatible.  Operationally: OPNsense accounts that
-      authenticate by certificate or API key, and disabled placeholder
-      accounts, will not appear on the target.  Inventory the source account
-      list before cutover instead of diffing the migrated one.
+      No account arrives: 0 of 14 across all 7 cells that populate local users.
+      The stored secrets on this corpus: 10 `bcrypt:`-tagged OPNsense hash.
+      AOS-CX can consume its own device-keyed `AQB` ciphertext, or a genuine
+      plaintext password under `password plaintext`; anything else is refused on
+      purpose (#461) with a review comment naming the account and no user entry.
+      Before that change the value was written behind `password ciphertext`, a
+      slot that only holds AOS-CX's own device-keyed blob, so the account either
+      carried the source's stored secret as its literal password or could not
+      authenticate at all. 4 further accounts with no stored secret also vanish:
+      the AOS-CX render has no passwordless form its own parser reads back.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      entirely (#436) and a `lossy` warning would understate a target with no
+      local accounts. It is a property of the source's secret form, not a gap in
+      the AOS-CX user model: an account whose secret AOS-CX can consume would
+      still migrate. Create a console admin on the target out of band before
+      cutover, then re-create every account with a native credential.
     references: [opnsense-aoscx-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      The role survives intact on every account that survives.
-      Drifts on the same 1 cell, for the same single reason as
-      `local_users[].name` — the 5 -> 1 record collapse — and carries no
-      independent signal of its own.  On every surviving account the role
-      itself is exact: `admin` -> `admin` and `user` -> `user` on all 6
-      populated cells.  Worth separating from a neighbouring field the audit
-      does not key on: `privilege_level` drifts on all 8 accounts across the
-      corpus (15 -> 1), because aruba_aoscx maps its named groups back to a
-      numeric privilege and declares `/local-users/user/privilege-level`
-      lossy.  So the role NAME survives while the numeric privilege behind it
-      does not — check any automation that keys off privilege level.  Recorded `good` rather than `lossy`: the only drift on this key is the parent record-count collapse, which the audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could never be evidenced by any cell.  The account vanishing is a real loss and is recorded against `local_users[].name`; this key is about what happens to the VALUE when the account survives.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [opnsense-aoscx-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      The stored secret survives intact on every account that survives.
-      Drifts on the same 1 cell and for the same 5 -> 1 record collapse, NOT
-      because the secret itself is mangled — on all 6 populated cells the
-      stored secret compares byte-identical after the round trip, and it was
-      confirmed to appear verbatim in the render.  That verbatim carry is the
-      thing to be careful about.  The OPNsense secret is a fixed-length opaque
-      string with no crypt(3) `$`-delimited prefix; the AOS-CX render places
-      it into a `user <name> group <group> password ciphertext <blob>` line,
-      i.e. it is presented to the switch as an AOS-CX `ciphertext` value.  The
-      aruba_aoscx matrix states elsewhere that a `ciphertext` blob is
-      encrypted with the device key and is "portable same-device only", so a
-      byte-perfect canonical round-trip is NOT evidence of a working
-      credential on the target device.  Set passwords on the target before
-      cutover and treat every migrated account as unusable until you have.
-      No secret value is quoted in this file or in the reference doc — only
-      its shape — because an encrypted secret is still operator-traceable.  Recorded `good` rather than `lossy`: the only drift on this key is the parent record-count collapse, which the audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could never be evidenced by any cell.  The account vanishing is a real loss and is recorded against `local_users[].name`; this key is about what happens to the VALUE when the account survives.
+      No secret is written in a form AOS-CX cannot consume. 10 accounts are
+      refused for their secret (10 `bcrypt:`-tagged OPNsense hash) and vanish
+      with it; that loss is recorded once, under `local_users[].name`. No
+      account arrives, so no value reaches the target to compare. Before #461
+      this key read preserved because the value was written behind `password
+      ciphertext`, a slot that only holds AOS-CX's own device-keyed blob; that
+      preservation was a leak or a dead credential, not a working one. Recorded
+      `good` rather than `lossy`: the only drift on this key is the parent
+      record-count collapse, which the audit attributes to `local_users[].name`
+      and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key
+      could never be evidenced. No secret value is quoted here or in the
+      reference doc; only shapes and counts.
     references: [opnsense-aoscx-surface]
 
   # -- Fabric -- absent on both ends of this pair ---------------------------

@@ -225,6 +225,9 @@ is measured. Both are `unsupported`, since a vanished record is not lossy
 
 ### 3. Local-user roles collapse to `admin` — a fail-open
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The VyOS render now calls the shared `is_migratable()` gate and NX-OS type-5 secrets are classified by their `$5$` payload.  Measured after the change: **10 of 10** local accounts now arrive across the 9 cells that populate users. Surviving secrets are re-wrapped into the target's native form (10 SHA-256 crypt (NX-OS type 5 over `$5$`) as `encrypted-password`); the credential itself is unchanged.  Any statement below that a secret is carried verbatim, or rendered into `encrypted-password`, a leaf that only holds a Linux crypt string, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_nxos__vyos.yaml`.
+
 10 user records across 9 cells. Names survive 10 of 10. The stored password
 hash survives 10 of 10, byte-for-byte. **The role drifts on 10 of 10**: nine
 `network-admin` → `admin`, and one `network-operator` → `admin`.

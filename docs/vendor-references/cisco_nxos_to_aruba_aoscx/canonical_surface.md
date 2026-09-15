@@ -288,6 +288,9 @@ survives, so that row is `lossy`.
 
 ## Credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate and NX-OS type-5 secrets are classified by their `$5$` payload.  Measured after the change: **0 of 10** local accounts now arrive across the 9 cells that populate users. 10 are refused for a secret AOS-CX cannot consume (10 SHA-256 crypt (NX-OS type 5 over `$5$`)): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_nxos__aruba_aoscx.yaml`.
+
 `local_users[].hashed_password` drifts on all 9 populated cells while
 `local_users[].name` and `local_users[].role` are preserved on all 9.
 

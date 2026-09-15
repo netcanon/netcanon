@@ -530,69 +530,51 @@ per_field_expectation:
   # -- Identity -- one account does not survive the parser -------------------
 
   "local_users[].name":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      17 local-user records across the 13 cells; 16 survive with their names
-      intact and 1 disappears.  The rule is clean enough to act on: every
-      account carrying a `$6$` SHA-512 crypt hash survives; the ONE account
-      whose VyOS stanza sets `encrypted-password ""` is gone.  That account is
-      `netadmin` on `houdev_vyos_dhcpv6_pd_client.conf`, and it is the only
-      user on that cell, so the round-tripped user list is empty.
-      Where it is lost matters, because "the render dropped it" would be
-      wrong.  The render DOES emit the account, as `username netadmin role
-      admin`.  The NX-OS username pattern requires a `password <type> <hash>`
-      clause between the name and the role, so that line matches nothing on
-      re-parse and the account is silently gone.
-      Recorded `lossy` rather than `unsupported` deliberately: cisco_nxos
-      declares `/local-users/user/name` SUPPORTED and does emit users, so this
-      is a partial record loss inside a concept the target models — not the
-      concept-level gap that forces `unsupported` under #436.
-      Before cutover, list the source accounts and diff them against the
-      render: a silently missing admin account is how a migration locks you
-      out.
+      No account arrives: 0 of 17 across all 13 cells that populate local users.
+      The stored secrets on this corpus: 16 SHA-512 crypt (`$6$`). NX-OS can
+      consume a `$5$` or `$1$` crypt string under `password 5`, or a genuine
+      plaintext password; anything else is refused on purpose (#461) with a
+      review comment naming the account and no user entry. Before that change
+      the value was written behind `password 0`, the NX-OS cleartext marker, so
+      the account either carried the source's stored secret as its literal
+      password or could not authenticate at all. 1 further account with no
+      stored secret also vanishes: the NX-OS render has no passwordless form its
+      own parser reads back. Recorded `unsupported` rather than `lossy` because
+      the record vanishes entirely (#436) and a `lossy` warning would understate
+      a target with no local accounts. It is a property of the source's secret
+      form, not a gap in the NX-OS user model: an account whose secret NX-OS can
+      consume would still migrate. Create a console admin on the target out of
+      band before cutover, then re-create every account with a native
+      credential.
     references: [vyos-nxos-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role is preserved on every user record that survives the round-trip —
-      `admin` stays `admin`, zero role drift measured on any of the 16
-      surviving records.  Both matrices declare `/local-users/user/role`
-      supported.
-      This key measures what happens to the VALUE when the record survives,
-      and the answer is: nothing.  The one account that vanishes is accounted
-      for once, under `local_users[].name`; recording the same disappearance
-      again here would double-count a single loss.
-      A caveat about a DIFFERENT canonical field, which this key does not
-      cover and does not claim: `privilege_level` degrades 15 -> 1 on all 16
-      surviving records, because cisco_nxos maps a role back to a privilege
-      only for `network-admin` / `vdc-admin` and VyOS accounts carry the string
-      `admin`.  Both matrices already declare
-      `/local-users/user/privilege-level` lossy.  It is the reason the whole
-      `local_users` field reads as drifted on 12 otherwise-clean cells.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [vyos-nxos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      The credential SURVIVES: all 16 surviving records round-trip their
-      `$6$` SHA-512 crypt hash byte-identical — zero drift on any cell.  Both
-      matrices declare `/local-users/user/hashed-password` supported.  Notable
-      because this key is `lossy` on most pairs in the mesh; here the NX-OS
-      parser strips the type digit it added on render, so the canonical value
-      comes back exactly as it left.
-      The record that disappears is accounted for once, under
-      `local_users[].name` — not a third time here.
-      One caveat that belongs to the RENDERED TEXT rather than to the
-      canonical comparison, and so changes no disposition: the hashes are
-      emitted under NX-OS's type-0 (CLEARTEXT) marker, in the form
-      `username <name> password 0 <crypt body> role admin`.  A Nexus reading
-      that line would take the crypt string itself as the plaintext password.
-      The fidelity harness scores preservation, not target-syntax validity.
-      Set passwords on the target before cutover and treat no migrated account
-      as having a working credential.  No hash body is reproduced in this file
-      or its reference doc — only the crypt-scheme marker and the NX-OS type
-      digit are described.
+      No secret is written in a form NX-OS cannot consume. 16 accounts are
+      refused for their secret (16 SHA-512 crypt (`$6$`)) and vanish with it;
+      that loss is recorded once, under `local_users[].name`. No account
+      arrives, so no value reaches the target to compare. Before #461 this key
+      read preserved because the value was written behind `password 0`, the
+      NX-OS cleartext marker; that preservation was a leak or a dead credential,
+      not a working one. Recorded `good` rather than `lossy`: the only drift on
+      this key is the parent record-count collapse, which the audit attributes
+      to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a
+      declared loss on this key could never be evidenced. No secret value is
+      quoted here or in the reference doc; only shapes and counts.
     references: [vyos-nxos-surface]
 
   radius_servers:

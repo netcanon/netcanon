@@ -239,6 +239,9 @@ arrives on AOS-CX is a namespace, not a VPN.
 
 ## Credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 14** local accounts now arrive across the 9 cells that populate users. 14 are refused for a secret AOS-CX cannot consume (6 MD5 crypt (Cisco type 5), 5 Cisco type-7 reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxr__aruba_aoscx.yaml`.
+
 `local_users[].hashed_password` drifts on 9 of the 12 cells. The mechanism is
 narrower than "the target cannot hold a hash", and the difference matters, so it
 was isolated rather than assumed.

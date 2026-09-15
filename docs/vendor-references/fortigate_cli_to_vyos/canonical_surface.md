@@ -204,6 +204,9 @@ before rendering and the whole surface crosses.
 
 ### 2. Passwords survive; authority does not, and it fails OPEN
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The VyOS render now calls the shared `is_migratable()` gate.  Measured after the change: **2 of 8** local accounts now arrive across the 4 cells that populate users. 6 are refused for a secret VyOS cannot consume (6 FortiOS `ENC` ciphertext): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered into `encrypted-password`, a leaf that only holds a Linux crypt string, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__vyos.yaml`.
+
 8 accounts across the 4 cells. **Every account name survives** and **every
 stored credential survives byte-identical** — 6 of the 8 carry one, and all 6
 round-trip unchanged; the other 2 carry none in the source.

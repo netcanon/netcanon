@@ -207,6 +207,9 @@ corroboration.
 
 ## The correlated-drift block: `local_users`
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 14** local accounts now arrive across the 7 cells that populate users. 10 are refused for a secret AOS-CX cannot consume (10 `bcrypt:`-tagged OPNsense hash): the render emits a `review:` comment naming the account and no user entry. 4 accounts with no stored secret still vanish, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/opnsense__aruba_aoscx.yaml`.
+
 All three `local_users[].*` keys drift on **exactly one cell for exactly one
 reason** — the account record count collapses **5 → 1** on
 `opnsense_acl_test_config.xml`. They are three views of a single observation.

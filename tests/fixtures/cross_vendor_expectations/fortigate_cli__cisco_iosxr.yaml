@@ -443,46 +443,49 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Preserved on all 8 user records across the 4 cells — FortiOS `config
-      system admin / edit "<name>"` becomes `username <name>` and re-parses
-      unchanged.
+    disposition: lossy
+    reason: >
+      2 of 8 accounts arrive across the 4 cells that populate local users; the
+      list shrinks on 4 of them. The 6 accounts that vanish carry 6 FortiOS
+      `ENC` ciphertext. IOS-XR can consume `secret 5` / `8` / `9` / `10`,
+      `password 7`, or a genuine plaintext password; anything else is refused on
+      purpose (#461) with a review comment naming the account and no user entry.
+      Before that change the value was written behind `secret 0`, the IOS-XR
+      cleartext marker, so the account either carried the source's stored secret
+      as its literal password or could not authenticate at all. The survivors
+      are 2 with no stored secret. Recorded `lossy` rather than `unsupported`:
+      which account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [fortigate-iosxr-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      The role STRING round-trips on all 8 records, 0 drifts: FortiOS `set
-      accprofile "super_admin"` renders as ` group super_admin` and re-parses
-      back.  Do not read that as authorisation surviving — the render emits
-      the FortiGate profile name verbatim into the XR task-group slot, so
-      what is preserved is a label, not a privilege the target is known to
-      have.  A neighbouring field the audit does not score makes the same
-      point: `privilege_level` collapses 15 -> 1 on every admin record (4
-      records), because IOS-XR carries no numeric privilege.  Map profiles to
-      real XR task-groups by hand.
+      On the 2 accounts that survive, the role is unchanged. Mechanism:
+      cisco_iosxr renders the role as ` group <role>` and maps only `root-lr` /
+      `root-system` back to privilege 15. Recorded `good` rather than `lossy`:
+      the only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [fortigate-iosxr-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on all 6 populated records (of 8 — the fg100e cell's two
-      RADIUS-backed accounts carry no local secret).  FortiOS stores the
-      admin secret as a `fortios:ENC`-prefixed ciphertext blob; because that
-      canonical value contains a space and the XR `secret <type> <hash>`
-      grammar is single-token, the re-parse recovers only the bare
-      `fortios:ENC` marker — a 226-character source value comes back as 11
-      characters.  Two consequences worth separating.  Every migrated account
-      arrives WITHOUT a usable credential, so set passwords on the target
-      before cutover or the accounts are unusable.  And the intermediate
-      render places the FortiGate ciphertext in the ` secret 0 ` slot — the
-      type-0, plaintext-marker form per the codec's own docstring — so the
-      rendered config should be handled as sensitive material rather than
-      circulated freely.
-      The ciphertext is deliberately NOT quoted here or in the reference
-      note: an encrypted secret is operator-traceable key material, and a
-      document that quotes the value it describes defeats its own redaction.
+    disposition: good
+    note: >
+      No secret is written in a form IOS-XR cannot consume. 6 accounts are
+      refused for their secret (6 FortiOS `ENC` ciphertext) and vanish with it;
+      that loss is recorded once, under `local_users[].name`. The accounts that
+      arrive carry no stored secret, so there is no value to compare. Before
+      #461 this key read preserved because the value was written behind `secret
+      0`, the IOS-XR cleartext marker; that preservation was a leak or a dead
+      credential, not a working one. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here, so a declared loss on this key could never be evidenced. No secret
+      value is quoted here or in the reference doc; only shapes and counts.
     references: [fortigate-iosxr-surface]
 
   radius_servers:

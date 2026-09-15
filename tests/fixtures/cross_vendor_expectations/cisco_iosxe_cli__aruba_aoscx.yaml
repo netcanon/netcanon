@@ -456,43 +456,55 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 7 cells that populate local users — 11 of 11
-      accounts arrive with the right name.
+    disposition: lossy
+    reason: >
+      1 of 11 accounts arrive across the 7 cells that populate local users; the
+      list shrinks on 6 of them. The 10 accounts that vanish carry 5 Cisco
+      type-9 scrypt, 3 MD5 crypt (Cisco type 5), 1 Cisco type-7 reversible
+      obfuscation, 1 Cisco type-8 PBKDF2. AOS-CX can consume its own
+      device-keyed `AQB` ciphertext, or a genuine plaintext password under
+      `password plaintext`; anything else is refused on purpose (#461) with a
+      review comment naming the account and no user entry. Before that change
+      the value was written behind `password ciphertext`, a slot that only holds
+      AOS-CX's own device-keyed blob, so the account either carried the source's
+      stored secret as its literal password or could not authenticate at all.
+      The survivors are 1 carrying 1 plaintext password. Recorded `lossy` rather
+      than `unsupported`: which account survives is decided by its secret form,
+      and accounts with a consumable secret do arrive. Before cutover, list the
+      source accounts, search the render for `review:` comments, and re-create
+      each refused account on the target with a fresh password.
     references: [iosxecli-aoscx-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      The role string round-trips on all 7 populated cells (11 of 11 accounts;
-      the corpus carries `admin` and `operator`).  Do NOT read this as
-      "authorisation survives": the separate numeric `privilege_level`
-      collapses to 1 on all 11 accounts, because aruba_aoscx maps only the
-      `administrators` group back to 15.  A privilege-15 Catalyst admin
-      arrives with the right role label and level-1 rights.  `privilege_level`
-      is not an audited key on this pair, so it is recorded here rather than
-      declared.
+      On the 1 account that survives, the role is unchanged. Mechanism:
+      aruba_aoscx writes the role into the `group` slot and maps only
+      `administrators` back to privilege 15 (declared lossy at
+      `/local-users/user/privilege-level`). Recorded `good` rather than `lossy`:
+      the only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [iosxecli-aoscx-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on 6 of the 7 populated cells — 10 of the 11 accounts in the
-      corpus lose their secret.  The render writes the Cisco value verbatim
-      into an AOS-CX `password ciphertext` slot, which expects a
-      device-key-encrypted blob rather than a Cisco type-N encoding, and the
-      AOS-CX re-parse then keeps only the leading type token: the measured
-      shape goes from a type marker plus a salted digest (36-72 characters) to
-      a 1-character value.  Recorded lossy rather than unsupported because the
-      account record itself survives with name and role.  Operationally it
-      makes no difference: every migrated account arrives without a working
-      credential, so set passwords on the target before cutover or the
-      accounts are unusable.
-      No hash, salt or ciphertext value is quoted here or in the reference
-      note — only lengths and prefix classes.  The corpus contains real-looking
-      crypt-style digests as well as synthetic placeholders, and a document
-      that reproduces the value it claims to redact defeats its own redaction.
+    disposition: good
+    note: >
+      No secret is written in a form AOS-CX cannot consume. 10 accounts are
+      refused for their secret (5 Cisco type-9 scrypt, 3 MD5 crypt (Cisco type
+      5), 1 Cisco type-7 reversible obfuscation, 1 Cisco type-8 PBKDF2) and
+      vanish with it; that loss is recorded once, under `local_users[].name`.
+      The 1 secret that arrives is carried with the credential unchanged: 1
+      plaintext password as `password plaintext`. Before #461 this key read
+      preserved because the value was written behind `password ciphertext`, a
+      slot that only holds AOS-CX's own device-keyed blob; that preservation was
+      a leak or a dead credential, not a working one. Recorded `good` rather
+      than `lossy`: the only drift on this key is the parent record-count
+      collapse, which the audit attributes to `local_users[].name` and
+      reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could
+      never be evidenced. No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [iosxecli-aoscx-surface]
 
   # -- Fabric ---------------------------------------------------------------

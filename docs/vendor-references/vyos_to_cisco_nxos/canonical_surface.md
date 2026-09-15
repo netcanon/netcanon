@@ -108,6 +108,9 @@ all preserved, none drifting.
 
 ### Per-record detail behind the local-user drift
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The NX-OS render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 17** local accounts now arrive across the 13 cells that populate users. 16 are refused for a secret NX-OS cannot consume (16 SHA-512 crypt (`$6$`)): the render emits a `review:` comment naming the account and no user entry. 1 account with no stored secret still vanishes, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password 0`, the NX-OS cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__cisco_nxos.yaml`.
+
 | sub-field | records affected | of total | shape |
 |---|---|---|---|
 | `privilege_level` | 16 | 16 surviving | `15` → `1` |

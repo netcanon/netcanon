@@ -171,6 +171,9 @@ before migrating rather than discovering it afterwards.
 
 ## Authorization and credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 8** local accounts now arrive across the 4 cells that populate users. 6 are refused for a secret AOS-CX cannot consume (6 FortiOS `ENC` ciphertext): the render emits a `review:` comment naming the account and no user entry. 2 accounts with no stored secret still vanish, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__aruba_aoscx.yaml`.
+
 `local_users[].role` itself is preserved on every surviving record
 (`super_admin`, `prof_admin`, `super_admin_readonly` all round-trip as the
 AOS-CX `user <name> group <role>` token). The authorization **level** does

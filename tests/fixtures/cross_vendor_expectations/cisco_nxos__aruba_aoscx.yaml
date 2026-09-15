@@ -507,41 +507,51 @@ per_field_expectation:
   # -- Identity --------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 9 cells that populate local users; the render
-      emits `user <name> group <role> password ...` and the name round-trips.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 10 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 10 SHA-256 crypt (NX-OS type 5 over
+      `$5$`). AOS-CX can consume its own device-keyed `AQB` ciphertext, or a
+      genuine plaintext password under `password plaintext`; anything else is
+      refused on purpose (#461) with a review comment naming the account and no
+      user entry. Before that change the value was written behind `password
+      ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, so the
+      account either carried the source's stored secret as its literal password
+      or could not authenticate at all. Recorded `unsupported` rather than
+      `lossy` because the record vanishes entirely (#436) and a `lossy` warning
+      would understate a target with no local accounts. It is a property of the
+      source's secret form, not a gap in the AOS-CX user model: an account whose
+      secret AOS-CX can consume would still migrate. Create a console admin on
+      the target out of band before cutover, then re-create every account with a
+      native credential.
     references: [nxos-aoscx-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role preserved on all 9 populated cells — the NX-OS `network-admin` /
-      `network-operator` strings survive verbatim into the AOS-CX `group`
-      slot.  Note this is the role STRING, not the privilege it grants:
-      `privilege_level` collapses 15 -> 1 on this pair (the target declares
-      `/local-users/user/privilege-level` lossy, mapping administrators -> 15
-      and everything else -> 1), so verify effective privilege on the target
-      rather than trusting the role label.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [nxos-aoscx-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on all 9 cells that populate local users, while `name` and `role`
-      survive on the same 9 — so the account arrives and the credential does
-      not, which is why this is lossy rather than unsupported.  The NX-OS
-      source stores the secret as a numeric type marker followed by a crypt(3)
-      SHA-256 hash (the `$5$` family); after the round-trip the canonical
-      field retains only the leading type marker, a single character, and the
-      digest is gone.  Every migrated account therefore arrives WITHOUT a
-      usable password.  Set passwords on the target before cutover and confirm
-      console / out-of-band access still works, or the switch comes up with
-      accounts nobody can log into.
-      No hash, salt or ciphertext value is reproduced here or in the reference
-      note — AOS-CX user secrets are `AQ...`-prefixed ciphertext blobs and
-      NX-OS secrets are crypt hashes, and both are operator-traceable even
-      encrypted.  Only the shape is described.
+    disposition: good
+    note: >
+      No secret is written in a form AOS-CX cannot consume. 10 accounts are
+      refused for their secret (10 SHA-256 crypt (NX-OS type 5 over `$5$`)) and
+      vanish with it; that loss is recorded once, under `local_users[].name`. No
+      account arrives, so no value reaches the target to compare. Before #461
+      this key read preserved because the value was written behind `password
+      ciphertext`, a slot that only holds AOS-CX's own device-keyed blob; that
+      preservation was a leak or a dead credential, not a working one. Recorded
+      `good` rather than `lossy`: the only drift on this key is the parent
+      record-count collapse, which the audit attributes to `local_users[].name`
+      and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key
+      could never be evidenced. No secret value is quoted here or in the
+      reference doc; only shapes and counts.
     references: [nxos-aoscx-surface]
 
   # -- Fabric ----------------------------------------------------------------

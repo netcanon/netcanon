@@ -184,6 +184,9 @@ more.
 
 ## Credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 13** local accounts now arrive across the 8 cells that populate users. 12 are refused for a secret AOS-CX cannot consume (12 `junos:`-tagged crypt string): the render emits a `review:` comment naming the account and no user entry. 1 account with no stored secret still vanishes, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/juniper_junos__aruba_aoscx.yaml`.
+
 `local_users[].hashed_password` drifts on 1 of 11 cells, and the cause is not
 the hash. Of 13 user records across the corpus, **12 round-trip byte-identical**
 — the Junos secret is a crypt-style hash carrying a `junos:` marker prefix

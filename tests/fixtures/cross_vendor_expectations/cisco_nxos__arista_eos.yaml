@@ -254,23 +254,49 @@ per_field_expectation:
     references: [lag-naming, nxos-arista-surface]
 
   "local_users[].name":
-    disposition: good
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 10 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 10 SHA-256 crypt (NX-OS type 5 over
+      `$5$`). NX-OS writes every secret as type 5 over a `$5$` SHA-256 crypt
+      string. That used to be tagged Cisco type-5 MD5 crypt and passed through
+      as `secret 5` (EOS reads type 5 as MD5 crypt), which produced an account
+      nobody could log in to. It is now classified by the payload's own `$5$` id
+      (#461), and EOS has no SHA-256-crypt form, so the render refuses it: a
+      review comment naming the account, and no `username` line. Recorded
+      `unsupported` rather than `lossy` because the record vanishes entirely
+      (#436) and a `lossy` warning would understate a target with no local
+      accounts. It is a property of the source's secret form, not a gap in the
+      EOS user model: an account whose secret EOS can consume would still
+      migrate. Create a console admin on the target out of band before cutover,
+      then re-create every account with a native credential.
     references: [nxos-arista-surface]
 
   "local_users[].role":
     disposition: good
-    note: "The NX-OS named role maps onto the Arista privilege model."
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [nxos-arista-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on every populated cell (10), but representationally rather than
-      as a loss: an NX-OS `5 $5$<salt>$<digest>` re-parses from the Arista render as
-      `arista:5:$5$<salt>$<digest>`.  The digest is preserved verbatim and only the
-      vendor/type marker around it changes, so accounts remain usable -- but a
-      byte-comparison of the password field will not match, and tooling that
-      diffs credentials across the migration reports every user as changed.
+    disposition: good
+    note: >
+      No secret is written in a form EOS cannot consume. 10 accounts are refused
+      for their secret (10 SHA-256 crypt (NX-OS type 5 over `$5$`)) and vanish
+      with it; that loss is recorded once, under `local_users[].name`. No
+      account arrives, so no value reaches the target to compare. Before #461
+      this key read preserved because the value was written as `secret 5` (EOS
+      reads type 5 as MD5 crypt); that preservation was a leak or a dead
+      credential, not a working one. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here, so a declared loss on this key could never be evidenced. No secret
+      value is quoted here or in the reference doc; only shapes and counts.
     references: [nxos-arista-surface]
 
   radius_servers:

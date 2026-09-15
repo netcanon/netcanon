@@ -623,66 +623,55 @@ per_field_expectation:
   # -- Identity -- names and secrets survive, authorisation does not ---------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Every account survives: 13 source user records on 8 cells, 13 after
-      the round-trip, same names on every cell (`admin`, `lab`,
-      `engineer`, `noc-auto`, `noc-write`, `noc-read`, `operator`,
-      `readonly`), including the `lab` account inherited from the
-      `POC_Lab` apply-group on four ksator cells.  Both matrices declare
-      `/local-users/user/name` supported.
-      This pair does NOT show the account-vanishing behaviour seen on the
-      arista_eos targets — no account is dropped for its secret format.
-      What does degrade is the role, recorded once under
-      `local_users[].role`.
+    disposition: lossy
+    reason: >
+      1 of 13 accounts arrive across the 8 cells that populate local users; the
+      list shrinks on 8 of them. The 12 accounts that vanish carry 12
+      `junos:`-tagged crypt string. VyOS can consume a Linux crypt(3) string
+      (`$1$` / `$5$` / `$6$`) in `encrypted-password`, or a genuine plaintext
+      password in `plaintext-password`; anything else is refused on purpose
+      (#461) with a review comment naming the account and no user entry. Before
+      that change the value was written into `encrypted-password`, a leaf that
+      only holds a Linux crypt string, so the account either carried the
+      source's stored secret as its literal password or could not authenticate
+      at all. The survivors are 1 with no stored secret. Recorded `lossy` rather
+      than `unsupported`: which account survives is decided by its secret form,
+      and accounts with a consumable secret do arrive. Before cutover, list the
+      source accounts, search the render for `review:` comments, and re-create
+      each refused account on the target with a fresh password.
     references: [junos-vyos-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on all 8 cells that populate users: 13 of 13 records lose
-      their Junos login class, and every one becomes `admin`.  For the
-      `super-user` accounts that is a fair mapping.  For three records it
-      is a PRIVILEGE ESCALATION, measured per record:
-      `noc-read` (class `READ`, privilege level 1) on
-      `saidvandeklundert_snmpv3_junos172.set`, and `operator` (class
-      `operator`, level 1) and `readonly` (class `read-only`, level 1) on
-      `kitchen_sink.set` — all three arrive as `admin` at privilege
-      level 15.
-      vyos declares `/local-users/user/privilege-level` LOSSY, stating
-      that VyOS login accounts have no numeric privilege level in the
-      common case so the codec maps every login user to one value.  It
-      declares `/local-users/user/role` SUPPORTED, which this
-      measurement contradicts — the role is not preserved on a single
-      record.
-      Recorded `lossy` rather than `unsupported`: the account record
-      survives inside a concept the target models, so this is value
-      degradation, not a concept-level gap.  The DIRECTION is what
-      matters, and a `lossy` badge alone does not convey it: a read-only
-      NOC account arriving as a full administrator is a fail-open.  Audit
-      the account list on the target and demote by hand before cutover.
-      The account names and their password material are unaffected and
-      are recorded on their own measurements — this entry is not
-      evidence for either of them, nor they for it.
+      On the 1 account that survives, the role changes: `read-only` -> `admin`
+      on 1, with the companion field moving `1` -> `15` on 1. Mechanism: the
+      vyos parser assigns every `system login user` `role="admin"` and
+      `privilege_level=15`, because VyOS login accounts carry no role or numeric
+      privilege in the common case (vyos declares
+      `/local-users/user/privilege-level` lossy for exactly this). This fails
+      OPEN: a less-privileged account arrives with more authority. Re-apply
+      least privilege on the target before cutover. Accounts refused for their
+      secret vanish with their role and are counted once, under
+      `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [junos-vyos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      Zero drift: all 13 secrets round-trip byte-identical on all 8 cells
-      that populate users.  Both matrices declare
-      `/local-users/user/hashed-password` supported.
-      Shape only, never the value: the corpus carries 4 records with a
-      `$1$` crypt-MD5 body, 4 with a `$6$` SHA-512-crypt body, 1 empty,
-      and 4 whose committed capture holds a sanitisation placeholder
-      rather than a real hash.  All are wrapped in the canonical
-      `junos:` envelope and all come back unchanged.
-      Notable because this is the opposite of the arista_eos targets,
-      where type-marker handling silently degrades a credential into a
-      cleartext token.  Nothing of that kind happens here — but the
-      accounts still arrive over-privileged, which is recorded under
-      `local_users[].role`, and the SNMPv3 keys still need re-keying,
-      which is recorded under `snmp.v3_users`.
+      No secret is written in a form VyOS cannot consume. 12 accounts are
+      refused for their secret (12 `junos:`-tagged crypt string) and vanish with
+      it; that loss is recorded once, under `local_users[].name`. The accounts
+      that arrive carry no stored secret, so there is no value to compare.
+      Before #461 this key read preserved because the value was written into
+      `encrypted-password`, a leaf that only holds a Linux crypt string; that
+      preservation was a leak or a dead credential, not a working one. Recorded
+      `good` rather than `lossy`: the only drift on this key is the parent
+      record-count collapse, which the audit attributes to `local_users[].name`
+      and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key
+      could never be evidenced. No secret value is quoted here or in the
+      reference doc; only shapes and counts.
     references: [junos-vyos-surface]
 
   radius_servers:

@@ -552,57 +552,52 @@ per_field_expectation:
   # -- Identity -- credentials survive, authority does not --------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Every account survives: 5 user records across the 3 cells that populate
-      local users, 5 present after the round-trip, zero dropped.  vyos
-      declares `/local-users/user/name` supported and renders each account as
-      `system login user <name> { ... }`.
-      Notable because the reverse is the common failure on this mesh — pairs
-      where accounts silently disappear.  Here nothing disappears, and the
-      loss on this surface is entirely about what authority the surviving
-      accounts arrive with.  See `local_users[].role`.
+    disposition: lossy
+    reason: >
+      1 of 5 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
+      `sha1:` digest. VyOS can consume a Linux crypt(3) string (`$1$` / `$5$` /
+      `$6$`) in `encrypted-password`, or a genuine plaintext password in
+      `plaintext-password`; anything else is refused on purpose (#461) with a
+      review comment naming the account and no user entry. Before that change
+      the value was written into `encrypted-password`, a leaf that only holds a
+      Linux crypt string, so the account either carried the source's stored
+      secret as its literal password or could not authenticate at all. The
+      survivors are 1 carrying 1 plaintext password. Recorded `lossy` rather
+      than `unsupported`: which account survives is decided by its secret form,
+      and accounts with a consumable secret do arrive. Before cutover, list the
+      source accounts, search the render for `review:` comments, and re-create
+      each refused account on the target with a fresh password.
     references: [aoss-vyos-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Every account arrives as an administrator.  Measured across all 5 user
-      records on the 3 populated cells: role preserved on 0 of 5, with
-      transitions `manager -> admin` on 4 records and `operator -> admin` on
-      1.  That last record also moves `privilege_level` from 1 to 15
-      (privilege level is otherwise preserved on 4 of 5).
-      CAUSE, read from the render: the VyOS `system login` block emits only
-      `user <name> { authentication { encrypted-password ... } }` — no role,
-      no level — and the vyos parser then assigns every login user
-      `role="admin"`, `privilege_level=15`.  vyos declares
-      `/local-users/user/privilege-level` LOSSY and documents exactly this
-      mapping ("configured users have full operator/admin access").
-      The direction matters more than the count: this FAILS OPEN.  A
-      read-only AOS-S `operator` becomes a full VyOS administrator.  Recorded
-      `lossy` rather than `unsupported` because the account record and its
-      credential both survive intact — it is the authority attached to them
-      that is wrong, not the account — but treat the `lossy` warning as a
-      floor, not a ceiling.  Re-assert every account's authority on the
-      target before cutover, and delete any account that was only ever meant
-      to look.
+      On the 1 account that survives, the role changes: `manager` -> `admin` on
+      1. Mechanism: the vyos parser assigns every `system login user`
+      `role="admin"` and `privilege_level=15`, because VyOS login accounts carry
+      no role or numeric privilege in the common case (vyos declares
+      `/local-users/user/privilege-level` lossy for exactly this). Accounts
+      refused for their secret vanish with their role and are counted once,
+      under `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [aoss-vyos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      Preserved byte-identical on 5 of 5 records — the credential is carried
-      into `authentication { encrypted-password <value> }` and re-parses
-      unchanged.  vyos declares `/local-users/user/hashed-password`
-      supported.  aruba_aoss declares nothing under `/local-users/`, so the
-      clean result here is measured rather than promised.
-      Two shape observations, no value quoted here or in the reference note:
-      4 of the 5 credentials carry a `sha1:` scheme marker and 1 carries a
-      `plaintext:` scheme marker.  The plaintext-scheme credential is written
-      verbatim into a VyOS node whose name promises a hash — nothing is lost,
-      which is why this key is `good`, but a cleartext secret lands in the
-      target config.  Re-set that account's password rather than migrating
-      it, and treat the rendered config as secret-bearing until you have.
+      No secret is written in a form VyOS cannot consume. 4 accounts are refused
+      for their secret (4 AOS-S `sha1:` digest) and vanish with it; that loss is
+      recorded once, under `local_users[].name`. The 1 secret that arrives is
+      carried with the credential unchanged: 1 plaintext password as
+      `plaintext-password`. Before #461 this key read preserved because the
+      value was written into `encrypted-password`, a leaf that only holds a
+      Linux crypt string; that preservation was a leak or a dead credential, not
+      a working one. Recorded `good` rather than `lossy`: the only drift on this
+      key is the parent record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared
+      loss on this key could never be evidenced. No secret value is quoted here
+      or in the reference doc; only shapes and counts.
     references: [aoss-vyos-surface]
 
   radius_servers:

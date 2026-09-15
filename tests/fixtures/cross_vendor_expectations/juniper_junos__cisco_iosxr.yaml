@@ -444,40 +444,49 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 8 cells that populate local users; both
-      matrices declare `/local-users/user/name` supported and the render emits
-      one `username <name>` block per account.
+    disposition: lossy
+    reason: >
+      1 of 13 accounts arrive across the 8 cells that populate local users; the
+      list shrinks on 8 of them. The 12 accounts that vanish carry 12
+      `junos:`-tagged crypt string. IOS-XR can consume `secret 5` / `8` / `9` /
+      `10`, `password 7`, or a genuine plaintext password; anything else is
+      refused on purpose (#461) with a review comment naming the account and no
+      user entry. Before that change the value was written behind `secret 0`,
+      the IOS-XR cleartext marker, so the account either carried the source's
+      stored secret as its literal password or could not authenticate at all.
+      The survivors are 1 with no stored secret. Recorded `lossy` rather than
+      `unsupported`: which account survives is decided by its secret form, and
+      accounts with a consumable secret do arrive. Before cutover, list the
+      source accounts, search the render for `review:` comments, and re-create
+      each refused account on the target with a fresh password.
     references: [junos-iosxr-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      The role STRING is preserved on all 8 populated cells — Junos
-      `super-user` / `operator` / `read-only` / `READ` arrive unchanged as the
-      IOS-XR `group` line.  Read that narrowly: the numeric `privilege_level`
-      on the same records collapses 15 -> 1 on 10 of them.  `privilege_level`
-      is not a key in this file and so affects no disposition, but "role
-      preserved" is not "authority preserved" — check effective privilege on
-      every migrated account.
+      On the 1 account that survives, the role is unchanged. Mechanism:
+      cisco_iosxr renders the role as ` group <role>` and maps only `root-lr` /
+      `root-system` back to privilege 15. Recorded `good` rather than `lossy`:
+      the only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [junos-iosxr-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      Preserved on all 8 populated cells — verified as string equality between
-      the source intent and the re-parsed intent, not inferred from record
-      counts.  The stored secret survives the migration, which is the opposite
-      of the AOS-CX-sourced pairs, where it does not.
-      One caveat that does not change the disposition but does change what an
-      operator should do: the render emits the Junos secret behind IOS-XR's
-      `secret 0` marker, and in Cisco syntax `0` means plaintext-follows — so
-      the emitted line's type marker does not describe the material it
-      carries.  The canonical value round-trips exactly; the marker on the
-      rendered line is what is wrong.  Review the `username` block before
-      loading it onto a device.  No secret value is quoted here or in the
-      cached note — encrypted material is still operator-traceable.
+      No secret is written in a form IOS-XR cannot consume. 12 accounts are
+      refused for their secret (12 `junos:`-tagged crypt string) and vanish with
+      it; that loss is recorded once, under `local_users[].name`. The accounts
+      that arrive carry no stored secret, so there is no value to compare.
+      Before #461 this key read preserved because the value was written behind
+      `secret 0`, the IOS-XR cleartext marker; that preservation was a leak or a
+      dead credential, not a working one. Recorded `good` rather than `lossy`:
+      the only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here, so a declared loss on this key could never be evidenced. No secret
+      value is quoted here or in the reference doc; only shapes and counts.
     references: [junos-iosxr-surface]
 
   radius_servers:

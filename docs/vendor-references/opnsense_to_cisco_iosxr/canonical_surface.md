@@ -220,6 +220,9 @@ sides of every cell.)
 
 ## Credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The IOS-XR render now calls the shared `is_migratable()` gate.  Measured after the change: **4 of 14** local accounts now arrive across the 7 cells that populate users. 10 are refused for a secret IOS-XR cannot consume (10 `bcrypt:`-tagged OPNsense hash): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered behind `secret 0`, the IOS-XR cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/opnsense__cisco_iosxr.yaml`.
+
 `local_users[].hashed_password` is **preserved on all 14 user records** —
 unusual for this mesh, and the reason it is `good`. OPNsense stores the user
 secret as a bcrypt hash and the IOS-XR render carries the string through

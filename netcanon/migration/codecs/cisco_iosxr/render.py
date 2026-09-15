@@ -39,9 +39,26 @@ from __future__ import annotations
 
 import re
 
+from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from .._helpers import _prefix_to_mask, same_vendor_version
 from . import port_names as _port_names
+
+#: Canonical algorithm token -> the IOS-XR keyword + type that consumes it.
+#: Keys mirror ``_TARGET_ACCEPTS["cisco_iosxr"]`` exactly (guarded).
+#: ``secret 0`` is the CLEARTEXT marker, so only genuine plaintext reaches
+#: it.  Type 7 is reversible and lives under ``password``, not ``secret``
+#: (``secret`` takes 0/5/8/9/10 only).
+_IOSXR_SECRET_FORM: dict[str, str] = {
+    "plaintext": "secret 0",
+    "5": "secret 5",
+    "md5crypt": "secret 5",
+    "8": "secret 8",
+    "9": "secret 9",
+    "10": "secret 10",
+    "sha512": "secret 10",
+    "7": "password 7",
+}
 
 #: Synthesised IOS-XR release stamped into the banner when the source
 #: device's own release is unknown.  When the tree was parsed from THIS codec
@@ -134,22 +151,28 @@ def _render_local_user(user) -> list[str]:
     """Render one ``username`` block.
 
     Emits ``group <role>`` (the verbatim IOS-XR task-group, or one derived
-    from the privilege level for a cross-vendor source) and ``secret
-    <type> <hash>``.  The hash is preserved with its type-digit prefix
-    (parse stored ``10 $6$...``); a bare value renders as the type-0
-    (plaintext-marker) form.
+    from the privilege level for a cross-vendor source) and the secret in
+    the form :data:`_IOSXR_SECRET_FORM` maps its algorithm to.
+
+    The secret passes the shared :func:`is_migratable` gate first.  This
+    codec used to render any value without a leading type digit as
+    ``secret 0 <value>`` — the CLEARTEXT marker — so a foreign digest
+    became the literal password.  A secret IOS-XR cannot consume now drops
+    the whole ``username`` block (a block with no secret is a passwordless
+    account) and leaves a review comment.
     """
     role = user.role or (
         "root-lr" if user.privilege_level >= 15 else "operator"
     )
     block = [f"username {user.name}", f" group {role}"]
     if user.hashed_password:
-        parts = user.hashed_password.split(" ", 1)
-        if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) <= 2:
-            htype, payload = parts[0], parts[1]
-        else:
-            htype, payload = "0", user.hashed_password
-        block.append(f" secret {htype} {payload}")
+        algorithm, payload = classify_hash(user.hashed_password)
+        if not is_migratable(user.hashed_password, "cisco_iosxr"):
+            return [format_review_comment(
+                user.name, algorithm,
+                comment_syntax="exclamation", target_label="Cisco IOS-XR",
+            )]
+        block.append(f" {_IOSXR_SECRET_FORM[algorithm]} {payload}")
     block.append("!")
     return block
 

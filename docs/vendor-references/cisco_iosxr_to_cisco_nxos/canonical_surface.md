@@ -180,6 +180,9 @@ that exists.
 
 ## Local users: the drift is real but it is not one of these keys
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The NX-OS render now calls the shared `is_migratable()` gate.  Measured after the change: **6 of 14** local accounts now arrive across the 9 cells that populate users. 8 are refused for a secret NX-OS cannot consume (5 Cisco type-7 reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt): the render emits a `review:` comment naming the account and no user entry. 6 consumable secrets are carried unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `password 0`, the NX-OS cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxr__cisco_nxos.yaml`.
+
 `local_users` drifts on 9 of 12 cells, and that number is easy to misread.
 Measured record by record across all 9 populated user records (5 cells):
 

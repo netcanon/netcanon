@@ -218,6 +218,9 @@ Two separable losses:
 
 ## Finding 5 — passwordless accounts vanish; the hash itself survives
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 12** local accounts now arrive across the 6 cells that populate users. 9 are refused for a secret AOS-CX cannot consume (7 SHA-512 crypt (`$6$`), 2 MD5 crypt (Cisco type 5)): the render emits a `review:` comment naming the account and no user entry. 3 accounts with no stored secret still vanish, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/arista_eos__aruba_aoscx.yaml`.
+
 `local_users` shrinks on 2 of 6 cells (5 → 3 and 3 → 2). The dropped accounts
 are exactly the ones whose `hashed_password` is empty: the render emits
 `user admin group network-admin` with no password clause, and the AOS-CX parser

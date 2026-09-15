@@ -243,6 +243,9 @@ addressing all round-trip on the same records. It is `lossy`, not
 
 ## Identity and credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The IOS-XR render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 5** local accounts now arrive across the 3 cells that populate users. 4 are refused for a secret IOS-XR cannot consume (4 AOS-S `sha1:` digest): the render emits a `review:` comment naming the account and no user entry. Surviving secrets are re-wrapped into the target's native form (1 plaintext password as `secret 0`); the credential itself is unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `secret 0`, the IOS-XR cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoss__cisco_iosxr.yaml`.
+
 `local_users[].name`, `.role` and `.hashed_password` are preserved on all 3
 cells that populate local users, and the opaque secret string round-trips
 byte-for-byte. Two caveats that the `good` disposition does not carry:

@@ -44,6 +44,7 @@ from __future__ import annotations
 import ipaddress
 import re
 
+from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent
 from .._helpers import _coalesce_vlan_ids, same_vendor_version
 
@@ -179,18 +180,27 @@ def _render_local_user(user) -> str:
 
     ``role`` (the AOS-CX group) is emitted verbatim when set (same-vendor
     round-trip) and otherwise derived from the privilege level
-    (administrators >= 15, else operators).  The ``ciphertext`` blob is
-    re-emitted verbatim from ``hashed_password``; a user with no stored
-    secret renders the bare form (best-effort for a cross-vendor source).
+    (administrators >= 15, else operators).  A user with no stored secret
+    renders the bare form (best-effort for a cross-vendor source).
+
+    The secret passes the shared :func:`is_migratable` gate first.  The
+    ``ciphertext`` slot only takes AOS-CX's own device-keyed ``AQB`` blob;
+    this codec used to write ANY value there, so every foreign hash produced
+    an account nobody could log in to.  Genuine plaintext now uses ``password
+    plaintext``; anything else drops the user with a review comment.
     """
     role = user.role or (
         "administrators" if user.privilege_level >= 15 else "operators"
     )
     if user.hashed_password:
-        return (
-            f"user {user.name} group {role} "
-            f"password ciphertext {user.hashed_password}"
-        )
+        algorithm, payload = classify_hash(user.hashed_password)
+        if not is_migratable(user.hashed_password, "aruba_aoscx"):
+            return format_review_comment(
+                user.name, algorithm,
+                comment_syntax="exclamation", target_label="ArubaOS-CX",
+            )
+        kind = "plaintext" if algorithm == "plaintext" else "ciphertext"
+        return f"user {user.name} group {role} password {kind} {payload}"
     return f"user {user.name} group {role}"
 
 

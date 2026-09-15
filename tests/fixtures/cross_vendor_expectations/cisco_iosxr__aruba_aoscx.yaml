@@ -444,52 +444,53 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 9 cells that populate local users; both sides
-      declare `/local-users/user/name` supported.  Every account arrives — see
-      `local_users[].hashed_password` for why none of them can log in.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 14 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 6 MD5 crypt (Cisco type 5), 5 Cisco
+      type-7 reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt. AOS-CX can
+      consume its own device-keyed `AQB` ciphertext, or a genuine plaintext
+      password under `password plaintext`; anything else is refused on purpose
+      (#461) with a review comment naming the account and no user entry. Before
+      that change the value was written behind `password ciphertext`, a slot
+      that only holds AOS-CX's own device-keyed blob, so the account either
+      carried the source's stored secret as its literal password or could not
+      authenticate at all. Recorded `unsupported` rather than `lossy` because
+      the record vanishes entirely (#436) and a `lossy` warning would understate
+      a target with no local accounts. It is a property of the source's secret
+      form, not a gap in the AOS-CX user model: an account whose secret AOS-CX
+      can consume would still migrate. Create a console admin on the target out
+      of band before cutover, then re-create every account with a native
+      credential.
     references: [iosxr-aoscx-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role preserved on all 9 populated cells — `root-lr` and `operator` both
-      round-trip, and the IOS-XR task-group name maps onto the AOS-CX `group`
-      keyword without loss on this corpus.  One scope caveat so this `good` is
-      not over-read: the adjacent `privilege_level` is NOT preserved (measured
-      15 -> 1), which aruba_aoscx declares lossy because it maps
-      `administrators -> 15` and everything else -> 1.  `privilege_level` is
-      not a tracked key in this file; `role` is, and it is genuinely intact.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [iosxr-aoscx-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on all 9 cells that populate local users, and the mechanism is
-      narrower than "the target cannot hold a hash" — it was isolated rather
-      than assumed.  The AOS-CX
-      `user <name> group <g> password ciphertext <blob>` grammar takes a SINGLE
-      token for the secret.  An IOS-XR secret arrives as TWO tokens — a numeric
-      type marker followed by the secret — and the render emits both; on
-      re-parse AOS-CX keeps only the leading token, so the canonical
-      `hashed_password` comes back as the bare marker digit.  Fed to the
-      aruba_aoscx parser directly with synthetic placeholder secrets, a native
-      single-token blob survives intact while the two-token form collapses to
-      one character.  Confirmed end-to-end: a 63-character crypt(3)-family
-      source secret returns as a 2-character marker on `kitchen_sink.cfg`, and
-      the Cisco type-7 obfuscated secrets return as the single digit `7` on
-      `iosxr_design_cst_pa3_xr752.cfg`.
-      Every migrated account therefore arrives WITHOUT a working credential.
-      Set passwords on the target before cutover, or the accounts are unusable.
-      Worth noting separately: aruba_aoscx declares
-      `/local-users/user/hashed-password` SUPPORTED while the round-trip does
-      not preserve it.  That is a target-side matrix under-declaration, a
-      codec-level fact rather than a pair-level one, and is left for a codec
-      change rather than fixed here.
-      No secret value is quoted in this file or in the reference doc — only
-      shapes (length, field count, family prefix).  Hashed and encrypted
-      secrets are operator-traceable even when they cannot be reversed.
+    disposition: good
+    note: >
+      No secret is written in a form AOS-CX cannot consume. 14 accounts are
+      refused for their secret (6 MD5 crypt (Cisco type 5), 5 Cisco type-7
+      reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt) and vanish with
+      it; that loss is recorded once, under `local_users[].name`. No account
+      arrives, so no value reaches the target to compare. Before #461 this key
+      read preserved because the value was written behind `password ciphertext`,
+      a slot that only holds AOS-CX's own device-keyed blob; that preservation
+      was a leak or a dead credential, not a working one. Recorded `good` rather
+      than `lossy`: the only drift on this key is the parent record-count
+      collapse, which the audit attributes to `local_users[].name` and
+      reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could
+      never be evidenced. No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [iosxr-aoscx-surface]
 
   radius_servers:

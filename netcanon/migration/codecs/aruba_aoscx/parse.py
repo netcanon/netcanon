@@ -165,7 +165,7 @@ _LACP_MODE_RE = re.compile(
 #: ``plaintext`` form is not parsed (rare in a running-config; would drop
 #: the user).
 _USER_RE = re.compile(
-    r"^user\s+(\S+)\s+group\s+(\S+)\s+password\s+ciphertext\s+(\S+)",
+    r"^user\s+(\S+)\s+group\s+(\S+)\s+password\s+(?:ciphertext|plaintext)\s+(\S+)",
     re.IGNORECASE | re.MULTILINE,
 )
 #: AOS-CX built-in group that maps to the cross-vendor admin privilege.

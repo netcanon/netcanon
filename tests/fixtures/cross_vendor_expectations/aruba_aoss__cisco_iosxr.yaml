@@ -444,46 +444,50 @@ per_field_expectation:
   # -- Identity --------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 3 cells that populate local users.
-      cisco_iosxr declares `/local-users/user/name` supported; aruba_aoss
-      declares no `/local-users/*` path at all, which is a source-side matrix
-      under-declaration — it clearly does parse users — and is left for a
-      codec change rather than fixed here.
+    disposition: lossy
+    reason: >
+      1 of 5 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
+      `sha1:` digest. IOS-XR can consume `secret 5` / `8` / `9` / `10`,
+      `password 7`, or a genuine plaintext password; anything else is refused on
+      purpose (#461) with a review comment naming the account and no user entry.
+      Before that change the value was written behind `secret 0`, the IOS-XR
+      cleartext marker, so the account either carried the source's stored secret
+      as its literal password or could not authenticate at all. The survivors
+      are 1 carrying 1 plaintext password. Recorded `lossy` rather than
+      `unsupported`: which account survives is decided by its secret form, and
+      accounts with a consumable secret do arrive. Before cutover, list the
+      source accounts, search the render for `review:` comments, and re-create
+      each refused account on the target with a fresh password.
     references: [aoss-iosxr-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role string preserved on all 3 populated cells; AOS-S `manager` /
-      `operator` render as `group manager` / `group operator` and re-parse
-      unchanged.
-      Caveat the disposition cannot carry: the SIBLING field
-      `CanonicalLocalUser.privilege_level` is downgraded `15 -> 1` on 4 of
-      the 5 user records in this corpus.  That field is not one of this
-      pair's audited keys, so it carries no declaration; it is recorded here
-      and in the reference note because it is real, was verified by
-      round-trip, and fails in the safe direction (privileges drop, they do
-      not escalate).  Confirm effective authorisation on the target rather
-      than trusting the surviving role string.
+      On the 1 account that survives, the role is unchanged. Mechanism:
+      cisco_iosxr renders the role as ` group <role>` and maps only `root-lr` /
+      `root-system` back to privilege 15. Recorded `good` rather than `lossy`:
+      the only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [aoss-iosxr-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      The opaque secret string round-trips byte-for-byte on all 3 populated
-      cells, so the canonical value is preserved and the key is `good`.
-      The rendered LINE is a different matter and is worth acting on: the XR
-      renderer sniffs a leading Cisco type digit and, finding none on an
-      AOS-S secret, defaults to type 0 — `secret 0 <string>` — which is the
-      plaintext marker.  The target config therefore presents the source's
-      stored secret as a literal password.  Reset every migrated account's
-      credential on the target before cutover.
-      Secret values are deliberately NOT quoted here or in the reference
-      note; only the shape is recorded (AOS-S secrets in this corpus carry an
-      `<algorithm>:<payload>` prefix rather than a crypt(3) `$n$` marker,
-      which is exactly why the type-digit sniff misses them).
+      No secret is written in a form IOS-XR cannot consume. 4 accounts are
+      refused for their secret (4 AOS-S `sha1:` digest) and vanish with it; that
+      loss is recorded once, under `local_users[].name`. The 1 secret that
+      arrives is carried with the credential unchanged: 1 plaintext password as
+      `secret 0`. Before #461 this key read preserved because the value was
+      written behind `secret 0`, the IOS-XR cleartext marker; that preservation
+      was a leak or a dead credential, not a working one. Recorded `good` rather
+      than `lossy`: the only drift on this key is the parent record-count
+      collapse, which the audit attributes to `local_users[].name` and
+      reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could
+      never be evidenced. No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [aoss-iosxr-surface]
 
   radius_servers:

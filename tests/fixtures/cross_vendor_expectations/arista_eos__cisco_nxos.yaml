@@ -377,25 +377,21 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Kept as a whole-record disposition because the RECORD does not survive
-      on 2 of the 6 cells: the user count drops 5 -> 3 and 3 -> 2.  On both,
-      the account that vanishes is the one with an EMPTY hashed password
-      (Arista `username admin privilege 15 nopassword ... role
-      network-admin`) -- NX-OS `username` render has no password-less form, so
-      it is not emitted at all.  That is the loss to plan for: a
-      break-glass/console admin can disappear from the target config.  On the
-      users that DO survive, the password itself is carried verbatim
-      (shape only: `arista:sha512:$6$<salt>$<digest>` on both sides, no
-      drift), but two attributes are re-derived rather than preserved:
-      `privilege_level`, because NX-OS models a named `role` instead of a
-      number and the codec maps `network-admin` / `vdc-admin` -> 15 and
-      everything else -> 1 (measured as `1` -> `15` on 2 cells, so a
-      deliberately low-privilege account carrying an admin role name comes
-      back with FULL privilege); and `role`, where a blank source role is
-      filled in on render (measured as `""` -> `network-admin` on 1 cell).
-      Audit the target's user table against the source before cutover:
-      re-create the password-less account with a real credential, and
-      re-check every privilege that was not 15 on the source.
+      2 of 12 accounts arrive across the 6 cells that populate local users; the
+      list shrinks on 6 of them. The 7 accounts that vanish carry 7 SHA-512
+      crypt (`$6$`). NX-OS can consume a `$5$` or `$1$` crypt string under
+      `password 5`, or a genuine plaintext password; anything else is refused on
+      purpose (#461) with a review comment naming the account and no user entry.
+      Before that change the value was written behind `password 0`, the NX-OS
+      cleartext marker, so the account either carried the source's stored secret
+      as its literal password or could not authenticate at all. 3 further
+      accounts with no stored secret also vanish: the NX-OS render has no
+      passwordless form its own parser reads back. The survivors are 2 carrying
+      2 MD5 crypt (Cisco type 5). Recorded `lossy` rather than `unsupported`:
+      which account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [eos-nxos-surface]
 
   radius_servers:

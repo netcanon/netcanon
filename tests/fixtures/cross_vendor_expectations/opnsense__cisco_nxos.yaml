@@ -493,48 +493,62 @@ per_field_expectation:
   # sub-field key that claims it). --
 
   "local_users[].name":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      Usernames survive on 6 of 8 cells, but one cell drops 4 of its 5
-      accounts (5 -> 1), and the four it drops are exactly those with an
-      EMPTY password hash.  The NX-OS render emits a passwordless account as
-      `username <name> role <role>`, and the NX-OS parser only recognises
-      lines carrying `password <type> <hash>`, so the account is absent from
-      the migrated inventory.  Any key-only / GUI-disabled OPNsense account
-      therefore disappears from the audit trail: enumerate the source users
-      and give each one a credential on the target.
+      No account arrives: 0 of 14 across all 7 cells that populate local users.
+      The stored secrets on this corpus: 10 `bcrypt:`-tagged OPNsense hash.
+      NX-OS can consume a `$5$` or `$1$` crypt string under `password 5`, or a
+      genuine plaintext password; anything else is refused on purpose (#461)
+      with a review comment naming the account and no user entry. Before that
+      change the value was written behind `password 0`, the NX-OS cleartext
+      marker, so the account either carried the source's stored secret as its
+      literal password or could not authenticate at all. 4 further accounts with
+      no stored secret also vanish: the NX-OS render has no passwordless form
+      its own parser reads back. Recorded `unsupported` rather than `lossy`
+      because the record vanishes entirely (#436) and a `lossy` warning would
+      understate a target with no local accounts. It is a property of the
+      source's secret form, not a gap in the NX-OS user model: an account whose
+      secret NX-OS can consume would still migrate. Create a console admin on
+      the target out of band before cutover, then re-create every account with a
+      native credential.
     references: [opnsense-nxos-surface]
 
   "local_users[].privilege_level":
-    disposition: lossy
-    reason: >
-      Downgrades `15` -> `1` on all 8 administrator records across 7 cells.
-      NX-OS has no numeric privilege: the parser derives it from the NAMED
-      role, mapping `network-admin` / `vdc-admin` to 15 and everything else
-      to 1.  OPNsense's role string is `admin`, which is not an NX-OS role
-      name, so EVERY OPNsense administrator re-parses as an unprivileged
-      user.  Re-map the roles to `network-admin` on the target, or nobody
-      arrives with administrative rights.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      privilege level on the target to compare. Recorded `good` rather than
+      `lossy`: the only drift on this key is the parent record-count collapse,
+      which the audit attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here. Accounts refused for their secret vanish with their
+      privilege level and are counted once, under `local_users[].name`.
     references: [opnsense-nxos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      The digest is preserved byte-for-byte wherever the account survives (6
-      of 8 cells): a `bcrypt:$2y$<rounds>$<digest>` value comes back
-      identical.  Canonical fidelity is exact — but the render tags it
-      `password 0 <value>`, and type 0 is the NX-OS PLAINTEXT marker, so a
-      real Nexus would hash the digest string as if it were the password.
-      The mesh scores preservation, not target-syntax validity; reset these
-      passwords on the target rather than trusting the round-trip.
+      No secret is written in a form NX-OS cannot consume. 10 accounts are
+      refused for their secret (10 `bcrypt:`-tagged OPNsense hash) and vanish
+      with it; that loss is recorded once, under `local_users[].name`. No
+      account arrives, so no value reaches the target to compare. Before #461
+      this key read preserved because the value was written behind `password 0`,
+      the NX-OS cleartext marker; that preservation was a leak or a dead
+      credential, not a working one. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here, so a declared loss on this key could never be evidenced. No secret
+      value is quoted here or in the reference doc; only shapes and counts.
     references: [opnsense-nxos-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      The role string itself is carried verbatim (`admin` / `user`) wherever
-      the account survives; what it no longer BUYS on the target is covered
-      under `local_users[].privilege_level`.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [opnsense-nxos-surface]
 
   # -- EVPN-VXLAN fabric + VRF surface: structurally absent on the source --

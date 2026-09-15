@@ -43,8 +43,8 @@ _SAMPLE = """\
 !Version ArubaOS-CX FL.10.13.1000
 !export-password: default
 hostname Leaf1
-user admin group administrators password ciphertext FAKECIPHERTEXTBLOBADMIN
-user netops group operators password ciphertext FAKECIPHERTEXTBLOBNETOPS
+user admin group administrators password ciphertext AQBFAKECIPHERTEXTBLOBADMIN
+user netops group operators password ciphertext AQBFAKECIPHERTEXTBLOBNETOPS
 snmp-server community FAKECOMMUNITY
 snmp-server system-location Data Center 1
 snmp-server system-contact noc@example.net
@@ -456,7 +456,7 @@ def test_local_users(codec: ArubaAOSCXCodec) -> None:
     assert set(by_name) == {"admin", "netops"}
     assert by_name["admin"].role == "administrators"
     assert by_name["admin"].privilege_level == 15
-    assert by_name["admin"].hashed_password == "FAKECIPHERTEXTBLOBADMIN"
+    assert by_name["admin"].hashed_password == "AQBFAKECIPHERTEXTBLOBADMIN"
     # Non-admin group -> privilege 1 (lossy numeric mapping).
     assert by_name["netops"].role == "operators"
     assert by_name["netops"].privilege_level == 1
