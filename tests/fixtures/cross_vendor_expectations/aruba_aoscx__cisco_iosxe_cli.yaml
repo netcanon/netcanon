@@ -475,8 +475,18 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: "Usernames preserved on all 6 cells that populate local users."
+    disposition: lossy
+    reason: >
+      Drifts on 4 of the 7 cells; 2 preserve every username. The AOS-CX
+      `AQB...` password ciphertext cannot be re-emitted as an IOS-XE secret,
+      so those accounts are dropped with a review comment instead of being
+      written under a cleartext marker. Accounts whose secret is consumable
+      survive, hence `lossy`. Re-create the dropped accounts and set passwords
+      on the target. This is the deliberate post-fix behaviour: an
+      unrecognised or unconsumable secret is REFUSED rather than re-emitted
+      under the target's cleartext marker, which previously turned the digest
+      itself into the password. The account vanishing is the cost of not
+      leaking a credential; it is recorded here rather than hidden.
     references: [aoscx-iosxecli-surface]
 
   "local_users[].role":

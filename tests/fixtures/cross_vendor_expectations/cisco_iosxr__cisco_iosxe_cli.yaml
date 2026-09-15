@@ -395,13 +395,19 @@ per_field_expectation:
   # -- Identity --------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 9 cells that populate local users; all 14 user
-      records match by name across the round-trip.  cisco_iosxr declares
-      `/local-users/user/name` supported and cisco_iosxe_cli declares nothing
-      at all for local users while rendering `username` lines — so this `good`
-      rests on the measurement, not on the target's silence.
+    disposition: lossy
+    reason: >
+      Drifts on 2 of the 12 cells; 7 preserve every username. IOS-XR type-7
+      and type-10 secrets cannot be re-emitted as an IOS-XE secret, so those
+      accounts are dropped with a review comment. Type-5 accounts carry
+      through intact, which is why this is `lossy` and why WHICH accounts
+      survive is predictable from the source secret type. Re-create the
+      dropped accounts and set passwords on the target. This is the deliberate
+      post-fix behaviour: an unrecognised or unconsumable secret is REFUSED
+      rather than re-emitted under the target's cleartext marker, which
+      previously turned the digest itself into the password. The account
+      vanishing is the cost of not leaking a credential; it is recorded here
+      rather than hidden.
     references: [iosxr-iosxecli-surface]
 
   "local_users[].role":

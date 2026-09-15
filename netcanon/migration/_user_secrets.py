@@ -9,10 +9,21 @@ Canonical ``CanonicalLocalUser.hashed_password`` carries vendor-tagged
 hashes from many sources.  The shapes observed in real captures and
 the synthetic round-trip fixtures are:
 
-* ``"plaintext"`` (no separator)                       -> ("plaintext", "plaintext")
 * ``"alg:hash"``  (single colon, e.g. ``sha1:abc``)    -> ("alg", "hash")
 * ``"vendor:alg:hash"`` (e.g. ``arista:sha512:$6$..``) -> ("alg", "hash")
 * ``"<digit> <payload>"`` (e.g. ``9 $9$..``, ``5 $1$..``)  -> ("<digit>", "payload")
+* bare crypt(3) / vendor ciphertext (e.g. ``$6$..``, ``AQB..``)
+  -> ("<algorithm>", "<whole string>") via :data:`_STRUCTURED_PREFIXES`
+* structured but unmodelled (any other ``$id$`` shape)  -> (:data:`_UNKNOWN`, ...)
+* anything else (no separator, no structure)            -> ("plaintext", ...)
+
+⚠️ The last line is a FAIL-OPEN default and is deliberately narrow.  It
+used to catch everything unrecognised, including bare crypt strings —
+so ``$6$..`` classified as plaintext, ``is_migratable`` returned True,
+and the Arista render emitted it under ``secret 0``, EOS's cleartext
+marker: the digest became the password, on 14 of 14 VyOS records.  Only
+genuinely unstructured values reach it now.  Guarded by
+``tests/unit/migration/test_secret_fail_open.py``.
 
 Each target vendor codec calls :func:`is_migratable` before emitting
 a ``password`` line.  When the hash cannot be consumed, the codec
@@ -37,8 +48,13 @@ Public surface:
 
 Configuration surface:
 
-* ``_UNIVERSALLY_UNMIGRATABLE`` — algorithms no target codec accepts;
-  drives :func:`is_migratable` short-circuit refusals.
+* ``_UNIVERSALLY_UNMIGRATABLE`` — descriptive only.  NOT consulted by
+  :func:`is_migratable`, which decides purely from ``_TARGET_ACCEPTS``.
+  Its contents in fact contradict that table (it lists ``sha512`` and
+  ``bcrypt``, which ``arista_eos``/``juniper_junos``/``opnsense`` do
+  accept), so wiring it in would break working migrations.  Retained
+  because a unit test asserts its membership; relabelled so the next
+  reader is not misled into treating it as policy.
 * ``_TARGET_ACCEPTS`` — per-target accepted-algorithm sets; the
   positive list backing :func:`is_migratable`.
 * ``_COMMENT_PREFIXES`` — per-target ``(open, close)`` comment-syntax
@@ -51,11 +67,12 @@ from __future__ import annotations
 # Algorithm vocabulary
 # ---------------------------------------------------------------------------
 
-#: Algorithms that NO target codec can re-use across vendors.  Each of
-#: these is a one-way hash whose binary format is not portable between
-#: vendor families.  When the source hash matches one of these, the
-#: target codec must emit a comment-form review line and skip the
-#: password command.
+#: ⚠️ DESCRIPTIVE ONLY — nothing in production reads this.
+#: :func:`is_migratable` decides from :data:`_TARGET_ACCEPTS` alone, and
+#: this set contradicts it (``sha512`` and ``bcrypt`` below ARE accepted
+#: by ``arista_eos`` / ``juniper_junos`` / ``opnsense``), so wiring it in
+#: would break working migrations rather than harden them.  Kept because
+#: ``test_universally_unmigratable_membership`` asserts its contents.
 _UNIVERSALLY_UNMIGRATABLE: frozenset[str] = frozenset({
     "5",         # Cisco IOS type-5 (md5crypt with leading "5 ")
     "7",         # Cisco IOS type-7 reversible XOR
@@ -92,12 +109,52 @@ _UNIVERSALLY_UNMIGRATABLE: frozenset[str] = frozenset({
 #: * ``opnsense`` is FreeBSD/PHP-style and accepts bcrypt ($2y$).
 #: * ``mikrotik_routeros`` does NOT accept foreign hashes — RouterOS
 #:   re-hashes the supplied password itself.  Plaintext only.
+#: Structured-secret prefixes -> algorithm token.  These are secrets that
+#: carry NO algorithm tag of their own: a bare crypt(3) string (the form
+#: VyOS stores natively) or a vendor ciphertext blob.  Before this table
+#: existed they matched none of the tagged shapes above and fell through to
+#: the plaintext default, so a digest could be re-emitted as the password
+#: itself under a target's cleartext marker.
+#:
+#: Longest-prefix-first ordering matters: ``$2y$`` must be tested before a
+#: hypothetical ``$2`` entry.  crypt(3) ids follow crypt(5).
+#:
+#: ⚠️ ``$5$`` maps to ``sha256crypt``, deliberately NOT to ``sha256``.
+#: ``sha256`` is the token ``aruba_aoss`` accepts, and it means a raw hex
+#: digest its ``password manager`` command ingests verbatim — not a crypt
+#: string.  Reusing that token would hand AOS-S a value it cannot consume
+#: while passing the migratability gate: a new fail-open wearing the shape
+#: of a fix.  Guarded by
+#: ``tests/unit/migration/test_secret_fail_open.py``.
+_STRUCTURED_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("$1$",  "md5crypt"),      # crypt(3) MD5
+    ("$2a$", "bcrypt"),
+    ("$2b$", "bcrypt"),
+    ("$2x$", "bcrypt"),
+    ("$2y$", "bcrypt"),        # OPNsense / FreeBSD / PHP
+    ("$5$",  "sha256crypt"),   # NOT "sha256" — see the warning above
+    ("$6$",  "sha512"),        # VyOS native; EOS + Junos can consume it
+    ("$7$",  "scrypt"),
+    ("$9$",  "junos_type9"),  # Juniper reversible; native ON Junos only
+    ("$y$",  "yescrypt"),
+    ("AQB",  "aoscx_encrypted"),  # ArubaOS-CX user-password ciphertext
+)
+
+#: Sentinel for a structured secret whose format is not in the table above.
+#: It is deliberately absent from every entry of :data:`_TARGET_ACCEPTS`, so
+#: :func:`is_migratable` refuses it — the *next* unseen secret format fails
+#: closed rather than open.  :func:`is_migratable` also refuses it
+#: explicitly, so adding it to an accept set cannot silently reopen the
+#: hole.
+_UNKNOWN = "unknown"
+
+
 _TARGET_ACCEPTS: dict[str, frozenset[str]] = {
     "aruba_aoss":        frozenset({"plaintext", "sha1", "sha256"}),
     "arista_eos":        frozenset({"plaintext", "5", "md5crypt", "sha512"}),
     "cisco_iosxe_cli":   frozenset({"plaintext", "5", "7", "8", "9", "md5crypt"}),
     "fortigate_cli":     frozenset({"plaintext", "fortios"}),
-    "juniper_junos":     frozenset({"plaintext", "junos_type1", "sha512"}),
+    "juniper_junos":     frozenset({"plaintext", "junos_type1", "junos_type9", "sha512"}),
     "opnsense":          frozenset({"plaintext", "bcrypt"}),
     "mikrotik_routeros": frozenset({"plaintext"}),
 }
@@ -139,11 +196,34 @@ def classify_hash(hashed: str) -> tuple[str, str]:
         return first.lower(), rest
 
     # Bare leading-digit Cisco form: ``5 $1$...`` / ``9 $9$...``.
+    # ``10`` is IOS-XR's sha512crypt wrapper.  It is recognised here (rather
+    # than left to fall through) because the whole string — type number and
+    # all — was previously treated as a plaintext password, which made the
+    # literal ``10`` the credential on the target.  No accept set contains
+    # "10": the payload is a portable ``$6$`` and COULD be re-tagged for a
+    # target that takes sha512, but that is a migration improvement rather
+    # than a security fix, so this change refuses and leaves the operator a
+    # review comment instead of guessing.
     head, sep, tail = hashed.partition(" ")
-    if sep and head in {"5", "7", "8", "9"}:
+    if sep and head in {"5", "7", "8", "9", "10"}:
         return head, tail
 
-    # No algorithm tag — treat as literal plaintext password.
+    # Structured secret carrying no algorithm tag of its own: a bare crypt
+    # string or a vendor ciphertext blob.
+    for prefix, algorithm in _STRUCTURED_PREFIXES:
+        if hashed.startswith(prefix):
+            return algorithm, hashed
+
+    # Unrecognised but structurally a secret: anything in ``$id$`` shape we
+    # do not model.  Fail CLOSED — see :data:`_UNKNOWN`.
+    if hashed.startswith("$"):
+        return _UNKNOWN, hashed
+
+    # Genuinely untagged and unstructured — a password a human typed.
+    # The corpus has one: a 5-character alphanumeric secret on an AOS-CX
+    # ``admin`` account.  Refusing everything unrecognised would catch that
+    # too, which is why the rule keys on structured-secret SHAPE rather than
+    # on "did I recognise it".
     return "plaintext", hashed
 
 
@@ -154,8 +234,19 @@ def is_migratable(hashed: str, target_vendor: str) -> bool:
     extracted by :func:`classify_hash` must appear in the target's
     accepted set.  Unknown vendors are conservatively treated as
     accepting only plaintext.
+
+    A secret whose format is structured but unmodelled (:data:`_UNKNOWN`)
+    is refused outright, ahead of the accept-set lookup.  The lookup
+    alone would already refuse it — no target lists the sentinel — but
+    stating the rule here means a later edit that adds the sentinel to an
+    accept set cannot silently reopen the fail-open this guards.  The
+    caller is expected to emit a review comment and skip the password
+    line; never to fall back to plaintext, which is what made a digest
+    the credential in the first place.
     """
     algorithm, _payload = classify_hash(hashed)
+    if algorithm == _UNKNOWN:
+        return False
     if algorithm == "plaintext":
         return True
     accepted = _TARGET_ACCEPTS.get(target_vendor, frozenset({"plaintext"}))

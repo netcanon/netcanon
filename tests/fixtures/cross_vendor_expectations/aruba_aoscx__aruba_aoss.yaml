@@ -468,14 +468,20 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 6 cells that populate local users, including
-      the 2-user cell.  Note that the aruba_aoss matrix declares NOTHING for
-      `/local-users/*` — no supported, lossy or unsupported path — while plainly
-      rendering the accounts; this `good` rests on the measurement, not on a
-      target declaration.  The under-declaration is recorded in the reference
-      note and left for a codec change.
+    disposition: lossy
+    reason: >
+      Drifts on 4 of the 7 cells; 2 preserve every username. AOS-CX stores
+      user passwords as an `AQB...` ciphertext blob that AOS-S cannot ingest,
+      so those accounts are dropped with a review comment rather than written
+      out behind AOS-S's `plaintext "..."` marker -- which would both break
+      the account and put secret-bearing material on a line that claims to be
+      cleartext. Accounts with a consumable secret survive, hence `lossy`.
+      Re-create the dropped accounts on the target. This is the deliberate
+      post-fix behaviour: an unrecognised or unconsumable secret is REFUSED
+      rather than re-emitted under the target's cleartext marker, which
+      previously turned the digest itself into the password. The account
+      vanishing is the cost of not leaking a credential; it is recorded here
+      rather than hidden.
     references: [aoscx-aoss-surface]
 
   "local_users[].role":
