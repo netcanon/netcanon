@@ -186,6 +186,9 @@ a tool change and is deliberately left outside this pair's files.
 
 ### 3. `local_users[].role` is *materialised*, not dropped
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The IOS-XR render now calls the shared `is_migratable()` gate.  Measured after the change: **12 of 12** local accounts now arrive across the 6 cells that populate users. Surviving secrets are re-wrapped into the target's native form (7 SHA-512 crypt (`$6$`) as `secret 10`, 2 MD5 crypt (Cisco type 5) as `secret 5`); the credential itself is unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `secret 0`, the IOS-XR cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/arista_eos__cisco_iosxr.yaml`.
+
 IOS-XR renders the canonical role as `group <role>`. When the source user has
 **no** role, the IOS-XR codec derives one from `privilege_level`. Reproduced
 with a hand-built config (see "Commands that reproduce this" below):

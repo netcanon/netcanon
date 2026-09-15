@@ -558,26 +558,18 @@ per_field_expectation:
     references: [vyos-iosxr-surface]
 
   "local_users[].hashed_password":
-    disposition: good
-    note: >
-      Preserved byte-identical on all 16 populated records across 12 cells;
-      the 17th account (`netadmin` on `houdev_vyos_dhcpv6_pd_client.conf`) has
-      no password on either side, and 1 cell is therefore trivially empty.
-      All 16 are SHA-512 crypt (`$6$`).  `_fmt_secret` on the IOS-XR side
-      stores a type-0 payload bare, so the canonical value survives the
-      round-trip unchanged — which is what this key measures, and why it is
-      honestly `good`.
-      ONE OPERATIONAL CAVEAT that does not change the disposition, because it
-      lives in the rendered artifact rather than in the canonical tree: the
-      render emits each account as `username <name> / group admin / secret 0
-      <hash>`, and `secret 0` is the IOS-XR type-0 CLEARTEXT marker.
-      `cisco_iosxr/render.py` documents the fallback — a bare value renders as
-      the type-0 form — and vyos-origin hashes carry no IOS-XR type digit, so
-      every account lands on that branch.  Do not paste the render at a device
-      and expect the accounts to work; set passwords on the target before
-      cutover.
-      No hash body is quoted in this file or its reference doc — only the
-      crypt-scheme marker and the fact of preservation.
+    disposition: lossy
+    reason: >
+      Every surviving secret is re-wrapped for IOS-XR, never re-hashed: 16
+      SHA-512 crypt (`$6$`) as `secret 10`. The crypt payload is byte-identical
+      on every one; only the canonical wrapper around it changes (vendor tag or
+      type digit), which is what the string comparison measures. Recorded
+      `lossy` for that reason, as on `vyos__juniper_junos` - but operationally
+      this is the outcome to want: IOS-XR receives the credential in a form it
+      consumes natively, so the account arrives able to log in. Before #461 the
+      value was written behind `secret 0`, the IOS-XR cleartext marker. No
+      secret value is quoted here or in the reference doc; only shapes and
+      counts.
     references: [vyos-iosxr-surface]
 
   radius_servers:

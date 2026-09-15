@@ -210,6 +210,9 @@ does not run the translator.
 
 ### 2. Every account arrives as `admin` — a fail-open privilege collapse
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The VyOS render now calls the shared `is_migratable()` gate.  Measured after the change: **9 of 14** local accounts now arrive across the 9 cells that populate users. 5 are refused for a secret VyOS cannot consume (5 Cisco type-7 reversible obfuscation): the render emits a `review:` comment naming the account and no user entry. Surviving secrets are re-wrapped into the target's native form (6 MD5 crypt (Cisco type 5) as `encrypted-password`, 3 IOS-XR type-10 SHA-512 crypt as `encrypted-password`); the credential itself is unchanged.  Any statement below that a secret is carried verbatim, or rendered into `encrypted-password`, a leaf that only holds a Linux crypt string, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxr__vyos.yaml`.
+
 All 14 user records across the 9 populated cells survive with their names, and
 `local_users[].role` drifts on all 14:
 

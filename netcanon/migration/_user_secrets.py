@@ -109,6 +109,18 @@ _UNIVERSALLY_UNMIGRATABLE: frozenset[str] = frozenset({
 #: * ``opnsense`` is FreeBSD/PHP-style and accepts bcrypt ($2y$).
 #: * ``mikrotik_routeros`` does NOT accept foreign hashes — RouterOS
 #:   re-hashes the supplied password itself.  Plaintext only.
+#: * ``cisco_nxos`` writes every crypt(3) form under ``password 5``:
+#:   ``$5$`` (its default) and the legacy ``$1$``.
+#: * ``cisco_iosxr`` takes ``secret 5`` ($1$), ``8`` ($8$), ``9`` ($9$),
+#:   ``10`` ($6$) and ``password 7``; a bare ``$6$`` re-tags as type 10.
+#: * ``vyos`` stores a Linux crypt(3) string in ``encrypted-password``
+#:   ($1$ / $5$ / $6$); plaintext goes to ``plaintext-password``.
+#: * ``aruba_aoscx`` only takes its own ``AQB`` ciphertext (device-keyed)
+#:   or ``password plaintext``.
+#:
+#: Each of those four codecs keeps a codec-local emit table whose keys
+#: mirror its entry here exactly; a guard test asserts the two agree, so an
+#: accepted token can never reach a render with no emit form.
 #: Structured-secret prefixes -> algorithm token.  These are secrets that
 #: carry NO algorithm tag of their own: a bare crypt(3) string (the form
 #: VyOS stores natively) or a vendor ciphertext blob.  Before this table
@@ -157,6 +169,14 @@ _TARGET_ACCEPTS: dict[str, frozenset[str]] = {
     "juniper_junos":     frozenset({"plaintext", "junos_type1", "junos_type9", "sha512"}),
     "opnsense":          frozenset({"plaintext", "bcrypt"}),
     "mikrotik_routeros": frozenset({"plaintext"}),
+    "cisco_nxos":        frozenset({"plaintext", "5", "md5crypt", "sha256crypt"}),
+    "cisco_iosxr":       frozenset({
+        "plaintext", "5", "md5crypt", "7", "8", "9", "10", "sha512",
+    }),
+    "vyos":              frozenset({
+        "plaintext", "5", "md5crypt", "sha256crypt", "10", "sha512",
+    }),
+    "aruba_aoscx":       frozenset({"plaintext", "aoscx_encrypted"}),
 }
 
 
@@ -206,6 +226,16 @@ def classify_hash(hashed: str) -> tuple[str, str]:
     # review comment instead of guessing.
     head, sep, tail = hashed.partition(" ")
     if sep and head in {"5", "7", "8", "9", "10"}:
+        # Type 5 is NOT always md5crypt.  IOS / IOS-XE / IOS-XR / EOS put a
+        # ``$1$`` behind it, but NX-OS writes EVERY crypt(3) variant under
+        # ``password 5`` — and its default is ``$5$`` (sha256crypt; 10 of 10
+        # corpus records).  Tagging that "5" told EOS and IOS-XE it was
+        # md5crypt, so ``secret 5 $5$...`` passed the gate and produced an
+        # account nobody could log in to.  Route by the payload's own id.
+        if head == "5" and tail.startswith("$5$"):
+            return "sha256crypt", tail
+        if head == "5" and tail.startswith("$6$"):
+            return "sha512", tail
         return head, tail
 
     # Structured secret carrying no algorithm tag of its own: a bare crypt

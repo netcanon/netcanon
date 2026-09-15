@@ -221,6 +221,9 @@ reachability at cutover.
 
 ## Credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The NX-OS render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 7** local accounts now arrive across the 6 cells that populate users. 6 are refused for a secret NX-OS cannot consume (6 AOS-CX `AQB` device-keyed ciphertext): the render emits a `review:` comment naming the account and no user entry. 1 consumable secret is carried unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `password 0`, the NX-OS cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__cisco_nxos.yaml`.
+
 `local_users[].hashed_password` is measured **preserved** on all 6 populated
 cells — and that `good` needs its caveat stated, not buried.
 

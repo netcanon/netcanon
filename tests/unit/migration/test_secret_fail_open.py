@@ -296,3 +296,132 @@ def test_aoscx_ciphertext_is_not_retyped_as_an_aos_s_plaintext_password() -> Non
     assert not offenders, (
         f"AOS-CX ciphertext re-typed as an AOS-S plaintext password: {offenders[:3]}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Every render path gates — the second route to the same leak
+# ---------------------------------------------------------------------------
+#
+# Classification alone does not close the leak: a codec that renders users
+# WITHOUT calling ``is_migratable`` accepts whatever it is handed.
+# ``aruba_aoscx``, ``cisco_iosxr``, ``cisco_nxos`` and ``vyos`` did exactly
+# that.  Rendering the committed corpus put 61 source secrets behind NX-OS's
+# ``password 0`` and 61 behind IOS-XR's ``secret 0`` — both cleartext markers —
+# and wrote 116 (VyOS) / 93 (AOS-CX) values into hash slots that could not
+# authenticate.  The tests below are shaped so the NEXT codec to skip the gate
+# goes red too, not just these four.
+
+#: Every codec that renders local users.  ``cisco_iosxe`` (the NETCONF stub)
+#: models no AAA subtree and is deliberately absent.
+_USER_RENDERING_TARGETS = (
+    "arista_eos", "aruba_aoss", "aruba_aoscx", "cisco_iosxe_cli", "cisco_iosxr",
+    "cisco_nxos", "fortigate_cli", "juniper_junos", "mikrotik_routeros",
+    "opnsense", "vyos",
+)
+
+
+def _intent_with_users(*secrets: str):
+    """A real parsed intent whose local users carry exactly ``secrets``."""
+    import netcanon.migration.codecs as _c  # noqa: F401
+    from netcanon.migration.canonical.intent import CanonicalLocalUser
+    from netcanon.migration.codecs.registry import get_codec
+
+    fx = _REPO / "tests" / "fixtures" / "synthetic" / "vyos"
+    intent = get_codec("vyos").parse(next(p for p in sorted(fx.glob("kitchen_sink*"))).read_text(
+        encoding="utf-8"))
+    intent.local_users = [
+        CanonicalLocalUser(name=f"u{i}", privilege_level=15, hashed_password=s, role="admin")
+        for i, s in enumerate(secrets)
+    ]
+    return intent
+
+
+@pytest.mark.parametrize("target", _USER_RENDERING_TARGETS)
+def test_every_user_rendering_codec_refuses_an_unmodelled_secret(target) -> None:
+    """No target accepts an unmodelled ``$id$`` form, so no render may emit it.
+
+    The digest body must not appear ANYWHERE in the output — not behind a
+    cleartext marker, not in a hash slot, not in a comment.  A codec that
+    renders users without consulting the gate fails this on the first run.
+    """
+    from netcanon.migration.codecs.registry import get_codec
+
+    out = get_codec(target).render(_intent_with_users(_UNKNOWN_CRYPT))
+    assert "B" * 40 not in out, (
+        f"{target} rendered an unmodelled secret it cannot consume — its user "
+        f"render path does not call is_migratable()"
+    )
+
+
+def test_nxos_type5_is_classified_by_its_payload_not_as_md5crypt() -> None:
+    """NX-OS writes EVERY crypt form under ``password 5``, and defaults to $5$.
+
+    Tagging ``5 $5$…`` as Cisco type-5 MD5 crypt told EOS and IOS-XE it was a
+    ``secret 5`` they could consume, so it passed the gate and produced an
+    account nobody could log in to.  All 10 NX-OS corpus secrets have this
+    shape.
+    """
+    assert classify_hash("5 " + _SHA256CRYPT) == ("sha256crypt", _SHA256CRYPT)
+    assert classify_hash("5 " + _SHA512CRYPT) == ("sha512", _SHA512CRYPT)
+    assert classify_hash("5 " + _MD5CRYPT) == ("5", _MD5CRYPT)  # IOS type 5 unchanged
+    for target in ("arista_eos", "cisco_iosxe_cli"):
+        assert not is_migratable("5 " + _SHA256CRYPT, target), target
+    for target in ("cisco_nxos", "vyos"):
+        assert is_migratable("5 " + _SHA256CRYPT, target), target
+
+
+@pytest.mark.parametrize(
+    ("module", "table", "target"),
+    [
+        ("netcanon.migration.codecs.cisco_nxos.render", "_NXOS_PASSWORD_TYPE", "cisco_nxos"),
+        ("netcanon.migration.codecs.cisco_iosxr.render", "_IOSXR_SECRET_FORM", "cisco_iosxr"),
+    ],
+)
+def test_emit_table_mirrors_the_accept_set_exactly(module, table, target) -> None:
+    """An accepted token with no emit form would crash the render (KeyError);
+    an emit form with no accepted token is dead code that hides a policy gap."""
+    import importlib
+
+    from netcanon.migration._user_secrets import _TARGET_ACCEPTS
+
+    assert set(getattr(importlib.import_module(module), table)) == set(_TARGET_ACCEPTS[target])
+
+
+@pytest.mark.parametrize(
+    ("target", "secret", "must_contain", "must_not_contain"),
+    [
+        # A consumable crypt string is re-tagged into the target's native form.
+        ("cisco_iosxr", _SHA512CRYPT, "secret 10 $6$", "secret 0"),
+        ("cisco_nxos", "5 " + _SHA256CRYPT, "password 5 $5$", "password 0"),
+        ("vyos", "5 " + _MD5CRYPT, "encrypted-password $1$", "encrypted-password 5"),
+        # Genuine plaintext goes to the leaf that means plaintext.
+        ("vyos", "h0rse", "plaintext-password h0rse", "encrypted-password h0rse"),
+        ("aruba_aoscx", "h0rse", "password plaintext h0rse", "password ciphertext h0rse"),
+        # An unconsumable secret is refused — review comment, no account line.
+        ("cisco_nxos", _BCRYPT, "review:", "B" * 40),
+        ("cisco_iosxr", _BCRYPT, "review:", "B" * 40),
+        ("vyos", _AOSCX_ENC, "review:", "b" * 40),
+        ("aruba_aoscx", _SHA512CRYPT, "review:", "B" * 40),
+    ],
+)
+def test_newly_gated_codecs_emit_the_right_form(
+    target, secret, must_contain, must_not_contain
+) -> None:
+    from netcanon.migration.codecs.registry import get_codec
+
+    out = get_codec(target).render(_intent_with_users(secret))
+    assert must_contain in out
+    assert must_not_contain not in out
+
+
+@pytest.mark.parametrize(
+    ("target", "secret"),
+    [("vyos", "h0rse"), ("aruba_aoscx", "h0rse"), ("cisco_iosxr", "7 0822455D0A16")],
+)
+def test_new_emit_forms_round_trip_through_their_own_parser(target, secret) -> None:
+    """A form the render now writes must be one its own parser reads back."""
+    from netcanon.migration.codecs.registry import get_codec
+
+    codec = get_codec(target)
+    back = codec.parse(codec.render(_intent_with_users(secret)))
+    assert [u.hashed_password for u in back.local_users] == [secret]

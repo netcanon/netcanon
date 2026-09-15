@@ -104,6 +104,9 @@ record.
 
 ### `local_users` — a password-less account disappears
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The NX-OS render now calls the shared `is_migratable()` gate.  Measured after the change: **2 of 12** local accounts now arrive across the 6 cells that populate users. 7 are refused for a secret NX-OS cannot consume (7 SHA-512 crypt (`$6$`)): the render emits a `review:` comment naming the account and no user entry. Surviving secrets are re-wrapped into the target's native form (2 MD5 crypt (Cisco type 5) as `password 5`); the credential itself is unchanged. 3 accounts with no stored secret still vanish, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password 0`, the NX-OS cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/arista_eos__cisco_nxos.yaml`.
+
 Kept as a whole-record disposition because the record itself does not
 survive: `ksator_dcs_7150s64` goes 5 users -> 3 and `kitchen_sink` goes
 3 -> 2. On both cells the account that vanishes is the one with an EMPTY

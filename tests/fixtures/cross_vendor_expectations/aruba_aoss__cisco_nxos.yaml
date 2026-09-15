@@ -406,41 +406,63 @@ per_field_expectation:
   # privilege does not. --
 
   "local_users[].name":
-    disposition: good
+    disposition: lossy
+    reason: >
+      1 of 5 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
+      `sha1:` digest. NX-OS can consume a `$5$` or `$1$` crypt string under
+      `password 5`, or a genuine plaintext password; anything else is refused on
+      purpose (#461) with a review comment naming the account and no user entry.
+      Before that change the value was written behind `password 0`, the NX-OS
+      cleartext marker, so the account either carried the source's stored secret
+      as its literal password or could not authenticate at all. The survivors
+      are 1 carrying 1 plaintext password. Recorded `lossy` rather than
+      `unsupported`: which account survives is decided by its secret form, and
+      accounts with a consumable secret do arrive. Before cutover, list the
+      source accounts, search the render for `review:` comments, and re-create
+      each refused account on the target with a fresh password.
     references: [aoss-nxos-surface]
 
   "local_users[].privilege_level":
     disposition: lossy
     reason: >
-      Every AOS-S administrator comes back as an unprivileged user: 15 -> 1 on
-      all 3 cells that populate local users (4 accounts).  The NX-OS codec
-      derives the numeric privilege from the named role, mapping
-      `network-admin` / `vdc-admin` -> 15 and everything else -> 1; AOS-S
-      roles are `manager` / `operator`, which are not NX-OS role names, so
-      every manager account degrades.  Re-assign `role network-admin` on the
-      target for each account that was an AOS-S manager BEFORE cutting over,
-      or the migration lands a switch nobody can administer.
+      On the 1 account that survives, the privilege level changes: `15` -> `1`
+      on 1. Mechanism: cisco_nxos renders the canonical role verbatim and maps
+      only `network-admin` / `vdc-admin` back to privilege 15 (declared lossy at
+      `/local-users/user/privilege-level`). Accounts refused for their secret
+      vanish with their privilege level and are counted once, under
+      `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [aoss-nxos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      The canonical string is preserved verbatim, AOS-S vendor tag included,
-      in the shape `sha1:<digest>` / `plaintext:<secret>`.  What the mesh
-      cannot score is target-syntax validity: NX-OS renders it as
-      `username <name> password 0 <tagged-hash> role <role>`, i.e. a type-0
-      (plaintext-marker) field holding an AOS-S digest.  Nothing is lost in
-      translation, but the credentials must be re-set on the Nexus — the hash
-      formats are not cross-compatible.
+      No secret is written in a form NX-OS cannot consume. 4 accounts are
+      refused for their secret (4 AOS-S `sha1:` digest) and vanish with it; that
+      loss is recorded once, under `local_users[].name`. The 1 secret that
+      arrives is carried with the credential unchanged: 1 plaintext password as
+      `password 0`. Before #461 this key read preserved because the value was
+      written behind `password 0`, the NX-OS cleartext marker; that preservation
+      was a leak or a dead credential, not a working one. Recorded `good` rather
+      than `lossy`: the only drift on this key is the parent record-count
+      collapse, which the audit attributes to `local_users[].name` and
+      reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could
+      never be evidenced. No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [aoss-nxos-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      The role string survives verbatim (`manager` / `operator`), which is
-      what the mesh scores.  Those are not NX-OS role names — map them to
-      `network-admin` / `network-operator` on the target; see
-      `local_users[].privilege_level` for the consequence of not doing so.
+      On the 1 account that survives, the role is unchanged. Mechanism:
+      cisco_nxos renders the canonical role verbatim and maps only
+      `network-admin` / `vdc-admin` back to privilege 15 (declared lossy at
+      `/local-users/user/privilege-level`). Recorded `good` rather than `lossy`:
+      the only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [aoss-nxos-surface]
 
   radius_servers:

@@ -317,37 +317,60 @@ per_field_expectation:
   # role label drifts. --
 
   "local_users[].name":
-    disposition: good
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 10 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 10 SHA-256 crypt (NX-OS type 5 over
+      `$5$`). NX-OS writes every secret as type 5 over a `$5$` SHA-256 crypt
+      string. That used to be tagged Cisco type-5 MD5 crypt and passed through
+      as `secret 5` (IOS-XE reads type 5 as MD5 crypt), which produced an
+      account nobody could log in to. It is now classified by the payload's own
+      `$5$` id (#461), and IOS-XE has no SHA-256-crypt form, so the render
+      refuses it: a review comment naming the account, and no `username` line.
+      Recorded `unsupported` rather than `lossy` because the record vanishes
+      entirely (#436) and a `lossy` warning would understate a target with no
+      local accounts. It is a property of the source's secret form, not a gap in
+      the IOS-XE user model: an account whose secret IOS-XE can consume would
+      still migrate. Create a console admin on the target out of band before
+      cutover, then re-create every account with a native credential.
     references: [nxos-iosxecli-surface]
 
   "local_users[].privilege_level":
     disposition: good
-    note: "The 1-15 privilege scale is shared, and carries across verbatim."
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      privilege level on the target to compare. Recorded `good` rather than
+      `lossy`: the only drift on this key is the parent record-count collapse,
+      which the audit attributes to `local_users[].name` and reclassifies
+      STRUCTURAL_ONLY here. Accounts refused for their secret vanish with their
+      privilege level and are counted once, under `local_users[].name`.
     references: [nxos-iosxecli-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      Same-vendor hash family, so the digest crosses untouched: an NX-OS
-      `5 $5$<salt>$<digest>` re-renders as `secret 5 $5$<salt>$<digest>` and
-      re-parses identically.  Preserved on all 9 cells with local accounts --
-      unlike the Arista target, where the marker around the digest is
-      rewritten.
+      No secret is written in a form IOS-XE cannot consume. 10 accounts are
+      refused for their secret (10 SHA-256 crypt (NX-OS type 5 over `$5$`)) and
+      vanish with it; that loss is recorded once, under `local_users[].name`. No
+      account arrives, so no value reaches the target to compare. Before #461
+      this key read preserved because the value was written as `secret 5`
+      (IOS-XE reads type 5 as MD5 crypt); that preservation was a leak or a dead
+      credential, not a working one. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here, so a declared loss on this key could never be evidenced. No secret
+      value is quoted here or in the reference doc; only shapes and counts.
     references: [nxos-iosxecli-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      Drifts on all 9 cells with local accounts: `network-admin` re-parses as
-      `admin` and `network-operator` as `operator`.  The IOS-XE render
-      deliberately omits the `role <name>` line, and the parser re-derives the
-      role from the privilege number instead (privilege 15 -> `admin`, else
-      `operator`), so NX-OS RBAC role names have no representation on the
-      target.  The account, its privilege and its password all survive, so
-      login still works -- but any custom NX-OS role with feature-scoped rules
-      must be re-authored on the target as a parser view or an AAA
-      authorization profile, and until it is, the user's rights are whatever
-      their privilege number alone grants.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [nxos-iosxecli-surface]
 
   radius_servers:

@@ -502,15 +502,18 @@ per_field_expectation:
     references: [arista-iosxr-surface]
 
   "local_users[].hashed_password":
-    disposition: good
-    note: >
-      Preserved on 6 of 6 cells — the stored secret survives byte-identical
-      and `/local-users/user/hashed-password` is declared supported on both
-      sides.  This is the good outcome and it is unusual across the mesh;
-      most pairs lose the credential and leave every migrated account
-      unusable.  Only the shape was inspected (length and leading marker);
-      hash values are deliberately not quoted here or in the reference note,
-      since a stored secret stays operator-traceable even when hashed.
+    disposition: lossy
+    reason: >
+      Every surviving secret is re-wrapped for IOS-XR, never re-hashed: 7
+      SHA-512 crypt (`$6$`) as `secret 10`, 2 MD5 crypt (Cisco type 5) as
+      `secret 5`. The crypt payload is byte-identical on every one; only the
+      canonical wrapper around it changes (vendor tag or type digit), which is
+      what the string comparison measures. Recorded `lossy` for that reason, as
+      on `vyos__juniper_junos` - but operationally this is the outcome to want:
+      IOS-XR receives the credential in a form it consumes natively, so the
+      account arrives able to log in. Before #461 the value was written behind
+      `secret 0`, the IOS-XR cleartext marker. No secret value is quoted here or
+      in the reference doc; only shapes and counts.
     references: [arista-iosxr-surface]
 
   radius_servers:

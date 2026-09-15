@@ -663,7 +663,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         # ── Phase 2: local-user password
         # (system / login / user X / authentication / encrypted-password) ──
         if (
-            key == "encrypted-password" and value
+            key in ("encrypted-password", "plaintext-password") and value
             and len(stack) == 4
             and stack[0][0] == "system" and stack[1][0] == "login"
             and stack[2][0] == "user" and stack[3][0] == "authentication"

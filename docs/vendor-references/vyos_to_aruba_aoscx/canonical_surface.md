@@ -197,6 +197,9 @@ recorded where it is measured.
 
 ### 4. A passwordless account disappears — and the cause is a render/parse asymmetry
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 17** local accounts now arrive across the 13 cells that populate users. 16 are refused for a secret AOS-CX cannot consume (16 SHA-512 crypt (`$6$`)): the render emits a `review:` comment naming the account and no user entry. 1 account with no stored secret still vanishes, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__aruba_aoscx.yaml`.
+
 12 of 13 cells round-trip their local users with every record intact. On
 `houdev_vyos_dhcpv6_pd_client.conf`, the single account `netadmin` — the only
 user on that fixture — **vanishes**, and the canonical `local_users` list comes

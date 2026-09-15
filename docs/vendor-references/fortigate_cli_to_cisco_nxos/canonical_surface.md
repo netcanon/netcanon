@@ -89,6 +89,9 @@ sub-field.
 
 ### `local_users` and `snmp.v3_users` — one root cause, two vanished tables
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The NX-OS render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 8** local accounts now arrive across the 4 cells that populate users. 6 are refused for a secret NX-OS cannot consume (6 FortiOS `ENC` ciphertext): the render emits a `review:` comment naming the account and no user entry. 2 accounts with no stored secret still vanish, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password 0`, the NX-OS cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__cisco_nxos.yaml`.
+
 The largest operator-visible loss on this pair, and the reason both are
 `unsupported` rather than `lossy`: the record does not survive at all.
 

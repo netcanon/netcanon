@@ -67,15 +67,40 @@ timestamp if your timezone matters for an audit.
   are re-authored `lossy` in the same change.  `CODEC_BUG` went 5 -> 23 on
   the raw behaviour change and is back to **5** with the pairs corrected.
 
-- **Known, NOT fixed here: the same leak exists via a second route.**
-  `aruba_aoscx`, `cisco_iosxr`, `cisco_nxos` and `vyos` emit local users
-  **without calling `is_migratable` at all**, so as targets they still
-  accept a hash they cannot consume — `cisco_nxos` writes it behind
-  `password 0` and `cisco_iosxr` behind `secret 0`, both cleartext markers.
-  Measured with a bcrypt hash (consumable only by OPNsense) rendered into
-  each.  Wiring the gate into those four render paths is a separate change
-  with its own account-drop blast radius; `docs/CAPABILITIES.md` no longer
-  claims every render path gates.
+- **Fixed: four codecs rendered local users without the migratability gate,
+  so a foreign digest was still written behind a cleartext marker.**
+  `aruba_aoscx`, `cisco_iosxr`, `cisco_nxos` and `vyos` never called
+  `is_migratable()`.  Measured on the committed corpus before this change:
+  **61 source secrets rendered behind NX-OS `password 0` and 61 behind IOS-XR
+  `secret 0`** — both cleartext markers — plus 116 VyOS `encrypted-password`
+  and 93 AOS-CX `password ciphertext` values that could not authenticate.
+  After: **0** local-user secrets in a form the target cannot consume, on all
+  four.  A consumable secret is re-tagged into the target's native form
+  (IOS-XR `secret 10` for SHA-512 crypt, a bare crypt string in VyOS
+  `encrypted-password`); genuine plaintext goes to the leaf that means
+  plaintext (`plaintext-password`, `password plaintext`), and both parsers
+  now read those forms back.  IOS-XR type-7 secrets render as `password 7`,
+  since `secret` takes only types 0/5/8/9/10.
+
+  **NX-OS type 5 was mis-tagged as MD5 crypt.**  NX-OS writes every crypt
+  form under `password 5` and defaults to `$5$` (10 of 10 corpus secrets).
+  Tagged `5`, it passed the EOS and IOS-XE gates as `secret 5` and produced
+  an account nobody could log in to.  Type 5 is now classified by its
+  payload id.
+
+  Refusing a secret drops the account (review comment, no user line), so
+  the cost is declared rather than hidden: `CODEC_BUG` went 5 -> 179 on the
+  raw change and is back to **5** after re-authoring 105 `local_users*`
+  blocks across 37 expectation pairs from a render / re-parse measurement
+  (48 disposition flips; the 13 pairs where no account survives are now
+  `unsupported`).  Each changed pair's vendor-reference doc carries a dated
+  update note.  `METHODOLOGY_ISSUE_over` held at 21.  The AOS-CX kitchen-sink
+  placeholder secrets now have the real `AQB` shape, so a fake ciphertext is
+  no longer classified as a password.
+
+  New guard `test_every_user_rendering_codec_refuses_an_unmodelled_secret`
+  fails for any codec, current or future, that renders users without the
+  gate; the new tests were verified red against `main` (15 failures).
 ### Added
 
 - **A6 COMPLETE: `vyos` was the last blind codec, and the mesh audit now has

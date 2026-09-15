@@ -435,34 +435,49 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      All 10 user records across the 4 populated cells cross intact.  Both
-      matrices declare `/local-users/user` supported.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 10 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 10 SHA-256 crypt (NX-OS type 5 over
+      `$5$`). IOS-XR can consume `secret 5` / `8` / `9` / `10`, `password 7`, or
+      a genuine plaintext password; anything else is refused on purpose (#461)
+      with a review comment naming the account and no user entry. Before that
+      change the value was written behind `secret 0`, the IOS-XR cleartext
+      marker, so the account either carried the source's stored secret as its
+      literal password or could not authenticate at all. Recorded `unsupported`
+      rather than `lossy` because the record vanishes entirely (#436) and a
+      `lossy` warning would understate a target with no local accounts. It is a
+      property of the source's secret form, not a gap in the IOS-XR user model:
+      an account whose secret IOS-XR can consume would still migrate. Create a
+      console admin on the target out of band before cutover, then re-create
+      every account with a native credential.
     references: [nxos-iosxr-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role preserved on all 10 records (`network-admin`, `network-operator`).
-      One caveat that this `good` does NOT cover: `privilege_level` — a
-      sub-field outside the audited key set on this pair — collapses 15 -> 1 on
-      9 of those records, which cisco_nxos honestly declares LOSSY at
-      `/local-users/user/privilege-level`.  The named role crosses; the numeric
-      privilege does not.  Check effective authorisation on the target rather
-      than trusting the role string alone.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [nxos-iosxr-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      All 10 hashes cross byte-identical — the same-vendor dividend, and the
-      exception in this mesh: unlike every cross-vendor pair, migrated accounts
-      arrive with WORKING credentials and do not need a password reset before
-      cutover.  Shape only, never a value: an NX-OS type-5 marker followed by a
-      SHA-256-crypt string, 32-55 characters across the corpus.  The hash
-      values are deliberately not reproduced here or in the vendor reference —
-      crypt material is operator-traceable even though it is hashed.
+      No secret is written in a form IOS-XR cannot consume. 10 accounts are
+      refused for their secret (10 SHA-256 crypt (NX-OS type 5 over `$5$`)) and
+      vanish with it; that loss is recorded once, under `local_users[].name`. No
+      account arrives, so no value reaches the target to compare. Before #461
+      this key read preserved because the value was written behind `secret 0`,
+      the IOS-XR cleartext marker; that preservation was a leak or a dead
+      credential, not a working one. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here, so a declared loss on this key could never be evidenced. No secret
+      value is quoted here or in the reference doc; only shapes and counts.
     references: [nxos-iosxr-surface]
 
   radius_servers:

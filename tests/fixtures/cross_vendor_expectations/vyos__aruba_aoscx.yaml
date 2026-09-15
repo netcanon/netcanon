@@ -513,71 +513,52 @@ per_field_expectation:
   # -- Identity -- one account disappears, the survivors keep their values ----
 
   "local_users[].name":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      One account vanishes, on one cell, and the rule is exact enough to act
-      on.  13 of 13 cells populate local users — 17 source accounts in total,
-      16 of which survive.  On
-      `houdev_vyos_dhcpv6_pd_client.conf` the single account `netadmin` — the
-      only user on that fixture — disappears and the canonical `local_users`
-      list comes back EMPTY.
-      The cause is a render/parse asymmetry, reproduced by hand rather than
-      guessed.  That VyOS account carries NO password hash (its
-      `hashed_password` is the empty string).  The AOS-CX render handles that
-      deliberately, emitting `user netadmin group admin` and omitting the
-      `password ciphertext` clause because there is no blob to write.  The
-      AOS-CX parser's user regex REQUIRES that clause — name, group, then
-      `password ciphertext <blob>` — so a passwordless `user … group …` line
-      matches nothing and the account is never read back.  Every account that
-      does carry a hash survives.
-      Recorded `lossy` rather than `unsupported` deliberately: aruba_aoscx
-      declares `/local-users/user/name` SUPPORTED and does emit users, 16 of
-      17 of them, so this is a partial record loss inside a concept the
-      target models — not the concept-level gap that #436 reserves
-      `unsupported` for.
-      This entry is where the ONE record-level disappearance on this pair is
-      claimed.  Before cutover, list the source accounts and diff them
-      against the render; a silently missing admin account is how a migration
-      locks you out.
+      No account arrives: 0 of 17 across all 13 cells that populate local users.
+      The stored secrets on this corpus: 16 SHA-512 crypt (`$6$`). AOS-CX can
+      consume its own device-keyed `AQB` ciphertext, or a genuine plaintext
+      password under `password plaintext`; anything else is refused on purpose
+      (#461) with a review comment naming the account and no user entry. Before
+      that change the value was written behind `password ciphertext`, a slot
+      that only holds AOS-CX's own device-keyed blob, so the account either
+      carried the source's stored secret as its literal password or could not
+      authenticate at all. 1 further account with no stored secret also
+      vanishes: the AOS-CX render has no passwordless form its own parser reads
+      back. Recorded `unsupported` rather than `lossy` because the record
+      vanishes entirely (#436) and a `lossy` warning would understate a target
+      with no local accounts. It is a property of the source's secret form, not
+      a gap in the AOS-CX user model: an account whose secret AOS-CX can consume
+      would still migrate. Create a console admin on the target out of band
+      before cutover, then re-create every account with a native credential.
     references: [vyos-aoscx-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Role is preserved on every one of the 16 user records that survives the
-      round-trip — `admin` stays `admin`, zero role drift measured on any
-      cell.  Both matrices declare `/local-users/user/role` supported.
-      This key measures what happens to the VALUE when the record survives,
-      and the answer is: nothing.  The single account that vanishes entirely
-      is accounted for once, under `local_users[].name` — recording the same
-      disappearance a second time here would double-count one loss.
-      One measured side-effect that this key does NOT cover, stated here so
-      it is not lost: the SEPARATE `privilege_level` field is demoted 15 -> 1
-      on all 16 surviving records, because the render writes the canonical
-      role string into the AOS-CX group slot (`group admin`) and the AOS-CX
-      codec recognises only `administrators` as privilege 15.  Both matrices
-      declare `/local-users/user/privilege-level` lossy.  It has no key in
-      the audit's field list, so no disposition in this file claims it, and
-      it is not evidence for anything above it.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [vyos-aoscx-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      The stored credential round-trips BYTE-IDENTICAL on every one of the 16
-      records that survives.  The VyOS `encrypted-password` blob is re-emitted
-      verbatim into the AOS-CX `password ciphertext <blob>` slot and read back
-      unchanged; zero hash drift measured on any cell.  Both matrices declare
-      `/local-users/user/hashed-password` supported.
-      Like `local_users[].role`, this key measures the value on a surviving
-      record; the account that disappears is claimed once, under
-      `local_users[].name`.
-      `good` describes the CANONICAL round-trip, not device portability —
-      both codecs state separately that a hash salted for one vendor's
-      device does not authenticate on another's.  Set passwords on the target
-      before cutover regardless.  No hash body is reproduced in this file or
-      its reference doc; only the crypt-scheme marker and the token length
-      are described.
+      No secret is written in a form AOS-CX cannot consume. 16 accounts are
+      refused for their secret (16 SHA-512 crypt (`$6$`)) and vanish with it;
+      that loss is recorded once, under `local_users[].name`. No account
+      arrives, so no value reaches the target to compare. Before #461 this key
+      read preserved because the value was written behind `password ciphertext`,
+      a slot that only holds AOS-CX's own device-keyed blob; that preservation
+      was a leak or a dead credential, not a working one. Recorded `good` rather
+      than `lossy`: the only drift on this key is the parent record-count
+      collapse, which the audit attributes to `local_users[].name` and
+      reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could
+      never be evidenced. No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [vyos-aoscx-surface]
 
   radius_servers:

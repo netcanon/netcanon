@@ -96,6 +96,9 @@ Fields the source populates on **zero** of the 15 cells: `timezone`,
 
 ### 1. Operator accounts arrive as administrators
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The VyOS render now calls the shared `is_migratable()` gate.  Measured after the change: **4 of 11** local accounts now arrive across the 7 cells that populate users. 7 are refused for a secret VyOS cannot consume (5 Cisco type-9 scrypt, 1 Cisco type-7 reversible obfuscation, 1 Cisco type-8 PBKDF2): the render emits a `review:` comment naming the account and no user entry. Surviving secrets are re-wrapped into the target's native form (3 MD5 crypt (Cisco type 5) as `encrypted-password`); the credential itself is unchanged. 1 consumable secret is carried unchanged.  Any statement below that a secret is carried verbatim, or rendered into `encrypted-password`, a leaf that only holds a Linux crypt string, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxe_cli__vyos.yaml`.
+
 This is the finding to act on before any other.
 
 11 local-user records across 7 cells are matched by name; **none disappears**.

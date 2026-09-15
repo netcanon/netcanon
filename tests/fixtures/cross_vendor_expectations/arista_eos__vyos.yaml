@@ -578,20 +578,19 @@ per_field_expectation:
     references: [arista-vyos-surface]
 
   "local_users[].hashed_password":
-    disposition: good
-    note: >
-      Credentials survive this pair intact, which is rare enough in this
-      mesh to be worth stating plainly.  Of the 12 accounts, 9 carry a
-      credential and all 9 round-trip BYTE-IDENTICAL; the remaining 3 carry
-      no credential in the source at all.  Zero drift on any cell — no
-      re-encoding, no scheme downgrade, no cleartext marker.  Both matrices
-      declare `/local-users/user/hashed-password` supported.
-      Read this together with `local_users[].role`: the accounts arrive with
-      WORKING passwords and with `admin` rights they may not have had.  This
-      key being `good` is what makes that one dangerous.
-      Only the shape is described here and in the reference doc — the values
-      are carried under the codec's own vendor tag prefix, and no hash body
-      is reproduced anywhere.
+    disposition: lossy
+    reason: >
+      Every surviving secret is re-wrapped for VyOS, never re-hashed: 7 SHA-512
+      crypt (`$6$`) as `encrypted-password`, 2 MD5 crypt (Cisco type 5) as
+      `encrypted-password`. The crypt payload is byte-identical on every one;
+      only the canonical wrapper around it changes (vendor tag or type digit),
+      which is what the string comparison measures. Recorded `lossy` for that
+      reason, as on `vyos__juniper_junos` - but operationally this is the
+      outcome to want: VyOS receives the credential in a form it consumes
+      natively, so the account arrives able to log in. Before #461 the value was
+      written into `encrypted-password`, a leaf that only holds a Linux crypt
+      string. No secret value is quoted here or in the reference doc; only
+      shapes and counts.
     references: [arista-vyos-surface]
 
   radius_servers:

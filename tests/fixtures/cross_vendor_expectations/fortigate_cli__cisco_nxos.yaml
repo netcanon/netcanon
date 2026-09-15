@@ -526,20 +526,22 @@ per_field_expectation:
   local_users:
     disposition: unsupported
     reason: >
-      The single most consequential loss on this pair, and a whole-record one:
-      EVERY account on EVERY cell is dropped (1 -> 0, 1 -> 0, 3 -> 0, 3 -> 0).
-      FortiOS stores an admin password as a two-token opaque value, canonical
-      shape `fortios:ENC <opaque-blob>`.  The NX-OS renderer emits
-      `username <name> password 0 fortios:ENC <opaque-blob> role <role>`,
-      while the NX-OS `username` grammar (and the codec's own parse regex)
-      accepts a SINGLE token for the hash -- the space inside the credential
-      breaks the line, so no account exists on the target and a real Nexus
-      would reject the line too.  `unsupported` rather than `lossy` precisely
-      because nothing of the record arrives: not the name, not the role, not
-      the privilege level.  Combined with the `radius_servers` row below, a
-      device built from this render authenticates NOBODY.  Create a local
-      console admin on the Nexus out of band, before cutover, and re-enter
-      every account with a native NX-OS credential.
+      No account arrives: 0 of 8 across all 4 cells that populate local users.
+      The stored secrets on this corpus: 6 FortiOS `ENC` ciphertext. NX-OS can
+      consume a `$5$` or `$1$` crypt string under `password 5`, or a genuine
+      plaintext password; anything else is refused on purpose (#461) with a
+      review comment naming the account and no user entry. Before that change
+      the value was written behind `password 0`, the NX-OS cleartext marker, so
+      the account either carried the source's stored secret as its literal
+      password or could not authenticate at all. 2 further accounts with no
+      stored secret also vanish: the NX-OS render has no passwordless form its
+      own parser reads back. Recorded `unsupported` rather than `lossy` because
+      the record vanishes entirely (#436), for every sub-field at once and a
+      `lossy` warning would understate a target with no local accounts. It is a
+      property of the source's secret form, not a gap in the NX-OS user model:
+      an account whose secret NX-OS can consume would still migrate. Create a
+      console admin on the target out of band before cutover, then re-create
+      every account with a native credential.
     references: [fg-nxos-surface]
 
   radius_servers:

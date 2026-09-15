@@ -1,5 +1,8 @@
 # Aruba AOS-S -> Cisco NX-OS: measured canonical surface
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The NX-OS render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 5** local accounts now arrive across the 3 cells that populate users. 4 are refused for a secret NX-OS cannot consume (4 AOS-S `sha1:` digest): the render emits a `review:` comment naming the account and no user entry. Surviving secrets are re-wrapped into the target's native form (1 plaintext password as `password 0`); the credential itself is unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `password 0`, the NX-OS cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoss__cisco_nxos.yaml`.
+
 Source: `netcanon/migration/codecs/aruba_aoss/codec.py` and
 `netcanon/migration/codecs/cisco_nxos/codec.py` (`CapabilityMatrix`), joined
 against a full in-process `tools/run_full_mesh.py` pass over the committed

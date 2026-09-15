@@ -236,6 +236,9 @@ membership, which is false.
 
 ## Credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 11** local accounts now arrive across the 7 cells that populate users. 10 are refused for a secret AOS-CX cannot consume (5 Cisco type-9 scrypt, 3 MD5 crypt (Cisco type 5), 1 Cisco type-7 reversible obfuscation, 1 Cisco type-8 PBKDF2): the render emits a `review:` comment naming the account and no user entry. 1 consumable secret is carried unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_iosxe_cli__aruba_aoscx.yaml`.
+
 Three separate credential surfaces degrade on this pair, and all three need
 hand work on the target.
 

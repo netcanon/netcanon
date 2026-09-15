@@ -261,6 +261,9 @@ mean "the VLAN name migrates".
 
 ## Credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The IOS-XR render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 13** local accounts now arrive across the 8 cells that populate users. 12 are refused for a secret IOS-XR cannot consume (12 `junos:`-tagged crypt string): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered behind `secret 0`, the IOS-XR cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/juniper_junos__cisco_iosxr.yaml`.
+
 `local_users[].hashed_password` is **preserved on all 8 populated cells** —
 verified as string equality between the source intent and the re-parsed
 intent, not inferred. So are `local_users[].name` and `.role`.

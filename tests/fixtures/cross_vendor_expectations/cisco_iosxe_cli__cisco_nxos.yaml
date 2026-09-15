@@ -433,48 +433,66 @@ per_field_expectation:
   # and its role label all survive; only the numeric privilege collapses. --
 
   "local_users[].name":
-    disposition: good
-    note: "Preserved on all 7 cells with local accounts."
+    disposition: lossy
+    reason: >
+      4 of 11 accounts arrive across the 7 cells that populate local users; the
+      list shrinks on 5 of them. The 7 accounts that vanish carry 5 Cisco type-9
+      scrypt, 1 Cisco type-7 reversible obfuscation, 1 Cisco type-8 PBKDF2.
+      NX-OS can consume a `$5$` or `$1$` crypt string under `password 5`, or a
+      genuine plaintext password; anything else is refused on purpose (#461)
+      with a review comment naming the account and no user entry. Before that
+      change the value was written behind `password 0`, the NX-OS cleartext
+      marker, so the account either carried the source's stored secret as its
+      literal password or could not authenticate at all. The survivors are 4
+      carrying 3 MD5 crypt (Cisco type 5), 1 plaintext password. Recorded
+      `lossy` rather than `unsupported`: which account survives is decided by
+      its secret form, and accounts with a consumable secret do arrive. Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a fresh
+      password.
     references: [iosxecli-nxos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      Same-vendor hash family, so the digest crosses untouched: an IOS-XE
-      `secret 5 $5$<salt>$<digest>` re-renders as
-      `username <name> password 5 $5$<salt>$<digest> role <role>` and
-      re-parses identically.  Preserved on all 7 cells with local accounts.
+      No secret is written in a form NX-OS cannot consume. 7 accounts are
+      refused for their secret (5 Cisco type-9 scrypt, 1 Cisco type-7 reversible
+      obfuscation, 1 Cisco type-8 PBKDF2) and vanish with it; that loss is
+      recorded once, under `local_users[].name`. The 4 secrets that arrive are
+      carried with the credential unchanged: 3 MD5 crypt (Cisco type 5) as
+      `password 5`, 1 plaintext password as `password 0`. Before #461 this key
+      read preserved because the value was written behind `password 0`, the
+      NX-OS cleartext marker; that preservation was a leak or a dead credential,
+      not a working one. Recorded `good` rather than `lossy`: the only drift on
+      this key is the parent record-count collapse, which the audit attributes
+      to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a
+      declared loss on this key could never be evidenced. No secret value is
+      quoted here or in the reference doc; only shapes and counts.
     references: [iosxecli-nxos-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      The canonical role string survives verbatim (`admin` in, `admin` out) --
-      but read it together with `local_users[].privilege_level` below, because
-      surviving verbatim is exactly what breaks the privilege: `admin` is not
-      an NX-OS built-in role name.
+      On the 4 accounts that survive, the role is unchanged. Mechanism:
+      cisco_nxos renders the canonical role verbatim and maps only
+      `network-admin` / `vdc-admin` back to privilege 15 (declared lossy at
+      `/local-users/user/privilege-level`). Recorded `good` rather than `lossy`:
+      the only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [iosxecli-nxos-surface]
 
   "local_users[].privilege_level":
     disposition: lossy
     reason: >
-      THE loss to plan for on this pair: every local account's privilege
-      collapses to 1 on all 7 cells that have accounts (`15 -> 1`, `5 -> 1`).
-      The chain is three codecs deep and each step is individually
-      reasonable -- the IOS-XE parser derives a canonical role from the
-      numeric privilege (15 -> `admin`, else `operator`); the NX-OS renderer
-      emits `user.role` verbatim, so it writes `username <name> ... role
-      admin`; the NX-OS parser maps only `network-admin` / `vdc-admin` back to
-      privilege 15 and everything else to 1.  Two consequences, both silent:
-      the migrated config references `role admin`, which is not an NX-OS
-      built-in and does not exist on the box until someone creates it, and
-      every privilege-15 administrator lands as a non-privileged user.  The
-      account name and password still work, so this shows up as a login that
-      succeeds and then cannot configure anything.  Re-map roles explicitly
-      (`role network-admin` for the privilege-15 accounts, `network-operator`
-      or a custom role for the rest) BEFORE cutting over -- and note that
-      `radius_servers` below is dropped in the same render, so the usual
-      fallback of "AAA will sort it out" is not available either.
+      On the 4 accounts that survive, the privilege level changes: `15` -> `1`
+      on 4. Mechanism: cisco_nxos renders the canonical role verbatim and maps
+      only `network-admin` / `vdc-admin` back to privilege 15 (declared lossy at
+      `/local-users/user/privilege-level`). Accounts refused for their secret
+      vanish with their privilege level and are counted once, under
+      `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [iosxecli-nxos-surface]
 
   radius_servers:

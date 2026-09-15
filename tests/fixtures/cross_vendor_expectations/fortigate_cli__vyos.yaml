@@ -588,66 +588,55 @@ per_field_expectation:
   # -- Identity -- names and credentials cross; authority does not ----------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Every account survives: 8 records across the 4 cells (1, 1, 3 and 3),
-      8 after the round-trip, identical name sets on every cell, zero
-      only-in-source and zero only-in-target.  Both matrices declare
-      `/local-users/user/name` supported, and the render emits
-      `system login user <name>` per account.
-      This is the key that makes the next two matter — nothing is hidden by
-      an account quietly disappearing.
+    disposition: lossy
+    reason: >
+      2 of 8 accounts arrive across the 4 cells that populate local users; the
+      list shrinks on 4 of them. The 6 accounts that vanish carry 6 FortiOS
+      `ENC` ciphertext. VyOS can consume a Linux crypt(3) string (`$1$` / `$5$`
+      / `$6$`) in `encrypted-password`, or a genuine plaintext password in
+      `plaintext-password`; anything else is refused on purpose (#461) with a
+      review comment naming the account and no user entry. Before that change
+      the value was written into `encrypted-password`, a leaf that only holds a
+      Linux crypt string, so the account either carried the source's stored
+      secret as its literal password or could not authenticate at all. The
+      survivors are 2 with no stored secret. Recorded `lossy` rather than
+      `unsupported`: which account survives is decided by its secret form, and
+      accounts with a consumable secret do arrive. Before cutover, list the
+      source accounts, search the render for `review:` comments, and re-create
+      each refused account on the target with a fresh password.
     references: [fgt-vyos-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on all 4 cells and on every one of the 8 accounts, and it fails
-      OPEN.  Every role collapses to the literal `admin`: 4 records go
-      `super_admin` -> `admin`, and one each goes `fortigate_ro`,
-      `fortigate_admins`, `super_admin_readonly` and `prof_admin` ->
-      `admin`.  Two of those — `fortigate_ro` and `super_admin_readonly` —
-      are READ-ONLY administrators on the FortiGate side and arrive on VyOS
-      as full administrators.
-      The companion `privilege_level` field moves the same way on the same
-      records (1 -> 15 on 4 of them).  That is the SAME mechanism, stated
-      for completeness, not independent corroboration of it.
-      vyos declares `/local-users/user/role` SUPPORTED while flattening
-      every role — an under-declaration on the target — and separately
-      declares `/local-users/user/privilege-level` LOSSY with the honest
-      reason: VyOS `system login user` accounts have no numeric privilege
-      level in the common case, so the codec maps every login user to
-      privilege 15 / role `admin`.
-      Recorded `lossy` rather than `unsupported`: the account record
-      survives and the target models roles, so the value degrades rather
-      than vanishing (#436).  Review every migrated account's authority
-      before cutover.  A migration that silently PROMOTES a read-only
-      operator is more dangerous than one that drops the account, because
-      nothing looks wrong afterwards.
+      On the 2 accounts that survive, the role changes: `fortigate_admins` ->
+      `admin` on 1, `fortigate_ro` -> `admin` on 1, with the companion field
+      moving `1` -> `15` on 2. Mechanism: the vyos parser assigns every `system
+      login user` `role="admin"` and `privilege_level=15`, because VyOS login
+      accounts carry no role or numeric privilege in the common case (vyos
+      declares `/local-users/user/privilege-level` lossy for exactly this). This
+      fails OPEN: a less-privileged account arrives with more authority.
+      Re-apply least privilege on the target before cutover. Accounts refused
+      for their secret vanish with their role and are counted once, under
+      `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [fgt-vyos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      Credentials survive this pair intact, which is rare enough in this
-      mesh to be worth stating plainly.  Of the 8 accounts, 6 carry a stored
-      credential and all 6 round-trip BYTE-IDENTICAL; the remaining 2 carry
-      none in the source at all (they are RADIUS-backed — see
-      `radius_servers`).  Zero drift on any cell: no re-encoding, no scheme
-      downgrade, no cleartext marker.  Both matrices declare
-      `/local-users/user/hashed-password` supported.
-      Two things this `good` does NOT say.  First, read it together with
-      `local_users[].role`: the accounts arrive with WORKING stored
-      credentials and with `admin` rights they may not have had, and that is
-      what makes the role finding dangerous.  Second, preserved is not
-      usable — the value is an opaque FortiOS `ENC` blob carried verbatim
-      into VyOS `system login user … encrypted-password` under the codec's
-      own vendor-tag marker, and vyos's own matrix says cross-vendor
-      migration requires re-keying.  This audit scores PRESERVATION, not
-      target-syntax validity.  Set passwords on the target before cutover.
-      Only the shape is described here and in the reference doc — an opaque
-      vendor blob with no `$`-prefixed crypt marker — and no credential body
-      is reproduced anywhere.
+      No secret is written in a form VyOS cannot consume. 6 accounts are refused
+      for their secret (6 FortiOS `ENC` ciphertext) and vanish with it; that
+      loss is recorded once, under `local_users[].name`. The accounts that
+      arrive carry no stored secret, so there is no value to compare. Before
+      #461 this key read preserved because the value was written into
+      `encrypted-password`, a leaf that only holds a Linux crypt string; that
+      preservation was a leak or a dead credential, not a working one. Recorded
+      `good` rather than `lossy`: the only drift on this key is the parent
+      record-count collapse, which the audit attributes to `local_users[].name`
+      and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key
+      could never be evidenced. No secret value is quoted here or in the
+      reference doc; only shapes and counts.
     references: [fgt-vyos-surface]
 
   radius_servers:

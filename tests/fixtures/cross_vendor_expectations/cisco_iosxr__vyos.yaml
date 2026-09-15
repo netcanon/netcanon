@@ -515,62 +515,57 @@ per_field_expectation:
   # -- Identity -- the accounts arrive, the privilege model does not ---------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Every account survives.  Measured on the 9 cells that populate local
-      users: 14 user records in, 14 out, same names on every cell — `cisco`,
-      `admin`, `root`, `lab`, `netops`, `readonly`.  Nothing is dropped and
-      nothing is renamed.  Both matrices declare `/local-users/user/name`
-      supported and the render emits a `system { login { user <name> … } }`
-      block per account.
-      This is a genuine divergence from the arista_eos pair off the same
-      corpus, where 5 accounts vanish; do not carry that finding here.
+    disposition: lossy
+    reason: >
+      9 of 14 accounts arrive across the 9 cells that populate local users; the
+      list shrinks on 4 of them. The 5 accounts that vanish carry 5 Cisco type-7
+      reversible obfuscation. VyOS can consume a Linux crypt(3) string (`$1$` /
+      `$5$` / `$6$`) in `encrypted-password`, or a genuine plaintext password in
+      `plaintext-password`; anything else is refused on purpose (#461) with a
+      review comment naming the account and no user entry. Before that change
+      the value was written into `encrypted-password`, a leaf that only holds a
+      Linux crypt string, so the account either carried the source's stored
+      secret as its literal password or could not authenticate at all. The
+      survivors are 9 carrying 6 MD5 crypt (Cisco type 5), 3 IOS-XR type-10
+      SHA-512 crypt. Recorded `lossy` rather than `unsupported`: which account
+      survives is decided by its secret form, and accounts with a consumable
+      secret do arrive. Before cutover, list the source accounts, search the
+      render for `review:` comments, and re-create each refused account on the
+      target with a fresh password.
     references: [iosxr-vyos-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      The role collapses on every account: 14 of 14 records across the 9
-      populated cells arrive as `admin`.  13 were `root-lr` — for which
-      `admin` is a fair mapping — and 1 was `operator`
-      (`readonly` on `kitchen_sink.cfg`), for which it is not.  That single
-      record is the finding: it also moves `privilege_level` from 1 to 15.
-      A read-only account arrives on the target with full administrative
-      access.  The direction of the failure is what matters — this fails
-      OPEN, not closed.
-      The mechanism is not a render gap but a parser constant: the vyos
-      parser assigns `role="admin"` and `privilege_level=15` to every
-      `system login user` it reads, because VyOS login accounts carry no
-      role or numeric privilege in the common case.  vyos declares
-      `/local-users/user/privilege-level` LOSSY and says exactly that; the
-      role leg of the same collapse is not separately declared.
-      Recorded `lossy` and not `unsupported`: the account does not vanish
-      and the target genuinely models login users — it is the privilege
-      attribute on a surviving record that degrades.
-      Audit every migrated account's access level before cutover, and
-      re-apply operator/read-only restrictions on the VyOS side.
+      On the 9 accounts that survive, the role changes: `root-lr` -> `admin` on
+      8, `operator` -> `admin` on 1, with the companion field moving `1` -> `15`
+      on 1. Mechanism: the vyos parser assigns every `system login user`
+      `role="admin"` and `privilege_level=15`, because VyOS login accounts carry
+      no role or numeric privilege in the common case (vyos declares
+      `/local-users/user/privilege-level` lossy for exactly this). This fails
+      OPEN: a less-privileged account arrives with more authority. Re-apply
+      least privilege on the target before cutover. Accounts refused for their
+      secret vanish with their role and are counted once, under
+      `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [iosxr-vyos-surface]
 
   "local_users[].hashed_password":
-    disposition: good
-    note: >
-      The secret blob round-trips byte-for-byte: 14 of 14 records across
-      the 9 populated cells come back with an identical value, covering all
-      three IOS-XR secret forms in the corpus — type-5 (crypt), type-7
-      (reversible vendor obfuscation) and type-10 (crypt).  The vyos render
-      writes the canonical value straight into
-      `authentication { encrypted-password … }` and the parser reads it
-      straight back.  No account is dropped for its secret form, and no
-      value is re-encoded.  Another clean divergence from the arista_eos
-      pair, where type-10 secrets degrade to a cleartext marker.
-      What `good` means here is narrow and worth spelling out: the audit
-      scores PRESERVATION, not target-syntax validity.  A Cisco type-7 or
-      type-10 token is not a Linux crypt string, so a byte-perfect carry
-      does not make it a credential VyOS can authenticate against.  Set
-      passwords on the target before cutover regardless.
-      No hash body, and no fragment of one, is quoted in this file or its
-      reference doc — only the scheme marker and the string length are
-      described anywhere.
+    disposition: lossy
+    reason: >
+      Every surviving secret is re-wrapped for VyOS, never re-hashed: 6 MD5
+      crypt (Cisco type 5) as `encrypted-password`, 3 IOS-XR type-10 SHA-512
+      crypt as `encrypted-password`. The crypt payload is byte-identical on
+      every one; only the canonical wrapper around it changes (vendor tag or
+      type digit), which is what the string comparison measures. 5 accounts
+      whose secret VyOS cannot consume are refused and recorded under
+      `local_users[].name`. Recorded `lossy` for that reason, as on
+      `vyos__juniper_junos` - but operationally this is the outcome to want:
+      VyOS receives the credential in a form it consumes natively, so the
+      account arrives able to log in. Before #461 the value was written into
+      `encrypted-password`, a leaf that only holds a Linux crypt string. No
+      secret value is quoted here or in the reference doc; only shapes and
+      counts.
     references: [iosxr-vyos-surface]
 
   radius_servers:

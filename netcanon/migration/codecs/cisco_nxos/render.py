@@ -31,9 +31,20 @@ from __future__ import annotations
 
 import re
 
+from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from .._helpers import _coalesce_vlan_ids, same_vendor_version
 from . import port_names as _port_names
+
+#: Canonical algorithm token -> NX-OS ``password <type>`` digit.  Keys mirror
+#: ``_TARGET_ACCEPTS["cisco_nxos"]`` exactly (guarded).  Type 0 is NX-OS's
+#: CLEARTEXT marker, so only a genuine plaintext password may reach it.
+_NXOS_PASSWORD_TYPE: dict[str, str] = {
+    "plaintext": "0",
+    "5": "5",
+    "md5crypt": "5",
+    "sha256crypt": "5",
+}
 
 #: Synthesised NX-OS release stamped into the banner when the source device's
 #: own release is unknown.  When the tree was parsed from THIS codec and
@@ -274,9 +285,13 @@ def _render_static_route(route) -> str:
 def _render_local_user(user) -> str:
     """Render a ``username <name> password <type> <hash> role <role>``.
 
-    The hash is preserved with its type-digit prefix (parse stored
-    ``5 $5$...``); a bare value (no leading single-digit type) renders as
-    the plaintext type-0 form.  ``role`` is emitted verbatim when set
+    The secret goes through the shared :func:`is_migratable` gate first.
+    This codec used to re-emit any value without a leading type digit as
+    ``password 0 <value>`` — NX-OS's CLEARTEXT marker — so a foreign digest
+    (a VyOS ``$6$``, an OPNsense bcrypt, a FortiGate ``ENC`` blob) became
+    the literal password.  A secret NX-OS cannot consume now drops the
+    account and leaves a review comment instead; a consumable one is
+    re-tagged from :data:`_NXOS_PASSWORD_TYPE`.  ``role`` is emitted verbatim when set
     (same-vendor round-trip) and otherwise derived from the privilege
     level (network-admin >= 15, else network-operator).
     """
@@ -285,11 +300,13 @@ def _render_local_user(user) -> str:
     )
     if not user.hashed_password:
         return f"username {user.name} role {role}"
-    parts = user.hashed_password.split(" ", 1)
-    if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) <= 2:
-        htype, payload = parts[0], parts[1]
-    else:
-        htype, payload = "0", user.hashed_password
+    algorithm, payload = classify_hash(user.hashed_password)
+    if not is_migratable(user.hashed_password, "cisco_nxos"):
+        return format_review_comment(
+            user.name, algorithm,
+            comment_syntax="exclamation", target_label="Cisco NX-OS",
+        )
+    htype = _NXOS_PASSWORD_TYPE[algorithm]
     return f"username {user.name} password {htype} {payload} role {role}"
 
 

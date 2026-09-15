@@ -1,5 +1,8 @@
 # NX-OS -> Cisco IOS-XE (CLI): measured canonical surface
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The IOS-XE render now calls the shared `is_migratable()` gate and NX-OS type-5 secrets are classified by their `$5$` payload.  Measured after the change: **0 of 10** local accounts now arrive across the 9 cells that populate users. 10 are refused for a secret IOS-XE cannot consume (10 SHA-256 crypt (NX-OS type 5 over `$5$`)): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered as `secret 5` (IOS-XE reads type 5 as MD5 crypt), describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_nxos__cisco_iosxe_cli.yaml`.
+
 Source: `netcanon/migration/codecs/cisco_nxos/codec.py` and
 `netcanon/migration/codecs/cisco_iosxe_cli/codec.py` (`CapabilityMatrix`),
 joined against a full `tools/run_full_mesh.py` pass over the committed corpus

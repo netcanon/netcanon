@@ -568,68 +568,85 @@ per_field_expectation:
   # land on a key that declares a loss. --
 
   local_users:
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      Drifts on all 8 cells that carry accounts, and on the synthetic kitchen
-      sink a whole record is LOST: 3 users in, 2 out.  The dropped account is
-      the password-less one -- Junos allows `set system login user readonly
-      class read-only` with authentication delegated to RADIUS/TACACS, the
-      NX-OS render emits `username readonly role read-only`, and the NX-OS
-      parser skips a `username` line carrying no password, so the account
-      never re-appears.  Combined with the privilege downgrade below and the
-      fact that `radius_servers` is not carried either, an operator who
-      migrates and reboots can find the target with fewer accounts than the
-      source and none of them privileged.  Audit `show running-config` for
-      `username` lines against the source list before you commit.
+      No account arrives: 0 of 13 across all 8 cells that populate local users.
+      The stored secrets on this corpus: 12 `junos:`-tagged crypt string. NX-OS
+      can consume a `$5$` or `$1$` crypt string under `password 5`, or a genuine
+      plaintext password; anything else is refused on purpose (#461) with a
+      review comment naming the account and no user entry. Before that change
+      the value was written behind `password 0`, the NX-OS cleartext marker, so
+      the account either carried the source's stored secret as its literal
+      password or could not authenticate at all. 1 further account with no
+      stored secret also vanishes: the NX-OS render has no passwordless form its
+      own parser reads back. Recorded `unsupported` rather than `lossy` because
+      the record vanishes entirely (#436), for every sub-field at once and a
+      `lossy` warning would understate a target with no local accounts. It is a
+      property of the source's secret form, not a gap in the NX-OS user model:
+      an account whose secret NX-OS can consume would still migrate. Create a
+      console admin on the target out of band before cutover, then re-create
+      every account with a native credential.
     references: [junos-nxos-surface]
 
   "local_users[].privilege_level":
     disposition: lossy
     reason: >
-      Drops from 15 to 1 on all 8 cells that carry accounts -- every
-      administrator arrives unprivileged.  The NX-OS codec maps the named role
-      `network-admin` / `vdc-admin` to privilege 15 and EVERYTHING ELSE to 1,
-      and a Junos class (`super-user`, `operator`, `read-only`) is neither, so
-      the numeric privilege is lost even though the role string itself
-      survives verbatim (see `local_users[].role`).  Because the surviving
-      role name is also not a valid NX-OS role, the account arrives both
-      unprivileged AND bound to a role the target does not define.  Re-map
-      each Junos class onto a real NX-OS role -- `super-user` ->
-      `network-admin`, `read-only` -> `network-operator` -- as part of the
-      migration, not after it.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      privilege level on the target to compare. Mechanism: cisco_nxos renders
+      the canonical role verbatim and maps only `network-admin` / `vdc-admin`
+      back to privilege 15 (declared lossy at
+      `/local-users/user/privilege-level`). Kept `lossy` because this key is
+      first in file order for its parent, so the audit books the record-count
+      drift here; the value-level mapping above still applies to any account
+      whose secret NX-OS can consume.
     references: [junos-nxos-surface]
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Account names round-trip verbatim on all 7 cells where the row set is
-      stable.  The one cell where this sub-field reports drift is the
-      kitchen-sink row-count change described under `local_users`, not a
-      rename.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 13 across all 8 cells that populate local users.
+      The stored secrets on this corpus: 12 `junos:`-tagged crypt string. NX-OS
+      can consume a `$5$` or `$1$` crypt string under `password 5`, or a genuine
+      plaintext password; anything else is refused on purpose (#461) with a
+      review comment naming the account and no user entry. Before that change
+      the value was written behind `password 0`, the NX-OS cleartext marker, so
+      the account either carried the source's stored secret as its literal
+      password or could not authenticate at all. 1 further account with no
+      stored secret also vanishes: the NX-OS render has no passwordless form its
+      own parser reads back. Recorded `unsupported` rather than `lossy` because
+      the record vanishes entirely (#436) and a `lossy` warning would understate
+      a target with no local accounts. It is a property of the source's secret
+      form, not a gap in the NX-OS user model: an account whose secret NX-OS can
+      consume would still migrate. Create a console admin on the target out of
+      band before cutover, then re-create every account with a native
+      credential.
     references: [junos-nxos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      The hash string survives the canonical round-trip verbatim on all 7
-      cells where the row set is stable -- but read HOW.  The NX-OS render
-      emits it as `username <name> password 0 junos:$6$<salt>$<digest>`, and
-      type-`0` is the NX-OS marker for a CLEARTEXT password, which the parser
-      strips again on re-parse.  So the canonical value is preserved while the
-      rendered config, applied to a real Nexus, would set a cleartext password
-      equal to the Junos hash string rather than installing the hash.  NX-OS
-      expects its own `password 5 $5$<salt>$<digest>` type-5 form and cannot
-      consume a Junos SHA-512 digest, so treat every migrated account as
-      needing a fresh password set on the target before commit.
+      No secret is written in a form NX-OS cannot consume. 12 accounts are
+      refused for their secret (12 `junos:`-tagged crypt string) and vanish with
+      it; that loss is recorded once, under `local_users[].name`. No account
+      arrives, so no value reaches the target to compare. Before #461 this key
+      read preserved because the value was written behind `password 0`, the
+      NX-OS cleartext marker; that preservation was a leak or a dead credential,
+      not a working one. Recorded `good` rather than `lossy`: the only drift on
+      this key is the parent record-count collapse, which the audit attributes
+      to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a
+      declared loss on this key could never be evidenced. No secret value is
+      quoted here or in the reference doc; only shapes and counts.
     references: [junos-nxos-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      The role string is carried verbatim on all 7 cells where the row set is
-      stable -- which is preservation of the DATA, not of the meaning: see
-      `local_users[].privilege_level` for why a verbatim `super-user` is not a
-      valid NX-OS role.
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [junos-nxos-surface]
 
   radius_servers:

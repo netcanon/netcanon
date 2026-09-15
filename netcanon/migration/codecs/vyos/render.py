@@ -39,6 +39,7 @@ from __future__ import annotations
 import logging
 import re
 
+from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent
 from .._helpers import same_vendor_version
 
@@ -286,17 +287,34 @@ def _render_login(users: list) -> list[str]:
     <hash> } }``.  Sorted by name for stable output (the round-trip
     compares local_users by name).  A user with no stored hash renders
     the bare ``user <name> { }`` form.
+
+    The secret passes the shared :func:`is_migratable` gate first.
+    ``encrypted-password`` only holds a Linux crypt(3) string; this codec
+    used to write ANY value there, so every Cisco type-digit form, AOS-CX
+    ciphertext and FortiGate blob produced an account nobody could log in
+    to.  A crypt payload is now unwrapped from its vendor tag, genuine
+    plaintext goes to ``plaintext-password`` (VyOS hashes it on commit), and
+    anything else drops the user with a ``/* review */`` comment.
     """
     if not users:
         return []
     out = ["    login {"]
     for u in sorted(users, key=lambda x: x.name):
+        if u.hashed_password and not is_migratable(u.hashed_password, "vyos"):
+            algorithm, _payload = classify_hash(u.hashed_password)
+            out.append("        " + format_review_comment(
+                u.name, algorithm, comment_syntax="slash", target_label="VyOS",
+            ))
+            continue
         out.append(f"        user {u.name} {{")
         if u.hashed_password:
-            out.append("            authentication {")
-            out.append(
-                f"                encrypted-password {u.hashed_password}"
+            algorithm, payload = classify_hash(u.hashed_password)
+            key = (
+                "plaintext-password" if algorithm == "plaintext"
+                else "encrypted-password"
             )
+            out.append("            authentication {")
+            out.append(f"                {key} {payload}")
             out.append("            }")
         out.append("        }")
     out.append("    }")

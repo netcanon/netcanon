@@ -211,6 +211,9 @@ lossy nor unsupported — while its parser plainly produces LAG records (2, 1,
 
 ## Credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The IOS-XR render now calls the shared `is_migratable()` gate.  Measured after the change: **2 of 8** local accounts now arrive across the 4 cells that populate users. 6 are refused for a secret IOS-XR cannot consume (6 FortiOS `ENC` ciphertext): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered behind `secret 0`, the IOS-XR cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__cisco_iosxr.yaml`.
+
 `local_users[].hashed_password` drifts on all 6 populated records (of 8 user
 records; the fg100e cell's two RADIUS-backed accounts carry no local secret).
 

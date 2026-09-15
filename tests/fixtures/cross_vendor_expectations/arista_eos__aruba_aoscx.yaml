@@ -472,60 +472,52 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      The user list shrinks on 2 of 6 cells — 5 accounts to 3, and 3 to 2 —
-      while the other 4 cells preserve it exactly.  The dropped accounts are
-      precisely those whose password hash is empty: the render emits
-      `user admin group network-admin` with no password clause and the
-      AOS-CX parser does not read that line back as a user.  Recorded `lossy`
-      rather than `unsupported` because the loss is partial and
-      account-conditional — most accounts migrate — and because AOS-CX
-      plainly does model local users.  Before cutover, list every source
-      account with no configured secret; those are the ones that will not
-      exist on the target at all.
+      No account arrives: 0 of 12 across all 6 cells that populate local users.
+      The stored secrets on this corpus: 7 SHA-512 crypt (`$6$`), 2 MD5 crypt
+      (Cisco type 5). AOS-CX can consume its own device-keyed `AQB` ciphertext,
+      or a genuine plaintext password under `password plaintext`; anything else
+      is refused on purpose (#461) with a review comment naming the account and
+      no user entry. Before that change the value was written behind `password
+      ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, so the
+      account either carried the source's stored secret as its literal password
+      or could not authenticate at all. 3 further accounts with no stored secret
+      also vanish: the AOS-CX render has no passwordless form its own parser
+      reads back. Recorded `unsupported` rather than `lossy` because the record
+      vanishes entirely (#436) and a `lossy` warning would understate a target
+      with no local accounts. It is a property of the source's secret form, not
+      a gap in the AOS-CX user model: an account whose secret AOS-CX can consume
+      would still migrate. Create a console admin on the target out of band
+      before cutover, then re-create every account with a native credential.
     references: [arista-aoscx-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      Drifts on 3 of 6 cells: the 2 record-drop cells above, plus one cell
-      where the role VALUE changes independently.  Both directions of the
-      AOS-CX group mapping are visible in the round-trip.  Where the EOS
-      source carries no role, the target materialises one from the privilege
-      level (empty + priv 15 -> `administrators`; empty + priv 1 ->
-      `operators`).  Where the source carries an EOS role name it passes
-      through verbatim as an AOS-CX group (`network-admin`), and the
-      privilege level then degrades 15 -> 1 on re-parse because that group is
-      not one AOS-CX recognises.  aruba_aoscx declares
-      `/local-users/user/privilege-level` lossy for this mapping.  Re-map
-      roles onto the AOS-CX group model (administrators / operators /
-      auditors) explicitly — do not assume an EOS role name means the same
-      thing after migration.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [arista-aoscx-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      The stored secret survives intact on every account that survives.
-      Drifts on 2 of 6 cells, and honesty about WHY matters here more than
-      the count.  The hash itself does NOT drift anywhere: across the whole
-      corpus aggregate there is no `hashed_password` sub-field drift at all,
-      and every surviving account carries its secret through the round-trip
-      unchanged in length and form.  The 2 drifting cells are exactly the 2
-      cells where whole user records vanish (`local_users[].name`), so this
-      key's loss is CORRELATED with the record drop and is not independent
-      evidence of a hash-format incompatibility — which would be the natural
-      but wrong reading of the number.  Operator consequence is therefore
-      narrower than on the reverse pair: accounts that survive keep working
-      credentials; accounts that had no secret do not arrive at all.  Verify
-      you can still log in with a known-good account before decommissioning
-      the source.
-      No secret value is reproduced here or in the reference document — the
-      EOS secrets are opaque single-token strings and the AOS-CX SNMPv3
-      render carries `ciphertext`-form blobs.  Per AGENTS.md, hashed and
-      encrypted secrets stay operator-traceable, and a document that quotes
-      the value it claims to redact defeats its own redaction.  Recorded `good` rather than `lossy`: the only drift on this key is the parent record-count collapse, which the audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared loss on this key could never be evidenced by any cell.  The account vanishing is a real loss and is recorded against `local_users[].name`; this key is about what happens to the VALUE when the account survives.
+      No secret is written in a form AOS-CX cannot consume. 9 accounts are
+      refused for their secret (7 SHA-512 crypt (`$6$`), 2 MD5 crypt (Cisco type
+      5)) and vanish with it; that loss is recorded once, under
+      `local_users[].name`. No account arrives, so no value reaches the target
+      to compare. Before #461 this key read preserved because the value was
+      written behind `password ciphertext`, a slot that only holds AOS-CX's own
+      device-keyed blob; that preservation was a leak or a dead credential, not
+      a working one. Recorded `good` rather than `lossy`: the only drift on this
+      key is the parent record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared
+      loss on this key could never be evidenced. No secret value is quoted here
+      or in the reference doc; only shapes and counts.
     references: [arista-aoscx-surface]
 
   # -- Fabric ---------------------------------------------------------------

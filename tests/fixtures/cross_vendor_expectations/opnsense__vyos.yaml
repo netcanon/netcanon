@@ -590,74 +590,55 @@ per_field_expectation:
   # -- Identity -- names and hashes survive; authority does not --------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Every account survives: 14 accounts across the 7 cells that populate
-      local users, 14 after the round-trip, identical name sets on every
-      cell (`root`, `api`, `netops`, `readonly`, `test1`-`test4`).  No
-      account is dropped and none is invented.  Both matrices declare
-      `/local-users/user/name` supported; the render emits
-      `system login user <name> { … }`.
-      The account INVENTORY is clean.  What those accounts are allowed to
-      do is not — see `local_users[].role`.
+    disposition: lossy
+    reason: >
+      4 of 14 accounts arrive across the 7 cells that populate local users; the
+      list shrinks on 7 of them. The 10 accounts that vanish carry 10
+      `bcrypt:`-tagged OPNsense hash. VyOS can consume a Linux crypt(3) string
+      (`$1$` / `$5$` / `$6$`) in `encrypted-password`, or a genuine plaintext
+      password in `plaintext-password`; anything else is refused on purpose
+      (#461) with a review comment naming the account and no user entry. Before
+      that change the value was written into `encrypted-password`, a leaf that
+      only holds a Linux crypt string, so the account either carried the
+      source's stored secret as its literal password or could not authenticate
+      at all. The survivors are 4 with no stored secret. Recorded `lossy` rather
+      than `unsupported`: which account survives is decided by its secret form,
+      and accounts with a consumable secret do arrive. Before cutover, list the
+      source accounts, search the render for `review:` comments, and re-create
+      each refused account on the target with a fresh password.
     references: [opnsense-vyos-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on 2 of the 7 populated cells, on 5 of the 14 accounts, and it
-      fails OPEN.  Every drifting record moves the same way: `user` ->
-      `admin`, with `privilege_level` 1 -> 15 on the same records —
-      `test1`, `test2`, `test3`, `test4` on
-      `opnsense_acl_test_config.xml`, and `readonly` on
-      `kitchen_sink.xml`.  No account is ever demoted.  The privilege_level
-      movement is the SAME mechanism stated for completeness, not
-      independent corroboration of it.
-      `opnsense_acl_test_config.xml` is the case to look at, because those
-      four escalated accounts also carry NO password hash on the source.
-      The render emits them as bare `user test1 { }` entries — no
-      `authentication` block, no `encrypted-password` — and the re-parse
-      reads each back as `role='admin'`, `privilege_level=15`.  Four
-      credential-less accounts arrive on the target described as
-      administrators.  Whether a real VyOS box would let such an account
-      authenticate is a device question this harness does not answer; what
-      is measured is that the canonical intent says `admin`, and a
-      migration report generated from it would say `admin` too.
-      vyos declares `/local-users/user/role` SUPPORTED while flattening
-      every role — an under-declaration on the target — and separately
-      declares `/local-users/user/privilege-level` LOSSY with the honest
-      reason that VyOS `system login user` accounts have no numeric
-      privilege level in the common case, so the codec maps every login
-      user to privilege 15 / role `admin`.
-      Recorded `lossy` rather than `unsupported`: the account record
-      survives and the target models roles, so the value degrades rather
-      than vanishing (#436).  The severity does not follow the label —
-      review every migrated account's authority on the target, and delete
-      the ones that should not have any, before cutover.
+      On the 4 accounts that survive, the role changes: `user` -> `admin` on 4,
+      with the companion field moving `1` -> `15` on 4. Mechanism: the vyos
+      parser assigns every `system login user` `role="admin"` and
+      `privilege_level=15`, because VyOS login accounts carry no role or numeric
+      privilege in the common case (vyos declares
+      `/local-users/user/privilege-level` lossy for exactly this). This fails
+      OPEN: a less-privileged account arrives with more authority. Re-apply
+      least privilege on the target before cutover. Accounts refused for their
+      secret vanish with their role and are counted once, under
+      `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [opnsense-vyos-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      Preserved on every account that has one: 10 of the 14 accounts carry
-      a password hash and all 10 round-trip verbatim — same scheme marker,
-      same length (65-97 characters) — into the VyOS
-      `system login user … authentication { encrypted-password … }` leaf.
-      The other 4 accounts carry no hash on the source and none on the
-      target.  Both matrices declare `/local-users/user/hashed-password`
-      supported.  No hash body is quoted in this file or its reference doc;
-      only the scheme marker and the length are described.
-      Two shape notes that do not change the disposition.  First, the
-      OPNsense parser tags every account password with a literal `bcrypt:`
-      marker unconditionally, so on the two HA fixtures that marker sits in
-      front of a `$6$` SHA-512 crypt body rather than a `$2y$` bcrypt one;
-      the canonical value is carried exactly, the marker just does not
-      describe the body.  That is a source-codec observation, not a loss on
-      this pair.  Second, preservation is not target-syntax validity — the
-      harness scores whether the value survived, not whether the target
-      device would accept the rendered leaf.
-      The credential is carried.  The AUTHORITY attached to it is not —
-      read `local_users[].role`.
+      No secret is written in a form VyOS cannot consume. 10 accounts are
+      refused for their secret (10 `bcrypt:`-tagged OPNsense hash) and vanish
+      with it; that loss is recorded once, under `local_users[].name`. The
+      accounts that arrive carry no stored secret, so there is no value to
+      compare. Before #461 this key read preserved because the value was written
+      into `encrypted-password`, a leaf that only holds a Linux crypt string;
+      that preservation was a leak or a dead credential, not a working one.
+      Recorded `good` rather than `lossy`: the only drift on this key is the
+      parent record-count collapse, which the audit attributes to
+      `local_users[].name` and reclassifies STRUCTURAL_ONLY here, so a declared
+      loss on this key could never be evidenced. No secret value is quoted here
+      or in the reference doc; only shapes and counts.
     references: [opnsense-vyos-surface]
 
   radius_servers:

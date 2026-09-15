@@ -218,6 +218,9 @@ never be evidenced. The membership loss is real and it is recorded — under
 
 ### 3. Every local user arrives as an administrator
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The VyOS render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 5** local accounts now arrive across the 3 cells that populate users. 4 are refused for a secret VyOS cannot consume (4 AOS-S `sha1:` digest): the render emits a `review:` comment naming the account and no user entry. Surviving secrets are re-wrapped into the target's native form (1 plaintext password as `plaintext-password`); the credential itself is unchanged.  Any statement below that a secret is carried verbatim, or rendered into `encrypted-password`, a leaf that only holds a Linux crypt string, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoss__vyos.yaml`.
+
 Names and credentials are clean; authority is not.
 
 | measurement (5 user records across 3 cells) | result |

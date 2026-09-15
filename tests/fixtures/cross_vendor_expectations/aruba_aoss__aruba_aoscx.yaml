@@ -490,44 +490,52 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Preserved on all 3 cells that populate local users (5 accounts in
-      total); the render emits `user <name> group <role> password ...`.
-      aruba_aoscx declares `/local-users/user/name` supported.  aruba_aoss
-      declares nothing at all under `/local-users/*` while parsing users
-      correctly — a source-matrix under-declaration, so this `good` rests on
-      the measurement rather than on both declarations.
+    disposition: lossy
+    reason: >
+      1 of 5 accounts arrive across the 3 cells that populate local users; the
+      list shrinks on 3 of them. The 4 accounts that vanish carry 4 AOS-S
+      `sha1:` digest. AOS-CX can consume its own device-keyed `AQB` ciphertext,
+      or a genuine plaintext password under `password plaintext`; anything else
+      is refused on purpose (#461) with a review comment naming the account and
+      no user entry. Before that change the value was written behind `password
+      ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, so the
+      account either carried the source's stored secret as its literal password
+      or could not authenticate at all. The survivors are 1 carrying 1 plaintext
+      password. Recorded `lossy` rather than `unsupported`: which account
+      survives is decided by its secret form, and accounts with a consumable
+      secret do arrive. Before cutover, list the source accounts, search the
+      render for `review:` comments, and re-create each refused account on the
+      target with a fresh password.
     references: [aoss-aoscx-surface]
 
   "local_users[].role":
     disposition: good
     note: >
-      Preserved on all 3 populated cells: AOS-S `manager` / `operator` map
-      onto the AOS-CX named groups without loss, and the role string
-      round-trips unchanged.  One caveat that this key does NOT capture: the
-      companion numeric `privilege_level` DOES degrade, 15 -> 1, on 4 of the
-      5 accounts, because aruba_aoscx derives privilege from the named group
-      (administrators -> 15, everything else -> 1) and declares
-      `/local-users/user/privilege-level` lossy.  If anything downstream of
-      your migration keys off the numeric privilege rather than the role
-      name, check it.
+      On the 1 account that survives, the role is unchanged. Mechanism:
+      aruba_aoscx writes the role into the `group` slot and maps only
+      `administrators` back to privilege 15 (declared lossy at
+      `/local-users/user/privilege-level`). Recorded `good` rather than `lossy`:
+      the only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [aoss-aoscx-surface]
 
   "local_users[].hashed_password":
     disposition: good
     note: >
-      Preserved on all 3 populated cells — the notable exception on this
-      pair, and the reason it is worth calling out: on every OTHER pair in
-      this mesh the password material is the first thing to die.  It survives
-      here because source and target are the same vendor family, so AOS-CX
-      re-emits the AOS-S secret token in the form it arrived in (the
-      corpus carries `sha1:`-prefixed digests and one `plaintext:`-marked
-      account; the values themselves are deliberately not reproduced here or
-      in the reference file).  Do not generalise this: it holds for
-      AOS-S -> AOS-CX specifically, and the `plaintext:` marker in the corpus
-      is a reminder to audit what you are carrying across before you carry
-      it.
+      No secret is written in a form AOS-CX cannot consume. 4 accounts are
+      refused for their secret (4 AOS-S `sha1:` digest) and vanish with it; that
+      loss is recorded once, under `local_users[].name`. The 1 secret that
+      arrives is carried with the credential unchanged: 1 plaintext password as
+      `password plaintext`. Before #461 this key read preserved because the
+      value was written behind `password ciphertext`, a slot that only holds
+      AOS-CX's own device-keyed blob; that preservation was a leak or a dead
+      credential, not a working one. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here, so a declared loss on this key could never be evidenced. No secret
+      value is quoted here or in the reference doc; only shapes and counts.
     references: [aoss-aoscx-surface]
 
   # -- Fabric ---------------------------------------------------------------

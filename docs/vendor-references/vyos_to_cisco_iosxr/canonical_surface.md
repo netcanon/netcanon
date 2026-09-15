@@ -315,6 +315,9 @@ drop of operator-authored data.
 
 ## Credential material
 
+<!-- secret-gate-461 -->
+> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The IOS-XR render now calls the shared `is_migratable()` gate.  Measured after the change: **17 of 17** local accounts now arrive across the 13 cells that populate users. Surviving secrets are re-wrapped into the target's native form (16 SHA-512 crypt (`$6$`) as `secret 10`); the credential itself is unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `secret 0`, the IOS-XR cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__cisco_iosxr.yaml`.
+
 `local_users` is clean at the canonical level and the YAML records all three
 keys `good`, on measurement:
 

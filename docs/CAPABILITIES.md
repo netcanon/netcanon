@@ -521,7 +521,7 @@ in rendered output find every such site.
 
 * **Hash-portability policy**
   ([`netcanon/migration/_user_secrets.py`](../netcanon/migration/_user_secrets.py)).
-  Seven of the eleven render paths that emit a local user call
+  Every render path that emits a local user (all eleven) calls
   `is_migratable(hash, target_vendor)` first; on a miss, they emit a
   vendor-correct comment of the form:
 
@@ -529,11 +529,12 @@ in rendered output find every such site.
       source vendor cannot be re-used on <target>; reset this user
       password manually
 
-  Comment delimiter varies by vendor: Aruba uses `;`, Cisco IOS-XE
-  CLI / Arista EOS use `!`, Junos / FortiGate / MikroTik use `#`,
+  Comment delimiter varies by vendor: Aruba AOS-S uses `;`, Cisco
+  IOS-XE CLI / NX-OS / IOS-XR, Arista EOS and ArubaOS-CX use `!`,
+  VyOS uses `/* … */`, Junos / FortiGate / MikroTik use `#`,
   OPNsense uses `<!-- … -->` (with `--` collapsed to `-` per XML
   1.0).  Per-target accepted-algorithm sets live in
-  `_TARGET_ACCEPTS`.  On those seven paths a foreign hash NEVER falls
+  `_TARGET_ACCEPTS`.  A foreign hash NEVER falls
   back to plaintext (that would leak the hash literal as the password —
   a severe security bug).
 
@@ -546,15 +547,21 @@ in rendered output find every such site.
      digest was emitted under the target's cleartext marker on 14 of 14
      VyOS records.  Bare crypt forms and vendor ciphertext blobs are now
      classified by prefix, and an unmodelled `$id$` shape fails closed.
-  2. ⚠️ **`aruba_aoscx`, `cisco_iosxr`, `cisco_nxos` and `vyos` emit local
-     users WITHOUT calling the gate at all.**  As targets they therefore
-     still accept a hash they cannot consume: `cisco_nxos` writes it
-     behind `password 0` and `cisco_iosxr` behind `secret 0` — both
-     cleartext markers — while `vyos` and `aruba_aoscx` write it behind
-     `encrypted-password` / `password ciphertext`, which breaks the
-     account without claiming the value is cleartext.  Wiring the gate
-     into those four render paths is outstanding work, tracked separately
-     from the classification fix above.
+  2. Until #461, **`aruba_aoscx`, `cisco_iosxr`, `cisco_nxos` and `vyos`
+     emitted local users WITHOUT calling the gate**, so as targets they
+     accepted any hash.  Measured on the corpus before that change: 61
+     source secrets rendered behind NX-OS `password 0` and 61 behind IOS-XR
+     `secret 0` — both cleartext markers — plus 116 VyOS and 93 AOS-CX
+     values written into hash slots that could not authenticate.  All four
+     now gate; a consumable secret is re-tagged into the target's native
+     form (IOS-XR `secret 10` for SHA-512 crypt, a bare crypt string in
+     VyOS `encrypted-password`) and genuine plaintext goes to the leaf that
+     means plaintext.  NX-OS type 5 is now classified by its payload: NX-OS
+     writes every crypt form under `password 5` and defaults to `$5$`, which
+     had been mis-tagged MD5 crypt and passed the EOS / IOS-XE gates.
+     `test_every_user_rendering_codec_refuses_an_unmodelled_secret` fails
+     for any codec — current or future — that renders users without the
+     gate.
 
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
