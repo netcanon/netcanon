@@ -356,8 +356,21 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: "Usernames preserved on all 6 cells that populate local users."
+    disposition: lossy
+    reason: >
+      Drifts on 4 of the 7 cells; 2 preserve every username. The account
+      itself is dropped when its secret cannot be re-emitted on the target:
+      AOS-CX stores user passwords as an `AQB...` ciphertext blob, which is
+      neither a crypt(3) form nor anything EOS can consume, so the render
+      emits a review comment and skips the whole `username` line. The one
+      account carrying a genuine plaintext password migrates intact, which is
+      why this is `lossy` rather than `unsupported`. Inventory the source
+      accounts before cutover and re-create the dropped ones with fresh
+      passwords. This is the deliberate post-fix behaviour: an unrecognised or
+      unconsumable secret is REFUSED rather than re-emitted under the target's
+      cleartext marker, which previously turned the digest itself into the
+      password. The account vanishing is the cost of not leaking a credential;
+      it is recorded here rather than hidden.
     references: [aoscx-arista-surface]
 
   "local_users[].role":

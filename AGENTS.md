@@ -325,6 +325,21 @@ tests use these exclusively — never CSS classes or element structure.  See
   by `tests/unit/test_docker_publish_signing_window.py`, which is
   parametrised over both workflows — add any new publishing workflow to
   its `_CASES` table in the same PR that creates it.
+- **Never** let an unrecognised secret classify as plaintext.  A classifier
+  whose final branch is "anything I don't recognise is a literal password"
+  fails OPEN on credential material: the digest is then re-emitted under the
+  target's cleartext marker and BECOMES the password.  A bare crypt string
+  carrying no algorithm tag — the form VyOS stores natively — did exactly
+  this on 14 of 14 records, while both capability matrices declared the
+  field SUPPORTED so the migration reported no loss at all.  Classify
+  structured secrets by prefix, and make the default for an unmodelled
+  `$id$` shape REFUSE migration.  Order matters when fixing this: recognise
+  the known forms FIRST, then close the default — flipping the default
+  first refuses every real record at once, which is a false-positive blast
+  rather than a fix.  Note that refusing a secret drops the whole account,
+  so the paired expectation YAMLs must be re-authored in the same change
+  (doc-sync 178).  Guarded by
+  `tests/unit/migration/test_secret_fail_open.py`.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

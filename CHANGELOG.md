@@ -26,6 +26,56 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Security
+
+- **Fixed: `classify_hash()` failed open, so a password digest could be
+  re-emitted as the password itself.**  Its final branch treated any shape
+  it did not recognise as a literal plaintext password.  A bare Unix crypt
+  string — the form VyOS stores natively — matched none of its tagged
+  shapes, so `$6$...` classified as `plaintext`, `is_migratable()` returned
+  True, and the Arista render mapped plaintext to `secret 0`, EOS's
+  CLEARTEXT marker.  Measured at **14 of 14 password-bearing VyOS records
+  (100%)**, and both matrices declared the field SUPPORTED so the migration
+  reported no loss at all.
+
+  The fix lands in two halves, in that order, because the order is
+  load-bearing:
+
+  1. **Prefix-classify structured secrets** (`_STRUCTURED_PREFIXES`) — bare
+     crypt(3) forms `$1$` `$2a/b/x/y$` `$5$` `$6$` `$7$` `$y$`, Juniper's
+     `$9$`, ArubaOS-CX `AQB...` ciphertext, and IOS-XR's `10 ` type wrapper.
+     This RECOVERS credentials rather than only refusing them: `$6$` now
+     routes to `sha512`, which Arista EOS and Junos genuinely consume.
+  2. **Refuse the unmodelled** — any other `$id$` shape classifies as
+     `_UNKNOWN` and is refused ahead of the accept-set lookup, so the *next*
+     unseen format fails closed.  Genuinely unstructured values (the corpus
+     has one: a 5-character password on an AOS-CX `admin` account) still
+     migrate as plaintext, which is why the rule keys on structured-secret
+     SHAPE rather than on "did I recognise it".
+
+  Flipping (2) without (1) would have refused all 19 affected corpus records
+  at once — a false-positive blast rather than a fix.
+
+  `$5$` deliberately maps to `sha256crypt`, **not** `sha256`: the latter is
+  the token `aruba_aoss` accepts and it means a raw hex digest, so reusing
+  it would have handed AOS-S an unusable value while passing the
+  migratability gate — a new fail-open wearing the shape of a fix.
+
+  Refusing a secret drops the whole account (the established pattern: review
+  comment, skip the `username` line), so five expectation pairs that
+  declared `local_users[].name` `good` on the strength of the old behaviour
+  are re-authored `lossy` in the same change.  `CODEC_BUG` went 5 -> 23 on
+  the raw behaviour change and is back to **5** with the pairs corrected.
+
+- **Known, NOT fixed here: the same leak exists via a second route.**
+  `aruba_aoscx`, `cisco_iosxr`, `cisco_nxos` and `vyos` emit local users
+  **without calling `is_migratable` at all**, so as targets they still
+  accept a hash they cannot consume — `cisco_nxos` writes it behind
+  `password 0` and `cisco_iosxr` behind `secret 0`, both cleartext markers.
+  Measured with a bcrypt hash (consumable only by OPNsense) rendered into
+  each.  Wiring the gate into those four render paths is a separate change
+  with its own account-drop blast radius; `docs/CAPABILITIES.md` no longer
+  claims every render path gates.
 ### Added
 
 - **A6 COMPLETE: `vyos` was the last blind codec, and the mesh audit now has

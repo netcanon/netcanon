@@ -521,8 +521,8 @@ in rendered output find every such site.
 
 * **Hash-portability policy**
   ([`netcanon/migration/_user_secrets.py`](../netcanon/migration/_user_secrets.py)).
-  Every render path that emits a local user calls
-  `is_migratable(hash, target_vendor)` first; on a miss, it emits a
+  Seven of the eleven render paths that emit a local user call
+  `is_migratable(hash, target_vendor)` first; on a miss, they emit a
   vendor-correct comment of the form:
 
       password manager user-name "X" -- review: <alg> hash from
@@ -533,9 +533,28 @@ in rendered output find every such site.
   CLI / Arista EOS use `!`, Junos / FortiGate / MikroTik use `#`,
   OPNsense uses `<!-- … -->` (with `--` collapsed to `-` per XML
   1.0).  Per-target accepted-algorithm sets live in
-  `_TARGET_ACCEPTS`.  A foreign hash NEVER falls back to plaintext
-  (that would leak the hash literal as the password — a severe
-  security bug).
+  `_TARGET_ACCEPTS`.  On those seven paths a foreign hash NEVER falls
+  back to plaintext (that would leak the hash literal as the password —
+  a severe security bug).
+
+  Two caveats, both measured rather than asserted:
+
+  1. The policy only binds secrets it can *recognise*.  Until the
+     `_STRUCTURED_PREFIXES` table existed, a bare crypt string carrying
+     no algorithm tag — the form VyOS stores natively — classified as
+     `plaintext`, so the "never falls back" rule did not engage and the
+     digest was emitted under the target's cleartext marker on 14 of 14
+     VyOS records.  Bare crypt forms and vendor ciphertext blobs are now
+     classified by prefix, and an unmodelled `$id$` shape fails closed.
+  2. ⚠️ **`aruba_aoscx`, `cisco_iosxr`, `cisco_nxos` and `vyos` emit local
+     users WITHOUT calling the gate at all.**  As targets they therefore
+     still accept a hash they cannot consume: `cisco_nxos` writes it
+     behind `password 0` and `cisco_iosxr` behind `secret 0` — both
+     cleartext markers — while `vyos` and `aruba_aoscx` write it behind
+     `encrypted-password` / `password ciphertext`, which breaks the
+     account without claiming the value is cleartext.  Wiring the gate
+     into those four render paths is outstanding work, tracked separately
+     from the classification fix above.
 
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).

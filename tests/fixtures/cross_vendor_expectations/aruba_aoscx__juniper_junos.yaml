@@ -464,8 +464,18 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: "Usernames preserved on all 6 cells that populate local users (`admin`, `netops`)."
+    disposition: lossy
+    reason: >
+      Drifts on 4 of the 7 cells; 2 preserve every username. The AOS-CX
+      `AQB...` password ciphertext is not a crypt string Junos's commit-time
+      hasher can consume, so the account is dropped with a review comment
+      rather than emitted with an unusable `encrypted-password`. Accounts with
+      a consumable secret survive, hence `lossy`. Re-create the dropped
+      accounts on the target. This is the deliberate post-fix behaviour: an
+      unrecognised or unconsumable secret is REFUSED rather than re-emitted
+      under the target's cleartext marker, which previously turned the digest
+      itself into the password. The account vanishing is the cost of not
+      leaking a credential; it is recorded here rather than hidden.
     references: [aoscx-junos-surface]
 
   "local_users[].role":
