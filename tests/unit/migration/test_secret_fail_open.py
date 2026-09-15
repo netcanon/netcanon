@@ -217,8 +217,8 @@ def test_empty_secret_is_still_plaintext() -> None:
 
 def _render_users(source_codec: str, target_codec: str, fixture_dir: str):
     """Yield rendered ``username`` lines for every fixture in a directory."""
-    from netcanon.migration.codecs.registry import get_codec
     import netcanon.migration.codecs as _c  # noqa: F401  (registry population)
+    from netcanon.migration.codecs.registry import get_codec
 
     src, tgt = get_codec(source_codec), get_codec(target_codec)
     root = _REPO / "tests" / "fixtures" / "real" / fixture_dir
@@ -277,8 +277,8 @@ def test_aoscx_ciphertext_is_not_retyped_as_an_aos_s_plaintext_password() -> Non
     behind ``plaintext`` both breaks the account and writes secret-bearing
     material onto a line that claims to be cleartext.
     """
-    from netcanon.migration.codecs.registry import get_codec
     import netcanon.migration.codecs as _c  # noqa: F401
+    from netcanon.migration.codecs.registry import get_codec
 
     src, tgt = get_codec("aruba_aoscx"), get_codec("aruba_aoss")
     root = _REPO / "tests" / "fixtures" / "real" / "aruba_aoscx"
