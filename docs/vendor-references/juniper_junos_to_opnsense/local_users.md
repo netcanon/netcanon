@@ -58,8 +58,9 @@ Retrieved: 2026-04-30
 
 OPNsense local-users notes:
 
-- Password hashes are bcrypt only (`$2b$<cost>$<salt><hash>`).
-  OPNsense's PAM stack rejects non-bcrypt hashes on apply.
+- Password hashes are verified with PHP `password_verify()`.  netcanon
+  accepts bcrypt (`$2b$` / `$2y$`) and, since #462, SHA-512 crypt (`$6$`),
+  the form real OPNsense HA configs store; Junos `$1$` MD5 crypt is not re-used.
 - Privilege model is group-based: `<groupname>admins</groupname>`
   grants administrative access via `<priv>page-all</priv>`;
   `<groupname>users</groupname>` grants read-only.

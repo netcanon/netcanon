@@ -562,6 +562,11 @@ in rendered output find every such site.
      `test_every_user_rendering_codec_refuses_an_unmodelled_secret` fails
      for any codec — current or future — that renders users without the
      gate.
+  3. A tag names an algorithm only when it can be trusted.  `junos:` is a
+     vendor envelope and OPNsense's `bcrypt:` is applied unconditionally, so
+     since #462 both defer to the crypt(3) id inside the payload (`$9$`
+     excepted, being both Juniper-reversible and Cisco type-9).  OPNsense
+     accepts bcrypt and SHA-512 crypt.
 
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).

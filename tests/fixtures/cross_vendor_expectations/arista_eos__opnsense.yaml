@@ -540,18 +540,20 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Arista ``$1$`` (MD5-crypt) and ``$6$`` (SHA-512-crypt)
-      hashes are NOT bcrypt and OPNsense will reject them on
-      apply via the FreeBSD ``crypt(3)`` allowed-prefix list
-      (bcrypt-only).  Operators must reset passwords on the
-      OPNsense target.  Privilege number (0-15) collapses to
-      OPNsense's binary admin / non-admin via group membership:
-      privilege >= 15 → ``<groupname>admins</groupname>``,
-      otherwise ``<groupname>users</groupname>``.  Arista role
-      tokens (``network-admin`` / ``network-operator`` / custom
-      roles) collapse to OPNsense's binary group surface.  Both
-      codecs pass hashes through verbatim per canonical doctrine;
-      loss surfaces in the validation report.
+      OPNsense keeps every account: 12 of 12 arrive across the 6 cells that
+      populate users, measured by render and re-parse. Of the 9 that carry a
+      secret, the 7 SHA-512 crypt (`$6$`) secrets are carried into `<password>`
+      with the Arista tag stripped: PHP `password_verify()` consumes a `$6$`
+      string, and real OPNsense HA configs store exactly that form (#462). The 2
+      MD5 crypt (`$1$`) secrets are refused in place: the `<user>` element is
+      kept with a review comment and no `<password>`, so set those passwords on
+      the target before cutover. The other 3 accounts carry no secret on the
+      source. Privilege number (0-15) collapses to OPNsense's binary admin /
+      non-admin via group membership: privilege >= 15 ->
+      `<groupname>admins</groupname>`, otherwise `<groupname>users</groupname>`.
+      Arista role tokens (`network-admin` / `network-operator` / custom roles)
+      collapse to OPNsense's binary group surface. No secret value is quoted
+      here.
     references: [opnsense-users, arista-user-security]
 
   radius_servers:

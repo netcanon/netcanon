@@ -114,8 +114,9 @@ def test_is_migratable_arista_sha512_to_junos() -> None:
 
 
 def test_is_migratable_arista_sha512_to_opnsense() -> None:
-    """OPNsense is bcrypt-only — sha512 is foreign and unmigratable."""
-    assert is_migratable("arista:sha512:$6$salt$hash", "opnsense") is False
+    """OPNsense verifies with PHP ``password_verify()``, which consumes a
+    ``$6$`` SHA-512 crypt string; real OPNsense HA configs store exactly that."""
+    assert is_migratable("arista:sha512:$6$salt$hash", "opnsense") is True
 
 
 def test_is_migratable_bcrypt_to_opnsense() -> None:

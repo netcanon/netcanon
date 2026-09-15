@@ -557,22 +557,20 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      OPNsense's bcrypt hash format (``$2b$<cost>$...``) is NOT a
-      Junos ``encrypted-password`` accepted format (Junos accepts
-      ``$1$`` MD5, ``$5$`` SHA-256, ``$6$`` SHA-512).  Junos's PAM
-      stack on most modern releases does support bcrypt via Linux
-      crypt() compatibility, but the safer expectation is rejection
-      or non-authentication; operator re-keys on the Junos target.
-      Privilege model: OPNsense's group-binary
-      (``<groupname>admins</groupname>`` ↔ privilege_level=15;
-      others ↔ 1) maps to Junos's named ``class``.  Default mapping:
-      privilege >= 15 → ``super-user``; else ``operator`` (or
-      ``read-only`` if a richer mapping is wired).  Custom OPNsense
-      groups lose identity.  SSH public keys live separately under
-      OPNsense's ``<authorizedkeys>`` (not currently wired into
-      canonical), so re-add SSH keys on the Junos target after
-      migration.  Both codecs pass hashes through verbatim; loss
-      surfaces in the validation report.
+      6 of 14 accounts arrive across the 7 cells that populate local users; the
+      list shrinks on 5 of them. The 8 accounts that vanish carry 8 bcrypt
+      (`$2y$` / `$2b$`). Junos can consume a `$1$` or `$6$` crypt string in
+      `encrypted-password`, or a genuine plaintext password; anything else is
+      refused with a review comment naming the account and no user entry. Before
+      #462 the classifier trusted OPNsense's unconditional `bcrypt:` tag, so the
+      `$6$` SHA-512 crypt secrets on the HA fixtures were refused as if they
+      were bcrypt; it now reads the crypt id inside the tag. The survivors are 2
+      carrying 2 SHA-512 crypt (`$6$`) and 4 with no stored secret. Recorded
+      `lossy` rather than `unsupported`: which account survives is decided by
+      its secret form, and accounts with a consumable secret do arrive. Before
+      cutover, list the source accounts, search the render for `review:`
+      comments, and re-create each refused account on the target with a fresh
+      password.
     references: [opnsense-users, junos-password-cli, junos-kb-password-format]
 
   # ── Tier 2 — RADIUS ──

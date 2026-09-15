@@ -101,6 +101,32 @@ timestamp if your timezone matters for an audit.
   New guard `test_every_user_rendering_codec_refuses_an_unmodelled_secret`
   fails for any codec, current or future, that renders users without the
   gate; the new tests were verified red against `main` (15 failures).
+
+- **Fixed: a secret's tag decided its algorithm even when the tag could not be
+  trusted, so Junos and OPNsense accounts were refused on every other
+  vendor.**  The Junos parser wraps every secret as `junos:<value>`, an
+  envelope rather than an algorithm, and `classify_hash()` returned
+  `junos`, which no foreign target accepts.  The OPNsense parser tags every
+  password `bcrypt:` unconditionally, so the `$6$` SHA-512 crypt secrets on
+  real HA configs were treated as bcrypt.  Both failed closed; this recovers
+  credentials rather than closing a leak.  An envelope tag, or a crypt-family
+  tag that contradicts its payload, now defers to the payload's own crypt(3)
+  id.  `$9$` is excluded because it is both Juniper-reversible and Cisco
+  type-9, and a `junos:`-wrapped sanitisation placeholder is still refused.
+  OPNsense now also accepts SHA-512 crypt: PHP `password_verify()` consumes it
+  and real OPNsense configs store it.
+
+  Measured by render and re-parse, Junos accounts that arrive rise from 1 to 9
+  of 13 on EOS, IOS-XR and VyOS, and from 0 to 4 on IOS-XE and NX-OS.
+  OPNsense accounts rise from 4 to 6 of 14 on EOS, IOS-XR, Junos and VyOS.
+  SHA-512 secrets now carry into OPNsense `<password>` from EOS (7), Junos (4)
+  and VyOS (16) instead of arriving empty.  `CODEC_BUG` went 5 -> 27 on the raw
+  change and is back to **5** after re-authoring 22 `local_users*` blocks
+  across the 12 changed pairs, plus two hand-written whole-record reasons that
+  claimed OPNsense is bcrypt-only.  `METHODOLOGY_ISSUE_under` rises 1800 ->
+  1818; all 18 are `local_users[].name` cells where accounts now arrive on
+  pairs whose loss is still observed elsewhere.  Stale bcrypt-only statements
+  are corrected in six vendor-reference docs and the OPNsense render comment.
 ### Added
 
 - **A6 COMPLETE: `vyos` was the last blind codec, and the mesh audit now has

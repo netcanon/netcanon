@@ -85,9 +85,11 @@ def test_unmigratable_hash_does_not_emit_password_element() -> None:
     assert "<password/>" not in out
 
 
-def test_arista_sha512_unmigratable_to_opnsense() -> None:
-    """Arista's ``arista:sha512:$6$...`` is not in OPNsense's accepted
-    set ({plaintext, bcrypt}).  Must surface the comment-form review."""
+def test_arista_sha512_migrates_to_opnsense() -> None:
+    """Arista's ``arista:sha512:$6$...`` is in OPNsense's accepted set
+    ({plaintext, bcrypt, sha512}): PHP ``password_verify()`` consumes a
+    ``$6$`` crypt string, and real OPNsense HA configs store that form.  The
+    vendor tag is stripped and no review comment is emitted."""
     intent = CanonicalIntent(
         local_users=[CanonicalLocalUser(
             name="aaa",
@@ -98,14 +100,9 @@ def test_arista_sha512_unmigratable_to_opnsense() -> None:
         )],
     )
     out = render_intent(intent)
-    assert "<!--" in out
-    assert "password manager" in out
-    assert "sha512 hash" in out
-    # Source hash must not leak.
-    assert "$6$" not in out
-    assert "fakeAristaHashPayload" not in out
-    # No <password> element emitted.
-    assert "<password>" not in out
+    assert "<password>$6$1b/rOJXKhrCHmRXC$fakeAristaHashPayload</password>" in out
+    assert "arista:" not in out
+    assert "review:" not in out
 
 
 # ---------------------------------------------------------------------------

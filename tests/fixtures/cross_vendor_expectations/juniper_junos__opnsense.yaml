@@ -629,19 +629,22 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Junos ``$6$`` SHA-512 hashes (or ``$5$`` SHA-256 / ``$1$`` MD5
-      legacy) are NOT bcrypt; OPNsense's PAM stack will reject the
-      hash on apply.  Junos ``ssh-rsa`` public-key auth lands in
-      OPNsense's ``<password>`` verbatim, but OPNsense expects a
-      bcrypt hash there and the SSH key in ``<authorizedkeys>``
-      (separate field).  Operators must reset passwords / re-add
-      SSH keys on the OPNsense target after migration.  Privilege /
-      role: Junos ``class super-user / operator / read-only`` named
-      roles collapse to OPNsense binary admin / non-admin via group
-      membership: ``super-user`` → ``<groupname>admins</groupname>``,
-      ``operator`` / ``read-only`` → ``<groupname>users</groupname>``.
-      Custom Junos classes lose named identity.  Both codecs pass
-      hashes through verbatim; loss surfaces in the validation report.
+      OPNsense keeps every account: 13 of 13 arrive across the 8 cells that
+      populate users, measured by render and re-parse. Of the 12 that carry a
+      secret, the 4 SHA-512 crypt (`$6$`) secrets are carried into `<password>`
+      with the `junos:` envelope stripped (#462: the classifier now reads the
+      crypt id inside that envelope, and OPNsense accepts SHA-512 crypt). The 4
+      MD5 crypt (`$1$`) secrets and the 4 `junos:`-wrapped sanitisation
+      placeholders are refused in place: the `<user>` element is kept with a
+      review comment and no `<password>`, so set those passwords on the target
+      before cutover. Junos SSH public keys (`authentication ssh-rsa`) are not
+      parsed by the Junos codec, so they never reach OPNsense's
+      `<authorizedkeys>`; re-add them on the target. Privilege / role: Junos
+      `class super-user / operator / read-only` named roles collapse to OPNsense
+      binary admin / non-admin via group membership: `super-user` ->
+      `<groupname>admins</groupname>`, `operator` / `read-only` ->
+      `<groupname>users</groupname>`. Custom Junos classes lose named identity.
+      No secret value is quoted here.
     references: [junos-password-cli, junos-kb-password-format, opnsense-users]
 
   # ── Tier 2 — RADIUS ──

@@ -485,43 +485,15 @@ per_field_expectation:
   "local_users[].hashed_password":
     disposition: lossy
     reason: >
-      Drifts on 16 of 17 records across 12 of 13 cells — the 17th account
-      carries no password material at all.  This is a defect, not merely a
-      vendor gap, and the shape matters more than the count.
-      Every source secret in this corpus is `$6$` (SHA-512 crypt), and vyos
-      emits it UNTAGGED — a bare crypt string with no `alg:` prefix.  After
-      the round-trip the canonical value is the same body verbatim (byte
-      length identical on all 16, asserted rather than eyeballed) with a
-      `bcrypt:` scheme tag prepended.  The credential material is carried;
-      the algorithm label attached to it is FALSE.
-      Why the guard did not fire: `_user_secrets.classify_hash()` recognises
-      `vendor:alg:payload`, `alg:payload` and the bare leading-digit Cisco
-      form, and treats anything else as a literal plaintext password.  An
-      untagged `$6$` hash is classified `plaintext`, `is_migratable()`
-      short-circuits to True, and the opnsense render writes the hash into
-      `<password>` as though an operator had typed it — emitting zero review
-      comments.  That is exactly the "broken hash literal masquerading as
-      bcrypt" the render's own comment says the review path exists to
-      prevent.  The policy intends to block it: `sha512` is in
-      `_UNIVERSALLY_UNMIGRATABLE` and absent from
-      `_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt}`; tag the identical
-      hash `sha512:` and the guard correctly refuses it.  The bypass is
-      purely the untagged input shape, which is the shape vyos produces.
-      Operationally: OPNsense's `<password>` is consumed by PHP
-      `password_verify()`, which expects bcrypt, so a `$6$` value there is
-      not a working credential and the account cannot authenticate — while
-      the source hash literal now sits in the target config where a review
-      comment was intended.  Set every migrated password on the target
-      before cutover and treat the rendered config.xml as containing source
-      credential material until you have.
-      Recorded `lossy`, not `unsupported`: nothing vanishes.  The account,
-      its name and its role all survive and opnsense declares
-      `/local-users/user/hashed-password` supported, so this is a degraded
-      value inside a concept the target models — the #436 definition of
-      lossy.  The severity belongs in this text, not in an inflated
-      disposition.
-      No hash body is quoted here or in the reference note — only the
-      crypt-scheme marker, the scheme tag and the record counts.
+      Surviving secrets are re-wrapped for OPNsense, never re-hashed: 16 SHA-512
+      crypt (`$6$`) as `<password>`. The crypt payload is byte-identical; only
+      the canonical wrapper around it changes (the source's envelope or vendor
+      tag, or the target's own), which is what the string comparison measures.
+      Recorded `lossy` because the value changes on surviving accounts. Before
+      #462 OPNsense did not accept SHA-512 crypt, so these accounts arrived with
+      no password; PHP's `password_verify()` consumes a `$6$` string, and real
+      OPNsense HA configs store exactly that form. No secret value is quoted
+      here or in the reference doc; only shapes and counts.
     references: [vyos-opnsense-surface]
 
   radius_servers:

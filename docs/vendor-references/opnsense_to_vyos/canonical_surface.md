@@ -190,8 +190,8 @@ another.
 
 ### 2. Local-user roles fail OPEN, and one cell makes it concrete
 
-<!-- secret-gate-461 -->
-> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The VyOS render now calls the shared `is_migratable()` gate.  Measured after the change: **4 of 14** local accounts now arrive across the 7 cells that populate users. 10 are refused for a secret VyOS cannot consume (10 `bcrypt:`-tagged OPNsense hash): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered into `encrypted-password`, a leaf that only holds a Linux crypt string, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/opnsense__vyos.yaml`.
+<!-- secret-gate-462 -->
+> **Update 2026-09-15 (#462) — the local-user behaviour described in this document has changed.**  The shared secret classifier now reads the crypt id inside a Junos `junos:` envelope or an OPNsense `bcrypt:` tag instead of trusting the tag, and OPNsense accepts SHA-512 crypt.  Measured after the change: **6 of 14** local accounts arrive across the 7 cells that populate users. 8 are refused for a secret VyOS cannot consume (8 bcrypt (`$2y$` / `$2b$`)), with a `review:` comment and no user entry. Secrets that arrive are re-wrapped into the target's native form (2 SHA-512 crypt (`$6$`) as `encrypted-password`); the credential itself is unchanged.  Any statement below that these accounts are refused, arrive without a password, or are classified by that tag describes the behaviour before this change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/opnsense__vyos.yaml`.
 
 14 accounts across the 7 cells that populate local users. Names: **14 of 14
 preserved**. Password hashes: **10 of 10 populated hashes preserved verbatim**.

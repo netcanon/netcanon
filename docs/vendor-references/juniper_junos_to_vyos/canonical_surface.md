@@ -231,8 +231,8 @@ recorded where it is measured.
 
 ### 2. Every local account is flattened to `admin` — a fail-open, measured
 
-<!-- secret-gate-461 -->
-> **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The VyOS render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 13** local accounts now arrive across the 8 cells that populate users. 12 are refused for a secret VyOS cannot consume (12 `junos:`-tagged crypt string): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered into `encrypted-password`, a leaf that only holds a Linux crypt string, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/juniper_junos__vyos.yaml`.
+<!-- secret-gate-462 -->
+> **Update 2026-09-15 (#462) — the local-user behaviour described in this document has changed.**  The shared secret classifier now reads the crypt id inside a Junos `junos:` envelope or an OPNsense `bcrypt:` tag instead of trusting the tag, and OPNsense accepts SHA-512 crypt.  Measured after the change: **9 of 13** local accounts arrive across the 8 cells that populate users. 4 are refused for a secret VyOS cannot consume (4 `junos:`-wrapped value with no crypt id (a sanitisation placeholder in this corpus)), with a `review:` comment and no user entry. Secrets that arrive are re-wrapped into the target's native form (4 SHA-512 crypt (`$6$`) as `encrypted-password`, 4 MD5 crypt (`$1$`) as `encrypted-password`); the credential itself is unchanged.  Any statement below that these accounts are refused, arrive without a password, or are classified by that tag describes the behaviour before this change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/juniper_junos__vyos.yaml`.
 
 All 13 user records survive with their names and their password material
 byte-identical. What does not survive is authorisation: **13 of 13 records lose

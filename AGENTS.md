@@ -346,6 +346,10 @@ tests use these exclusively — never CSS classes or element structure.  See
   well the secret was classified.  A new user-rendering codec goes in
   `_USER_RENDERING_TARGETS` in that test file, which fails for any render
   path that skips the gate.
+  And never let a TAG decide the algorithm when the tag cannot be trusted:
+  a vendor envelope (`junos:`) or a parser that tags everything one way
+  (OPNsense `bcrypt:` over a `$6$` body) must defer to the payload's own
+  crypt(3) id (#462).  Fails closed, but refuses every account it mislabels.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

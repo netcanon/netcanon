@@ -414,6 +414,82 @@ def test_newly_gated_codecs_emit_the_right_form(
     assert must_not_contain not in out
 
 
+# ---------------------------------------------------------------------------
+# A tag that cannot be trusted must not decide the algorithm
+# ---------------------------------------------------------------------------
+#
+# ``junos:`` is an envelope — the Junos parser wraps every secret in it — and
+# OPNsense tags every password ``bcrypt:`` even when the body is ``$6$``.
+# Classifying by the tag refused every Junos account on every foreign target
+# and mislabelled OPNsense SHA-512 secrets as bcrypt.  Both failed closed; the
+# fix recovers accounts, so these tests pin the recovery AND the edges that
+# must stay closed.
+
+@pytest.mark.parametrize(
+    ("hashed", "expected"),
+    [
+        ("junos:" + _SHA512CRYPT, "sha512"),
+        ("junos:" + _MD5CRYPT, "md5crypt"),
+        ("bcrypt:" + _SHA512CRYPT, "sha512"),
+        ("bcrypt:" + _BCRYPT, "bcrypt"),
+        ("junos:$9$" + "B" * 20, "junos_type9"),
+    ],
+)
+def test_envelope_and_contradicting_tags_defer_to_the_payload_id(hashed, expected) -> None:
+    assert classify_hash(hashed)[0] == expected
+
+
+def test_payload_id_does_not_override_a_tag_it_cannot_disambiguate() -> None:
+    """``$9$`` is Juniper-reversible AND Cisco type-9 scrypt; the id alone
+    cannot decide, so a Cisco type-9 secret must keep its Cisco classification."""
+    assert classify_hash("9 $9$" + "B" * 40)[0] == "9"
+    assert classify_hash("cisco:type9:$9$" + "B" * 40)[0] == "type9"
+
+
+def test_a_sanitised_junos_placeholder_is_still_refused_off_junos() -> None:
+    for target in ("arista_eos", "cisco_iosxr", "vyos", "opnsense"):
+        assert not is_migratable("junos:" + "X" * 24, target), target
+
+
+@pytest.mark.parametrize(
+    ("hashed", "target"),
+    [
+        ("junos:" + _SHA512CRYPT, "arista_eos"),
+        ("junos:" + _SHA512CRYPT, "cisco_iosxr"),
+        ("junos:" + _SHA512CRYPT, "vyos"),
+        ("junos:" + _SHA512CRYPT, "opnsense"),
+        ("junos:" + _MD5CRYPT, "cisco_iosxe_cli"),
+        ("junos:" + _MD5CRYPT, "cisco_nxos"),
+        ("bcrypt:" + _SHA512CRYPT, "opnsense"),
+        ("bcrypt:" + _SHA512CRYPT, "juniper_junos"),
+    ],
+)
+def test_recovered_secrets_are_migratable_where_the_target_consumes_them(hashed, target) -> None:
+    assert is_migratable(hashed, target)
+
+
+def test_opnsense_sha512_body_is_not_handed_to_a_bcrypt_only_consumer() -> None:
+    """The mislabel's other face: ``bcrypt:$6$`` must not pass as bcrypt."""
+    assert classify_hash("bcrypt:" + _SHA512CRYPT)[0] != "bcrypt"
+
+
+@pytest.mark.parametrize(
+    ("target", "secret", "must_contain"),
+    [
+        ("cisco_iosxr", "junos:" + _SHA512CRYPT, "secret 10 $6$"),
+        ("vyos", "junos:" + _MD5CRYPT, "encrypted-password $1$"),
+        ("opnsense", "junos:" + _SHA512CRYPT, "<password>$6$"),
+        ("opnsense", "bcrypt:" + _SHA512CRYPT, "<password>$6$"),
+    ],
+)
+def test_recovered_secrets_render_in_the_target_native_form(target, secret, must_contain) -> None:
+    from netcanon.migration.codecs.registry import get_codec
+
+    out = get_codec(target).render(_intent_with_users(secret))
+    assert must_contain in out
+    assert "junos:" not in out and "bcrypt:" not in out
+
+
 @pytest.mark.parametrize(
     ("target", "secret"),
     [("vyos", "h0rse"), ("aruba_aoscx", "h0rse"), ("cisco_iosxr", "7 0822455D0A16")],
