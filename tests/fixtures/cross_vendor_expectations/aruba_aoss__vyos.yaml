@@ -491,26 +491,24 @@ per_field_expectation:
   "snmp.v3_users":
     disposition: lossy
     reason: >
-      Much narrower than the trap-host drop above, and the two are unrelated
-      mechanisms despite sharing a parent — neither is evidence for the
-      other.  Both USM users on the single cell that carries them
-      (`kitchen_sink.cfg`) survive the round-trip with their names, group and
-      auth protocol intact.  The single measured drift is one user's
-      `priv_protocol` collapsing from `aes128` to bare `aes`.
-      vyos declares `/snmp/v3-user/priv-protocol` LOSSY and names the cause:
-      its `privacy type` node renders only bare `des` / `aes`, so AES
-      key-length variants (AES-192/256) and 3DES lose their exact strength on
-      render.  It declares `/snmp/v3-user/auth-protocol` lossy for the mirror
-      reason (SHA-224/256/384/512 collapse to `sha`); this corpus does not
-      exercise that one — its users are `sha` and `md5` already.
-      This is a cryptographic-strength MARKER downgrade, not a lost user,
-      which is why it is `lossy`.  The auth and privacy passphrases
-      round-trip verbatim as opaque blobs and are stripped by the mesh
-      comparator as target-determined cosmetics, so they do not contribute
-      either way; no passphrase value appears in this file or its reference
-      note.  Re-key v3 users on the target regardless — vyos declares both
-      passphrases lossy on the grounds that cross-vendor migration requires
-      it.
+      No SNMPv3 USM user survives: 2 in, 0 out across the 1 cells that carry
+      one. The source key is an AOS-S USM key. VyOS stores a v3 key as an
+      `encrypted-password` blob localised against its OWN agent engine ID, and
+      the vyos matrix says so at `/snmp/v3-user/auth-passphrase`: it round-trips
+      verbatim same-vendor, and plaintext keys are never accepted. A foreign key
+      is therefore REFUSED on render (#463): the whole `user` entry is skipped —
+      VyOS USM has no form for a user without auth — and a review comment names
+      it. Until #463 the key was written into that leaf verbatim, which produced
+      a syntactically valid v3 user that could authenticate nobody; the record
+      looked preserved while the credential was already dead. 2 users are
+      refused here. Recorded `lossy` rather than `unsupported`: the cells that
+      carry no USM user are unaffected, and the SNMP surface around it
+      (community, contact, location) still migrates — it is the USM credential
+      that cannot cross. The engine-ID salt is why no re-tagging could rescue
+      this: a key localised to one agent is meaningless on another. Re-create
+      each v3 user on the target and re-key it, then search the render for
+      `review:` comments to get the list. No key material is quoted here or in
+      the reference doc; only counts and shapes.
     references: [aoss-vyos-surface]
 
   # -- LAGs -- a name-shape artifact, and it is recoverable -------------------

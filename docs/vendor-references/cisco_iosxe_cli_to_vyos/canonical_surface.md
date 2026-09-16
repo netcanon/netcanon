@@ -364,6 +364,9 @@ stanza. First-hop redundancy has to be rebuilt by hand on the target.
 
 ## SNMPv3 survives, at a weaker algorithm
 
+<!-- snmpv3-key-gate-463 -->
+> **Update 2026-09-16 (#463) — the SNMPv3 USM behaviour described in this document has changed.**  VyOS stores a v3 key as an `encrypted-password` blob localised against its own agent engine ID, so a key from this source cannot authenticate there.  The vyos render now refuses it: the whole `user` entry is skipped (VyOS USM has no form for a user without auth) and a `review:` comment names it.  Measured after the change: **0 of 2** USM users arrive across the 1 cells that carry one, 2 refused.  The SNMP surface around them (community, contact, location) is unaffected.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying describes the render before this change — the user no longer arrives at all.
+
 The 2 USM users on `kitchen_sink.txt` both survive as records, with names and
 group intact. What changes is the cryptography:
 

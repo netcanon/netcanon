@@ -238,6 +238,9 @@ operator is worse than one that drops the account, because nothing looks wrong.
 
 ### 3. Credentials survive this pair intact — unusually
 
+<!-- snmpv3-key-gate-463 -->
+> **Update 2026-09-16 (#463) — the SNMPv3 USM behaviour described in this document has changed.**  VyOS stores a v3 key as an `encrypted-password` blob localised against its own agent engine ID, so a key from this source cannot authenticate there.  The vyos render now refuses it: the whole `user` entry is skipped (VyOS USM has no form for a user without auth) and a `review:` comment names it.  Measured after the change: **0 of 2** USM users arrive across the 1 cells that carry one, 2 refused.  The SNMP surface around them (community, contact, location) is unaffected.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying describes the render before this change — the user no longer arrives at all.
+
 `local_users[].hashed_password` is `good`, which is rare in this mesh. Of the
 12 accounts, 9 carry a credential and **all 9 round-trip byte-identical**; the
 other 3 carry no credential in the source at all. No re-encoding, no scheme

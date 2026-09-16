@@ -272,6 +272,9 @@ double-quote, which on this corpus is one SNMP contact string.
 
 ### 5. SNMP trap destinations have no emit path at all
 
+<!-- snmpv3-key-gate-463 -->
+> **Update 2026-09-16 (#463) — the SNMPv3 USM behaviour described in this document has changed.**  VyOS stores a v3 key as an `encrypted-password` blob localised against its own agent engine ID, so a key from this source cannot authenticate there.  The vyos render now refuses it: the whole `user` entry is skipped (VyOS USM has no form for a user without auth) and a `review:` comment names it.  Measured after the change: **0 of 2** USM users arrive across the 1 cells that carry one, 2 refused.  The SNMP surface around them (community, contact, location) is unaffected.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying describes the render before this change — the user no longer arrives at all.
+
 3 trap-host records across 2 cells become **0**. The rendered `service snmp`
 block carries `community`, `contact`, `location` and the `v3` users — and no
 trap target of any kind.

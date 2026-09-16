@@ -568,6 +568,17 @@ in rendered output find every such site.
      excepted, being both Juniper-reversible and Cisco type-9).  OPNsense
      accepts bcrypt and SHA-512 crypt.
 
+* **SNMPv3 USM key portability**
+  ([`vyos/render.py`](../netcanon/migration/codecs/vyos/render.py)).  A v3 auth
+  or privacy key is localised against the agent's engine ID, so it does not
+  port between devices even when both sides model USM.  Since #463 the vyos
+  render emits a key only when it produced it (`source_vendor == "vyos"`);
+  any other key is refused and the whole `user` entry is skipped, with a
+  `review:` comment naming it.  There is no recovery path here — unlike a
+  local-user password, the target accepts no plaintext USM form.  Other
+  targets still carry foreign USM keys verbatim; their pair expectations
+  declare that loss.
+
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
   AOS-S is a DHCP-relay platform on most SKUs — it doesn't run a

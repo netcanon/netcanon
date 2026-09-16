@@ -350,6 +350,9 @@ pair, stated once here rather than repeated on 21 keys.
 
 ## Credential material
 
+<!-- snmpv3-key-gate-463 -->
+> **Update 2026-09-16 (#463) — the SNMPv3 USM behaviour described in this document has changed.**  VyOS stores a v3 key as an `encrypted-password` blob localised against its own agent engine ID, so a key from this source cannot authenticate there.  The vyos render now refuses it: the whole `user` entry is skipped (VyOS USM has no form for a user without auth) and a `review:` comment names it.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused.  The SNMP surface around them (community, contact, location) is unaffected.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying describes the render before this change — the user no longer arrives at all.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The VyOS render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 7** local accounts now arrive across the 6 cells that populate users. 6 are refused for a secret VyOS cannot consume (6 AOS-CX `AQB` device-keyed ciphertext): the render emits a `review:` comment naming the account and no user entry. 1 consumable secret is carried unchanged.  Any statement below that a secret is carried verbatim, or rendered into `encrypted-password`, a leaf that only holds a Linux crypt string, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__vyos.yaml`.
 

@@ -503,29 +503,27 @@ per_field_expectation:
     references: [mikrotik-vyos-surface]
 
   "snmp.v3_users":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      The user records survive; the cryptography degrades.  Measured across
-      the 3 cells that carry SNMP: 4 v3 user records in, 4 out, all matched
-      by name, and both passphrase blobs compare EQUAL source-to-target on
-      every record — no key material is lost in transit.  What changes is
-      algorithm strength, on the one cell that uses anything modern:
-      `sha256` -> `sha` on one record, `aes128` -> `aes` on one and
-      `aes256` -> `aes` on another, while the two `md5` / `des` users on the
-      other cells round-trip untouched.
-      vyos declares `/snmp/v3-user/auth-protocol` and `/priv-protocol` LOSSY
-      and names them CRYPTOGRAPHIC DOWNGRADES: `sha` on the VyOS side is
-      SHA-1, and bare `aes` loses the AES-192/256 key length.  It further
-      declares both passphrases and the engine-ID lossy, on the grounds that
-      the VyOS key is an opaque `encrypted-password` blob requiring
-      re-keying cross-vendor.
-      Recorded `lossy`, not `unsupported`: no record vanishes.  But treat
-      "lossy" here as an operational instruction, not a shrug — an
-      SHA-256 / AES-256 user arrives as SHA-1 / AES.  Re-create SNMPv3
-      users on the target, re-key them, and re-select the algorithms
-      explicitly.  No passphrase, hash body or engine-ID value is quoted in
-      this file or its reference doc — only the algorithm names and the
-      blob's shape are described.
+      No SNMPv3 USM user survives: 4 in, 0 out across the 3 cells that carry
+      one. The source key is a RouterOS USM key (2 of the 4 records carry none
+      at all, because `/export` omits them). VyOS stores a v3 key as an
+      `encrypted-password` blob localised against its OWN agent engine ID, and
+      the vyos matrix says so at `/snmp/v3-user/auth-passphrase`: it round-trips
+      verbatim same-vendor, and plaintext keys are never accepted. A foreign key
+      is therefore REFUSED on render (#463): the whole `user` entry is skipped —
+      VyOS USM has no form for a user without auth — and a review comment names
+      it. Until #463 the key was written into that leaf verbatim, which produced
+      a syntactically valid v3 user that could authenticate nobody; the record
+      looked preserved while the credential was already dead. 4 users are
+      refused here. Recorded `unsupported` rather than `lossy` because the
+      record vanishes entirely (#436) and no cell on this pair preserves the
+      key; a `lossy` warning would understate a target with no v3 users at all.
+      The engine-ID salt is why no re-tagging could rescue this: a key localised
+      to one agent is meaningless on another. Re-create each v3 user on the
+      target and re-key it, then search the render for `review:` comments to get
+      the list. No key material is quoted here or in the reference doc; only
+      counts and shapes.
     references: [mikrotik-vyos-surface]
 
   # -- LAGs -- the surface that works ----------------------------------------

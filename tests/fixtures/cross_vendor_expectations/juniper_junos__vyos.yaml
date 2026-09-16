@@ -555,29 +555,24 @@ per_field_expectation:
   "snmp.v3_users":
     disposition: lossy
     reason: >
-      4 USM users across 2 cells; the user records themselves, their
-      names and their group bindings all survive.  Two things degrade.
-      CRYPTOGRAPHIC STRENGTH — 3 of the 4 records lose it.  On
-      `saidvandeklundert_snmpv3_junos172.set` both POLLER accounts go
-      `aes128` -> `aes`; on `kitchen_sink.set` `readonly_v3` goes
-      `sha256` -> `sha` AND `aes256` -> `aes`.  `sha256` -> `sha` is
-      SHA-256 down to SHA-1.  The fourth record (`monitor`, md5/des) is
-      unchanged.  vyos declares `/snmp/v3-user/auth-protocol` and
-      `/priv-protocol` LOSSY and names this exact downgrade — its render
-      emits only `md5`/`sha` and bare `des`/`aes`.
-      KEY MATERIAL — the auth and privacy passphrases round-trip
-      verbatim, which sounds like a win and is not: they are opaque
-      Junos `$9$` vendor-reversible blobs, and a `$9$` blob is not a
-      valid VyOS `encrypted-password`, so v3 polling will fail on the
-      target until the users are re-keyed.  vyos declares
-      `/snmp/v3-user/auth-passphrase` and `/priv-passphrase` lossy for
-      precisely this reason, and `/engine-id` lossy on top.
-      Recorded `lossy` rather than `unsupported`: the user record
-      survives inside a concept the target models, so this is
-      degradation, not a concept gap.  Re-create SNMPv3 users on the
-      target and choose the algorithms explicitly.  No passphrase blob
-      or hash body is quoted in this file or its reference doc — only
-      the scheme marker.
+      No SNMPv3 USM user survives: 4 in, 0 out across the 2 cells that carry
+      one. The source key is a Junos USM key from `snmp v3 usm local-engine`.
+      VyOS stores a v3 key as an `encrypted-password` blob localised against its
+      OWN agent engine ID, and the vyos matrix says so at
+      `/snmp/v3-user/auth-passphrase`: it round-trips verbatim same-vendor, and
+      plaintext keys are never accepted. A foreign key is therefore REFUSED on
+      render (#463): the whole `user` entry is skipped — VyOS USM has no form
+      for a user without auth — and a review comment names it. Until #463 the
+      key was written into that leaf verbatim, which produced a syntactically
+      valid v3 user that could authenticate nobody; the record looked preserved
+      while the credential was already dead. 4 users are refused here. Recorded
+      `lossy` rather than `unsupported`: the cells that carry no USM user are
+      unaffected, and the SNMP surface around it (community, contact, location)
+      still migrates — it is the USM credential that cannot cross. The engine-ID
+      salt is why no re-tagging could rescue this: a key localised to one agent
+      is meaningless on another. Re-create each v3 user on the target and re-key
+      it, then search the render for `review:` comments to get the list. No key
+      material is quoted here or in the reference doc; only counts and shapes.
     references: [junos-vyos-surface]
 
   # -- LAGs -- dropped by a name shape the target does not recognise ---------

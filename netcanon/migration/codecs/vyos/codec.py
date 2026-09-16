@@ -252,10 +252,13 @@ class VyOSCodec(CodecBase):
                 path="/snmp/v3-user/auth-passphrase",
                 reason=(
                     "VyOS stores the v3 USM auth / privacy keys as an opaque "
-                    "`encrypted-password` blob; it round-trips verbatim "
-                    "same-vendor but cross-vendor migration requires re-keying "
-                    "on the target (hashes are salted with vendor-specific "
-                    "constants).  Plaintext keys are never accepted."
+                    "`encrypted-password` blob localised against its own agent "
+                    "engine ID; it round-trips verbatim same-vendor, and "
+                    "plaintext keys are never accepted.  A key from any other "
+                    "source is therefore REFUSED on render (the whole `user` "
+                    "entry is skipped with a review comment) rather than "
+                    "written into a leaf where it would authenticate nobody: "
+                    "re-create the v3 user and re-key it on the target."
                 ),
                 severity="warn",
             ),
@@ -284,8 +287,9 @@ class VyOSCodec(CodecBase):
                 reason=(
                     "Same as the auth key: the VyOS privacy key is an opaque "
                     "`encrypted-password` blob; it round-trips verbatim same-"
-                    "vendor but cross-vendor migration requires re-keying on "
-                    "the target."
+                    "vendor, and a foreign key is refused with the user rather "
+                    "than re-emitted.  A same-vendor privacy block with no "
+                    "stored key is omitted instead of emitted empty."
                 ),
                 severity="warn",
             ),

@@ -515,33 +515,27 @@ per_field_expectation:
     references: [nxos-vyos-surface]
 
   "snmp.v3_users":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      The v3 user RECORDS survive — 1 in / 1 out on ten cells, 2 in / 2 out on
-      `nautobot_gc_nxos_snmp_spine01_nxos933.txt` — with name and group
-      intact.  Both matrices declare `/snmp/v3-user` supported.  What drifts
-      is the USM crypto description, on 4 cells, in two distinct ways:
-      (1) `priv_protocol` collapses `aes128` -> `aes` on 3 cells
-      (`batfish_nxos_n9kv_ebgp_r1.txt`,
-      `networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg`,
-      `kitchen_sink.cfg`).  vyos declares `/snmp/v3-user/priv-protocol` LOSSY
-      and names this exact failure: `privacy type` renders only bare `des` /
-      `aes`, so AES key-length variants lose their exact strength — a
-      cryptographic downgrade in the description of the key, on render.
-      (2) `engine_id` goes from empty to a synthesised value on 1 cell
-      (`nautobot_...`), because vyos carries ONE config-wide `engineid` and
-      maps it onto every user.  A source that set none comes back with one.
-      Recorded separately because it is real but deliberately NOT counted as
-      evidence: the privacy passphrase goes from a 34-character opaque value
-      to empty on 8 records.  The harness blanks `auth_passphrase` and
-      `priv_passphrase` on both sides before comparing
-      (`_COSMETIC_SNMP_V3_SUBFIELDS`), so it cannot ground this disposition —
-      but it is the reason the advice is RE-KEY SNMPv3 on the target rather
-      than merely check the protocol.  No passphrase, hash body or ciphertext
-      is quoted anywhere in this file or its reference doc; only the field
-      length and the drift shape are described.
-      Recorded `lossy` rather than `unsupported`: the user records survive
-      with their identity, and only the crypto description degrades.
+      No SNMPv3 USM user survives: 12 in, 0 out across the 11 cells that carry
+      one. The source key is an NX-OS `localizedkey` digest, salted with the
+      source agent's engine ID. VyOS stores a v3 key as an `encrypted-password`
+      blob localised against its OWN agent engine ID, and the vyos matrix says
+      so at `/snmp/v3-user/auth-passphrase`: it round-trips verbatim
+      same-vendor, and plaintext keys are never accepted. A foreign key is
+      therefore REFUSED on render (#463): the whole `user` entry is skipped —
+      VyOS USM has no form for a user without auth — and a review comment names
+      it. Until #463 the key was written into that leaf verbatim, which produced
+      a syntactically valid v3 user that could authenticate nobody; the record
+      looked preserved while the credential was already dead. 12 users are
+      refused here. Recorded `unsupported` rather than `lossy` because the
+      record vanishes entirely (#436) and no cell on this pair preserves the
+      key; a `lossy` warning would understate a target with no v3 users at all.
+      The engine-ID salt is why no re-tagging could rescue this: a key localised
+      to one agent is meaningless on another. Re-create each v3 user on the
+      target and re-key it, then search the render for `review:` comments to get
+      the list. No key material is quoted here or in the reference doc; only
+      counts and shapes.
     references: [nxos-vyos-surface]
 
   # -- LAGs -- the concept the target cannot name ----------------------------
