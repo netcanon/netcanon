@@ -151,6 +151,34 @@ timestamp if your timezone matters for an audit.
   rather than emitted empty.  `snmp.v3_users` is re-authored on the 8 affected
   pairs from the measurement, `CODEC_BUG` holds at **5** and
   `METHODOLOGY_ISSUE_over` at **21**.
+
+- **Fixed: NX-OS labelled every SNMPv3 USM key `localizedkey`, whatever produced
+  it.**  That keyword asserts the digest is ALREADY localised against this
+  agent's engine ID — true only of a key NX-OS itself derived.  The render
+  appended it to every v3 user, so a Junos `authentication-key`, a VyOS
+  `encrypted-password`, an AOS-CX `ciphertext` blob or a FortiGate `ENC` value
+  was installed as if the Nexus had produced it, and the migrated user
+  authenticated nobody while looking intact.  Worse in the other direction: a
+  genuine PASSPHRASE — the one portable shape, and all that `arista_eos`,
+  `cisco_iosxe_cli`, `aruba_aoss` and `mikrotik_routeros` parse — was stored as
+  a digest instead of being localised on commit, so the case that should have
+  worked was the case that broke.
+
+  A key bound to the source device is now refused (no `snmp-server user` line, a
+  `review:` comment naming the user), and a passphrase renders WITHOUT the
+  keyword so NX-OS localises it.  Measured on the corpus: Junos (4), VyOS (2),
+  AOS-CX (2) and FortiGate (2) refused; Arista, AOS-S and IOS-XE keep migrating
+  2 each, now correctly; RouterOS keeps 2 and loses the 2 whose `/export`
+  carried no key at all.
+
+  The policy lives in a new `netcanon/migration/_usm_keys.py`, sibling to
+  `_user_secrets.py`: it classifies a key by the SOURCE CODEC'S GRAMMAR rather
+  than by the value's shape, because a sanitised fixture makes a localised
+  digest look like a word, and "it looks like a passphrase" is the fail-open
+  #460 closed on the other credential surface.  An unknown source vendor
+  classifies as unportable, so a codec added later fails closed.
+  `snmp.v3_users` is re-authored on the pairs that moved; `CODEC_BUG` back to
+  **5**, `METHODOLOGY_ISSUE_over` **21**.
 ### Added
 
 - **A6 COMPLETE: `vyos` was the last blind codec, and the mesh audit now has

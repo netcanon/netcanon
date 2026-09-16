@@ -389,6 +389,13 @@ class CiscoNXOSCodec(CodecBase):
             LossyPath(
                 path="/snmp/v3-user/auth-passphrase",
                 reason=(
+                    "A USM key is localised against the agent's own "
+                    "engine ID, so a key from another vendor cannot be "
+                    "re-used: the render refuses it (review comment, no "
+                    "`snmp-server user` line) rather than emitting it behind "
+                    "`localizedkey`, which would claim the digest was already "
+                    "this agent's.  A source PASSPHRASE is portable and is "
+                    "emitted without that keyword, letting NX-OS localise it.  "
                     "NX-OS 10.x introduced the `localizedV2key` digest "
                     "format; the v1 codec normalises to the older "
                     "`localizedkey` form on render.  Operators migrating "

@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
+from ..._usm_keys import classify_usm_key, usm_is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from .._helpers import _coalesce_vlan_ids, same_vendor_version
 from . import port_names as _port_names
@@ -138,7 +139,7 @@ def render_intent(tree: CanonicalIntent) -> str:
     if tree.local_users:
         lines.append("")
     if tree.snmp is not None:
-        snmp_lines = _render_snmp(tree.snmp)
+        snmp_lines = _render_snmp(tree.snmp, tree.source_vendor)
         if snmp_lines:
             lines.extend(snmp_lines)
             lines.append("")
@@ -310,7 +311,7 @@ def _render_local_user(user) -> str:
     return f"username {user.name} password {htype} {payload} role {role}"
 
 
-def _render_snmp(snmp) -> list[str]:
+def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
     """Render NX-OS ``snmp-server`` lines (v2c community + v3 USM users).
 
     v3 privacy cipher denormalises canonical -> NX-OS (``aes128`` ->
@@ -328,6 +329,28 @@ def _render_snmp(snmp) -> list[str]:
     for host in snmp.trap_hosts:
         lines.append(f"snmp-server host {host}")
     for user in snmp.v3_users:
+        # ⚠️ An SNMPv3 USM key is localised against the agent's OWN engine ID.
+        # This render emitted whatever key it was handed and then appended
+        # ``localizedkey``, which tells the Nexus "this digest is already mine"
+        # — true only for an NX-OS source.  A foreign digest (Junos, VyOS), an
+        # AOS-CX ciphertext blob or a FortiGate ``ENC`` value produced a v3 user
+        # that commits clean and authenticates nobody.  A PASSPHRASE is the one
+        # portable shape: emitted WITHOUT the keyword, NX-OS localises it
+        # itself, so those now migrate correctly instead of being mislabelled.
+        # Policy: :mod:`netcanon.migration._usm_keys`.
+        if user.auth_protocol and not usm_is_migratable(
+            user.auth_passphrase, source_vendor, "cisco_nxos",
+        ):
+            kind = classify_usm_key(user.auth_passphrase, source_vendor)
+            lines.append(
+                f"! snmpv3 user {user.name} -- review: a {kind} USM key is "
+                f"bound to the source agent's engine ID and cannot be re-used "
+                f"on NX-OS; re-create this user and re-key it on the target"
+            )
+            continue
+        localised = classify_usm_key(
+            user.auth_passphrase, source_vendor,
+        ) != "plaintext"
         line = f"snmp-server user {user.name}"
         if user.group:
             line += f" {user.group}"
@@ -347,7 +370,11 @@ def _render_snmp(snmp) -> list[str]:
                     line += f" priv {priv} {user.priv_passphrase}"
                 else:
                     line += f" priv {user.priv_passphrase}"
-            line += " localizedkey"
+            # Claim the key is pre-localised only when it actually is.  A
+            # passphrase carrying this keyword is stored as a digest, and
+            # authentication then fails on the target.
+            if localised:
+                line += " localizedkey"
         if user.engine_id:
             line += f" engineID {user.engine_id}"
         lines.append(line)

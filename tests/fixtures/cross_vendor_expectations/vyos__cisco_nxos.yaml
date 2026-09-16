@@ -476,24 +476,21 @@ per_field_expectation:
   "snmp.v3_users":
     disposition: lossy
     reason: >
-      Drifts on both cells that carry a USM record, and the drift is a single
-      token: the canonical privacy protocol `aes` is rendered as NX-OS's
-      `priv aes-128` and re-parses as `aes128`.  Everything else about the
-      user survives — name, group, auth protocol, engine ID, and both key
-      blobs verbatim.
-      `lossy` and not `unsupported`: the record does not vanish, its cipher
-      discriminator gets MORE specific.  Both codecs declare `/snmp/v3-user`
-      supported.  Read the direction carefully before acting on it — vyos
-      declares `/snmp/v3-user/priv-protocol` lossy because ITS render collapses
-      AES-192/256 down to bare `aes`, so on a corpus that had used a stronger
-      cipher the source value would already have been degraded before NX-OS
-      saw it.
-      Independent of the token, re-key every SNMPv3 user on the Nexus.  Both
-      matrices declare the auth and privacy passphrase paths lossy in their own
-      right (VyOS stores an opaque `encrypted-password` blob; NX-OS normalises
-      to the older `localizedkey` digest form), and a key localized against one
-      agent's engine ID does not authenticate against another's.  No key
-      material or engine ID is reproduced in this file.
+      No SNMPv3 USM user survives: 2 in, 0 out across the 2 cells that carry
+      one. The source key is a VyOS `encrypted-password` blob, localised against
+      the source agent's engine ID. NX-OS installs a v3 key with `snmp-server
+      user ... localizedkey`, which asserts the digest is ALREADY localised
+      against this agent's engine ID — true only of a key NX-OS itself produced.
+      Until #464 the render appended that keyword to every user whatever the
+      source, so a foreign key was installed as if the Nexus had derived it and
+      the v3 user authenticated nobody while looking migrated. Such a key is now
+      REFUSED: no `snmp-server user` line, and a review comment names the user.
+      2 users are refused here. Recorded `lossy` rather than `unsupported`: the
+      surrounding SNMP surface (community, contact, location, trap hosts) still
+      migrates, and cells that carry no USM user are unaffected. Re-create each
+      refused v3 user on the target and re-key it; the render's `review:`
+      comments list them. No key material is quoted here or in the reference
+      doc; only counts and kinds.
     references: [vyos-nxos-surface]
 
   # -- LAGs -- renamed correctly, and stranded --------------------------------

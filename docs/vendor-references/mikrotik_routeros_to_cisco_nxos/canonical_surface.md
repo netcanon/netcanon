@@ -1,5 +1,8 @@
 # RouterOS -> NX-OS: measured canonical surface
 
+<!-- snmpv3-key-gate-464 -->
+> **Update 2026-09-16 (#464) — the SNMPv3 USM behaviour described in this document has changed.**  `snmp-server user ... localizedkey` asserts the key is already localised against this agent's engine ID, which is true only of a key NX-OS produced.  The render used to append that keyword to every user whatever the source, so a key bound to the source device was installed as if the Nexus had derived it.  Such a key is now refused: no `snmp-server user` line, and a `review:` comment names the user.  Measured after the change: **2 of 4** USM users arrive across the 3 cells that carry one, 2 refused (2 no key, 2 plaintext).  The 2 that arrive carry a passphrase, which IS portable: NX-OS localises it itself, so those now render WITHOUT `localizedkey` and are usable.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying describes the render before this change.
+
 Source: `netcanon/migration/codecs/mikrotik_routeros/codec.py` and
 `netcanon/migration/codecs/cisco_nxos/codec.py` (`CapabilityMatrix`), joined
 against a full `tools/run_full_mesh.py` pass over the committed corpus.

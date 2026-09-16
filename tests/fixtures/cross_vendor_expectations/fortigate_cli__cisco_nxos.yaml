@@ -487,17 +487,20 @@ per_field_expectation:
   "snmp.v3_users":
     disposition: unsupported
     reason: >
-      The v3 USM table does not survive: on `kitchen_sink`, the only cell that
-      carries v3 users, both go missing (2 -> []).  FortiOS holds the auth and
-      privacy keys as a TWO-token opaque value (`ENC <blob>`), which the
-      NX-OS renderer splices verbatim into `snmp-server user <name> auth
-      <proto> ENC <blob> priv <cipher> ENC <blob> localizedkey` -- a line the
-      NX-OS grammar, which expects a single key token, cannot read.  The user
-      is therefore not created at all, which is why this is `unsupported`
-      rather than the passphrase-only `lossy` the NX-OS matrix declares.
-      Re-create every SNMPv3 user on the target with fresh auth/priv keys;
-      monitoring that authenticates with v3 goes dark at cutover.  The v1/v2c
-      surface is unaffected.
+      No SNMPv3 USM user survives: 2 in, 0 out across the 1 cells that carry
+      one. The source key is a FortiOS `ENC` blob, encrypted under the source
+      device's key. NX-OS installs a v3 key with `snmp-server user ...
+      localizedkey`, which asserts the digest is ALREADY localised against this
+      agent's engine ID — true only of a key NX-OS itself produced. Until #464
+      the render appended that keyword to every user whatever the source, so a
+      foreign key was installed as if the Nexus had derived it and the v3 user
+      authenticated nobody while looking migrated. Such a key is now REFUSED: no
+      `snmp-server user` line, and a review comment names the user. 2 users are
+      refused here. Recorded `unsupported` rather than `lossy` because the
+      record vanishes entirely (#436) and no cell on this pair preserves the
+      key. Re-create each refused v3 user on the target and re-key it; the
+      render's `review:` comments list them. No key material is quoted here or
+      in the reference doc; only counts and kinds.
     references: [fg-nxos-surface]
 
   lags:

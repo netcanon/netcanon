@@ -221,6 +221,9 @@ reachability at cutover.
 
 ## Credential material
 
+<!-- snmpv3-key-gate-464 -->
+> **Update 2026-09-16 (#464) — the SNMPv3 USM behaviour described in this document has changed.**  `snmp-server user ... localizedkey` asserts the key is already localised against this agent's engine ID, which is true only of a key NX-OS produced.  The render used to append that keyword to every user whatever the source, so a key bound to the source device was installed as if the Nexus had derived it.  Such a key is now refused: no `snmp-server user` line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 ciphertext).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying describes the render before this change.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The NX-OS render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 7** local accounts now arrive across the 6 cells that populate users. 6 are refused for a secret NX-OS cannot consume (6 AOS-CX `AQB` device-keyed ciphertext): the render emits a `review:` comment naming the account and no user entry. 1 consumable secret is carried unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `password 0`, the NX-OS cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__cisco_nxos.yaml`.
 

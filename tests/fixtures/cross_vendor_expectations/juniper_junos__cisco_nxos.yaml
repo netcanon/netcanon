@@ -512,19 +512,23 @@ per_field_expectation:
     references: [junos-nxos-surface]
 
   "snmp.v3_users":
-    disposition: good
-    note: >
-      Preserved on all 6 populated cells, including the dedicated SNMPv3
-      capture `saidvandeklundert_snmpv3_junos172`: the USM user name, group,
-      auth/priv protocols and engineID all round-trip.  Read the scope
-      honestly -- the mesh blanks `auth_passphrase` / `priv_passphrase` before
-      comparing, because they are opaque per-vendor localized digests, and the
-      NX-OS matrix declares both lossy (it normalises to the older
-      `localizedkey` digest form) alongside `/snmp/v3-user/engine-id` (it
-      emits engineIDs in colon-decimal where cross-vendor sources use hex).
-      So: the v3 user RECORDS arrive, but plan on re-keying every v3 user on
-      the target and re-pointing any manager pinned to the source engineID.
-      v1/v2c is unaffected.
+    disposition: lossy
+    reason: >
+      No SNMPv3 USM user survives: 4 in, 0 out across the 2 cells that carry
+      one. The source key is a Junos `authentication-key`, localised against the
+      source agent's engine ID. NX-OS installs a v3 key with `snmp-server user
+      ... localizedkey`, which asserts the digest is ALREADY localised against
+      this agent's engine ID — true only of a key NX-OS itself produced. Until
+      #464 the render appended that keyword to every user whatever the source,
+      so a foreign key was installed as if the Nexus had derived it and the v3
+      user authenticated nobody while looking migrated. Such a key is now
+      REFUSED: no `snmp-server user` line, and a review comment names the user.
+      4 users are refused here. Recorded `lossy` rather than `unsupported`: the
+      surrounding SNMP surface (community, contact, location, trap hosts) still
+      migrates, and cells that carry no USM user are unaffected. Re-create each
+      refused v3 user on the target and re-key it; the render's `review:`
+      comments list them. No key material is quoted here or in the reference
+      doc; only counts and kinds.
     references: [junos-nxos-surface]
 
   # -- Tier 2 -- LAGs.  Top-level key omitted: `lags[].members` is preserved

@@ -335,6 +335,9 @@ drift on 2 cells each, and an operator should know:
 
 ## SNMP
 
+<!-- snmpv3-key-gate-464 -->
+> **Update 2026-09-16 (#464) — the SNMPv3 USM behaviour described in this document has changed.**  `snmp-server user ... localizedkey` asserts the key is already localised against this agent's engine ID, which is true only of a key NX-OS produced.  The render used to append that keyword to every user whatever the source, so a key bound to the source device was installed as if the Nexus had derived it.  Such a key is now refused: no `snmp-server user` line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 localised).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying describes the render before this change.
+
 Four cells populate an SNMP block. The community string is preserved
 byte-for-byte on all **3** cells that set one; location and contact on both
 cells that set them. So all three keys are `good` on measurement rather than on
