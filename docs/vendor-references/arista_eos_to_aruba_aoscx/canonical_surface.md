@@ -246,6 +246,9 @@ exist on the target at all.
 
 ## Credential material
 
+<!-- snmpv3-key-gate-466 -->
+> **Update 2026-09-16 (#466) — the SNMPv3 USM behaviour described in this document has changed.**  `auth-pass ciphertext <blob>` claims the value is encrypted under the TARGET device's key, which is true only of a key that switch produced.  This source supplies a key bound to the source device.  Such a key is now refused: no `snmpv3 user` line, and a `review:` comment names the user.  Measured after the change: **2 of 2** USM users arrive across the 1 cells that carry one, 0 refused (2 plaintext).  The 2 that arrive carry a PASSPHRASE, which IS portable: those now render through `auth-pass plaintext` for the switch to encrypt itself, instead of being mislabelled as this device's `ciphertext`.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 No secret value from any fixture is reproduced in this file or in the
 expectation YAML. The EOS user secrets are opaque single-token strings; the
 AOS-CX SNMPv3 render carries `ciphertext`-form blobs. Per `AGENTS.md`, encrypted

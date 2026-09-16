@@ -215,6 +215,9 @@ reference `lag 1`. Anchor and members disagree by name in the emitted text.
 
 ## Finding 6 — SNMP splits three ways
 
+<!-- snmpv3-key-gate-466 -->
+> **Update 2026-09-16 (#466) — the SNMPv3 USM behaviour described in this document has changed.**  `auth-pass ciphertext <blob>` claims the value is encrypted under the TARGET device's key, which is true only of a key that switch produced.  This source supplies a RouterOS passphrase -- portable -- except where `/export` omitted it entirely, leaving nothing to migrate.  Such a key is now refused: no `snmpv3 user` line, and a `review:` comment names the user.  Measured after the change: **2 of 4** USM users arrive across the 3 cells that carry one, 2 refused (2 no key, 2 plaintext).  The 2 that arrive carry a PASSPHRASE, which IS portable: those now render through `auth-pass plaintext` for the switch to encrypt itself, instead of being mislabelled as this device's `ciphertext`.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 - `community`, `location`, `contact` — **preserved on all 3 populated cells**.
   Rendered as `snmp-server community`, `snmp-server system-location`,
   `snmp-server system-contact`.

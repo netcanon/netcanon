@@ -442,7 +442,7 @@ unsupported exceptions:
 | `/interfaces/interface/config/type` | Lossy | No IANA ifType is declared; inferred from the name shape (`1/1/1` → ethernetCsmacd, `vlan N` → l3ipvlan, `lag N` → ieee8023adLag, `loopback N` → softwareLoopback, `mgmt` → ethernetCsmacd, `vxlan N` → tunnel).  Best-effort. |
 | `/system/raw-sections/version-banner` | Lossy | The `!Version ArubaOS-CX <release>` banner + service footer lines (`ssh server`, `https-server`, `clock`, `ntp`, `spanning-tree`, `system interface-group`) are discarded on parse and a synthesised banner is emitted on render; re-apply management-plane services on the target. |
 | `/local-users/user/privilege-level` | Lossy | Named `group` (administrators / operators / auditors / custom), not numeric: administrators → 15, everything else → 1.  The `password ciphertext` blob is AES-encrypted with the device key (portable same-device only); cross-vendor migration requires re-keying. |
-| `/snmp/v3-user/auth-passphrase` | Lossy | SNMPv3 auth/priv keys are `ciphertext` blobs encrypted with the device key (portable same-device only); cross-vendor / cross-device migration emits the blob verbatim but the operator must re-key.  The `plaintext` key form is normalised to `ciphertext` on render. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | Two distinct losses.  (1) AOS-CX renders SHA-1 auth / AES-128 priv only, so a stronger source algorithm is DOWNGRADED — a crypto change, not a re-key.  (2) `auth-pass ciphertext <blob>` claims the value is encrypted under this device's key, true only of a key this switch produced, so a key belonging to another agent is refused (review comment, no `snmpv3 user` line).  A source passphrase is portable and renders through `auth-pass plaintext`, which the switch encrypts itself; the parser already accepts both keywords, so the recovered form round-trips. |
 | `/vxlan-vnis/source-interface` | Lossy | AOS-CX states the VTEP source as an IPv4 *address* (`interface vxlan 1 / source ip <X>`), not an interface name (NX-OS / Arista `source-interface loopbackN`).  Stored verbatim in the opaque `source_interface` field; a cross-vendor source carrying an interface *name* has no `source ip` form so the line is omitted on render (VLAN↔VNI bindings still emit).  Set the loopback→IP mapping on the target manually. |
 | `/snmp/trap-host` | Unsupported | The `snmp-server host … trap …` trap-receiver grammar is deferred; v2c community + system-location / system-contact + v3 USM users are supported. |
 | `/routing-instances/instance/{description,route-distinguisher,rt-imports,rt-exports}` | Unsupported | The `vrf <name>` stanza is a bare name in v1; descriptions / RD / route-targets live under the deferred `evpn` / `router bgp` blocks. |
@@ -604,8 +604,16 @@ in rendered output find every such site.
   the same change — a leaf the render emits but the parser ignores is a silent
   loss.  A Junos refusal drops the user's VACM `security-to-group` binding as
   well, since a security-name with no usable key is a half-configured account.
-  Four targets now gate; `aruba_aoss`, `aruba_aoscx`, `cisco_iosxe_cli` and
-  `mikrotik_routeros` still carry a foreign USM key verbatim.
+
+  Since #466 `aruba_aoscx` gates too, and it is the NX-OS shape in a different
+  grammar: `auth-pass ciphertext <blob>` claims the value is encrypted under
+  this device's key, so a foreign key is refused and a portable passphrase
+  renders through `auth-pass plaintext` for the switch to encrypt.  Its parser
+  already accepted both keywords, so that recovery needed no parse change —
+  but the parser still DISCARDS which keyword it saw, so an AOS-CX *source*
+  continues to classify `ciphertext` and fails closed.  Five targets now gate;
+  `aruba_aoss`, `cisco_iosxe_cli` and `mikrotik_routeros` still carry a
+  foreign USM key verbatim.
 
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
