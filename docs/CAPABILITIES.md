@@ -289,6 +289,8 @@ output.
 | `/routing/static-route/vrf` | Supported (#340) | Per-VRF static routes (`ip route vrf <NAME> …`) round-trip onto `CanonicalStaticRoute.vrf`; interface-nexthop (`… <iface>`, e.g. `Null0`) is supported too (#342). |
 | `/interfaces/interface/config/type` | Lossy | EOS interface names don't encode speed; parser defaults `Ethernet<N>` to a `gig` speed-hint and target codecs that care about speed (e.g. Cisco's GigabitEthernet vs TenGigabitEthernet distinction) may emit less-specific prefixes. |
 | `/evpn-type5-routes/route` | Lossy | Per-prefix records are a lossy-by-default extension point — no codec populates them today (would require route-map / policy-statement parsing). |
+| `/snmp/v3-user/auth-passphrase` | Lossy | `snmp-server user … auth <proto> <value>` takes the operator's PASSPHRASE and EOS derives the localised key from it at commit, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `snmp-server user` line) rather than feeding a digest through key derivation.  A source passphrase is portable and is emitted unchanged.  EOS's own `auth <proto> <key> localized <engineID>` display form is not parsed, so a key survives only in the passphrase slot same-vendor. |
+| `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — the privacy value is refused with the user unless it is a portable passphrase or came from EOS itself; re-key the v3 user on the target. |
 | `/routing/bgp` | Unsupported | BGP neighbour tables / redistribution / address-families parse-and-ignore in v1. |
 | `/routing/ospf` | Unsupported | OSPF areas / redistribution / per-interface cost tuning parse-and-ignore in v1. |
 | `/access-list/{extended,standard,ipv6}` | Unsupported | Tier 3 — auto-translating ACL semantics across vendors risks shipping subtly-permissive rules. |
@@ -321,6 +323,8 @@ output.
 | `/interfaces/interface/subinterfaces/subinterface` | Lossy | Unit 0 collapses into the parent; units 1+ materialise as distinct `<parent>.<unit>` interfaces, and per-unit 802.1Q tagging (`unit N vlan-id`) is captured on `/interfaces/interface/dot1q-vlan` (GAP 7 — round-trips). Per-unit subinterface attributes beyond the address + 802.1Q tag remain unmodelled. |
 | `/groups` | Lossy | Apply-groups inheritance is wired for the dispatch surface (system / login / interfaces / protocols / SNMP / routing-options / routing-instances / vlans); group bodies for unsupported surfaces (policy-options, firewall filters, RADIUS server options) parse-and-ignore. |
 | `/evpn-type5-routes/route` | Lossy | Per-prefix records lossy-by-default — VRF-property model uses `CanonicalRoutingInstance.l3_vni`; explicit per-prefix lists not populated by any codec today. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | `authentication-key` holds the value Junos itself stored for one of its own keys, so a key produced by another agent cannot be written there: the render refuses it (review comment, and the user's VACM `security-to-group` binding is dropped with it) rather than emitting a key that authenticates nobody.  A source PASSPHRASE is portable and is routed through `authentication-password`, from which Junos derives the key on commit, and the parser reads that leaf back.  A Junos config that stores a passphrase in that leaf still classifies as unportable (the kind is inferred per-codec, not per-line), so it fails closed cross-vendor. |
+| `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — a foreign privacy key is refused with the user, and a portable passphrase is routed through `privacy-password` instead of `privacy-key`. |
 | `/routing/bgp` | Unsupported | BGP / IS-IS / OSPF / MPLS stanzas parse-and-ignore in v1; Junos routing-options grammar warrants a dedicated follow-up. |
 | `/firewall/filter` | Unsupported | Junos firewall filters (family / term / from / then) are Tier 3 — distinct from ACL models in other codecs. |
 
@@ -589,6 +593,19 @@ in rendered output find every such site.
   `ciphertext`/`plaintext`) and their parsers still discard it, so both fall
   back to the unportable kind — fail-closed, and capturing those markers is
   follow-up work.
+
+  Since #465 `arista_eos` and `juniper_junos` are gated too, and they show the
+  two shapes this defect takes.  EOS's slot takes a PASSPHRASE and derives the
+  key from it, so handing it a digest re-derives a key from a key; Junos's
+  `authentication-key` holds a value Junos already processed, so handing it a
+  passphrase stores the passphrase as a key.  Junos carries a portable key
+  through `authentication-password` (a different LEAF, where NX-OS used the
+  same leaf without a keyword) and the parser was taught to read that leaf in
+  the same change — a leaf the render emits but the parser ignores is a silent
+  loss.  A Junos refusal drops the user's VACM `security-to-group` binding as
+  well, since a security-name with no usable key is a half-configured account.
+  Four targets now gate; `aruba_aoss`, `aruba_aoscx`, `cisco_iosxe_cli` and
+  `mikrotik_routeros` still carry a foreign USM key verbatim.
 
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).

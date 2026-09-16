@@ -44,7 +44,10 @@ _EXPECTED: dict[str, dict[str, str]] = {
         "opnsense": "unsupported",
     },
     "/snmp/v3-user/priv-passphrase": {
-        "aruba_aoscx": "lossy", "cisco_nxos": "lossy", "vyos": "lossy",
+        # arista_eos + juniper_junos gained the USM key gate in #465: a
+        # privacy key bound to the source device is refused with its user.
+        "arista_eos": "lossy", "aruba_aoscx": "lossy",
+        "cisco_nxos": "lossy", "juniper_junos": "lossy", "vyos": "lossy",
         "cisco_iosxe": "unsupported", "cisco_iosxr": "unsupported",
         "opnsense": "unsupported",
     },

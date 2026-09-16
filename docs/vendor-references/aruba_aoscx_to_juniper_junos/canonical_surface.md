@@ -222,6 +222,9 @@ on the target before the routes are activated.
 
 ## SNMP
 
+<!-- snmpv3-key-gate-465 -->
+> **Update 2026-09-16 (#465) — the SNMPv3 USM behaviour described in this document has changed.**  `authentication-key` holds the value Junos itself stored for one of its own keys, so a key produced by another agent cannot be written there, and a genuine passphrase written there is stored as though it had already been processed.  This source supplies an AOS-CX `auth-pass ciphertext` blob, encrypted under the source device's key.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 ciphertext).  The refusal also drops the user's VACM `security-to-group` binding, since a security-name with no usable key is a half-configured account.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 Preserved on all 4 cells that carry an SNMP record — community, location and
 contact all round-trip exactly where they have data (`location` and `contact`
 on the arch4 core pair, `community` on the kitchen sink).

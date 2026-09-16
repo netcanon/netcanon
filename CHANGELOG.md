@@ -28,6 +28,40 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **Fixed: Arista EOS re-derived another agent's SNMPv3 key as if it were a
+  passphrase, and Junos stored a passphrase as if it were already a key.**
+  Extends the USM key gate (#463 VyOS, #464 NX-OS) to two more targets, which
+  were wrong in opposite directions.  EOS's `snmp-server user ... auth <proto>
+  <value>` slot takes the operator's PASSPHRASE and derives the localised key
+  from it at commit; the render wrote whatever it was handed there, so a value
+  that was already a key (an NX-OS `localizedkey` digest, a Junos
+  `authentication-key`, a VyOS `encrypted-password`, an AOS-CX ciphertext
+  blob, a FortiGate `ENC` value) was fed back through key derivation and
+  produced a user that commits cleanly and authenticates nobody.  Junos's
+  `authentication-key` is the other half: it holds the value Junos itself
+  stored, so a foreign key written there is equally dead, and a genuine
+  passphrase written there is stored as though it had already been processed.
+  Measured on the committed corpus: **24 of 30** USM records arriving into EOS
+  carried a key EOS could not re-derive, and **20 of 28** into Junos carried
+  one Junos could not use.  Both are now refused with a `review:` comment
+  naming the user; on Junos the refusal takes the user's VACM
+  `security-to-group` binding with it, since a security-name with no usable
+  key is a half-configured account.  Junos also gains the recovery path its
+  grammar already had: a portable passphrase renders through
+  `authentication-password`, from which Junos derives the key itself, and the
+  parser now reads that leaf back (a leaf the render emits but the parser
+  ignores would be a silent loss of its own).  Passphrase sources into EOS
+  were already correct and are untouched.  Both codecs now declare
+  `/snmp/v3-user/auth-passphrase` and `/snmp/v3-user/priv-passphrase` lossy.
+  The gate keys on `auth_protocol or priv_protocol`, since gating on auth
+  alone would let a privacy-only user carry a foreign key through.  Guards:
+  `tests/unit/migration/test_arista_snmpv3_key_gate.py` and
+  `test_junos_snmpv3_key_gate.py` (25 assertions, 23 verified red first).
+  Mesh-flat: `CODEC_BUG` held 5 and `METHODOLOGY_ISSUE_over` held 21, and
+  `METHODOLOGY_ISSUE_under` TIGHTENED 1814 -> 1794 as refused records moved
+  into the `EXPECTED_LOSSY` evidence their pairs already declared, so no
+  expectation YAML needed re-authoring.
+
 - **Fixed: `classify_hash()` failed open, so a password digest could be
   re-emitted as the password itself.**  Its final branch treated any shape
   it did not recognise as a literal plaintext password.  A bare Unix crypt

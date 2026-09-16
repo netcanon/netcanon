@@ -283,6 +283,9 @@ belongs to a codec change, not to this file.
 
 ### 4. SNMPv3 survives as a user and dies as a credential
 
+<!-- snmpv3-key-gate-465 -->
+> **Update 2026-09-16 (#465) — the SNMPv3 USM behaviour described in this document has changed.**  `snmp-server user ... auth <proto> <value>` takes the operator's PASSPHRASE and EOS derives the localised key from it at commit, so a value that is ALREADY a key cannot be re-derived.  This source supplies a VyOS `encrypted-password` blob, localised against the source agent's engine ID.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 localised).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 Two cells carry a v3 USM user (`vyos_forum_snmpv3_user_eq13.conf`,
 `kitchen_sink.conf`). Both round-trip the user record: name, group, auth
 protocol (`sha`) and **both passphrases** come back byte-identical. Two things

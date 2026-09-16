@@ -209,6 +209,31 @@ class AristaEOSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/auth-passphrase",
+                reason=(
+                    "`snmp-server user ... auth <proto> <value>` takes the "
+                    "operator's passphrase and EOS derives the localised key "
+                    "from it at commit, so a value that is already another "
+                    "agent's key cannot be re-derived.  The render refuses "
+                    "such a key (review comment, no `snmp-server user` line) "
+                    "rather than feeding a digest through key derivation; a "
+                    "source passphrase is portable and is emitted unchanged.  "
+                    "EOS's own `auth <proto> <key> localized <engineID>` "
+                    "display form is not parsed, so a key survives only in "
+                    "the passphrase slot same-vendor."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/priv-passphrase",
+                reason=(
+                    "Same as the auth key: the privacy value is refused with "
+                    "the user unless it is a portable passphrase or came from "
+                    "EOS itself -- re-key the v3 user on the target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/snmp/v3-user/engine-id",
                 reason=(
                     "The SNMPv3 USM user round-trips but a per-user "

@@ -223,6 +223,9 @@ times would triple-count one loss.
 
 ### 2. Credentials survive, behind a codec prefix
 
+<!-- snmpv3-key-gate-465 -->
+> **Update 2026-09-16 (#465) — the SNMPv3 USM behaviour described in this document has changed.**  `authentication-key` holds the value Junos itself stored for one of its own keys, so a key produced by another agent cannot be written there, and a genuine passphrase written there is stored as though it had already been processed.  This source supplies a VyOS `encrypted-password` blob, localised against the source agent's engine ID.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 localised).  The refusal also drops the user's VACM `security-to-group` binding, since a security-name with no usable key is a half-configured account.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 17 local-user records across 13 cells. **All 17 survive** — zero accounts
 vanish, zero names drift, zero roles drift (every account is `admin`). That is
 unusual for this mesh, where identity is normally the first thing to shed
