@@ -579,6 +579,17 @@ in rendered output find every such site.
   targets still carry foreign USM keys verbatim; their pair expectations
   declare that loss.
 
+  Since #464 the policy is shared
+  ([`_usm_keys.py`](../netcanon/migration/_usm_keys.py)) and NX-OS uses it too.
+  NX-OS differs from VyOS in having a portable form: a passphrase renders
+  without `localizedkey` and the agent localises it on commit, so passphrase
+  sources migrate correctly rather than being refused.  The kind is inferred
+  from the source codec's grammar, never from the value's shape.  Two grammars
+  mark the kind on the line itself (NX-OS `localizedkey`, AOS-CX
+  `ciphertext`/`plaintext`) and their parsers still discard it, so both fall
+  back to the unportable kind — fail-closed, and capturing those markers is
+  follow-up work.
+
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
   AOS-S is a DHCP-relay platform on most SKUs — it doesn't run a

@@ -357,6 +357,11 @@ tests use these exclusively — never CSS classes or element structure.  See
   canonical value is an opaque blob on both sides, gate on PROVENANCE
   (`tree.source_vendor`), not on the value's shape, and refuse rather than
   invent a plaintext form the target does not accept.
+  Corollary (#464): where the target DOES have a portable form, use it rather
+  than refusing — NX-OS localises a passphrase itself, so a passphrase must
+  render WITHOUT `localizedkey`.  Classify the key by the SOURCE CODEC'S
+  GRAMMAR, never by the value's shape: a sanitised fixture makes a localised
+  digest look like a word.  Shared policy: `netcanon/migration/_usm_keys.py`.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

@@ -465,16 +465,23 @@ per_field_expectation:
   "snmp.v3_users":
     disposition: lossy
     reason: >
-      The only SNMP attribute that drifts — on the 2 cells where `snmp`
-      drifts, Phase 1 names `v3_users` as the sole value-drift key, with
-      nothing only-in-source or only-in-target.  The cisco_nxos matrix
-      declares the v3 auth passphrase, priv passphrase and engine-id lossy:
-      NX-OS normalises USM key material to the older `localizedkey` digest
-      form and spells engineID colon-decimal (`128:0:0:9:...`) where other
-      vendors use hex, so the RouterOS-sourced key material does not transfer
-      byte-identically.  Re-key every SNMPv3 user on the Nexus (the account
-      and its auth/priv protocol survive; the secret does not).  v1/v2c is
-      unaffected.
+      2 of 4 USM users arrive across the 3 cells that carry one. The source key
+      is a RouterOS passphrase — portable — except where `/export` omitted it
+      entirely, leaving nothing to migrate. NX-OS installs a v3 key with
+      `snmp-server user ... localizedkey`, which asserts the digest is ALREADY
+      localised against this agent's engine ID — true only of a key NX-OS itself
+      produced. Until #464 the render appended that keyword to every user
+      whatever the source, so a foreign key was installed as if the Nexus had
+      derived it and the v3 user authenticated nobody while looking migrated.
+      Such a key is now REFUSED: no `snmp-server user` line, and a review
+      comment names the user. 2 users are refused here. The 2 that arrive carry
+      a passphrase, which IS portable: NX-OS localises it itself, so those
+      render without the keyword and are usable. Recorded `lossy` rather than
+      `unsupported`: the surrounding SNMP surface (community, contact, location,
+      trap hosts) still migrates, and cells that carry no USM user are
+      unaffected. Re-create each refused v3 user on the target and re-key it;
+      the render's `review:` comments list them. No key material is quoted here
+      or in the reference doc; only counts and kinds.
     references: [routeros-nxos-surface]
 
   # -- LAGs.  Top-level key omitted: the bundle records survive with their

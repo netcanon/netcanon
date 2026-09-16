@@ -430,21 +430,21 @@ per_field_expectation:
   "snmp.v3_users":
     disposition: lossy
     reason: >
-      Drifts on 1 of the 4 cells that populate SNMP.  The measured change is
-      narrow and is a re-spelling, not a credential drop: the privacy protocol
-      `aes` normalises to `aes128` on the NX-OS round-trip (the render
-      denormalises canonical `aes128` to NX-OS `aes-128` and the parser reads
-      it back canonically).  The user name, group, auth protocol and both key
-      blobs survive; the real-world SNMPv3 fixture round-trips with no drift
-      at all.
-      The declared risk is wider than what this corpus exercises, and it is
-      worth carrying into a cutover plan: aruba_aoscx declares six
-      `/snmp/v3-user/*` child paths lossy, and cisco_nxos declares
-      auth-passphrase, priv-passphrase and engine-id lossy because it
-      normalises keys to the older `localizedkey` digest form and emits
-      engineIDs in colon-decimal.  Plan to re-key SNMPv3 users on the target
-      rather than trusting a migrated key.  No key material is quoted here or
-      in the reference doc.
+      No SNMPv3 USM user survives: 2 in, 0 out across the 2 cells that carry
+      one. The source key is an AOS-CX `auth-pass ciphertext` blob, encrypted
+      under the source device's key. NX-OS installs a v3 key with `snmp-server
+      user ... localizedkey`, which asserts the digest is ALREADY localised
+      against this agent's engine ID — true only of a key NX-OS itself produced.
+      Until #464 the render appended that keyword to every user whatever the
+      source, so a foreign key was installed as if the Nexus had derived it and
+      the v3 user authenticated nobody while looking migrated. Such a key is now
+      REFUSED: no `snmp-server user` line, and a review comment names the user.
+      2 users are refused here. Recorded `lossy` rather than `unsupported`: the
+      surrounding SNMP surface (community, contact, location, trap hosts) still
+      migrates, and cells that carry no USM user are unaffected. Re-create each
+      refused v3 user on the target and re-key it; the render's `review:`
+      comments list them. No key material is quoted here or in the reference
+      doc; only counts and kinds.
     references: [aoscx-nxos-surface]
 
   radius_servers:
