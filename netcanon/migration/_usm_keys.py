@@ -21,22 +21,29 @@ kind          where it comes from
               pre-hashed ``localized <engineID>`` form is
               parse-and-ignore per its own parser comment, and RouterOS
               uses ``authentication-password=``.
-``localised`` A digest already localised to the SOURCE agent's engine
-              ID: NX-OS ``localizedkey``, Junos ``authentication-key``,
-              VyOS ``encrypted-password``.
+``localised`` A key the SOURCE agent already processed for itself and
+              cannot hand on: NX-OS ``localizedkey`` and VyOS
+              ``encrypted-password`` are localised against that agent's
+              engine ID, and Junos ``authentication-key`` is the value
+              Junos stored for a key of its own.
 ``ciphertext`` A blob encrypted under the source device's key: AOS-CX
               ``auth-pass ciphertext``.
 ``encrypted`` FortiGate's ``ENC `` blob — the one kind that marks
               itself, because FortiOS keeps the marker in the value.
 ============  =========================================================
 
-⚠️ Two grammars distinguish the kind ON THE LINE and their parsers currently
-discard it: NX-OS ``localizedkey`` / ``localizedV2key``, and AOS-CX
-``ciphertext`` vs ``plaintext``.  Both therefore fall back to the UNSAFE kind
-here (``localised`` / ``ciphertext``), which fails closed: an NX-OS or AOS-CX
-config that really did carry a passphrase is refused rather than mis-emitted.
-Capturing those markers is follow-up work, and belongs with the change that
-gates the remaining targets.
+⚠️ Three grammars distinguish the kind ON THE LINE and the kind is still
+inferred per-CODEC rather than per-line: NX-OS ``localizedkey`` /
+``localizedV2key``, AOS-CX ``ciphertext`` vs ``plaintext``, and Junos
+``authentication-key`` vs ``authentication-password``.  All three therefore
+fall back to the UNSAFE kind here (``localised`` / ``ciphertext``), which
+fails closed: a config from one of them that really did carry a passphrase is
+refused rather than mis-emitted.  Junos is the one whose parser now READS its
+passphrase leaf — it has to, because the render emits that leaf to carry a
+portable key in (#465), and a leaf the render writes but the parser ignores is
+a silent loss — but reading it does not yet make the VALUE classify as
+``plaintext`` when Junos is the source.  Capturing these markers as per-value
+provenance is follow-up work.
 """
 
 from __future__ import annotations

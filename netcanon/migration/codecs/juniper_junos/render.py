@@ -72,6 +72,7 @@ from ..._user_secrets import (
     format_review_comment,
     is_migratable,
 )
+from ..._usm_keys import classify_usm_key, usm_is_migratable
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
 
@@ -1067,12 +1068,41 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             "aes256": "privacy-aes256",
         }
         for u in tree.snmp.v3_users:
+            # ⚠️ ``authentication-key`` is the PROCESSED form -- the value
+            # Junos stores for a key of its own.  Another agent's key written
+            # there commits cleanly and authenticates nobody, and a genuine
+            # passphrase written there is stored as though it were already a
+            # key.  Junos has the portable leaf for that half:
+            # ``authentication-password``, from which it derives the key
+            # itself.  So a passphrase is routed through the password leaf, a
+            # key bound to the source device is refused outright (taking its
+            # VACM binding with it -- a security-name with no usable key
+            # authenticates nobody), and Junos's own value goes back verbatim.
+            # Policy: :mod:`netcanon.migration._usm_keys`.
+            usm_key = u.auth_passphrase or u.priv_passphrase
+            if (u.auth_protocol or u.priv_protocol) and not usm_is_migratable(
+                usm_key, tree.source_vendor, "juniper_junos",
+            ):
+                kind = classify_usm_key(usm_key, tree.source_vendor)
+                out.append(
+                    f"# snmpv3 user {u.name} -- review: a {kind} USM key "
+                    f"belongs to the source agent, so Junos cannot re-use "
+                    f"it; re-create this user and re-key it on the target"
+                )
+                continue
+            portable = classify_usm_key(
+                usm_key, tree.source_vendor,
+            ) == "plaintext"
+            auth_leaf = (
+                "authentication-password" if portable else "authentication-key"
+            )
+            priv_leaf = "privacy-password" if portable else "privacy-key"
             if u.auth_protocol and u.auth_protocol in _auth_to_junos:
                 auth_cmd = _auth_to_junos[u.auth_protocol]
                 out.append(
                     f"set snmp v3 usm local-engine user "
                     f"{_quote_if_needed(u.name)} {auth_cmd} "
-                    f"authentication-key "
+                    f"{auth_leaf} "
                     f"{_quote_always(u.auth_passphrase)}"
                 )
             if u.priv_protocol and u.priv_protocol in _priv_to_junos:
@@ -1080,7 +1110,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append(
                     f"set snmp v3 usm local-engine user "
                     f"{_quote_if_needed(u.name)} {priv_cmd} "
-                    f"privacy-key "
+                    f"{priv_leaf} "
                     f"{_quote_always(u.priv_passphrase)}"
                 )
             if u.group:

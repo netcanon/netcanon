@@ -210,6 +210,32 @@ class JunosCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/auth-passphrase",
+                reason=(
+                    "`authentication-key` holds the value Junos itself stored "
+                    "for one of its own keys, so a key produced by another "
+                    "agent cannot be written there: the render refuses it "
+                    "(review comment, and the user's VACM binding is dropped "
+                    "with it) rather than emitting a key that authenticates "
+                    "nobody.  A source PASSPHRASE is portable and is routed "
+                    "through `authentication-password`, from which Junos "
+                    "derives the key on commit.  A Junos config that stores a "
+                    "passphrase in that leaf still classifies as unportable "
+                    "(the kind is inferred per-codec, not per-line), so it "
+                    "fails closed cross-vendor."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/priv-passphrase",
+                reason=(
+                    "Same as the auth key: a foreign privacy key is refused "
+                    "with the user, and a portable passphrase is routed "
+                    "through `privacy-password` instead of `privacy-key`."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/snmp/v3-user/engine-id",
                 reason=(
                     "The SNMPv3 USM user round-trips but a per-user "

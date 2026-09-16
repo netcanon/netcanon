@@ -362,6 +362,18 @@ tests use these exclusively — never CSS classes or element structure.  See
   render WITHOUT `localizedkey`.  Classify the key by the SOURCE CODEC'S
   GRAMMAR, never by the value's shape: a sanitised fixture makes a localised
   digest look like a word.  Shared policy: `netcanon/migration/_usm_keys.py`.
+  Corollary (#465): the portable form may be a DIFFERENT LEAF, not merely the
+  same leaf without a keyword.  Junos derives the key from
+  `authentication-password`, so a passphrase routes there while
+  `authentication-key` stays reserved for Junos's own value; Arista's slot
+  takes a passphrase and DERIVES the key, so feeding it a digest is the same
+  defect wearing the opposite shape.  When a render starts emitting a leaf,
+  teach the parser to read it back in the SAME change, or the recovery path is
+  itself a silent loss.  And refusing a v3 user means refusing every line that
+  composes it: a Junos VACM `security-to-group` binding left behind without a
+  usable key is a half-configured account.  Gate on
+  `auth_protocol or priv_protocol` -- gating on auth alone lets a
+  privacy-only user carry a foreign key straight through.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

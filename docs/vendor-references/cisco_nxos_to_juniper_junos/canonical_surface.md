@@ -1,5 +1,8 @@
 # NX-OS -> Juniper Junos: measured canonical surface
 
+<!-- snmpv3-key-gate-465 -->
+> **Update 2026-09-16 (#465) — the SNMPv3 USM behaviour described in this document has changed.**  `authentication-key` holds the value Junos itself stored for one of its own keys, so a key produced by another agent cannot be written there, and a genuine passphrase written there is stored as though it had already been processed.  This source supplies an NX-OS `localizedkey` digest, localised against the source agent's engine ID.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 12** USM users arrive across the 11 cells that carry one, 12 refused (12 localised).  The refusal also drops the user's VACM `security-to-group` binding, since a security-name with no usable key is a half-configured account.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 Source: `netcanon/migration/codecs/cisco_nxos/codec.py` and
 `netcanon/migration/codecs/juniper_junos/codec.py` (`CapabilityMatrix`), joined
 against a full in-process `tools/run_full_mesh.py` run over the committed
