@@ -338,13 +338,16 @@ class ArubaAOSCXCodec(CodecBase):
                     "auth, or AES-192/256 / 3DES priv) is silently DOWNGRADED "
                     "to fit the target's grammar -- verify the resulting "
                     "security level is acceptable, this is a cryptographic "
-                    "downgrade, not just a re-key.  The auth/priv keys are "
-                    "also `ciphertext` blobs encrypted with the device key "
-                    "(portable same-device only), so cross-vendor / cross-"
-                    "device migration emits the blob verbatim and the "
-                    "operator must RE-KEY the SNMPv3 user on the target (the "
-                    "`plaintext` key form is normalised to `ciphertext` on "
-                    "render)."
+                    "downgrade, not just a re-key.  Separately, `auth-pass "
+                    "ciphertext <blob>` CLAIMS the value is encrypted under "
+                    "this device's key, which holds only for a key this "
+                    "switch produced: a key belonging to another agent is "
+                    "therefore REFUSED on render (review comment, no `snmpv3 "
+                    "user` line) rather than emitted behind a claim that "
+                    "would make it authenticate nobody.  A source PASSPHRASE "
+                    "is portable and renders through `auth-pass plaintext`, "
+                    "which the switch encrypts itself -- previously it was "
+                    "mislabelled `ciphertext` and stored as a blob."
                 ),
                 severity="warn",
             ),
@@ -372,10 +375,12 @@ class ArubaAOSCXCodec(CodecBase):
             LossyPath(
                 path="/snmp/v3-user/priv-passphrase",
                 reason=(
-                    "The SNMPv3 privacy key is a `ciphertext` blob encrypted "
-                    "with the device key (portable same-device only); cross-"
-                    "vendor / cross-device migration emits it verbatim and the "
-                    "operator must RE-KEY the user on the target."
+                    "Same as the auth key: the privacy value is a "
+                    "`ciphertext` blob encrypted with the device key "
+                    "(portable same-device only), so a foreign key is refused "
+                    "with its user rather than re-emitted, and a portable "
+                    "passphrase renders through `priv-pass plaintext` for the "
+                    "switch to encrypt.  Re-key the user on the target."
                 ),
                 severity="warn",
             ),

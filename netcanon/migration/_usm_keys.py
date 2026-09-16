@@ -38,8 +38,11 @@ inferred per-CODEC rather than per-line: NX-OS ``localizedkey`` /
 ``authentication-key`` vs ``authentication-password``.  All three therefore
 fall back to the UNSAFE kind here (``localised`` / ``ciphertext``), which
 fails closed: a config from one of them that really did carry a passphrase is
-refused rather than mis-emitted.  Junos is the one whose parser now READS its
-passphrase leaf — it has to, because the render emits that leaf to carry a
+refused rather than mis-emitted.  ⚠️ Emitting the right marker is a separate
+question from classifying one: since #466 the AOS-CX RENDER chooses
+``plaintext`` vs ``ciphertext`` correctly, but its PARSE still discards the
+keyword, so an AOS-CX source still classifies ``ciphertext``.  Junos is the one
+whose parser now READS its passphrase leaf — it has to, because the render emits that leaf to carry a
 portable key in (#465), and a leaf the render writes but the parser ignores is
 a silent loss — but reading it does not yet make the VALUE classify as
 ``plaintext`` when Junos is the source.  Capturing these markers as per-value

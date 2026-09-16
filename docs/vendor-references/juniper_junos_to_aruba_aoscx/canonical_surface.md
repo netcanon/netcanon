@@ -184,6 +184,9 @@ more.
 
 ## Credential material
 
+<!-- snmpv3-key-gate-466 -->
+> **Update 2026-09-16 (#466) — the SNMPv3 USM behaviour described in this document has changed.**  `auth-pass ciphertext <blob>` claims the value is encrypted under the TARGET device's key, which is true only of a key that switch produced.  This source supplies a Junos `authentication-key`, the value that agent stored for its own key.  Such a key is now refused: no `snmpv3 user` line, and a `review:` comment names the user.  Measured after the change: **0 of 4** USM users arrive across the 2 cells that carry one, 4 refused (4 localised).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 13** local accounts now arrive across the 8 cells that populate users. 12 are refused for a secret AOS-CX cannot consume (12 `junos:`-tagged crypt string): the render emits a `review:` comment naming the account and no user entry. 1 account with no stored secret still vanishes, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/juniper_junos__aruba_aoscx.yaml`.
 

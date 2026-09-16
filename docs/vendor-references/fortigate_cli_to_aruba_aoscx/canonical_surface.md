@@ -171,6 +171,9 @@ before migrating rather than discovering it afterwards.
 
 ## Authorization and credential material
 
+<!-- snmpv3-key-gate-466 -->
+> **Update 2026-09-16 (#466) — the SNMPv3 USM behaviour described in this document has changed.**  `auth-pass ciphertext <blob>` claims the value is encrypted under the TARGET device's key, which is true only of a key that switch produced.  This source supplies a FortiOS `ENC` blob, encrypted under the source device's key.  Such a key is now refused: no `snmpv3 user` line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 1 cells that carry one, 2 refused (2 encrypted).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The AOS-CX render now calls the shared `is_migratable()` gate.  Measured after the change: **0 of 8** local accounts now arrive across the 4 cells that populate users. 6 are refused for a secret AOS-CX cannot consume (6 FortiOS `ENC` ciphertext): the render emits a `review:` comment naming the account and no user entry. 2 accounts with no stored secret still vanish, as before.  Any statement below that a secret is carried verbatim, or rendered behind `password ciphertext`, a slot that only holds AOS-CX's own device-keyed blob, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/fortigate_cli__aruba_aoscx.yaml`.
 

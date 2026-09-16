@@ -28,6 +28,29 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **Fixed: AOS-CX labelled every SNMPv3 USM key as its own device ciphertext.**
+  Extends the USM key gate (#463 VyOS, #464 NX-OS, #465 Arista/Junos) to
+  `aruba_aoscx`.  `snmpv3 user <n> auth <proto> auth-pass ciphertext <blob>`
+  CLAIMS the value is encrypted under this device's key, which is true only of
+  a key this switch produced.  The render appended `ciphertext` to every user
+  whatever the source, so it broke in both directions: a key belonging to
+  another agent (an NX-OS `localizedkey` digest, a Junos `authentication-key`,
+  a VyOS `encrypted-password`, a FortiGate `ENC` value) was installed as though
+  this switch had encrypted it — it authenticates nobody — and a genuine
+  PASSPHRASE was stored as if it already were a blob, which is the case that
+  should have worked.  Measured on the committed corpus: **22 of 30** USM
+  records arriving into AOS-CX carried a key it could not use, and the other
+  **8** were portable passphrases being mislabelled.  A foreign key is now
+  refused with a `review:` comment naming the user; a passphrase renders
+  through `auth-pass plaintext` / `priv-pass plaintext`, which the switch
+  encrypts itself.  The parser already accepted both keywords, so the
+  recovered form round-trips with no parser change — the guard asserts it.
+  Same-vendor blobs still render as `ciphertext`, because that claim is true.
+  Mesh-flat: `CODEC_BUG` held 5, `METHODOLOGY_ISSUE_over` 21 and
+  `METHODOLOGY_ISSUE_under` 1794 — no expectation YAML needed re-authoring.
+  Guard: `tests/unit/migration/test_aoscx_snmpv3_key_gate.py` (12 assertions,
+  11 verified red first).
+
 - **Fixed: Arista EOS re-derived another agent's SNMPv3 key as if it were a
   passphrase, and Junos stored a passphrase as if it were already a key.**
   Extends the USM key gate (#463 VyOS, #464 NX-OS) to two more targets, which

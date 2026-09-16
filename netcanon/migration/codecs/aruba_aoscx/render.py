@@ -45,6 +45,7 @@ import ipaddress
 import re
 
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
+from ..._usm_keys import classify_usm_key, usm_is_migratable
 from ...canonical.intent import CanonicalIntent
 from .._helpers import _coalesce_vlan_ids, same_vendor_version
 
@@ -93,7 +94,7 @@ def render_intent(tree: CanonicalIntent) -> str:
 
     # ── SNMP (Phase 2b) ──
     if tree.snmp is not None:
-        lines.extend(_render_snmp(tree.snmp))
+        lines.extend(_render_snmp(tree.snmp, tree.source_vendor))
 
     lines.append("!")
 
@@ -204,16 +205,27 @@ def _render_local_user(user) -> str:
     return f"user {user.name} group {role}"
 
 
-def _render_snmp(snmp) -> list[str]:
+def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
     """Render AOS-CX ``snmp-server`` + ``snmpv3 user`` lines.
 
     AOS-CX uses ``system-location`` / ``system-contact`` (not ``location``
-    / ``contact``).  v3 auth/priv keys re-emit with the ``ciphertext``
-    keyword (the ``plaintext`` form is normalised away — declared lossy);
-    the auth protocol collapses to ``md5`` / ``sha`` and the privacy
-    cipher denormalises canonical -> AOS-CX (aes-family -> ``aes``,
+    / ``contact``); the auth protocol collapses to ``md5`` / ``sha`` and the
+    privacy cipher denormalises canonical -> AOS-CX (aes-family -> ``aes``,
     des/3des -> ``des``).  Trap hosts and the ``snmp-server vrf`` binding
     are not emitted (deferred).
+
+    ⚠️ The v3 key keyword is a CLAIM about the value.  ``auth-pass
+    ciphertext <blob>`` says the value is encrypted under THIS device's key,
+    which is true only of a key this switch produced.  This render appended
+    ``ciphertext`` to every user whatever the source, so a key belonging to
+    another agent (NX-OS ``localizedkey``, Junos ``authentication-key``,
+    VyOS ``encrypted-password``, FortiGate ``ENC``) was installed as though
+    this switch had encrypted it — it authenticates nobody — and a genuine
+    PASSPHRASE was stored as if it already were a blob, which is the case
+    that should have worked.  AOS-CX has the portable form: ``auth-pass
+    plaintext <passphrase>``, which the switch encrypts itself, and the
+    parser already accepts both keywords so the recovered form round-trips.
+    Policy: :mod:`netcanon.migration._usm_keys`.
     """
     lines: list[str] = []
     if snmp.community:
@@ -225,15 +237,31 @@ def _render_snmp(snmp) -> list[str]:
     for user in snmp.v3_users:
         if not user.auth_protocol:
             continue  # AOS-CX snmpv3 users require an auth protocol
+        usm_key = user.auth_passphrase or user.priv_passphrase
+        if not usm_is_migratable(usm_key, source_vendor, "aruba_aoscx"):
+            kind = classify_usm_key(usm_key, source_vendor)
+            lines.append(
+                f"! snmpv3 user {user.name} -- review: a {kind} USM key "
+                f"belongs to the source agent, so this switch cannot re-use "
+                f"it; re-create this user and re-key it on the target"
+            )
+            continue
+        # Claim the value is this device's ciphertext only when it is.  A
+        # passphrase goes through ``plaintext`` so AOS-CX encrypts it itself.
+        keyword = (
+            "plaintext"
+            if classify_usm_key(usm_key, source_vendor) == "plaintext"
+            else "ciphertext"
+        )
         auth = "md5" if user.auth_protocol.lower() == "md5" else "sha"
         line = (
             f"snmpv3 user {user.name} auth {auth} "
-            f"auth-pass ciphertext {user.auth_passphrase}"
+            f"auth-pass {keyword} {user.auth_passphrase}"
         )
         if user.priv_protocol:
             priv = _CANON_TO_AOSCX_PRIV.get(user.priv_protocol.lower(), "aes")
             line += (
-                f" priv {priv} priv-pass ciphertext {user.priv_passphrase}"
+                f" priv {priv} priv-pass {keyword} {user.priv_passphrase}"
             )
         lines.append(line)
     return lines
