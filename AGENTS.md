@@ -350,6 +350,13 @@ tests use these exclusively — never CSS classes or element structure.  See
   a vendor envelope (`junos:`) or a parser that tags everything one way
   (OPNsense `bcrypt:` over a `$6$` body) must defer to the payload's own
   crypt(3) id (#462).  Fails closed, but refuses every account it mislabels.
+- **Never** re-emit a credential that is SALTED TO ITS SOURCE DEVICE.  An
+  SNMPv3 USM key is localised against the agent's engine ID, so writing another
+  vendor's key into the target's key leaf yields a config that commits cleanly
+  and authenticates nobody — 30 records on the corpus before #463.  Where the
+  canonical value is an opaque blob on both sides, gate on PROVENANCE
+  (`tree.source_vendor`), not on the value's shape, and refuse rather than
+  invent a plaintext form the target does not accept.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

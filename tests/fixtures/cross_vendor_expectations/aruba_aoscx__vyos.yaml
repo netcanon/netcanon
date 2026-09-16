@@ -473,21 +473,26 @@ per_field_expectation:
     references: [aoscx-vyos-surface]
 
   "snmp.v3_users":
-    disposition: good
-    note: >
-      Preserved on all 4 populated cells: the 2 cells that actually carry a v3
-      user round-trip the user with its name, auth protocol, privacy protocol
-      and both passphrases unchanged.  Both matrices declare `/snmp/v3-user`
-      supported.  (The committed passphrase values are sanitised placeholders;
-      no secret material is quoted in this file or its reference doc.)
-      A declared caveat that no committed cell exercises, and it is a
-      cryptographic one: both matrices declare
-      `/snmp/v3-user/auth-passphrase`, `/priv-passphrase`, `/auth-protocol`,
-      `/priv-protocol` and `/engine-id` LOSSY, and vyos's stated reasons are
-      specific — `auth type` renders only `md5`/`sha`, so a SHA-256/384/512
-      source collapses to SHA-1, and AES-192/256 collapses to bare `aes`.  The
-      corpus only carries md5/sha and des/aes, so the downgrade never fires
-      here.  Re-key SNMPv3 on the target regardless.
+    disposition: lossy
+    reason: >
+      No SNMPv3 USM user survives: 2 in, 0 out across the 2 cells that carry
+      one. The source key is a passphrase carried in the AOS-CX `snmpv3 user`
+      line. VyOS stores a v3 key as an `encrypted-password` blob localised
+      against its OWN agent engine ID, and the vyos matrix says so at
+      `/snmp/v3-user/auth-passphrase`: it round-trips verbatim same-vendor, and
+      plaintext keys are never accepted. A foreign key is therefore REFUSED on
+      render (#463): the whole `user` entry is skipped — VyOS USM has no form
+      for a user without auth — and a review comment names it. Until #463 the
+      key was written into that leaf verbatim, which produced a syntactically
+      valid v3 user that could authenticate nobody; the record looked preserved
+      while the credential was already dead. 2 users are refused here. Recorded
+      `lossy` rather than `unsupported`: the cells that carry no USM user are
+      unaffected, and the SNMP surface around it (community, contact, location)
+      still migrates — it is the USM credential that cannot cross. The engine-ID
+      salt is why no re-tagging could rescue this: a key localised to one agent
+      is meaningless on another. Re-create each v3 user on the target and re-key
+      it, then search the render for `review:` comments to get the list. No key
+      material is quoted here or in the reference doc; only counts and shapes.
     references: [aoscx-vyos-surface]
 
   # -- LAGs -- the concept the target cannot name ----------------------------

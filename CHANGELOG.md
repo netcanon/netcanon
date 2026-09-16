@@ -127,6 +127,30 @@ timestamp if your timezone matters for an audit.
   1818; all 18 are `local_users[].name` cells where accounts now arrive on
   pairs whose loss is still observed elsewhere.  Stale bcrypt-only statements
   are corrected in six vendor-reference docs and the OPNsense render comment.
+
+- **Fixed: the VyOS render wrote every source's SNMPv3 USM key into its own
+  `encrypted-password` leaf, producing v3 users that authenticate nobody.**
+  VyOS localises a USM key against its OWN agent engine ID, which its capability
+  matrix already stated at `/snmp/v3-user/auth-passphrase` ("round-trips
+  verbatim same-vendor", "plaintext keys are never accepted") — but the render
+  ignored provenance and emitted whatever it was handed.  Measured on the
+  committed corpus: **30 USM records from 8 source vendors** landed in that
+  leaf — NX-OS `localizedkey` digests (12), Junos keys (4), RouterOS (4, two of
+  them EMPTY, which rendered a malformed leaf), plus Arista, AOS-CX, AOS-S,
+  IOS-XE and FortiGate (2 each).  After: **0**.  A key this codec did not
+  produce is refused, the whole `user` entry is skipped (VyOS USM has no form
+  for a user without auth), and a `review:` comment names the user so the
+  operator gets the re-key list.  VyOS's own keys still round-trip, and the
+  SNMP surface around them (community, contact, location) is untouched.
+
+  Unlike a local-user password there is no recovery path: the engine-ID salt
+  means a key localised to one agent is meaningless on another, and the target
+  accepts no plaintext USM form.  The gate keys on `source_vendor` rather than
+  on the key's shape, because a VyOS blob and a foreign digest are both opaque
+  strings.  A same-vendor privacy block with no stored key is now omitted
+  rather than emitted empty.  `snmp.v3_users` is re-authored on the 8 affected
+  pairs from the measurement, `CODEC_BUG` holds at **5** and
+  `METHODOLOGY_ISSUE_over` at **21**.
 ### Added
 
 - **A6 COMPLETE: `vyos` was the last blind codec, and the mesh audit now has

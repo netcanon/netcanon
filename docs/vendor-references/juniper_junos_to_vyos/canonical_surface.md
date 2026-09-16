@@ -359,6 +359,9 @@ Neither is cited as evidence for the other.
 
 ## Credential material
 
+<!-- snmpv3-key-gate-463 -->
+> **Update 2026-09-16 (#463) — the SNMPv3 USM behaviour described in this document has changed.**  VyOS stores a v3 key as an `encrypted-password` blob localised against its own agent engine ID, so a key from this source cannot authenticate there.  The vyos render now refuses it: the whole `user` entry is skipped (VyOS USM has no form for a user without auth) and a `review:` comment names it.  Measured after the change: **0 of 4** USM users arrive across the 2 cells that carry one, 4 refused.  The SNMP surface around them (community, contact, location) is unaffected.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying describes the render before this change — the user no longer arrives at all.
+
 No hash body, USM passphrase blob or vendor ciphertext is reproduced in this
 file or in the expectation YAML — only crypt-scheme markers, envelope prefixes
 and lengths. Per `AGENTS.md`, password hashes are operator-traceable even when

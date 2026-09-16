@@ -99,7 +99,7 @@ def render_intent(tree: CanonicalIntent) -> str:
 
     # ``service { snmp { ... } }`` — emitted between ``protocols`` and
     # ``system`` to match VyOS's alphabetical top-level node order.
-    lines.extend(_render_service(tree.snmp))
+    lines.extend(_render_service(tree.snmp, tree.source_vendor))
 
     # ``system`` always carries at least the host-name; Phase 2 adds the
     # ``login`` (local users) and ``ntp`` sub-blocks.
@@ -371,25 +371,61 @@ def _snmp_priv_type(proto: str) -> str:
     return "des" if proto in ("des", "3des") else "aes"
 
 
-def _render_snmp_v3(users: list) -> list[str]:
+def _snmp_v3_review(name: str, source_vendor: str) -> str:
+    """One-line VyOS comment naming a USM user whose key cannot be re-used.
+
+    Kept local rather than using ``_user_secrets.format_review_comment``:
+    that helper's body names a login account ("password manager user-name"),
+    which would misdescribe an SNMPv3 USM key.  No key material is quoted.
+    """
+    origin = f"{source_vendor} " if source_vendor else ""
+    return (
+        f'        /* snmpv3 user "{name}" -- review: {origin}USM keys are '
+        f"localised to the source agent's engine ID, so VyOS cannot re-use "
+        f"them; re-create this user and re-key it on the target */"
+    )
+
+
+def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
     """Render the ``v3 { }`` USM sub-block (nested under ``snmp``).
 
     Users are sorted by name for stable output.  A single config-wide
-    ``engineid`` is emitted when every USM user shares one (the canonical
-    model carries the engineID per-user; VyOS declares it once for the
-    whole agent).  A user with no auth protocol is skipped — VyOS USM
-    requires authentication.  Auth / privacy keys are emitted as
-    ``encrypted-password`` (the 1.4 saved-config form); the opaque blob
-    round-trips verbatim same-vendor.
+    ``engineid`` is emitted when every surviving USM user shares one (the
+    canonical model carries the engineID per-user; VyOS declares it once for
+    the whole agent).  A user with no auth protocol is skipped — VyOS USM
+    requires authentication.
+
+    ⚠️ The USM key is GATED on provenance.  ``encrypted-password`` holds a key
+    VyOS localised against its own agent engine ID, and the vyos matrix says
+    so at ``/snmp/v3-user/auth-passphrase``: it "round-trips verbatim
+    same-vendor but cross-vendor migration requires re-keying" and "plaintext
+    keys are never accepted".  This codec used to write ANY source's key into
+    that leaf, so a Cisco ``localizedkey`` digest, an AOS-S key, a FortiGate
+    ``ENC`` blob or a plaintext passphrase became a VyOS USM key that
+    authenticates nobody — 30 records across 8 source vendors on the committed
+    corpus.  A key this codec did not produce is now refused: the whole ``user``
+    entry is skipped (VyOS USM has no form for a user without auth) and a
+    review comment names it.  Unlike a local-user password there is no
+    recovery path, because the target cannot accept a plaintext passphrase.
+
+    A same-vendor privacy sub-block with no stored key is omitted rather than
+    emitted with an empty value, which was malformed VyOS.
     """
     usable = [u for u in users if u.auth_protocol]
     if not usable:
         return []
-    out = ["        v3 {"]
-    engine_ids = {u.engine_id for u in usable if u.engine_id}
+    same_vendor = source_vendor == "vyos"
+    carried = [u for u in sorted(usable, key=lambda x: x.name)
+               if same_vendor and u.auth_passphrase]
+    refused = [u for u in sorted(usable, key=lambda x: x.name) if u not in carried]
+    out = [_snmp_v3_review(u.name, source_vendor) for u in refused]
+    if not carried:
+        return out
+    out.append("        v3 {")
+    engine_ids = {u.engine_id for u in carried if u.engine_id}
     if len(engine_ids) == 1:
         out.append(f"            engineid {next(iter(engine_ids))}")
-    for u in sorted(usable, key=lambda x: x.name):
+    for u in carried:
         out.append(f"            user {u.name} {{")
         if u.group:
             out.append(f"                group {u.group}")
@@ -401,7 +437,7 @@ def _render_snmp_v3(users: list) -> list[str]:
             f"                    type {_snmp_auth_type(u.auth_protocol)}"
         )
         out.append("                }")
-        if u.priv_protocol:
+        if u.priv_protocol and u.priv_passphrase:
             out.append("                privacy {")
             out.append(
                 f"                    encrypted-password {u.priv_passphrase}"
@@ -415,7 +451,7 @@ def _render_snmp_v3(users: list) -> list[str]:
     return out
 
 
-def _render_service(snmp) -> list[str]:
+def _render_service(snmp, source_vendor: str = "") -> list[str]:
     """Render the top-level ``service { snmp { ... } }`` block.
 
     Returns ``[]`` when there is no SNMP configuration so the caller
@@ -435,7 +471,7 @@ def _render_service(snmp) -> list[str]:
         body.append(f"        contact {_q(snmp.contact)}")
     if snmp.location:
         body.append(f"        location {_q(snmp.location)}")
-    body.extend(_render_snmp_v3(snmp.v3_users))
+    body.extend(_render_snmp_v3(snmp.v3_users, source_vendor))
     if not body:
         return []
     return ["service {", "    snmp {", *body, "    }", "}"]
