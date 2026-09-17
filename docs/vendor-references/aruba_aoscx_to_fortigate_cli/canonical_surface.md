@@ -247,6 +247,9 @@ never survives.
 
 ## Identity: roles and credentials
 
+<!-- snmpv3-key-gate-468 -->
+> **Update 2026-09-17 (#468) — the SNMPv3 USM behaviour described in this document has changed.**  `set auth-pwd "ENC <v>"` CLAIMS the value is encrypted under this FortiGate's key, which is true only of a value this device produced.  This source supplies an AOS-CX `auth-pass ciphertext` blob, encrypted under the source device's key.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 ciphertext).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 **Roles are remapped, not lost.** The AOS-CX `administrators` role renders to
 the FortiOS `super_admin` accessprofile on all 6 populated cells; `operators`
 passes through unchanged (measured on `kitchen_sink`, which carries both).

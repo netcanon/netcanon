@@ -205,6 +205,29 @@ class FortiGateCLICodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/auth-passphrase",
+                reason=(
+                    "`set auth-pwd \"ENC <v>\"` claims the value is encrypted "
+                    "under this FortiGate's key, true only of a value this "
+                    "device produced, so a key belonging to another agent is "
+                    "REFUSED on render (review comment, no `edit` block) "
+                    "rather than emitted behind a claim that would make it "
+                    "authenticate nobody.  A source PASSPHRASE is portable and "
+                    "is emitted WITHOUT the `ENC` prefix, which is how an "
+                    "operator types one and FortiOS encrypts it on save."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/priv-passphrase",
+                reason=(
+                    "Same as the auth key: a foreign privacy key is refused "
+                    "with the user, and a portable passphrase is emitted "
+                    "without the `ENC` prefix for FortiOS to encrypt."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/snmp/v3-user/engine-id",
                 reason=(
                     "The SNMPv3 USM user round-trips but a per-user "

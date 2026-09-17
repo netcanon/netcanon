@@ -201,6 +201,9 @@ or keepalive traffic into a VRF, decide how that is replaced before cutover.
 
 ## Credential material
 
+<!-- snmpv3-key-gate-468 -->
+> **Update 2026-09-17 (#468) — the SNMPv3 USM behaviour described in this document has changed.**  `authentication-password=` takes the operator's PASSPHRASE and RouterOS derives the localised USM key from it, so a value that is ALREADY a key cannot be re-derived.  This source supplies an AOS-CX `auth-pass ciphertext` blob, encrypted under the source device's key.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 ciphertext).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 `local_users[].hashed_password` drifts on all 7 account records, and the
 round-trip shows more than the drift count does.
 

@@ -80,7 +80,10 @@ def test_mikrotik_renders_snmp_trap_hosts() -> None:
 
 
 def test_mikrotik_renders_snmp_v3_user() -> None:
-    intent = CanonicalIntent()
+    # source_vendor stamps this as a RouterOS capture: the USM key gate (#468)
+    # refuses a key belonging to another agent, and this test is about the
+    # same-vendor wire grammar, not portability.
+    intent = CanonicalIntent(source_vendor="mikrotik_routeros")
     intent.snmp = CanonicalSNMP(
         v3_users=[
             CanonicalSNMPv3User(

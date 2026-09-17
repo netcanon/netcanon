@@ -92,7 +92,10 @@ def test_fortigate_renders_snmp_trap_hosts_without_community() -> None:
 
 
 def test_fortigate_renders_snmp_v3_user_auth_priv() -> None:
-    intent = CanonicalIntent()
+    # Stamped as a FortiGate capture: the USM key gate (#468) refuses a key
+    # belonging to another agent, and this test is about FortiOS's own wire
+    # grammar.  `fortigate` is the family name the parser writes.
+    intent = CanonicalIntent(source_vendor="fortigate")
     intent.snmp = CanonicalSNMP(
         v3_users=[
             CanonicalSNMPv3User(
@@ -119,7 +122,7 @@ def test_fortigate_renders_snmp_v3_user_auth_priv() -> None:
 def test_fortigate_renders_snmp_v3_user_no_priv() -> None:
     """auth-no-priv is a valid USM mode; FortiOS expects the
     explicit security-level keyword."""
-    intent = CanonicalIntent()
+    intent = CanonicalIntent(source_vendor="fortigate")
     intent.snmp = CanonicalSNMP(
         v3_users=[
             CanonicalSNMPv3User(
@@ -144,7 +147,7 @@ def test_fortigate_renders_snmp_v3_user_sha224_preserved() -> None:
     contradicted both the parse map (``sha224 -> sha224``) and the
     declared junos->fortigate expectation, mangling the value on a
     same-vendor round-trip."""
-    intent = CanonicalIntent()
+    intent = CanonicalIntent(source_vendor="fortigate")
     intent.snmp = CanonicalSNMP(
         v3_users=[
             CanonicalSNMPv3User(

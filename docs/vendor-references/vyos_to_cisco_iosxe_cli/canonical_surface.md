@@ -181,6 +181,9 @@ there were none to lose.
 
 ### 2. A passwordless account disappears, and every surviving secret lands behind the cleartext marker
 
+<!-- snmpv3-key-gate-468 -->
+> **Update 2026-09-17 (#468) — the SNMPv3 USM behaviour described in this document has changed.**  `snmp-server user <n> <grp> v3 auth <proto> <value>` takes the operator's PASSPHRASE and IOS-XE derives the localised USM key from it, so a value that is ALREADY a key cannot be re-derived.  This source supplies a VyOS `encrypted-password` blob, localised against the source agent's engine ID.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 localised).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 Two separate facts about the same 17 user records, both measured.
 
 **The record loss.** 17 local-user records across 13 cells; **16 survive**.

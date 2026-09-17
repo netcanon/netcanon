@@ -1,5 +1,8 @@
 # NX-OS -> FortiGate CLI: measured canonical surface
 
+<!-- snmpv3-key-gate-468 -->
+> **Update 2026-09-17 (#468) — the SNMPv3 USM behaviour described in this document has changed.**  `set auth-pwd "ENC <v>"` CLAIMS the value is encrypted under this FortiGate's key, which is true only of a value this device produced.  This source supplies an NX-OS `localizedkey` digest, localised against the source agent's engine ID.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 12** USM users arrive across the 11 cells that carry one, 12 refused (12 localised).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 Source: `netcanon/migration/codecs/cisco_nxos/codec.py` and
 `netcanon/migration/codecs/fortigate_cli/codec.py` (`CapabilityMatrix`), joined
 against a full in-process `tools/run_full_mesh.py` run over the committed

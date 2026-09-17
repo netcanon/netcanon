@@ -1,5 +1,8 @@
 # NX-OS -> Cisco IOS-XE (CLI): measured canonical surface
 
+<!-- snmpv3-key-gate-468 -->
+> **Update 2026-09-17 (#468) — the SNMPv3 USM behaviour described in this document has changed.**  `snmp-server user <n> <grp> v3 auth <proto> <value>` takes the operator's PASSPHRASE and IOS-XE derives the localised USM key from it, so a value that is ALREADY a key cannot be re-derived.  This source supplies an NX-OS `localizedkey` digest, localised against the source agent's engine ID.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 12** USM users arrive across the 11 cells that carry one, 12 refused (12 localised).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The IOS-XE render now calls the shared `is_migratable()` gate and NX-OS type-5 secrets are classified by their `$5$` payload.  Measured after the change: **0 of 10** local accounts now arrive across the 9 cells that populate users. 10 are refused for a secret IOS-XE cannot consume (10 SHA-256 crypt (NX-OS type 5 over `$5$`)): the render emits a `review:` comment naming the account and no user entry.  Any statement below that a secret is carried verbatim, or rendered as `secret 5` (IOS-XE reads type 5 as MD5 crypt), describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_nxos__cisco_iosxe_cli.yaml`.
 
