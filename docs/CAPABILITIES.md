@@ -307,6 +307,8 @@ output.
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/type` | Lossy | AOS-S does not declare IANA `ifType`; codec infers type from interface-name shape (bare number → ethernet, `Trk` → port-channel, `Vlan` → l3ipvlan). |
 | `/filter/rule` | Unsupported | AOS-S access-lists are Tier 3 (informational) and not yet auto-rendered. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | `snmpv3 user "<n>" auth <proto> "<value>"` takes the operator's passphrase and AOS-S derives the localised USM key from it, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `snmpv3 user` line, and the `snmpv3 group` binding drops with it) rather than deriving a key from a key.  A source passphrase is portable and is emitted unchanged. |
+| `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — refused with the user unless it is a portable passphrase or came from AOS-S itself; re-key the v3 user on the target. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — AOS-S is a campus L2/L3 codec. |
 
 #### `juniper_junos` (bidirectional)
@@ -611,9 +613,14 @@ in rendered output find every such site.
   renders through `auth-pass plaintext` for the switch to encrypt.  Its parser
   already accepted both keywords, so that recovery needed no parse change —
   but the parser still DISCARDS which keyword it saw, so an AOS-CX *source*
-  continues to classify `ciphertext` and fails closed.  Five targets now gate;
-  `aruba_aoss`, `cisco_iosxe_cli` and `mikrotik_routeros` still carry a
-  foreign USM key verbatim.
+  continues to classify `ciphertext` and fails closed.
+
+  Since #467 `aruba_aoss` gates too, in the Arista shape: its `snmpv3 user`
+  slot takes a passphrase and derives the key, so a foreign key is refused and
+  passphrase sources are untouched.  A refused AOS-S user also loses its
+  `snmpv3 group … user …` binding, which would otherwise name a user that was
+  never created.  Six targets now gate; `cisco_iosxe_cli` and
+  `mikrotik_routeros` still carry a foreign USM key verbatim.
 
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).

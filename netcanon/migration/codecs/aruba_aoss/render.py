@@ -32,6 +32,7 @@ import re
 from typing import Any
 
 from ..._user_secrets import classify_hash, is_migratable
+from ..._usm_keys import classify_usm_key, usm_is_migratable
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
 
@@ -430,6 +431,28 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # the group-binding line.  ``aes128`` canonical → ``aes``
         # on AOS-S wire (platform-natural default when unsuffixed).
         for u in tree.snmp.v3_users:
+            # ⚠️ This slot takes the operator's PASSPHRASE -- AOS-S derives
+            # the localised USM key from it when the user is created.  A value
+            # that is ALREADY a key (NX-OS `localizedkey`, Junos
+            # `authentication-key`, VyOS `encrypted-password`, AOS-CX
+            # ciphertext, FortiGate `ENC`) run through that derivation a second
+            # time yields a user that commits cleanly and authenticates nobody.
+            # Refuse it; a passphrase source was already correct and is
+            # untouched.  The group binding goes with the refused user -- a
+            # `snmpv3 group ... user ...` line naming a user that was never
+            # created is a dangling reference.
+            # Policy: :mod:`netcanon.migration._usm_keys`.
+            usm_key = u.auth_passphrase or u.priv_passphrase
+            if (u.auth_protocol or u.priv_protocol) and not usm_is_migratable(
+                usm_key, tree.source_vendor, "aruba_aoss",
+            ):
+                kind = classify_usm_key(usm_key, tree.source_vendor)
+                lines.append(
+                    f'; snmpv3 user "{u.name}" -- review: a {kind} USM key '
+                    f'belongs to the source agent, so AOS-S cannot re-derive '
+                    f'it; re-create this user and re-key it on the target'
+                )
+                continue
             parts = [f'snmpv3 user "{u.name}"']
             if u.auth_protocol:
                 parts.append(

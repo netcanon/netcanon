@@ -167,6 +167,9 @@ migrate.
 
 ### 1. Credentials do not migrate — they are re-typed as cleartext
 
+<!-- snmpv3-key-gate-467 -->
+> **Update 2026-09-17 (#467) — the SNMPv3 USM behaviour described in this document has changed.**  `snmpv3 user "<n>" auth <proto> "<value>"` takes the operator's PASSPHRASE and AOS-S derives the localised USM key from it, so a value that is ALREADY a key cannot be re-derived.  This source supplies a VyOS `encrypted-password` blob, localised against the source agent's engine ID.  Such a key is now refused: no `snmpv3 user` line, and a `; ... -- review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 localised).  The refusal also drops the user's `snmpv3 group ... user ...` binding, which would otherwise name a user that was never created.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 `local_users[].hashed_password` drifts on 12 of the 13 cells that populate
 users — every cell whose user records survive — and the failure mode is worse
 than a drop.
