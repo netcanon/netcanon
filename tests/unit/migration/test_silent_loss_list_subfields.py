@@ -170,9 +170,18 @@ def _vlan_desc_survived(reparsed: CanonicalIntent) -> bool:
 
 
 def _v3_engineid_intent() -> CanonicalIntent:
-    """A single SNMPv3 USM user carrying an explicit engineID."""
+    """A single SNMPv3 USM user carrying an explicit engineID.
+
+    ``source_vendor`` is stamped because every USM render now gates the key
+    (#463-#468): an unstamped tree fails closed on all nine codecs, which would
+    make this probe VACUOUS -- no codec would keep the v3 user long enough to
+    demonstrate the engine-id drop this case exists to catch.  A passphrase
+    source is portable everywhere, so the user survives and the engineID is
+    still the only thing lost.
+    """
     return CanonicalIntent(
         hostname="r",
+        source_vendor="arista_eos",
         interfaces=[CanonicalInterface(name="Ethernet1", default_name="Ethernet1")],
         snmp=CanonicalSNMP(
             v3_users=[

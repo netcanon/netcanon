@@ -36,6 +36,7 @@ import re
 from typing import Any
 
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
+from ..._usm_keys import classify_usm_key, usm_is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalVlan
 from .._helpers import same_vendor_version
 from ..base import RenderError
@@ -690,6 +691,25 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 "3des": "DES",      # RouterOS doesn't speak 3DES — fallback
             }
             for u in tree.snmp.v3_users:
+                # ⚠️ `authentication-password=` takes the operator's
+                # PASSPHRASE -- RouterOS derives the localised USM key from it.
+                # A value that is ALREADY a key run through that derivation a
+                # second time yields a user that commits cleanly and
+                # authenticates nobody.  The review comment carries no
+                # `key=value` token, so `_parse_snmp_community` skips it.
+                # Policy: :mod:`netcanon.migration._usm_keys`.
+                usm_key = u.auth_passphrase or u.priv_passphrase
+                if (u.auth_protocol or u.priv_protocol) and not usm_is_migratable(
+                    usm_key, tree.source_vendor, "mikrotik_routeros",
+                ):
+                    kind = classify_usm_key(usm_key, tree.source_vendor)
+                    lines.append(
+                        f"# snmpv3 user {u.name} -- review: a {kind} USM key "
+                        f"belongs to the source agent, so RouterOS cannot "
+                        f"re-derive it; re-create this user and re-key it on "
+                        f"the target"
+                    )
+                    continue
                 add_parts = ["add", f"name={u.name}"]
                 if u.auth_protocol:
                     mt_auth = _CAN_TO_MT_AUTH.get(

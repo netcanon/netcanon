@@ -240,6 +240,8 @@ in `netcanon/migration/codecs/<vendor>/codec.py`.
 | `/vxlan-vnis/{udp-port,flood-list}` | Lossy | The nve1 render keeps the VNI identity but normalizes the UDP port and drops head-end static ingress-replication flood peers (no IOS-XE grammar in v1). |
 | `/routing-instances/instance` | Lossy | VRF declarations parse and render bidirectionally (`parse._parse_routing_instances` → `vrf definition` emit loop; cross-vendor confirmed via Wave 10β-B / commit `40de39c`).  Lossy because `address-family ipv6` / EVPN `l2vpn evpn` sub-stanzas inside `vrf definition` are parse-and-ignore in v1.  (Per-VRF static-route membership now round-trips via the supported `/routing/static-route/vrf` surface above.) |
 | `/access-list/{extended,standard,ipv6}` | Unsupported | Tier 3 — auto-translating ACL semantics across vendors risks shipping subtly-permissive rules. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | `snmp-server user <n> <grp> v3 auth <proto> <value>` takes the operator's passphrase and IOS-XE derives the localised USM key from it, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `snmp-server user` line) rather than deriving a key from a key.  A source passphrase is portable and is emitted unchanged. |
+| `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — refused with the user unless it is a portable passphrase or came from IOS-XE itself. |
 | `/firewall` | Unsupported | Zone-based firewall (zone-pair / policy-map type inspect) is Tier 3. |
 | `/nat` | Unsupported | NAT is Tier 3 — semantics are tightly coupled to interface zone designations. |
 
@@ -345,6 +347,8 @@ output.
 | `/interfaces/interface/config/description` | Lossy | FortiOS limits the interface alias to 25 characters; longer descriptions from other vendors are truncated. |
 | `/interfaces/interface/config/type` | Lossy | FortiOS has no IANA `ifType`; inferred from `type vlan` sub-setting or name shape. |
 | `/filter/rule` | Unsupported | `config firewall policy` is Tier 3 — session-based, zone-aware, UTM-enabled semantics don't translate cleanly. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | `set auth-pwd "ENC <v>"` claims the value is encrypted under this FortiGate's key, true only of a value this device produced, so a key belonging to another agent is refused (review comment, no `edit` block).  A source passphrase is portable and is emitted WITHOUT the `ENC` prefix, which is how an operator types one and FortiOS encrypts it on save. |
+| `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — a foreign privacy key is refused with the user; a portable passphrase is emitted without the prefix. |
 | `/nat/rule` | Unsupported | FortiGate NAT lives inside firewall policy and address / VIP objects — not auto-translatable. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — FortiGate is a firewall codec. |
 
@@ -361,6 +365,8 @@ output.
 | `/vlans/vlan/name` | Lossy | MikroTik stores a VLAN's name as the L3 interface name (e.g. `vlan10`), not a separate descriptive name field; cross-vendor rendering may conflate the two. |
 | `/vlans/vlan/description` | Lossy | RouterOS exposes a single per-VLAN `comment` field, which the parser maps to the VLAN name; a separate description collides with it on render. |
 | `/filter/rule` | Unsupported | Firewall filter rules are Tier 3 (informational) and not auto-rendered. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | `authentication-password=` takes the operator's passphrase and RouterOS derives the localised USM key from it, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `add name=` line).  A source passphrase is portable and is emitted unchanged. |
+| `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — refused with the user unless it is a portable passphrase or came from RouterOS itself. |
 | `/nat/rule` | Unsupported | NAT rules are Tier 3 — informational only. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | RouterOS VXLAN exists but is rare in canonical scope and not modelled in v1. |
 
@@ -619,8 +625,22 @@ in rendered output find every such site.
   slot takes a passphrase and derives the key, so a foreign key is refused and
   passphrase sources are untouched.  A refused AOS-S user also loses its
   `snmpv3 group … user …` binding, which would otherwise name a user that was
-  never created.  Six targets now gate; `cisco_iosxe_cli` and
-  `mikrotik_routeros` still carry a foreign USM key verbatim.
+  never created.
+
+  Since #468 the series is complete: `cisco_iosxe_cli` and
+  `mikrotik_routeros` gate in the Arista shape, and `fortigate_cli` in the
+  AOS-CX shape — `set auth-pwd "ENC <v>"` claims FortiOS encryption, so a
+  foreign key is refused and a portable passphrase is emitted WITHOUT the
+  prefix for FortiOS to encrypt on save.  **All nine codecs that render
+  SNMPv3 USM users now gate.**  FortiGate was missing from the earlier
+  "remaining targets" lists in #464-#467; it renders v3 users and was never
+  gated, so it is included here.
+
+  Two parsers stamp a FAMILY name rather than the codec name
+  (`fortigate_cli` → `fortigate`, `cisco_iosxe_cli` → `cisco_iosxe`).
+  `_usm_keys._VENDOR_ALIASES` treats those as same-vendor, without which a
+  FortiGate re-render of its own config would refuse its own key — FortiOS
+  values classify `encrypted`, which no target accepts from a foreign source.
 
 * **Aruba AOS-S DHCP comment block**
   ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).

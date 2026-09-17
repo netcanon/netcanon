@@ -28,6 +28,32 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **Fixed: the last three render paths still re-used another agent's SNMPv3 USM
+  key - and FortiGate had been missing from the list entirely.**  Completes the
+  USM key gate (#463 VyOS, #464 NX-OS, #465 Arista/Junos, #466 AOS-CX, #467
+  AOS-S) across `cisco_iosxe_cli`, `mikrotik_routeros` and `fortigate_cli`, so
+  **all nine codecs that render SNMPv3 USM users now gate**.  IOS-XE
+  (`snmp-server user ... auth <proto> <value>`) and RouterOS
+  (`authentication-password=`) are the Arista shape: one passphrase slot from
+  which the device derives the key, so a value that was already a key was run
+  through derivation a second time - **24 of 30** records into IOS-XE and **22
+  of 28** into RouterOS.  FortiGate is the AOS-CX shape: `set auth-pwd "ENC
+  <v>"` claims the value is encrypted under that device's key, and the render
+  added the prefix to whatever it was handed - **22 of 30** records.  Foreign
+  keys are now refused with a `review:` comment naming the user; on FortiGate a
+  portable passphrase is emitted WITHOUT the `ENC` prefix, which is how an
+  operator types one and FortiOS encrypts it on save.  FortiGate appeared in no
+  earlier "remaining targets" list even though it renders v3 users, so it was
+  never gated; it is included here.
+  Also fixed: `fortigate_cli/parse.py` stamps `source_vendor="fortigate"` and
+  `cisco_iosxe_cli/parse.py` stamps `"cisco_iosxe"` - the FAMILY name, not the
+  codec name.  `_usm_keys._VENDOR_ALIASES` now treats those as same-vendor;
+  without it the new gate would have refused a FortiGate's OWN key when
+  re-rendering its OWN config, since FortiOS values classify `encrypted` and no
+  target accepts that from a foreign source.  Guard:
+  `tests/unit/migration/test_iosxe_mikrotik_snmpv3_key_gate.py`, including an
+  explicit regression test for the family-stamp equivalence.
+
 - **Fixed: AOS-S derived an SNMPv3 key from a value that was already a key.**
   Extends the USM key gate (#463 VyOS, #464 NX-OS, #465 Arista/Junos, #466
   AOS-CX) to `aruba_aoss`.  `snmpv3 user "<n>" auth <proto> "<value>"` takes

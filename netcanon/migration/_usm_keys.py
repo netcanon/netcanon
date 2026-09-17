@@ -106,6 +106,29 @@ def classify_usm_key(value: str, source_vendor: str) -> str:
     return _SOURCE_DEFAULT_KIND.get(source_vendor, LOCALISED)
 
 
+#: Parsers that stamp a FAMILY name rather than the codec name.  A
+#: ``fortigate_cli`` capture is stamped ``fortigate``; an IOS-XE CLI capture is
+#: stamped ``cisco_iosxe``.  Both must count as same-vendor against the codec
+#: that produced them, or re-rendering a device's OWN config refuses its OWN
+#: key.  FortiGate showed this: its values classify ``encrypted``, which no
+#: target accepts from a foreign source, so the family stamp is the only thing
+#: marking them as native.
+_VENDOR_ALIASES: dict[str, frozenset[str]] = {
+    "fortigate_cli": frozenset({"fortigate", "fortigate_cli"}),
+    "cisco_iosxe_cli": frozenset({"cisco_iosxe", "cisco_iosxe_cli"}),
+}
+
+
+def _same_vendor(source_vendor: str, target_vendor: str) -> bool:
+    """True when *source_vendor* names the same platform as *target_vendor*,
+    allowing for the family-name stamps in :data:`_VENDOR_ALIASES`."""
+    if not source_vendor:
+        return False
+    if source_vendor == target_vendor:
+        return True
+    return source_vendor in _VENDOR_ALIASES.get(target_vendor, frozenset())
+
+
 def usm_is_migratable(value: str, source_vendor: str, target_vendor: str) -> bool:
     """True if *target_vendor* can actually use this key.
 
@@ -114,10 +137,15 @@ def usm_is_migratable(value: str, source_vendor: str, target_vendor: str) -> boo
     localised key belongs to one engine ID and a ciphertext blob to one device
     key.
     """
+    # Same-vendor FIRST: a device re-rendering its own config keeps its own
+    # users, including one whose `/export` omitted the secret.  The
+    # empty-value rule below is about cross-vendor portability ("nothing to
+    # migrate"), and must not refuse a record the operator still has on the
+    # box -- two committed RouterOS captures carry exactly that shape.
+    if _same_vendor(source_vendor, target_vendor):
+        return True
     if not value:
         return False
-    if source_vendor and source_vendor == target_vendor:
-        return True
     return classify_usm_key(value, source_vendor) in _TARGET_USM_ACCEPTS.get(
         target_vendor, frozenset(),
     )

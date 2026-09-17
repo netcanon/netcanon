@@ -246,6 +246,9 @@ VyOS declares `/local-users/user/privilege-level` lossy on its own side.
 
 ## SNMP: the user survives, its bookkeeping does not
 
+<!-- snmpv3-key-gate-468 -->
+> **Update 2026-09-17 (#468) — the SNMPv3 USM behaviour described in this document has changed.**  `set auth-pwd "ENC <v>"` CLAIMS the value is encrypted under this FortiGate's key, which is true only of a value this device produced.  This source supplies a VyOS `encrypted-password` blob, localised against the source agent's engine ID.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 localised).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 4 of 13 cells populate SNMP. `community`, `location` and `contact` round-trip
 byte-identical on every cell that sets them; `trap_hosts` is empty everywhere,
 so that key rests on declarations rather than a round-trip.

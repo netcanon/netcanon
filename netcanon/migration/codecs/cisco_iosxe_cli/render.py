@@ -50,6 +50,7 @@ from ..._user_secrets import (
     format_review_comment,
     is_migratable,
 )
+from ..._usm_keys import classify_usm_key, usm_is_migratable
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -691,6 +692,25 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # the v3 keyword; ``aes128`` canonical → ``aes 128`` two
         # tokens; ``aes192``/``aes256`` similarly split.
         for u in s.v3_users:
+            # ⚠️ This slot takes the operator's PASSPHRASE -- IOS-XE derives
+            # the localised USM key from it.  A value that is ALREADY a key
+            # (NX-OS `localizedkey`, Junos `authentication-key`, VyOS
+            # `encrypted-password`, AOS-CX ciphertext, FortiGate `ENC`) run
+            # through that derivation a second time yields a user that commits
+            # cleanly and authenticates nobody.  Refuse it; a passphrase source
+            # was already correct and is untouched.
+            # Policy: :mod:`netcanon.migration._usm_keys`.
+            usm_key = u.auth_passphrase or u.priv_passphrase
+            if (u.auth_protocol or u.priv_protocol) and not usm_is_migratable(
+                usm_key, tree.source_vendor, "cisco_iosxe_cli",
+            ):
+                kind = classify_usm_key(usm_key, tree.source_vendor)
+                out.append(
+                    f"! snmpv3 user {u.name} -- review: a {kind} USM key "
+                    f"belongs to the source agent, so IOS-XE cannot re-derive "
+                    f"it; re-create this user and re-key it on the target"
+                )
+                continue
             line = [
                 f"snmp-server user {u.name} {u.group or 'v3group'} v3",
             ]

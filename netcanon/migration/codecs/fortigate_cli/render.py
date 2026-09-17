@@ -50,6 +50,7 @@ from ..._user_secrets import (
     format_review_comment,
     is_migratable,
 )
+from ..._usm_keys import classify_usm_key, usm_is_migratable
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -846,6 +847,27 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if tree.snmp.v3_users:
             out.append("config system snmp user")
             for u in tree.snmp.v3_users:
+                # ⚠️ `set auth-pwd "ENC <v>"` CLAIMS the value is encrypted
+                # under THIS FortiGate's key -- true only of a value this
+                # device produced.  The render added that prefix to whatever it
+                # was handed, so another agent's key was installed as if
+                # FortiOS had encrypted it (it authenticates nobody) and a
+                # genuine passphrase was labelled as an encrypted blob.  A
+                # portable passphrase is emitted WITHOUT the prefix, which is
+                # how an operator types one and FortiOS encrypts it on save.
+                # Policy: :mod:`netcanon.migration._usm_keys`.
+                usm_key = u.auth_passphrase or u.priv_passphrase
+                if (u.auth_protocol or u.priv_protocol) and not usm_is_migratable(
+                    usm_key, tree.source_vendor, "fortigate_cli",
+                ):
+                    kind = classify_usm_key(usm_key, tree.source_vendor)
+                    out.append(
+                        f"# snmpv3 user {u.name} -- review: a {kind} USM key "
+                        f"belongs to the source agent, so FortiOS cannot "
+                        f"re-use it; re-create this user and re-key it on the "
+                        f"target"
+                    )
+                    continue
                 out.append(f'    edit "{u.name}"')
                 if u.auth_protocol and u.priv_protocol:
                     out.append("        set security-level auth-priv")
@@ -860,8 +882,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         # Preserve operator-supplied hash verbatim.
                         # Source-joined ``ENC <hash>`` round-trips as-is;
                         # cross-vendor hashes get an ENC prefix.
+                        # Only claim FortiOS encryption when the value
+                        # really is this device's blob; a portable passphrase
+                        # goes in bare for FortiOS to encrypt on save.
                         val = u.auth_passphrase
-                        if val.startswith("ENC "):
+                        if val.startswith("ENC ") or classify_usm_key(
+                            val, tree.source_vendor,
+                        ) == "plaintext":
                             out.append(f'        set auth-pwd "{val}"')
                         else:
                             out.append(f'        set auth-pwd "ENC {val}"')
@@ -870,7 +897,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     out.append(f"        set priv-proto {fg_priv}")
                     if u.priv_passphrase:
                         val = u.priv_passphrase
-                        if val.startswith("ENC "):
+                        if val.startswith("ENC ") or classify_usm_key(
+                            val, tree.source_vendor,
+                        ) == "plaintext":
                             out.append(f'        set priv-pwd "{val}"')
                         else:
                             out.append(f'        set priv-pwd "ENC {val}"')
