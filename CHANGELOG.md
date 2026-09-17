@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-17
+
 ### Security
 
 - **Fixed: the last three render paths still re-used another agent's SNMPv3 USM
