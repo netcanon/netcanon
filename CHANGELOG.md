@@ -28,6 +28,28 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **Fixed: AOS-S derived an SNMPv3 key from a value that was already a key.**
+  Extends the USM key gate (#463 VyOS, #464 NX-OS, #465 Arista/Junos, #466
+  AOS-CX) to `aruba_aoss`.  `snmpv3 user "<n>" auth <proto> "<value>"` takes
+  the operator's PASSPHRASE and the switch derives the localised USM key from
+  it when the user is created; the render wrote whatever it was handed there,
+  so a value that was ALREADY a key — an NX-OS `localizedkey` digest, a Junos
+  `authentication-key`, a VyOS `encrypted-password`, an AOS-CX `ciphertext`
+  blob, a FortiGate `ENC` value — was run through key derivation a second time,
+  producing a user that commits cleanly and authenticates nobody.  Measured on
+  the committed corpus: **24 of 30** USM records arriving into AOS-S carried
+  such a key.  They are now refused with a `; … -- review:` comment naming the
+  user, and the refusal takes the user's `snmpv3 group … user …` binding with
+  it, since a binding for a user that was never created is a dangling
+  reference.  This is the Arista shape rather than the NX-OS one: the
+  passphrase slot is the only slot, so there is nothing to re-label and
+  passphrase sources (Arista, IOS-XE CLI, RouterOS) were already correct and
+  are untouched.  `/snmp/v3-user/auth-passphrase` and `priv-passphrase` are now
+  declared lossy — AOS-S had no such declaration, so the loss had been
+  reported as `severity: ok`.  Guard:
+  `tests/unit/migration/test_aoss_snmpv3_key_gate.py` (19 assertions, 13
+  verified red first).
+
 - **Fixed: AOS-CX labelled every SNMPv3 USM key as its own device ciphertext.**
   Extends the USM key gate (#463 VyOS, #464 NX-OS, #465 Arista/Junos) to
   `aruba_aoscx`.  `snmpv3 user <n> auth <proto> auth-pass ciphertext <blob>`

@@ -1,5 +1,8 @@
 # NX-OS -> Aruba AOS-S: measured canonical surface
 
+<!-- snmpv3-key-gate-467 -->
+> **Update 2026-09-17 (#467) — the SNMPv3 USM behaviour described in this document has changed.**  `snmpv3 user "<n>" auth <proto> "<value>"` takes the operator's PASSPHRASE and AOS-S derives the localised USM key from it, so a value that is ALREADY a key cannot be re-derived.  This source supplies an NX-OS `localizedkey` digest, localised against the source agent's engine ID.  Such a key is now refused: no `snmpv3 user` line, and a `; ... -- review:` comment names the user.  Measured after the change: **0 of 12** USM users arrive across the 11 cells that carry one, 12 refused (12 localised).  The refusal also drops the user's `snmpv3 group ... user ...` binding, which would otherwise name a user that was never created.  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
+
 Source: `netcanon/migration/codecs/cisco_nxos/codec.py` and
 `netcanon/migration/codecs/aruba_aoss/codec.py` (`CapabilityMatrix`), joined
 against a full `tools/run_full_mesh.py` run over the committed corpus.

@@ -230,6 +230,29 @@ class ArubaAOSSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/auth-passphrase",
+                reason=(
+                    "`snmpv3 user \"<n>\" auth <proto> \"<value>\"` takes the "
+                    "operator's passphrase and AOS-S derives the localised USM "
+                    "key from it, so a value that is already another agent's "
+                    "key cannot be re-derived: the render refuses it (review "
+                    "comment, no `snmpv3 user` line, and the `snmpv3 group` "
+                    "binding drops with it) rather than deriving a key from a "
+                    "key.  A source passphrase is portable and is emitted "
+                    "unchanged."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/priv-passphrase",
+                reason=(
+                    "Same as the auth key: the privacy value is refused with "
+                    "the user unless it is a portable passphrase or came from "
+                    "AOS-S itself -- re-key the v3 user on the target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/snmp/v3-user/engine-id",
                 reason=(
                     "The SNMPv3 USM user round-trips but a per-user "
