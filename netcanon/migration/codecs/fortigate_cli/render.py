@@ -50,7 +50,12 @@ from ..._user_secrets import (
     format_review_comment,
     is_migratable,
 )
-from ..._usm_keys import classify_usm_key, usm_is_migratable
+from ..._usm_keys import (
+    PLAINTEXT,
+    classify_usm_key,
+    user_usm_is_migratable,
+    user_usm_kind,
+)
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -856,11 +861,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # portable passphrase is emitted WITHOUT the prefix, which is
                 # how an operator types one and FortiOS encrypts it on save.
                 # Policy: :mod:`netcanon.migration._usm_keys`.
-                usm_key = u.auth_passphrase or u.priv_passphrase
-                if (u.auth_protocol or u.priv_protocol) and not usm_is_migratable(
-                    usm_key, tree.source_vendor, "fortigate_cli",
+                if (u.auth_protocol or u.priv_protocol) and not user_usm_is_migratable(
+                    u, tree.source_vendor, "fortigate_cli",
                 ):
-                    kind = classify_usm_key(usm_key, tree.source_vendor)
+                    kind = user_usm_kind(u, tree.source_vendor)
                     out.append(
                         f"# snmpv3 user {u.name} -- review: a {kind} USM key "
                         f"belongs to the source agent, so FortiOS cannot "
@@ -887,8 +891,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         # goes in bare for FortiOS to encrypt on save.
                         val = u.auth_passphrase
                         if val.startswith("ENC ") or classify_usm_key(
-                            val, tree.source_vendor,
-                        ) == "plaintext":
+                            val, tree.source_vendor, u.auth_kind,
+                        ) == PLAINTEXT:
                             out.append(f'        set auth-pwd "{val}"')
                         else:
                             out.append(f'        set auth-pwd "ENC {val}"')
@@ -898,8 +902,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     if u.priv_passphrase:
                         val = u.priv_passphrase
                         if val.startswith("ENC ") or classify_usm_key(
-                            val, tree.source_vendor,
-                        ) == "plaintext":
+                            val, tree.source_vendor, u.priv_kind,
+                        ) == PLAINTEXT:
                             out.append(f'        set priv-pwd "{val}"')
                         else:
                             out.append(f'        set priv-pwd "ENC {val}"')

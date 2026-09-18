@@ -327,7 +327,7 @@ output.
 | `/interfaces/interface/subinterfaces/subinterface` | Lossy | Unit 0 collapses into the parent; units 1+ materialise as distinct `<parent>.<unit>` interfaces, and per-unit 802.1Q tagging (`unit N vlan-id`) is captured on `/interfaces/interface/dot1q-vlan` (GAP 7 — round-trips). Per-unit subinterface attributes beyond the address + 802.1Q tag remain unmodelled. |
 | `/groups` | Lossy | Apply-groups inheritance is wired for the dispatch surface (system / login / interfaces / protocols / SNMP / routing-options / routing-instances / vlans); group bodies for unsupported surfaces (policy-options, firewall filters, RADIUS server options) parse-and-ignore. |
 | `/evpn-type5-routes/route` | Lossy | Per-prefix records lossy-by-default — VRF-property model uses `CanonicalRoutingInstance.l3_vni`; explicit per-prefix lists not populated by any codec today. |
-| `/snmp/v3-user/auth-passphrase` | Lossy | `authentication-key` holds the value Junos itself stored for one of its own keys, so a key produced by another agent cannot be written there: the render refuses it (review comment, and the user's VACM `security-to-group` binding is dropped with it) rather than emitting a key that authenticates nobody.  A source PASSPHRASE is portable and is routed through `authentication-password`, from which Junos derives the key on commit, and the parser reads that leaf back.  A Junos config that stores a passphrase in that leaf still classifies as unportable (the kind is inferred per-codec, not per-line), so it fails closed cross-vendor. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | `authentication-key` holds the value Junos itself stored for one of its own keys, so a key produced by another agent cannot be written there: the render refuses it (review comment, and the user's VACM `security-to-group` binding is dropped with it) rather than emitting a key that authenticates nobody.  A source PASSPHRASE is portable and is routed through `authentication-password`, from which Junos derives the key on commit, and the parser reads that leaf back.  The parser also records WHICH leaf carried the value, so a Junos config that stores a passphrase in `authentication-password` now classifies as portable and migrates, instead of failing closed because the kind was inferred per-codec. |
 | `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — a foreign privacy key is refused with the user, and a portable passphrase is routed through `privacy-password` instead of `privacy-key`. |
 | `/routing/bgp` | Unsupported | BGP / IS-IS / OSPF / MPLS stanzas parse-and-ignore in v1; Junos routing-options grammar warrants a dedicated follow-up. |
 | `/firewall/filter` | Unsupported | Junos firewall filters (family / term / from / then) are Tier 3 — distinct from ACL models in other codecs. |
@@ -398,7 +398,7 @@ Anycast Gateway).  The lossy / unsupported exceptions:
 | `/system/raw-sections/vdc` | Lossy | `vdc <name> id N / limit-resource …` (N7K virtualisation) has no canonical primitive; the source block is discarded and a default single-VDC `vdc <hostname> id 1` wrapper is synthesised on render. |
 | `/system/raw-sections/features` | Lossy | `feature <name>` lines are derived on render from the canonical-tree shape (any SVI → `feature interface-vlan`, etc).  Source features not motivated by a canonical surface (`feature scp-server`, `feature telnet`) are dropped; re-authorise on the target. |
 | `/local-users/user/privilege-level` | Lossy | NX-OS uses a named `role` (network-admin / network-operator / custom), not a numeric privilege.  network-admin / vdc-admin → 15, everything else → 1.  The named role round-trips losslessly same-vendor. |
-| `/snmp/v3-user/auth-passphrase` | Lossy | NX-OS 10.x `localizedV2key` digest is normalised to the older `localizedkey` form on render; re-key SNMPv3 users on the target across OS-version / vendor boundaries. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | The trailing `localizedkey` keyword is a CLAIM that the digest is already localised against this agent's engine ID, so it is both read and re-emitted per line: a key from another agent is refused (review comment, no `snmp-server user` line), a genuine passphrase renders WITHOUT the keyword and the Nexus localises it on commit, and a localised digest keeps its keyword.  NX-OS 10.x `localizedV2key` is normalised to the older `localizedkey` form on render.  Re-key SNMPv3 users on the target across OS-version boundaries. |
 | `/snmp/v3-user/engine-id` | Lossy | engineID emitted colon-decimal (`128:0:0:9:…`); cross-vendor sources typically use hex.  Preserved verbatim same-vendor; cross-vendor render may need re-keying. |
 | `/interfaces/interface/vrrp-groups/group` | Lossy | FHRP is expressed as HSRP (`interface VlanN / hsrp N / ip <vip> / priority / preempt`).  EVERY `CanonicalVRRPGroup` renders as an `hsrp` block regardless of source `mode` — the virtual-IP redundancy intent survives but the wire protocol changes.  Same-vendor HSRP round-trips losslessly; sub-second timers / virtual-MAC / track objects are not modelled. |
 | `/routing-instances/instance/route-distinguisher` | Lossy | `rd auto` is preserved verbatim as a sentinel; cross-vendor renderers that don't recognise it must synthesise an explicit RD.  An explicit `rd <asn>:<nn>` round-trips losslessly. |
@@ -596,11 +596,19 @@ in rendered output find every such site.
   NX-OS differs from VyOS in having a portable form: a passphrase renders
   without `localizedkey` and the agent localises it on commit, so passphrase
   sources migrate correctly rather than being refused.  The kind is inferred
-  from the source codec's grammar, never from the value's shape.  Two grammars
-  mark the kind on the line itself (NX-OS `localizedkey`, AOS-CX
-  `ciphertext`/`plaintext`) and their parsers still discard it, so both fall
-  back to the unportable kind — fail-closed, and capturing those markers is
-  follow-up work.
+  from the source codec's grammar, never from the value's shape.  Three
+  grammars mark the kind on the line itself (NX-OS `localizedkey`, AOS-CX
+  `ciphertext`/`plaintext`, Junos `authentication-key` vs
+  `authentication-password`) and their parsers now RECORD which marker they
+  read, onto `CanonicalSNMPv3User.auth_kind` / `priv_kind`; a line carrying no
+  marker falls back to the per-codec default.  That is still kind-from-grammar,
+  at per-line rather than per-codec resolution — it is not licence to read the
+  value, and three committed NX-OS captures prove why: they carry
+  `localizedkey` over a value sanitisation left word-like, so the marker
+  survived where the shape did not.  Recording it also fixed a SAME-VENDOR
+  corruption: NX-OS had been re-emitting a passphrase line with `localizedkey`
+  appended, telling the agent a passphrase was already localised against its
+  own engine ID.
 
   Since #465 `arista_eos` and `juniper_junos` are gated too, and they show the
   two shapes this defect takes.  EOS's slot takes a PASSPHRASE and derives the
@@ -618,8 +626,9 @@ in rendered output find every such site.
   this device's key, so a foreign key is refused and a portable passphrase
   renders through `auth-pass plaintext` for the switch to encrypt.  Its parser
   already accepted both keywords, so that recovery needed no parse change —
-  but the parser still DISCARDS which keyword it saw, so an AOS-CX *source*
-  continues to classify `ciphertext` and fails closed.
+  and the parser now also RECORDS which keyword it saw, so an AOS-CX *source*
+  whose key really is a passphrase migrates instead of failing closed.  Each
+  token carries its own keyword, so auth and priv are resolved independently.
 
   Since #467 `aruba_aoss` gates too, in the Arista shape: its `snmpv3 user`
   slot takes a passphrase and derives the key, so a foreign key is refused and

@@ -187,12 +187,13 @@ _SNMP_CONTACT_RE = re.compile(
 #: ``snmpv3 user <name> auth <proto> auth-pass <ciphertext|plaintext>
 #: <blob> [priv <proto> priv-pass <ciphertext|plaintext> <blob>]``.  The
 #: blob is device-key-encrypted (preserved verbatim; lossy cross-vendor /
-#: cross-device).  The ``ciphertext`` / ``plaintext`` keyword is consumed
-#: (render always emits ``ciphertext``).
+#: cross-device).  The ``ciphertext`` / ``plaintext`` keyword is CAPTURED:
+#: it is the switch's own statement of what the value is, and each token
+#: carries its own, so auth and priv are read independently.
 _SNMPV3_USER_RE = re.compile(
     r"^snmpv3\s+user\s+(\S+)"
-    r"\s+auth\s+(\S+)\s+auth-pass\s+(?:ciphertext|plaintext)\s+(\S+)"
-    r"(?:\s+priv\s+(\S+)\s+priv-pass\s+(?:ciphertext|plaintext)\s+(\S+))?",
+    r"\s+auth\s+(\S+)\s+auth-pass\s+(ciphertext|plaintext)\s+(\S+)"
+    r"(?:\s+priv\s+(\S+)\s+priv-pass\s+(ciphertext|plaintext)\s+(\S+))?",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -797,14 +798,25 @@ def _parse_snmp(raw: str) -> CanonicalSNMP | None:
         snmp.location = location_m.group(1).strip().strip('"')
     if contact_m:
         snmp.contact = contact_m.group(1).strip().strip('"')
+    from ..._usm_keys import CIPHERTEXT, PLAINTEXT  # lazy: policy module
+
+    def _kind(marker: str | None) -> str:
+        """``plaintext`` is a passphrase this switch will encrypt itself;
+        ``ciphertext`` is a blob already encrypted under ITS device key."""
+        if not marker:
+            return ""
+        return PLAINTEXT if marker.lower() == "plaintext" else CIPHERTEXT
+
     for m in v3_matches:
-        name, auth_p, auth_pw, priv_p, priv_pw = m.groups()
+        name, auth_p, auth_mark, auth_pw, priv_p, priv_mark, priv_pw = m.groups()
         snmp.v3_users.append(CanonicalSNMPv3User(
             name=name,
             auth_protocol=(auth_p or "").lower(),
             auth_passphrase=auth_pw or "",
+            auth_kind=_kind(auth_mark),
             priv_protocol=(priv_p or "").lower(),
             priv_passphrase=priv_pw or "",
+            priv_kind=_kind(priv_mark),
         ))
     return snmp
 

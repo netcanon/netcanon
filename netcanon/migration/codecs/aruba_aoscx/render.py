@@ -45,7 +45,12 @@ import ipaddress
 import re
 
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
-from ..._usm_keys import classify_usm_key, usm_is_migratable
+from ..._usm_keys import (
+    PLAINTEXT,
+    classify_usm_key,
+    user_usm_is_migratable,
+    user_usm_kind,
+)
 from ...canonical.intent import CanonicalIntent
 from .._helpers import _coalesce_vlan_ids, same_vendor_version
 
@@ -237,9 +242,8 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
     for user in snmp.v3_users:
         if not user.auth_protocol:
             continue  # AOS-CX snmpv3 users require an auth protocol
-        usm_key = user.auth_passphrase or user.priv_passphrase
-        if not usm_is_migratable(usm_key, source_vendor, "aruba_aoscx"):
-            kind = classify_usm_key(usm_key, source_vendor)
+        if not user_usm_is_migratable(user, source_vendor, "aruba_aoscx"):
+            kind = user_usm_kind(user, source_vendor)
             lines.append(
                 f"! snmpv3 user {user.name} -- review: a {kind} USM key "
                 f"belongs to the source agent, so this switch cannot re-use "
@@ -248,20 +252,32 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
             continue
         # Claim the value is this device's ciphertext only when it is.  A
         # passphrase goes through ``plaintext`` so AOS-CX encrypts it itself.
-        keyword = (
+        # Each token carries its OWN keyword, so they are resolved
+        # independently -- a user can arrive with a portable auth passphrase
+        # and a device-bound privacy key.
+        auth_kw = (
             "plaintext"
-            if classify_usm_key(usm_key, source_vendor) == "plaintext"
+            if classify_usm_key(
+                user.auth_passphrase, source_vendor, user.auth_kind,
+            ) == PLAINTEXT
+            else "ciphertext"
+        )
+        priv_kw = (
+            "plaintext"
+            if classify_usm_key(
+                user.priv_passphrase, source_vendor, user.priv_kind,
+            ) == PLAINTEXT
             else "ciphertext"
         )
         auth = "md5" if user.auth_protocol.lower() == "md5" else "sha"
         line = (
             f"snmpv3 user {user.name} auth {auth} "
-            f"auth-pass {keyword} {user.auth_passphrase}"
+            f"auth-pass {auth_kw} {user.auth_passphrase}"
         )
         if user.priv_protocol:
             priv = _CANON_TO_AOSCX_PRIV.get(user.priv_protocol.lower(), "aes")
             line += (
-                f" priv {priv} priv-pass {keyword} {user.priv_passphrase}"
+                f" priv {priv} priv-pass {priv_kw} {user.priv_passphrase}"
             )
         lines.append(line)
     return lines

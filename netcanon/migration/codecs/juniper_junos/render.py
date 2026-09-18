@@ -72,7 +72,12 @@ from ..._user_secrets import (
     format_review_comment,
     is_migratable,
 )
-from ..._usm_keys import classify_usm_key, usm_is_migratable
+from ..._usm_keys import (
+    PLAINTEXT,
+    classify_usm_key,
+    user_usm_is_migratable,
+    user_usm_kind,
+)
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
 
@@ -1079,24 +1084,32 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # VACM binding with it -- a security-name with no usable key
             # authenticates nobody), and Junos's own value goes back verbatim.
             # Policy: :mod:`netcanon.migration._usm_keys`.
-            usm_key = u.auth_passphrase or u.priv_passphrase
-            if (u.auth_protocol or u.priv_protocol) and not usm_is_migratable(
-                usm_key, tree.source_vendor, "juniper_junos",
+            if (u.auth_protocol or u.priv_protocol) and not user_usm_is_migratable(
+                u, tree.source_vendor, "juniper_junos",
             ):
-                kind = classify_usm_key(usm_key, tree.source_vendor)
+                kind = user_usm_kind(u, tree.source_vendor)
                 out.append(
                     f"# snmpv3 user {u.name} -- review: a {kind} USM key "
                     f"belongs to the source agent, so Junos cannot re-use "
                     f"it; re-create this user and re-key it on the target"
                 )
                 continue
-            portable = classify_usm_key(
-                usm_key, tree.source_vendor,
-            ) == "plaintext"
+            # The two keys land on two independent ``set`` lines, so each
+            # picks its own leaf.
             auth_leaf = (
-                "authentication-password" if portable else "authentication-key"
+                "authentication-password"
+                if classify_usm_key(
+                    u.auth_passphrase, tree.source_vendor, u.auth_kind,
+                ) == PLAINTEXT
+                else "authentication-key"
             )
-            priv_leaf = "privacy-password" if portable else "privacy-key"
+            priv_leaf = (
+                "privacy-password"
+                if classify_usm_key(
+                    u.priv_passphrase, tree.source_vendor, u.priv_kind,
+                ) == PLAINTEXT
+                else "privacy-key"
+            )
             if u.auth_protocol and u.auth_protocol in _auth_to_junos:
                 auth_cmd = _auth_to_junos[u.auth_protocol]
                 out.append(

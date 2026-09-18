@@ -297,9 +297,16 @@ _COSMETIC_LIST_SUBFIELDS: dict[str, dict[str, tuple[str, ...]]] = {
 #: (community / contact / location / trap_hosts / v3 group / protocols) still
 #: surfaces.  (Scoped subset of promotion #20 — the whole-``snmp``-dict flip
 #: stays blocked on those other, matrix-undeclared surfaces.)
+#: ``auth_kind`` / ``priv_kind`` ride along for the same reason: they describe
+#: the PROVENANCE of a value that is itself blanked here, and only the three
+#: marker-bearing grammars record one at all -- so a target whose grammar
+#: carries no marker re-parses an empty kind and every cross-vendor snmp cell
+#: would read as drifted on a field the operator never expressed.
 _COSMETIC_SNMP_V3_SUBFIELDS: tuple[str, ...] = (
     "auth_passphrase",
     "priv_passphrase",
+    "auth_kind",
+    "priv_kind",
 )
 
 

@@ -229,7 +229,7 @@ _SNMP_V3_USER_RE = re.compile(
     r"^snmp-server\s+user\s+(\S+)(?:\s+(\S+))?"
     r"\s+auth\s+(md5|sha|sha224|sha256|sha384|sha512)\s+(\S+)"
     r"(?:\s+priv\s+(?:(aes-128|aes-192|aes-256|3des|des)\s+)?(\S+))?"
-    r"(?:\s+localized(V2)?key)?"
+    r"(?:\s+(localized(?:V2)?key))?"
     r"(?:\s+engineID\s+(\S+))?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
@@ -1382,15 +1382,25 @@ def _parse_snmp(raw: str) -> CanonicalSNMP | None:
     if contact_m:
         snmp.contact = contact_m.group(1).strip().strip('"')
     snmp.trap_hosts = list(hosts)
+    from ..._usm_keys import LOCALISED, PLAINTEXT  # lazy: policy module
     for m in v3_matches:
-        name, group, auth_p, auth_pw, priv_p, priv_pw, _v2, eng = m.groups()
+        name, group, auth_p, auth_pw, priv_p, priv_pw, marker, eng = m.groups()
+        # The trailing keyword is the agent's CLAIM about its own value:
+        # present, the digest is already localised against THIS engine ID;
+        # absent, the value is a passphrase the Nexus localises on commit.
+        # Record which was read -- re-deriving it from the value's shape is
+        # the fail-open #460 closed, and three committed captures carry the
+        # keyword over a sanitised, word-like value.
+        kind = LOCALISED if marker else PLAINTEXT
         snmp.v3_users.append(CanonicalSNMPv3User(
             name=name,
             group=group or "",
             auth_protocol=(auth_p or "").lower(),
             auth_passphrase=auth_pw or "",
+            auth_kind=kind,
             priv_protocol=_normalise_priv_proto(priv_p),
             priv_passphrase=priv_pw or "",
+            priv_kind=kind,
             engine_id=eng or "",
         ))
     return snmp

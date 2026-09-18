@@ -2458,17 +2458,27 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent) -> None:
             # carry a portable passphrase into Junos (#465); a leaf the
             # render emits but the parser ignores is a silent loss.
             if key_tok in ("authentication-key", "authentication-password"):
+                from ..._usm_keys import LOCALISED, PLAINTEXT
                 u = _get_or_create_v3_user(intent.snmp, name)
                 u.auth_protocol = _JUNOS_AUTH_MAP[attr]
                 u.auth_passphrase = key_val
+                # WHICH leaf carried the value IS the kind: Junos derives the
+                # key from ``-password`` and stores ``-key`` already derived.
+                u.auth_kind = (
+                    PLAINTEXT if key_tok.endswith("-password") else LOCALISED
+                )
                 return
         if attr in _JUNOS_PRIV_MAP and len(tokens) >= 7:
             key_tok = tokens[5]
             key_val = tokens[6]
             if key_tok in ("privacy-key", "privacy-password"):
+                from ..._usm_keys import LOCALISED, PLAINTEXT
                 u = _get_or_create_v3_user(intent.snmp, name)
                 u.priv_protocol = _JUNOS_PRIV_MAP[attr]
                 u.priv_passphrase = key_val
+                u.priv_kind = (
+                    PLAINTEXT if key_tok.endswith("-password") else LOCALISED
+                )
                 return
         # Bare ``authentication-none`` / ``privacy-none`` (no key
         # follows) — clears the corresponding field.

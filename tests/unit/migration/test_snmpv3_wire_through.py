@@ -247,15 +247,24 @@ class TestJuniperJunosSNMPv3:
         retree = c.parse(c.render(tree))
         assert len(retree.snmp.v3_users) == 2
         by_name = {u.name: u for u in retree.snmp.v3_users}
+        # ``auth_kind`` / ``priv_kind`` record WHICH leaf carried each value.
+        # Both users came in through ``authentication-key`` / ``privacy-key``
+        # -- the already-derived form -- so both read ``localised``, and the
+        # render sends them back out through the same leaf.  User "b" has no
+        # privacy key at all, so its priv kind is never set.
         assert by_name["a"].model_dump() == {
             "name": "a", "group": "G1", "auth_protocol": "sha",
-            "auth_passphrase": "h1", "priv_protocol": "aes128",
-            "priv_passphrase": "h2", "engine_id": "",
+            "auth_passphrase": "h1", "auth_kind": "localised",
+            "priv_protocol": "aes128",
+            "priv_passphrase": "h2", "priv_kind": "localised",
+            "engine_id": "",
         }
         assert by_name["b"].model_dump() == {
             "name": "b", "group": "G2", "auth_protocol": "md5",
-            "auth_passphrase": "h3", "priv_protocol": "",
-            "priv_passphrase": "", "engine_id": "",
+            "auth_passphrase": "h3", "auth_kind": "localised",
+            "priv_protocol": "",
+            "priv_passphrase": "", "priv_kind": "",
+            "engine_id": "",
         }
 
 
