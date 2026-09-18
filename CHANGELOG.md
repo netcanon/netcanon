@@ -28,6 +28,53 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **Fixed: three SNMPv3 USM grammars parsed into nothing at all.**  Each of
+  these vendors has a second, equally valid spelling for a v3 user's key, and
+  in each case the parser matched only the first — so a real config lost the
+  key, or the entire user, with no warning.  A refusal is visible; a silent
+  drop is not.
+
+  * **VyOS** `service snmp v3 user <n> auth plaintext-password <v>`.  The
+    accepted leaf set was `type` / `encrypted-password` / `encrypted-key`, so a
+    config using `plaintext-password` built the user record with an **empty**
+    key — and an empty value then reads as portable.  Per the VyOS reference
+    the valid leaves under *both* `auth` and `privacy` are `plaintext-password`
+    and `encrypted-password`; `encrypted-key` is not a VyOS spelling at all
+    (kept accepted only so an older tree cannot regress).
+  * **Cisco IOS-XE** `snmp-server user <n> <g> v3 encrypted auth sha <v>`.  Per
+    the Cisco command reference `encrypted` is an optional keyword immediately
+    after `v3`; the regex had no place for it and ended `\s*$`, so the whole
+    LINE failed to match and the user disappeared.  The parser comment claimed
+    the opposite — that the keyword "lands in the passphrase bucket and
+    round-trips back out on render" — which was false in both position and
+    effect.
+  * **Arista EOS** `snmp-server user <n> <g> v3 localized <engineID> auth …`.
+    Per the EOS command reference the form is
+    `user_name group_name [AGENT] VERSION [ENGINE][SECURITY]` with ENGINE =
+    `localized <engineID>`, i.e. *between* `v3` and `auth`.  Same failure mode,
+    documented as "parse-and-ignore" when it was a silent whole-user loss.
+
+  **Recovering the key was only half the job.**  Each of these slots derives a
+  key from a passphrase, so re-emitting a recovered, already-derived key into
+  the bare slot would make the device derive a key from a key — the same
+  same-vendor corruption fixed for NX-OS in the previous entry, in three new
+  grammars.  So each render now re-emits the marker that matches the value's
+  recorded kind: EOS behind its ENGINE clause, IOS-XE behind `encrypted`, and
+  VyOS through `plaintext-password` vs `encrypted-password`.  VyOS is the
+  sharpest case: its render wrote `encrypted-password` **unconditionally**,
+  which was self-consistent only because it carried same-vendor users alone —
+  the moment the parser could read a passphrase, that leaf would have claimed
+  VyOS had localised it.
+
+  Grammars are taken from each vendor's command reference, not from a capture:
+  **no committed fixture carries any of the three forms**, which is why they
+  went unnoticed.  Measured accordingly — the cross-vendor matrix does not move
+  at all, and every phase-4 bucket is byte-identical to the baseline
+  (`EXPECTED_LOSSY` 3233, `METHODOLOGY_ISSUE_under` 1774, `over` 21,
+  `CODEC_BUG` 5), so no baseline rewrite.  ⚠️ The EOS manual shows no
+  running-config example of the ENGINE clause, and that caveat is recorded in
+  the parser and the capability matrix rather than left implicit.
+
 - **Fixed: NX-OS re-labelled its own SNMPv3 passphrase as a pre-localised
   digest, and three grammars' per-line key markers were being discarded.**
   `CanonicalSNMPv3User` gains `auth_kind` / `priv_kind`, recording what the

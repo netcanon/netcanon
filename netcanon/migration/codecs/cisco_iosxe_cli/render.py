@@ -50,7 +50,12 @@ from ..._user_secrets import (
     format_review_comment,
     is_migratable,
 )
-from ..._usm_keys import user_usm_is_migratable, user_usm_kind
+from ..._usm_keys import (
+    PLAINTEXT,
+    classify_usm_key,
+    user_usm_is_migratable,
+    user_usm_kind,
+)
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -713,6 +718,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             line = [
                 f"snmp-server user {u.name} {u.group or 'v3group'} v3",
             ]
+            # Recovering an already-derived key is only half the job: the bare
+            # slot takes a PASSPHRASE and IOS-XE derives from it, so a stored
+            # key must go back out behind its own ``encrypted`` keyword or the
+            # device derives a key from a key (same-vendor re-render).
+            if classify_usm_key(
+                u.auth_passphrase, tree.source_vendor, u.auth_kind,
+            ) != PLAINTEXT:
+                line.append("encrypted")
             if u.auth_protocol:
                 line.append(
                     f"auth {u.auth_protocol} {u.auth_passphrase}"
