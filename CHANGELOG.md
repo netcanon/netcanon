@@ -26,6 +26,72 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Security
+
+- **Fixed: NX-OS re-labelled its own SNMPv3 passphrase as a pre-localised
+  digest, and three grammars' per-line key markers were being discarded.**
+  `CanonicalSNMPv3User` gains `auth_kind` / `priv_kind`, recording what the
+  source LINE said each key is instead of inferring it from the source CODEC.
+
+  Two failures fall out of the same root cause.
+
+  *Same-vendor corruption (previously unreported).*  NX-OS chose the trailing
+  keyword with `classify_usm_key(...) != "plaintext"`, and an NX-OS source
+  always classified `localised`, so the keyword was appended unconditionally:
+  a `snmp-server user … auth md5 <passphrase>` line came back out as
+  `… <passphrase> localizedkey`.  That keyword asserts the value is already
+  localised against this agent's own engine ID, so the Nexus stores passphrase
+  bytes as a digest and the user authenticates nobody — on the one path that is
+  supposed to be lossless.  No guard could see it: `test_real_capture_round_
+  trips_stable` compares parse → render → parse, which stayed STABLE while the
+  rendered TEXT was wrong, and `_COSMETIC_SNMP_V3_SUBFIELDS` blanks the
+  passphrase on the mesh diagonal (a caveat that file already documented).
+
+  *Cross-vendor over-refusal.*  A genuine passphrase from NX-OS, AOS-CX or
+  Junos classified as the unsafe kind and was refused rather than migrated.
+
+  The three parsers now record the marker they read: NX-OS `localizedkey` /
+  `localizedV2key` (its regex captured only the `V2` group, so absent and
+  present were indistinguishable), AOS-CX `auth-pass ciphertext|plaintext`
+  (captured per token — auth and priv can disagree), and Junos
+  `authentication-key` vs `authentication-password`.  An empty kind means the
+  line carried no marker and the per-codec default applies, so the six
+  marker-free codecs are unchanged; an unrecognised kind fails closed to
+  `localised`, like an unknown source vendor.
+
+  ⚠️ This is still kind-from-GRAMMAR, at per-line rather than per-codec
+  resolution — not licence to read the value.  Three committed NX-OS captures
+  carry `localizedkey` over a value sanitisation left word-like: the marker
+  survived where the shape did not, which is the fail-open #460 closed.
+
+  Also fixes a latent gate bug found while wiring this: every render judged the
+  user on `auth_passphrase or priv_passphrase`, one value for two independent
+  leaves, so a user with a portable auth passphrase and a device-bound PRIVACY
+  key would have had that privacy key emitted.  `user_usm_is_migratable()` now
+  requires EVERY populated key to be usable, and `user_usm_kind()` names the
+  least portable one in the review comment.
+
+  Guards updated in the same change (each would otherwise rot green→red on the
+  new leaves): the walker-completeness exemption set (`METADATA` — provenance
+  about a walked value; an operator configures a key, never its kind), the
+  sanitiser field partition (`METADATA`), `_COSMETIC_SNMP_V3_SUBFIELDS` in
+  `tools/run_full_mesh.py` (without it every cross-vendor snmp cell would read
+  as drifted on a field no target renders), and one exhaustive `model_dump()`
+  literal in the Junos wire-through round-trip.
+
+  Mesh effect, measured: exactly **4 field-cells** move, all `snmp.v3_users` on
+  the one committed NX-OS capture whose line carries no keyword
+  (`busterswt_spine_leaf_xk32_1_nxos9312.txt`), for `cisco_nxos` →
+  `arista_eos` / `aruba_aoss` / `cisco_iosxe_cli` / `juniper_junos`, each going
+  `(drifted, lossy)` → `(preserved, lossy)`.  Nothing newly drifts.
+  `EXPECTED_LOSSY` 3237 → 3233 and `METHODOLOGY_ISSUE_under` 1770 → 1774;
+  `CODEC_BUG` holds at 5 and `METHODOLOGY_ISSUE_over` at 21.  The baseline was
+  rewritten consciously rather than flipping the pair expectations: each of
+  those four pairs still has 10 cells at `(drifted, lossy)` from the
+  `localizedkey` captures, so the pair-level `lossy` declaration remains
+  correct and flipping it would under-declare those ten and grow
+  `METHODOLOGY_ISSUE_over` past its gate.
+
 ## [0.7.0] - 2026-09-17
 
 ### Security

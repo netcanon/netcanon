@@ -32,21 +32,26 @@ kind          where it comes from
               itself, because FortiOS keeps the marker in the value.
 ============  =========================================================
 
-⚠️ Three grammars distinguish the kind ON THE LINE and the kind is still
-inferred per-CODEC rather than per-line: NX-OS ``localizedkey`` /
+Three grammars mark the kind ON THE LINE, and those markers are now CAPTURED
+per value rather than inferred per codec: NX-OS ``localizedkey`` /
 ``localizedV2key``, AOS-CX ``ciphertext`` vs ``plaintext``, and Junos
-``authentication-key`` vs ``authentication-password``.  All three therefore
-fall back to the UNSAFE kind here (``localised`` / ``ciphertext``), which
-fails closed: a config from one of them that really did carry a passphrase is
-refused rather than mis-emitted.  ⚠️ Emitting the right marker is a separate
-question from classifying one: since #466 the AOS-CX RENDER chooses
-``plaintext`` vs ``ciphertext`` correctly, but its PARSE still discards the
-keyword, so an AOS-CX source still classifies ``ciphertext``.  Junos is the one
-whose parser now READS its passphrase leaf — it has to, because the render emits that leaf to carry a
-portable key in (#465), and a leaf the render writes but the parser ignores is
-a silent loss — but reading it does not yet make the VALUE classify as
-``plaintext`` when Junos is the source.  Capturing these markers as per-value
-provenance is follow-up work.
+``authentication-key`` vs ``authentication-password``.  Each parser records
+what it read into ``CanonicalSNMPv3User.auth_kind`` / ``priv_kind``, and
+:func:`classify_usm_key` prefers that over
+:data:`_SOURCE_DEFAULT_KIND`.  The table above therefore describes the
+DEFAULT for a line that carried no marker.
+
+⚠️ This is still kind-from-grammar, at finer resolution -- it is NOT a licence
+to read the value.  Three committed NX-OS captures carry ``localizedkey`` over
+a value sanitisation turned word-like: the marker survived, the shape did not.
+
+Recording the marker fixed two failures at once.  Cross-vendor, a genuine
+passphrase from any of the three was refused rather than migrated.  And
+SAME-VENDOR, NX-OS re-emitted a passphrase line WITH ``localizedkey``
+appended, telling the Nexus a passphrase was already localised against its own
+engine ID -- corruption on the one path that is supposed to be lossless, and
+invisible to the round-trip guard because parse -> render -> parse stayed
+stable while the rendered TEXT was wrong.
 """
 
 from __future__ import annotations
@@ -92,17 +97,40 @@ _TARGET_USM_ACCEPTS: dict[str, frozenset[str]] = {
 }
 
 
-def classify_usm_key(value: str, source_vendor: str) -> str:
+#: Kinds this policy models.  A *kind* arriving from anywhere else is not
+#: trusted: it fails closed to ``localised`` exactly as an unknown SOURCE
+#: does, so a codec that later records a kind this module does not know
+#: cannot smuggle a device-bound key past the gate.
+_KNOWN_KINDS: frozenset[str] = frozenset(
+    {PLAINTEXT, LOCALISED, CIPHERTEXT, ENCRYPTED},
+)
+
+
+def classify_usm_key(value: str, source_vendor: str, kind: str = "") -> str:
     """Return the kind of a canonical USM key.
+
+    *kind* is the per-value provenance recorded by the parser
+    (:attr:`CanonicalSNMPv3User.auth_kind` / ``priv_kind``) for the three
+    grammars that mark the kind ON THE LINE.  It wins over the per-codec
+    default, because it is the more precise reading of the SAME evidence --
+    the source grammar -- not a different kind of evidence.  ``""`` means the
+    source line carried no marker, and the codec default applies.
 
     An unknown source vendor classifies ``localised`` — the unportable kind —
     so a codec added later fails closed until it declares itself in
-    :data:`_SOURCE_DEFAULT_KIND`.
+    :data:`_SOURCE_DEFAULT_KIND`.  An unrecognised *kind* fails closed the
+    same way.
+
+    The ``ENC `` test stays ahead of *kind*: FortiOS keeps that marker inside
+    the value, and ``encrypted`` is unportable, so honouring it first can only
+    ever refuse more.
     """
     if not value:
         return PLAINTEXT
     if value.upper().startswith("ENC "):
         return ENCRYPTED
+    if kind:
+        return kind if kind in _KNOWN_KINDS else LOCALISED
     return _SOURCE_DEFAULT_KIND.get(source_vendor, LOCALISED)
 
 
@@ -129,7 +157,12 @@ def _same_vendor(source_vendor: str, target_vendor: str) -> bool:
     return source_vendor in _VENDOR_ALIASES.get(target_vendor, frozenset())
 
 
-def usm_is_migratable(value: str, source_vendor: str, target_vendor: str) -> bool:
+def usm_is_migratable(
+    value: str,
+    source_vendor: str,
+    target_vendor: str,
+    kind: str = "",
+) -> bool:
     """True if *target_vendor* can actually use this key.
 
     A same-vendor re-render always can: the key is going back to the kind of
@@ -146,6 +179,53 @@ def usm_is_migratable(value: str, source_vendor: str, target_vendor: str) -> boo
         return True
     if not value:
         return False
-    return classify_usm_key(value, source_vendor) in _TARGET_USM_ACCEPTS.get(
+    return classify_usm_key(value, source_vendor, kind) in _TARGET_USM_ACCEPTS.get(
         target_vendor, frozenset(),
     )
+
+
+def user_usm_is_migratable(user, source_vendor: str, target_vendor: str) -> bool:
+    """True when EVERY key this user actually carries can reach the target.
+
+    ``auth_passphrase`` and ``priv_passphrase`` are separate leaves with
+    separate provenance, and they CAN disagree: Junos writes them on two
+    independent ``set`` lines, and AOS-CX marks each token on its own.  The
+    render paths used to collapse them to ``auth_passphrase or
+    priv_passphrase`` and judge the user on that one value, which would leak a
+    device-bound PRIVACY key whenever the auth key happened to be portable.
+
+    A user carrying no key at all is decided by vendor alone -- same-vendor
+    keeps the record (a ``/export`` that omitted the secret is still that
+    device's own user), cross-vendor has nothing to migrate.
+    """
+    populated = [
+        (value, kind)
+        for value, kind in (
+            (user.auth_passphrase, user.auth_kind),
+            (user.priv_passphrase, user.priv_kind),
+        )
+        if value
+    ]
+    if not populated:
+        return _same_vendor(source_vendor, target_vendor)
+    return all(
+        usm_is_migratable(value, source_vendor, target_vendor, kind)
+        for value, kind in populated
+    )
+
+
+def user_usm_kind(user, source_vendor: str) -> str:
+    """The kind to NAME when refusing *user* -- its least portable key.
+
+    Reporting the auth key's kind while refusing on the privacy key's would
+    put a misleading word in the operator's review comment.
+    """
+    for value, kind in (
+        (user.auth_passphrase, user.auth_kind),
+        (user.priv_passphrase, user.priv_kind),
+    ):
+        if value:
+            resolved = classify_usm_key(value, source_vendor, kind)
+            if resolved != PLAINTEXT:
+                return resolved
+    return PLAINTEXT

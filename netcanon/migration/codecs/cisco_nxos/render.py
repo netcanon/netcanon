@@ -32,7 +32,7 @@ from __future__ import annotations
 import re
 
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
-from ..._usm_keys import classify_usm_key, usm_is_migratable
+from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from .._helpers import _coalesce_vlan_ids, same_vendor_version
 from . import port_names as _port_names
@@ -338,19 +338,19 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
         # portable shape: emitted WITHOUT the keyword, NX-OS localises it
         # itself, so those now migrate correctly instead of being mislabelled.
         # Policy: :mod:`netcanon.migration._usm_keys`.
-        if user.auth_protocol and not usm_is_migratable(
-            user.auth_passphrase, source_vendor, "cisco_nxos",
+        if user.auth_protocol and not user_usm_is_migratable(
+            user, source_vendor, "cisco_nxos",
         ):
-            kind = classify_usm_key(user.auth_passphrase, source_vendor)
+            kind = user_usm_kind(user, source_vendor)
             lines.append(
                 f"! snmpv3 user {user.name} -- review: a {kind} USM key is "
                 f"bound to the source agent's engine ID and cannot be re-used "
                 f"on NX-OS; re-create this user and re-key it on the target"
             )
             continue
-        localised = classify_usm_key(
-            user.auth_passphrase, source_vendor,
-        ) != "plaintext"
+        # One keyword covers the whole line, so it must describe the least
+        # portable key the user carries.
+        localised = user_usm_kind(user, source_vendor) != PLAINTEXT
         line = f"snmp-server user {user.name}"
         if user.group:
             line += f" {user.group}"

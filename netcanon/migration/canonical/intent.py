@@ -447,6 +447,22 @@ class CanonicalSNMPv3User(BaseModel):
             auth_protocol = auth-no-priv.
         priv_passphrase: Opaque pre-hashed / encrypted privacy
             key.  Never plaintext.
+        auth_kind / priv_kind: PROVENANCE of the corresponding key --
+            what the source LINE said the value is, recorded per value
+            instead of inferred per codec.  ``""`` means the source
+            grammar carried no marker, so
+            :mod:`netcanon.migration._usm_keys` falls back to that
+            codec's default kind; otherwise one of ``plaintext`` /
+            ``localised`` / ``ciphertext`` / ``encrypted``.  Three
+            grammars mark the kind on the line itself -- NX-OS
+            ``localizedkey``, AOS-CX ``auth-pass ciphertext|plaintext``
+            and Junos ``authentication-key`` vs
+            ``authentication-password`` -- and discarding that marker
+            cost both directions: a same-vendor re-render relabelled a
+            passphrase as a pre-localised digest, and a genuine
+            passphrase was refused cross-vendor.  NEVER inferred from
+            the value's shape -- a sanitised digest reads like a word,
+            which is the fail-open #460 closed.
         engine_id: Optional SNMPv3 engineID (hex string).  Most
             vendors derive the engineID from the device; operators
             override only in specialised environments.  Empty =
@@ -457,8 +473,10 @@ class CanonicalSNMPv3User(BaseModel):
     group: str = ""
     auth_protocol: str = ""                         # "" | "md5" | "sha" | ...
     auth_passphrase: str = ""                       # opaque hash, never plaintext
+    auth_kind: str = ""                             # "" = infer from source codec
     priv_protocol: str = ""                         # "" | "des" | "aes" | ...
     priv_passphrase: str = ""                       # opaque hash, never plaintext
+    priv_kind: str = ""                             # "" = infer from source codec
     engine_id: str = ""                             # hex; empty = vendor default
 
 

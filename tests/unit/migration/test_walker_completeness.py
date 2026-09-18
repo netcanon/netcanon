@@ -151,6 +151,15 @@ _WALK_EXEMPT: dict[tuple[str, str], tuple[str, str]] = {
     ("CanonicalIntent", "dropped_tier3_sections"): ("METADATA", "notification-only; own migrate banner"),
     ("CanonicalIntent", "apply_groups"): ("METADATA", "Junos apply-groups provenance hint"),
     ("CanonicalIntent", "group_content"): ("METADATA", "Junos group-body provenance"),
+    # Provenance ABOUT a walked value, not a value of its own: these record
+    # which marker the source LINE carried for the key in the sibling
+    # ``auth_passphrase`` / ``priv_passphrase`` leaf (NX-OS ``localizedkey``,
+    # AOS-CX ``ciphertext|plaintext``, Junos ``-key`` vs ``-password``).  An
+    # operator configures the key, never its kind, so there is no target-side
+    # fidelity question to classify -- walking them would ask all 12 codecs to
+    # declare support for a field none of them renders.
+    ("CanonicalSNMPv3User", "auth_kind"): ("METADATA", "provenance of auth_passphrase; read from the source line"),
+    ("CanonicalSNMPv3User", "priv_kind"): ("METADATA", "provenance of priv_passphrase; read from the source line"),
     # ── Transform hints / render mechanics (not operator-visible fidelity) ──
     ("CanonicalInterface", "kind"): ("TRANSFORM_HINT", "rename-mesh hint, not a render surface"),
     ("CanonicalInterface", "default_name"): ("TRANSFORM_HINT", "MikroTik factory-name render mechanism"),
