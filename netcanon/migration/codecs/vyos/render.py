@@ -410,7 +410,16 @@ def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
 
     A same-vendor privacy sub-block with no stored key is omitted rather than
     emitted with an empty value, which was malformed VyOS.
+
+    ⚠️ The LEAF is a claim, like every other marker in this series.
+    ``encrypted-password`` says VyOS localised the value against its own engine
+    ID; ``plaintext-password`` says VyOS should hash it on commit.  The parser
+    now reads both, so the render must emit back the one that matches the
+    value's recorded kind -- writing a passphrase into ``encrypted-password``
+    would be the same false claim NX-OS made with ``localizedkey``.
     """
+    from ..._usm_keys import PLAINTEXT, classify_usm_key  # lazy: policy module
+
     usable = [u for u in users if u.auth_protocol]
     if not usable:
         return []
@@ -429,9 +438,23 @@ def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
         out.append(f"            user {u.name} {{")
         if u.group:
             out.append(f"                group {u.group}")
+        auth_leaf = (
+            "plaintext-password"
+            if classify_usm_key(
+                u.auth_passphrase, source_vendor, u.auth_kind,
+            ) == PLAINTEXT
+            else "encrypted-password"
+        )
+        priv_leaf = (
+            "plaintext-password"
+            if classify_usm_key(
+                u.priv_passphrase, source_vendor, u.priv_kind,
+            ) == PLAINTEXT
+            else "encrypted-password"
+        )
         out.append("                auth {")
         out.append(
-            f"                    encrypted-password {u.auth_passphrase}"
+            f"                    {auth_leaf} {u.auth_passphrase}"
         )
         out.append(
             f"                    type {_snmp_auth_type(u.auth_protocol)}"
@@ -440,7 +463,7 @@ def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
         if u.priv_protocol and u.priv_passphrase:
             out.append("                privacy {")
             out.append(
-                f"                    encrypted-password {u.priv_passphrase}"
+                f"                    {priv_leaf} {u.priv_passphrase}"
             )
             out.append(
                 f"                    type {_snmp_priv_type(u.priv_protocol)}"

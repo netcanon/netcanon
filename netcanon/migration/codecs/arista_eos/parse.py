@@ -150,11 +150,22 @@ _SNMP_HOST_RE = re.compile(
 # EOS natively uses ``aes`` (AES-128 default) / ``aes192`` /
 # ``aes256`` as single tokens but tolerates the Cisco-style
 # ``aes 128`` two-token form on ingest.  The keybits group is
-# optional to match both.  The pre-hashed ``localized <engineID>
-# <hex>`` form is out of scope for v1 — parse-and-ignore, rendered
-# back from canonical in plain form.
+# optional to match both.
+#
+# ``localized <engineID>`` is the optional ENGINE clause, which sits BETWEEN
+# ``v3`` and the auth clause per the EOS command reference:
+#     snmp-server user user_name group_name [AGENT] VERSION [ENGINE][SECURITY]
+#     ENGINE   = localized <engineID>
+#     SECURITY = auth <meth> <pass> [priv <meth> <pass>]
+# It says the key that follows is already localised against THAT engine ID.
+# This regex had no place for it and ended ``\s*$``, so such a line matched
+# NOTHING and the whole user disappeared -- a silent loss, not the documented
+# "parse-and-ignore".  ⚠️ Grammar taken from the vendor command reference; the
+# EOS manual shows no running-config example of the clause, and no committed
+# fixture carries one.
 _SNMP_V3_USER_RE = re.compile(
     r"^snmp-server\s+user\s+(\S+)\s+(\S+)\s+v3"
+    r"(?:\s+localized\s+(\S+))?"
     r"(?:\s+auth\s+(md5|sha|sha224|sha256|sha384|sha512)\s+(\S+))?"
     r"(?:\s+priv\s+(des|3des|aes|aes128|aes192|aes256)"
     r"(?:\s+(128|192|256))?\s+(\S+))?"
@@ -604,10 +615,14 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # style paste); ``aes128`` → aes128 (EOS native single-token);
     # ``aes192`` / ``aes256`` preserve bits.  ``des`` / ``3des``
     # ignore the bits group if present (unusual but tolerated).
+    from ..._usm_keys import LOCALISED  # lazy: policy module
     for v3_m in _SNMP_V3_USER_RE.finditer(raw):
-        name, group, auth_p, auth_pw, priv_p, priv_bits, priv_pw = (
+        name, group, engine, auth_p, auth_pw, priv_p, priv_bits, priv_pw = (
             v3_m.groups()
         )
+        # The ENGINE clause says the key is already localised against that
+        # engine ID; without it the slot holds a passphrase EOS derives from.
+        kind = LOCALISED if engine else ""
         priv_norm = ""
         if priv_p:
             priv_low = priv_p.lower()
@@ -620,8 +635,11 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             group=group,
             auth_protocol=(auth_p or "").lower(),
             auth_passphrase=auth_pw or "",
+            auth_kind=kind,
             priv_protocol=priv_norm,
             priv_passphrase=priv_pw or "",
+            priv_kind=kind,
+            engine_id=engine or "",
         ))
         snmp_hit = True
     if snmp_hit:

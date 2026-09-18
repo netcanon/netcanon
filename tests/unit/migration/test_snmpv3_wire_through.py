@@ -25,9 +25,13 @@ What IS tested here:
 What IS NOT tested here:
     * Cross-vendor key re-encoding (not modelled — keys pass through
       verbatim and operators re-key on the target device).
-    * Wire-grammar edge cases with localised / pre-hashed keys
-      (``snmp-server user ... v3 localized 0 <hex>`` form is
-      out-of-scope for v1 — rendered in plain form after parse).
+    * Cross-vendor key re-encoding beyond the portability gate.
+
+Wire-grammar edge cases with localised / pre-hashed keys are no longer
+out-of-scope: the EOS ENGINE clause (``v3 localized <engineID> auth …``) and
+the IOS-XE ``encrypted`` keyword are parsed, recorded as provenance, and
+re-emitted behind their own marker.  Those live in
+``test_usm_parse_silent_losses.py``.
 """
 from __future__ import annotations
 

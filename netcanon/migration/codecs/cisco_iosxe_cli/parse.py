@@ -1683,12 +1683,21 @@ _SNMP_HOST_RE = re.compile(
 #
 # The ``auth`` and ``priv`` clauses are both optional (noAuthNoPriv
 # is expressible).  ``priv aes 128/192/256`` uses two tokens for the
-# cipher; every other cipher name is a single token.  The pre-hashed
-# form ``auth sha <encrypted_hex> encrypted`` is captured verbatim via
-# lazy greedy match — the operator's ``encrypted`` trailer lands in
-# the passphrase bucket and round-trips back out on render.
+# cipher; every other cipher name is a single token.
+#
+# ``encrypted`` is an optional keyword immediately after ``v3`` and BEFORE the
+# auth clause, per the Cisco command reference:
+#     snmp-server user <n> <grp> {v1|v2c|v3 [encrypted] [auth {md5|sha} <p>]}
+#                                [priv ...]
+# It says the value that follows is the stored, already-derived key rather than
+# a passphrase.  This regex used to have no place for it and ended ``\s*$``, so
+# a line carrying it matched NOTHING and the whole user disappeared -- a silent
+# loss, not a degraded one.  (An older comment here claimed the trailer "lands
+# in the passphrase bucket and round-trips back out on render"; it did not, and
+# the keyword is not a trailer.)
 _SNMP_V3_USER_RE = re.compile(
     r"^snmp-server\s+user\s+(\S+)\s+(\S+)\s+v3"
+    r"(?:\s+(encrypted))?"
     r"(?:\s+auth\s+(md5|sha|sha224|sha256|sha384|sha512)\s+(\S+))?"
     r"(?:\s+priv\s+(des|3des|aes)(?:\s+(128|192|256))?\s+(\S+))?"
     r"\s*$",
@@ -1970,8 +1979,13 @@ def _parse_snmp(raw: str) -> CanonicalSNMP | None:
     if contact_m:
         snmp.contact = contact_m.group(1).strip().strip('"')
     snmp.trap_hosts = list(hosts)
+    from ..._usm_keys import LOCALISED  # lazy: policy module
     for m in v3_matches:
-        name, group, auth_p, auth_pw, priv_p, priv_bits, priv_pw = m.groups()
+        name, group, enc, auth_p, auth_pw, priv_p, priv_bits, priv_pw = m.groups()
+        # ``encrypted`` marks the value as the stored, already-derived key;
+        # without it the slot holds the operator's passphrase and the codec
+        # default applies.
+        kind = LOCALISED if enc else ""
         # Cisco spells ``aes 128`` / ``aes 192`` / ``aes 256`` as two
         # tokens; canonicalise to the single-token form.  ``3des`` /
         # ``des`` are single tokens; preserved.  Missing priv_bits
@@ -1987,7 +2001,9 @@ def _parse_snmp(raw: str) -> CanonicalSNMP | None:
             group=group,
             auth_protocol=(auth_p or "").lower(),
             auth_passphrase=auth_pw or "",
+            auth_kind=kind,
             priv_protocol=priv_p_norm,
             priv_passphrase=priv_pw or "",
+            priv_kind=kind,
         ))
     return snmp

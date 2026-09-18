@@ -398,8 +398,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         u = v3_users.get(name)
         if u is None:
             u = {
-                "auth_proto": "", "auth_pass": "",
-                "priv_proto": "", "priv_pass": "", "group": "",
+                "auth_proto": "", "auth_pass": "", "auth_kind": "",
+                "priv_proto": "", "priv_pass": "", "priv_kind": "",
+                "group": "",
             }
             v3_users[name] = u
             v3_user_order.append(name)
@@ -719,28 +720,40 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             continue
 
         # ── Phase 3: SNMP v3 user auth / privacy leaves
-        # (.../ user <name> / {auth|privacy} / {type | encrypted-password
-        # | encrypted-key}).  Plaintext keys never appear in a saved
-        # config; the opaque ciphertext round-trips verbatim same-vendor. ──
+        # (.../ user <name> / {auth|privacy} / {type | plaintext-password
+        # | encrypted-password}).  Per the VyOS reference BOTH sub-blocks take
+        # the same two spellings.  ``plaintext-password`` used to be missing
+        # from this set, so a config using it built a v3 user record with an
+        # EMPTY key -- the credential vanished with no warning at all, and an
+        # empty value then reads as portable.  (``encrypted-key`` is not a
+        # VyOS leaf; it stays accepted only so an older tree cannot regress.)
         if (
             len(stack) == 5
             and stack[0][0] == "service" and stack[1][0] == "snmp"
             and stack[2][0] == "v3" and stack[3][0] == "user"
             and stack[4][0] in ("auth", "privacy")
-            and key in ("type", "encrypted-password", "encrypted-key")
+            and key in ("type", "encrypted-password", "plaintext-password",
+                        "encrypted-key")
             and value
         ):
+            from ..._usm_keys import LOCALISED, PLAINTEXT  # lazy: policy module
             u = _touch_v3_user(stack[3][1])
             if key == "type":
                 if stack[4][0] == "auth":
                     u["auth_proto"] = value.lower()
                 else:
                     u["priv_proto"] = value.lower()
-            else:  # encrypted-password / encrypted-key → opaque key blob
+            else:
+                # WHICH spelling carried the value IS the kind: VyOS hashes a
+                # plaintext password itself on commit, whereas an encrypted one
+                # it already localised against its OWN agent engine ID.
+                kind = PLAINTEXT if key == "plaintext-password" else LOCALISED
                 if stack[4][0] == "auth":
                     u["auth_pass"] = value
+                    u["auth_kind"] = kind
                 else:
                     u["priv_pass"] = value
+                    u["priv_kind"] = kind
             continue
 
         # ── Phase 5: VXLAN netdev leaves
@@ -818,8 +831,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                     group=v3_users[name]["group"],
                     auth_protocol=v3_users[name]["auth_proto"],
                     auth_passphrase=v3_users[name]["auth_pass"],
+                    auth_kind=v3_users[name]["auth_kind"],
                     priv_protocol=v3_users[name]["priv_proto"],
                     priv_passphrase=v3_users[name]["priv_pass"],
+                    priv_kind=v3_users[name]["priv_kind"],
                     engine_id=snmp_engine_id,
                 )
                 for name in v3_user_order
