@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-17
+
 ### Security
 
 - **Fixed: three SNMPv3 USM grammars parsed into nothing at all.**  Each of
