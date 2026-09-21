@@ -55,6 +55,7 @@ the L2/L3 layer only.  The two-clause test for setting it lives in
 | `mikrotik_routeros` | MikroTik RouterOS | router | `/path` slash-prefixed CLI export | bidirectional | certified |
 | `opnsense`        | OPNsense      | firewall | `config.xml`              | bidirectional | certified |
 | `vyos`            | VyOS          | router | `config.boot` curly-brace **or** `set`-form text | bidirectional | certified (Phases 1-6 — `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`) + `protocols static` routes + `system login` local users + `system`/`service` ntp servers (bare + 1.4 block form) + `bonding` LAGs (`mode 802.3ad` LACP + both member forms) + `service snmp` (v1/v2c community / location / contact + v3 USM users) + VRF (`vrf name` routing-instances + per-interface `vrf` binding) + `interfaces vxlan` netdevs (one VNI each — vni / source / mcast or remote / port); round-trip-validated against a 10-config real corpus from 4 sources spanning VyOS 1.3/1.4/1.5 (`cisagov/prescup-challenges` MIT IPv4/OSPF + IPv6/BGP, `zhouleyan/wcni-kind` Apache-2.0 VXLAN pair, `scottlaird/vyos-parser` + `rapid7/metasploit-framework` for `service snmp`); accepts BOTH the native curly-brace `config.boot` AND `set`-form input (`show configuration commands`, converted to curly-brace up front; the probe disambiguates VyOS set-form from the `set`-form `juniper_junos` codec); per-VRF static routes + symmetric-IRB L3VNI remain later phases) |
+| `dell_os10`       | Dell SmartFabric OS10 | switch | `show running-configuration` text | bidirectional | best_effort (all 4 phases wired — hostname + interfaces (three-segment `ethernet1/1/1` naming + `ethernet1/1/10:1` breakout subports; L3 CIDR + `ip vrf forwarding` + L2 switchport/`channel-group`) + SVI-derived VLANs (OS10 has no top-level `vlan <id>` stanza) + `port-channel` LAGs + local users (real numeric `priv-lvl`) + SNMP v2c/v3 USM with the per-line `localized` marker + real VRRP; validated against 14 real OS10 captures that all parse cleanly and round-trip canonical-stable, plus a committed synthetic kitchen sink and full mesh coverage.  `best_effort` rather than `certified` because those captures carry live password hashes and are held out-of-tree, so no REAL corpus is committed; VXLAN/EVPN (`virtual-network`), VLT and QoS/DCB remain unsupported) |
 
 Backup-side device-definition YAMLs ship for every codec family above
 (plus per-OS-version overlays).  Cisco and Aruba each span two NOSes with
@@ -492,6 +493,50 @@ curly-brace form.  The lossy / unsupported exceptions:
 | `/nat` | Unsupported | `nat source` / `nat destination` is Tier-3 — too platform-specific to auto-translate. |
 | `/firewall` | Unsupported | `firewall` rule-sets are Tier-3 — auto-translating risks subtly-permissive rules. |
 | `/access-list/extended` | Unsupported | VyOS `policy` route-maps / prefix-lists are Tier-3. |
+
+#### `dell_os10` (Dell SmartFabric OS10, bidirectional, best_effort)
+
+Broad supported surface (Tier-1 + L2 switchport/LAG + SVI-derived VLANs
++ local users + SNMP v2c/v3 + real VRRP + VRF + per-VRF static).
+Distinct from Dell's older Force10 **OS9 / FTOS** grammar, which this
+codec REFUSES rather than mis-parse.  The lossy / unsupported
+exceptions:
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/config/type` | Lossy | No IANA ifType is declared; inferred from the name shape (`ethernet` → ethernetCsmacd, `vlan` → l3ipvlan, `port-channel` → ieee8023adLag, `loopback` → softwareLoopback, `mgmt` → ethernetCsmacd).  Best-effort. |
+| `/interfaces/interface/dhcp-client` | Lossy | OS10 spells this `ip address dhcp`, which v1 neither parses nor renders; the interface renders, the DHCP-client flag drops. |
+| `/interfaces/interface/dhcp-client-v6` | Lossy | OS10 spells this `ipv6 address autoconfig` / `dhcp`; the marker is consumed but has no canonical value, so it drops on render. |
+| `/interfaces/interface/ipv6/address/secondary-ip` | Lossy | The IPv4 render re-emits the `secondary` keyword and reads it back, but OS10's `ipv6 address` form has no such keyword, so an IPv6 secondary flag is lost while the address survives. |
+| `/interfaces/interface/tunnel-type` | Lossy | v1 models no OS10 tunnel encapsulation; the port renders as a plain `interface <name>` stanza while its encapsulation type drops. |
+| `/interfaces/interface/{ipv4,ipv6}/address/virtual-gateway-address` | Lossy | OS10 has **no VARP / distributed-anycast-gateway concept** — first-hop redundancy is real VRRP (`vrrp-group` + `virtual-address`).  The interface address renders; the anycast virtual IP does not.  Re-author it as a VRRP group on the target. |
+| `/interfaces/interface/{ipv4,ipv6}/address/virtual-gateway-mac` | Lossy | Drops with the anycast virtual-gateway IP above. |
+| `/vlans/vlan/description` | Lossy | OS10 carries exactly ONE human label for a VLAN — the SVI's `description` — and the render spends it on `CanonicalVlan.name`.  A separate canonical description has no second place to go. |
+| `/vlans/vlan/ipv4/address/{virtual-gateway-address,virtual-gateway-mac}` | Lossy | The VLAN's address renders (an `interface vlan<N>` SVI is synthesised for a VLAN that carries one), but the anycast virtual gateway has no OS10 form. |
+| `/routing-instances/instance/instance-type` | Lossy | Renders as `ip vrf <name>`, which has no mac-vrf form, so the mac-vrf vs vrf discriminator downgrades to `vrf`.  The instance itself round-trips. |
+| `/routing-instances/instance/{description,route-distinguisher,rt-imports,rt-exports,l3-vni}` | Lossy | The `ip vrf <name>` stanza carries the name and nothing else — RD, route-targets and the L3VNI binding all live under Tier-3 `router bgp` / the deferred `virtual-network` indirection. |
+| `/routing/static-route/description` | Lossy | Render emits destination + next-hop + administrative distance only; a route name / description drops. |
+| `/snmp/v3-user/{auth-passphrase,priv-passphrase}` | Lossy | A USM key is localised against the agent's OWN engine ID, and Dell states such keys cannot be copied between switches (10.5.2 User Guide L8942).  A key from another agent is REFUSED (review comment, no `snmp-server user` line) rather than emitted behind `localized`, which would claim the digest was already this switch's.  A source PASSPHRASE is portable and is emitted WITHOUT that keyword so OS10 localises it on commit.  Migrating cross-vendor means re-keying SNMPv3 users. |
+| `/snmp/v3-user/auth-protocol` | Lossy | OS10 offers only `auth md5` / `auth sha`, so every SHA-2 variant (sha224/256/384/512) collapses to `sha` — a real crypto downgrade, not a faithful round-trip. |
+| `/snmp/v3-user/priv-protocol` | Lossy | OS10 offers only `priv des` / `priv aes`, so AES-192 and AES-256 collapse to `aes` and 3DES to `des`. |
+| `/snmp/v3-user/engine-id` | Lossy | OS10 states the engine ID on its own `snmp-server engineID local` line rather than on the user, so a per-user engine ID from a cross-vendor source drops while the user renders. |
+| `/interfaces/interface/vrrp-groups/group/mode` | Lossy | OS10 renders **real VRRP**, so a cross-family source mode (HSRP / CARP) is reinterpreted as VRRP: the operator's redundancy intent for the virtual IP survives but the wire protocol changes.  Same-vendor VRRP round-trips losslessly. |
+| `/interfaces/interface/vrrp-groups/group/{advertisement-interval,authentication,virtual-mac,track-interfaces,description}` | Lossy | Not modelled in the v1 VRRP surface; the group renders (id / priority / preempt / virtual addresses) without them.  OS10 tracks a track-OBJECT id, not an interface name, so a canonical track-interface list has no faithful form. |
+| `/interfaces/interface/vrrp-groups/group/virtual-ipv6s` | Lossy | OS10 expresses IPv6 VRRP through a SEPARATE `vrrp-ipv6-group` stanza that v1 does not render, so IPv6 virtual addresses drop while the IPv4 group survives. |
+| `/vxlan-vnis/{vni,vlan-id,source-interface,mcast-group,flood-list,udp-port}` | Unsupported | OS10 reaches an overlay through a `virtual-network <vnid>` indirection deferred past v1; no VXLAN is rendered. |
+| `/evpn-type5-routes/route` | Unsupported | No EVPN is rendered; BGP / EVPN is Tier-3 on OS10. |
+| `/anycast-gateway-mac` | Unsupported | No distributed-anycast-gateway concept (see the virtual-gateway rows above). |
+| `/system/{domain,dns-server,ntp-server,syslog-server,timezone}` | Unsupported | v1 parses no `ip domain-name` / `ip name-server` / `ntp server` / `logging server` / clock stanza.  Re-apply the management plane on the target. |
+| `/dhcp-servers/pool` + `/dhcp-servers/pool/{gateway,dns-servers,domain-name,lease-time}` | Unsupported | v1 parses no DHCP server pool. |
+| `/radius-servers/server/{host,key}` | Unsupported | v1 parses no AAA `radius-server` config. |
+| `/interfaces/interface/dot1q-vlan` | Unsupported | Per-port dot1q sub-interface VLAN tagging is not modelled. |
+| `/interfaces/interface/voice-vlan` | Unsupported | Per-port voice VLAN is not modelled. |
+| `/routing-protocols/{bgp,ospf,eigrp,isis}` | Unsupported | Tier-3 — captured for the dropped-Tier-3 banner, never auto-rendered cross-vendor. |
+| `/access-list/{extended,standard,ipv6}` | Unsupported | ACLs are Tier-3 — auto-translating risks subtly-permissive rules. |
+| `/firewall` | Unsupported | Tier-3. |
+| `/nat` | Unsupported | OS10 does not host typical edge NAT. |
+| `/qos` | Unsupported | QoS / DCB is Tier-3 — too platform-specific to auto-translate. |
+
 
 ### B. Tier-3 sections detected banner
 

@@ -15,22 +15,23 @@ Module layout (mirrors ``cisco_nxos`` post-split):
     * render.py     — canonical tree → OS10 text.  Entry: :func:`render_intent`.
     * port_names.py — cross-vendor port-name bridge.
 
-⚠️ This codec is **not registered** yet — ``codec.py`` carries no
-``@register`` decorator, and ``dell_os10`` is absent from the explicit
-import lists in ``tools/run_full_mesh.py`` and the two mesh tests.
-Registering a 13th codec grows the cross-vendor mesh from 132 to 156
-ordered pairs and breaks ``test_cross_mesh_ci_guard``'s exact
-``cells_total`` assertion, so it is inseparable from the Phase-4 baseline
-re-cut.  ``tests/unit/migration/test_dell_os10.py`` imports the class
-directly.
+Registered (Phase 4) as the 13th codec.  Registration grew the
+cross-vendor mesh from 132 to 156 ordered pairs, which is why it landed
+together with the 24 new pair-expectation YAMLs, their
+``docs/vendor-references/`` companions and a re-cut
+``tests/fixtures/real/_phase4_runs/latest.json`` baseline — the coverage
+ratchet in ``test_cross_mesh_ci_guard`` holds
+``cells_without_expectation_yaml`` at 0, so the wiring could not be split
+from the authoring.
 
 Direction: ``bidirectional`` (Phase 2 — parse + render).
 Certainty: ``best_effort`` — the parse path is validated against 14 real
-    OS10 captures held out-of-tree at ``local/dell-os10/configs/``, but
-    the render path is exercised against SYNTHETIC samples only and there
-    is no committed round-trip fixture and no mesh coverage.
-    ``certified`` requires committed real captures, as for every other
-    codec.
+    OS10 captures held out-of-tree at ``local/dell-os10/configs/``, and
+    Phase 4 added a committed synthetic kitchen-sink fixture plus full
+    cross-vendor mesh coverage.  It stays ``best_effort`` rather than
+    ``certified`` because no REAL capture is committed: every other
+    codec's ``certified`` rests on an in-tree real corpus, and these
+    captures carry live password hashes.
 """
 
 from __future__ import annotations

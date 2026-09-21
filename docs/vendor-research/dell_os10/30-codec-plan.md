@@ -304,6 +304,39 @@ honest ways forward:
 | **B — register and re-cut** | small | **loosens the ratchet 0 → 24.** Wave A6 (#444/#450/#452/#453/#454) took five PRs to reach 0; this gives part of that back |
 | **C — stop before registration** | none | Phases 1-3 ship as a self-contained codec; Phase 4 becomes its own PR |
 
+> **Resolved: C then A.**  Phases 1-3 shipped unregistered as PR #478
+> (option C), and Phase 4 then took **option A** — all 24 YAMLs authored,
+> ratchet held at 0.  Option B was rejected: wave A6 spent five PRs
+> (#444/#450/#452/#453/#454) driving `cells_without_expectation_yaml`
+> to 0, and loosening it 0 → 24 would hand most of that back.
+>
+> The authoring rule that actually binds is NOT "read the two matrices".
+> It is the per-pair unevidenced ratchet
+> (`test_no_new_pair_declares_a_loss_it_never_observes`), which allows a
+> pair absent from `_UNEVIDENCED_BASELINE` exactly **zero** declared-but-
+> never-observed losses.  So a field the corpus PRESERVES on every cell
+> must be `good` — hedging it to `lossy` fails the build just as surely
+> as under-declaring a real loss does.  Every disposition here was
+> resolved through the audit's own `actual_disposition()` over a measured
+> run.
+>
+> ⚠️ **Replaying `derive_variance` is NOT verification.**  That was tried
+> as a pre-flight check and reported both gates clean; the real guard
+> then found **40 unevidenced fields across 9 pairs**.  The reconciler
+> applies a `STRUCTURAL_ONLY` collapse AFTER `derive_variance`: when a
+> list parent drifts wholesale, the FIRST sub-field in YAML insertion
+> order owns the structural signal and every sibling on that cell is
+> overridden to `STRUCTURAL_ONLY`.  A field whose only drifted cells were
+> collapsed never earns an `EXPECTED_LOSSY`, so declaring it lossy reads
+> as unevidenced even though the parent really did drift.
+>
+> The fix was to drive the dispositions to a fixed point against the
+> RECONCILER'S OWN per-cell output (`field_variances`), not a model of
+> it — two iterations, 40 fields to `good`, 0 back to `lossy`, 0 new
+> `CODEC_BUG`.  Anyone authoring the next codec's pairs should skip the
+> simulation entirely and iterate against `run_phase4_reconciliation.py`
+> from the start.
+
 ⚠️ **The YAMLs cannot be written in advance.**  Their dispositions come
 from OBSERVED drift, not from the capability matrices — the schema spec
 is explicit that "a field that never drifts is `good` even where the
@@ -371,7 +404,13 @@ unmarked native value must render WITHOUT the keyword — pinned by
 Measured at the end of Phase 3: **14/14 real captures parse cleanly and
 14/14 round-trip canonical-stable** under the repo's own comparator.
 
-**Phase 4 — the remaining work, and it is ATOMIC.**  See § 6.
+**Phase 4 — ✅ DONE.**  Registered as the 13th codec via **option A**
+(§ 6): the mesh grew 1224 → **1339** cells across **156** ordered pairs,
+and all **24** new pair-expectation YAMLs + their
+`docs/vendor-references/` companions were authored from a MEASURED mesh
+run, holding `cells_without_expectation_yaml` at **0**.  `CODEC_BUG`
+stayed at 5 and `METHODOLOGY_ISSUE_over` at 21; all 24 new pairs render
+and re-parse with zero errors.
 
 **Deferred:** VXLAN/EVPN `virtual-network`, VLT, QoS/DCB.
 

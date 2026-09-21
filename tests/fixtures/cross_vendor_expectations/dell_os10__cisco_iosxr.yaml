@@ -1,0 +1,467 @@
+# Cross-vendor fidelity expectations: dell_os10 -> cisco_iosxr
+#
+# Source: dell_os10 codec.  Target: cisco_iosxr codec.
+#
+# Every disposition below is resolved through the audit's own
+# `actual_disposition()` over a measured `tools/run_full_mesh.py`
+# pass, NOT read off the two capability matrices.  That ordering
+# is forced by the per-pair unevidenced ratchet
+# (`test_no_new_pair_declares_a_loss_it_never_observes`), which
+# allows a NEW pair exactly zero declared-but-never-observed
+# losses: a field this corpus preserves on every cell MUST be
+# `good`, so hedging to `lossy` when unsure fails the build just
+# as surely as missing a real loss does.  The matrices supply
+# only the MECHANISM prose for a loss the corpus exhibits.
+#
+# Measured: 1 fixture cell, 0 render errors, 0 re-parse errors.
+# Dispositions: {'unsupported': 9, 'good': 16, 'not_applicable': 6, 'lossy': 15}
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/dell_os10_to_cisco_iosxr/
+#
+# Authored 2026-09-21 with the dell_os10 registration (Phase 4).
+
+meta:
+  source_vendor: dell_os10
+  target_vendor: cisco_iosxr
+  primary_use_case: >
+    Migrating a Dell EMC PowerSwitch running SmartFabric OS10 onto Cisco
+    IOS-XR. OS10's supported surface is hostname, interfaces (three-
+    segment `ethernet1/1/1` naming, CIDR addressing, `ip vrf
+    forwarding`, L2 switchport and `channel-group`), SVI-derived VLANs,
+    `port-channel` LAGs, VRFs, static routes including the separate
+    `management route` RIB, local users, SNMP v2c/v3 and real VRRP. This
+    file records which of those survive the render into Cisco IOS-XR and
+    which do not.
+  certainty: medium
+  references:
+    - id: os10-iosxr-surface
+      path: docs/vendor-references/dell_os10_to_cisco_iosxr/canonical_surface.md
+      title: "Dell OS10 -> Cisco IOS-XR: measured canonical surface (1 fixture cell)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-09-21"
+
+# -------------------------------------------------------------------------
+
+per_field_expectation:
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XR renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 1 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. Companion to
+      the anycast virtual-gateway entries above: IOS-XR has no VARP /
+      distributed-anycast-gateway grammar, so the chassis-wide
+      anycast-gateway MAC is dropped on render. Previously undeclared
+      (classify() fail-opened to supported) — Fable review MTX-3.
+      Measured over 1 cell: drifted on 0, preserved on 0, both sides
+      empty on 1.
+    references: [os10-iosxr-surface]
+
+  apply_groups:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-iosxr-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XR renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 1 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. Render emits
+      no DHCP server pool; intent.dhcp_servers are dropped on
+      migration. Measured over 1 cell: drifted on 0, preserved on 0,
+      both sides empty on 1.
+    references: [os10-iosxr-surface]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-iosxr-surface]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-iosxr-surface]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XR renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 1 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. IOS-XR EVPN
+      runs under top-level `l2vpn` + `evpn` + `bridge group` stanzas —
+      grammatically distant from the IOS-XE / Arista / NX-OS EVPN
+      model. No canonical mapping in v1. Measured over 1 cell: drifted
+      on 0, preserved on 0, both sides empty on 1.
+    references: [os10-iosxr-surface]
+
+  group_content:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-iosxr-surface]
+
+  hostname:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. CLI parser infers interface type from the name prefix
+      (GigabitEthernet -> ethernetCsmacd, Loopback ->
+      softwareLoopback, Bundle-Ether -> ieee8023adLag, MgmtEth ->
+      ethernetCsmacd, tunnel-ip/te -> tunnel) but cannot detect every
+      IANA type — sub-interfaces with vendor-specific encapsulation
+      classify as 'other'. Measured over 1 cell: drifted on 1,
+      preserved on 0, both sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  interfaces[].lag_member_of:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  interfaces[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  interfaces[].vrrp_groups:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XR renders no instance of this surface, so the record
+      cannot exist on the target side at all. VRRP / FHRP redundancy
+      groups are out of the v1 IOS-XR scope; the group is dropped on
+      migration. Measured over 1 cell: drifted on 1, preserved on 0,
+      both sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  lags:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0. Sample drift: {"lags[0] {'name': 'port-
+      channel100'}": {'name': {'source': 'port-channel100', 'target':
+      'Bundle-Ether100'}}, "lags[1] {'name': 'port-channel200'}":
+      {'name': {'source': 'port-channel200', 'target': 'B.
+    references: [os10-iosxr-surface]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  local_users[].hashed_password:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  local_users[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  local_users[].role:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-iosxr-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XR renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 1 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. Render emits
+      no AAA radius-server config; RADIUS host is dropped on
+      migration. Measured over 1 cell: drifted on 0, preserved on 0,
+      both sides empty on 1.
+    references: [os10-iosxr-surface]
+
+  raw_sections:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-iosxr-surface]
+
+  routing_instances:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  routing_instances[].description:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-iosxr-surface]
+
+  routing_instances[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  snmp.community:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XR renders no instance of this surface, so the record
+      cannot exist on the target side at all. SNMP parse + render is
+      out of the v1 XR scope. Measured over 1 cell: drifted on 1,
+      preserved on 0, both sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  snmp.contact:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  snmp.location:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  snmp.trap_hosts:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  snmp.v3_users:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-iosxr-surface]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-iosxr-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XR renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 1 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. Render emits
+      no clock/timezone stanza; intent.timezone is dropped on
+      migration. Measured over 1 cell: drifted on 0, preserved on 0,
+      both sides empty on 1.
+    references: [os10-iosxr-surface]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. OS10 carries exactly one human label for a VLAN — the
+      SVI's `description` — and the render spends it on
+      CanonicalVlan.name. A separate canonical VLAN description has no
+      second place to go and is dropped. Measured over 1 cell: drifted
+      on 1, preserved on 0, both sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  vlans[].id:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  vlans[].ipv4_addresses:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Renders VLAN SVI / management L3 only from a sibling
+      interface stanza; an L3 address carried on the VLAN record
+      itself (the Junos irb / Aruba SVI-on-VLAN shape, folded onto
+      CanonicalVlan.ipv4_addresses) is dropped on render because this
+      codec does not synthesize an SVI from the VLAN record. Declared
+      lossy so validate_against surfaces the loss instead of reporting
+      severity:ok (blind-audit 3ec11f3 T0-2). Measured over 1 cell:
+      drifted on 1, preserved on 0, both sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  vlans[].tagged_ports:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  vlans[].untagged_ports:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-iosxr-surface]
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XR renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 1 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. IOS-XR VXLAN
+      (NCS 5500 / 540 `nve` interfaces) is rare in the SP corpus; no
+      canonical demand surfaced. Parse-and-ignore in v1. Measured over
+      1 cell: drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-iosxr-surface]
+
+  vxlan_vnis[].mcast_group:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-iosxr-surface]
+
+  vxlan_vnis[].vlan_id:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-iosxr-surface]
+
+  vxlan_vnis[].vni:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XR renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 1 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. IOS-XR VXLAN
+      (NCS 5500 / 540 `nve` interfaces) is rare in the SP corpus; no
+      canonical demand surfaced. Parse-and-ignore in v1. Measured over
+      1 cell: drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-iosxr-surface]

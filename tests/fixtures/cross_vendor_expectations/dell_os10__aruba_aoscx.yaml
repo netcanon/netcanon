@@ -1,0 +1,459 @@
+# Cross-vendor fidelity expectations: dell_os10 -> aruba_aoscx
+#
+# Source: dell_os10 codec.  Target: aruba_aoscx codec.
+#
+# Every disposition below is resolved through the audit's own
+# `actual_disposition()` over a measured `tools/run_full_mesh.py`
+# pass, NOT read off the two capability matrices.  That ordering
+# is forced by the per-pair unevidenced ratchet
+# (`test_no_new_pair_declares_a_loss_it_never_observes`), which
+# allows a NEW pair exactly zero declared-but-never-observed
+# losses: a field this corpus preserves on every cell MUST be
+# `good`, so hedging to `lossy` when unsure fails the build just
+# as surely as missing a real loss does.  The matrices supply
+# only the MECHANISM prose for a loss the corpus exhibits.
+#
+# Measured: 1 fixture cell, 0 render errors, 0 re-parse errors.
+# Dispositions: {'not_applicable': 6, 'good': 18, 'unsupported': 10, 'lossy': 12}
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/dell_os10_to_aruba_aoscx/
+#
+# Authored 2026-09-21 with the dell_os10 registration (Phase 4).
+
+meta:
+  source_vendor: dell_os10
+  target_vendor: aruba_aoscx
+  primary_use_case: >
+    Migrating a Dell EMC PowerSwitch running SmartFabric OS10 onto AOS-
+    CX. OS10's supported surface is hostname, interfaces (three-segment
+    `ethernet1/1/1` naming, CIDR addressing, `ip vrf forwarding`, L2
+    switchport and `channel-group`), SVI-derived VLANs, `port-channel`
+    LAGs, VRFs, static routes including the separate `management route`
+    RIB, local users, SNMP v2c/v3 and real VRRP. This file records which
+    of those survive the render into AOS-CX and which do not.
+  certainty: medium
+  references:
+    - id: os10-aoscx-surface
+      path: docs/vendor-references/dell_os10_to_aruba_aoscx/canonical_surface.md
+      title: "Dell OS10 -> AOS-CX: measured canonical surface (1 fixture cell)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-09-21"
+
+# -------------------------------------------------------------------------
+
+per_field_expectation:
+
+  anycast_gateway_mac:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-aoscx-surface]
+
+  apply_groups:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-aoscx-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      AOS-CX renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no DHCP server pool;
+      intent.dhcp_servers are dropped on migration. Measured over 1
+      cell: drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-aoscx-surface]
+
+  dns_servers:
+    disposition: unsupported
+    reason: >
+      AOS-CX renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no name-server config;
+      intent.dns_servers are dropped on migration. Measured over 1
+      cell: drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-aoscx-surface]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      AOS-CX renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no system domain-name;
+      intent.domain is dropped on migration. Measured over 1 cell:
+      drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-aoscx-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-aoscx-surface]
+
+  group_content:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-aoscx-surface]
+
+  hostname:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. AOS-CX declares no IANA ifType; the codec infers it from
+      the interface-name shape (`1/1/1` -> ethernetCsmacd, `vlan N` ->
+      l3ipvlan, `lag N` -> ieee8023adLag, `loopback N` ->
+      softwareLoopback, `mgmt` -> ethernetCsmacd, `vxlan N` ->
+      tunnel). Inference is best-effort and may not catch every IANA
+      type. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  interfaces[].lag_member_of:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  interfaces[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  interfaces[].vrrp_groups:
+    disposition: unsupported
+    reason: >
+      AOS-CX renders no instance of this surface, so the record cannot
+      exist on the target side at all. AOS-CX VRRP (`vrrp <vrid>
+      address-family` under an SVI) is a later phase; the `active-
+      gateway` anycast surface (the VSX/EVPN distributed gateway) IS
+      supported. Measured over 1 cell: drifted on 1, preserved on 0,
+      both sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  lags:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0. Sample drift: {"lags[0] {'name': 'port-
+      channel100'}": {'mode': {'source': 'active', 'target':
+      'static'}, 'name': {'source': 'port-channel100', 'target': 'lag
+      100'}}, "lags[1] {'name': 'port-channel200'}": {'name': .
+    references: [os10-aoscx-surface]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  local_users[].hashed_password:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  local_users[].name:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  local_users[].role:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      AOS-CX renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no NTP config;
+      intent.ntp_servers are dropped on migration. Measured over 1
+      cell: drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-aoscx-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      AOS-CX renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no AAA radius-server
+      config; RADIUS host is dropped on migration. Measured over 1
+      cell: drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-aoscx-surface]
+
+  raw_sections:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-aoscx-surface]
+
+  routing_instances:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  routing_instances[].description:
+    disposition: unsupported
+    reason: >
+      AOS-CX renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. The AOS-CX `vrf <name>` stanza is a bare
+      name in v1; VRF descriptions / RD / route-target live under the
+      deferred `evpn` / `router bgp` blocks. Measured over 1 cell:
+      drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-aoscx-surface]
+
+  routing_instances[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  snmp.community:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  snmp.contact:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  snmp.location:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  snmp.trap_hosts:
+    disposition: unsupported
+    reason: >
+      AOS-CX renders no instance of this surface, so the record cannot
+      exist on the target side at all. The `snmp-server host <ip> trap
+      version ... community ...` trap-receiver grammar is deferred;
+      v2c community + system-location / system-contact + v3 USM users
+      are supported. Measured over 1 cell: drifted on 1, preserved on
+      0, both sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  snmp.v3_users:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0. Sample drift: count drift: 3 → 1
+      (static_routes).
+    references: [os10-aoscx-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      AOS-CX renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no logging/syslog config;
+      intent.syslog_servers are dropped on migration. Measured over 1
+      cell: drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-aoscx-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      AOS-CX renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no clock/timezone stanza;
+      intent.timezone is dropped on migration. Measured over 1 cell:
+      drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-aoscx-surface]
+
+  vlans[].description:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-aoscx-surface]
+
+  vlans[].id:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  vlans[].ipv4_addresses:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Renders VLAN SVI / management L3 only from a sibling
+      interface stanza; an L3 address carried on the VLAN record
+      itself (the Junos irb / Aruba SVI-on-VLAN shape, folded onto
+      CanonicalVlan.ipv4_addresses) is dropped on render because this
+      codec does not synthesize an SVI from the VLAN record. Declared
+      lossy so validate_against surfaces the loss instead of reporting
+      severity:ok (blind-audit 3ec11f3 T0-2). Measured over 1 cell:
+      drifted on 1, preserved on 0, both sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  vlans[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-aoscx-surface]
+
+  vlans[].tagged_ports:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  vlans[].untagged_ports:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-aoscx-surface]
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-aoscx-surface]
+
+  vxlan_vnis[].mcast_group:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-aoscx-surface]
+
+  vxlan_vnis[].vlan_id:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-aoscx-surface]
+
+  vxlan_vnis[].vni:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-aoscx-surface]

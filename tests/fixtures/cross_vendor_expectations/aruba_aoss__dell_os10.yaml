@@ -1,0 +1,491 @@
+# Cross-vendor fidelity expectations: aruba_aoss -> dell_os10
+#
+# Source: aruba_aoss codec.  Target: dell_os10 codec.
+#
+# Every disposition below is resolved through the audit's own
+# `actual_disposition()` over a measured `tools/run_full_mesh.py`
+# pass, NOT read off the two capability matrices.  That ordering
+# is forced by the per-pair unevidenced ratchet
+# (`test_no_new_pair_declares_a_loss_it_never_observes`), which
+# allows a NEW pair exactly zero declared-but-never-observed
+# losses: a field this corpus preserves on every cell MUST be
+# `good`, so hedging to `lossy` when unsure fails the build just
+# as surely as missing a real loss does.  The matrices supply
+# only the MECHANISM prose for a loss the corpus exhibits.
+#
+# Measured: 7 fixture cells, 0 render errors, 0 re-parse errors.
+# Dispositions: {'unsupported': 13, 'good': 18, 'lossy': 15}
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoss_to_dell_os10/
+#
+# Authored 2026-09-21 with the dell_os10 registration (Phase 4).
+
+meta:
+  source_vendor: aruba_aoss
+  target_vendor: dell_os10
+  primary_use_case: >
+    Replacing a AOS-S device with a Dell EMC PowerSwitch running
+    SmartFabric OS10. OS10 is port-centric (no top-level `vlan <id>`
+    stanza -- VLANs are derived from `interface vlan<N>` SVIs), runs
+    real VRRP rather than a vendor FHRP, has no VARP/anycast-gateway
+    concept, and defers VXLAN/EVPN behind a `virtual-network`
+    indirection. This file records what a AOS-S config keeps and loses
+    when rendered onto OS10.
+  certainty: medium
+  references:
+    - id: aoss-os10-surface
+      path: docs/vendor-references/aruba_aoss_to_dell_os10/canonical_surface.md
+      title: "AOS-S -> Dell OS10: measured canonical surface (7 fixture cells)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-09-21"
+
+# -------------------------------------------------------------------------
+
+per_field_expectation:
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 7 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. OS10
+      expresses first-hop redundancy as real VRRP, not a chassis-wide
+      anycast-gateway MAC; nothing renders it. Measured over 7 cells:
+      drifted on 0, preserved on 0, both sides empty on 7.
+    references: [aoss-os10-surface]
+
+  apply_groups:
+    disposition: good
+    note: >
+      No cell populates this field on either side (7 of 7 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [aoss-os10-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 7 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. Phase 1
+      parses no DHCP server pool. Measured over 7 cells: drifted on 0,
+      preserved on 0, both sides empty on 7.
+    references: [aoss-os10-surface]
+
+  dns_servers:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. Phase 1 parses no `ip
+      name-server`. Measured over 7 cells: drifted on 3, preserved on
+      0, both sides empty on 4. Sample drift: all 1 dns_servers
+      dropped.
+    references: [aoss-os10-surface]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 7 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. Phase 1
+      parses no `ip domain-name`. Measured over 7 cells: drifted on 0,
+      preserved on 0, both sides empty on 7.
+    references: [aoss-os10-surface]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 7 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. No EVPN is
+      rendered; BGP / EVPN is Tier-3 on OS10. Measured over 7 cells:
+      drifted on 0, preserved on 0, both sides empty on 7.
+    references: [aoss-os10-surface]
+
+  group_content:
+    disposition: good
+    note: >
+      No cell populates this field on either side (7 of 7 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [aoss-os10-surface]
+
+  hostname:
+    disposition: good
+    note: >
+      Preserved on 7 of 7 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [aoss-os10-surface]
+
+  interfaces[].description:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 5, preserved on 1, both
+      sides empty on 1.
+    references: [aoss-os10-surface]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Preserved on 1 of 7 cells. On 5 further cells the whole
+      `interfaces` list drifted at once (records added or dropped),
+      and the reconciler attributes that single structural event to
+      one owner sub-field rather than counting it against every
+      sibling. So this field shows no loss of its own on this pair:
+      the parent-level drift is recorded against that owner key, and
+      declaring it lossy here would over-claim a second, independent
+      loss that the corpus does not exhibit.
+    references: [aoss-os10-surface]
+
+  interfaces[].interface_type:
+    disposition: good
+    note: >
+      Preserved on 1 of 7 cells. On 5 further cells the whole
+      `interfaces` list drifted at once (records added or dropped),
+      and the reconciler attributes that single structural event to
+      one owner sub-field rather than counting it against every
+      sibling. So this field shows no loss of its own on this pair:
+      the parent-level drift is recorded against that owner key, and
+      declaring it lossy here would over-claim a second, independent
+      loss that the corpus does not exhibit.
+    references: [aoss-os10-surface]
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      Preserved on 1 of 7 cells. On 5 further cells the whole
+      `interfaces` list drifted at once (records added or dropped),
+      and the reconciler attributes that single structural event to
+      one owner sub-field rather than counting it against every
+      sibling. So this field shows no loss of its own on this pair:
+      the parent-level drift is recorded against that owner key, and
+      declaring it lossy here would over-claim a second, independent
+      loss that the corpus does not exhibit.
+    references: [aoss-os10-surface]
+
+  interfaces[].ipv6_addresses:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 5, preserved on 0, both
+      sides empty on 2.
+    references: [aoss-os10-surface]
+
+  interfaces[].lag_member_of:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 5, preserved on 0, both
+      sides empty on 2.
+    references: [aoss-os10-surface]
+
+  interfaces[].mtu:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 5, preserved on 0, both
+      sides empty on 2.
+    references: [aoss-os10-surface]
+
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 6, preserved on 0, both
+      sides empty on 1.
+    references: [aoss-os10-surface]
+
+  interfaces[].vrrp_groups:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 5, preserved on 0, both
+      sides empty on 2.
+    references: [aoss-os10-surface]
+
+  lags:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 2, preserved on 0, both
+      sides empty on 5. Sample drift: all 1 lags dropped.
+    references: [aoss-os10-surface]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 3, preserved on 0, both
+      sides empty on 4.
+    references: [aoss-os10-surface]
+
+  local_users[].hashed_password:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 3, preserved on 0, both
+      sides empty on 4.
+    references: [aoss-os10-surface]
+
+  local_users[].name:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 3, preserved on 0, both
+      sides empty on 4.
+    references: [aoss-os10-surface]
+
+  local_users[].role:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 3, preserved on 0, both
+      sides empty on 4.
+    references: [aoss-os10-surface]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. Phase 1 parses no `ntp
+      server`. Measured over 7 cells: drifted on 1, preserved on 0,
+      both sides empty on 6. Sample drift: all 2 ntp_servers dropped.
+    references: [aoss-os10-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. Phase 1 parses no AAA
+      radius-server config. Measured over 7 cells: drifted on 1,
+      preserved on 0, both sides empty on 6. Sample drift: all 2
+      radius_servers dropped.
+    references: [aoss-os10-surface]
+
+  raw_sections:
+    disposition: good
+    note: >
+      No cell populates this field on either side (7 of 7 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [aoss-os10-surface]
+
+  routing_instances:
+    disposition: good
+    note: >
+      No cell populates this field on either side (7 of 7 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [aoss-os10-surface]
+
+  routing_instances[].description:
+    disposition: good
+    note: >
+      No cell populates this field on either side (7 of 7 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [aoss-os10-surface]
+
+  routing_instances[].name:
+    disposition: good
+    note: >
+      No cell populates this field on either side (7 of 7 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [aoss-os10-surface]
+
+  snmp.community:
+    disposition: good
+    note: >
+      Preserved on 6 of 7 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [aoss-os10-surface]
+
+  snmp.contact:
+    disposition: good
+    note: >
+      Preserved on 6 of 7 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [aoss-os10-surface]
+
+  snmp.location:
+    disposition: good
+    note: >
+      Preserved on 6 of 7 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [aoss-os10-surface]
+
+  snmp.trap_hosts:
+    disposition: good
+    note: >
+      Preserved on 6 of 7 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [aoss-os10-surface]
+
+  snmp.v3_users:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 1, preserved on 5, both
+      sides empty on 1.
+    references: [aoss-os10-surface]
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on 5 of 7 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [aoss-os10-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 7 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. Phase 1
+      parses no `logging server`. Measured over 7 cells: drifted on 0,
+      preserved on 0, both sides empty on 7.
+    references: [aoss-os10-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 7 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. Phase 1
+      parses no `clock timezone` stanza; intent.timezone is dropped.
+      Measured over 7 cells: drifted on 0, preserved on 0, both sides
+      empty on 7.
+    references: [aoss-os10-surface]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. OS10 carries exactly one human label for a VLAN — the
+      SVI's `description` — and the render spends it on
+      CanonicalVlan.name. A separate canonical VLAN description has no
+      second place to go and is dropped. Measured over 7 cells:
+      drifted on 1, preserved on 0, both sides empty on 6.
+    references: [aoss-os10-surface]
+
+  vlans[].id:
+    disposition: good
+    note: >
+      Preserved on 6 of 7 cells. On 1 further cell the whole `vlans`
+      list drifted at once (records added or dropped), and the
+      reconciler attributes that single structural event to one owner
+      sub-field rather than counting it against every sibling. So this
+      field shows no loss of its own on this pair: the parent-level
+      drift is recorded against that owner key, and declaring it lossy
+      here would over-claim a second, independent loss that the corpus
+      does not exhibit.
+    references: [aoss-os10-surface]
+
+  vlans[].ipv4_addresses:
+    disposition: good
+    note: >
+      Preserved on 4 of 7 cells. On 1 further cell the whole `vlans`
+      list drifted at once (records added or dropped), and the
+      reconciler attributes that single structural event to one owner
+      sub-field rather than counting it against every sibling. So this
+      field shows no loss of its own on this pair: the parent-level
+      drift is recorded against that owner key, and declaring it lossy
+      here would over-claim a second, independent loss that the corpus
+      does not exhibit.
+    references: [aoss-os10-surface]
+
+  vlans[].name:
+    disposition: good
+    note: >
+      Preserved on 6 of 7 cells. On 1 further cell the whole `vlans`
+      list drifted at once (records added or dropped), and the
+      reconciler attributes that single structural event to one owner
+      sub-field rather than counting it against every sibling. So this
+      field shows no loss of its own on this pair: the parent-level
+      drift is recorded against that owner key, and declaring it lossy
+      here would over-claim a second, independent loss that the corpus
+      does not exhibit.
+    references: [aoss-os10-surface]
+
+  vlans[].tagged_ports:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 4, preserved on 2, both
+      sides empty on 1.
+    references: [aoss-os10-surface]
+
+  vlans[].untagged_ports:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 7 cells: drifted on 6, preserved on 1, both
+      sides empty on 0.
+    references: [aoss-os10-surface]
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 7 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. OS10 VXLAN
+      uses a `virtual-network <vnid>` indirection between VLAN and VNI
+      rather than NX-OS's direct `vlan N / vn-segment` binding;
+      deferred past v1. Measured over 7 cells: drifted on 0, preserved
+      on 0, both sides empty on 7.
+    references: [aoss-os10-surface]
+
+  vxlan_vnis[].mcast_group:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 7 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. No VXLAN
+      overlay is rendered. Measured over 7 cells: drifted on 0,
+      preserved on 0, both sides empty on 7.
+    references: [aoss-os10-surface]
+
+  vxlan_vnis[].vlan_id:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 7 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. No VXLAN
+      overlay is rendered (see /vxlan-vnis/vni). Measured over 7
+      cells: drifted on 0, preserved on 0, both sides empty on 7.
+    references: [aoss-os10-surface]
+
+  vxlan_vnis[].vni:
+    disposition: unsupported
+    reason: >
+      Dell OS10 renders no instance of this surface, so the record
+      cannot exist on the target side at all. NOT EXERCISED BY THIS
+      CORPUS — all 7 cells are empty on both sides, so this
+      disposition rests on the target codec's own capability
+      declaration rather than on an observed round-trip. OS10 VXLAN
+      uses a `virtual-network <vnid>` indirection between VLAN and VNI
+      rather than NX-OS's direct `vlan N / vn-segment` binding;
+      deferred past v1. Measured over 7 cells: drifted on 0, preserved
+      on 0, both sides empty on 7.
+    references: [aoss-os10-surface]

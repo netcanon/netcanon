@@ -32,13 +32,18 @@ _SUBPATHS = [
 # explicit lossy/unsupported declaration or the silent loss returns.
 _EXPECTED: dict[str, dict[str, str]] = {
     "/snmp/v3-user/auth-protocol": {
-        "aruba_aoscx": "lossy", "aruba_aoss": "lossy",
+        # dell_os10 offers only `auth md5` / `auth sha`, so every SHA-2
+        # variant collapses to `sha` on render — a crypto downgrade.
+        "aruba_aoscx": "lossy", "aruba_aoss": "lossy", "dell_os10": "lossy",
         "mikrotik_routeros": "lossy", "vyos": "lossy",
         "cisco_iosxe": "unsupported", "cisco_iosxr": "unsupported",
         "opnsense": "unsupported",
     },
     "/snmp/v3-user/priv-protocol": {
-        "aruba_aoscx": "lossy", "aruba_aoss": "lossy", "fortigate_cli": "lossy",
+        # dell_os10 offers only `priv des` / `priv aes`: AES-192/256 collapse
+        # to `aes`, 3DES to `des`.
+        "aruba_aoscx": "lossy", "aruba_aoss": "lossy", "dell_os10": "lossy",
+        "fortigate_cli": "lossy",
         "mikrotik_routeros": "lossy", "vyos": "lossy",
         "cisco_iosxe": "unsupported", "cisco_iosxr": "unsupported",
         "opnsense": "unsupported",
@@ -46,8 +51,11 @@ _EXPECTED: dict[str, dict[str, str]] = {
     "/snmp/v3-user/priv-passphrase": {
         # arista_eos + juniper_junos gained the USM key gate in #465: a
         # privacy key bound to the source device is refused with its user.
+        # dell_os10 refuses a privacy key localised to another agent's
+        # engine ID rather than re-emit it behind `localized` (#471 shape).
         "arista_eos": "lossy", "aruba_aoscx": "lossy", "aruba_aoss": "lossy",
         "cisco_iosxe_cli": "lossy", "cisco_nxos": "lossy",
+        "dell_os10": "lossy",
         "fortigate_cli": "lossy", "juniper_junos": "lossy",
         "mikrotik_routeros": "lossy", "vyos": "lossy",
         "cisco_iosxe": "unsupported", "cisco_iosxr": "unsupported",

@@ -447,6 +447,22 @@ class TestShipBeforeWireUnsupportedDeclarations:
         # VyOS: none of the six graduated yet — every new path stays
         # unsupported (ship-before-wire).
         "vyos": set(),
+        # Dell OS10 (Phase 4 registration).  OS10 runs REAL VRRP, so the
+        # group anchor is ``supported`` outright rather than normalised
+        # from another FHRP family the way NX-OS's HSRP render is, and
+        # ``ip route vrf <name> <dest> <gw>`` round-trips through parse +
+        # render.  The two virtual-gateway paths graduated to ``lossy``
+        # rather than ``supported``: OS10 has no VARP / distributed-
+        # anycast-gateway concept at all (first-hop redundancy IS VRRP),
+        # so the interface address renders while the anycast VIP does not.
+        # ``/anycast-gateway-mac`` and the routed sub-interface dot1q tag
+        # stay ``unsupported``.
+        "dell_os10": {
+            "/interfaces/interface/vrrp-groups/group",
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            "/interfaces/interface/ipv6/address/virtual-gateway-address",
+            "/routing/static-route/vrf",
+        },
     }
 
     @pytest.mark.parametrize("codec_name", _SHIP_BEFORE_WIRE_ROSTER)

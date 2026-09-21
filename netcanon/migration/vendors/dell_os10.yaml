@@ -1,0 +1,21 @@
+# Dell EMC SmartFabric OS10 — modern Dell PowerSwitch portfolio
+# (S-series leaf/ToR, Z-series spine).
+# Codec: dell_os10 (CLI `show running-configuration`).
+id: dell_os10
+display_name: "Dell SmartFabric OS10"
+device_classes:
+  - switch
+  - router
+default_timeout: 30
+notes: >
+  SmartFabric OS10 is Dell's modern Debian-based NOS, distinct from the
+  older Force10 OS9 / FTOS grammar (`TenGigabitEthernet 0/1`,
+  `ManagementEthernet`, VLAN-centric `tagged` / `untagged`), which this
+  codec deliberately REFUSES rather than mis-parse.  OS10 uses
+  three-segment lower-case port naming (`ethernet1/1/1`, plus
+  `ethernet1/1/10:1` breakout subports), CIDR addressing, a port-centric
+  VLAN model with no top-level `vlan <id>` stanza (VLANs are derived from
+  `interface vlan<N>` SVIs), real VRRP rather than HSRP, and a separate
+  `management route` RIB that must not be merged into the global one.
+  SNMPv3 USM keys carry a per-line `localized` marker, so an UNMARKED
+  value is a passphrase — the opposite of the NX-OS default.

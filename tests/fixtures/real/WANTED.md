@@ -29,6 +29,7 @@ grammar.
 | **cisco_iosxr** | 10 | IOS-XR (2 sources: `batfish/lab-validation` + `ios-xr/xrd-tools`) | flex-algo; L2VPN bridge-groups; ACL extended; QoS class-maps (remaining `xrd-tools` topos `simple-bgp` / `ospf-bgp-rr` / 8-node `segment-routing` are easy pulls) |
 | **aruba_aoscx** | 4 | AOS-CX 10.04 / 10.13 | symmetric-IRB **L3VNI** (`vni N / vrf`); **VSX** stanza; **VRRP**; an operator capture from a non-Aruba-published source |
 | **vyos** | 10 | VyOS 1.3 / 1.4 / 1.5 | a **permissive + curly-brace** real capture exercising **`vrf name`** (VRF stays synthetic-validated — see below); a permissive real **set-form** capture |
+| **dell_os10** | **0** | — (nothing committed) | **any permissively-licensed OS10 `show running-configuration`.** This is the single highest-value ask in the table: the codec is validated against 14 real OS10 captures that all parse and round-trip cleanly, but they carry live password hashes and are held out-of-tree, so the in-tree corpus is empty and the codec ships `best_effort` for that reason alone.  One clean capture starts the path to `certified`.  Also wanted: **OS9 / FTOS** material (a different grammar this codec deliberately refuses), and an OS10 config whose first 500 bytes are QoS-only — those currently return no detection candidate |
 
 ---
 

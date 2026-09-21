@@ -182,11 +182,20 @@ class TestCiscoCLIProbeDefersToDellOS10:
     def test_os10_running_config_is_not_claimed_as_ios(self):
         assert CiscoIOSXECLICodec.probe(self._OS10) is None
 
-    def test_os10_detects_as_nothing_rather_than_wrongly(self):
-        # No `dell_os10` codec ships yet, so "no candidate" IS the correct
-        # answer.  Asserting the empty list (not merely "not cisco") pins
-        # the honest-failure contract.
-        assert [c.codec for c in detect_codec(self._OS10)] == []
+    def test_os10_detects_as_dell_os10(self):
+        # Phase 4 registered the codec, so the honest answer moved on from
+        # "no candidate" to the right one.  Asserting it wins OUTRIGHT — and
+        # that Cisco is not even a runner-up — pins the same contract the
+        # old empty-list assertion did: a Dell switch is never handed to
+        # another vendor.
+        ranked = detect_codec(self._OS10)
+        assert ranked, "the OS10 sample is now detected by nothing at all"
+        assert ranked[0].codec == "dell_os10", (
+            f"expected dell_os10 to win; ranking: "
+            f"{[(c.codec, c.confidence) for c in ranked[:4]]}"
+        )
+        assert ranked[0].confidence >= 95
+        assert "cisco_iosxe_cli" not in [c.codec for c in ranked]
 
     # Each per-marker sample below deliberately carries the IOS-scoring
     # `! Last configuration change at` banner.  Without it the sample can

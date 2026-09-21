@@ -809,6 +809,49 @@ synthetic-validated (tracked in `WANTED.md`).
 
 ---
 
+## dell_os10
+
+**Codec:** `netcanon.migration.codecs.dell_os10.DellOS10Codec`
+**Direction:** `bidirectional`
+**Certainty:** `best_effort` ⚠️
+
+### Status
+
+All four phases shipped (Tier-1 + L2 switchport / LAG + SVI-derived VLANs
++ local users + SNMP v2c/v3 USM + real VRRP + VRF + per-VRF static), and
+Phase 4 registered the codec as the 13th in the cross-vendor mesh.
+
+**The in-tree corpus is empty.**  The codec was built and validated
+against **14 real OS10 captures** — all 14 parse cleanly and round-trip
+canonical-stable — but they carry live password hashes and are held
+out-of-tree at `local/dell-os10/`, so none is committed.  That is the
+whole reason for the certainty tier; it is a provenance limit, not a
+codec-quality one.
+
+### Coverage matrix
+
+| Fixture | Kind | Exercises |
+|---|---|---|
+| `synthetic/dell_os10/kitchen_sink.cfg` | synthetic | hostname; 3 VRF declarations; chassis `interface breakout … map` lines (correctly NOT parsed as ports); 14 interfaces incl. `mgmt1/1/1`; 4 SVI-derived VLANs (OS10 has no top-level `vlan <id>` stanza); 2 `port-channel` LAGs with `channel-group` members; access / trunk / native switchport; 2 local users with numeric `priv-lvl`; SNMP v2c + 2 v3 USM users (one `localized`, one bare passphrase); 2 VRRP groups; `ip route` + `ip route vrf` + `management route` |
+
+### Certification decision
+
+`best_effort`.  `base.py`'s bar for `certified` is "≥3 real captures
+round-trip cleanly" — fourteen do, but none can be committed, so nothing
+*in this repository* demonstrates it.  Every other codec's `certified`
+rests on an in-tree real corpus, and claiming the same tier on
+out-of-tree evidence would make the label mean two different things.
+
+See [`WANTED.md`](WANTED.md): a single permissively-licensed OS10
+`show running-configuration` is the highest-value contribution to this
+corpus.
+
+Mesh participation is full — 156 ordered pairs / 1339 cells, with all 24
+`dell_os10` pairs carrying authored expectation YAMLs and rendering +
+re-parsing with **zero errors**.
+
+---
+
 ## Summary
 
 | Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |

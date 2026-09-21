@@ -27,6 +27,7 @@ rather than duplicate.
 | MikroTik RouterOS | [`mikrotik_routeros.md`](mikrotik_routeros.md) | `mikrotik_routeros` | certified |
 | OPNsense | [`opnsense.md`](opnsense.md) | `opnsense` | certified |
 | VyOS | [`vyos.md`](vyos.md) | `vyos` | certified |
+| Dell SmartFabric OS10 | [`dell_os10.md`](dell_os10.md) | `dell_os10` | best_effort |
 
 ## Page format
 

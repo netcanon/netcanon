@@ -37,15 +37,20 @@ timestamp if your timezone matters for an audit.
   USM, and VRRP.  All 14 real OS10 captures held parse cleanly and
   round-trip canonical-stable.
 
-  ⚠️ **Not registered yet.**  The class carries no `@register`, so the
-  codec is not offered in the UI and does not enter the cross-vendor
-  mesh.  Registering a 13th codec takes the mesh from 132 to 156
-  ordered pairs, and `test_cross_mesh_ci_guard` ratchets
-  `cells_without_expectation_yaml` against a committed baseline of
-  **0** — so registration is inseparable from authoring 24 expectation
-  YAMLs plus their 24 `docs/vendor-references/` companions and re-cutting
-  the baseline.  That is tracked as Phase 4 in
-  `docs/vendor-research/dell_os10/30-codec-plan.md` § 6.
+  **Registered (Phase 4) as the 13th codec**, which is why this entry
+  also covers the mesh work.  Registration took the cross-vendor mesh
+  from 132 to 156 ordered pairs (1224 → 1339 cells), and
+  `test_cross_mesh_ci_guard` ratchets `cells_without_expectation_yaml`
+  against a committed baseline of **0** — so the wiring could not be
+  split from authoring 24 pair-expectation YAMLs plus their 24
+  `docs/vendor-references/` companions and re-cutting the baseline.
+  Every disposition in those YAMLs is resolved through the audit's own
+  `actual_disposition()` against a measured mesh run rather than read
+  off the capability matrices, because the per-pair unevidenced-loss
+  ratchet allows a NEW pair exactly zero declared-but-never-observed
+  losses.  `CODEC_BUG` held at 5 and `METHODOLOGY_ISSUE_over` at 21
+  across the larger mesh; all 24 new pairs render and re-parse with
+  zero errors.
 
   Four OS10 grammar traps are handled explicitly, each measured across
   the capture corpus rather than assumed: `interface breakout ... map`

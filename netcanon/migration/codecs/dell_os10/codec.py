@@ -57,16 +57,18 @@ from ....models.migration import (
 from ...canonical.intent import CanonicalIntent
 from .._input_shape import detect_input_shape
 from ..base import CodecBase
+from ..registry import register
 from . import port_names as _port_names
 from .parse import parse_intent
 from .render import render_intent
 
 
+@register
 class DellOS10Codec(CodecBase):
-    """Parse-only codec for Dell SmartFabric OS10 running-configuration text.
+    """Bidirectional codec for Dell SmartFabric OS10 running-configuration text.
 
-    ``vendor_id=dell_os10`` — its own vendor row once the wiring PR lands
-    (``netcanon/migration/vendors/dell_os10.yaml``).
+    ``vendor_id=dell_os10`` — its own vendor row in
+    ``netcanon/migration/vendors/dell_os10.yaml``.
     """
 
     name: ClassVar[str] = "dell_os10"
@@ -123,12 +125,12 @@ class DellOS10Codec(CodecBase):
         vendor_id="dell_os10",
         version_range="10.5.x+",
         device_classes=[DeviceClass.switch, DeviceClass.router],
-        # ⚠️ Phase 1 is PARSE-ONLY: `render()` raises NotImplementedError and
-        # `direction` is `parse_only`, so the UI offers this codec as a SOURCE
-        # only.  The paths below therefore describe SOURCE fidelity — what
-        # parse() harvests out of real OS10 text — not a round-trip claim.
-        # Phase 2 adds the render path and re-states these against an actual
-        # round-trip; any that do not survive it get demoted to lossy THEN.
+        # The paths below describe ROUND-TRIP fidelity: Phase 2 shipped the
+        # render path and `direction` is `bidirectional`, so each declaration
+        # below is stated against an actual parse -> render -> parse probe
+        # rather than against what parse() alone harvests.  Every `lossy`
+        # entry is proved to drop by
+        # `test_dell_os10.py::TestDeclaredLossesAreReal`.
         supported=[
             # System
             "/system/hostname",
@@ -411,12 +413,13 @@ class DellOS10Codec(CodecBase):
                 severity="warn",
             ),
             # ── VRRP sub-details (Phase 3b) ──
-            # ⚠️ PHASE-4 NOTE: the PR-2b disposition guard
+            # The PR-2b disposition guard
             # (`test_vrrp_subfield_walk_expansion._EXPECTED`) treats a codec
-            # ABSENT from a leaf's dict as expected-`supported`.  Every leaf
-            # declared lossy below therefore needs a `dell_os10` row added to
-            # that dict in the registration PR, or the guard fails the moment
-            # this codec enters `list_public_codecs()`.
+            # ABSENT from a leaf's dict as expected-`supported`, so every
+            # leaf declared lossy below carries a matching `dell_os10` row
+            # there.  `priority`, `preempt` and `virtual-ips` are deliberately
+            # ABSENT from that dict: OS10 renders real VRRP, so they
+            # round-trip and the supported default is the honest answer.
             LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(

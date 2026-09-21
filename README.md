@@ -11,7 +11,7 @@
 
 **Built for switches and routers.**  Translates running-config across
 Cisco (IOS-XE, NX-OS, IOS-XR), Juniper Junos, Arista EOS, Aruba
-(AOS-S, AOS-CX), MikroTik RouterOS, and VyOS.
+(AOS-S, AOS-CX), Dell SmartFabric OS10, MikroTik RouterOS, and VyOS.
 
 **Fortinet FortiGate and OPNsense are supported at the L2/L3 layer
 only:** that covers interface addressing, VLAN interfaces and local
@@ -122,11 +122,14 @@ FortiGate→MikroTik, Aruba→Arista, OPNsense→Junos).
 
 ## The trust signal — and the invitation
 
-Across every vendor pair we ship a fixture **and** a cross-vendor
-expectation for — 8 of the 12 codecs today; `aruba_aoscx`, `cisco_iosxr`,
-`cisco_nxos`, and `vyos` have fixtures but not yet cross-vendor
-expectations — the cross-mesh audit tracks `CODEC_BUG` drift cell by
-cell.  The live reconciliation (`tests/fixtures/real/PHASE4_RECONCILIATION.md`
+Every ordered vendor pair — all 156 of them across 13 codecs — now ships
+a cross-vendor expectation, so the cross-mesh audit tracks `CODEC_BUG`
+drift cell by cell with no uncovered pairs
+(`cells_without_expectation_yaml: 0`).  Twelve of the thirteen codecs
+also ship real-capture fixtures; `dell_os10` is the exception and ships
+`best_effort` for exactly that reason — its validation captures carry
+live password hashes and are held out-of-tree, so it has full
+cross-vendor expectations but no committed corpus.  The live reconciliation (`tests/fixtures/real/PHASE4_RECONCILIATION.md`
 for the roll-up, `tests/fixtures/real/phase4_findings_residuals.md` for
 the per-cell triage) currently reports a small number of residual
 high-severity cells (5 at last run) — each triaged as a benign
