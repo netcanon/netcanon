@@ -129,6 +129,7 @@ INPUT_FORMATS = frozenset({
     "cli-iosxr",        # Cisco IOS-XR `show running-config` text
     "cli-aoscx",        # Aruba AOS-CX `show running-config` text
     "cli-vyos",         # VyOS config.boot / `show configuration` curly-brace text
+    "cli-dellos10",     # Dell SmartFabric OS10 `show running-configuration` text
     "json-flat",        # flat {"xpath": "value"} JSON — the mock adapter
     "unknown",          # experimental adapter with no declared format
 })

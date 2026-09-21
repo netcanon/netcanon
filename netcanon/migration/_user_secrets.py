@@ -218,6 +218,14 @@ _TARGET_ACCEPTS: dict[str, frozenset[str]] = {
     "opnsense":          frozenset({"plaintext", "bcrypt", "sha512"}),
     "mikrotik_routeros": frozenset({"plaintext"}),
     "cisco_nxos":        frozenset({"plaintext", "5", "md5crypt", "sha256crypt"}),
+    # Dell OS10 stores `username ... password <crypt>` with NO type digit.
+    # The switch writes SHA-512 ($6$) itself, and the User Guide documents
+    # MD-5 / SHA-256 / SHA-512 as accepted for backward compatibility with
+    # releases up to 10.3.1E — hence the three crypt(3) families.  There is
+    # no codec-local emit table to mirror (no type digit to dispatch on).
+    "dell_os10":         frozenset({
+        "plaintext", "md5crypt", "sha256crypt", "sha512",
+    }),
     "cisco_iosxr":       frozenset({
         "plaintext", "5", "md5crypt", "7", "8", "9", "10", "sha512",
     }),

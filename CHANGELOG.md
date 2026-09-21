@@ -26,6 +26,45 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Added
+
+- **Dell SmartFabric OS10 codec (`dell_os10`) — parse + render.**  A
+  bidirectional codec for Dell EMC PowerSwitch `show
+  running-configuration` text, covering hostname, interfaces
+  (description / admin state / MTU / IPv4 + IPv6 CIDR / `ip vrf
+  forwarding` / L2 switchport / `channel-group`), SVI-derived VLANs,
+  LAGs, VRF declarations, static routes, local users, SNMP v2c + v3
+  USM, and VRRP.  All 14 real OS10 captures held parse cleanly and
+  round-trip canonical-stable.
+
+  ⚠️ **Not registered yet.**  The class carries no `@register`, so the
+  codec is not offered in the UI and does not enter the cross-vendor
+  mesh.  Registering a 13th codec takes the mesh from 132 to 156
+  ordered pairs, and `test_cross_mesh_ci_guard` ratchets
+  `cells_without_expectation_yaml` against a committed baseline of
+  **0** — so registration is inseparable from authoring 24 expectation
+  YAMLs plus their 24 `docs/vendor-references/` companions and re-cutting
+  the baseline.  That is tracked as Phase 4 in
+  `docs/vendor-research/dell_os10/30-codec-plan.md` § 6.
+
+  Four OS10 grammar traps are handled explicitly, each measured across
+  the capture corpus rather than assumed: `interface breakout ... map`
+  (x148) and `interface range` (x10) sit at column 0 and begin with the
+  word `interface` without declaring one; an INDENTED `!` separates an
+  SVI's L3 block from its VRRP block and must not terminate the stanza;
+  `switchport access vlan` on a TRUNK port is the NATIVE VLAN (OS10
+  emits no `switchport trunk native vlan` at all); and `management
+  route` outnumbers `ip route` 8:2 and installs into the management VRF
+  only, never the global RIB.
+
+  SNMPv3 USM key provenance is wired from day one rather than
+  retrofitted: OS10 marks the kind ON THE LINE with a trailing
+  `localized` keyword, so `auth_kind` / `priv_kind` are stamped per
+  value (#471's kind-from-grammar rule).  OS10's per-codec default is
+  `plaintext` — the OPPOSITE of NX-OS — so an unmarked native value is a
+  passphrase and renders WITHOUT the keyword; labelling it pre-localised
+  would make the switch derive a key from a key.
+
 ### Fixed
 
 - **Dell SmartFabric OS10 configs were confidently mis-detected as Cisco

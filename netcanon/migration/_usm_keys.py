@@ -68,6 +68,13 @@ _SOURCE_DEFAULT_KIND: dict[str, str] = {
     "cisco_iosxe": PLAINTEXT,
     "aruba_aoss": PLAINTEXT,
     "mikrotik_routeros": PLAINTEXT,
+    # Dell OS10 marks the kind ON THE LINE with a trailing `localized`
+    # keyword (10.5.2 User Guide L9085), so the parser stamps auth_kind /
+    # priv_kind per value and this entry is only the default for an
+    # UNMARKED line — which on OS10 is a passphrase the switch localises
+    # itself on commit.  Omitting it would fail closed to `localised` and
+    # make every Dell USM key unmigratable.
+    "dell_os10": PLAINTEXT,
     "cisco_nxos": LOCALISED,
     "juniper_junos": LOCALISED,
     "vyos": LOCALISED,
@@ -90,6 +97,10 @@ _TARGET_USM_ACCEPTS: dict[str, frozenset[str]] = {
     "aruba_aoscx": frozenset({PLAINTEXT}),
     "cisco_iosxe_cli": frozenset({PLAINTEXT}),
     "cisco_nxos": frozenset({PLAINTEXT}),
+    # Dell states a localised key is generated from the switch's OWN engine
+    # ID and cannot be copied between switches (10.5.2 User Guide L8942),
+    # so OS10 accepts only a portable passphrase from a foreign source.
+    "dell_os10": frozenset({PLAINTEXT}),
     "fortigate_cli": frozenset({PLAINTEXT}),
     "juniper_junos": frozenset({PLAINTEXT}),
     "mikrotik_routeros": frozenset({PLAINTEXT}),
