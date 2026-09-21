@@ -631,6 +631,45 @@ class CiscoIOSXECLICodec(CodecBase):
                     raw_prefix, re.IGNORECASE | re.MULTILINE)):
             return None
 
+        # Defer to Dell SmartFabric OS10.  OS10's `show running-
+        # configuration` opens with `! Version 10.5.1.0` then `! Last
+        # configuration change at ...` — and that second line is scored
+        # weight 2 by _IOS_BANNER_HITS, which ALONE clears the `>= 2`
+        # threshold and returned 95 ("IOS-specific banner sequence
+        # detected") on real Dell OS10 captures: of 14 OS10 configs
+        # measured, 12 were claimed by this probe (6 of them at 95) and
+        # none were correct.  The banner table's comment justifies
+        # that marker as Cisco-specific because "Aruba uses `;` for
+        # comments, not `!`" — true of Aruba, NOT true of Dell.
+        #
+        # With no `dell_os10` codec in tree the honest answer is "no
+        # candidate", not a confident wrong one: the #460 fail-open shape
+        # is the WRONG codec sure of itself, which here would parse a Dell
+        # switch as Cisco and emit silent garbage.
+        #
+        # Each marker below is OS10-exclusive and was verified to appear
+        # ZERO times across every committed fixture and test, so deferring
+        # cannot regress IOS-XE detection:
+        #   `interface breakout <port> map <profile>` — OS10 port splitting
+        #   `system-user linuxadmin`                  — OS10's Linux account
+        #   `vlt-domain` / `vlt-port-channel`         — Dell MLAG (Cisco: vPC)
+        #   `ip vrf default`                          — OS10 states the
+        #       default VRF as an explicit stanza; IOS-XE never does (and
+        #       `\s*$` pins it so a real VRF named "default-x" can't match)
+        #   column-0 `vrrp version` / `vrrp delay reload` — OS10 configures
+        #       VRRP globally; IOS-XE has no such top-level command (its
+        #       `vrrp <grp> version` is INDENTED under an interface)
+        if re.search(
+            r"^interface\s+breakout\s+\S+\s+map\b"
+            r"|^system-user\s+linuxadmin\b"
+            r"|^vlt-domain\s+\d+"
+            r"|^\s*vlt-port-channel\s+\d+"
+            r"|^ip\s+vrf\s+default\s*$"
+            r"|^vrrp\s+(?:version\s+\d|delay\s+reload\s+\d)",
+            raw_prefix, re.IGNORECASE | re.MULTILINE,
+        ):
+            return None
+
         # RANCID / oxidized collection header naming bare ``cisco`` —
         # IOS / IOS-XE classic, distinct from ``cisco-nx`` / ``cisco-xr``
         # (which the deferral blocks above already routed to the NX-OS /

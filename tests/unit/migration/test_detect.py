@@ -150,6 +150,125 @@ class TestCiscoCLIProbe:
         assert CiscoIOSXECLICodec.probe('{"foo": "bar"}') is None
 
 
+class TestCiscoCLIProbeDefersToDellOS10:
+    """Dell SmartFabric OS10 must not be claimed by the IOS-XE probe.
+
+    OS10's `show running-configuration` emits `! Last configuration change
+    at ...` verbatim.  _IOS_BANNER_HITS scores that string at weight 2 and
+    the probe returns 95 at `>= 2`, so ONE line was enough.  Measured over
+    14 real OS10 captures before this fix: 12 claimed by `cisco_iosxe_cli`
+    (6 of them at confidence 95), none correct.  After: 10 return no
+    candidate and the 95 band is gone (6 -> 0).  A wrong codec that is sure
+    of itself is the #460 fail-open shape — a Dell switch parsed as Cisco.
+    """
+
+    _OS10 = (
+        "! Version 10.5.1.0\n"
+        "! Last configuration change at Feb  25 15:06:23 2020\n"
+        "!\n"
+        "ip vrf default\n"
+        "!\n"
+        "interface breakout 1/1/1 map 100g-1x\n"
+        "!\n"
+        "hostname leaf1\n"
+        "!\n"
+        "interface ethernet1/1/1\n"
+        " switchport mode trunk\n"
+        " switchport trunk allowed vlan 10,20\n"
+        " no shutdown\n"
+        "!\n"
+    )
+
+    def test_os10_running_config_is_not_claimed_as_ios(self):
+        assert CiscoIOSXECLICodec.probe(self._OS10) is None
+
+    def test_os10_detects_as_nothing_rather_than_wrongly(self):
+        # No `dell_os10` codec ships yet, so "no candidate" IS the correct
+        # answer.  Asserting the empty list (not merely "not cisco") pins
+        # the honest-failure contract.
+        assert [c.codec for c in detect_codec(self._OS10)] == []
+
+    # Each per-marker sample below deliberately carries the IOS-scoring
+    # `! Last configuration change at` banner.  Without it the sample can
+    # probe as None for unrelated reasons and the assertion passes on an
+    # UNPATCHED tree — a vacuous test.  With it, every sample scores 95
+    # before the deferral exists, so each case proves the real claim: the
+    # OS10 marker beats the Cisco banner.
+
+    def test_vlt_domain_defers(self):
+        raw = (
+            "! Version 10.5.1.0\n"
+            "! Last configuration change at Feb  25 15:06:23 2020\n"
+            "!\n"
+            "hostname tor1\n"
+            "!\n"
+            "vlt-domain 1\n"
+            " backup destination 192.168.255.2\n"
+            "!\n"
+        )
+        assert CiscoIOSXECLICodec.probe(raw) is None
+
+    def test_system_user_linuxadmin_defers(self):
+        raw = (
+            "! Version 10.5.2.4\n"
+            "! Last configuration change at Apr 11 01:25:02 2021\n"
+            "!\n"
+            "system-user linuxadmin password redacted\n"
+            "!\n"
+        )
+        assert CiscoIOSXECLICodec.probe(raw) is None
+
+    def test_global_vrrp_version_defers(self):
+        raw = (
+            "! Version 10.5.2.4\n"
+            "! Last configuration change at Apr 11 01:25:02 2021\n"
+            "!\n"
+            "hostname tor2\n"
+            "!\n"
+            "vrrp version 3\n"
+            "vrrp delay reload 180\n"
+            "!\n"
+        )
+        assert CiscoIOSXECLICodec.probe(raw) is None
+
+    def test_genuine_ios_is_still_detected(self):
+        # Regression guard: blunting real IOS detection would be a worse
+        # bug than the one this deferral fixes.  This config carries the
+        # SAME `! Last configuration change at` line as the OS10 sample.
+        raw = (
+            "Building configuration...\n"
+            "\n"
+            "Current configuration : 1234 bytes\n"
+            "!\n"
+            "! Last configuration change at 10:00:00 UTC Mon Jan 1 2024\n"
+            "!\n"
+            "hostname r1\n"
+            "!\n"
+            "interface GigabitEthernet0/0/0\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!\n"
+        )
+        hit = CiscoIOSXECLICodec.probe(raw)
+        assert hit is not None
+        assert hit[0] >= 95
+
+    def test_indented_cisco_vrrp_version_still_detected(self):
+        # IOS-XE's own `vrrp <group> version 3` is INDENTED under an
+        # interface; only the column-0 OS10 form defers.
+        raw = (
+            "Building configuration...\n"
+            "\n"
+            "Current configuration : 500 bytes\n"
+            "!\n"
+            "interface GigabitEthernet0/0\n"
+            " vrrp 10 version 3\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!\n"
+        )
+        hit = CiscoIOSXECLICodec.probe(raw)
+        assert hit is not None
+
+
 class TestMikroTikProbe:
     def test_matches_routeros_banner(self):
         raw = (
