@@ -26,6 +26,31 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Dell SmartFabric OS10 configs were confidently mis-detected as Cisco
+  IOS-XE.**  `cisco_iosxe_cli`'s probe scores `! Last configuration change
+  at` at weight 2 and returns confidence 95 at `>= 2`, so that single line
+  was enough -- and Dell OS10's `show running-configuration` emits it
+  verbatim as its second line.  Measured across 14 real OS10 captures: 12
+  were claimed by `cisco_iosxe_cli` (6 of them at confidence 95) and none
+  were correct; after the fix 10 return no candidate and the 95-confidence
+  band is eliminated (6 -> 0).  The 4 that still match do so at 45, because
+  their first 500 bytes -- all the probe sees -- are pure QoS config.
+  Dell OS9/FTOS captures are deliberately unaffected: this fix is OS10-only
+  and OS9 matches via `service timestamps`, which FTOS genuinely emits.
+  Netcanon
+  ships no Dell codec, so the failure mode was not "unsupported" but the
+  more dangerous one -- a Dell switch parsed as Cisco, emitting silent
+  garbage.  The probe now defers (returns `None`) on OS10-exclusive markers
+  (`interface breakout ... map`, `system-user linuxadmin`, `vlt-domain` /
+  `vlt-port-channel`, a bare `ip vrf default` stanza, and column-0 `vrrp
+  version` / `vrrp delay reload`), joining the existing IOS-XR / NX-OS /
+  AOS-CX deferral blocks.  Every marker was verified absent from all
+  committed fixtures, and a regression test pins that genuine IOS -- which
+  carries the same `! Last configuration change at` banner -- still scores
+  95.
+
 ## [0.7.1] - 2026-09-17
 
 ### Security
