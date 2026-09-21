@@ -118,7 +118,7 @@ dev = [
     # could disagree with nothing noticing.
     #
     # Guarded by tests/unit/test_ruff_pin_is_exact.py.
-    "ruff==0.16.4",
+    "ruff==0.16.7",
 ]
 desktop = [
     "PySide6>=6.7.0",
