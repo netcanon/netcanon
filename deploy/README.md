@@ -16,7 +16,7 @@ warden/shim live in [`demo/warden/`](../demo/warden/).
 | `nftables/demo-int.nft` | The demo-int isolation rules (warden→instance ALLOW, instance→instance DENY, instance→warden DENY). |
 | `Makefile` | `verify` / `verify-bundle` (Gate 4) / `whitepaper` / `deploy` / `down` + `dev-up` / `dev-down` / `smoke-*`. ⚠️ `drain` is **not implemented** and exits non-zero — the warden has no drain sentinel. |
 | `demo.env.example` | Env template (image digests + ACME email). Copy → `demo.env` (**gitignored**; real values never commit). |
-| `PINNED_PRODUCT_TAG` | The netcanon version the demo pins (`v0.6.3`). Bumped by ordinary PR. |
+| `PINNED_PRODUCT_TAG` | The netcanon version the demo pins (`v0.7.1`). Bumped by ordinary PR. |
 
 ## Local Gate-1 (needs Docker)
 
