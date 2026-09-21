@@ -15,7 +15,7 @@
 <meta name="description" content="Open-source multi-vendor network config translator. Parses one vendor's running-config, renders another's, and declares every field it translates as supported, lossy, or unsupported — with the reason. Try it in the browser or run it locally with one command.">
 <link rel="canonical" href="https://netcanon.net/">
 <meta property="og:title" content="netcanon — translate network configs between vendors, with every loss declared">
-<meta property="og:description" content="Multi-vendor config translator that shows its work — including the work it refuses. Cisco, Juniper, Arista, Aruba, FortiGate, MikroTik, OPNsense, VyOS.">
+<meta property="og:description" content="Multi-vendor config translator that shows its work — including the work it refuses. Cisco, Juniper, Arista, Aruba, Dell, FortiGate, MikroTik, OPNsense, VyOS.">
 <meta property="og:url" content="https://netcanon.net/">
 <meta property="og:image" content="https://netcanon.net/og.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -170,6 +170,7 @@ footer { border-top: 1px solid var(--nc-border); margin-top: 64px; padding: 32px
   network-function layer those platforms share. It is not a firewall-policy tool.</p>
   <p class="vendor-row"><strong>Switches and routers</strong> &mdash; Cisco IOS-XE &middot; Cisco NX-OS &middot;
   Cisco IOS-XR &middot; Juniper Junos &middot; Arista EOS &middot; Aruba AOS-S &middot; Aruba AOS-CX &middot;
+  Dell SmartFabric OS10 <span class="small">(best-effort &mdash; no committed real-capture corpus yet)</span> &middot;
   MikroTik RouterOS &middot; VyOS
   <br><strong>Firewall platforms &mdash; the L2/L3 layer only</strong> &mdash; FortiGate &middot; OPNsense
   <span class="small">(on a firewall that covers interface addressing, VLAN interfaces and local users;
@@ -377,6 +378,7 @@ set servers=192.168.1.10,192.168.1.11</code></pre>
   <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/arista_eos.md">Arista EOS</a> &middot;
   <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/aruba_aoss.md">Aruba AOS-S</a> &middot;
   <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/aruba_aoscx.md">Aruba AOS-CX</a> &middot;
+  <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/dell_os10.md">Dell OS10</a> &middot;
   <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/fortigate.md">FortiGate</a> &middot;
   <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/mikrotik_routeros.md">MikroTik</a> &middot;
   <a href="https://github.com/netcanon/netcanon/blob/main/docs/vendors/opnsense.md">OPNsense</a> &middot;

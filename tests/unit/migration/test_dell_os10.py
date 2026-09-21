@@ -837,15 +837,23 @@ class TestCodecContract:
 
         assert codec.input_format in INPUT_FORMATS
 
-    def test_codec_is_not_registered_yet(self):
-        """Registration grows the mesh from 132 to 156 ordered pairs and
-        breaks `test_cross_mesh_ci_guard`'s exact `cells_total == 1224`
-        assertion.  It lands with the Phase-4 baseline re-cut, not here —
-        this guard makes that sequencing explicit rather than incidental.
-        """
-        from netcanon.migration.codecs.registry import list_codecs
+    def test_codec_is_registered(self):
+        """Phase 4 registered the codec.
 
-        assert "dell_os10" not in list_codecs()
+        This assertion was `not in list_codecs()` for Phases 1-3, which
+        made the sequencing explicit rather than incidental: registration
+        grows the mesh from 132 to 156 ordered pairs and could not land
+        until the 24 pair-expectation YAMLs and the re-cut baseline landed
+        with it.  Flipped here, in that same change.
+        """
+        from netcanon.migration.codecs.registry import (
+            list_codecs,
+            list_public_codecs,
+        )
+
+        assert "dell_os10" in list_codecs()
+        # Not hidden — it must reach the target dropdown and auto-detection.
+        assert "dell_os10" in list_public_codecs()
 
 
 # ---------------------------------------------------------------------------

@@ -38,9 +38,13 @@ _NO_FHRP = ("aruba_aoscx", "cisco_iosxe", "cisco_iosxr", "vyos")
 # returns.  `mode` is lossy/unsupported on ALL 12 -- no codec renders every
 # FHRP family, so the family discriminator never round-trips guaranteed.
 _EXPECTED: dict[str, dict[str, str]] = {
+    # dell_os10 renders REAL VRRP (no HSRP normalisation), so `priority`,
+    # `preempt` and `virtual-ips` round-trip and it stays absent from those
+    # rows.  It IS listed wherever the v1 VRRP model carries no OS10 form.
     _BASE + "mode": dict.fromkeys(_NO_FHRP, "unsupported") | dict.fromkeys(
         (
             "arista_eos", "aruba_aoss", "cisco_iosxe_cli", "cisco_nxos",
+            "dell_os10",
             "fortigate_cli", "juniper_junos", "mikrotik_routeros", "opnsense",
         ),
         "lossy",
@@ -48,16 +52,16 @@ _EXPECTED: dict[str, dict[str, str]] = {
     _BASE + "priority": dict.fromkeys(_NO_FHRP, "unsupported"),
     _BASE + "preempt": dict.fromkeys(_NO_FHRP, "unsupported") | {"opnsense": "lossy"},
     _BASE + "advertisement-interval": dict.fromkeys(_NO_FHRP, "unsupported") | {
-        "aruba_aoss": "lossy", "cisco_nxos": "lossy",
+        "aruba_aoss": "lossy", "cisco_nxos": "lossy", "dell_os10": "lossy",
     },
     _BASE + "authentication": dict.fromkeys(_NO_FHRP, "unsupported") | {
-        "aruba_aoss": "lossy",
+        "aruba_aoss": "lossy", "dell_os10": "lossy",
     },
     _BASE + "virtual-ipv6s": dict.fromkeys(_NO_FHRP, "unsupported") | {
-        "aruba_aoss": "lossy", "cisco_nxos": "lossy",
+        "aruba_aoss": "lossy", "cisco_nxos": "lossy", "dell_os10": "lossy",
     },
     _BASE + "description": dict.fromkeys(_NO_FHRP, "unsupported") | {
-        "aruba_aoss": "lossy", "cisco_nxos": "lossy",
+        "aruba_aoss": "lossy", "cisco_nxos": "lossy", "dell_os10": "lossy",
         "fortigate_cli": "lossy", "mikrotik_routeros": "lossy",
     },
 }

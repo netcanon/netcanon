@@ -42,6 +42,7 @@ from netcanon.migration.codecs import (  # noqa: F401 — side-effect import
     cisco_iosxe_cli,
     cisco_iosxr,
     cisco_nxos,
+    dell_os10,
     fortigate_cli,
     juniper_junos,
     mikrotik_routeros,
@@ -300,6 +301,22 @@ system {
 }
 // vyos-config-version: "system@27:interfaces@29"
 """,
+    "dell_os10": """\
+! Version 10.5.2.4
+!
+hostname TestDell
+!
+interface vlan10
+ description USERS
+ no shutdown
+ ip address 10.10.10.2/24
+!
+interface ethernet1/1/3
+ no shutdown
+ switchport mode access
+ switchport access vlan 10
+!
+""",
 }
 
 #: Codec classes used in the cross-mesh smoke matrix.  Built lazily
@@ -331,6 +348,7 @@ _SOURCE_CAPABLE = [
     "cisco_iosxr",
     "aruba_aoscx",
     "vyos",
+    "dell_os10",
 ]
 # Target-capable expanded post-aruba→cisco-iosxe-NETCONF bug:
 # every bidirectional codec is now in the smoke matrix.  The
@@ -350,6 +368,7 @@ _TARGET_CAPABLE = [
     "cisco_iosxr",
     "aruba_aoscx",
     "vyos",
+    "dell_os10",
 ]
 
 

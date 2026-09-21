@@ -46,6 +46,18 @@ from netcanon.migration.codecs.cisco_iosxe_cli.parse import (
 from netcanon.migration.codecs.cisco_nxos.parse import (
     _VRF_DESCRIPTION_RE as _NXOS_VRF_DESCRIPTION_RE,
 )
+from netcanon.migration.codecs.dell_os10.parse import (
+    _DESC_RE as _OS10_DESC_RE,
+)
+from netcanon.migration.codecs.dell_os10.parse import (
+    _IPV6_CIDR_RE as _OS10_IPV6_CIDR_RE,
+)
+from netcanon.migration.codecs.dell_os10.parse import (
+    _SWITCHPORT_TRUNK_ALLOWED_RE as _OS10_TRUNK_ALLOWED_RE,
+)
+from netcanon.migration.codecs.dell_os10.parse import (
+    _VRRP_VADDR_RE as _OS10_VRRP_VADDR_RE,
+)
 from netcanon.migration.codecs.fortigate_cli.parse import (
     _CONFIG_HEADER_RE,
     _EDIT_HEADER_RE,
@@ -130,6 +142,26 @@ def test_vrrp_plaintext_auth_still_captures():
         assert _VRRP_AUTH_PLAINTEXT_RE.match(line).group(1).strip().strip('"') == want
 
 
+def test_dell_os10_value_patterns_still_capture():
+    """dell_os10 was WRITTEN in the hardened shape rather than retrofitted
+    into it — every value-capturing pattern anchors on the disjoint ``\\S``
+    class instead of the ``.+`` / ``.+?`` that CodeQL flagged elsewhere in
+    this repo.  Nothing enforced that it stays that way, which is what
+    these two tests are for: the codec's parser is regex-dense and its
+    input is operator-pasted config text."""
+    assert _OS10_DESC_RE.match(
+        " description Uplink to spine  ",
+    ).group(1).strip() == "Uplink to spine"
+    assert _OS10_TRUNK_ALLOWED_RE.match(
+        " switchport trunk allowed vlan 32,34,47,461",
+    ).group(1).strip() == "32,34,47,461"
+    assert _OS10_VRRP_VADDR_RE.match(
+        "  virtual-address 192.168.46.1",
+    ).group(1).strip() == "192.168.46.1"
+    m = _OS10_IPV6_CIDR_RE.match(" ipv6 address 2001:db8:a::1/64")
+    assert (m.group(1), m.group(2)) == ("2001:db8:a::1", "64")
+
+
 # ---------------------------------------------------------------------------
 # ReDoS gone: CodeQL's own attack strings complete in linear time.
 # ---------------------------------------------------------------------------
@@ -153,10 +185,19 @@ def test_vrrp_plaintext_auth_still_captures():
         (_ARISTA_VRRP_DESCRIPTION_RE, "vrrp 1 description a" + " " * _REPS + "!"),
         (_IOSXE_VRRP_DESCRIPTION_RE, " vrrp 1 description a" + " " * _REPS + "!"),
         (_VRRP_AUTH_PLAINTEXT_RE, "authentication mode plaintext-password a" + " " * _REPS + "!"),
+        # dell_os10 — same value-then-padding-then-non-space shape.  These
+        # are hardened by construction; the entries pin that they stay so.
+        (_OS10_DESC_RE, " description a" + " " * _REPS + "!"),
+        (_OS10_TRUNK_ALLOWED_RE, " switchport trunk allowed vlan a" + " " * _REPS + "!"),
+        (_OS10_VRRP_VADDR_RE, " virtual-address a" + " " * _REPS + "!"),
+        # The lazy ``(\\S+?)`` before ``/`` is the one OS10 pattern whose
+        # value class can overlap its own delimiter.
+        (_OS10_IPV6_CIDR_RE, " ipv6 address " + "a" * _REPS + "!"),
     ],
     ids=["dns-server", "vlan-trunk", "nxos-desc", "iosxe-desc", "static-route",
          "arista-desc", "fg-config-header", "fg-edit-header", "arista-vrrp-desc",
-         "iosxe-vrrp-desc", "aoss-plaintext-auth"],
+         "iosxe-vrrp-desc", "aoss-plaintext-auth",
+         "os10-desc", "os10-trunk-allowed", "os10-vrrp-vaddr", "os10-ipv6-cidr"],
 )
 def test_attack_string_is_linear_time(rx, attack):
     _m, elapsed = _timed_match(rx, attack)

@@ -1,0 +1,431 @@
+# Cross-vendor fidelity expectations: dell_os10 -> juniper_junos
+#
+# Source: dell_os10 codec.  Target: juniper_junos codec.
+#
+# Every disposition below is resolved through the audit's own
+# `actual_disposition()` over a measured `tools/run_full_mesh.py`
+# pass, NOT read off the two capability matrices.  That ordering
+# is forced by the per-pair unevidenced ratchet
+# (`test_no_new_pair_declares_a_loss_it_never_observes`), which
+# allows a NEW pair exactly zero declared-but-never-observed
+# losses: a field this corpus preserves on every cell MUST be
+# `good`, so hedging to `lossy` when unsure fails the build just
+# as surely as missing a real loss does.  The matrices supply
+# only the MECHANISM prose for a loss the corpus exhibits.
+#
+# Measured: 1 fixture cell, 0 render errors, 0 re-parse errors.
+# Dispositions: {'unsupported': 3, 'good': 26, 'not_applicable': 10, 'lossy': 7}
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/dell_os10_to_juniper_junos/
+#
+# Authored 2026-09-21 with the dell_os10 registration (Phase 4).
+
+meta:
+  source_vendor: dell_os10
+  target_vendor: juniper_junos
+  primary_use_case: >
+    Migrating a Dell EMC PowerSwitch running SmartFabric OS10 onto
+    Junos. OS10's supported surface is hostname, interfaces (three-
+    segment `ethernet1/1/1` naming, CIDR addressing, `ip vrf
+    forwarding`, L2 switchport and `channel-group`), SVI-derived VLANs,
+    `port-channel` LAGs, VRFs, static routes including the separate
+    `management route` RIB, local users, SNMP v2c/v3 and real VRRP. This
+    file records which of those survive the render into Junos and which
+    do not.
+  certainty: medium
+  references:
+    - id: os10-junos-surface
+      path: docs/vendor-references/dell_os10_to_juniper_junos/canonical_surface.md
+      title: "Dell OS10 -> Junos: measured canonical surface (1 fixture cell)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-09-21"
+
+# -------------------------------------------------------------------------
+
+per_field_expectation:
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      Junos renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Junos has no system-wide anycast-gateway
+      MAC: per-IRB-unit overrides live on
+      CanonicalIPv4Address.virtual_gateway_mac (the ``set interfaces
+      irb unit <vid> virtual-gateway-v4-mac`` / ``-v6-mac`` grammar)
+      and round-trip through the supported per-address surface
+      instead. The top-level CanonicalIntent.anycast_gateway_mac field
+      is silently dropped on render — cross-vendor migration from a
+      source carrying the system-wide MAC (Arista ``ip virtual-router
+      mac-address``, NX-OS ``fabric forwarding anycast-gateway-mac``)
+      must distribute the value across every IRB unit's per-address
+      MAC on the receiving Junos side. Measured over 1 cell: drifted
+      on 0, preserved on 0, both sides empty on 1.
+    references: [os10-junos-surface]
+
+  apply_groups:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-junos-surface]
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-junos-surface]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-junos-surface]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-junos-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-junos-surface]
+
+  group_content:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-junos-surface]
+
+  hostname:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. OS10 interface-type is inferred from the name prefix
+      (ethernet -> ethernetCsmacd, vlan -> l3ipvlan, port-channel ->
+      ieee8023adLag, loopback -> softwareLoopback, mgmt ->
+      ethernetCsmacd). Inference is best-effort and will not recover
+      every IANA type a cross-vendor source carried. Measured over 1
+      cell: drifted on 1, preserved on 0, both sides empty on 0.
+    references: [os10-junos-surface]
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  interfaces[].lag_member_of:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-junos-surface]
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  interfaces[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  interfaces[].vrrp_groups:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  lags:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0. Sample drift: {"lags[0] {'name': 'port-
+      channel100'}": {'name': {'source': 'port-channel100', 'target':
+      'ae100'}}, "lags[1] {'name': 'port-channel200'}": {'name':
+      {'source': 'port-channel200', 'target': 'ae200'}}}.
+    references: [os10-junos-surface]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-junos-surface]
+
+  local_users[].hashed_password:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-junos-surface]
+
+  local_users[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  local_users[].role:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-junos-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Junos renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no AAA radius-server
+      config; RADIUS host is dropped on migration. Measured over 1
+      cell: drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-junos-surface]
+
+  raw_sections:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-junos-surface]
+
+  routing_instances:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  routing_instances[].description:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-junos-surface]
+
+  routing_instances[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  snmp.community:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  snmp.contact:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  snmp.location:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  snmp.trap_hosts:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  snmp.v3_users:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-junos-surface]
+
+  static_routes:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-junos-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Junos renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no clock/timezone stanza;
+      intent.timezone is dropped on migration. Measured over 1 cell:
+      drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-junos-surface]
+
+  vlans[].description:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-junos-surface]
+
+  vlans[].id:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  vlans[].ipv4_addresses:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-junos-surface]
+
+  vlans[].tagged_ports:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  vlans[].untagged_ports:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-junos-surface]
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-junos-surface]
+
+  vxlan_vnis[].mcast_group:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-junos-surface]
+
+  vxlan_vnis[].vlan_id:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-junos-surface]
+
+  vxlan_vnis[].vni:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-junos-surface]

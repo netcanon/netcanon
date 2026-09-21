@@ -1,0 +1,445 @@
+# Cross-vendor fidelity expectations: dell_os10 -> vyos
+#
+# Source: dell_os10 codec.  Target: vyos codec.
+#
+# Every disposition below is resolved through the audit's own
+# `actual_disposition()` over a measured `tools/run_full_mesh.py`
+# pass, NOT read off the two capability matrices.  That ordering
+# is forced by the per-pair unevidenced ratchet
+# (`test_no_new_pair_declares_a_loss_it_never_observes`), which
+# allows a NEW pair exactly zero declared-but-never-observed
+# losses: a field this corpus preserves on every cell MUST be
+# `good`, so hedging to `lossy` when unsure fails the build just
+# as surely as missing a real loss does.  The matrices supply
+# only the MECHANISM prose for a loss the corpus exhibits.
+#
+# Measured: 1 fixture cell, 0 render errors, 0 re-parse errors.
+# Dispositions: {'unsupported': 7, 'good': 18, 'not_applicable': 8, 'lossy': 13}
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/dell_os10_to_vyos/
+#
+# Authored 2026-09-21 with the dell_os10 registration (Phase 4).
+
+meta:
+  source_vendor: dell_os10
+  target_vendor: vyos
+  primary_use_case: >
+    Migrating a Dell EMC PowerSwitch running SmartFabric OS10 onto VyOS.
+    OS10's supported surface is hostname, interfaces (three-segment
+    `ethernet1/1/1` naming, CIDR addressing, `ip vrf forwarding`, L2
+    switchport and `channel-group`), SVI-derived VLANs, `port-channel`
+    LAGs, VRFs, static routes including the separate `management route`
+    RIB, local users, SNMP v2c/v3 and real VRRP. This file records which
+    of those survive the render into VyOS and which do not.
+  certainty: medium
+  references:
+    - id: os10-vyos-surface
+      path: docs/vendor-references/dell_os10_to_vyos/canonical_surface.md
+      title: "Dell OS10 -> VyOS: measured canonical surface (1 fixture cell)"
+      source_url: "https://github.com/netcanon/netcanon"
+      retrieved: "2026-09-21"
+
+# -------------------------------------------------------------------------
+
+per_field_expectation:
+
+  anycast_gateway_mac:
+    disposition: unsupported
+    reason: >
+      VyOS renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Companion to the anycast virtual-gateway
+      entries above: VyOS has no VARP / distributed-anycast-gateway
+      grammar, so the chassis-wide anycast-gateway MAC is dropped on
+      render. Previously undeclared (classify() fail-opened to
+      supported) — Fable review MTX-3. Measured over 1 cell: drifted
+      on 0, preserved on 0, both sides empty on 1.
+    references: [os10-vyos-surface]
+
+  apply_groups:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-vyos-surface]
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      VyOS renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no DHCP server pool;
+      intent.dhcp_servers are dropped on migration. Measured over 1
+      cell: drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-vyos-surface]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-vyos-surface]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-vyos-surface]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-vyos-surface]
+
+  group_content:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-vyos-surface]
+
+  hostname:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. VyOS declares no IANA ifType; the codec infers it from the
+      interface-name shape (`ethN` -> ethernetCsmacd, `lo`/`dumN` ->
+      softwareLoopback, `bondN` -> ieee8023adLag). Best-effort.
+      Measured over 1 cell: drifted on 1, preserved on 0, both sides
+      empty on 0.
+    references: [os10-vyos-surface]
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  interfaces[].lag_member_of:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-vyos-surface]
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  interfaces[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  interfaces[].vrrp_groups:
+    disposition: unsupported
+    reason: >
+      VyOS renders no instance of this surface, so the record cannot
+      exist on the target side at all. VyOS VRRP / VRRPv3 is not
+      modelled by the codec; the group is dropped on migration.
+      Measured over 1 cell: drifted on 1, preserved on 0, both sides
+      empty on 0.
+    references: [os10-vyos-surface]
+
+  lags:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0. Sample drift: all 2 lags dropped.
+    references: [os10-vyos-surface]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-vyos-surface]
+
+  local_users[].hashed_password:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  local_users[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  local_users[].role:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-vyos-surface]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-vyos-surface]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      VyOS renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no RADIUS config; RADIUS
+      host is dropped on migration. Measured over 1 cell: drifted on
+      0, preserved on 0, both sides empty on 1.
+    references: [os10-vyos-surface]
+
+  raw_sections:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-vyos-surface]
+
+  routing_instances:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  routing_instances[].description:
+    disposition: good
+    note: >
+      No cell populates this field on either side (1 of 1 trivially
+      empty), and neither codec declares the surface unsupported, so
+      nothing is claimed lost.
+    references: [os10-vyos-surface]
+
+  routing_instances[].name:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  snmp.community:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  snmp.contact:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  snmp.location:
+    disposition: good
+    note: >
+      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
+      this surface.
+    references: [os10-vyos-surface]
+
+  snmp.trap_hosts:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-vyos-surface]
+
+  snmp.v3_users:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-vyos-surface]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0. Sample drift: {"static_routes[0]
+      {'destination': '0.0.0.0/0'}": {'vrf': {'source': 'management',
+      'target': ''}}, "static_routes[2] {'destination':
+      '10.50.0.0/16'}": {'vrf': {'source': 'TENANT-A', 'target':
+      ''}}}.
+    references: [os10-vyos-surface]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      VyOS renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no syslog config;
+      intent.syslog_servers are dropped on migration. Measured over 1
+      cell: drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-vyos-surface]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      VyOS renders no instance of this surface, so the record cannot
+      exist on the target side at all. NOT EXERCISED BY THIS CORPUS —
+      all 1 cells are empty on both sides, so this disposition rests
+      on the target codec's own capability declaration rather than on
+      an observed round-trip. Render emits no time-zone stanza;
+      intent.timezone is dropped on migration. Measured over 1 cell:
+      drifted on 0, preserved on 0, both sides empty on 1.
+    references: [os10-vyos-surface]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. OS10 carries exactly one human label for a VLAN — the
+      SVI's `description` — and the render spends it on
+      CanonicalVlan.name. A separate canonical VLAN description has no
+      second place to go and is dropped. Measured over 1 cell: drifted
+      on 1, preserved on 0, both sides empty on 0.
+    references: [os10-vyos-surface]
+
+  vlans[].id:
+    disposition: unsupported
+    reason: >
+      VyOS renders no instance of this surface, so the record cannot
+      exist on the target side at all. VyOS has no top-level VLAN
+      database; 802.1Q VLANs are modelled as `vif <vid>` sub-
+      interfaces (rendered as `ethN.<vid>` CanonicalInterfaces), which
+      ARE supported. Measured over 1 cell: drifted on 1, preserved on
+      0, both sides empty on 0.
+    references: [os10-vyos-surface]
+
+  vlans[].ipv4_addresses:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-vyos-surface]
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-vyos-surface]
+
+  vlans[].tagged_ports:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-vyos-surface]
+
+  vlans[].untagged_ports:
+    disposition: lossy
+    reason: >
+      The anchor renders but the value does not survive the round
+      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
+      sides empty on 0.
+    references: [os10-vyos-surface]
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-vyos-surface]
+
+  vxlan_vnis[].mcast_group:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-vyos-surface]
+
+  vxlan_vnis[].vlan_id:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-vyos-surface]
+
+  vxlan_vnis[].vni:
+    disposition: not_applicable
+    note: >
+      Measured empty on both sides of all 1 cells: Dell OS10 declares
+      this surface unsupported, so it never enters the canonical tree
+      from this source. Re-author it on the target rather than assume
+      there was nothing there.
+    references: [os10-vyos-surface]

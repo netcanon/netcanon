@@ -61,7 +61,8 @@ _EXPECTED: dict[str, dict[str, str]] = {
     # are unsupported.
     _RI + "instance-type": (
         dict.fromkeys(
-            ("aruba_aoscx", "cisco_iosxe_cli", "cisco_iosxr", "cisco_nxos", "vyos"),
+            ("aruba_aoscx", "cisco_iosxe_cli", "cisco_iosxr", "cisco_nxos",
+             "dell_os10", "vyos"),
             "lossy",
         )
         | dict.fromkeys(
