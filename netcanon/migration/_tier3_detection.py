@@ -232,6 +232,53 @@ _OPNSENSE_TIER3_HEADERS: tuple[str, ...] = (
 )
 
 
+# Dell SmartFabric OS10 shape — `show running-configuration` headers for
+# the sections the OS10 codec does NOT consume.  Excludes `interface`,
+# `hostname`, `ip vrf`, `ip route` / `management route` (parsed), and the
+# deferred VXLAN blocks (`nve` / `virtual-network`), which have a planned
+# canonical surface — flagging those as Tier-3 would mislead, and their
+# drop is already declared in the capability matrix (the same line the
+# AOS-CX header set draws).
+#
+# `interface breakout` is matched WITHOUT its port/profile tail on
+# purpose: a 32-port switch carries 32 distinct breakout lines, and
+# `_detect_regex` dedupes by label, so capturing the tail would flood the
+# operator's dropped-sections banner with 32 near-identical entries
+# instead of one.
+_DELLOS10_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^router (?:bgp|ospf|ospfv3|isis|rip)\b.*$", re.MULTILINE),
+    re.compile(r"^ip access-list\s+\S+", re.MULTILINE),
+    re.compile(r"^ipv6 access-list\s+\S+", re.MULTILINE),
+    re.compile(r"^mac access-list\s+\S+", re.MULTILINE),
+    re.compile(r"^route-map\s+\S+", re.MULTILINE),
+    # DCB / RoCE QoS — heavy in real Azure Local switch configs.
+    re.compile(r"^class-map\b.*$", re.MULTILINE),
+    re.compile(r"^policy-map\b.*$", re.MULTILINE),
+    re.compile(r"^trust dot1p-map\s+\S+", re.MULTILINE),
+    re.compile(r"^qos-map\s+\S+", re.MULTILINE),
+    re.compile(r"^system qos\b", re.MULTILINE),
+    # VLT (Dell's MLAG) — no canonical surface; present in 10 of 12
+    # OS10 captures, so this banner fires on most real configs.
+    re.compile(r"^vlt-domain\s+\d+", re.MULTILINE),
+    re.compile(r"^interface breakout\b", re.MULTILINE),
+    # `system-user linuxadmin` is the switch's underlying LINUX shell
+    # account, not a NOS login, so the codec deliberately does not model it
+    # as a local user (re-emitting it as `username` would convert a shell
+    # account into a NOS operator).  Matched WITHOUT its tail so the
+    # secret-bearing `password <hash>` never reaches the banner.
+    re.compile(r"^system-user\b", re.MULTILINE),
+    # Chassis-wide VRRP settings (`vrrp version 2|3`, `vrrp delay reload
+    # <s>`).  The per-group canonical record is per-interface, so a
+    # SYSTEM-wide setting has no canonical home and is permanently
+    # dropped — surfaced here rather than silently discarded.  Matched
+    # without the value so the label stays constant.
+    re.compile(r"^vrrp\s+(?:version|delay)\b", re.MULTILINE),
+    re.compile(r"^telemetry\b", re.MULTILINE),
+    re.compile(r"^support-assist\b", re.MULTILINE),
+    re.compile(r"^aaa\b.*$", re.MULTILINE),
+)
+
+
 def detect_tier3_sections_iosxe_cli(raw: str) -> list[str]:
     """Detect Tier-3 stanza headers in IOS-XE / Arista CLI text.
 
@@ -268,6 +315,11 @@ def detect_tier3_sections_iosxr(raw: str) -> list[str]:
 def detect_tier3_sections_aoscx(raw: str) -> list[str]:
     """Detect Tier-3 stanza headers in Aruba AOS-CX CLI text."""
     return _detect_regex(raw, _AOSCX_TIER3_HEADERS)
+
+
+def detect_tier3_sections_dellos10(raw: str) -> list[str]:
+    """Detect Tier-3 stanza headers in Dell SmartFabric OS10 CLI text."""
+    return _detect_regex(raw, _DELLOS10_TIER3_HEADERS)
 
 
 def detect_tier3_sections_vyos(raw: str) -> list[str]:
