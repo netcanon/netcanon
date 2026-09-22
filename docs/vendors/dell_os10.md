@@ -19,12 +19,14 @@ it to the wrong codec.
 
 > **Why `best_effort` and not `certified`?**  Every other codec's
 > `certified` rests on an **in-tree real capture corpus**.  The OS10
-> corpus used to build this codec — 14 real configs — carries live
-> password hashes and is held out-of-tree, so it cannot be committed.
-> The codec is validated against those 14 captures (all parse cleanly
-> and round-trip canonical-stable) plus a committed synthetic
-> kitchen-sink fixture and full cross-vendor mesh coverage, but the
-> honest label for "no committed real corpus" is `best_effort`.
+> development corpus — 40 real configs spanning five OS10 releases —
+> is held out-of-tree: some captures carry live password hashes, and
+> the best-structured material of all carries no redistribution
+> licence.  The codec is validated against those 40 captures plus a
+> committed synthetic kitchen-sink fixture and full cross-vendor mesh
+> coverage, but the honest label for "no committed real corpus" is
+> `best_effort`.  See
+> [Real-world fixtures](#real-world-fixtures-weve-validated-against).
 
 ## What translates well
 
@@ -131,17 +133,119 @@ Declared `unsupported` — the loss is reported, never silent:
 - Management-plane scalars: `ip domain-name`, `ip name-server`,
   `ntp server`, `logging server`, DHCP pools and `radius-server`.
 
-Declared `lossy` — translated with a caveat:
+## Lossy paths
 
-- VLAN **description**.  OS10 carries exactly one human label for a
-  VLAN (the SVI's `description`) and the render spends it on the VLAN
-  **name**, so a separate canonical description has nowhere to go.
-- Anycast gateway (`virtual-gateway-address` / `-mac`).  OS10 has no
-  VARP / distributed-anycast-gateway concept — first-hop redundancy is
-  real VRRP.  Migrating from Arista VARP or NX-OS anycast gateway means
-  re-authoring it as a VRRP group.
-- VRF sub-details — description, RD, route-targets and L3VNI all live
-  under Tier-3 `router bgp`, so `ip vrf <name>` carries the name alone.
+Declared `lossy` means: translated, but something measurable is left
+behind.  Never silent — each one is reported in the migration diff.
+
+**VRRP sub-fields** — the group itself round-trips; these do not:
+
+- **`…/vrrp-groups/group/mode`** — a cross-family source (HSRP, CARP)
+  is re-expressed as real VRRP.  The virtual-IP intent survives; the
+  wire protocol changes.
+- **`…/advertisement-interval`**, **`…/authentication`**,
+  **`…/virtual-mac`**, **`…/description`** — not modelled in v1; the
+  group renders without them and the target applies its defaults.
+- **`…/virtual-ipv6s`** — OS10 expresses IPv6 VRRP through a separate
+  `vrrp-ipv6-group` stanza that v1 does not render, so IPv6 virtual
+  addresses drop while the IPv4 group survives.
+- **`…/track-interfaces`** — OS10 tracks a track-*object* id, not an
+  interface name, so a canonical track list has no faithful OS10 form.
+
+**Anycast / virtual gateway** — OS10 has no VARP or
+distributed-anycast-gateway concept at all:
+
+- **`/interfaces/…/ipv4|ipv6/address/virtual-gateway-address`** and
+  **`…/virtual-gateway-mac`**, plus the `/vlans/vlan/…` companions —
+  the address renders, the virtual gateway does not.  Migrating from
+  Arista VARP or NX-OS anycast gateway means re-authoring as VRRP.
+
+**SNMPv3 USM** — see the section above before migrating users:
+
+- **`auth-passphrase`** / **`priv-passphrase`** — a key localised to
+  the source agent's engine ID is refused with its user.
+- **`auth-protocol`** — OS10 offers only `md5` / `sha`, so every SHA-2
+  variant collapses to `sha`.  A real cryptographic downgrade.
+- **`priv-protocol`** — AES-192/256 collapse to `aes`, 3DES to `des`.
+- **`engine-id`** — OS10 states it on its own `snmp-server engineID
+  local` line, so a per-user engine ID has nowhere to go.
+
+**VRF sub-details** — `ip vrf <name>` carries the name alone:
+
+- **`instance-type`** (mac-vrf downgrades to `vrf`),
+  **`description`**, **`route-distinguisher`**, **`rt-imports`**,
+  **`rt-exports`**, **`l3-vni`** — the RD and route-targets live under
+  Tier-3 `router bgp`; the L3VNI needs the deferred `virtual-network`
+  indirection.
+
+**Interface + misc:**
+
+- **`/interfaces/interface/config/type`** — inferred from the name
+  prefix on render rather than carried explicitly.
+- **`/interfaces/interface/tunnel-type`** — the port survives as an
+  `interface <name>` stanza; its encapsulation does not.
+- **`dhcp-client`** / **`dhcp-client-v6`** — OS10 spells these
+  `ip address dhcp` / `ipv6 address autoconfig`; v1 models no value.
+- **`/interfaces/…/ipv6/address/secondary-ip`** — the IPv4 render
+  re-emits `secondary`, the IPv6 form does not.
+- **`/vlans/vlan/description`** — OS10 carries exactly one human label
+  per VLAN (the SVI's `description`) and the render spends it on the
+  VLAN **name**.
+- **`/routing/static-route/description`** — destination, next-hop and
+  administrative distance only.
+
+## Real-world fixtures we've validated against
+
+**There are none in-tree** — the reason this codec ships `best_effort`.
+Unlike every `certified` codec, `dell_os10` has no section in
+[`../../tests/fixtures/real/NOTICE.md`](../../tests/fixtures/real/NOTICE.md).
+
+Development instead used a **40-capture out-of-tree corpus** covering
+five OS10 releases — **10.4.3.1, 10.4.3.4, 10.5.1.0, 10.5.1.4,
+10.5.4.4** — across S3048, S4112F-ON, S5212F-ON, S5232F, S5248F-ON and
+Z-series platforms, plus four **OS9 / FTOS S4810** captures kept as
+negative controls.  Measured over that corpus:
+
+- **40/40 parse** without exception
+- **38/40 round-trip canonical-stable.**  The two exceptions are not
+  defects: both are Microsoft reference configs scrubbed to a literal
+  `$CREDENTIAL_PLACEHOLDER$` token, which the credential gate
+  correctly refuses to re-emit — see
+  `tests/unit/migration/codecs/dell_os10/test_render_refuses_unmodelled_credential.py`
+- **4/4 OS9 captures refused**, as intended
+
+Why it cannot simply be committed: the captures divide almost exactly
+along the wrong axis.  The permissively-licensed material (MIT) carries
+**no `! Version` banner**, while every capture that pins an OS10
+release is **unlicensed**.  So committing the licensed half would not
+satisfy the `certified` bar of ≥3 captures across ≥2 OS versions
+anyway.  **One permissively-licensed OS10 `show running-configuration`
+with its version banner intact remains the single highest-value
+contribution to this codec** — see
+[`WANTED.md`](../../tests/fixtures/real/WANTED.md).
+
+## Common gotchas
+
+⚠️ **Auto-detection needs an OS10 marker in the first 500 bytes.**
+Detection hands each codec only the leading `DEFAULT_PROBE_BYTES = 500`.
+Measured across the 40-capture corpus, **19 detect correctly, 7 return
+no candidate, and 10 are claimed by `cisco_iosxe_cli` instead** — OS10
+and IOS-XE share the `!`-delimited Cisco shape, so a capture that spends
+its opening budget on a template header, a console login banner, or a
+block of QoS never reaches an OS10-exclusive token.  If auto-detection
+picks the wrong vendor, **select `dell_os10` explicitly** — parsing is
+unaffected, since only the probe window is at issue.  Pinned in
+`tests/unit/migration/codecs/dell_os10/test_probe_window_limits.py`
+and tracked in
+[`../vendor-research/dell_os10/30-codec-plan.md`](../vendor-research/dell_os10/30-codec-plan.md)
+§9.
+
+⚠️ **A user whose password hash we can't model is dropped, loudly.**
+The renderer refuses to re-emit a credential it cannot prove is safe to
+reuse, leaving a `review:` comment naming the user instead of a
+`username` line.  A config whose secrets were scrubbed by some other
+tool will therefore render with no users at all — that is the gate
+working, not a parser fault.
 
 ## Two things that would have been silent bugs
 

@@ -418,8 +418,29 @@ and re-parse with zero errors.
 
 ## 9. Open questions
 
-1. `probe_bytes = 500` cannot cover QoS-leading OS10 configs. Accept the
-   tail, or raise the window globally?
+1. `probe_bytes = 500` cannot cover OS10 configs that spend the window
+   on a preamble. Accept the tail, or raise the window globally?
+
+   **Quantified 2026-09-21 over a 40-capture corpus** (was: "the four
+   DellGEOS captures"). Running the real `detect_codec()` across all
+   codecs, not `dell_os10.probe()` alone:
+
+   | Outcome | Count |
+   |---|---|
+   | `dell_os10` wins outright | 19 |
+   | No candidate at all | 7 |
+   | **Genuine OS10 claimed by `cisco_iosxe_cli`** | **10** (4 at ≥90) |
+   | OS9/FTOS claimed by `cisco_iosxe_cli` @95 | 4 (expected — #475 left FTOS matching via `service timestamps`) |
+
+   So the failure mode is NOT silence, it is **mis-attribution to the
+   Cisco codec** — the #460/#475 fail-open shape, at confidence 90.
+   Three distinct preamble classes cause it: jinja2 template headers
+   (`! system.j2`), serial-console login banners, and QoS-leading
+   configs. The first two carry a valid OS10 marker *later in the
+   file*, so a wider window would rescue them; the QoS-leading
+   DellGEOS captures are markerless throughout and would not be.
+   Pinned in
+   `tests/unit/migration/codecs/dell_os10/test_probe_window_limits.py`.
 2. `feature config-os9-style` lets OS10 present OS9-style commands —
    a config collected under it may not match the OS10 grammar at all.
    Unquantified; no capture in this corpus exercises it.

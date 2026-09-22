@@ -708,13 +708,20 @@ class DellOS10Codec(CodecBase):
         reproduce the very fail-open #475 closed, only with Dell on both
         sides of it.
 
-        Known limitation: the four ``DellGEOS`` captures open with ~500
-        bytes of pure QoS (``class-map type queuing``, ``trust
-        dot1p-map``) and carry NO OS10 marker inside the probe window, so
-        they return ``None`` here.  That is inherent to
+        Known limitation — the probe WINDOW, not the marker set.  A
+        capture that spends its first 500 bytes on a preamble reaches no
+        marker: QoS-leading configs (the ``DellGEOS`` captures open with
+        ``class-map type queuing`` / ``trust dot1p-map``), jinja2
+        template headers (``! system.j2``), and serial-console login
+        banners all do this.  Measured over a 40-capture corpus
+        (2026-09-21): 19 detect correctly, 7 return no candidate, and 10
+        are claimed by ``cisco_iosxe_cli`` instead — the mis-attribution
+        being the more serious half.  That is inherent to
         ``probe_bytes=500`` and is tracked as an open question in
-        ``30-codec-plan.md`` § 9.1 — not papered over with a weak
-        structural guess that would start stealing other vendors' configs.
+        ``30-codec-plan.md`` § 9 — not papered over with a weak
+        structural guess that would start stealing other vendors'
+        configs.  Pinned in
+        ``tests/unit/migration/codecs/dell_os10/test_probe_window_limits.py``.
         """
         # Reject XML / JSON early (shared shape helper).
         if detect_input_shape(raw_prefix) is not None:
