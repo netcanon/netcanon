@@ -681,16 +681,18 @@ def test_real_capture_is_never_mis_attributed_at_production_window(
     Force10 OS9 taken as Cisco IOS-XE at confidence 95) was invisible to
     it.
 
-    This asserts the weaker property that actually holds today, so it is
-    a ratchet rather than an aspiration.  Measured 2026-09-23 over the
-    committed corpus: **73 correct / 0 wrong / 17 silent**.
+    When this landed it could only assert the weaker property — that a
+    capture is never claimed by the WRONG codec — because 17 fixtures
+    across nine vendors returned no candidate at all at the then-500-byte
+    window.  #483 widened the window to 64 KiB after measuring the sweep,
+    and the corpus now detects **90 / 0 / 0**, so this asserts the full
+    property: every committed capture resolves to its own codec at the
+    width the operator actually gets.
 
-    Silence is a documented limitation of the 500-byte window and is NOT
-    asserted against here — 17 fixtures across nine vendors currently
-    return no candidate at production width, which is its own open
-    finding and deserves its own fix rather than a failing test. What is
-    asserted is the property that distinguishes "we didn't recognise it"
-    from "we recognised it as something it isn't".
+    Both halves matter and are asserted separately, because they fail for
+    different reasons: silence means no codec saw its marker (a window or
+    marker-set problem), while a wrong claim means another codec's marker
+    outscored the right one (a probe-discrimination problem).
     """
     from netcanon.services.migration_detect import detect_codec
 
@@ -698,11 +700,12 @@ def test_real_capture_is_never_mis_attributed_at_production_window(
     raw = path.read_text(encoding="utf-8", errors="replace")
     ranked = detect_codec(raw)
 
-    if not ranked:
-        pytest.skip(
-            "no candidate at the 500-byte production window — a known "
-            "limitation, covered by the whole-file sibling test"
-        )
+    assert ranked, (
+        f"{path.name}: no codec recognised this at the production probe "
+        f"window.  Silence is safer than a wrong answer, but the corpus "
+        f"measured 90/0/0 when this ratchet was set — so this is a "
+        f"regression, not a known limitation."
+    )
     top = ranked[0]
     assert top.codec == expected, (
         f"{path.name}: at the PRODUCTION probe window this is claimed by "

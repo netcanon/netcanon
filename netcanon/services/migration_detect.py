@@ -25,10 +25,45 @@ from pydantic import BaseModel, Field
 
 from ..migration.codecs.registry import get_codec, list_public_codecs
 
-#: Bytes of input passed to each codec's probe.  Longer gives better
-#: signal for ambiguous formats but most real signatures fit in the
-#: first 200-300 bytes.  Keep generous.
-DEFAULT_PROBE_BYTES = 500
+#: Bytes of input passed to each codec's probe.
+#:
+#: This was 500 until #483, on the reasoning that "most real signatures fit in
+#: the first 200-300 bytes".  Measured against the committed corpus, that was
+#: false often enough to matter: real captures open with collection headers,
+#: jinja2 template preambles, login banners, MOTDs and QoS blocks that push
+#: the vendor marker past the window.  A codec that never sees its own marker
+#: returns no candidate, and the operator gets silence or — worse — a
+#: different vendor's weaker marker winning by default.
+#:
+#: Measured 2026-09-23 over 90 committed fixtures (correct / wrong / silent)
+#: and the 40-capture Dell OS10 corpus:
+#:
+#:     window   committed        dell
+#:        500   73 / 0 / 17    19 / 10 / 11
+#:       1000   83 / 1 /  6    26 /  6 /  8
+#:       1100   85 / 0 /  5    26 /  6 /  8
+#:       1500   86 / 1 /  3    28 /  4 /  8
+#:       2000   86 / 1 /  3    26 /  6 /  8
+#:       4000   87 / 1 /  2    26 /  6 /  8
+#:       8000   89 / 0 /  1    27 /  6 /  7
+#:      16384   89 / 0 /  1    29 /  4 /  7
+#:      65536   90 / 0 /  0    29 /  4 /  7
+#:  whole file  90 / 0 /  0    29 /  4 /  7
+#:
+#: ⚠️ **Widening is NOT monotonic — do not interpolate a value, measure it.**
+#: Two committed fixtures are mis-attributed in the middle of the range and
+#: correct at both ends: `aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg` is
+#: claimed by `cisco_iosxe_cli` at 2000 and 4000 but is silent at 500-1000 and
+#: correct from 8000, and `cisco_iosxr/xrdtools_sr_xrd1.cfg` is claimed at 1000
+#: but correct from 1500.  A larger window admits more of the *wrong* codec's
+#: markers as readily as the right one's; only past every marker does the
+#: ranking settle.
+#:
+#: 65536 is where the committed corpus reaches 90/0/0, and it is identical to
+#: probing the whole file for every fixture we hold — the cap exists to bound
+#: the cost of a pathological paste, not to trade away accuracy.  Cost at this
+#: width is ~2.8 ms per file across the corpus.
+DEFAULT_PROBE_BYTES = 65536
 
 
 class DetectCandidate(BaseModel):

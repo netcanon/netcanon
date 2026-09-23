@@ -505,16 +505,36 @@ class TestDetectCodec:
         assert all(c.confidence >= 80 for c in strong)
 
     def test_probe_bytes_truncation(self):
-        """Only the first N bytes should be probed."""
-        # Put a matching OPNsense signature way past 500 bytes.
+        """Only the first N bytes should be probed.
+
+        Expressed against EXPLICIT widths on both halves.  This used to
+        rely on the default being 500 and padded the signature just past
+        it; #483 widened the default to 64 KiB, at which point the padded
+        sample fits inside the window and the "miss" half silently
+        stopped testing truncation at all.
+        """
+        # A matching OPNsense signature placed past a narrow window.
         padding = "x" * 1000
         raw = padding + "\n<opnsense>\n<system/>\n</opnsense>\n"
-        # default: miss (signature past the probe cutoff).
-        assert detect_codec(raw) == []
-        # explicit larger probe_bytes: match.
+        # Narrow window: miss (signature past the cutoff).
+        assert detect_codec(raw, probe_bytes=500) == []
+        # Wider window: match.
         results = detect_codec(raw, probe_bytes=2000)
         assert len(results) == 1
         assert results[0].codec == "opnsense"
+
+    def test_the_default_window_sees_what_a_narrow_one_misses(self):
+        """The operator-facing half of #483.
+
+        Same text, same codec: invisible at the old 500-byte window,
+        found at the shipped default.  This is the point of the
+        widening, and it fails if the default is narrowed back.
+        """
+        raw = "x" * 1000 + "\n<opnsense>\n<system/>\n</opnsense>\n"
+        assert detect_codec(raw, probe_bytes=500) == []
+        found = detect_codec(raw)
+        assert len(found) == 1
+        assert found[0].codec == "opnsense"
 
     def test_returns_detect_candidate_instances(self):
         raw = "<opnsense/>"

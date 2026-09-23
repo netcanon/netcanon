@@ -236,15 +236,21 @@ contribution to this codec** — see
 
 ## Common gotchas
 
-⚠️ **Auto-detection needs an OS10 marker in the first 500 bytes.**
-Detection hands each codec only the leading `DEFAULT_PROBE_BYTES = 500`.
-Measured across the 40-capture corpus, **19 detect correctly, 7 return
-no candidate, and 10 are claimed by `cisco_iosxe_cli` instead** — OS10
-and IOS-XE share the `!`-delimited Cisco shape, so a capture that spends
-its opening budget on a template header, a console login banner, or a
-block of QoS never reaches an OS10-exclusive token.  If auto-detection
-picks the wrong vendor, **select `dell_os10` explicitly** — parsing is
-unaffected, since only the probe window is at issue.  Pinned in
+⚠️ **Auto-detection finds about three OS10 configs in four.**
+OS10 and IOS-XE share the `!`-delimited Cisco shape, so a capture that
+spends its opening bytes on a template header, a console login banner or
+a block of QoS can reach an IOS-XE marker before an OS10-exclusive one.
+
+Measured across the 40-capture corpus, at the widened window shipped in
+#483 (`DEFAULT_PROBE_BYTES = 65536`): **29 detect correctly, 7 return no
+candidate, and 4 are still claimed by `cisco_iosxe_cli`.**  Before the
+widening it was 19 / 11 / 10 — so most, but not all, of this gap was the
+window rather than the markers.  The four that remain are config
+*fragments* (a VLAN-only or interface-only excerpt) which carry no OS10
+token at all.
+
+If auto-detection picks the wrong vendor, or none, **select `dell_os10`
+explicitly** — parsing is unaffected, since only the probe is at issue.  Pinned in
 `tests/unit/migration/codecs/dell_os10/test_probe_window_limits.py`
 and tracked in
 [`../vendor-research/dell_os10/30-codec-plan.md`](../vendor-research/dell_os10/30-codec-plan.md)
