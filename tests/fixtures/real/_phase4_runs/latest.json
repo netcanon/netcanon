@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-09-23T18:28:01+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260923T182759Z.json",
-  "mesh_run_started_utc": "2026-09-23T18:27:51+00:00",
+  "started_utc": "2026-09-23T21:08:15+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260923T210723Z.json",
+  "mesh_run_started_utc": "2026-09-23T21:07:15+00:00",
   "cells_total": 1456,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -598,19 +598,19 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 9256,
+    "ALIGNED": 9236,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 4182,
-    "EXPECTED_UNSUPPORTED": 2625,
-    "METHODOLOGY_ISSUE_under": 1926,
+    "EXPECTED_LOSSY": 4190,
+    "EXPECTED_UNSUPPORTED": 2637,
+    "METHODOLOGY_ISSUE_under": 1913,
     "METHODOLOGY_ISSUE_over": 21,
-    "STRUCTURAL_ONLY": 4556,
-    "TRIVIAL_EMPTY": 35423,
+    "STRUCTURAL_ONLY": 4635,
+    "TRIVIAL_EMPTY": 35357,
     "fields_total": 57994,
     "severity_high": 5,
     "severity_medium": 286,
-    "severity_low": 6217,
-    "severity_ok": 51486
+    "severity_low": 6283,
+    "severity_ok": 51420
   },
   "severity_matrix": {
     "arista_eos": {
@@ -2026,7 +2026,7 @@
                   }
                 ]
               },
-              "... and 12 more"
+              "... and 14 more"
             ],
             "target": [
               {
@@ -2067,7 +2067,7 @@
                 "untagged_ports": [],
                 "ipv4_addresses": []
               },
-              "... and 12 more"
+              "... and 14 more"
             ],
             "drift": {
               "vlans[0] {'id': 110, 'name': 'Tenant_A_OP_Zone_1'}": {
@@ -2183,8 +2183,8 @@
                 }
               }
             },
-            "source_count": 15,
-            "target_count": 15
+            "source_count": 17,
+            "target_count": 17
           }
         },
         "static_routes": {
