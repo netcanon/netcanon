@@ -72,6 +72,69 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **The sanitiser fabricated a route-distinguisher and collided two VRFs onto
+  one.**  `auto` is a keyword telling the device to derive the RD/RT itself,
+  not operator identity, but it was run through the route-target redactor like
+  any value.  Two consequences, the second worse than the first:
+
+  * **Fabrication.**  `rd auto` became `rd 64496:1` — a value the operator
+    never wrote.  That also contradicted a shipped promise:
+    `docs/CAPABILITIES.md` tells operators the keyword is preserved "rather
+    than inventing a value", and a same-vendor re-render of a sanitised tree
+    emitted the fabricated RD.
+  * **Collision.**  The substitution table is keyed on the value string, which
+    is safe while every string is an identity — two different real values can
+    never share a placeholder.  `auto` breaks that, because ONE string stands
+    for N real values.  On a committed NX-OS capture, two tenants whose RDs
+    genuinely differ on the device both became `64496:1`, **and so did their
+    export route-targets**, while the two explicit route-targets in the same
+    file correctly mapped to distinct placeholders.  A reviewer of that
+    submission saw a merged-VPN topology that does not exist.
+
+  It also silently defeated the derivation-keyword gate added in the same
+  release: on a sanitised tree the value is no longer `auto`, so the check
+  passes and a fabricated RD ships cross-vendor with no review comment.
+  Because `BUG_REPORTING.md` tells operators to sanitise before submitting,
+  this hid the whole class from every future contributor.
+
+  The keyword now passes through at the choke point, so none of the five call
+  sites can miss it.  The RD walk also gained the `!=` guard its sibling list
+  helper always had — without it the audit trail claimed a
+  `route-distinguisher` substitution for a value that came back unchanged, and
+  a log that over-reports is as untrustworthy as one that under-reports.
+  The RD/RT redaction rule was undocumented in both `SECURITY.md` and
+  `BUG_REPORTING.md`; both now carry it, including what is deliberately NOT
+  redacted.
+
+  ⚠️ Latent and deliberately not built: the sanitiser also walks
+  `evpn_type5_routes.rt_imports` / `.rt_exports`, which no renderer's
+  derivation gate inspects, so an `auto` there would survive into a target
+  stanza ungated.  The committed corpus contains zero `evpn_type5_routes`, so
+  nothing exercises it today — recorded so the next contributor to add such a
+  fixture does not inherit an invisible half-gate.
+
+### Changed
+
+- **The migrate page no longer stays silent when your chosen source codec did
+  not recognise the config at all.**  The detection banner showed a green tick
+  whenever the top candidate matched your pick, and showed nothing when your
+  pick was absent from the candidate list entirely — which reads as tacit
+  approval.  A note now says so explicitly.  The tick itself is unchanged but
+  its limit is documented in the template: detection is a 500-byte-prefix
+  heuristic, so agreement means the probe and the operator chose the same
+  codec, not that the codec is right.
+
+- **`_usm_keys._same_vendor` now documents that `source_vendor` records which
+  PARSER RAN, not what the config is**, and that a wrong codec choice
+  therefore opens the same-vendor credential pass.  Investigated in depth and
+  **deliberately left as a documented property rather than gated**: across
+  1236 successful wrong-codec parses over two corpora the free pass changes
+  exactly ONE verdict (the NX-OS parser reading an NX-OS line in its own
+  grammar, on placeholder values), while removing it would refuse 16 of 17
+  SNMPv3 users and 1 of 1 RADIUS secrets across 15 committed fixtures on
+  legitimate same-vendor round-trips.  Requiring the chosen codec to
+  self-attest is circular and measurably inverts on a Dell OS10 capture.
+
 - **Dell Force10 OS9 / FTOS configs were claimed by `cisco_iosxe_cli` at
   confidence 95.**  This is #475 one Dell NOS generation earlier, arriving by
   a different marker: OS10 was claimed via `! Last configuration change at`,

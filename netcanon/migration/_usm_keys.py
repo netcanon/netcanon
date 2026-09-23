@@ -160,7 +160,40 @@ _VENDOR_ALIASES: dict[str, frozenset[str]] = {
 
 def _same_vendor(source_vendor: str, target_vendor: str) -> bool:
     """True when *source_vendor* names the same platform as *target_vendor*,
-    allowing for the family-name stamps in :data:`_VENDOR_ALIASES`."""
+    allowing for the family-name stamps in :data:`_VENDOR_ALIASES`.
+
+    ⚠️ **`source_vendor` records which PARSER RAN, not what the config is.**
+    It is stamped unconditionally by whichever codec parsed the text
+    (`<vendor>/parse.py`), and nothing validates that the choice was right.
+    The `source` field on a plan request is caller-supplied with no
+    validator, and both migrate-page dropdowns default to the same vendor —
+    so an operator can hand a Dell FTOS file to `cisco_iosxe_cli` and this
+    function will then answer True for a platform the data never came from,
+    opening the same-vendor pass on a credential that platform cannot use.
+
+    This was investigated in depth (2026-09-23) and **deliberately left as a
+    property rather than gated**, because every candidate gate was measured
+    to be worse than the problem:
+
+    * Across 1236 successful wrong-codec parses over both corpora, the free
+      pass changes the verdict on exactly **one** record — and that record is
+      the NX-OS parser reading an NX-OS line in its own grammar and writing
+      it back unchanged, on values that are literally `dummypassword`.
+    * Requiring the chosen codec to self-attest (re-probe the text) is
+      circular — it asks the heuristic that already erred for a second
+      opinion — and measurably inverts: on a Dell OS10 capture
+      `cisco_iosxe_cli` attests while `dell_os10` fails to attest itself.
+    * Removing the pass outright would refuse **16 of 17 SNMPv3 users and
+      1 of 1 RADIUS secrets across 15 committed fixtures** on legitimate
+      same-vendor round-trips — the false-positive blast #460 warns against.
+
+    The honest disposition is therefore this docstring plus operator-facing
+    detection honesty, NOT a gate. If a future grammar pairs a Cisco-shaped
+    `snmp-server user … v3 …` line with a device-bound key, the response
+    surface is live and this decision should be revisited — absence over two
+    corpora is not proof. Workings:
+    `docs/reviews/2026-09-23-provenance-sanitiser/`.
+    """
     if not source_vendor:
         return False
     if source_vendor == target_vendor:

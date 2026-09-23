@@ -540,6 +540,7 @@ diff page's banner severity palette (`diff-banner-*` / `mig-banner-*`).
 |---------------------------------------|------------|-------|
 | `migrate-detect-banner`               | `<div>`    | Shown after `POST /api/v1/migration/detect` returns a candidate.  Carries `data-detected-codec` + `data-detected-confidence` attrs.  Green when the user has already picked the detected codec; blue when a switch is offered |
 | `migrate-detect-use-btn`              | `<button>` | "Use this source" — clicking sets `migrate-source-select` to the detected codec.  Only rendered when the currently-selected source differs from the detected one |
+| `migrate-detect-pick-not-recognised` | `<div>` | Appended to the detection banner when the operator's chosen source codec is absent from the candidate list entirely, i.e. that codec's own probe declined the text.  Saying nothing there reads as tacit approval |
 
 ### Rendered-output actions
 

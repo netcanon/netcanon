@@ -397,6 +397,7 @@ on the canonical model:
 | Anycast / VARP virtual-gateway addresses (public, v4 + v6) | RFC 5737 / RFC 3849 docs ranges |
 | Anycast virtual-gateway MAC + VRRP virtual MAC + system anycast-gateway MAC (burned-in / operator-assigned) | RFC 7042 documentation MAC (`00:00:5e:00:53:NN`), separator style preserved; protocol-standard VRRP / HSRP / GLBP / CARP vMACs + multicast / broadcast preserved (identify nothing) |
 | Static-route destination prefix + next-hop (public) | RFC 5737 / RFC 3849 docs ranges (prefix length preserved) |
+| Route distinguishers + route-targets (`<asn>:<nn>` / `<ip>:<nn>`) | Stable `64496:N` placeholders on the RFC 5398 documentation ASN, so the correlation structure between a VRF's RD and the RTs that import it survives.  **The `auto` derivation keyword is preserved verbatim** — it is an instruction to the device, not an identity, so redacting it fabricated a value the operator never wrote AND collided (one keyword stands for N different real values, so two tenants' distinct RDs merged onto one placeholder) |
 | Interface descriptions | `description redacted` |
 | Tier-3 sections (firewall / NAT / VPN) | Stripped entirely |
 
