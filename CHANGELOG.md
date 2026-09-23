@@ -72,6 +72,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **The cross-mesh fidelity audit scored 15 of its 1339 cells against a
+  source tree the render had already rewritten.**  `process_cell` runs
+  `parse → render → parse → compare(source, target)` and passed the *live*
+  tree to both the render and the comparison.  `render` does not leave its
+  argument alone: the three port-centric render paths (`arista_eos`,
+  `cisco_iosxe_cli`, `juniper_junos`) call `project_vlan_to_switchport`,
+  which appends synthesised `CanonicalInterface` records into the caller's
+  tree in place, so the audit compared the target against a source that had
+  just been back-filled with exactly the records the render was about to
+  emit — `interfaces` agreed *by construction*.  One `aruba_aoss` capture
+  parses to 0 interfaces and held 52 after being rendered.  `process_cell`
+  now deep-copies the source before rendering and scores against the copy.
+
+  Scope was measured rather than estimated: 15 cells, five `aruba_aoss`
+  fixtures × three targets, with no cross-cell contamination (each cell
+  re-parses).  The correction moves the committed baseline — `ALIGNED`
+  8356 → 8332, `STRUCTURAL_ONLY` 4200 → 4270, `METHODOLOGY_ISSUE_under`
+  1872 → 1853, `TRIVIAL_EMPTY` 32270 → 32240, `EXPECTED_LOSSY` 3756 →
+  3759 — while `CODEC_BUG` holds at **5** and `METHODOLOGY_ISSUE_over` at
+  **21**, so the fidelity ratchet is unmoved.
+
+  This is a measurement-integrity fix, not an operator-facing one: the
+  rendered config is identical either way and the synthesis itself is
+  correct and intended.  Nor is the new verdict on those cells
+  *right* — materialising 9 interfaces into 49 is a legitimate gain and
+  the taxonomy has no class for it; the defect was that the audit's input
+  was mutable by its own subject.  Pinned by
+  `tests/unit/tools/test_run_full_mesh_source_snapshot.py`, which asserts
+  recorded source counts equal a fresh parse without encoding whether
+  `render` mutates (that is current behaviour, not a contract).
+
 - **Dell SmartFabric OS10 configs were confidently mis-detected as Cisco
   IOS-XE.**  `cisco_iosxe_cli`'s probe scores `! Last configuration change
   at` at weight 2 and returns confidence 95 at `>= 2`, so that single line

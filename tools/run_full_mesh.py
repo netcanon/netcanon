@@ -8,6 +8,10 @@ performs ``target_codec.parse(target_codec.render(source_codec.parse(raw)))``,
 and records per-canonical-field drift between the source-side canonical
 tree and the round-tripped target-side canonical tree.
 
+The source side of that comparison is a ``deepcopy`` taken BEFORE the
+render, not the tree the render was handed — ``render`` may mutate its
+argument (see :func:`process_cell`).
+
 What this is
 ------------
 A *mechanical* drift report.  It tells you which top-level
@@ -72,6 +76,7 @@ Constraints honoured
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 import time
@@ -746,6 +751,20 @@ def process_cell(
         cell["duration_ms"] = int((time.perf_counter() - t0) * 1000)
         return cell
 
+    # (#481) Snapshot the source BEFORE rendering.  ``render`` is NOT
+    # guaranteed to leave its argument alone: the three port-centric
+    # render paths (arista_eos, cisco_iosxe_cli, juniper_junos) call
+    # ``project_vlan_to_switchport(tree)``, which APPENDS synthesised
+    # CanonicalInterface records into the caller's tree in place.  With
+    # the live tree on both sides of the comparison below, the audit was
+    # scoring ``interfaces`` against a source the render had already
+    # back-filled with exactly the records it was about to emit — so the
+    # field matched by construction on 15 of the 1339 cells (five
+    # aruba_aoss fixtures x three targets).  A measurement whose input is
+    # mutable by its subject is not a measurement.  See
+    # docs/reviews/2026-09-22-api-full-mesh/40-api-identity-settled.md.
+    pristine_source = copy.deepcopy(canonical_source)
+
     try:
         rendered = target_codec.render(canonical_source)
     except Exception as exc:
@@ -770,7 +789,7 @@ def process_cell(
         u.path for u in target_codec.capabilities.unsupported
     ]
     field_disposition = compute_field_disposition(
-        canonical_source, canonical_target, target_unsupported,
+        pristine_source, canonical_target, target_unsupported,
     )
     cell["field_disposition"] = field_disposition
     cell["summary"] = _summary_counts(field_disposition)

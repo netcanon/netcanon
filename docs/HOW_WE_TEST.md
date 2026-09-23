@@ -135,6 +135,14 @@ display.
 parse-render drift across every (source × target × fixture)
 permutation).
 
+The source side of each comparison is a snapshot taken *before* the
+render, not the tree the render was handed.  Rendering is not
+guaranteed to leave its argument alone — the port-centric render paths
+synthesise missing interfaces into the tree in place — and an audit
+whose input can be edited by the code it measures is not measuring
+anything.  Pinned by
+`tests/unit/tools/test_run_full_mesh_source_snapshot.py`.
+
 `python tools/run_phase4_reconciliation.py` — applies the 8-class
 variance taxonomy and generates
 `tests/fixtures/real/PHASE4_RECONCILIATION.md` (the matrix).
