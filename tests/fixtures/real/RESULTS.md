@@ -61,6 +61,11 @@ originally proven on cisco_iosxe_cli — the source-side pattern of
 snapshotting legitimate VLAN ids BEFORE `project_switchport_to_vlan`
 and pruning phantoms AFTER landed here first.  See
 `tests/unit/migration/codecs/cisco_iosxe_cli/test_trunk_allowed_phantom_vlan_guard.py`.
+⚠️ What counts as a *phantom* narrowed in 2026-09: the keep-set moved
+from `access_and_native_vlan_ids` to `switchport_declared_vlan_ids`,
+so a VID named by a **narrow** trunk-allowed list is now kept and only
+a **wide** "allow everything" range is pruned.  The snapshot-then-prune
+mechanism this wave established is unchanged.
 Wave 7c also closed the rendered-secondary IPv4 path on this codec
 (secondary `ip address ... secondary` lines now round-trip stable).
 

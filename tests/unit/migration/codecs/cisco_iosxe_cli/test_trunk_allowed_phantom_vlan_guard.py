@@ -70,10 +70,15 @@ def test_cisco_trunk_allowed_does_not_inflate_vlans() -> None:
 def test_cisco_trunk_allowed_with_explicit_subset_keeps_explicit() -> None:
     """``switchport trunk allowed vlan 10,20,30`` with explicit
     ``vlan 10`` and ``vlan 20`` stanzas (and NO ``vlan 30``) must keep
-    the 2 explicit definitions on ``tree.vlans`` and drop the phantom
-    VID 30.  ``trunk_allowed_vlans`` on the interface stays at
-    ``[10, 20, 30]`` — it's the per-port L2 attribute, not the VLAN
-    database."""
+    all THREE on ``tree.vlans``.  ``trunk_allowed_vlans`` on the
+    interface stays at ``[10, 20, 30]`` — it's the per-port L2
+    attribute, not the VLAN database.
+
+    VID 30 used to be dropped here as "the phantom".  It is not one: a
+    three-entry enumeration is a specific operator declaration.  Dropping
+    it produced a target config whose trunk allowed a VLAN the config
+    never declared.  Phantom-ness is about the BREADTH of the list — see
+    :func:`test_cisco_partial_wide_range_does_not_inflate`."""
     cfg = (
         "hostname r1\n"
         "!\n"
@@ -92,7 +97,10 @@ def test_cisco_trunk_allowed_with_explicit_subset_keeps_explicit() -> None:
     )
     tree = parse_intent(cfg)
     ids = sorted(v.id for v in tree.vlans)
-    assert ids == [10, 20]
+    assert ids == [10, 20, 30]
+    by_id = {v.id: v for v in tree.vlans}
+    assert by_id[10].name == "V10", "declared names survive the prune"
+    assert by_id[20].name == "V20"
     iface = next(
         i for i in tree.interfaces if i.name == "GigabitEthernet0/0/0"
     )
@@ -100,9 +108,9 @@ def test_cisco_trunk_allowed_with_explicit_subset_keeps_explicit() -> None:
     # Surviving VLANs still gained the iface's tagged_ports projection
     # — the guard prunes phantoms but doesn't strip membership info
     # from legitimate records.
-    by_id = {v.id: v for v in tree.vlans}
     assert "GigabitEthernet0/0/0" in by_id[10].tagged_ports
     assert "GigabitEthernet0/0/0" in by_id[20].tagged_ports
+    assert "GigabitEthernet0/0/0" in by_id[30].tagged_ports
 
 
 def test_cisco_trunk_allowed_round_trip_stable() -> None:
@@ -215,8 +223,11 @@ def test_cisco_access_vlan_without_stanza_survives() -> None:
 def test_cisco_trunk_native_vlan_without_stanza_survives() -> None:
     """``switchport trunk native vlan 11`` (no ``vlan 11`` stanza): the
     native VLAN must exist for the trunk to carry untagged traffic, so
-    VID 11 is real and kept.  VID 20 — appearing ONLY in
-    ``trunk_allowed`` — is still pruned as a possible phantom."""
+    VID 11 is real and kept.
+
+    VID 20 — appearing ONLY in a two-entry ``trunk_allowed`` list — is
+    kept too.  It used to be pruned, which left the rendered trunk
+    allowing a VLAN the config never declared."""
     cfg = (
         "hostname sw\n"
         "!\n"
@@ -228,8 +239,7 @@ def test_cisco_trunk_native_vlan_without_stanza_survives() -> None:
         "end\n"
     )
     ids = {v.id for v in parse_intent(cfg).vlans}
-    assert 11 in ids
-    assert 20 not in ids
+    assert ids == {11, 20}
 
 
 def test_cisco_access_kept_but_trunk_allowed_only_range_pruned() -> None:

@@ -148,6 +148,31 @@ If VLANs are missing on the target, check:
   Tier-3)
 - The dropped_tier3_sections list
 
+**One case is by design: a VLAN carried only by an
+"allow-everything" trunk.**  Netcanon synthesises a VLAN record for
+every VID your switchport lines mention, then prunes the ones no
+config actually declares.  A VID is kept if it has a `vlan <N>`
+stanza or an SVI, if a port uses it as an access or native VLAN, or
+if it appears in a *specific* `switchport trunk allowed vlan` list.
+It is dropped only when its sole mention is a wide range such as
+`1-4094`, `2-4094` or `100-3000` — those say "carry whatever
+exists", not "these VLANs exist", and expanding them would invent
+thousands of VLANs you never wrote.
+
+So `switchport trunk allowed vlan 701-710` gives you ten VLANs on
+the target; `switchport trunk allowed vlan 1-4094` gives you none
+from that line alone.  If your VLAN database genuinely lives behind
+a wide trunk and nowhere else, declare the VLANs explicitly in the
+source config before translating.
+
+⚠️ Releases up to and including **v0.7.5** did not limit this
+pruning to wide ranges — *any* VLAN appearing solely in a trunk-allowed
+list was dropped, however short the list.  If you translated a trunked
+config on one of those releases, re-check the target's VLAN
+database: the trunk lines were
+emitted correctly but the matching `vlan <N>` declarations could be
+missing, which silently stops those VLANs forwarding.
+
 ### "My hashed password came out as a review comment"
 
 By design.  Netcanon's hash-portability policy (see

@@ -232,10 +232,33 @@ def test_arista_render_emits_trunk_native_vlan() -> None:
     assert "switchport trunk allowed vlan 10,20" in rendered
 
 
-def test_junos_phantom_vlan_guard_drops_undeclared_vid() -> None:
-    """Synthetic Junos config: declare ``vlans v10 vlan-id 10``, then
-    a port with ``vlan members v99`` (no v99 stanza).  The Junos
-    parser must not surface VLAN 99 in ``intent.vlans``."""
+def test_junos_phantom_vlan_guard_drops_wide_vlan_members_range() -> None:
+    """Synthetic Junos config: declare ``vlans v10 vlan-id 10``, then a
+    port whose ``vlan members`` span the whole VLAN space.  The Junos
+    parser must not surface 4094 phantom records in ``intent.vlans``."""
+    cfg = (
+        "set system host-name sw1\n"
+        "set vlans v10 vlan-id 10\n"
+        "set interfaces Ethernet1 unit 0 family ethernet-switching "
+        "interface-mode trunk\n"
+        "set interfaces Ethernet1 unit 0 family ethernet-switching "
+        "vlan members 1-4094\n"
+    )
+    intent = junos_parse(cfg)
+    ids = sorted(v.id for v in intent.vlans)
+    assert ids == [10], (
+        f"an allow-everything range must synthesise no VLAN records; "
+        f"got {len(ids)} ids"
+    )
+
+
+def test_junos_specific_vlan_members_vid_survives() -> None:
+    """A single ``vlan members 99`` with no ``vlans v99`` stanza names
+    exactly one VLAN the operator put on that link, so it survives.
+
+    This used to assert ``ids == [10]``.  Pruning VID 99 rendered a
+    Junos trunk whose ``vlan members`` referenced a VLAN the config
+    never declared."""
     cfg = (
         "set system host-name sw1\n"
         "set vlans v10 vlan-id 10\n"
@@ -245,11 +268,7 @@ def test_junos_phantom_vlan_guard_drops_undeclared_vid() -> None:
         "vlan members 99\n"
     )
     intent = junos_parse(cfg)
-    ids = sorted(v.id for v in intent.vlans)
-    assert ids == [10], (
-        f"Phantom VLAN 99 must be pruned (no ``vlans v99`` stanza); "
-        f"got {ids!r}"
-    )
+    assert sorted(v.id for v in intent.vlans) == [10, 99]
 
 
 def test_arista_parse_recognises_trunk_native_vlan() -> None:

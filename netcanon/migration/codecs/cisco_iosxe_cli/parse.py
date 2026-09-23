@@ -652,14 +652,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # operator-declared VLANs (the C9300 running-config case: VLANs used
     # only via ``switchport access vlan 20`` with the database in
     # ``vlan.dat`` and no SVI) — keeping them recovers the real VLANs while
-    # still pruning VIDs that appear solely in a wide ``trunk allowed``
-    # range as possible phantoms.
+    # still pruning VIDs that appear solely in a WIDE ``trunk allowed``
+    # range as possible phantoms.  A narrow trunk-allowed list is itself a
+    # specific declaration, so its members are kept too.
     from ...canonical.transforms import (
-        access_and_native_vlan_ids,
         project_switchport_to_vlan,
+        switchport_declared_vlan_ids,
     )
+    # See ``canonical.transforms.switchport_declared_vlan_ids``.
     legitimate_vlan_ids = (
-        {v.id for v in intent.vlans} | access_and_native_vlan_ids(intent)
+        {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
     project_switchport_to_vlan(intent)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]

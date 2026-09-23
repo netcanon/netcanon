@@ -506,15 +506,27 @@ class TestVlans:
         # VLAN 1 is po100's native VLAN and ethernet1/1/12's access VLAN.
         assert "ethernet1/1/12" in by_id[1].untagged_ports
 
-    def test_trunk_only_vlans_are_pruned_as_phantoms(self, codec):
+    def test_trunk_only_vlans_survive_when_the_list_is_specific(self, codec):
         """VLANs 32 / 34 / 47 appear ONLY inside po100's `trunk allowed`
-        list — no SVI, no access or native port — so the phantom-VLAN
-        guard drops them.  Pinned explicitly because the alternative
-        (materialising a record for every id in a range) is how a
-        `switchport trunk allowed vlan 1-4094` line inflates the tree by
-        thousands of phantom VLANs."""
+        list — no SVI, no access or native port.
+
+        They are still REAL: the operator enumerated exactly four VIDs on
+        that link.  A four-entry list is a declaration, not the "allow
+        everything" idiom, so all four survive the phantom prune.
+
+        This assertion used to read ``== {1, 461}``, which is the defect a
+        user reported against this very sample: translating it to IOS-XE
+        emitted `switchport trunk allowed vlan 32,34,47,461` but declared
+        only `vlan 1` and `vlan 461`, so the target would not have
+        forwarded 32 / 34 / 47 at all.  The loss happened at PARSE time,
+        which is why no renderer and no cross-mesh cell could see it.
+
+        The anti-inflation property it was protecting is unchanged and is
+        pinned next door by
+        :meth:`test_wide_trunk_range_does_not_inflate_vlans`.
+        """
         intent = codec.parse(_DEVICE_DUMP)
-        assert {v.id for v in intent.vlans} == {1, 461}
+        assert {v.id for v in intent.vlans} == {1, 32, 34, 47, 461}
 
     def test_wide_trunk_range_does_not_inflate_vlans(self, codec):
         """The phantom-VLAN guard: a wide `trunk allowed` range must not

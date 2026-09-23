@@ -396,14 +396,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # cisco_nxos — a wide ``vlan trunk allowed`` range must not inflate
     # tree.vlans with phantom records.
     from ...canonical.transforms import (
-        access_and_native_vlan_ids,
         project_switchport_to_vlan,
+        switchport_declared_vlan_ids,
     )
-    # Keep access/native VLANs (single, operator-declared VIDs) through the
-    # prune; only VIDs appearing solely in a wide trunk-allowed range are
-    # dropped as possible phantoms.
+    # Keep every VID the switchport config declares: access / native
+    # singles, plus the members of any ``vlan trunk allowed`` list narrow
+    # enough to be a specific declaration.  Only VIDs appearing solely in
+    # a WIDE trunk-allowed range are dropped as possible phantoms.
+    # See ``canonical.transforms.switchport_declared_vlan_ids``.
     legitimate_vlan_ids = (
-        {v.id for v in intent.vlans} | access_and_native_vlan_ids(intent)
+        {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
     project_switchport_to_vlan(intent)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]

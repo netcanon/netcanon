@@ -59,18 +59,40 @@ def test_parse_projects_access_vlan_to_vlan_untagged_ports() -> None:
     assert "Ethernet1" not in by_id[10].tagged_ports
 
 
-def test_parse_phantom_vlan_guard_drops_undeclared_trunk_allowed_vid() -> None:
-    """Phase 4b Wave 7c-C: trunk-allowed VIDs that have no top-level
-    ``vlan N`` stanza must NOT survive parse — the phantom-VLAN
-    guard mirrors the cisco_iosxe_cli pattern.  Without the guard a
-    cross-vendor pass from a source that already pruned phantoms
-    (Cisco IOS-XE) silently re-inflated the canonical VLAN table on
-    Arista round-trip parse, surfacing as ``vlans`` count drift in
-    the Phase 4 mesh.
+def test_parse_phantom_vlan_guard_drops_wide_trunk_allowed_range() -> None:
+    """Phase 4b Wave 7c-C: a WIDE trunk-allowed range must not inflate
+    ``intent.vlans``.  Without the guard a cross-vendor pass from a
+    source that already pruned phantoms (Cisco IOS-XE) silently
+    re-inflated the canonical VLAN table on Arista round-trip parse,
+    surfacing as ``vlans`` count drift in the Phase 4 mesh.
 
     The per-port ``trunk_allowed_vlans`` attribute is still carried
     on the interface — the L2 attribute round-trips through canonical
-    unchanged; only the synthesised top-level VLAN entry is pruned.
+    unchanged; only the synthesised top-level VLAN entries are pruned.
+    """
+    cfg = (
+        "hostname sw1\n"
+        "interface Ethernet3\n"
+        "   switchport mode trunk\n"
+        "   switchport trunk allowed vlan 1-4094\n"
+    )
+    intent = parse_intent(cfg)
+    assert intent.vlans == [], (
+        "an allow-everything range must synthesise no VLAN records"
+    )
+    iface = next(i for i in intent.interfaces if i.name == "Ethernet3")
+    assert iface.trunk_allowed_vlans == list(range(1, 4095))
+
+
+def test_parse_keeps_a_specific_trunk_allowed_vid() -> None:
+    """A single-VID trunk-allowed list is as explicit as an access VLAN.
+
+    ``switchport trunk allowed vlan 99`` names exactly one VLAN the
+    operator put on that link.  This used to assert ``99 not in by_id``
+    — pruning it meant a target rendered `switchport trunk allowed vlan
+    99` with no `vlan 99` stanza to back it, so the VLAN did not forward.
+    Breadth, not the mere absence of a stanza, is what makes a VID a
+    phantom; the wide case is pinned above.
     """
     cfg = (
         "hostname sw1\n"
@@ -80,16 +102,20 @@ def test_parse_phantom_vlan_guard_drops_undeclared_trunk_allowed_vid() -> None:
     )
     intent = parse_intent(cfg)
     by_id = {v.id: v for v in intent.vlans}
-    assert 99 not in by_id, (
-        "phantom VID 99 must be pruned (no explicit vlan 99 stanza)"
-    )
+    assert 99 in by_id
+    assert "Ethernet3" in by_id[99].tagged_ports
     iface = next(i for i in intent.interfaces if i.name == "Ethernet3")
     assert iface.trunk_allowed_vlans == [99]
 
 
 def test_parse_phantom_guard_keeps_explicit_vlan_membership() -> None:
     """Phase 4b Wave 7c-C: phantom-VLAN guard must NOT strip
-    membership from legitimate (explicitly-declared) VLAN records."""
+    membership from legitimate (explicitly-declared) VLAN records.
+
+    VID 30 has no ``vlan 30`` stanza but is one of three VIDs the
+    operator enumerated on the trunk, so it is kept alongside the two
+    declared ones (it used to be dropped).
+    """
     cfg = (
         "hostname sw1\n"
         "vlan 10\n"
@@ -102,9 +128,12 @@ def test_parse_phantom_guard_keeps_explicit_vlan_membership() -> None:
     )
     intent = parse_intent(cfg)
     by_id = {v.id: v for v in intent.vlans}
-    assert sorted(by_id) == [10, 20], "phantom VID 30 must be pruned"
+    assert sorted(by_id) == [10, 20, 30]
+    assert by_id[10].name == "V10", "declared names must survive the prune"
+    assert by_id[20].name == "V20"
     assert "Ethernet1" in by_id[10].tagged_ports
     assert "Ethernet1" in by_id[20].tagged_ports
+    assert "Ethernet1" in by_id[30].tagged_ports
     iface = next(i for i in intent.interfaces if i.name == "Ethernet1")
     assert iface.trunk_allowed_vlans == [10, 20, 30]
 

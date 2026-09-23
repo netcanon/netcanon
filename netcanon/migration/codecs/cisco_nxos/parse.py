@@ -504,15 +504,17 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # iosxe_cli — a wide ``switchport trunk allowed`` range must not
     # inflate tree.vlans with thousands of phantom records.
     from ...canonical.transforms import (
-        access_and_native_vlan_ids,
         project_switchport_to_vlan,
+        switchport_declared_vlan_ids,
     )
-    # Keep access/native VLANs (single, operator-declared VIDs — e.g. a
-    # ``switchport access vlan 20`` whose VLAN has no ``vlan 20`` stanza)
-    # through the prune; only VIDs appearing solely in a wide
-    # ``switchport trunk allowed`` range are dropped as possible phantoms.
+    # Keep every VID the switchport config declares: access / native
+    # singles (e.g. a ``switchport access vlan 20`` whose VLAN has no
+    # ``vlan 20`` stanza), plus the members of any ``switchport trunk
+    # allowed`` list narrow enough to be a specific declaration.  Only
+    # VIDs appearing solely in a WIDE range are dropped as phantoms.
+    # See ``canonical.transforms.switchport_declared_vlan_ids``.
     legitimate_vlan_ids = (
-        {v.id for v in intent.vlans} | access_and_native_vlan_ids(intent)
+        {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
     project_switchport_to_vlan(intent)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
