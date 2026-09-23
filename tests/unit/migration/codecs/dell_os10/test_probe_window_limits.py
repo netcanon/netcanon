@@ -1,13 +1,11 @@
-"""The OS10 probe is limited by the 500-byte detection WINDOW, not by
-its marker set — and this pins the difference.
+"""The OS10 probe is limited by the detection WINDOW, not by its marker
+set — and this pins the difference.
 
-``detect_codec()`` hands each codec only
-``DEFAULT_PROBE_BYTES = 500`` leading bytes
-(``netcanon/services/migration_detect.py:31``).  OS10 captures in the
-wild routinely spend that entire budget before emitting a single
-OS10-exclusive token:
+``detect_codec()`` hands each codec only ``DEFAULT_PROBE_BYTES`` leading
+bytes.  OS10 captures in the wild routinely spend a small budget before
+emitting a single OS10-exclusive token:
 
-* **comment//template preambles** — jinja2-rendered configs open with
+* **comment/template preambles** — jinja2-rendered configs open with
   ``! system.j2 - hostname`` / ``! Name:`` / ``! Make:`` header blocks
 * **console captures** — a switch scraped over the serial console
   carries ``OS10 login:`` + the Debian boot banner first
@@ -16,22 +14,31 @@ OS10-exclusive token:
 
 The markers themselves are fine; they are simply out of range.  These
 tests prove exactly that by probing the SAME text twice — once
-truncated to the production window (no candidate) and once whole
-(claimed at high confidence).  If someone later widens the window or
-adds an early structural marker, the first assertion flips and this
-module is the place that explains why that is a deliberate change.
+truncated, once whole.
 
-⚠️ This is a KNOWN, DOCUMENTED limitation, not an unnoticed bug — see
-``dell_os10/codec.py::probe`` docstring and
-``docs/vendor-research/dell_os10/30-codec-plan.md`` §9 item 1.  It is
-pinned here rather than "fixed" with a weak structural guess, because a
-loose OS10 heuristic would start stealing other Cisco-shaped vendors'
-configs — the failure mode PR #475 closed.
+⚠️ **UPDATED 2026-09-23 (#483): the window was widened, 500 -> 65536.**
+This module's original header said the 500-byte limit was "a KNOWN,
+DOCUMENTED limitation, not an unnoticed bug", pinned "rather than
+'fixed' with a weak structural guess, because a loose OS10 heuristic
+would start stealing other Cisco-shaped vendors' configs".  That
+reasoning was about the MARKER SET and it still stands — no marker was
+loosened.  What changed is the budget those markers are given, which
+was measured rather than guessed: over the 90 committed fixtures the
+window took detection from 73 correct / 0 wrong / 17 silent to a
+perfect **90 / 0 / 0**, and over the 40-capture Dell corpus from
+19/10/11 to 29/4/7.
+
+The assertions below therefore now pass ``probe_bytes`` / a slice
+EXPLICITLY rather than reading the default, because what they test is
+the window MECHANISM — that a marker out of range is not seen — which
+is true at any width and is the thing worth pinning.  See the sweep
+table in ``netcanon/services/migration_detect.py``, including the
+warning that widening is **not monotonic**.
 
 See also:
-- netcanon/services/migration_detect.py — DEFAULT_PROBE_BYTES = 500
+- netcanon/services/migration_detect.py — DEFAULT_PROBE_BYTES + the sweep
 - netcanon/migration/codecs/dell_os10/codec.py — the marker ladder
-- tests/unit/migration/test_detect.py — the cross-codec deferral suite
+- tests/unit/migration/test_real_captures.py — the corpus-wide guard
 """
 
 from __future__ import annotations
@@ -93,10 +100,18 @@ _PLAIN_OS10 = (
 )
 
 
-def test_probe_window_is_still_500_bytes() -> None:
-    """Pin the constant these tests reason about.  If it moves, the
-    window-boundary assertions below stop meaning what they claim."""
-    assert DEFAULT_PROBE_BYTES == 500
+#: The width these boundary samples were authored against.  Kept as a
+#: module constant, NOT read from DEFAULT_PROBE_BYTES, so that widening
+#: the production window never silently turns these into no-ops: at 64 KiB
+#: every sample below is shorter than the window and the truncation half
+#: of each assertion would stop testing anything.
+_AUTHORED_WINDOW = 500
+
+
+def test_the_production_window_is_at_least_the_authored_one() -> None:
+    """A narrowing would be a silent regression for every capture this
+    module describes, so catch it here."""
+    assert DEFAULT_PROBE_BYTES >= _AUTHORED_WINDOW
 
 
 @pytest.mark.parametrize(
@@ -113,9 +128,9 @@ def test_marker_outside_the_window_is_not_seen(sample: str, label: str) -> None:
     text, so a failure here can only mean the window changed — never
     that the marker set regressed.
     """
-    truncated = sample[:DEFAULT_PROBE_BYTES]
+    truncated = sample[:_AUTHORED_WINDOW]
     assert DellOS10Codec.probe(truncated) is None, (
-        f"{label}: expected no candidate inside the 500-byte window"
+        f"{label}: expected no candidate inside the {_AUTHORED_WINDOW}-byte window"
     )
 
     whole = DellOS10Codec.probe(sample)

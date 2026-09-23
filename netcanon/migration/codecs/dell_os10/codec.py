@@ -708,19 +708,23 @@ class DellOS10Codec(CodecBase):
         reproduce the very fail-open #475 closed, only with Dell on both
         sides of it.
 
-        Known limitation — the probe WINDOW, not the marker set.  A
-        capture that spends its first 500 bytes on a preamble reaches no
-        marker: QoS-leading configs (the ``DellGEOS`` captures open with
-        ``class-map type queuing`` / ``trust dot1p-map``), jinja2
-        template headers (``! system.j2``), and serial-console login
-        banners all do this.  Measured over a 40-capture corpus
-        (2026-09-21): 19 detect correctly, 7 return no candidate, and 10
-        are claimed by ``cisco_iosxe_cli`` instead — the mis-attribution
-        being the more serious half.  That is inherent to
-        ``probe_bytes=500`` and is tracked as an open question in
-        ``30-codec-plan.md`` § 9 — not papered over with a weak
-        structural guess that would start stealing other vendors'
-        configs.  Pinned in
+        The probe WINDOW, not the marker set, was the dominant limit
+        here.  A capture that spends its opening bytes on a preamble
+        reaches no marker: QoS-leading configs (the ``DellGEOS``
+        captures open with ``class-map type queuing`` / ``trust
+        dot1p-map``), jinja2 template headers (``! system.j2``), and
+        serial-console login banners all do this.
+
+        Measured over a 40-capture corpus: at ``probe_bytes=500``,
+        19 detected correctly, 11 returned no candidate and 10 were
+        claimed by ``cisco_iosxe_cli``.  #483 widened the window to
+        65536 after measuring the full sweep, giving **29 / 7 / 4**.
+        The four remaining mis-attributions are config FRAGMENTS (a
+        VLAN-only or interface-only excerpt) carrying no OS10 token at
+        all, so no window reaches them; closing those needs a marker,
+        and a weak structural guess would start stealing other vendors'
+        configs — the failure mode #475 closed.  Tracked in
+        ``30-codec-plan.md`` § 9.  Pinned in
         ``tests/unit/migration/codecs/dell_os10/test_probe_window_limits.py``.
         """
         # Reject XML / JSON early (shared shape helper).

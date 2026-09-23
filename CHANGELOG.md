@@ -70,6 +70,39 @@ timestamp if your timezone matters for an audit.
   passphrase and renders WITHOUT the keyword; labelling it pre-localised
   would make the switch derive a key from a key.
 
+### Changed
+
+- **Auto-detection now reads up to 64 KiB of a config instead of 500 bytes.**
+  `DEFAULT_PROBE_BYTES` was 500 on the reasoning that "most real signatures
+  fit in the first 200-300 bytes".  Measured against the committed corpus that
+  was false often enough to matter: real captures open with collection
+  headers, jinja2 template preambles, login banners, MOTDs and QoS blocks that
+  push the vendor marker past the window, and a codec that never sees its own
+  marker returns no candidate — or loses to a different vendor's weaker
+  marker.
+
+  Over the 90 committed fixtures, detection goes from **73 correct / 0 wrong /
+  17 silent** to a perfect **90 / 0 / 0**.  Over the 40-capture Dell OS10
+  corpus it goes from 19 / 10 / 11 to **29 / 4 / 7**.  Cost is ~2.8 ms per
+  file.
+
+  ⚠️ **Widening is NOT monotonic — the value was measured, not
+  interpolated, and any future change must be re-measured.**  Two committed
+  fixtures are mis-attributed in the MIDDLE of the range and correct at both
+  ends: `aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg` is claimed by
+  `cisco_iosxe_cli` at 2000 and 4000 bytes but is silent at 500-1000 and
+  correct from 8000, and `cisco_iosxr/xrdtools_sr_xrd1.cfg` is claimed at 1000
+  but correct from 1500.  A larger window admits more of the WRONG codec's
+  markers as readily as the right one's; only past every marker does the
+  ranking settle.  The full sweep table is in `migration_detect.py`.
+
+  No marker was loosened — the change is the budget those markers are given.
+  The corpus-wide production-window guard added earlier in this release now
+  asserts the full property (every capture resolves to its own codec) rather
+  than only "never the wrong codec".  Two detection tests that relied on the
+  default being 500 now pass explicit widths, so they keep testing truncation
+  instead of silently becoming no-ops.
+
 ### Fixed
 
 - **The sanitiser fabricated a route-distinguisher and collided two VRFs onto
