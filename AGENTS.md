@@ -374,6 +374,33 @@ tests use these exclusively — never CSS classes or element structure.  See
   usable key is a half-configured account.  Gate on
   `auth_protocol or priv_protocol` -- gating on auth alone lets a
   privacy-only user carry a foreign key straight through.
+- **Never** assume a credential surface is gated because its NEIGHBOURS are.
+  Local-user password hashes (#460-#462) and SNMPv3 USM keys (#463-#472)
+  each got a shared portability policy; RADIUS shared secrets, the third
+  credential class on the canonical tree, had **no gate at all** until
+  #483 -- every render path wrote `CanonicalRADIUSServer.key` verbatim
+  into the target's key slot.  Five of the six leaked a FortiGate
+  `fortios:ENC <blob>` -- a secret encrypted under the SOURCE device's
+  own key -- into a field the target reads as the LITERAL shared secret,
+  and the sixth ran it backwards, stamping `ENC` onto a plaintext secret
+  from Aruba or OPNsense and so asserting a provenance the value never
+  had.  Policy now lives in `netcanon/migration/_radius_secrets.py`.
+  When adding ANY new secret-bearing canonical field, the question is
+  not "does a policy module exist" but "does THIS field route through
+  one".  Guarded by `tests/unit/migration/
+  test_radius_secret_portability.py`, whose completeness test walks
+  `list_public_codecs()` and fails for any target that emits a foreign
+  encrypted secret.
+  Two corollaries this class keeps re-teaching.  (1) Refusal granularity
+  is per-surface, not universal: refusing a v3 user means dropping every
+  line composing it (#465), but refusing a RADIUS secret must KEEP the
+  server record -- a keyless `radius-server host <ip>` is a
+  half-configured server the operator can see and finish, while a
+  vanished one is an invisible hole in their AAA config.  (2) Closing a
+  default must not become a false-positive blast: classify by envelope
+  and PROVENANCE, so a plaintext secret that merely CONTAINS a colon
+  (`my:secret`) stays migratable while an unregistered envelope from an
+  unvouched source is refused.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

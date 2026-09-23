@@ -38,6 +38,13 @@ from __future__ import annotations
 from typing import Any
 from xml.etree import ElementTree as ET
 
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
+)
+from ..._radius_secrets import (
+    radius_secret_is_migratable,
+    unwrap_native_secret,
+)
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -113,8 +120,33 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
             )
             ET.SubElement(auth_el, "type").text = "radius"
             ET.SubElement(auth_el, "host").text = server.host
+            # (#483) See netcanon/migration/_radius_secrets.py —
+            # <radius_secret> is read as the literal shared secret, so a
+            # blob encrypted under another device's key is refused.  XML
+            # has no line-comment slot in this position, so the refusal
+            # is recorded as a sibling element the operator can see in
+            # the UI rather than a comment.
             if server.key:
-                ET.SubElement(auth_el, "radius_secret").text = server.key
+                if radius_secret_is_migratable(
+                    server.key, intent.source_vendor, "opnsense",
+                ):
+                    ET.SubElement(
+                        auth_el, "radius_secret",
+                    ).text = unwrap_native_secret(server.key)
+                else:
+                    # A sibling ELEMENT, not an ET.Comment: XML forbids
+                    # ``--`` inside a comment and the shared review
+                    # wording contains it, so a comment here produces a
+                    # document that will not re-parse.  An element also
+                    # survives the config round-trip and is visible in
+                    # the UI, which a comment is not.
+                    ET.SubElement(
+                        auth_el, "radius_secret_review",
+                    ).text = format_radius_review_comment(
+                        server.host,
+                        comment_syntax="plain",
+                        target_label="OPNsense",
+                    )
             ET.SubElement(auth_el, "radius_auth_port").text = (
                 str(server.auth_port)
             )

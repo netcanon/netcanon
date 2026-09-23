@@ -45,6 +45,13 @@ import re
 from typing import Any
 
 from ..._naming import sanitise_hostname
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
+)
+from ..._radius_secrets import (
+    radius_secret_is_migratable,
+    unwrap_native_secret,
+)
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -678,8 +685,22 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append(f"radius server {server.host}")
         out.append(f" address ipv4 {server.host} auth-port "
                    f"{server.auth_port} acct-port {server.acct_port}")
+        # (#483) See netcanon/migration/_radius_secrets.py — a secret
+        # encrypted under the SOURCE device's key cannot be re-used
+        # here, and IOS-XE reads this slot as the literal secret.
         if server.key:
-            out.append(f" key {server.key}")
+            if radius_secret_is_migratable(
+                server.key, tree.source_vendor, "cisco_iosxe_cli",
+            ):
+                out.append(f" key {unwrap_native_secret(server.key)}")
+            else:
+                out.append(
+                    format_radius_review_comment(
+                        server.host,
+                        comment_syntax="exclamation",
+                        target_label="Cisco IOS-XE",
+                    )
+                )
         out.append("!")
 
     # --- SNMP block ---

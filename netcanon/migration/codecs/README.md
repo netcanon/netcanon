@@ -299,6 +299,20 @@ the policy locally:
   Per-target accepted-algorithm sets live in
   `_TARGET_ACCEPTS[<vendor>]`.
 
+* **`netcanon/migration/_radius_secrets.py`** — cross-vendor RADIUS
+  shared-secret portability.  Public API:
+  `classify_radius_secret(value, source_vendor)`,
+  `radius_secret_is_migratable(value, source_vendor, target_vendor)`,
+  `unwrap_native_secret(value)`, `format_review_comment(host, ...)`.
+  Every codec rendering `CanonicalRADIUSServer.key` MUST call the
+  gate: only a plaintext secret crosses a vendor boundary, and a
+  FortiGate `ENC` blob is encrypted under its own device's key.
+  On a refusal, still emit the server record and add a review
+  comment — the operator needs to see the half-configured server.
+  A new rendering codec goes in `_TARGET_ACCEPTS` here AND in
+  `_RENDERING_TARGETS` in
+  `tests/unit/migration/test_radius_secret_portability.py`.
+
 * **`netcanon/migration/_tier3_detection.py`** — Tier-3 stanza-header
   detection.  One `detect_tier3_sections_<vendor>(raw)` per source codec
   (`iosxe_cli`, `iosxe_xml` [no-op], `fortios`, `junos`, `routeros`,

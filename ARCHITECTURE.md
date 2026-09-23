@@ -454,6 +454,30 @@ Cisco type-9 scrypt → Junos, OPNsense bcrypt → Arista) emit a
 syntax instead of leaking the hash literal as plaintext.  Per-target
 accepted-algorithm sets live in `_TARGET_ACCEPTS[<vendor>]`.
 
+**RADIUS shared-secret portability policy**
+(`netcanon/migration/_radius_secrets.py`).  The third credential
+surface, sibling to `_user_secrets.py` (password hashes) and
+`_usm_keys.py` (SNMPv3 USM keys).  A render path consuming
+`CanonicalRADIUSServer.key` calls
+`radius_secret_is_migratable(value, source_vendor, target_vendor)`.
+Only a **plaintext** secret crosses a vendor boundary; FortiGate's
+`set secret ENC <blob>` (carried canonically behind the `fortios:`
+envelope) is encrypted under that device's own key and is refused,
+with a `format_review_comment(...)` line so the operator knows to
+re-enter it.  Same-vendor re-render always passes — that is the
+reference path.  Unlike the SNMPv3 rule, a refusal does **not** drop
+the server record: a keyless `radius-server host <ip>` is a
+half-configured server the operator can see and finish, whereas a
+vanished one is an invisible hole in their AAA config.
+
+Classification is by envelope and **provenance**, never by the value's
+shape.  Note the deliberate asymmetry with a colon: when
+`source_vendor` is known the full envelope set is known too, so
+`my:secret` is a legal literal secret; only an unregistered
+envelope-shaped prefix from an *unvouched* source classifies as
+`unknown` and is refused.  Refusing every value containing a colon
+would be a false-positive blast rather than a fix.
+
 **Naming-value sanitisation** (`netcanon/migration/_naming.py`).
 Some target CLI parsers (Arista EOS, Cisco IOS-XE) reject whitespace
 in hostname / domain / VRF-name tokens; renderers call

@@ -33,6 +33,13 @@ import re
 from typing import Any
 
 from ..._naming import sanitise_hostname
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
+)
+from ..._radius_secrets import (
+    radius_secret_is_migratable,
+    unwrap_native_secret,
+)
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -367,9 +374,30 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 parts.append(f"auth-port {server.auth_port}")
             if server.acct_port and server.acct_port != 1813:
                 parts.append(f"acct-port {server.acct_port}")
+            # (#483) Gate the shared secret on PROVENANCE.  A FortiGate
+            # `fortios:ENC <blob>` is encrypted under that device's own
+            # key: writing it into EOS's literal-secret slot produces a
+            # config that commits and authenticates nobody, and hands
+            # the blob to anything that later strips the envelope.
+            refused = False
             if server.key:
-                parts.append(f'key {server.key}')
+                if radius_secret_is_migratable(
+                    server.key, tree.source_vendor, "arista_eos",
+                ):
+                    parts.append(
+                        f'key {unwrap_native_secret(server.key)}'
+                    )
+                else:
+                    refused = True
             out.append(" ".join(parts))
+            if refused:
+                out.append(
+                    format_radius_review_comment(
+                        server.host,
+                        comment_syntax="exclamation",
+                        target_label="Arista EOS",
+                    )
+                )
         out.append("!")
 
     # --- DHCP server pools (Cluster E.1-A, Tier 2) ---

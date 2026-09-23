@@ -72,6 +72,49 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **SECURITY: a RADIUS shared secret encrypted under the SOURCE device's
+  own key was written into other vendors' key slots.**  RADIUS secrets
+  were the third credential class on the canonical tree and, unlike
+  local-user password hashes (#460-#462) and SNMPv3 USM keys
+  (#463-#472), had **no portability gate at all** — every render path
+  emitted `CanonicalRADIUSServer.key` verbatim.
+
+  Five of the six render paths — `arista_eos`, `cisco_iosxe_cli`,
+  `aruba_aoss`, `mikrotik_routeros`, `opnsense` — wrote a FortiGate
+  `fortios:ENC <blob>` string into a field their vendor reads as the
+  LITERAL shared secret.  That config commits cleanly and authenticates
+  nobody, and anything that later strips the envelope turns the blob
+  into the password.
+
+  The sixth ran the same failure backwards: `fortigate_cli` split the
+  canonical value on `":"` and stamped `ENC` onto whatever came back,
+  so a *plaintext* secret from Aruba or OPNsense was emitted as
+  `set secret ENC <plaintext>` — asserting a provenance the value never
+  had and handing FortiOS something it will try to decrypt.
+
+  Policy now lives in `netcanon/migration/_radius_secrets.py`, the third
+  sibling of the two existing credential modules.  Only a **plaintext**
+  secret crosses a vendor boundary; same-vendor re-render always passes
+  and is the reference path.  Classification is by envelope and
+  PROVENANCE, never by the value's shape — so `my:secret` from a known
+  source stays migratable (refusing every value containing a colon
+  would be a false-positive blast, not a fix), while an unregistered
+  envelope from an unvouched source is refused.
+
+  A refusal does **not** drop the server record.  This is a deliberate
+  departure from the SNMPv3 rule (#465, where a v3 user without a usable
+  key is not a meaningful record): a keyless `radius-server host <ip>`
+  is a half-configured server the operator can see and finish, whereas
+  a vanished one is an invisible hole in their AAA config.  Each
+  renderer emits a review comment in its own comment syntax.
+
+  The audit confirms the fix rather than merely tolerating it: six
+  field-cells moved from `METHODOLOGY_ISSUE_under` (1853 → 1847) to
+  `EXPECTED_LOSSY` (3759 → 3765).  Those pairs' expectation YAMLs
+  already declared the RADIUS key lossy; the code had been wrongly
+  preserving it, so no YAML re-authoring was needed — reality now
+  matches the declaration.  `CODEC_BUG` holds at 5.
+
 - **`cisco_iosxe` (NETCONF / OpenConfig) deleted 96% of the interfaces
   handed to it as a migration target, and reported `completed`.**  It was
   the only registered codec with no `port_names.py`, so it inherited the

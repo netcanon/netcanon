@@ -45,6 +45,14 @@ import ipaddress
 import re
 from typing import Any
 
+from ..._radius_secrets import (
+    FORTIOS_ENVELOPE,
+    radius_secret_is_migratable,
+    unwrap_native_secret,
+)
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
+)
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -965,14 +973,39 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for idx, server in enumerate(tree.radius_servers, start=1):
             out.append(f'    edit "radius-{idx}"')
             out.append(f'        set server "{server.host}"')
+            # (#483) The two fallback branches here used to stamp ``ENC``
+            # onto whatever arrived — a bare plaintext secret from Aruba
+            # or OPNsense became ``set secret ENC <plaintext>``, and any
+            # other envelope had its tag stripped and the payload
+            # relabelled as FortiGate ciphertext.  Both asserted a
+            # provenance the value never had, which is the same
+            # fail-open the Hard Rules close on user passwords and USM
+            # keys: never let a tag decide the algorithm when the tag
+            # cannot be trusted.
+            #
+            # Now: the ``fortios:`` envelope round-trips natively (this
+            # is the reference same-vendor path), a plaintext secret is
+            # emitted WITHOUT the ENC marker so FortiOS stores it as
+            # typed, and anything else is refused.
             if server.key:
-                alg, _, raw = server.key.partition(":")
-                if alg == "fortios":
-                    out.append(f"        set secret {raw}")
-                elif raw:
-                    out.append(f"        set secret ENC {raw}")
+                if server.key.startswith(FORTIOS_ENVELOPE):
+                    out.append(
+                        f"        set secret "
+                        f"{unwrap_native_secret(server.key)}"
+                    )
+                elif radius_secret_is_migratable(
+                    server.key, tree.source_vendor, "fortigate_cli",
+                ):
+                    out.append(f"        set secret {server.key}")
                 else:
-                    out.append(f"        set secret ENC {server.key}")
+                    out.append(
+                        "    "
+                        + format_radius_review_comment(
+                            server.host,
+                            comment_syntax="hash",
+                            target_label="FortiGate",
+                        )
+                    )
             if server.auth_port and server.auth_port != 1812:
                 out.append(f"        set radius-port {server.auth_port}")
             out.append("    next")
