@@ -114,10 +114,17 @@ per_field_expectation:
     references: [os10-eos-surface]
 
   interfaces[].description:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      Count drift 26 -> 27 on `canu_sw-leaf-bmc-001`: the target GAINS a
+      `port-channel150` interface stanza.  OS10 declares the LAG only as
+      `interface port-channel 150` with `channel-group` members; EOS
+      materialises the bundle as an interface record of its own, which has
+      no description, so the subfield registers as drifted.
+      NOTE this is a GAIN, not a loss -- nothing the operator wrote is
+      missing.  The variance taxonomy has no class for `the target
+      materialised a record the source implied`, so `lossy` is the closest
+      available disposition rather than an exact one.
     references: [os10-eos-surface]
 
   interfaces[].enabled:
@@ -356,10 +363,17 @@ per_field_expectation:
     references: [os10-eos-surface]
 
   vlans[].name:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      A VLAN name containing whitespace is rewritten with underscores:
+      `oob-mgmt 10.0.0.0/24` -> `oob-mgmt_10.0.0.0/24` on 3 of 8 VLANs in
+      `azlocal_tor1`/`tor2`.  This is the documented naming-value
+      sanitisation policy (`netcanon/migration/_naming.py`): EOS's parser
+      rejects whitespace in these tokens, so the wire form must be
+      sanitised to round-trip through the target's own parser.  The VLAN
+      and its id survive intact; only the label is altered.  Scored `good`
+      until the real OS10 corpus landed because the synthetic kitchen-sink
+      has no whitespace in any VLAN name.
     references: [os10-eos-surface]
 
   vlans[].tagged_ports:

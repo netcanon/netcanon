@@ -206,11 +206,21 @@ distributed-anycast-gateway concept at all:
 
 ## Real-world fixtures we've validated against
 
-**There are none in-tree** — the reason this codec ships `best_effort`.
-Unlike every `certified` codec, `dell_os10` has no section in
+**Nine are now in-tree** (2026-09-23), the codec's first committed corpus —
+all MIT-licensed, verified against each upstream repository's licence metadata,
+all nine parsing and round-tripping canonical-stable.  They are listed in
 [`../../tests/fixtures/real/NOTICE.md`](../../tests/fixtures/real/NOTICE.md).
 
-Development instead used a **40-capture out-of-tree corpus** covering
+⚠️ **This does not promote the codec to `certified`, and the reason is worth
+stating plainly.**  The codified bar is "≥3 real captures round-trip cleanly"
+and nine do.  But **none of the nine states its OS10 release** — every MIT
+source ships its configs with the `! Version` banner stripped, while every
+source that *does* pin a release carries no licence file at all.  Every other
+certified codec names the versions behind its claim, so promoting on an
+unversioned corpus would make the word mean something weaker here.  One
+licence-clean capture with its banner intact closes it.
+
+Development also used a **40-capture out-of-tree corpus** covering
 five OS10 releases — **10.4.3.1, 10.4.3.4, 10.5.1.0, 10.5.1.4,
 10.5.4.4** — across S3048, S4112F-ON, S5212F-ON, S5232F, S5248F-ON and
 Z-series platforms, plus four **OS9 / FTOS S4810** captures kept as

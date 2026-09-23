@@ -1,8 +1,8 @@
 {
-  "started_utc": "2026-09-23T15:52:21+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260923T155019Z.json",
-  "mesh_run_started_utc": "2026-09-23T15:50:12+00:00",
-  "cells_total": 1339,
+  "started_utc": "2026-09-23T18:28:01+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260923T182759Z.json",
+  "mesh_run_started_utc": "2026-09-23T18:27:51+00:00",
+  "cells_total": 1456,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
     "arista_eos",
@@ -306,6 +306,51 @@
       "target_codec": "cisco_nxos"
     },
     {
+      "fixture": "tests/fixtures/real/dell_os10/azlocal_tor1.txt",
+      "source_codec": "dell_os10",
+      "target_codec": "dell_os10"
+    },
+    {
+      "fixture": "tests/fixtures/real/dell_os10/azlocal_tor2.txt",
+      "source_codec": "dell_os10",
+      "target_codec": "dell_os10"
+    },
+    {
+      "fixture": "tests/fixtures/real/dell_os10/azsupport_TOR1_Sample.cfg",
+      "source_codec": "dell_os10",
+      "target_codec": "dell_os10"
+    },
+    {
+      "fixture": "tests/fixtures/real/dell_os10/azsupport_TOR2_Sample.cfg",
+      "source_codec": "dell_os10",
+      "target_codec": "dell_os10"
+    },
+    {
+      "fixture": "tests/fixtures/real/dell_os10/canu_sw-leaf-bmc-001.cfg",
+      "source_codec": "dell_os10",
+      "target_codec": "dell_os10"
+    },
+    {
+      "fixture": "tests/fixtures/real/dell_os10/dellgeos_S5212F-TOR1-Advanced.cfg",
+      "source_codec": "dell_os10",
+      "target_codec": "dell_os10"
+    },
+    {
+      "fixture": "tests/fixtures/real/dell_os10/dellgeos_S5212F-TOR1-Universal.cfg",
+      "source_codec": "dell_os10",
+      "target_codec": "dell_os10"
+    },
+    {
+      "fixture": "tests/fixtures/real/dell_os10/dellgeos_S5212F-TOR2-Advanced.cfg",
+      "source_codec": "dell_os10",
+      "target_codec": "dell_os10"
+    },
+    {
+      "fixture": "tests/fixtures/real/dell_os10/dellgeos_S5212F-TOR2-Universal.cfg",
+      "source_codec": "dell_os10",
+      "target_codec": "dell_os10"
+    },
+    {
       "fixture": "tests/fixtures/real/fortigate/kevinguenay_fgt_70g_branch.conf",
       "source_codec": "fortigate_cli",
       "target_codec": "fortigate_cli"
@@ -553,19 +598,19 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 8302,
+    "ALIGNED": 9256,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 3785,
-    "EXPECTED_UNSUPPORTED": 2546,
-    "METHODOLOGY_ISSUE_under": 1857,
+    "EXPECTED_LOSSY": 4182,
+    "EXPECTED_UNSUPPORTED": 2625,
+    "METHODOLOGY_ISSUE_under": 1926,
     "METHODOLOGY_ISSUE_over": 21,
-    "STRUCTURAL_ONLY": 4270,
-    "TRIVIAL_EMPTY": 32240,
-    "fields_total": 53026,
+    "STRUCTURAL_ONLY": 4556,
+    "TRIVIAL_EMPTY": 35423,
+    "fields_total": 57994,
     "severity_high": 5,
-    "severity_medium": 282,
-    "severity_low": 5866,
-    "severity_ok": 46873
+    "severity_medium": 286,
+    "severity_low": 6217,
+    "severity_ok": 51486
   },
   "severity_matrix": {
     "arista_eos": {
@@ -4805,6 +4850,6 @@
     "note": "Committed mirror \u2014 high-severity CODEC_BUG cells only (the Phase 4b 'investigate first' set).  Lower-severity methodology / structural / ok cells are summarised in the full top-level `aggregate` block above; their per-cell detail is in the gitignored <timestamp>.json beside this file (regenerate with tools/run_phase4_reconciliation.py).",
     "filter": "summary.severity_high > 0  (CODEC_BUG cells)",
     "cells_committed": 5,
-    "cells_total_in_run": 1339
+    "cells_total_in_run": 1456
   }
 }

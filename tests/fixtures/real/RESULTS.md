@@ -821,26 +821,48 @@ All four phases shipped (Tier-1 + L2 switchport / LAG + SVI-derived VLANs
 + local users + SNMP v2c/v3 USM + real VRRP + VRF + per-VRF static), and
 Phase 4 registered the codec as the 13th in the cross-vendor mesh.
 
-**The in-tree corpus is empty.**  The codec was built and validated
-against **14 real OS10 captures** — all 14 parse cleanly and round-trip
-canonical-stable — but they carry live password hashes and are held
-out-of-tree at `local/dell-os10/`, so none is committed.  That is the
-whole reason for the certainty tier; it is a provenance limit, not a
-codec-quality one.
+**Nine real captures are now committed** (2026-09-23), the codec's first
+in-tree corpus.  All nine are MIT-licensed, verified against each upstream
+repository's licence metadata rather than assumed; all nine parse cleanly and
+round-trip canonical-stable.  Before this the directory did not exist at all,
+so the corpus-wide detection guard, the round-trip harness and the cross-vendor
+mesh all skipped Dell entirely and every claim rested on out-of-tree evidence.
+
+The codec is additionally validated against a 40-capture out-of-tree corpus at
+`local/dell-os10/` spanning five OS10 releases (40/40 parse, 38/40 round-trip
+stable); that material is dev-only and not redistributable.
+
+⚠️ **Why still `best_effort` when the codified bar is met.**  `base.py`'s bar
+for `certified` is "round-trip tested against ≥3 real captures" and nine now
+do.  The tier is held back deliberately on a *different* ground: **not one
+committed capture carries a `! Version` banner**, so this corpus pins no OS10
+release, while every other certified codec names the releases it was tested
+against.  Promoting on an unversioned corpus would make the label mean
+something weaker here than everywhere else.  The remaining ask is therefore
+narrow and specific — see [`WANTED.md`](WANTED.md).
 
 ### Coverage matrix
 
 | Fixture | Kind | Exercises |
 |---|---|---|
+| `azlocal_tor1.txt` / `azlocal_tor2.txt` | real | Azure Local ToR pair: VLT peer-routing, 8 VLANs including names carrying whitespace, SNMP, port-channels |
+| `azsupport_TOR1_Sample.cfg` / `azsupport_TOR2_Sample.cfg` | real | Microsoft "cleaned and simplified" M365 sample ToRs; `#`-style comments alongside `!` |
+| `canu_sw-leaf-bmc-001.cfg` | real | 26 interfaces + a `port-channel 150` LAG; the capture that surfaced the IOS-XE port-name mis-attribution |
+| `dellgeos_S5212F-TOR{1,2}-{Advanced,Universal}.cfg` | real | S5212F-ON ToR pair, two lab variants each; QoS-leading openers that defeated the old 500-byte probe window |
 | `synthetic/dell_os10/kitchen_sink.cfg` | synthetic | hostname; 3 VRF declarations; chassis `interface breakout … map` lines (correctly NOT parsed as ports); 14 interfaces incl. `mgmt1/1/1`; 4 SVI-derived VLANs (OS10 has no top-level `vlan <id>` stanza); 2 `port-channel` LAGs with `channel-group` members; access / trunk / native switchport; 2 local users with numeric `priv-lvl`; SNMP v2c + 2 v3 USM users (one `localized`, one bare passphrase); 2 VRRP groups; `ip route` + `ip route vrf` + `management route` |
 
 ### Certification decision
 
-`best_effort`.  `base.py`'s bar for `certified` is "≥3 real captures
-round-trip cleanly" — fourteen do, but none can be committed, so nothing
-*in this repository* demonstrates it.  Every other codec's `certified`
-rests on an in-tree real corpus, and claiming the same tier on
-out-of-tree evidence would make the label mean two different things.
+`best_effort`.  The codified bar — "round-trip tested against ≥3 real
+captures" (`base.py`) — **is now met in-tree**: nine MIT-licensed captures are
+committed and all nine round-trip canonical-stable.
+
+The tier is held deliberately on the one thing the corpus cannot show: **no
+committed capture states its OS10 release.**  Every other certified codec names
+the versions behind its claim (`cisco_iosxe_cli`: 4 LTS + IOSv 15.x, and so
+on), and "certified against an unspecified release" is a weaker claim wearing
+the same word.  Promote when a licence-clean capture **with its `! Version`
+banner intact** lands.
 
 See [`WANTED.md`](WANTED.md): a single permissively-licensed OS10
 `show running-configuration` is the highest-value contribution to this

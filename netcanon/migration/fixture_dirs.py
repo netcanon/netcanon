@@ -37,4 +37,5 @@ DIR_TO_CODEC_NAME: dict[str, str] = {
     "arista_eos":   "arista_eos",
     "junos":        "juniper_junos",
     "vyos":         "vyos",
+    "dell_os10":    "dell_os10",
 }

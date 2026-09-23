@@ -254,6 +254,43 @@ round-trip cleanly (the codec keeps the canonical single `community`).
 
 ---
 
+## dell_os10/
+
+All nine are **MIT-licensed** and were verified as such against each
+repository's licence metadata rather than assumed.  None carries a crypt-style
+password hash, an SSH key, a public IP or a real hardware MAC -- the only MACs
+present are the placeholders `00:11:22:33:44:55`, `de:ad:00:be:ef:01` and
+`00:00:00:00:00:02`.
+
+⚠️ **None carries a `! Version` banner**, so this corpus pins no OS10 release.
+That is not an oversight: it is a near-perfect inverse correlation in the
+available material.  Every OS10 source that *does* state its release
+(`segusaro/OS10_BGP_EVPN_ansible`, `dell-tsb/dell-mec`, `dell-tsb/dell-dme`,
+`install-safe-press/gb10-playbooks`) has **no licence file at all** and so
+cannot be redistributed.  See [`WANTED.md`](WANTED.md) for the precise
+remaining ask.
+
+Seven further MIT-licensed OS10 files from
+`microsoft/Azure_Local_Physical_Network_Config_Tool` were deliberately NOT
+committed: they are jinja2-rendered *fragments* (`vlan`, `interface`, `bgp`,
+`qos`, ...) with no `hostname` line, which would register a spurious
+`'' -> <vendor default>` hostname drift on every target -- a known non-defect.
+Every other capture in this corpus carries a hostname.
+
+| File | Origin | License | Notes |
+|---|---|---|---|
+| `azlocal_tor1.txt` | [AzureLocal/azurelocal-toolkit](https://github.com/AzureLocal/azurelocal-toolkit) | MIT | OS10 ToR 1 of an Azure Local pair.  VLT peer-routing, 8 VLANs incl. names carrying whitespace (`oob-mgmt 10.0.0.0/24`), SNMP, port-channels.  `vlt-mac` is the placeholder `00:11:22:33:44:55`. |
+| `azlocal_tor2.txt` | [AzureLocal/azurelocal-toolkit](https://github.com/AzureLocal/azurelocal-toolkit) | MIT | The ToR 2 peer of the above -- same topology, mirrored addressing. |
+| `azsupport_TOR1_Sample.cfg` | [Azure/AzureLocal-Supportability](https://github.com/Azure/AzureLocal-Supportability) | MIT | Microsoft's "cleaned and simplified" M365 sample ToR.  `#`-style comments alongside `!`.  `vlt-mac` is the placeholder `de:ad:00:be:ef:01`.  Renamed from `.config` so the harness's extension filter discovers it. |
+| `azsupport_TOR2_Sample.cfg` | [Azure/AzureLocal-Supportability](https://github.com/Azure/AzureLocal-Supportability) | MIT | The ToR 2 peer of the above. |
+| `canu_sw-leaf-bmc-001.cfg` | [Cray-HPE/canu](https://github.com/Cray-HPE/canu) | MIT | `tests/data/switch_backups/dellanox/` -- genuine OS10 despite the directory name.  26 interfaces + a `port-channel 150` LAG.  ⭐ This capture is why `cisco_iosxe_cli.probe()` gained the lower-case three-segment port-name deferral: it was claimed by IOS-XE at 90 against OS10's 75. |
+| `dellgeos_S5212F-TOR1-Advanced.cfg` | [DellGEOS/AzureLocalHOLs](https://github.com/DellGEOS/AzureLocalHOLs) | MIT | S5212F-ON ToR, "Advanced" lab variant.  Opens with ~500 bytes of `class-map type queuing` QoS -- the shape that defeated the old 500-byte probe window (markers at bytes 849 and 1270). |
+| `dellgeos_S5212F-TOR1-Universal.cfg` | [DellGEOS/AzureLocalHOLs](https://github.com/DellGEOS/AzureLocalHOLs) | MIT | The "Universal" variant of the same ToR. |
+| `dellgeos_S5212F-TOR2-Advanced.cfg` | [DellGEOS/AzureLocalHOLs](https://github.com/DellGEOS/AzureLocalHOLs) | MIT | ToR 2, Advanced variant. |
+| `dellgeos_S5212F-TOR2-Universal.cfg` | [DellGEOS/AzureLocalHOLs](https://github.com/DellGEOS/AzureLocalHOLs) | MIT | ToR 2, Universal variant. |
+
+---
+
 ## Adding new captures
 
 1. Fetch from an unambiguously-licensed public source (Apache, MIT, BSD)

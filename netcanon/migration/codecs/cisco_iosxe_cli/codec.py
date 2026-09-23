@@ -670,6 +670,33 @@ class CiscoIOSXECLICodec(CodecBase):
         ):
             return None
 
+        # Second OS10 deferral, and deliberately CASE-SENSITIVE.
+        #
+        # The markers above are all config COMMANDS.  A capture that
+        # happens to use none of them still gives itself away by its port
+        # naming: OS10 writes lower-case three-segment names
+        # (`interface ethernet1/1/1`, `interface mgmt1/1/1`).  IOS-XE
+        # never does -- its names are capitalised and two-segment
+        # (`GigabitEthernet0/0/0`), and its management port is
+        # `GigabitEthernet0` or `Management0`.
+        #
+        # Case matters and this must NOT join the IGNORECASE block above:
+        # NX-OS writes `Ethernet1/1/1` with a capital E on breakout-capable
+        # modular chassis, so a case-insensitive form of this marker would
+        # start declining real NX-OS captures -- the exact over-reach #475
+        # was written to avoid.
+        #
+        # Found by committing the first real OS10 corpus: the whole-file
+        # detection guard caught `canu_sw-leaf-bmc-001.cfg` being claimed
+        # at 90 while dell_os10 scored 75.  Measured blast radius over all
+        # 99 committed fixtures: exactly ONE verdict changes, the Dell
+        # capture this is for.
+        if re.search(
+            r"^interface\s+(?:ethernet|mgmt)\d+/\d+/\d+",
+            raw_prefix, re.MULTILINE,
+        ):
+            return None
+
         # Defer to Dell Force10 OS9 / FTOS.  Same shape as the OS10
         # deferral above, one NOS generation earlier, and it arrives by a
         # different marker: OS9 has no `! Last configuration change at`

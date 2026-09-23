@@ -128,28 +128,39 @@ per_field_expectation:
     references: [os10-fortigate-surface]
 
   interfaces[].enabled:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 4 of 10 cells that carry data for this
+      field -- the declared loss is never observed.  Authored `lossy`
+      against the synthetic kitchen-sink alone, which did not exercise
+      it; the real OS10 corpus committed alongside this change does,
+      and the field survives.  An unevidenced `lossy` over-claims loss
+      exactly as a missing declaration under-claims it, so the honest
+      disposition is `good`.
     references: [os10-fortigate-surface]
 
   interfaces[].interface_type:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. FortiOS has no IANA ifType; inferred from 'type vlan' sub-
-      setting or name shape. Measured over 1 cell: drifted on 1,
-      preserved on 0, both sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 4 of 10 cells that carry data for this
+      field -- the declared loss is never observed.  Authored `lossy`
+      against the synthetic kitchen-sink alone, which did not exercise
+      it; the real OS10 corpus committed alongside this change does,
+      and the field survives.  An unevidenced `lossy` over-claims loss
+      exactly as a missing declaration under-claims it, so the honest
+      disposition is `good`.
     references: [os10-fortigate-surface]
 
   interfaces[].ipv4_addresses:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 4 of 10 cells that carry data for this
+      field -- the declared loss is never observed.  Authored `lossy`
+      against the synthetic kitchen-sink alone, which did not exercise
+      it; the real OS10 corpus committed alongside this change does,
+      and the field survives.  An unevidenced `lossy` over-claims loss
+      exactly as a missing declaration under-claims it, so the honest
+      disposition is `good`.
     references: [os10-fortigate-surface]
 
   interfaces[].ipv6_addresses:
@@ -169,19 +180,27 @@ per_field_expectation:
     references: [os10-fortigate-surface]
 
   interfaces[].mtu:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 4 of 10 cells that carry data for this
+      field -- the declared loss is never observed.  Authored `lossy`
+      against the synthetic kitchen-sink alone, which did not exercise
+      it; the real OS10 corpus committed alongside this change does,
+      and the field survives.  An unevidenced `lossy` over-claims loss
+      exactly as a missing declaration under-claims it, so the honest
+      disposition is `good`.
     references: [os10-fortigate-surface]
 
   interfaces[].name:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 4 of 10 cells that carry data for this
+      field -- the declared loss is never observed.  Authored `lossy`
+      against the synthetic kitchen-sink alone, which did not exercise
+      it; the real OS10 corpus committed alongside this change does,
+      and the field survives.  An unevidenced `lossy` over-claims loss
+      exactly as a missing declaration under-claims it, so the honest
+      disposition is `good`.
     references: [os10-fortigate-surface]
 
   interfaces[].vrrp_groups:
@@ -282,10 +301,18 @@ per_field_expectation:
     references: [os10-fortigate-surface]
 
   snmp.community:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      `'' -> 'public'` on `azlocal_tor1`/`tor2`: when the source carries no
+      v2c community the FortiGate renderer SYNTHESISES one
+      (`fortigate_cli/render.py:832`, `tree.snmp.community or "public"`).
+      That is deliberate and commented in the render path, but it invents a
+      community string the operator never wrote -- and `public` is the
+      default every scanner tries.
+      DECLARED, NOT BLESSED: this is carried as a known product question
+      (2026-09-22 review, confirmed smaller findings) and the disposition
+      records what the code does today rather than endorsing it.  If the
+      synthesis is removed, flip this back to `good`.
     references: [os10-fortigate-surface]
 
   snmp.contact:
