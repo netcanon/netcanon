@@ -749,7 +749,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         lines.append("/radius")
         for server in tree.radius_servers:
             parts = ["add", f"address={server.host}"]
-            # (#483) See netcanon/migration/_radius_secrets.py — RouterOS
+            # (#482) See netcanon/migration/_radius_secrets.py — RouterOS
             # reads `secret=` as the literal shared secret.
             refused_secret = False
             if server.key:

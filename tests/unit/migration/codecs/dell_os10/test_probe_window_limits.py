@@ -131,7 +131,7 @@ def test_qos_leading_config_returns_no_candidate() -> None:
     Unlike the two above, the marker is far enough in that a modest
     window widening would not reach it.
 
-    ⚠️ Corrected 2026-09-23 (#485): this docstring used to say the real
+    ⚠️ Corrected 2026-09-23 (#482): this docstring used to say the real
     captures were "genuinely markerless, so widening the window alone
     would not rescue them".  That is false.  Measured on the real
     `dellgeos_S5212F-TOR1-Advanced.cfg` (2802 bytes): `interface

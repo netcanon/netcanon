@@ -973,7 +973,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for idx, server in enumerate(tree.radius_servers, start=1):
             out.append(f'    edit "radius-{idx}"')
             out.append(f'        set server "{server.host}"')
-            # (#483) The two fallback branches here used to stamp ``ENC``
+            # (#482) The two fallback branches here used to stamp ``ENC``
             # onto whatever arrived — a bare plaintext secret from Aruba
             # or OPNsense became ``set secret ENC <plaintext>``, and any
             # other envelope had its tag stripped and the payload

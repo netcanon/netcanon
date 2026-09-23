@@ -185,7 +185,7 @@ pipeline — they just aren't pinned by a fixture yet").
   FortiGate, and so on for 9 of the 11 targets.  The two ports merge,
   and so do their VLAN memberships.
 
-  Since #484 this is **reported** in the job's warnings; before that
+  Since #482 this is **reported** in the job's warnings; before that
   it was silent, and silent specifically on the captures most likely
   to hit it (an AOS-S config with no `interface` stanzas names its
   ports only inside the VLAN lists, which the old collision check

@@ -417,7 +417,7 @@ per_field_expectation:
       keyword `auto`, which every VRF in this pair's NX-OS corpus does.
       IOS-XE spells its auto-RD `rd-auto` (hyphenated, 17.12.1+) and has no
       `route-target ... auto` form at all -- the auto-RT is implied by
-      `vnid <n> evpn-instance` -- so since #486 the keyword is dropped with a
+      `vnid <n> evpn-instance` -- so since #482 the keyword is dropped with a
       review comment naming the native equivalent, rather than emitted as
       ` rd auto` / ` route-target import auto`, which IOS-XE cannot parse.
       The target matrix declares the instance and its instance-type lossy for

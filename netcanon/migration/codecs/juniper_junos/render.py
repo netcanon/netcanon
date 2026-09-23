@@ -963,7 +963,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f"description {_quote_always(ri.description)}"
             )
         if ri.route_distinguisher:
-            # (#486) Junos `route-distinguisher` accepts exactly
+            # (#482) Junos `route-distinguisher` accepts exactly
             # as-number:number / number:id / ip-address:id.  `auto` is
             # not among them, so a source that wrote `rd auto` (NX-OS,
             # AOS-CX) must not have the keyword copied into this slot --
@@ -987,7 +987,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             ri.rt_imports == ri.rt_exports and ri.rt_imports
         ):
             for rt in ri.rt_imports:
-                # (#486) `auto` is a STANDALONE alternative to
+                # (#482) `auto` is a STANDALONE alternative to
                 # `target:<community-id>` in Junos's vrf-target grammar,
                 # not a value substitutable into the community slot --
                 # `vrf-target target:auto` was a non-form.  Emitting the
@@ -1005,7 +1005,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         f"vrf-target target:{rt}"
                     )
         else:
-            # (#486) The diverged branch has no `auto` escape: Junos's
+            # (#482) The diverged branch has no `auto` escape: Junos's
             # `vrf-target import` / `export` take a community
             # (`target:<id>`), and the bare `auto` form exists only on
             # the undifferentiated `vrf-target` statement above.  A

@@ -454,7 +454,7 @@ class CiscoNXOSCodec(CodecBase):
                     "resolved from a capture.  (This reason previously said "
                     "'BGP ASN + VRF VNI', which is the ROUTE-TARGET formula, "
                     "not the RD one.)  The codec preserves `auto` verbatim; "
-                    "renderers must NOT synthesise a value -- #486 drops it "
+                    "renderers must NOT synthesise a value -- #482 drops it "
                     "with a review comment on targets whose grammar has no "
                     "`auto` form.  An explicit RD round-trips losslessly."
                 ),

@@ -220,7 +220,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append(f"vrf definition {vrf.name}")
         if vrf.description:
             out.append(f" description {vrf.description}")
-        # (#486) IOS-XE's auto-RD keyword is `rd-auto` (hyphenated,
+        # (#482) IOS-XE's auto-RD keyword is `rd-auto` (hyphenated,
         # 17.12.1+), NOT `rd auto`, and there is no
         # `route-target ... auto` CLI form at all -- the auto-RT is
         # implied by `vnid <n> evpn-instance`.  So a source that wrote
@@ -726,7 +726,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append(f"radius server {server.host}")
         out.append(f" address ipv4 {server.host} auth-port "
                    f"{server.auth_port} acct-port {server.acct_port}")
-        # (#483) See netcanon/migration/_radius_secrets.py — a secret
+        # (#482) See netcanon/migration/_radius_secrets.py — a secret
         # encrypted under the SOURCE device's key cannot be re-used
         # here, and IOS-XE reads this slot as the literal secret.
         if server.key:

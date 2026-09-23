@@ -18,7 +18,7 @@ a mis-classified token **becomes a credential** on the target; the blast radius
 is every account on the box. Here the worst case is a config line the target
 rejects. One known literal, one predicate, no envelopes, no classifier.
 
-Scope of the remedy (#486)
+Scope of the remedy (#482)
 --------------------------
 Only the two targets where the emitted form is **provably not the vendor's
 grammar**, each closed against a primary source:

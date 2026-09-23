@@ -589,7 +589,7 @@ per_field_expectation:
       But EVERY RD in this pair's NX-OS corpus is the derivation keyword
       `auto`, and `auto` is not one of Junos's accepted forms -- the CLI
       reference enumerates exactly `as-number:number`, `number:id` and
-      `ip-address:id`.  Since #486 the keyword is dropped with a review
+      `ip-address:id`.  Since #482 the keyword is dropped with a review
       comment rather than pasted into a slot that would reject it, so this
       is a real loss on every cell that populates the field.  It was
       previously scored `good` only because the invalid literal round-tripped

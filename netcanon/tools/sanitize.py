@@ -1273,7 +1273,7 @@ class _SubstitutionTable:
           file correctly mapped to distinct placeholders.  A reviewer reading
           that submission saw a merged-VPN topology that does not exist.
 
-        It also silently defeated the #486 derivation-keyword gate: on a
+        It also silently defeated the #482 derivation-keyword gate: on a
         sanitised tree the value is no longer `auto`, so the renderers' check
         passes and a fabricated RD ships cross-vendor with no review comment.
         Since `BUG_REPORTING.md` tells operators to sanitise before

@@ -15,7 +15,7 @@ did two kinds of damage:
   *explicit* RTs in the same file correctly mapped to distinct placeholders. A
   reviewer of that submission saw a merged-VPN topology that does not exist.
 
-It also defeated the #486 derivation-keyword gate: on a sanitised tree the
+It also defeated the #482 derivation-keyword gate: on a sanitised tree the
 value is no longer `auto`, so the renderers' check passes and a fabricated RD
 ships cross-vendor with no review comment. Since `BUG_REPORTING.md` tells
 operators to sanitise before submitting, this hid the class from every future
@@ -184,7 +184,7 @@ def test_the_audit_log_does_not_claim_a_redaction_that_did_not_happen() -> None:
 
 
 def test_the_derivation_gate_is_not_defeated_by_sanitisation() -> None:
-    """End to end: a sanitised tree must still trip the #486 renderer gate.
+    """End to end: a sanitised tree must still trip the #482 renderer gate.
 
     This is the coupling that made the defect invisible — operators are told
     to sanitise before submitting, so every reported fixture had already had

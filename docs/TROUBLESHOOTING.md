@@ -192,7 +192,7 @@ colliding port explicitly in the ports pane (or `port_rename_map` on
 the API), e.g. `1/A1` -> `xe-1/1/1`.  The warning clears once the
 mapping is distinct.
 
-⚠️ If you migrated from AOS-S before #484, this was **silent** —
+⚠️ If you migrated from AOS-S before #482, this was **silent** —
 re-run the translation and check for these warnings.
 
 ### "The migrate page reports 'paramiko-shell capture artifact'"

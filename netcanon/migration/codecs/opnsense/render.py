@@ -120,7 +120,7 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
             )
             ET.SubElement(auth_el, "type").text = "radius"
             ET.SubElement(auth_el, "host").text = server.host
-            # (#483) See netcanon/migration/_radius_secrets.py —
+            # (#482) See netcanon/migration/_radius_secrets.py —
             # <radius_secret> is read as the literal shared secret, so a
             # blob encrypted under another device's key is refused.  XML
             # has no line-comment slot in this position, so the refusal

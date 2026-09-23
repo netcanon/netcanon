@@ -490,7 +490,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # existing real-capture round-trips don't pick up spurious
     # ``auth-port 1812`` lines.
     for server in tree.radius_servers:
-        # (#483) See netcanon/migration/_radius_secrets.py — AOS-S reads
+        # (#482) See netcanon/migration/_radius_secrets.py — AOS-S reads
         # this slot as the literal shared secret, so a foreign encrypted
         # blob must be refused rather than quoted into it.
         if server.key and radius_secret_is_migratable(

@@ -798,7 +798,7 @@ class CiscoIOSXECLICodec(CodecBase):
 #: both halves, and the error mattered: it made a single shared line look
 #: insufficient to trigger a confident claim, which is exactly how Dell
 #: OS10 (#475, via `! Last configuration change at`) and then Dell OS9
-#: (#485, via `service timestamps`) each scored 95 off ONE marker.)
+#: (#482, via `service timestamps`) each scored 95 off ONE marker.)
 _IOS_BANNER_HITS: tuple[tuple[str, int], ...] = (
     ("building configuration", 2),
     ("current configuration :", 2),

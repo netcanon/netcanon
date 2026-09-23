@@ -374,7 +374,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 parts.append(f"auth-port {server.auth_port}")
             if server.acct_port and server.acct_port != 1813:
                 parts.append(f"acct-port {server.acct_port}")
-            # (#483) Gate the shared secret on PROVENANCE.  A FortiGate
+            # (#482) Gate the shared secret on PROVENANCE.  A FortiGate
             # `fortios:ENC <blob>` is encrypted under that device's own
             # key: writing it into EOS's literal-secret slot produces a
             # config that commits and authenticates nobody, and hands

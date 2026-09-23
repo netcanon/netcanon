@@ -15,7 +15,7 @@ Force10 **OS9 / FTOS** grammar (`interface TenGigabitEthernet 0/1`,
 different language, and this codec **refuses** it outright rather than
 mis-parse it into a plausible-looking wrong answer.
 
-> **Corrected 2026-09-23 (#485).**  This paragraph used to promise that
+> **Corrected 2026-09-23 (#482).**  This paragraph used to promise that
 > "auto-detection returns no candidate" for an OS9 paste.  That was a
 > whole-product claim, and it was **false**: the OS10 codec did refuse,
 > but `cisco_iosxe_cli` then claimed the file at confidence **95**

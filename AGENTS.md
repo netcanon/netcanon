@@ -378,7 +378,7 @@ tests use these exclusively — never CSS classes or element structure.  See
   Local-user password hashes (#460-#462) and SNMPv3 USM keys (#463-#472)
   each got a shared portability policy; RADIUS shared secrets, the third
   credential class on the canonical tree, had **no gate at all** until
-  #483 -- every render path wrote `CanonicalRADIUSServer.key` verbatim
+  #482 -- every render path wrote `CanonicalRADIUSServer.key` verbatim
   into the target's key slot.  Five of the six leaked a FortiGate
   `fortios:ENC <blob>` -- a secret encrypted under the SOURCE device's
   own key -- into a field the target reads as the LITERAL shared secret,

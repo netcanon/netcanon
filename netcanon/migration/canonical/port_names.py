@@ -618,7 +618,7 @@ def translate_port_names(  # noqa: C901
     _warn_collisions(intent.interfaces, "interface")
     _warn_collisions(intent.lags, "LAG")
 
-    # (#484) The two sweeps above only see names that reached an
+    # (#482) The two sweeps above only see names that reached an
     # `interfaces` or `lags` RECORD.  A VLAN-centric source need not have
     # any: Aruba AOS-S captures routinely carry zero `interface` stanzas
     # and name every port only inside `vlans[].tagged_ports` /
