@@ -415,14 +415,17 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # ``switchport trunk allowed vlan 1-4094`` must not inflate
     # ``intent.vlans`` with thousands of phantom records, but a single
     # operator-declared access / native VLAN with no SVI is legitimate
-    # and has to survive.
+    # and has to survive — as are the members of a narrow ``switchport
+    # trunk allowed`` list, which is a specific declaration rather than
+    # the "allow everything" idiom.
     from ...canonical.transforms import (
-        access_and_native_vlan_ids,
         project_switchport_to_vlan,
+        switchport_declared_vlan_ids,
     )
 
+    # See ``canonical.transforms.switchport_declared_vlan_ids``.
     legitimate_vlan_ids = (
-        {v.id for v in intent.vlans} | access_and_native_vlan_ids(intent)
+        {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
     project_switchport_to_vlan(intent)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]

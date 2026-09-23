@@ -859,6 +859,23 @@ matter; the matrix is honest about both.
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP
   pools surface as a comment block, not as `dhcp-server pool`
   syntax.
+* **A VLAN known only to an "allow-everything" trunk is not
+  translated.**  On the six port-centric codecs (`cisco_iosxe_cli`,
+  `arista_eos`, `cisco_nxos`, `juniper_junos`, `aruba_aoscx`,
+  `dell_os10`) Netcanon reconstructs the VLAN database from the
+  config text.  A VID counts as real if it has a `vlan <N>` stanza
+  or an SVI, if a port binds it as an access or native VLAN, or if a
+  *specific* `switchport trunk allowed vlan` list names it.  A VID
+  whose only appearance is a wide range — `1-4094`, `2-4094`,
+  `100-3000` — is not translated: such a line means "carry whatever
+  exists", so expanding it would fabricate thousands of VLANs the
+  operator never wrote.  `switchport trunk allowed vlan 701-710`
+  therefore yields ten VLANs on the target; `1-4094` yields none
+  from that line alone.  This is a parse-time reconstruction rule,
+  not a `CapabilityMatrix` declaration, which is why it appears here
+  rather than in a per-codec panel.  See
+  [`docs/TROUBLESHOOTING.md`](TROUBLESHOOTING.md) § "My VLANs
+  disappeared".
 
 ---
 

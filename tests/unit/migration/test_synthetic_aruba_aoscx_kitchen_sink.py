@@ -176,8 +176,17 @@ def test_populates_every_expected_canonical_field(codec, raw_text):
     assert lag_by_name["lag 2"].members == []
 
     # /vlans/vlan — id + name + description + tagged/untagged ports.
-    assert len(intent.vlans) == 4
+    #
+    # 4 are declared by a `vlan <N>` stanza (1, 10, 20, 30); the other 9
+    # (21-29) are carried only by 1/1/4's twelve-entry
+    # `vlan trunk allowed 10,20-30` list.  A twelve-entry list is a
+    # specific operator declaration, so those VIDs survive the
+    # phantom prune — see
+    # ``canonical.transforms.switchport_declared_vlan_ids``.
+    assert len(intent.vlans) == 13
     vlan_by_id = {v.id: v for v in intent.vlans}
+    assert sorted(vlan_by_id) == [1, 10, 20, 21, 22, 23, 24, 25, 26, 27,
+                                  28, 29, 30]
     assert vlan_by_id[10].name == "USERS"
     assert vlan_by_id[10].description == "User access VLAN"
     assert vlan_by_id[10].tagged_ports == ["1/1/4"]

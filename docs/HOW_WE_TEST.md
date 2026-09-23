@@ -147,6 +147,27 @@ anything.  Pinned by
 variance taxonomy and generates
 `tests/fixtures/real/PHASE4_RECONCILIATION.md` (the matrix).
 
+**What this layer structurally cannot see.**  The audit compares a
+parsed source against a parsed round-trip, so it only measures what
+`parse()` produced.  Anything discarded *inside* parse is absent from
+both sides of the comparison, and the cell scores ALIGNED — the audit
+reports perfect fidelity precisely because the data never reached it.
+
+This is not hypothetical.  Until 2026-09 the port-centric codecs
+dropped every VLAN that appeared only in a `switchport trunk allowed`
+list; 45 real VLANs across the committed corpus vanished at parse
+time, `/vlans/vlan/id` was declared `supported` on all six codecs, and
+every affected cell scored ALIGNED.  A user found it by reading a
+translation, which no gate here would have done.
+
+The defence is not a bigger mesh — it is that a rule deciding what
+parse keeps must carry its own guard measured against the corpus,
+independently of the audit.  `test_trunk_allowed_specificity_bound.py`
+is the worked example: it re-derives the threshold's evidence from the
+committed captures on every run rather than trusting a constant.  When
+you add a heuristic that discards input, assume the mesh will endorse
+it and write that guard.
+
 Both run locally / on demand — the cross-mesh audit is a maintainer tool,
 NOT a CI gate (the four pytest tiers gate every PR; the cross-mesh audit
 does not).  The

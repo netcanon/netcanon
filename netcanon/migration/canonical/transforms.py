@@ -47,6 +47,12 @@ Public surface:
   "legitimate" set their phantom-VLAN prune keeps, so a switchport-
   only VLAN (no ``vlan <N>`` stanza / SVI) survives while a wide
   ``trunk_allowed`` phantom range is still dropped.
+* :func:`switchport_declared_vlan_ids` — the full "legitimate" set the
+  phantom prune keeps: the above, PLUS the members of every
+  ``trunk_allowed_vlans`` list narrow enough to be a specific operator
+  declaration rather than the "allow everything" idiom.  This is what
+  the six port-centric codecs call; :func:`access_and_native_vlan_ids`
+  remains the narrower primitive it is built from.
 
 Internal helper:
 
@@ -102,15 +108,18 @@ def access_and_native_vlan_ids(intent: CanonicalIntent) -> set[int]:
     port to, so — unlike a wide ``trunk_allowed_vlans`` range that can span
     thousands of VIDs — they are never phantom-range inflation.
 
-    The port-centric codecs (Cisco IOS-XE CLI, Arista EOS, NX-OS, Junos,
-    Aruba AOS-CX) use this to decide which VLANs synthesised by
-    :func:`project_switchport_to_vlan` to KEEP through their phantom-VLAN
-    prune.  A VLAN that exists only because a port is an access or native
-    member of it — with no ``vlan <N>`` stanza and no SVI (the exact shape
-    of a Cisco ``show running-config`` whose VLAN database lives in
-    ``vlan.dat``) — is a real VLAN and must survive; only a VID appearing
-    *solely* in a (potentially wide) ``trunk_allowed_vlans`` list is pruned
-    as a possible phantom.
+    A VLAN that exists only because a port is an access or native member
+    of it — with no ``vlan <N>`` stanza and no SVI (the exact shape of a
+    Cisco ``show running-config`` whose VLAN database lives in
+    ``vlan.dat``) — is a real VLAN and must survive the phantom-VLAN
+    prune.
+
+    This is the narrow primitive, NOT what the codecs call.  The
+    port-centric prune sites use :func:`switchport_declared_vlan_ids`,
+    which unions this with the members of any sufficiently narrow
+    ``trunk_allowed_vlans`` list.  Keep them separate: "a port is bound to
+    exactly this VID" and "a port's trunk filter names this VID" are
+    different claims, and only the first is unconditional.
     """
     vids: set[int] = set()
     for iface in intent.interfaces:
@@ -118,6 +127,75 @@ def access_and_native_vlan_ids(intent: CanonicalIntent) -> set[int]:
             vids.add(iface.access_vlan)
         if iface.trunk_native_vlan is not None:
             vids.add(iface.trunk_native_vlan)
+    return vids
+
+
+#: Largest ``trunk_allowed_vlans`` list still read as a SPECIFIC operator
+#: declaration rather than the "allow everything" idiom.
+#:
+#: A trunk-allowed list is a filter, not a VLAN database — but a *narrow*
+#: one enumerates exactly the VLANs the operator put on that link, which
+#: makes each member as real as an ``access_vlan``.  A *wide* one
+#: (``1-4094``, ``2-4094``, ``100-3000``) says "don't filter" and names no
+#: VLAN at all; expanding it would synthesise thousands of records the
+#: operator never wrote.  Breadth is the signal that separates them — not
+#: the literal form, because real narrow declarations are written as
+#: ranges too (``switchport trunk allowed vlan 701-710``).
+#:
+#: The exact value is deliberately NOT load-bearing.  Measured over the
+#: committed corpus the recovered-VID count is identical for every bound
+#: from 12 to 2901 — the two populations are separated by a ~240x gap:
+#:
+#:     real, undeclared           <= 12 VIDs per list
+#:     real, fully declared          85 VIDs per list  (a Junos ae trunk)
+#:     "allow everything" idiom    4093 / 4094 VIDs per list
+#:
+#: 128 sits above every genuine list observed and ~4x below the narrowest
+#: phantom case the regression guards pin (``500-999``).  That gap is
+#: re-measured on every CI run by
+#: ``tests/unit/migration/test_trunk_allowed_specificity_bound.py`` — if a
+#: future capture lands a legitimate list wider than this, the guard fails
+#: loudly instead of the VLANs being dropped silently.
+TRUNK_ALLOWED_SPECIFICITY_BOUND = 128
+
+
+def switchport_declared_vlan_ids(intent: CanonicalIntent) -> set[int]:
+    """VIDs a per-port switchport config declares as real.
+
+    :func:`access_and_native_vlan_ids` plus every member of a
+    ``trunk_allowed_vlans`` list no wider than
+    :data:`TRUNK_ALLOWED_SPECIFICITY_BOUND`.
+
+    This is the set the six port-centric codecs (Cisco IOS-XE CLI, Arista
+    EOS, NX-OS, Junos, Aruba AOS-CX, Dell OS10) keep through their
+    phantom-VLAN prune.
+
+    Why trunk-allowed members count
+    -------------------------------
+    They did not used to.  The prune kept only access and native VIDs, so
+    a VLAN carried *solely* on a trunk was dropped at PARSE time — before
+    any renderer or audit could see it.  Measured on the committed corpus
+    that silently discarded 45 real VLANs across 6 captures, including the
+    ten-VLAN block ``701-710`` on four Dell Azure-Local ToR configs.  The
+    loss was invisible to the cross-mesh audit precisely because it
+    happened before the comparison: source and target were both already
+    missing the VIDs, so the cell scored ALIGNED.
+
+    The anti-inflation rationale the old rule rested on is still honoured
+    — it just applies to *wide* lists, which is the case it was written
+    for.  A ``switchport trunk allowed vlan 1-4094`` still synthesises
+    nothing.
+
+    Note this reads the EXPANDED ``trunk_allowed_vlans`` list, so it needs
+    no provenance about how the operator wrote it; ``701-710`` and
+    ``701,702,...,710`` are treated identically, which is correct — they
+    mean the same thing on the wire.
+    """
+    vids = access_and_native_vlan_ids(intent)
+    for iface in intent.interfaces:
+        allowed = iface.trunk_allowed_vlans
+        if allowed and len(allowed) <= TRUNK_ALLOWED_SPECIFICITY_BOUND:
+            vids.update(allowed)
     return vids
 
 

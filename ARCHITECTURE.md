@@ -495,6 +495,29 @@ inverse `project_vlan_to_switchport`) as a post-pass for round-trip
 stability.  The forward helper guards the Junos `vlan members all`
 sentinel (`range(1,4095)`) to avoid synthesising 4094 phantom VLANs.
 
+**What makes a switchport VLAN real** (the phantom-VLAN prune,
+`transforms.switchport_declared_vlan_ids`).  Projection synthesises a
+`CanonicalVlan` for every VID a switchport line mentions, so the six
+port-centric codecs (`cisco_iosxe_cli`, `arista_eos`, `cisco_nxos`,
+`juniper_junos`, `aruba_aoscx`, `dell_os10`) snapshot a "legitimate"
+VID set before projecting and prune to it after.  That set is every
+declared `vlan <N>` stanza, every `access_vlan` / `trunk_native_vlan`,
+and — provided the expanded list is no wider than
+`TRUNK_ALLOWED_SPECIFICITY_BOUND` — every member of a
+`trunk_allowed_vlans` list.  The bound exists because a trunk-allowed
+list is a *filter*, not a VLAN database: a narrow one enumerates
+exactly the VLANs on that link, while a wide one (`1-4094`) says
+"don't filter" and names no VLAN at all.  Breadth is the only signal
+that separates them — literal form does not, since real narrow
+declarations are written as ranges too (`701-710`).  Trunk-allowed
+members were excluded outright until 2026-09; that dropped 45 real
+VLANs across the committed corpus at parse time, *before* the
+cross-mesh comparison could see them, so every affected cell scored
+ALIGNED.  A constant this load-bearing would rot silently, so
+`tests/unit/migration/test_trunk_allowed_specificity_bound.py`
+re-measures the corpus each CI run and fails if a genuine trunk list
+ever lands near the bound.
+
 **`kind=mgmt` cascade**.  Source-side codecs promote
 `CanonicalInterface.kind` from `physical` to `mgmt` when context
 indicates an out-of-band management interface (e.g. cisco_iosxe_cli

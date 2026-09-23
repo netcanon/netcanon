@@ -26,6 +26,57 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **VLANs carried only on a trunk were dropped at parse time, on every
+  port-centric codec.**  User-reported against the Dell OS10 sample:
+  translating it to `cisco_iosxe_cli` emitted `switchport trunk allowed
+  vlan 32,34,47,461` but declared only `vlan 1` and `vlan 461`, so the
+  target would not have forwarded 32 / 34 / 47 at all.
+
+  Cause: the phantom-VLAN prune that every port-centric codec runs at
+  the end of `parse()` kept only `{declared vlan stanzas} ∪
+  access_and_native_vlan_ids()`.  A VID appearing *solely* in a
+  `switchport trunk allowed vlan …` list (Junos: `vlan members`) was
+  discarded no matter how few VIDs the operator had listed.  The
+  anti-inflation rationale behind that prune is sound — `switchport
+  trunk allowed vlan 1-4094` must not synthesise 4094 VLAN records —
+  but it was applied to *every* trunk list rather than wide ones.  Each
+  of the six codecs' own comments already said "a **wide** range"; the
+  code never implemented the qualifier.
+
+  The prune now keeps trunk-allowed members when the expanded list is no
+  wider than `TRUNK_ALLOWED_SPECIFICITY_BOUND` (128), via the new shared
+  `canonical.transforms.switchport_declared_vlan_ids()`.  Breadth is the
+  signal, not literal form: real narrow declarations are written as
+  ranges too (`switchport trunk allowed vlan 701-710`), so
+  enumerated-vs-range provenance would not have separated them.
+
+  Affects `cisco_iosxe_cli`, `arista_eos`, `cisco_nxos`,
+  `juniper_junos`, `aruba_aoscx`, `dell_os10`.  Measured on the
+  committed corpus: **45 real VLANs recovered across 6 captures**,
+  including the ten-VLAN block 701-710 on four Dell Azure-Local ToR
+  configs.  Wide lists still synthesise nothing.
+
+  **Why no gate caught this.**  The loss happened *before* the
+  comparison the cross-mesh audit makes: source and re-parsed target
+  were both already missing the VIDs, so every affected cell scored
+  ALIGNED.  `/vlans/vlan/id` was simultaneously declared `supported` on
+  all six codecs, and nothing in `docs/CAPABILITIES.md` mentioned a
+  drop — the matrix was honest about a behaviour the code did not have.
+  Correcting it moved the mesh ALIGNED -20 / STRUCTURAL_ONLY +79 /
+  TRIVIAL_EMPTY -66 / EXPECTED_LOSSY +8 / EXPECTED_UNSUPPORTED +12,
+  with unevidenced loss (`METHODOLOGY_ISSUE_under`) **down 13** and
+  CODEC_BUG unchanged at 5.  Same-vendor VLAN round-trip re-verified
+  stable across all 56 affected captures.
+
+  The bound is kept honest by
+  `tests/unit/migration/test_trunk_allowed_specificity_bound.py`, which
+  re-measures the corpus every CI run and fails if a legitimate trunk
+  list ever lands in the ambiguous band between the bound and the
+  narrowest phantom case — the recurrence would otherwise be silent for
+  exactly the same reason the original was.
+
 ## [0.7.5] - 2026-09-23
 
 ### Added

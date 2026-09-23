@@ -342,9 +342,29 @@ the policy locally:
   parse loop populates per-iface VLAN membership but not the
   symmetric per-VLAN port lists call this as a parse post-pass for
   round-trip stability.  Currently called by `arista_eos`,
-  `aruba_aoss`, `cisco_iosxe_cli`, `juniper_junos`.  Helper
+  `aruba_aoscx`, `aruba_aoss`, `cisco_iosxe_cli`, `cisco_nxos`,
+  `dell_os10`, `juniper_junos`.  Helper
   internally guards the Junos `vlan members all` sentinel
   (`range(1,4095)`) to avoid synthesising 4094 phantom CanonicalVlans.
+  Because it synthesises a VLAN for every VID a switchport mentions,
+  every caller must pair it with the phantom prune below.
+
+* **`netcanon/migration/canonical/transforms.py::switchport_declared_vlan_ids`**
+  — the "legitimate VID" set the phantom-VLAN prune keeps: declared
+  `vlan <N>` stanzas, every `access_vlan` / `trunk_native_vlan` (via the
+  narrower `access_and_native_vlan_ids`, which is the primitive, not the
+  thing to call), and the members of any `trunk_allowed_vlans` list no
+  wider than `TRUNK_ALLOWED_SPECIFICITY_BOUND`.  Currently called by
+  `arista_eos`, `aruba_aoscx`, `cisco_iosxe_cli`, `cisco_nxos`,
+  `dell_os10`, `juniper_junos` — the six port-centric codecs.  The call
+  pattern is fixed: snapshot the set BEFORE
+  `project_switchport_to_vlan(intent)`, prune `intent.vlans` to it
+  AFTER.  A narrow trunk list is a specific operator declaration and its
+  VLANs are real; only a WIDE one ("allow everything") synthesises
+  nothing.  Excluding trunk members outright — the behaviour before
+  2026-09 — silently dropped VLANs at parse time, which no render check
+  and no cross-mesh cell could detect.  A new port-centric codec MUST
+  adopt this; re-deriving a local keep-set is how the rule drifts.
 
 * **`netcanon/migration/canonical/transforms.py::project_vlan_to_switchport`**
   — the symmetric direction.  Materialises port-centric switchport
