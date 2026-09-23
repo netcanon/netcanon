@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-09-23
+
 ### Added
 
 - **Dell SmartFabric OS10 codec (`dell_os10`) — parse + render.**  A
