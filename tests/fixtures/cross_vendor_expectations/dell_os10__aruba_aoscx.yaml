@@ -223,19 +223,27 @@ per_field_expectation:
     references: [os10-aoscx-surface]
 
   local_users[].name:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 2 of 3 cells that carry data for this
+      field -- the declared loss is never observed.  Authored `lossy`
+      against the synthetic kitchen-sink alone, which did not exercise
+      it; the real OS10 corpus committed alongside this change does,
+      and the field survives.  An unevidenced `lossy` over-claims loss
+      exactly as a missing declaration under-claims it, so the honest
+      disposition is `good`.
     references: [os10-aoscx-surface]
 
   local_users[].role:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 2 of 3 cells that carry data for this
+      field -- the declared loss is never observed.  Authored `lossy`
+      against the synthetic kitchen-sink alone, which did not exercise
+      it; the real OS10 corpus committed alongside this change does,
+      and the field survives.  An unevidenced `lossy` over-claims loss
+      exactly as a missing declaration under-claims it, so the honest
+      disposition is `good`.
     references: [os10-aoscx-surface]
 
   ntp_servers:

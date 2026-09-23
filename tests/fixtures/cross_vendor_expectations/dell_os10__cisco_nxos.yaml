@@ -213,19 +213,27 @@ per_field_expectation:
     references: [os10-nxos-surface]
 
   local_users[].name:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 2 of 3 cells that carry data for this
+      field -- the declared loss is never observed.  Authored `lossy`
+      against the synthetic kitchen-sink alone, which did not exercise
+      it; the real OS10 corpus committed alongside this change does,
+      and the field survives.  An unevidenced `lossy` over-claims loss
+      exactly as a missing declaration under-claims it, so the honest
+      disposition is `good`.
     references: [os10-nxos-surface]
 
   local_users[].role:
-    disposition: lossy
-    reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 1 cell: drifted on 1, preserved on 0, both
-      sides empty on 0.
+    disposition: good
+    note: >
+      Preserved on 2 of 3 cells that carry data for this
+      field -- the declared loss is never observed.  Authored `lossy`
+      against the synthetic kitchen-sink alone, which did not exercise
+      it; the real OS10 corpus committed alongside this change does,
+      and the field survives.  An unevidenced `lossy` over-claims loss
+      exactly as a missing declaration under-claims it, so the honest
+      disposition is `good`.
     references: [os10-nxos-surface]
 
   ntp_servers:
@@ -259,18 +267,23 @@ per_field_expectation:
     references: [os10-nxos-surface]
 
   routing_instances:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      The target GAINS a `management` VRF that the OS10 source does not
+      declare (`azlocal_tor1`/`tor2`, 0 -> 1).  NX-OS models its built-in
+      management VRF as a routing instance, so its parser harvests one from
+      the rendered config even when the source carried none.
+      NOTE this is a GAIN, not a loss -- no operator-authored VRF is
+      dropped.  The taxonomy has no class for a materialised record, so
+      `lossy` is the closest available disposition rather than an exact one.
     references: [os10-nxos-surface]
 
   routing_instances[].description:
-    disposition: good
-    note: >
-      No cell populates this field on either side (1 of 1 trivially
-      empty), and neither codec declares the surface unsupported, so
-      nothing is claimed lost.
+    disposition: lossy
+    reason: >
+      Follows `routing_instances`: the materialised `management` VRF has no
+      description, so the subfield registers as drifted.  A GAIN, not a
+      loss.
     references: [os10-nxos-surface]
 
   routing_instances[].name:

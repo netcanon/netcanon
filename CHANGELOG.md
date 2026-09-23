@@ -70,6 +70,66 @@ timestamp if your timezone matters for an audit.
   passphrase and renders WITHOUT the keyword; labelling it pre-localised
   would make the switch derive a key from a key.
 
+### Added
+
+- **Dell SmartFabric OS10's first in-tree real-capture corpus — 9 MIT-licensed
+  captures.**  Before this, `tests/fixtures/real/dell_os10/` did not exist, so
+  the corpus-wide detection guard, the round-trip harness and the cross-vendor
+  mesh all skipped Dell entirely and every claim about the codec rested on
+  out-of-tree evidence.  The mesh grows 1339 -> 1456 cells.
+
+  Licences were **verified against each upstream repository's metadata, not
+  assumed**: `Cray-HPE/canu`, `Azure/AzureLocal-Supportability`,
+  `AzureLocal/azurelocal-toolkit` and `DellGEOS/AzureLocalHOLs` are all MIT.
+  None of the nine carries a crypt-style hash, an SSH key, a public IP or a
+  real hardware MAC.
+
+  Seven further MIT files were deliberately NOT committed — jinja2-rendered
+  fragments with no `hostname`, which would inject a spurious
+  `'' -> <vendor default>` drift on every target (a known non-defect).  Two
+  more were excluded because they are scrubbed to a literal
+  `$CREDENTIAL_PLACEHOLDER$` that the credential gate correctly refuses.
+
+  **The codec stays `best_effort`, deliberately.**  The codified bar is "≥3
+  real captures round-trip cleanly" and nine now do — but not one states its
+  OS10 release.  Every MIT source ships its configs banner-stripped, while
+  every source that pins a release (`segusaro/OS10_BGP_EVPN_ansible`,
+  `dell-tsb/dell-mec`, `dell-tsb/dell-dme`, `install-safe-press/gb10-playbooks`)
+  carries **no licence file at all**.  Every other certified codec names its
+  versions, so promoting on an unversioned corpus would make the label mean
+  something weaker here.  `WANTED.md`'s ask is narrowed accordingly: the gap is
+  no longer "any licence-clean OS10 capture" but "one WITH its `! Version`
+  banner intact".
+
+  The corpus earned its keep immediately, surfacing two things the synthetic
+  kitchen-sink could not:
+
+  * **A real mis-detection.**  `canu_sw-leaf-bmc-001.cfg` was claimed by
+    `cisco_iosxe_cli` at confidence 90 against `dell_os10`'s 75, even at whole
+    -file width.  IOS-XE never writes lower-case three-segment port names, so
+    its probe now defers on `interface ethernet|mgmt <a>/<b>/<c>`.  The check
+    is deliberately **case-sensitive**: NX-OS writes `Ethernet1/1/1` with a
+    capital E on breakout chassis, and a case-insensitive form would start
+    declining real NX-OS captures.  Measured blast radius: exactly **1 of 99**
+    committed fixtures changes verdict — the Dell one it is for.
+  * **23 expectation dispositions authored against a synthetic fixture that
+    did not exercise them.**  Six were scored `good` where real captures show
+    genuine drift (VLAN names containing whitespace being underscore-sanitised
+    for EOS; NX-OS materialising its built-in `management` VRF; a LAG becoming
+    a `port-channel150` interface record; FortiGate synthesising an SNMP
+    community named `public`).  Seventeen more declared a loss the corpus
+    never exhibits and are now `good` — an unevidenced `lossy` over-claims
+    loss exactly as a missing declaration under-claims it.
+
+  ⚠️ Note on the six: four are target-side **gains**, not losses — the
+  taxonomy has no class for "the target materialised a record the source
+  implied", so `lossy` is the closest available disposition rather than an
+  exact one, and each reason says so.  The FortiGate `public` synthesis is
+  declared but explicitly **not blessed**: it is carried as a known product
+  question, since `public` is the default every scanner tries.
+
+  `CODEC_BUG` holds at **5** throughout.
+
 ### Changed
 
 - **Auto-detection now reads up to 64 KiB of a config instead of 500 bytes.**

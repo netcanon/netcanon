@@ -1,0 +1,424 @@
+! ===========================================================================
+! Dell OS10 - TOR2 Switch Configuration for Azure Local
+! ===========================================================================
+! Switch Role:      Top-of-Rack 2 (Secondary VLT peer)
+! Platform:         Dell PowerSwitch (S5200/S4100/S4200 series running OS10)
+! Topology:         VLT pair with TOR1, DCB enabled for RDMA/S2D storage
+! Reference:        Dell AX System for Azure Local - Switch Configurations
+! ---------------------------------------------------------------------------
+! IMPORTANT: Replace all <PLACEHOLDER> values with your environment settings
+!            before applying this configuration.
+! ===========================================================================
+
+configure terminal
+hostname tor2-iic-azlocal
+clock timezone EST -5 0
+
+! --- SSH Hardening ---
+ip ssh server cipher aes256-ctr aes192-ctr aes128-ctr
+ip ssh server mac hmac-sha2-256
+ip ssh server enable
+
+! --- Protocol Enablement ---
+lldp enable
+dcbx enable
+
+! --- Console and Session Settings ---
+logging console disable
+exec-timeout 1800
+
+! ===========================================================================
+! Management Interface
+! ===========================================================================
+interface mgmt1/1/1
+    no shutdown
+    no ip address dhcp
+    ip address 10.0.0.7/24
+    no ipv6 enable
+    exit
+
+management route 0.0.0.0/0 10.0.0.1
+
+! ===========================================================================
+! VLAN Definitions
+! ===========================================================================
+
+! --- Infrastructure VLANs ---
+interface vlan 710
+ description "mgmt 10.0.1.0/24"
+interface vlan 720
+ description "compute 10.0.2.0/24"
+interface vlan 700
+ description "oob-mgmt 10.0.0.0/24"
+
+! --- Storage VLANs (Layer 2 only - RDMA/S2D) ---
+interface vlan 711
+ description "storage1"
+interface vlan 712
+ description "storage2"
+interface vlan 713
+ description "storage3"
+interface vlan 714
+ description "storage4"
+
+! --- Tenant VLANs ---
+interface vlan 730
+ description "tenant1 10.0.10.0/24"
+interface vlan 731
+ description "tenant2 10.0.11.0/24"
+interface vlan 732
+ description "tenant3 10.0.12.0/24"
+interface vlan 733
+ description "tenant4 10.0.13.0/24"
+interface vlan 734
+ description "tenant5 10.0.14.0/24"
+
+! ===========================================================================
+! QoS / DCB Configuration (PFC + ETS for RDMA Storage Traffic)
+! ---------------------------------------------------------------------------
+! Reference: Dell AX System for Azure Local - Switch Configurations
+!            Priority 3 = SMB/Storage, Priority 5 = Cluster Heartbeat
+! ===========================================================================
+class-map type queuing Q0
+    match queue 0
+class-map type queuing Q3
+    match queue 3
+class-map type queuing Q5
+    match queue 5
+class-map type network-qos S2DManagement
+    match qos-group 0
+class-map type network-qos SmbStorage
+    match qos-group 3
+class-map type network-qos NodeHeartBeat
+    match qos-group 5
+
+trust dot1p-map trust_map
+    qos-group 0 dot1p 0-2,4,6-7
+    qos-group 3 dot1p 3
+    qos-group 5 dot1p 5
+
+qos-map traffic-class queue-map
+    queue 0 qos-group 0-2,4,6-7
+    queue 3 qos-group 3
+    queue 5 qos-group 5
+
+policy-map type queuing ets-policy
+    class Q0
+        bandwidth percent 48
+    class Q3
+        bandwidth percent 50
+    class Q5
+        bandwidth percent 2
+
+policy-map type network-qos pfc-policy
+    class SmbStorage
+        pause
+        pfc-cos 3
+
+system qos
+    trust-map dot1p trust_map
+
+! ===========================================================================
+! VLT Interconnect (VLTi) - Ports 1/1/13 and 1/1/14
+! ===========================================================================
+interface range ethernet1/1/13-1/1/14
+    description VLTiLink
+    no shutdown
+    no switchport
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    exit
+
+! ===========================================================================
+! Uplink - Port 1/1/1 (Trunk to upstream network)
+! ===========================================================================
+interface ethernet1/1/1
+    description CUSTOMER.UPLINK
+    no shutdown
+    switchport mode trunk
+    switchport access vlan 1
+    switchport trunk allowed vlan 700,710-714,720,730-734
+    mtu 9216
+    flowcontrol receive on
+    flowcontrol transmit off
+    exit
+
+! ===========================================================================
+! Node Ports - Ports 1/1/2 through 1/1/12 (Azure Local Host NICs)
+! ---------------------------------------------------------------------------
+! DCB enabled with PFC/ETS for RDMA storage traffic.
+! Adjust port range to match the number of host NICs connected.
+! ===========================================================================
+interface ethernet1/1/2
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+interface ethernet1/1/3
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+interface ethernet1/1/4
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+interface ethernet1/1/5
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+interface ethernet1/1/6
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+interface ethernet1/1/7
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+interface ethernet1/1/8
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+interface ethernet1/1/9
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+interface ethernet1/1/10
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+interface ethernet1/1/11
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+interface ethernet1/1/12
+    description NodeDCB
+    no shutdown
+    switchport mode access
+    switchport access vlan 710
+    mtu 9216
+    flowcontrol receive off
+    flowcontrol transmit off
+    priority-flow-control mode on
+    service-policy input type network-qos pfc-policy
+    service-policy output type queuing ets-policy
+    ets mode on
+    qos-map traffic-class queue-map
+    spanning-tree bpduguard enable
+    spanning-tree port type edge
+    exit
+
+! ===========================================================================
+! VLT Domain Configuration
+! ---------------------------------------------------------------------------
+! TOR2 is the secondary peer (priority 200). TOR1 uses priority 100.
+! Backup destination is the management IP of the VLT peer switch.
+! ===========================================================================
+vlt-domain 1
+    backup destination 10.0.0.6
+    discovery-interface ethernet1/1/13
+    discovery-interface ethernet1/1/14
+    peer-routing
+    primary-priority 200
+    vlt-mac 00:11:22:33:44:55
+    exit
+
+! ===========================================================================
+! Spanning Tree
+! ===========================================================================
+spanning-tree mode rstp
+spanning-tree vlan 710,700,711-714,730-734 priority 4096
+
+! ===========================================================================
+! DNS and NTP
+! ===========================================================================
+ip name-server 10.0.0.10
+ip name-server 10.0.0.11
+ntp server 10.0.0.10
+ntp server 10.0.0.11
+
+! ===========================================================================
+! Logging and Monitoring
+! ===========================================================================
+logging audit enable
+logging source-interface mgmt 1/1/1
+logging server 10.0.0.20
+
+! --- SNMP Monitoring ---
+snmp-server contact "IIC Infrastructure Team"
+snmp-server location "IIC Azure Local Rack 1"
+snmp-server enable traps lldp rem-tables-change
+snmp-server enable traps entity
+snmp-server enable traps envmon fan
+snmp-server enable traps envmon power-supply
+snmp-server enable traps envmon temperature
+snmp-server enable traps snmp authentication
+snmp-server enable traps snmp warmstart
+snmp-server enable traps snmp coldstart
+snmp-server enable traps snmp linkdown
+snmp-server enable traps snmp linkup
+snmp-server enable traps dom
+snmp-server enable traps config
+snmp-server group iicsnmp 3 priv read readview
+snmp-server host 10.0.0.20 traps version 3 priv iicsnmp
+snmp-server user iicsnmp iicsnmp 3 auth sha <SNMP_AUTH_KEY> priv aes <SNMP_PRIV_KEY>
+snmp-server view readview 1.3.6.1 included
+
+! ===========================================================================
+! User Accounts
+! ---------------------------------------------------------------------------
+! IMPORTANT: Change default passwords before deploying to production.
+! ===========================================================================
+username admin password <ADMIN_PASSWORD> role sysadmin
+username iicadmin password <ADMIN_PASSWORD> role sysadmin
+
+! ===========================================================================
+! SSH Access Control List
+! ---------------------------------------------------------------------------
+! Restrict SSH access to the OOB management subnet only.
+! Adjust the source network to match your environment.
+! ===========================================================================
+no ip access-list SSH-Allowed
+ip access-list SSH-Allowed
+ seq 10 permit ip 10.0.0.0 255.255.255.0 any log
+ exit
+
+line vty
+ ip access-class SSH-Allowed
+
+end
+write memory

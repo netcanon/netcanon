@@ -122,10 +122,13 @@ per_field_expectation:
     references: [os10-vyos-surface]
 
   interfaces[].description:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      Count drift 26 -> 27 on `canu_sw-leaf-bmc-001`: the target GAINS a
+      `port-channel150` interface record materialised from the OS10 LAG
+      declaration.  Same shape as the arista_eos pair.
+      NOTE this is a GAIN, not a loss.  The taxonomy has no class for a
+      materialised record, so `lossy` is the closest available.
     references: [os10-vyos-surface]
 
   interfaces[].enabled:
