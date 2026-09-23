@@ -1144,9 +1144,25 @@
     }
     var top = candidates[0];
     var currentSource = sourceSel.value;
-    // If the user has already picked the right codec, show a green
+    // If the user's pick matches what detection ranked first, show a green
     // confirmation instead of an action prompt.
+    //
+    // NOTE the limit of this signal, and do not read more into the tick than
+    // it carries: detection is a 500-byte-prefix heuristic, so agreement
+    // means "the probe and the operator picked the same codec", NOT "the
+    // codec is right".  Measured on a 40-capture Dell OS10 corpus, 10 files
+    // are top-ranked by `cisco_iosxe_cli`; an operator who picks that codec
+    // for one of them currently sees a green tick reading "Auto-detected:
+    // Cisco IOS-XE, 90% confidence" over a file that is not Cisco.
     var alreadyCorrect = (top.codec === currentSource);
+
+    // The genuinely dishonest case is narrower and worth calling out: the
+    // operator's pick is absent from the candidate list ENTIRELY, i.e. that
+    // codec's own probe declined the text.  Saying nothing there reads as
+    // tacit approval, so flag it.
+    var pickedIsCandidate = candidates.some(function(c) {
+      return c.codec === currentSource;
+    });
     detectBanner.className =
       'mig-banner ' + (alreadyCorrect ? 'mig-banner-ok' : 'mig-banner-info');
     detectBanner.setAttribute('data-detected-codec', top.codec);
@@ -1181,6 +1197,22 @@
         + 'onclick="useDetectedSource()" '
         + 'style="font-size:.78rem;padding:.25rem .6rem;align-self:center">'
         + 'Use this source</button>';
+    }
+    if (!pickedIsCandidate && currentSource) {
+      var pickedAdapter = adapters.find(function(x) {
+        return x.name === currentSource;
+      });
+      var pickedLabel = pickedAdapter
+        ? (pickedAdapter.vendor_display_name || pickedAdapter.name)
+        : currentSource;
+      detectBanner.insertAdjacentHTML(
+        'beforeend',
+        '<div data-testid="migrate-detect-pick-not-recognised" '
+        + 'style="flex-basis:100%;margin-top:.35rem;opacity:.85">'
+        + 'Note: <strong>' + escapeHtml(pickedLabel) + '</strong> did not '
+        + 'recognise this config at all. Translating anyway may silently '
+        + 'mis-parse it.</div>'
+      );
     }
   }
 

@@ -67,6 +67,12 @@ import logging
 import re
 from typing import Any
 
+from ..._derived_values import (
+    is_derivation_keyword,
+)
+from ..._derived_values import (
+    review_comment as derived_review_comment,
+)
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -957,10 +963,23 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f"description {_quote_always(ri.description)}"
             )
         if ri.route_distinguisher:
-            out.append(
-                f"set routing-instances {_quote_if_needed(ri.name)} "
-                f"route-distinguisher {ri.route_distinguisher}"
-            )
+            # (#482) Junos `route-distinguisher` accepts exactly
+            # as-number:number / number:id / ip-address:id.  `auto` is
+            # not among them, so a source that wrote `rd auto` (NX-OS,
+            # AOS-CX) must not have the keyword copied into this slot --
+            # and unlike vrf-target below, Junos offers no native
+            # derive-it-yourself form here to fall back on.
+            if is_derivation_keyword(ri.route_distinguisher):
+                out.append(
+                    "# " + derived_review_comment(
+                        "route-distinguisher", "Junos",
+                    )
+                )
+            else:
+                out.append(
+                    f"set routing-instances {_quote_if_needed(ri.name)} "
+                    f"route-distinguisher {ri.route_distinguisher}"
+                )
         # vrf-target: collapse to the compact ``target:X`` form when
         # import + export are identical; otherwise emit separate
         # import/export lines.
@@ -968,17 +987,50 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             ri.rt_imports == ri.rt_exports and ri.rt_imports
         ):
             for rt in ri.rt_imports:
-                out.append(
-                    f"set routing-instances {_quote_if_needed(ri.name)} "
-                    f"vrf-target target:{rt}"
-                )
+                # (#482) `auto` is a STANDALONE alternative to
+                # `target:<community-id>` in Junos's vrf-target grammar,
+                # not a value substitutable into the community slot --
+                # `vrf-target target:auto` was a non-form.  Emitting the
+                # bare `vrf-target auto` preserves what the operator
+                # actually asked for ("derive it"), which is a better
+                # translation than dropping it.
+                if is_derivation_keyword(rt):
+                    out.append(
+                        f"set routing-instances {_quote_if_needed(ri.name)} "
+                        f"vrf-target auto"
+                    )
+                else:
+                    out.append(
+                        f"set routing-instances {_quote_if_needed(ri.name)} "
+                        f"vrf-target target:{rt}"
+                    )
         else:
+            # (#482) The diverged branch has no `auto` escape: Junos's
+            # `vrf-target import` / `export` take a community
+            # (`target:<id>`), and the bare `auto` form exists only on
+            # the undifferentiated `vrf-target` statement above.  A
+            # derivation keyword that reaches here is dropped with a
+            # note rather than pasted into the community slot.
             for rt in ri.rt_imports:
+                if is_derivation_keyword(rt):
+                    out.append(
+                        "# " + derived_review_comment(
+                            "route-target import", "Junos",
+                        )
+                    )
+                    continue
                 out.append(
                     f"set routing-instances {_quote_if_needed(ri.name)} "
                     f"vrf-target import target:{rt}"
                 )
             for rt in ri.rt_exports:
+                if is_derivation_keyword(rt):
+                    out.append(
+                        "# " + derived_review_comment(
+                            "route-target export", "Junos",
+                        )
+                    )
+                    continue
                 out.append(
                     f"set routing-instances {_quote_if_needed(ri.name)} "
                     f"vrf-target export target:{rt}"

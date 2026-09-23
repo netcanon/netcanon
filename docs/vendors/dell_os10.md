@@ -13,9 +13,19 @@ OS10 is Dell's modern Debian-based NOS.  It is **not** the older
 Force10 **OS9 / FTOS** grammar (`interface TenGigabitEthernet 0/1`,
 `ManagementEthernet`, VLAN-centric `tagged` / `untagged`) — that is a
 different language, and this codec **refuses** it outright rather than
-mis-parse it into a plausible-looking wrong answer.  If you paste an OS9
-config, auto-detection returns no candidate instead of silently handing
-it to the wrong codec.
+mis-parse it into a plausible-looking wrong answer.
+
+> **Corrected 2026-09-23 (#482).**  This paragraph used to promise that
+> "auto-detection returns no candidate" for an OS9 paste.  That was a
+> whole-product claim, and it was **false**: the OS10 codec did refuse,
+> but `cisco_iosxe_cli` then claimed the file at confidence **95**
+> ("IOS-specific banner sequence detected"), because Force10 emits
+> `service timestamps` and one such banner was enough.  Measured on four
+> real S4810 captures, it parsed them into 90 interfaces collapsed onto
+> 5 distinct names, 0 VLANs and 0 IP addresses.  The deferral now lives
+> in `cisco_iosxe_cli.probe()`, so the claim above is true again — but
+> if you migrated an OS9 config before this, re-check what source codec
+> was used.
 
 > **Why `best_effort` and not `certified`?**  Every other codec's
 > `certified` rests on an **in-tree real capture corpus**.  The OS10

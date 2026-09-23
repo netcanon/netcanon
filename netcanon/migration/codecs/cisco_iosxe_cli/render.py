@@ -44,7 +44,20 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..._derived_values import (
+    is_derivation_keyword,
+)
+from ..._derived_values import (
+    review_comment as derived_review_comment,
+)
 from ..._naming import sanitise_hostname
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
+)
+from ..._radius_secrets import (
+    radius_secret_is_migratable,
+    unwrap_native_secret,
+)
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -207,13 +220,48 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append(f"vrf definition {vrf.name}")
         if vrf.description:
             out.append(f" description {vrf.description}")
+        # (#482) IOS-XE's auto-RD keyword is `rd-auto` (hyphenated,
+        # 17.12.1+), NOT `rd auto`, and there is no
+        # `route-target ... auto` CLI form at all -- the auto-RT is
+        # implied by `vnid <n> evpn-instance`.  So a source that wrote
+        # `rd auto` / `route-target both auto` (NX-OS, AOS-CX) produced
+        # three lines here that IOS-XE cannot parse.  We drop the value
+        # and name the native equivalent rather than emit `rd-auto`
+        # ourselves: it is gated at 17.12.1 while this codec supports
+        # 15.x onward, so emitting it would trade a wrong line on every
+        # release for a wrong line on most of them.
         if vrf.route_distinguisher:
-            out.append(f" rd {vrf.route_distinguisher}")
-        if vrf.rt_imports or vrf.rt_exports:
+            if is_derivation_keyword(vrf.route_distinguisher):
+                out.append(
+                    " ! " + derived_review_comment(
+                        "route-distinguisher",
+                        "Cisco IOS-XE",
+                        native_form="rd-auto (IOS-XE 17.12.1+)",
+                    )
+                )
+            else:
+                out.append(f" rd {vrf.route_distinguisher}")
+        rt_imports = [
+            rt for rt in vrf.rt_imports if not is_derivation_keyword(rt)
+        ]
+        rt_exports = [
+            rt for rt in vrf.rt_exports if not is_derivation_keyword(rt)
+        ]
+        if len(rt_imports) != len(vrf.rt_imports) or len(
+            rt_exports
+        ) != len(vrf.rt_exports):
+            out.append(
+                " ! " + derived_review_comment(
+                    "route-target",
+                    "Cisco IOS-XE",
+                    native_form="vnid <n> evpn-instance",
+                )
+            )
+        if rt_imports or rt_exports:
             out.append(" address-family ipv4")
-            for rt in vrf.rt_imports:
+            for rt in rt_imports:
                 out.append(f"  route-target import {rt}")
-            for rt in vrf.rt_exports:
+            for rt in rt_exports:
                 out.append(f"  route-target export {rt}")
             out.append(" exit-address-family")
         out.append("!")
@@ -678,8 +726,22 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         out.append(f"radius server {server.host}")
         out.append(f" address ipv4 {server.host} auth-port "
                    f"{server.auth_port} acct-port {server.acct_port}")
+        # (#482) See netcanon/migration/_radius_secrets.py — a secret
+        # encrypted under the SOURCE device's key cannot be re-used
+        # here, and IOS-XE reads this slot as the literal secret.
         if server.key:
-            out.append(f" key {server.key}")
+            if radius_secret_is_migratable(
+                server.key, tree.source_vendor, "cisco_iosxe_cli",
+            ):
+                out.append(f" key {unwrap_native_secret(server.key)}")
+            else:
+                out.append(
+                    format_radius_review_comment(
+                        server.host,
+                        comment_syntax="exclamation",
+                        target_label="Cisco IOS-XE",
+                    )
+                )
         out.append("!")
 
     # --- SNMP block ---

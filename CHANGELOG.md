@@ -72,6 +72,252 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **The sanitiser fabricated a route-distinguisher and collided two VRFs onto
+  one.**  `auto` is a keyword telling the device to derive the RD/RT itself,
+  not operator identity, but it was run through the route-target redactor like
+  any value.  Two consequences, the second worse than the first:
+
+  * **Fabrication.**  `rd auto` became `rd 64496:1` — a value the operator
+    never wrote.  That also contradicted a shipped promise:
+    `docs/CAPABILITIES.md` tells operators the keyword is preserved "rather
+    than inventing a value", and a same-vendor re-render of a sanitised tree
+    emitted the fabricated RD.
+  * **Collision.**  The substitution table is keyed on the value string, which
+    is safe while every string is an identity — two different real values can
+    never share a placeholder.  `auto` breaks that, because ONE string stands
+    for N real values.  On a committed NX-OS capture, two tenants whose RDs
+    genuinely differ on the device both became `64496:1`, **and so did their
+    export route-targets**, while the two explicit route-targets in the same
+    file correctly mapped to distinct placeholders.  A reviewer of that
+    submission saw a merged-VPN topology that does not exist.
+
+  It also silently defeated the derivation-keyword gate added in the same
+  release: on a sanitised tree the value is no longer `auto`, so the check
+  passes and a fabricated RD ships cross-vendor with no review comment.
+  Because `BUG_REPORTING.md` tells operators to sanitise before submitting,
+  this hid the whole class from every future contributor.
+
+  The keyword now passes through at the choke point, so none of the five call
+  sites can miss it.  The RD walk also gained the `!=` guard its sibling list
+  helper always had — without it the audit trail claimed a
+  `route-distinguisher` substitution for a value that came back unchanged, and
+  a log that over-reports is as untrustworthy as one that under-reports.
+  The RD/RT redaction rule was undocumented in both `SECURITY.md` and
+  `BUG_REPORTING.md`; both now carry it, including what is deliberately NOT
+  redacted.
+
+  ⚠️ Latent and deliberately not built: the sanitiser also walks
+  `evpn_type5_routes.rt_imports` / `.rt_exports`, which no renderer's
+  derivation gate inspects, so an `auto` there would survive into a target
+  stanza ungated.  The committed corpus contains zero `evpn_type5_routes`, so
+  nothing exercises it today — recorded so the next contributor to add such a
+  fixture does not inherit an invisible half-gate.
+
+### Changed
+
+- **The migrate page no longer stays silent when your chosen source codec did
+  not recognise the config at all.**  The detection banner showed a green tick
+  whenever the top candidate matched your pick, and showed nothing when your
+  pick was absent from the candidate list entirely — which reads as tacit
+  approval.  A note now says so explicitly.  The tick itself is unchanged but
+  its limit is documented in the template: detection is a 500-byte-prefix
+  heuristic, so agreement means the probe and the operator chose the same
+  codec, not that the codec is right.
+
+- **`_usm_keys._same_vendor` now documents that `source_vendor` records which
+  PARSER RAN, not what the config is**, and that a wrong codec choice
+  therefore opens the same-vendor credential pass.  Investigated in depth and
+  **deliberately left as a documented property rather than gated**: across
+  1236 successful wrong-codec parses over two corpora the free pass changes
+  exactly ONE verdict (the NX-OS parser reading an NX-OS line in its own
+  grammar, on placeholder values), while removing it would refuse 16 of 17
+  SNMPv3 users and 1 of 1 RADIUS secrets across 15 committed fixtures on
+  legitimate same-vendor round-trips.  Requiring the chosen codec to
+  self-attest is circular and measurably inverts on a Dell OS10 capture.
+
+- **Dell Force10 OS9 / FTOS configs were claimed by `cisco_iosxe_cli` at
+  confidence 95.**  This is #475 one Dell NOS generation earlier, arriving by
+  a different marker: OS10 was claimed via `! Last configuration change at`,
+  while OS9 has no such line but emits `service timestamps` — another
+  weight-2 entry in `_IOS_BANNER_HITS`, and since the `>= 2` threshold
+  returns 95, one line was enough.  Measured over a 41-entry dev corpus: four
+  real Dell S4810 captures each claimed at 95 and mis-parsed into 90
+  interfaces collapsed onto 5 distinct names (Force10 writes `interface
+  TenGigabitEthernet 0/1` with a SPACE, so the Cisco regex takes the type and
+  drops the number), 0 VLANs and 0 IP addresses.  There is no `dell_os9`
+  codec, so the honest outcome is no candidate rather than a confident wrong
+  one.  `cisco_iosxe_cli.probe()` now defers on two Force10 `stack-unit`
+  markers.  **Measured: 4 of 4 fixed, 0 of 90 committed fixtures changed
+  anywhere in their candidate ranking.**
+
+  A `! Version 9.x(y)` banner clause was evaluated and **rejected**: it adds
+  zero recall and is the one marker shape that can collide, since NX-OS
+  writes `version 9.2(3)` / `version 9.3(12)` and differs only by the leading
+  `!`.  A collector or operator commenting that line would have silenced a
+  correct NX-OS detection.  Pinned by a negative test.
+
+  `docs/vendors/dell_os10.md` shipped the whole-product claim that pasting an
+  OS9 config "returns no candidate"; it was false, and is corrected with a
+  re-check note.  Two further docstrings were wrong: `_IOS_BANNER_HITS` said
+  95 meant "two banners" (it means ONE — wrong by a factor of two in both
+  halves, and that error is why a single shared line kept reading as
+  insufficient), and `best_codec`'s "the /migrate UI does this" example was
+  false — it has **no production caller**, and the UI hard-codes
+  `min_confidence: 40`.
+
+- **Added a corpus-wide detection guard at the PRODUCTION probe window.**  The
+  only existing one runs at whole-file width to exercise probe discrimination,
+  so nothing measured the 500-byte cutoff over real data — a green corpus-wide
+  guard for a code path the operator never runs, the same shape as the
+  fidelity harness auditing a path the default endpoint does not use.  The new
+  test asserts only the property that holds today (**73 correct / 0 wrong / 17
+  silent**): a capture may go undetected, but must never be claimed by the
+  WRONG codec.  The 17 silent fixtures across nine vendors are a separate open
+  finding, deliberately not asserted against.
+
+- **The EVPN `auto` derivation keyword was emitted into two vendors'
+  grammars that have no such form.**  `auto` is not a value — it instructs the
+  device to derive the RD/RT itself.  Because the literal round-trips
+  perfectly, the fidelity audit scored it `ALIGNED` and no gate saw it.
+
+  Narrowed by adversarial verification to a **lexical** defect on exactly two
+  targets, each closed against a primary source.  *Junos*:
+  `route-distinguisher` accepts only `as-number:number` / `number:id` /
+  `ip-address:id`; and `vrf-target` takes a bare `auto` as a STANDALONE
+  alternative to `target:<community-id>`, so `vrf-target target:auto` was a
+  non-form built by substituting the keyword into the community slot.  The RD
+  is now dropped with a review comment, while the RT uses the native
+  `vrf-target auto` — preserving the operator's "derive it" intent rather
+  than discarding it.  *Cisco IOS-XE CLI*: the auto-RD keyword is `rd-auto`
+  (hyphenated, 17.12.1+), not `rd auto`, and there is no `route-target ...
+  auto` form at all; both are dropped with a comment naming the native
+  equivalent.  We do not emit `rd-auto` ourselves — it is gated at 17.12.1
+  while this codec supports 15.x onward.
+
+  **Arista EOS and Cisco IOS-XR are deliberately unchanged**, and a test pins
+  that they still emit `auto`.  Whether EOS accepts `rd auto` in `router bgp /
+  vrf` submode could not be established from a primary source, and the earlier
+  claim that "EOS rejects `rd auto`" was **refuted** by a counter-example in
+  this repo's own corpus.  Changing behaviour on an unverified grammar belief
+  would repeat that mistake.
+
+  The paired expectation YAMLs were re-authored in the same change
+  (`cisco_nxos__juniper_junos`, `cisco_nxos__cisco_iosxe_cli`): the RD/RT keys
+  were scored `good` only because an invalid literal round-tripped through our
+  own re-parse.  `CODEC_BUG` went 5 → 25 before the re-authoring and holds at
+  **5** after.  Also corrected: the repo stated the RD derivation formula as
+  "BGP ASN + VRF VNI" in three shipped places — that is the ROUTE-TARGET
+  formula; an IP-VRF `auto` RD is `<BGP router-id>:<internal VRF ID>`, whose
+  numbering field is a runtime allocation index that appears nowhere in a
+  config file, which is why resolving `auto` is impossible in principle and
+  was not attempted.
+
+- **Two physically distinct source ports could fuse into one target
+  port with `warnings == []`.**  Aruba AOS-S `1/A1` is a port on uplink
+  MODULE A and `1/1` is access port 1.  `classify_port_name` keeps them
+  apart (`subslot_letter="A"`), but no target's `format_port_identity`
+  consumes that field, so both render to a single name on **9 of the 11**
+  public targets — `ge-1/0/1` (Junos), `Ethernet1/0/1` (NX-OS), `port1`
+  (FortiGate) — merging the two ports and their VLAN memberships.
+
+  A collision detector already existed and could not see this: it walked
+  `intent.interfaces` and `intent.lags`, and the AOS-S captures that
+  exercise the bug carry **zero** `interface` stanzas — every port is
+  named only inside `vlans[].tagged_ports` / `untagged_ports`.  Both
+  lists were empty, so the check passed vacuously on exactly the configs
+  most likely to hit the defect.  That is the same scoping mistake as
+  the rename sweep itself: `translate_port_names` rewrites the
+  `present_names` set, which is strictly larger than `interfaces[].name`.
+
+  Detection now reads `memo` — every source -> final pair actually
+  applied — so it sees a rename wherever the name lived.
+
+  Netcanon **warns rather than repairs**: no target models a letter
+  slot, and synthesising an offset port number would fabricate topology
+  the operator never wrote.  An explicit `port_rename_map` entry
+  overrides and clears the warning.  Render output is unchanged, so the
+  cross-mesh baseline does not move.
+
+- **SECURITY: a RADIUS shared secret encrypted under the SOURCE device's
+  own key was written into other vendors' key slots.**  RADIUS secrets
+  were the third credential class on the canonical tree and, unlike
+  local-user password hashes (#460-#462) and SNMPv3 USM keys
+  (#463-#472), had **no portability gate at all** — every render path
+  emitted `CanonicalRADIUSServer.key` verbatim.
+
+  Five of the six render paths — `arista_eos`, `cisco_iosxe_cli`,
+  `aruba_aoss`, `mikrotik_routeros`, `opnsense` — wrote a FortiGate
+  `fortios:ENC <blob>` string into a field their vendor reads as the
+  LITERAL shared secret.  That config commits cleanly and authenticates
+  nobody, and anything that later strips the envelope turns the blob
+  into the password.
+
+  The sixth ran the same failure backwards: `fortigate_cli` split the
+  canonical value on `":"` and stamped `ENC` onto whatever came back,
+  so a *plaintext* secret from Aruba or OPNsense was emitted as
+  `set secret ENC <plaintext>` — asserting a provenance the value never
+  had and handing FortiOS something it will try to decrypt.
+
+  Policy now lives in `netcanon/migration/_radius_secrets.py`, the third
+  sibling of the two existing credential modules.  Only a **plaintext**
+  secret crosses a vendor boundary; same-vendor re-render always passes
+  and is the reference path.  Classification is by envelope and
+  PROVENANCE, never by the value's shape — so `my:secret` from a known
+  source stays migratable (refusing every value containing a colon
+  would be a false-positive blast, not a fix), while an unregistered
+  envelope from an unvouched source is refused.
+
+  A refusal does **not** drop the server record.  This is a deliberate
+  departure from the SNMPv3 rule (#465, where a v3 user without a usable
+  key is not a meaningful record): a keyless `radius-server host <ip>`
+  is a half-configured server the operator can see and finish, whereas
+  a vanished one is an invisible hole in their AAA config.  Each
+  renderer emits a review comment in its own comment syntax.
+
+  The audit confirms the fix rather than merely tolerating it: six
+  field-cells moved from `METHODOLOGY_ISSUE_under` (1853 → 1847) to
+  `EXPECTED_LOSSY` (3759 → 3765).  Those pairs' expectation YAMLs
+  already declared the RADIUS key lossy; the code had been wrongly
+  preserving it, so no YAML re-authoring was needed — reality now
+  matches the declaration.  `CODEC_BUG` holds at 5.
+
+- **`cisco_iosxe` (NETCONF / OpenConfig) deleted 96% of the interfaces
+  handed to it as a migration target, and reported `completed`.**  It was
+  the only registered codec with no `port_names.py`, so it inherited the
+  `CodecBase` defaults: `classify_port_name` → `kind="unknown"` and
+  `format_port_identity` → `None`.  Because `translate_port_names` takes
+  `strip_unmappable=True` by default — and nothing in the tree overrides
+  it — "no native representation" DELETES the name and the interface with
+  it, rather than leaving it verbatim as the base docstring claimed.
+  Measured across five source codecs: 429 of 441 interfaces restored by
+  this fix (96% → 2% lost), with `arista_eos`, `cisco_nxos` and
+  `aruba_aoscx` each previously losing 100% and rendering ~60 bytes
+  carrying zero interfaces.  The codec is offered in the operator target
+  dropdown, so this was a silent outage rather than a stub gap.
+
+  IOS-XE NETCONF and IOS-XE CLI are the same platform in two wire
+  formats, so both methods now delegate to the CLI sibling's port-name
+  bridge rather than duplicating it — the two can no longer disagree
+  about what a Cisco port name looks like.  `"ports"` is removed from
+  `unsupported_rename_categories` accordingly (the comment beside it
+  invited exactly this: "Remove when the stub grows real port-name
+  translation").  Management interfaces are still dropped, matching
+  `cisco_iosxe_cli`, and that is surfaced in the job's warnings.
+
+  The amber pane-compat banner this codec declared is a cautionary note
+  on that mechanism: it advertised a cosmetic warning-collapse while
+  sitting on total interface loss.  **Declaring a rename category
+  unsupported is not a substitute for failing loudly when data is being
+  dropped.**  `CodecBase.format_port_identity`'s docstring is corrected
+  in the same commit, since its "leaves the original name verbatim"
+  claim described a branch nothing selects.
+
+  ⚠ **The cross-mesh audit did not move by a single cell** — all eight
+  variance counts are byte-identical before and after.  `run_full_mesh.py`
+  never calls `translate_port_names`, so the fidelity harness audits a
+  code path the default `/plan` endpoint does not use.  That is why this
+  survived twelve codec waves, and it is not yet addressed.
+
 - **The cross-mesh fidelity audit scored 15 of its 1339 cells against a
   source tree the render had already rewritten.**  `process_cell` runs
   `parse → render → parse → compare(source, target)` and passed the *live*

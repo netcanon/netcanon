@@ -445,12 +445,18 @@ class CiscoNXOSCodec(CodecBase):
             LossyPath(
                 path="/routing-instances/instance/route-distinguisher",
                 reason=(
-                    "NX-OS supports `rd auto` (deriving the RD from the "
-                    "BGP ASN + VRF VNI) as well as an explicit "
-                    "`rd <asn>:<nn>`.  The codec preserves `auto` verbatim "
-                    "as a sentinel; cross-vendor renderers that don't "
-                    "recognise it must synthesise an explicit RD or emit "
-                    "nothing.  An explicit RD round-trips losslessly."
+                    "NX-OS supports `rd auto` as well as an explicit "
+                    "`rd <asn>:<nn>`.  Per the Nexus 9000 VXLAN guide, an "
+                    "IP-VRF `auto` RD derives as "
+                    "`<BGP router-id>:<internal VRF ID>` -- the numbering "
+                    "field is the device's RUNTIME VRF allocation index and "
+                    "appears nowhere in the config text, so it can never be "
+                    "resolved from a capture.  (This reason previously said "
+                    "'BGP ASN + VRF VNI', which is the ROUTE-TARGET formula, "
+                    "not the RD one.)  The codec preserves `auto` verbatim; "
+                    "renderers must NOT synthesise a value -- #482 drops it "
+                    "with a review comment on targets whose grammar has no "
+                    "`auto` form.  An explicit RD round-trips losslessly."
                 ),
                 severity="warn",
             ),

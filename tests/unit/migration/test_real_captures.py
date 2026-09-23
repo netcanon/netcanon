@@ -661,6 +661,57 @@ def test_real_capture_detects_to_unique_codec(
         )
 
 
+@pytest.mark.parametrize(
+    "codec_key,path",
+    _FIXTURE_PARAMS,
+    ids=[_param_id(p) for p in _FIXTURE_PARAMS],
+)
+def test_real_capture_is_never_mis_attributed_at_production_window(
+    codec_key: str, path: Path,
+) -> None:
+    """At the PRODUCTION probe window, a capture may go undetected — but
+    it must never be claimed by the WRONG codec.
+
+    The sibling test above deliberately runs at whole-file width to
+    exercise probe *discrimination*.  That left nothing measuring the
+    cutoff over real data, so the repo had a green corpus-wide detection
+    guard for a code path the operator never runs — the same shape as
+    the fidelity harness auditing a path the default endpoint doesn't
+    use.  A wrong-vendor claim at the real window (defect D5: Dell
+    Force10 OS9 taken as Cisco IOS-XE at confidence 95) was invisible to
+    it.
+
+    This asserts the weaker property that actually holds today, so it is
+    a ratchet rather than an aspiration.  Measured 2026-09-23 over the
+    committed corpus: **73 correct / 0 wrong / 17 silent**.
+
+    Silence is a documented limitation of the 500-byte window and is NOT
+    asserted against here — 17 fixtures across nine vendors currently
+    return no candidate at production width, which is its own open
+    finding and deserves its own fix rather than a failing test. What is
+    asserted is the property that distinguishes "we didn't recognise it"
+    from "we recognised it as something it isn't".
+    """
+    from netcanon.services.migration_detect import detect_codec
+
+    expected = _DIR_TO_CODEC_NAME[codec_key]
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    ranked = detect_codec(raw)
+
+    if not ranked:
+        pytest.skip(
+            "no candidate at the 500-byte production window — a known "
+            "limitation, covered by the whole-file sibling test"
+        )
+    top = ranked[0]
+    assert top.codec == expected, (
+        f"{path.name}: at the PRODUCTION probe window this is claimed by "
+        f"{top.codec} (confidence {top.confidence}) but it is a "
+        f"{expected} capture.  A confident wrong answer is worse than "
+        f"silence.  Ranking: {[(c.codec, c.confidence) for c in ranked[:4]]}"
+    )
+
+
 def test_every_mapped_fixture_dir_yields_at_least_one_capture() -> None:
     """Vacuous-skip guard (run3 ``data-driven-harness-vacuous-skip``).
 

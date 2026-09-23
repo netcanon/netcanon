@@ -110,6 +110,7 @@ from ....models.migration import (
     UnsupportedPath,
 )
 from ..base import CodecBase, ParseError, RenderError
+from ..cisco_iosxe_cli import port_names as _cli_port_names
 from ..registry import register
 
 if TYPE_CHECKING:
@@ -211,15 +212,19 @@ class CiscoIOSXECodec(CodecBase):
     #   native YANG bridging that hasn't landed).  Matches the
     #   capability-matrix ``/snmp/v3-user`` ``Unsupported`` declaration.
     #
-    # ``"ports"`` — classify_port_name + format_port_identity are
-    #   inherited no-ops (CodecBase defaults).  Without this declaration,
-    #   using this codec as a migration TARGET generates N per-port
-    #   "no native representation" warnings instead of one up-front
-    #   amber banner.  Remove when the stub grows real port-name
-    #   translation.
+    # ``"ports"`` was here until #482 on the grounds that
+    #   classify_port_name + format_port_identity were inherited no-ops.
+    #   It is GONE because they no longer are — both now delegate to the
+    #   CLI sibling's shared port-name bridge (see "Cross-vendor
+    #   port-name translation" below).  The declaration collapsed N
+    #   per-port warnings into one amber banner, which read as a
+    #   cosmetic UI hint but was sitting on top of total interface loss:
+    #   ``strip_unmappable`` defaults to True, so "no native
+    #   representation" DELETED each name.  Measured before the fix: 96%
+    #   of 441 interfaces across five source codecs, 100% from
+    #   arista_eos / cisco_nxos / aruba_aoscx.
     unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset({
         "snmpv3",
-        "ports",
     })
 
     #: Declared capability matrix.  Paths are canonical schema paths
@@ -983,6 +988,34 @@ class CiscoIOSXECodec(CodecBase):
         if not isinstance(tree, dict):
             return
         yield from _walk(tree, "")
+
+    # -----------------------------------------------------------------
+    # Cross-vendor port-name translation
+    # -----------------------------------------------------------------
+    # IOS-XE NETCONF and IOS-XE CLI are the SAME PLATFORM in two wire
+    # formats.  An OpenConfig ``<name>GigabitEthernet0/0/0</name>`` and a
+    # CLI ``interface GigabitEthernet0/0/0`` name the same port with the
+    # same grammar, so the port-name bridge is shared with the CLI
+    # sibling rather than duplicated.  Delegating (not subclassing) keeps
+    # the two codecs' parse/render independent while guaranteeing the two
+    # can never disagree about what a Cisco port name looks like.
+    #
+    # (#482) Before this existed, the codec inherited CodecBase's
+    # defaults: ``classify_port_name`` -> kind="unknown" and
+    # ``format_port_identity`` -> None.  Because ``strip_unmappable``
+    # defaults to True, "no native representation" means the name is
+    # DELETED, so every foreign port name was dropped on the way in --
+    # measured at 96% of 441 interfaces across five source codecs, with
+    # arista_eos, cisco_nxos and aruba_aoscx all losing 100%.  The result
+    # was a ~60-byte render carrying zero interfaces while the job still
+    # reported ``completed``.  This codec is offered in the operator
+    # target dropdown, so that was a silent outage, not a stub gap.
+
+    def classify_port_name(self, name: str):
+        return _cli_port_names.classify_port_name(name)
+
+    def format_port_identity(self, identity) -> str | None:
+        return _cli_port_names.format_port_identity(identity)
 
     # -----------------------------------------------------------------
     # Auto-detection probe (R5)

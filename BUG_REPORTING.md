@@ -151,6 +151,7 @@ the same redacted value all 5 times).
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
 | VRRP / CARP virtual IPs (v4 + v6) | Public → docs ranges; private / ULA preserved |
 | Static-route destination prefix + next-hop | Public IPv4 / IPv6 → docs ranges (prefix length preserved); default route + private aggregates preserved |
+| Route distinguishers + route-targets | Stable `64496:N` placeholders (RFC 5398 documentation ASN); cross-references between a VRF's RD and its route-targets survive.  `auto` is left alone — it is a keyword telling the device to derive the value, not operator data |
 | Interface descriptions | `description redacted` |
 | Tier-3 sections (firewall, NAT, VPN) | Stripped entirely |
 

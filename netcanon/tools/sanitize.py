@@ -134,6 +134,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ..ip_transition import embedded_ipv4s
+from ..migration._derived_values import is_derivation_keyword
 from ..migration.canonical.intent import CanonicalIntent
 from ..migration.codecs.base import ParseError
 from ..migration.codecs.registry import get_codec
@@ -896,12 +897,19 @@ def sanitize_intent(  # noqa: C901
             ri.description = "description redacted"
         if ri.route_distinguisher:
             new_rd = table.redact_route_target(ri.route_distinguisher)
-            subs.append(Substitution(
-                category="route-distinguisher",
-                field=f"routing_instances[{i}].route_distinguisher",
-                original=ri.route_distinguisher,
-                redacted=new_rd,
-            ))
+            # The `!=` guard mirrors _redact_route_target_list, which has
+            # always had it.  Without it this walk logged a
+            # `route-distinguisher` substitution for a value that came back
+            # unchanged -- so once `auto` passes through, the audit trail
+            # would claim a redaction that did not happen.  An audit log that
+            # over-reports is as untrustworthy as one that under-reports.
+            if new_rd != ri.route_distinguisher:
+                subs.append(Substitution(
+                    category="route-distinguisher",
+                    field=f"routing_instances[{i}].route_distinguisher",
+                    original=ri.route_distinguisher,
+                    redacted=new_rd,
+                ))
             ri.route_distinguisher = new_rd
         ri.rt_imports = _redact_route_target_list(
             ri.rt_imports, f"routing_instances[{i}].rt_imports", table, subs
@@ -1244,7 +1252,38 @@ class _SubstitutionTable:
         the RFC 5398 documentation ASN ``64496`` so the correlation
         structure survives while the real ASN/IP and index are hidden.
         Same input → same output across the whole config.
+
+        **A derivation keyword is passed through untouched.**  `auto` is not
+        an identity — it is an instruction to the device to derive the value
+        itself — so redacting it protected nobody and did two kinds of damage:
+
+        * **Fabrication.** It replaced a keyword the operator wrote with a
+          synthetic value they never wrote, which is what AGENTS.md's
+          "declare it, don't invent it" forbids.  It also contradicted a
+          shipped promise: `docs/CAPABILITIES.md` tells operators the keyword
+          is preserved "rather than inventing a value", and a same-vendor
+          re-render of a sanitised tree emitted ` rd 64496:1`.
+        * **Collision — the worse half.**  This map is keyed on the value
+          string, which is safe while every string is an identity: two
+          different real values can never share a placeholder.  `auto` breaks
+          that, because ONE string stands for N different real values.  On
+          `akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt` two tenants whose
+          RDs genuinely differ on the device both became `64496:1`, and so did
+          their export RTs — while the two *explicit* leak RTs in the same
+          file correctly mapped to distinct placeholders.  A reviewer reading
+          that submission saw a merged-VPN topology that does not exist.
+
+        It also silently defeated the #482 derivation-keyword gate: on a
+        sanitised tree the value is no longer `auto`, so the renderers' check
+        passes and a fabricated RD ships cross-vendor with no review comment.
+        Since `BUG_REPORTING.md` tells operators to sanitise before
+        submitting, this hid the whole class from every future contributor.
+
+        The keyword check lives at this choke point rather than at the five
+        call sites so no caller can miss it.
         """
+        if is_derivation_keyword(value):
+            return value
         if value not in self._route_targets:
             self._route_targets[value] = f"64496:{len(self._route_targets) + 1}"
         return self._route_targets[value]

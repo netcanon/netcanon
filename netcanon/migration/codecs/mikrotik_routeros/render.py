@@ -35,6 +35,13 @@ import ipaddress
 import re
 from typing import Any
 
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
+)
+from ..._radius_secrets import (
+    radius_secret_is_migratable,
+    unwrap_native_secret,
+)
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalVlan
@@ -742,8 +749,18 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         lines.append("/radius")
         for server in tree.radius_servers:
             parts = ["add", f"address={server.host}"]
+            # (#482) See netcanon/migration/_radius_secrets.py — RouterOS
+            # reads `secret=` as the literal shared secret.
+            refused_secret = False
             if server.key:
-                parts.append(f"secret={server.key}")
+                if radius_secret_is_migratable(
+                    server.key, tree.source_vendor, "mikrotik_routeros",
+                ):
+                    parts.append(
+                        f"secret={unwrap_native_secret(server.key)}"
+                    )
+                else:
+                    refused_secret = True
             if server.auth_port and server.auth_port != 1812:
                 parts.append(f"authentication-port={server.auth_port}")
             if server.acct_port and server.acct_port != 1813:
@@ -755,6 +772,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # only the baseline here.
             parts.append("service=login")
             lines.append(" ".join(parts))
+            if refused_secret:
+                lines.append(
+                    format_radius_review_comment(
+                        server.host,
+                        comment_syntax="hash",
+                        target_label="MikroTik RouterOS",
+                    )
+                )
         lines.append("")
 
     # ----- /ip pool + /ip dhcp-server network (Tier 2 DHCP) -----

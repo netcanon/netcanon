@@ -670,6 +670,47 @@ class CiscoIOSXECLICodec(CodecBase):
         ):
             return None
 
+        # Defer to Dell Force10 OS9 / FTOS.  Same shape as the OS10
+        # deferral above, one NOS generation earlier, and it arrives by a
+        # different marker: OS9 has no `! Last configuration change at`
+        # line, but it DOES emit `service timestamps` — another weight-2
+        # entry in _IOS_BANNER_HITS, again enough on its own to clear the
+        # `>= 2` threshold and return 95.  Measured over the 41-entry dev
+        # corpus: the four real S4810 captures were each claimed at
+        # confidence 95 with reason "IOS-specific banner sequence
+        # detected", and mis-parsed into 90 interfaces collapsed onto 5
+        # distinct names (Force10 writes `interface TenGigabitEthernet
+        # 0/1` with a SPACE, so the Cisco regex takes the type and drops
+        # the number), 0 VLANs, 0 IPv4 addresses.
+        #
+        # There is no `dell_os9` codec, so the honest answer is "no
+        # candidate" rather than a confident wrong one.
+        #
+        # Marker selection is deliberately narrow.  Both entries are from
+        # the Force10 `stack-unit` family, are the only two candidates
+        # that fall INSIDE the 500-byte probe window on all four real
+        # captures (offsets 86-89 and 376-379), and were verified to
+        # appear ZERO times anywhere under tests/, netcanon/, tools/ or
+        # docs/.  Measured effect: 4 of 4 dev captures fixed, and 0 of
+        # the 90 committed fixtures change anywhere in their candidate
+        # ranking.
+        #
+        # ⚠️ A `! Version 9.x(y)` banner clause was evaluated and
+        # REJECTED.  It adds zero recall (these two markers already fix
+        # 4/4) and it is the one marker shape that can collide: NX-OS
+        # writes `version 9.2(3)` / `version 9.3(12)`, which differ from
+        # the Force10 banner only by the leading `!`.  A collector,
+        # sanitiser, or operator that comments out an NX-OS version line
+        # would turn it into an OS9 match and silence a correct NX-OS
+        # detection.  The veto fails toward "decline", so a missed marker
+        # is safe and a false marker is not.
+        if re.search(
+            r"^boot\s+system\s+stack-unit\s+\d"
+            r"|^logging\s+coredump\s+stack-unit\s+\d",
+            raw_prefix, re.IGNORECASE | re.MULTILINE,
+        ):
+            return None
+
         # RANCID / oxidized collection header naming bare ``cisco`` —
         # IOS / IOS-XE classic, distinct from ``cisco-nx`` / ``cisco-xr``
         # (which the deferral blocks above already routed to the NX-OS /
@@ -751,8 +792,13 @@ class CiscoIOSXECLICodec(CodecBase):
 #:   * ``service timestamps`` — Cisco-specific top-of-config
 #:     directive controlling logging/debug message formatting
 #:
-#: Each contributes weight 2.  The 95 threshold is "two banners
-#: present"; 98 is "all four / kitchen sink".
+#: Each contributes weight 2, and the thresholds are `>= 4` -> 98,
+#: `>= 2` -> 95.  So 98 is "TWO banners present" and 95 is "ONE".
+#: (This comment previously said two/four -- wrong by a factor of two in
+#: both halves, and the error mattered: it made a single shared line look
+#: insufficient to trigger a confident claim, which is exactly how Dell
+#: OS10 (#475, via `! Last configuration change at`) and then Dell OS9
+#: (#482, via `service timestamps`) each scored 95 off ONE marker.)
 _IOS_BANNER_HITS: tuple[tuple[str, int], ...] = (
     ("building configuration", 2),
     ("current configuration :", 2),

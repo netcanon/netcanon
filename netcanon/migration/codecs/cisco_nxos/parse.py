@@ -279,8 +279,13 @@ _VRF_CONTEXT_RE = re.compile(r"^vrf\s+context\s+(\S+)\s*$", re.IGNORECASE)
 _VRF_DESCRIPTION_RE = re.compile(r"^\s+description\s+(\S.*)$", re.IGNORECASE)
 # ── VRF RD / route-target + per-VRF static route (Phase 3) ──
 #: ``rd <asn>:<nn>`` / ``rd <ip>:<nn>`` / ``rd auto`` inside a ``vrf
-#: context`` block.  ``auto`` (NX-OS derives the RD from the BGP ASN +
-#: VRF VNI) is preserved verbatim as a sentinel — declared lossy.
+#: context`` block.  ``auto`` is preserved verbatim as a sentinel —
+#: declared lossy.  An IP-VRF ``auto`` RD derives as
+#: ``<BGP router-id>:<internal VRF ID>`` (Nexus 9000 VXLAN guide); the
+#: MAC-VRF form is ``<router-id>:<VLAN ID + 32767>``.  Neither is
+#: resolvable from config text — the numbering field is a runtime
+#: allocation index.  (Previously documented here as "BGP ASN + VRF
+#: VNI", which is the ROUTE-TARGET formula.)
 _VRF_RD_RE = re.compile(r"^\s+rd\s+(\S+)\s*$", re.IGNORECASE)
 #: ``route-target import|export|both <rt> [evpn]`` (nested under an
 #: ``address-family ... unicast`` sub-block).  ``both`` expands to

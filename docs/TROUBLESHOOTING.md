@@ -174,6 +174,27 @@ name-equivalence helper:
 If you see `Po1` on Cisco become `ae1` on Junos, that's the
 correct mapping.
 
+### "Two of my ports became one port"
+
+Check the job warnings for `port_rename: multiple source ports map
+to ...`.  This is a **real loss**, not cosmetic: two physically
+distinct source ports resolved to a single name on the target, and
+their VLAN memberships merged.
+
+The common case is Aruba AOS-S uplink-module ports.  `1/A1` (module
+**A**, port 1) and `1/1` (access port 1) are different ports, but no
+other vendor models a letter slot, so both become `ge-1/0/1` /
+`Ethernet1/0/1` / `port1` depending on target.
+
+Netcanon will not guess a target port for you — inventing an offset
+would fabricate topology you never wrote.  Fix it by mapping each
+colliding port explicitly in the ports pane (or `port_rename_map` on
+the API), e.g. `1/A1` -> `xe-1/1/1`.  The warning clears once the
+mapping is distinct.
+
+⚠️ If you migrated from AOS-S before #482, this was **silent** —
+re-run the translation and check for these warnings.
+
 ### "The migrate page reports 'paramiko-shell capture artifact'"
 
 Specific to OPNsense backups via SSH + `cat /conf/config.xml`.

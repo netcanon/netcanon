@@ -31,6 +31,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
+)
+from ..._radius_secrets import (
+    radius_secret_is_migratable,
+    unwrap_native_secret,
+)
 from ..._user_secrets import classify_hash, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent
@@ -483,12 +490,26 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # existing real-capture round-trips don't pick up spurious
     # ``auth-port 1812`` lines.
     for server in tree.radius_servers:
-        if server.key:
+        # (#482) See netcanon/migration/_radius_secrets.py — AOS-S reads
+        # this slot as the literal shared secret, so a foreign encrypted
+        # blob must be refused rather than quoted into it.
+        if server.key and radius_secret_is_migratable(
+            server.key, tree.source_vendor, "aruba_aoss",
+        ):
             lines.append(
-                f'radius-server host {server.host} key "{server.key}"'
+                f'radius-server host {server.host} '
+                f'key "{unwrap_native_secret(server.key)}"'
             )
         else:
             lines.append(f"radius-server host {server.host}")
+            if server.key:
+                lines.append(
+                    format_radius_review_comment(
+                        server.host,
+                        comment_syntax="semicolon",
+                        target_label="Aruba AOS-S",
+                    )
+                )
         if server.auth_port != 1812 or server.acct_port != 1813:
             lines.append(
                 f"radius-server host {server.host} "

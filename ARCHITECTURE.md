@@ -380,12 +380,25 @@ where rename overrides apply to the canonical tree but vanish
 from rendered output.
 
 **Current state:** every shipped bidirectional codec has the
-attribute empty EXCEPT `OpnSenseCodec` (which declares
-`frozenset({"snmpv3"})`) and `CiscoIOSXECodec` (the NETCONF Phase-0.5
-stub, which declares `frozenset({"snmpv3", "ports"})`) because their
-parse + render paths don't yet round-trip those categories
+attribute empty EXCEPT `OpnSenseCodec` and `CiscoIOSXECodec` (the
+NETCONF Phase-0.5 stub), which each declare `frozenset({"snmpv3"})`
+because their parse + render paths don't yet round-trip that category
 (operators renaming SNMPv3 users on either of those codecs as the
-target see the surfaced banner immediately).  Earlier `OPNsenseCodec`
+target see the surfaced banner immediately).
+
+`CiscoIOSXECodec` also declared `"ports"` until #482, on the grounds
+that its `classify_port_name` / `format_port_identity` were inherited
+`CodecBase` no-ops.  That entry is a cautionary example of this
+mechanism's limit: a banner is a *UI hint*, and this one was
+advertising a cosmetic warning-collapse while the underlying no-op
+silently DELETED every port name (`strip_unmappable` defaults to True,
+so "no native representation" removes rather than preserves — contrary
+to what the `CodecBase.format_port_identity` docstring claimed).
+Measured before the fix: 96% of 441 interfaces lost across five source
+codecs.  The entry is gone because IOS-XE NETCONF now shares the IOS-XE
+CLI port-name bridge — same platform, two wire formats.  **Declaring a
+category here is not a substitute for failing loudly when data is being
+dropped.**  Earlier `OPNsenseCodec`
 and `FortiGateCLICodec` also declared `{"local_users"}` under an
 incorrect assumption that those codecs kept user blocks in
 `raw_sections`; verified otherwise (both round-trip
@@ -440,6 +453,30 @@ Cisco type-9 scrypt → Junos, OPNsense bcrypt → Arista) emit a
 `format_review_comment(...)` line in the appropriate per-codec
 syntax instead of leaking the hash literal as plaintext.  Per-target
 accepted-algorithm sets live in `_TARGET_ACCEPTS[<vendor>]`.
+
+**RADIUS shared-secret portability policy**
+(`netcanon/migration/_radius_secrets.py`).  The third credential
+surface, sibling to `_user_secrets.py` (password hashes) and
+`_usm_keys.py` (SNMPv3 USM keys).  A render path consuming
+`CanonicalRADIUSServer.key` calls
+`radius_secret_is_migratable(value, source_vendor, target_vendor)`.
+Only a **plaintext** secret crosses a vendor boundary; FortiGate's
+`set secret ENC <blob>` (carried canonically behind the `fortios:`
+envelope) is encrypted under that device's own key and is refused,
+with a `format_review_comment(...)` line so the operator knows to
+re-enter it.  Same-vendor re-render always passes — that is the
+reference path.  Unlike the SNMPv3 rule, a refusal does **not** drop
+the server record: a keyless `radius-server host <ip>` is a
+half-configured server the operator can see and finish, whereas a
+vanished one is an invisible hole in their AAA config.
+
+Classification is by envelope and **provenance**, never by the value's
+shape.  Note the deliberate asymmetry with a colon: when
+`source_vendor` is known the full envelope set is known too, so
+`my:secret` is a legal literal secret; only an unregistered
+envelope-shaped prefix from an *unvouched* source classifies as
+`unknown` and is refused.  Refusing every value containing a colon
+would be a false-positive blast rather than a fix.
 
 **Naming-value sanitisation** (`netcanon/migration/_naming.py`).
 Some target CLI parsers (Arista EOS, Cisco IOS-XE) reject whitespace
