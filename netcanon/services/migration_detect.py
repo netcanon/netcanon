@@ -103,9 +103,17 @@ def best_codec(
 ) -> DetectCandidate | None:
     """Convenience: return the top-ranked candidate, or ``None``.
 
-    Useful for callers that want to auto-pre-select a codec without
-    rendering the full ranking (e.g. the /migrate UI does this when
-    the user picks a stored config).
+    Intended for callers that want to auto-pre-select a codec without
+    rendering the full ranking.
+
+    .. warning::
+       **This function has no production caller.**  The example that
+       used to sit here -- "the /migrate UI does this when the user
+       picks a stored config" -- was false: the UI posts to
+       ``/api/v1/migration/detect`` with a hard-coded
+       ``min_confidence: 40`` (``migrate.html``), so this 50 floor is
+       never applied anywhere a user can reach.  Do not reason about
+       operator-facing behaviour from this default.
 
     Args:
         raw: Raw config text.

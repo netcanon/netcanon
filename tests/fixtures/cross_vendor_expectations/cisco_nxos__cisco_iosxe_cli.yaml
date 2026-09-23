@@ -408,14 +408,20 @@ per_field_expectation:
     references: [nxos-iosxecli-surface]
 
   routing_instances:
-    disposition: good
-    note: >
-      Preserved on all 12 cells with VRFs: the name, the route
-      distinguisher, RT imports and exports, the L3 VNI binding, the
-      instance-type discriminator and the VRF description all round-trip into
-      `vrf definition <name>` with its address-family block.  The target
-      matrix declares the instance and its instance-type lossy for the
-      mac-vrf shape, which no fixture on this pair exercises.
+    disposition: lossy
+    reason: >
+      The name, L3 VNI binding, instance-type discriminator and VRF
+      description round-trip into `vrf definition <name>` with its
+      address-family block, and explicit RD / RT values are preserved.
+      The RD and route-targets are LOST when the source wrote the derivation
+      keyword `auto`, which every VRF in this pair's NX-OS corpus does.
+      IOS-XE spells its auto-RD `rd-auto` (hyphenated, 17.12.1+) and has no
+      `route-target ... auto` form at all -- the auto-RT is implied by
+      `vnid <n> evpn-instance` -- so since #486 the keyword is dropped with a
+      review comment naming the native equivalent, rather than emitted as
+      ` rd auto` / ` route-target import auto`, which IOS-XE cannot parse.
+      The target matrix declares the instance and its instance-type lossy for
+      the mac-vrf shape, which no fixture on this pair exercises.
     references: [nxos-iosxecli-surface]
 
   # -- Vendor-specific / structural surfaces --

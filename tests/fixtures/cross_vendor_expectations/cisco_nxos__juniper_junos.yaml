@@ -582,19 +582,37 @@ per_field_expectation:
     references: [nxos-junos-surface]
 
   "routing_instances[].route_distinguisher":
-    disposition: good
-    note: >
-      Both accept the `<asn>:<nn>` and `<ip>:<nn>` forms; Junos emits it as
-      `set routing-instances <X> route-distinguisher <rd>`.  Preserved on all
-      6 cells that populate it.
+    disposition: lossy
+    reason: >
+      Both accept the `<asn>:<nn>` and `<ip>:<nn>` forms, and an explicit RD
+      round-trips into `set routing-instances <X> route-distinguisher <rd>`.
+      But EVERY RD in this pair's NX-OS corpus is the derivation keyword
+      `auto`, and `auto` is not one of Junos's accepted forms -- the CLI
+      reference enumerates exactly `as-number:number`, `number:id` and
+      `ip-address:id`.  Since #486 the keyword is dropped with a review
+      comment rather than pasted into a slot that would reject it, so this
+      is a real loss on every cell that populates the field.  It was
+      previously scored `good` only because the invalid literal round-tripped
+      through our own re-parse.
     references: [nxos-junos-surface]
 
   "routing_instances[].rt_imports":
-    disposition: good
+    disposition: lossy
+    reason: >
+      Same cause as `route_distinguisher`, with a different outcome per form.
+      Junos DOES have a bare `vrf-target auto`, so when imports and exports
+      match, the derivation intent survives.  When they diverge the renderer
+      must use `vrf-target import target:<community>`, which has no `auto`
+      alternative, and the keyword is dropped with a note.  Explicit RTs are
+      unaffected; one NX-OS capture mixes both in a single list and each
+      element is handled on its own.
     references: [nxos-junos-surface]
 
   "routing_instances[].rt_exports":
-    disposition: good
+    disposition: lossy
+    reason: >
+      Mirror of `rt_imports` -- one NX-OS `route-target both auto` line
+      populates both lists.
     references: [nxos-junos-surface]
 
   "routing_instances[].description":

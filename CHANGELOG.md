@@ -72,6 +72,83 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Dell Force10 OS9 / FTOS configs were claimed by `cisco_iosxe_cli` at
+  confidence 95.**  This is #475 one Dell NOS generation earlier, arriving by
+  a different marker: OS10 was claimed via `! Last configuration change at`,
+  while OS9 has no such line but emits `service timestamps` — another
+  weight-2 entry in `_IOS_BANNER_HITS`, and since the `>= 2` threshold
+  returns 95, one line was enough.  Measured over a 41-entry dev corpus: four
+  real Dell S4810 captures each claimed at 95 and mis-parsed into 90
+  interfaces collapsed onto 5 distinct names (Force10 writes `interface
+  TenGigabitEthernet 0/1` with a SPACE, so the Cisco regex takes the type and
+  drops the number), 0 VLANs and 0 IP addresses.  There is no `dell_os9`
+  codec, so the honest outcome is no candidate rather than a confident wrong
+  one.  `cisco_iosxe_cli.probe()` now defers on two Force10 `stack-unit`
+  markers.  **Measured: 4 of 4 fixed, 0 of 90 committed fixtures changed
+  anywhere in their candidate ranking.**
+
+  A `! Version 9.x(y)` banner clause was evaluated and **rejected**: it adds
+  zero recall and is the one marker shape that can collide, since NX-OS
+  writes `version 9.2(3)` / `version 9.3(12)` and differs only by the leading
+  `!`.  A collector or operator commenting that line would have silenced a
+  correct NX-OS detection.  Pinned by a negative test.
+
+  `docs/vendors/dell_os10.md` shipped the whole-product claim that pasting an
+  OS9 config "returns no candidate"; it was false, and is corrected with a
+  re-check note.  Two further docstrings were wrong: `_IOS_BANNER_HITS` said
+  95 meant "two banners" (it means ONE — wrong by a factor of two in both
+  halves, and that error is why a single shared line kept reading as
+  insufficient), and `best_codec`'s "the /migrate UI does this" example was
+  false — it has **no production caller**, and the UI hard-codes
+  `min_confidence: 40`.
+
+- **Added a corpus-wide detection guard at the PRODUCTION probe window.**  The
+  only existing one runs at whole-file width to exercise probe discrimination,
+  so nothing measured the 500-byte cutoff over real data — a green corpus-wide
+  guard for a code path the operator never runs, the same shape as the
+  fidelity harness auditing a path the default endpoint does not use.  The new
+  test asserts only the property that holds today (**73 correct / 0 wrong / 17
+  silent**): a capture may go undetected, but must never be claimed by the
+  WRONG codec.  The 17 silent fixtures across nine vendors are a separate open
+  finding, deliberately not asserted against.
+
+- **The EVPN `auto` derivation keyword was emitted into two vendors'
+  grammars that have no such form.**  `auto` is not a value — it instructs the
+  device to derive the RD/RT itself.  Because the literal round-trips
+  perfectly, the fidelity audit scored it `ALIGNED` and no gate saw it.
+
+  Narrowed by adversarial verification to a **lexical** defect on exactly two
+  targets, each closed against a primary source.  *Junos*:
+  `route-distinguisher` accepts only `as-number:number` / `number:id` /
+  `ip-address:id`; and `vrf-target` takes a bare `auto` as a STANDALONE
+  alternative to `target:<community-id>`, so `vrf-target target:auto` was a
+  non-form built by substituting the keyword into the community slot.  The RD
+  is now dropped with a review comment, while the RT uses the native
+  `vrf-target auto` — preserving the operator's "derive it" intent rather
+  than discarding it.  *Cisco IOS-XE CLI*: the auto-RD keyword is `rd-auto`
+  (hyphenated, 17.12.1+), not `rd auto`, and there is no `route-target ...
+  auto` form at all; both are dropped with a comment naming the native
+  equivalent.  We do not emit `rd-auto` ourselves — it is gated at 17.12.1
+  while this codec supports 15.x onward.
+
+  **Arista EOS and Cisco IOS-XR are deliberately unchanged**, and a test pins
+  that they still emit `auto`.  Whether EOS accepts `rd auto` in `router bgp /
+  vrf` submode could not be established from a primary source, and the earlier
+  claim that "EOS rejects `rd auto`" was **refuted** by a counter-example in
+  this repo's own corpus.  Changing behaviour on an unverified grammar belief
+  would repeat that mistake.
+
+  The paired expectation YAMLs were re-authored in the same change
+  (`cisco_nxos__juniper_junos`, `cisco_nxos__cisco_iosxe_cli`): the RD/RT keys
+  were scored `good` only because an invalid literal round-tripped through our
+  own re-parse.  `CODEC_BUG` went 5 → 25 before the re-authoring and holds at
+  **5** after.  Also corrected: the repo stated the RD derivation formula as
+  "BGP ASN + VRF VNI" in three shipped places — that is the ROUTE-TARGET
+  formula; an IP-VRF `auto` RD is `<BGP router-id>:<internal VRF ID>`, whose
+  numbering field is a runtime allocation index that appears nowhere in a
+  config file, which is why resolving `auto` is impossible in principle and
+  was not attempted.
+
 - **Two physically distinct source ports could fuse into one target
   port with `warnings == []`.**  Aruba AOS-S `1/A1` is a port on uplink
   MODULE A and `1/1` is access port 1.  `classify_port_name` keeps them

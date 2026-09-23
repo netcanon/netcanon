@@ -128,9 +128,19 @@ def test_marker_outside_the_window_is_not_seen(sample: str, label: str) -> None:
 def test_qos_leading_config_returns_no_candidate() -> None:
     """The DellGEOS case named in the ``probe()`` docstring.
 
-    Unlike the two above there is no marker later in the file either —
-    these captures are genuinely markerless, so widening the window
-    alone would not rescue them.
+    Unlike the two above, the marker is far enough in that a modest
+    window widening would not reach it.
+
+    ⚠️ Corrected 2026-09-23 (#485): this docstring used to say the real
+    captures were "genuinely markerless, so widening the window alone
+    would not rescue them".  That is false.  Measured on the real
+    `dellgeos_S5212F-TOR1-Advanced.cfg` (2802 bytes): `interface
+    mgmt1/1/1` at byte **849** and `vlt-domain 1` at byte **1270** —
+    both OS10 markers, both merely outside the 500-byte window.  The
+    sample below (`_QOS_LEAD`) is a truncated excerpt and IS markerless,
+    which is what this test actually pins; the claim about the captures
+    was an over-generalisation from it.  Widening the window is a live
+    option, not a foreclosed one.
     """
     assert DellOS10Codec.probe(_QOS_LEAD) is None
 

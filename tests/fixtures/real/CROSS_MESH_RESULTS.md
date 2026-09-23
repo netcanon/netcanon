@@ -61,17 +61,17 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | cisco_iosxr/xrdtools_isis_r1.cfg | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 |
 | cisco_iosxr/xrdtools_sr_xrd1.cfg | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
 | cisco_iosxr/xrdtools_srv6_pe1.cfg | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 |
-| cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt | WARN 17/21 | WARN 14/21 | WARN 15/21 | WARN 19/21 | WARN 19/21 | WARN 16/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 | WARN 14/21 |
+| cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt | WARN 17/21 | WARN 14/21 | WARN 15/21 | WARN 19/21 | WARN 18/21 | WARN 16/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 17/21 | WARN 14/21 |
 | cisco_nxos/batfish_nxos_bgp_redist_d1.txt | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 |
 | cisco_nxos/batfish_nxos_evpn_l2vni_nx1.txt | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 16/21 | OK 21/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 15/21 |
-| cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 15/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 14/21 |
-| cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 19/21 | WARN 18/21 | WARN 15/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 14/21 |
+| cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 19/21 | WARN 17/21 | WARN 15/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 14/21 |
+| cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt | WARN 18/21 | WARN 15/21 | WARN 17/21 | WARN 19/21 | WARN 17/21 | WARN 15/21 | OK 21/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 14/21 |
 | cisco_nxos/batfish_nxos_hsrp_nxos1.txt | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 16/21 | OK 21/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 |
 | cisco_nxos/batfish_nxos_hsrp_nxos2.txt | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 17/21 | WARN 16/21 | OK 21/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 17/21 | WARN 16/21 |
 | cisco_nxos/batfish_nxos_n9kv_ebgp_r1.txt | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 18/21 | WARN 17/21 | OK 21/21 | WARN 18/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 |
-| cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt | WARN 18/21 | WARN 14/21 | WARN 16/21 | WARN 19/21 | WARN 19/21 | WARN 15/21 | OK 21/21 | WARN 17/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 13/21 |
+| cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt | WARN 18/21 | WARN 14/21 | WARN 16/21 | WARN 19/21 | WARN 18/21 | WARN 15/21 | OK 21/21 | WARN 17/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 13/21 |
 | cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt | WARN 19/21 | WARN 16/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 18/21 | WARN 16/21 | WARN 16/21 | WARN 17/21 |
-| cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 19/21 | WARN 18/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 14/21 |
+| cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 19/21 | WARN 17/21 | WARN 15/21 | OK 21/21 | WARN 15/21 | WARN 16/21 | WARN 15/21 | WARN 16/21 | WARN 16/21 | WARN 14/21 |
 | cisco_nxos/networklessons_clab_vxlan_mcast_leaf2_nxos.cfg | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
 | fortigate/kevinguenay_fgt_70g_branch.conf | WARN 17/21 | WARN 15/21 | WARN 16/21 | WARN 20/21 | WARN 16/21 | WARN 16/21 | WARN 16/21 | WARN 15/21 | OK 21/21 | WARN 17/21 | WARN 17/21 | WARN 17/21 | WARN 15/21 |
 | fortigate/kevinguenay_fgt_vm_hub.conf | WARN 17/21 | WARN 15/21 | WARN 16/21 | OK 21/21 | WARN 16/21 | WARN 17/21 | WARN 16/21 | WARN 15/21 | OK 21/21 | WARN 17/21 | WARN 18/21 | WARN 17/21 | WARN 16/21 |
@@ -141,9 +141,9 @@ Combined across both matrices.  Sums every WARN cell's ``fields_drifted`` count 
 | 3 | cisco_nxos | aruba_aoscx | 71 |
 | 4 | juniper_junos | vyos | 67 |
 | 5 | juniper_junos | dell_os10 | 66 |
-| 6 | cisco_nxos | cisco_iosxr | 64 |
-| 7 | juniper_junos | opnsense | 62 |
-| 8 | cisco_nxos | juniper_junos | 60 |
+| 6 | cisco_nxos | juniper_junos | 65 |
+| 7 | cisco_nxos | cisco_iosxr | 64 |
+| 8 | juniper_junos | opnsense | 62 |
 | 9 | cisco_nxos | mikrotik_routeros | 60 |
 | 10 | cisco_nxos | fortigate_cli | 58 |
 
@@ -3985,12 +3985,13 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | routing_instances | UNSUPPORTED (by design) | [{"name": "VRF_SERVICE_CUST_1", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto", "65000:901002"], "rt_exports": ["auto"], "description": "", "l3_vni": 901001}, {"name":... | [] | all 3 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 00:00:00:5e:12:34 |  | anycast_gateway_mac: '00:00:00:5e:12:34' → '' |
 
-### cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt → cisco_iosxe_cli  (WARN 19/21)
+### cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt → cisco_iosxe_cli  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "Ethernet1/1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "10.0.0.1", "prefix_length": 31, ... | [{"name": "Ethernet1/1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "10.0.0.1", "prefix_length": 31, ... | {"interfaces[2] {'name': 'Ethernet1/3'}": {"lag_member_of": {"source": "port-channel1", "target": "Port-channel1"}}, "interfaces[3] {'name': 'Ethernet1/4'}": {"lag_member_of": {"source": "port-chan... |
 | lags | DRIFT | [{"name": "port-channel1", "members": ["Ethernet1/3", "Ethernet1/4"], "mode": "active"}, {"name": "port-channel2002", "members": ["Ethernet1/6"], "mode": "active"}, {"name": "port-channel2003", "me... | [{"name": "Port-channel1", "members": ["Ethernet1/3", "Ethernet1/4"], "mode": "active"}, {"name": "Port-channel2002", "members": ["Ethernet1/6"], "mode": "active"}, {"name": "Port-channel2003", "me... | {"lags[0] {'name': 'port-channel1'}": {"name": {"source": "port-channel1", "target": "Port-channel1"}}, "lags[1] {'name': 'port-channel2002'}": {"name": {"source": "port-channel2002", "target": "Po... |
+| routing_instances | DRIFT | [{"name": "VRF_SERVICE_CUST_1", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto", "65000:901002"], "rt_exports": ["auto"], "description": "", "l3_vni": 901001}, {"name":... | [{"name": "VRF_SERVICE_CUST_1", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": ["65000:901002"], "rt_exports": [], "description": "", "l3_vni": 901001}, {"name": "VRF_SERVICE_CUST... | {"routing_instances[0] {'name': 'VRF_SERVICE_CUST_1'}": {"route_distinguisher": {"source": "auto", "target": ""}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto",... |
 
 ### cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt → cisco_iosxr  (WARN 16/21)
 
@@ -4025,7 +4026,7 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | routing_instances | UNSUPPORTED (by design) | [{"name": "VRF_SERVICE_CUST_1", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto", "65000:901002"], "rt_exports": ["auto"], "description": "", "l3_vni": 901001}, {"name":... | [] | all 3 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 00:00:00:5e:12:34 |  | anycast_gateway_mac: '00:00:00:5e:12:34' → '' |
 
-### cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt → juniper_junos  (WARN 16/21)
+### cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt → juniper_junos  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
@@ -4033,6 +4034,7 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "user_svi_1_vrf_service_cust_1", "description": "", "tagged_ports": [],... | [{"id": 1, "name": "VLAN-1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "user_svi_1_vrf_service_cust_1", "description": "", "tagged_ports... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "VLAN-1"}}} |
 | lags | DRIFT | [{"name": "port-channel1", "members": ["Ethernet1/3", "Ethernet1/4"], "mode": "active"}, {"name": "port-channel2002", "members": ["Ethernet1/6"], "mode": "active"}, {"name": "port-channel2003", "me... | [{"name": "ae1", "members": ["Ethernet1/3", "Ethernet1/4"], "mode": "active"}, {"name": "ae2002", "members": ["Ethernet1/6"], "mode": "active"}, {"name": "ae2003", "members": ["Ethernet1/7"], "mode... | {"lags[0] {'name': 'port-channel1'}": {"name": {"source": "port-channel1", "target": "ae1"}}, "lags[1] {'name': 'port-channel2002'}": {"name": {"source": "port-channel2002", "target": "ae2002"}}, "... |
 | vxlan_vnis | DRIFT | [{"vlan_id": 10, "vni": 100010, "mcast_group": "239.11.11.10", "flood_list": [], "source_interface": "loopback0", "udp_port": 4789}, {"vlan_id": 20, "vni": 100020, "mcast_group": "239.11.11.20", "f... | [{"vlan_id": 10, "vni": 100010, "mcast_group": "", "flood_list": [], "source_interface": "loopback0", "udp_port": 4789}, {"vlan_id": 20, "vni": 100020, "mcast_group": "", "flood_list": [], "source_... | {"vxlan_vnis[0] {'vni': 100010, 'vlan_id': 10}": {"mcast_group": {"source": "239.11.11.10", "target": ""}}, "vxlan_vnis[1] {'vni': 100020, 'vlan_id': 20}": {"mcast_group": {"source": "239.11.11.20"... |
+| routing_instances | DRIFT | [{"name": "VRF_SERVICE_CUST_1", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto", "65000:901002"], "rt_exports": ["auto"], "description": "", "l3_vni": 901001}, {"name":... | [{"name": "VRF_SERVICE_CUST_1", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": ["65000:901002"], "rt_exports": [], "description": "", "l3_vni": 901001}, {"name": "VRF_SERVICE_CUST... | {"routing_instances[0] {'name': 'VRF_SERVICE_CUST_1'}": {"route_distinguisher": {"source": "auto", "target": ""}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto",... |
 | anycast_gateway_mac | DRIFT | 00:00:00:5e:12:34 |  | anycast_gateway_mac: '00:00:00:5e:12:34' → '' |
 
 ### cisco_nxos/akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939.txt → mikrotik_routeros  (WARN 16/21)
@@ -4352,13 +4354,14 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | routing_instances | UNSUPPORTED (by design) | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100777}, {"name": "management", "instance... | [] | all 2 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 0a:0a:11:11:22:22 |  | anycast_gateway_mac: '0a:0a:11:11:22:22' → '' |
 
-### cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt → cisco_iosxe_cli  (WARN 18/21)
+### cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt → cisco_iosxe_cli  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "Ethernet1/1", "default_name": "", "description": "TO->NX-2", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "10.1.12.1", "prefix_leng... | [{"name": "Ethernet1/1", "default_name": "", "description": "TO->NX-2", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "10.1.12.1", "prefix_leng... | {"interfaces[131] {'name': 'mgmt0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}} |
 | snmp | DRIFT | {"community": "", "location": "", "contact": "", "trap_hosts": [], "v3_users": [{"name": "admin", "group": "network-admin", "auth_protocol": "md5", "auth_passphrase": "0x34f04b1a1b9c69d4e3d5e21d088... |  | snmp: {'community': '', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': [{'name': 'admin', 'group': 'network-admin', 'auth_protocol': 'md5', 'auth_passphrase': '0x34f04b1a1b9c69d4e3d5e... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $5$AIKMNG$H5p2G70XwW904ZLrZBQ2V8/j07hx0gVhM6jO2Eqc9C3", "role": "network-admin"}] | [] | all 1 local_users dropped |
+| routing_instances | DRIFT | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100777}, {"name": "management", "instance... | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": 100777}, {"name": "management", "instance_type": "vrf", "... | {"routing_instances[0] {'name': 'TENANT-777'}": {"route_distinguisher": {"source": "auto", "target": ""}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto"], "targe... |
 
 ### cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt → cisco_iosxr  (WARN 15/21)
 
@@ -4395,7 +4398,7 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | routing_instances | UNSUPPORTED (by design) | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100777}, {"name": "management", "instance... | [] | all 2 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 0a:0a:11:11:22:22 |  | anycast_gateway_mac: '0a:0a:11:11:22:22' → '' |
 
-### cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt → juniper_junos  (WARN 16/21)
+### cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt → juniper_junos  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
@@ -4403,6 +4406,7 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 777, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4... | [{"id": 1, "name": "VLAN-1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 777, "name": "VLAN-777", "description": "", "tagged_ports": [], "untagged_por... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "VLAN-1"}}, "vlans[1] {'id': 777, 'name': ''}": {"name": {"source": "", "target": "VLAN-777"}}} |
 | snmp | DRIFT | {"community": "", "location": "", "contact": "", "trap_hosts": [], "v3_users": [{"name": "admin", "group": "network-admin", "auth_protocol": "md5", "auth_passphrase": "0x34f04b1a1b9c69d4e3d5e21d088... |  | snmp: {'community': '', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': [{'name': 'admin', 'group': 'network-admin', 'auth_protocol': 'md5', 'auth_passphrase': '0x34f04b1a1b9c69d4e3d5e... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $5$AIKMNG$H5p2G70XwW904ZLrZBQ2V8/j07hx0gVhM6jO2Eqc9C3", "role": "network-admin"}] | [] | all 1 local_users dropped |
+| routing_instances | DRIFT | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100777}, {"name": "management", "instance... | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": 100777}, {"name": "management", "instance_type": "vrf", "... | {"routing_instances[0] {'name': 'TENANT-777'}": {"route_distinguisher": {"source": "auto", "target": ""}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto"], "targe... |
 | anycast_gateway_mac | DRIFT | 0a:0a:11:11:22:22 |  | anycast_gateway_mac: '0a:0a:11:11:22:22' → '' |
 
 ### cisco_nxos/batfish_nxos_evpn_l3vni_nx1.txt → mikrotik_routeros  (WARN 16/21)
@@ -4484,13 +4488,14 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | routing_instances | UNSUPPORTED (by design) | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100777}, {"name": "management", "instance... | [] | all 2 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 0a:0a:11:11:22:22 |  | anycast_gateway_mac: '0a:0a:11:11:22:22' → '' |
 
-### cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt → cisco_iosxe_cli  (WARN 18/21)
+### cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt → cisco_iosxe_cli  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "Ethernet1/1", "default_name": "", "description": "TO->NX-1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "10.1.12.2", "prefix_leng... | [{"name": "Ethernet1/1", "default_name": "", "description": "TO->NX-1", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "10.1.12.2", "prefix_leng... | {"interfaces[131] {'name': 'mgmt0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}} |
 | snmp | DRIFT | {"community": "", "location": "", "contact": "", "trap_hosts": [], "v3_users": [{"name": "admin", "group": "network-admin", "auth_protocol": "md5", "auth_passphrase": "0xec9e3b98c0d43a77eba33217ce4... |  | snmp: {'community': '', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': [{'name': 'admin', 'group': 'network-admin', 'auth_protocol': 'md5', 'auth_passphrase': '0xec9e3b98c0d43a77eba33... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $5$DALFOK$79GBh2hlSO71YV9KG9HYEo7BWiURDvPcOfDe/Zols.5", "role": "network-admin"}] | [] | all 1 local_users dropped |
+| routing_instances | DRIFT | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100777}, {"name": "management", "instance... | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": 100777}, {"name": "management", "instance_type": "vrf", "... | {"routing_instances[0] {'name': 'TENANT-777'}": {"route_distinguisher": {"source": "auto", "target": ""}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto"], "targe... |
 
 ### cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt → cisco_iosxr  (WARN 15/21)
 
@@ -4527,7 +4532,7 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | routing_instances | UNSUPPORTED (by design) | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100777}, {"name": "management", "instance... | [] | all 2 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 0a:0a:11:11:22:22 |  | anycast_gateway_mac: '0a:0a:11:11:22:22' → '' |
 
-### cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt → juniper_junos  (WARN 16/21)
+### cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt → juniper_junos  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
@@ -4535,6 +4540,7 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 777, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4... | [{"id": 1, "name": "VLAN-1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 777, "name": "VLAN-777", "description": "", "tagged_ports": [], "untagged_por... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "VLAN-1"}}, "vlans[1] {'id': 777, 'name': ''}": {"name": {"source": "", "target": "VLAN-777"}}} |
 | snmp | DRIFT | {"community": "", "location": "", "contact": "", "trap_hosts": [], "v3_users": [{"name": "admin", "group": "network-admin", "auth_protocol": "md5", "auth_passphrase": "0xec9e3b98c0d43a77eba33217ce4... |  | snmp: {'community': '', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': [{'name': 'admin', 'group': 'network-admin', 'auth_protocol': 'md5', 'auth_passphrase': '0xec9e3b98c0d43a77eba33... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $5$DALFOK$79GBh2hlSO71YV9KG9HYEo7BWiURDvPcOfDe/Zols.5", "role": "network-admin"}] | [] | all 1 local_users dropped |
+| routing_instances | DRIFT | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100777}, {"name": "management", "instance... | [{"name": "TENANT-777", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": 100777}, {"name": "management", "instance_type": "vrf", "... | {"routing_instances[0] {'name': 'TENANT-777'}": {"route_distinguisher": {"source": "auto", "target": ""}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto"], "targe... |
 | anycast_gateway_mac | DRIFT | 0a:0a:11:11:22:22 |  | anycast_gateway_mac: '0a:0a:11:11:22:22' → '' |
 
 ### cisco_nxos/batfish_nxos_evpn_l3vni_nx2.txt → mikrotik_routeros  (WARN 16/21)
@@ -4972,12 +4978,13 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | routing_instances | UNSUPPORTED (by design) | [{"name": "PUBLIC", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 10000900}, {"name": "management", "instance_t... | [] | all 2 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 00:00:00:10:09:99 |  | anycast_gateway_mac: '00:00:00:10:09:99' → '' |
 
-### cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt → cisco_iosxe_cli  (WARN 19/21)
+### cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt → cisco_iosxe_cli  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "Ethernet1/1", "default_name": "", "description": "x spine01", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9216, "ipv4_addresses": [], "ipv6_addresses": [], "switc... | [{"name": "Ethernet1/1", "default_name": "", "description": "x spine01", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9216, "ipv4_addresses": [], "ipv6_addresses": [], "switc... | {"interfaces[22] {'name': 'Ethernet1/3'}": {"lag_member_of": {"source": "port-channel10", "target": "Port-channel10"}}, "interfaces[55] {'name': 'Ethernet1/6'}": {"lag_member_of": {"source": "port-... |
 | lags | DRIFT | [{"name": "port-channel10", "members": ["Ethernet1/3"], "mode": "active"}, {"name": "port-channel999", "members": ["Ethernet1/6", "Ethernet1/7"], "mode": "active"}] | [{"name": "Port-channel10", "members": ["Ethernet1/3"], "mode": "active"}, {"name": "Port-channel999", "members": ["Ethernet1/6", "Ethernet1/7"], "mode": "active"}] | {"lags[0] {'name': 'port-channel10'}": {"name": {"source": "port-channel10", "target": "Port-channel10"}}, "lags[1] {'name': 'port-channel999'}": {"name": {"source": "port-channel999", "target": "P... |
+| routing_instances | DRIFT | [{"name": "PUBLIC", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 10000900}, {"name": "management", "instance_t... | [{"name": "PUBLIC", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": 10000900}, {"name": "management", "instance_type": "vrf", "ro... | {"routing_instances[0] {'name': 'PUBLIC'}": {"route_distinguisher": {"source": "auto", "target": ""}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto"], "target": ... |
 
 ### cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt → cisco_iosxr  (WARN 15/21)
 
@@ -5013,13 +5020,14 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | routing_instances | UNSUPPORTED (by design) | [{"name": "PUBLIC", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 10000900}, {"name": "management", "instance_t... | [] | all 2 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 00:00:00:10:09:99 |  | anycast_gateway_mac: '00:00:00:10:09:99' → '' |
 
-### cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt → juniper_junos  (WARN 17/21)
+### cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt → juniper_junos  (WARN 16/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "Ethernet1/1", "default_name": "", "description": "x spine01", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": 9216, "ipv4_addresses": [], "ipv6_addresses": [], "switc... | [{"name": "Ethernet1/1", "default_name": "", "description": "x spine01", "enabled": true, "interface_type": "", "mtu": 9216, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "ac... | count drift: 72 → 14 (interfaces) |
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 15, "name": "oob_mgmt", "description": "", "tagged_ports": [], "untagged_ports": ["... | [{"id": 1, "name": "VLAN-1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 15, "name": "oob_mgmt", "description": "", "tagged_ports": [], "untagged_port... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "VLAN-1"}}, "vlans[4] {'id': 999, 'name': ''}": {"name": {"source": "", "target": "VLAN-999"}}} |
 | lags | DRIFT | [{"name": "port-channel10", "members": ["Ethernet1/3"], "mode": "active"}, {"name": "port-channel999", "members": ["Ethernet1/6", "Ethernet1/7"], "mode": "active"}] | [{"name": "ae10", "members": ["Ethernet1/3"], "mode": "active"}, {"name": "ae999", "members": ["Ethernet1/6", "Ethernet1/7"], "mode": "active"}] | {"lags[0] {'name': 'port-channel10'}": {"name": {"source": "port-channel10", "target": "ae10"}}, "lags[1] {'name': 'port-channel999'}": {"name": {"source": "port-channel999", "target": "ae999"}}} |
+| routing_instances | DRIFT | [{"name": "PUBLIC", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 10000900}, {"name": "management", "instance_t... | [{"name": "PUBLIC", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": 10000900}, {"name": "management", "instance_type": "vrf", "ro... | {"routing_instances[0] {'name': 'PUBLIC'}": {"route_distinguisher": {"source": "auto", "target": ""}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto"], "target": ... |
 | anycast_gateway_mac | DRIFT | 00:00:00:10:09:99 |  | anycast_gateway_mac: '00:00:00:10:09:99' → '' |
 
 ### cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt → mikrotik_routeros  (WARN 16/21)
@@ -5219,13 +5227,14 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | routing_instances | UNSUPPORTED (by design) | [{"name": "CUST1", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100100}, {"name": "management", "instance_type... | [] | all 2 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 00:01:00:01:00:01 |  | anycast_gateway_mac: '00:01:00:01:00:01' → '' |
 
-### cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg → cisco_iosxe_cli  (WARN 18/21)
+### cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg → cisco_iosxe_cli  (WARN 17/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "Ethernet1/1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "192.168.13.3", "prefix_length": ... | [{"name": "Ethernet1/1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"ip": "192.168.13.3", "prefix_length": ... | {"interfaces[69] {'name': 'mgmt0'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}} |
 | snmp | DRIFT | {"community": "", "location": "", "contact": "", "trap_hosts": [], "v3_users": [{"name": "admin", "group": "network-admin", "auth_protocol": "md5", "auth_passphrase": "FACE0000FAKE0000AAAA0000BBBB0... |  | snmp: {'community': '', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': [{'name': 'admin', 'group': 'network-admin', 'auth_protocol': 'md5', 'auth_passphrase': 'FACE0000FAKE0000AAAA000... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $5$fakeSalt$fakeHashExampleValueLeaf1Admin0000", "role": "network-admin"}] | [] | all 1 local_users dropped |
+| routing_instances | DRIFT | [{"name": "CUST1", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100100}, {"name": "management", "instance_type... | [{"name": "CUST1", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": 100100}, {"name": "management", "instance_type": "vrf", "route... | {"routing_instances[0] {'name': 'CUST1'}": {"route_distinguisher": {"source": "auto", "target": ""}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto"], "target": [... |
 
 ### cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg → cisco_iosxr  (WARN 15/21)
 
@@ -5263,7 +5272,7 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | routing_instances | UNSUPPORTED (by design) | [{"name": "CUST1", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100100}, {"name": "management", "instance_type... | [] | all 2 routing_instances dropped |
 | anycast_gateway_mac | DRIFT | 00:01:00:01:00:01 |  | anycast_gateway_mac: '00:01:00:01:00:01' → '' |
 
-### cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg → juniper_junos  (WARN 16/21)
+### cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg → juniper_junos  (WARN 15/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
@@ -5271,6 +5280,7 @@ One section per non-OK real-capture cell (1019 total).  Sections are ordered by 
 | vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "VLAN10", "description": "", "tagged_ports": [], "untagged_ports": ["Et... | [{"id": 1, "name": "VLAN-1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 10, "name": "VLAN10", "description": "", "tagged_ports": [], "untagged_ports"... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "VLAN-1"}}} |
 | snmp | DRIFT | {"community": "", "location": "", "contact": "", "trap_hosts": [], "v3_users": [{"name": "admin", "group": "network-admin", "auth_protocol": "md5", "auth_passphrase": "FACE0000FAKE0000AAAA0000BBBB0... |  | snmp: {'community': '', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': [{'name': 'admin', 'group': 'network-admin', 'auth_protocol': 'md5', 'auth_passphrase': 'FACE0000FAKE0000AAAA000... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "5 $5$fakeSalt$fakeHashExampleValueLeaf1Admin0000", "role": "network-admin"}] | [] | all 1 local_users dropped |
+| routing_instances | DRIFT | [{"name": "CUST1", "instance_type": "vrf", "route_distinguisher": "auto", "rt_imports": ["auto"], "rt_exports": ["auto"], "description": "", "l3_vni": 100100}, {"name": "management", "instance_type... | [{"name": "CUST1", "instance_type": "vrf", "route_distinguisher": "", "rt_imports": [], "rt_exports": [], "description": "", "l3_vni": 100100}, {"name": "management", "instance_type": "vrf", "route... | {"routing_instances[0] {'name': 'CUST1'}": {"route_distinguisher": {"source": "auto", "target": ""}, "rt_exports": {"source": ["auto"], "target": []}, "rt_imports": {"source": ["auto"], "target": [... |
 | anycast_gateway_mac | DRIFT | 00:01:00:01:00:01 |  | anycast_gateway_mac: '00:01:00:01:00:01' → '' |
 
 ### cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg → mikrotik_routeros  (WARN 16/21)
