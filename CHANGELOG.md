@@ -72,6 +72,32 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Two physically distinct source ports could fuse into one target
+  port with `warnings == []`.**  Aruba AOS-S `1/A1` is a port on uplink
+  MODULE A and `1/1` is access port 1.  `classify_port_name` keeps them
+  apart (`subslot_letter="A"`), but no target's `format_port_identity`
+  consumes that field, so both render to a single name on **9 of the 11**
+  public targets — `ge-1/0/1` (Junos), `Ethernet1/0/1` (NX-OS), `port1`
+  (FortiGate) — merging the two ports and their VLAN memberships.
+
+  A collision detector already existed and could not see this: it walked
+  `intent.interfaces` and `intent.lags`, and the AOS-S captures that
+  exercise the bug carry **zero** `interface` stanzas — every port is
+  named only inside `vlans[].tagged_ports` / `untagged_ports`.  Both
+  lists were empty, so the check passed vacuously on exactly the configs
+  most likely to hit the defect.  That is the same scoping mistake as
+  the rename sweep itself: `translate_port_names` rewrites the
+  `present_names` set, which is strictly larger than `interfaces[].name`.
+
+  Detection now reads `memo` — every source -> final pair actually
+  applied — so it sees a rename wherever the name lived.
+
+  Netcanon **warns rather than repairs**: no target models a letter
+  slot, and synthesising an offset port number would fabricate topology
+  the operator never wrote.  An explicit `port_rename_map` entry
+  overrides and clears the warning.  Render output is unchanged, so the
+  cross-mesh baseline does not move.
+
 - **SECURITY: a RADIUS shared secret encrypted under the SOURCE device's
   own key was written into other vendors' key slots.**  RADIUS secrets
   were the third credential class on the canonical tree and, unlike

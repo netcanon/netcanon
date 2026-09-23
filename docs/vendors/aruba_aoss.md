@@ -175,6 +175,24 @@ pipeline — they just aren't pinned by a fixture yet").
 - **Stacking-aware port IDs** — 2930M stacks use `1/1-1/47`,
   `1/A1-1/A4` forms which expand correctly in cross-vendor port
   rename.
+
+  ⚠️ **Uplink-module ports fuse onto access ports on most targets.**
+  `1/A1` is a port on uplink module **A**; `1/1` is access port 1.
+  They are physically different ports, and Netcanon's parser keeps
+  them apart.  But no other vendor models a letter-slot module, so
+  every target that formats a `stack/port` pair renders both as one
+  name — `ge-1/0/1` on Junos, `Ethernet1/0/1` on NX-OS, `port1` on
+  FortiGate, and so on for 9 of the 11 targets.  The two ports merge,
+  and so do their VLAN memberships.
+
+  Since #484 this is **reported** in the job's warnings; before that
+  it was silent, and silent specifically on the captures most likely
+  to hit it (an AOS-S config with no `interface` stanzas names its
+  ports only inside the VLAN lists, which the old collision check
+  never looked at).  Netcanon does not repair it automatically —
+  there is no correct target port to invent.  Supply an explicit
+  `port_rename_map` entry per uplink port, e.g.
+  `{"1/A1": "xe-1/1/1"}`, to place them somewhere distinct.
 - **Hash portability** — `sha1` hashes don't translate to all
   targets cleanly; review-comment surfaces in the rendered output
   when targeting incompatible vendors.

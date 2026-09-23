@@ -618,6 +618,50 @@ def translate_port_names(  # noqa: C901
     _warn_collisions(intent.interfaces, "interface")
     _warn_collisions(intent.lags, "LAG")
 
+    # (#484) The two sweeps above only see names that reached an
+    # `interfaces` or `lags` RECORD.  A VLAN-centric source need not have
+    # any: Aruba AOS-S captures routinely carry zero `interface` stanzas
+    # and name every port only inside `vlans[].tagged_ports` /
+    # `untagged_ports`.  On those configs both sweeps inspect empty lists
+    # and the fusion below went out with `warnings == []`.
+    #
+    # `memo` holds every source -> final pair the sweep actually applied,
+    # wherever the name lived, so it is the honest detection surface --
+    # the same `present_names`-vs-`interfaces[].name` scoping mistake
+    # that made the fusion invisible in the first place.
+    #
+    # Worked example: Aruba `1/A1` is an uplink-MODULE port and `1/1` is
+    # an access port.  `classify_port_name` correctly distinguishes them
+    # (`subslot_letter="A"`), but no target's `format_port_identity`
+    # consumes that field, so both render to one name -- `ge-1/0/1` on
+    # Junos, `Ethernet1/0/1` on NX-OS, `port1` on FortiGate, and so on
+    # for 9 of the 11 public targets.  Two physically distinct ports
+    # become one, and their VLAN memberships merge.
+    #
+    # We warn rather than invent: no target models a letter slot, and
+    # synthesising an offset port number would fabricate topology the
+    # operator never wrote.  An explicit `port_rename_map` entry still
+    # overrides, which is the documented escape hatch.
+    already_warned = {
+        obj.name
+        for objs in (intent.interfaces, intent.lags)
+        for obj in objs
+    }
+    fused: dict[str, list[str]] = {}
+    for source, final in memo.items():
+        if source != final:
+            fused.setdefault(final, []).append(source)
+    for final in sorted(fused):
+        sources = sorted(fused[final])
+        if len(sources) < 2 or final in already_warned:
+            continue
+        warnings.append(
+            f"port_rename: multiple source ports map to {final!r} "
+            f"(sources: {', '.join(sources)}); these are distinct ports "
+            f"on the source device and their VLAN membership will be "
+            f"merged — map each source to a distinct target"
+        )
+
     # (#49b) Operator drop/rename keys that named a port absent from the tree
     # did nothing — warn instead of silently over-reporting them as dropped.
     for key in user_map:
