@@ -16,6 +16,22 @@ Two codecs ship for the IOS-XE family:
   subset Netcanon's NETCONF stub knows how to emit).  Use only when
   you specifically need NETCONF output.
 
+  > **Fixed in #482 — re-check any NETCONF output produced before it.**
+  > Used as a migration **target**, this codec previously dropped
+  > foreign port names instead of translating them, and because
+  > unmappable names are *deleted* rather than preserved, the interfaces
+  > carrying them went with them.  Measured across five source codecs,
+  > 96% of interfaces were lost — 100% from Arista EOS, Cisco NX-OS and
+  > Aruba AOS-CX — leaving a near-empty render that the job still
+  > reported as `completed`.  It now shares the `cisco_iosxe_cli`
+  > port-name bridge (same platform, different wire format), so Cisco
+  > port names are emitted natively.  If you migrated **to**
+  > `cisco_iosxe` previously, re-run the translation and diff the
+  > interface list before trusting the earlier output.  Management
+  > interfaces (`Management1` / `mgmt0` / `mgmt`) are still dropped, as
+  > they are for `cisco_iosxe_cli` — that is reported in the job's
+  > warnings, not silent.
+
 For 95% of operators wanting to translate IOS-XE configs to other
 vendors (or vice versa), use `cisco_iosxe_cli`.
 

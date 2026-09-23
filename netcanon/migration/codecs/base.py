@@ -412,12 +412,24 @@ class CodecBase(ABC):
         Returns ``None`` when this vendor has no native representation
         for the given identity's ``kind`` (e.g. Aruba AOS-S has no
         loopback concept; ``format_port_identity(PortIdentity(kind="loopback", ...))``
-        returns ``None``).  The orchestrator handles this by leaving
-        the original name verbatim and emitting a specific warning
-        the UI can surface as a manual-review item.
+        returns ``None``).
 
-        Default implementation returns ``None`` — safe for codecs not
-        yet participating in port-name translation.
+        ⚠️ Returning ``None`` DROPS the port.  ``translate_port_names``
+        takes ``strip_unmappable=True`` by default and no caller in the
+        tree overrides it, so the name — and the interface carrying it —
+        is deleted from the canonical tree, with a warning.  This
+        docstring previously said the orchestrator "leaves the original
+        name verbatim"; that describes the ``strip_unmappable=False``
+        branch, which nothing selects, and believing it is what let
+        ``cisco_iosxe`` ship as a target that deleted 96% of the
+        interfaces handed to it (#482).
+
+        The default implementation therefore returns ``None`` for
+        EVERY kind, which means a codec that does not override this is
+        not "not yet participating in port-name translation" — it is a
+        codec that discards every port it is given.  That is acceptable
+        only for a codec which is never offered as a migration target.
+        Override it before adding one to the target registry.
 
         Contract:
             * Must be pure.

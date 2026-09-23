@@ -72,6 +72,43 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`cisco_iosxe` (NETCONF / OpenConfig) deleted 96% of the interfaces
+  handed to it as a migration target, and reported `completed`.**  It was
+  the only registered codec with no `port_names.py`, so it inherited the
+  `CodecBase` defaults: `classify_port_name` → `kind="unknown"` and
+  `format_port_identity` → `None`.  Because `translate_port_names` takes
+  `strip_unmappable=True` by default — and nothing in the tree overrides
+  it — "no native representation" DELETES the name and the interface with
+  it, rather than leaving it verbatim as the base docstring claimed.
+  Measured across five source codecs: 429 of 441 interfaces restored by
+  this fix (96% → 2% lost), with `arista_eos`, `cisco_nxos` and
+  `aruba_aoscx` each previously losing 100% and rendering ~60 bytes
+  carrying zero interfaces.  The codec is offered in the operator target
+  dropdown, so this was a silent outage rather than a stub gap.
+
+  IOS-XE NETCONF and IOS-XE CLI are the same platform in two wire
+  formats, so both methods now delegate to the CLI sibling's port-name
+  bridge rather than duplicating it — the two can no longer disagree
+  about what a Cisco port name looks like.  `"ports"` is removed from
+  `unsupported_rename_categories` accordingly (the comment beside it
+  invited exactly this: "Remove when the stub grows real port-name
+  translation").  Management interfaces are still dropped, matching
+  `cisco_iosxe_cli`, and that is surfaced in the job's warnings.
+
+  The amber pane-compat banner this codec declared is a cautionary note
+  on that mechanism: it advertised a cosmetic warning-collapse while
+  sitting on total interface loss.  **Declaring a rename category
+  unsupported is not a substitute for failing loudly when data is being
+  dropped.**  `CodecBase.format_port_identity`'s docstring is corrected
+  in the same commit, since its "leaves the original name verbatim"
+  claim described a branch nothing selects.
+
+  ⚠ **The cross-mesh audit did not move by a single cell** — all eight
+  variance counts are byte-identical before and after.  `run_full_mesh.py`
+  never calls `translate_port_names`, so the fidelity harness audits a
+  code path the default `/plan` endpoint does not use.  That is why this
+  survived twelve codec waves, and it is not yet addressed.
+
 - **The cross-mesh fidelity audit scored 15 of its 1339 cells against a
   source tree the render had already rewritten.**  `process_cell` runs
   `parse → render → parse → compare(source, target)` and passed the *live*

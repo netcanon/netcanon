@@ -380,12 +380,25 @@ where rename overrides apply to the canonical tree but vanish
 from rendered output.
 
 **Current state:** every shipped bidirectional codec has the
-attribute empty EXCEPT `OpnSenseCodec` (which declares
-`frozenset({"snmpv3"})`) and `CiscoIOSXECodec` (the NETCONF Phase-0.5
-stub, which declares `frozenset({"snmpv3", "ports"})`) because their
-parse + render paths don't yet round-trip those categories
+attribute empty EXCEPT `OpnSenseCodec` and `CiscoIOSXECodec` (the
+NETCONF Phase-0.5 stub), which each declare `frozenset({"snmpv3"})`
+because their parse + render paths don't yet round-trip that category
 (operators renaming SNMPv3 users on either of those codecs as the
-target see the surfaced banner immediately).  Earlier `OPNsenseCodec`
+target see the surfaced banner immediately).
+
+`CiscoIOSXECodec` also declared `"ports"` until #482, on the grounds
+that its `classify_port_name` / `format_port_identity` were inherited
+`CodecBase` no-ops.  That entry is a cautionary example of this
+mechanism's limit: a banner is a *UI hint*, and this one was
+advertising a cosmetic warning-collapse while the underlying no-op
+silently DELETED every port name (`strip_unmappable` defaults to True,
+so "no native representation" removes rather than preserves — contrary
+to what the `CodecBase.format_port_identity` docstring claimed).
+Measured before the fix: 96% of 441 interfaces lost across five source
+codecs.  The entry is gone because IOS-XE NETCONF now shares the IOS-XE
+CLI port-name bridge — same platform, two wire formats.  **Declaring a
+category here is not a substitute for failing loudly when data is being
+dropped.**  Earlier `OPNsenseCodec`
 and `FortiGateCLICodec` also declared `{"local_users"}` under an
 incorrect assumption that those codecs kept user blocks in
 `raw_sections`; verified otherwise (both round-trip

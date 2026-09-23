@@ -104,8 +104,25 @@ the rename-modal flow.  The cross-vendor orchestrator at
 `netcanon/migration/canonical/port_names.py` imports each codec's
 pair of pure functions directly — a codec that inlines them inside
 `codec.py` blocks on circular imports.  Every codec that joins the
-rename-mode mesh ships this split (11 today — the bidirectional codecs
-plus the IOS-XE CLI parser); copy the closest one.
+rename-mode mesh ships this split; copy the closest one.
+
+**Two codecs may SHARE one bridge when they are the same platform in
+different wire formats.**  `cisco_iosxe` (NETCONF / OpenConfig)
+delegates both methods to `cisco_iosxe_cli.port_names` rather than
+carrying its own copy: an OpenConfig `<name>GigabitEthernet0/0/0</name>`
+and a CLI `interface GigabitEthernet0/0/0` name the same port under the
+same grammar, so duplicating it would only create a way for the two to
+disagree.  Delegate (don't subclass) — parse and render stay
+independent.
+
+⚠️ **Omitting the bridge is not a soft degradation.**  The `CodecBase`
+defaults are `classify_port_name` → `kind="unknown"` and
+`format_port_identity` → `None`, and `strip_unmappable` defaults to
+True — so "no native representation" DELETES the name and the interface
+with it, rather than leaving it verbatim as the base docstring claims.
+`cisco_iosxe` shipped without a bridge and lost 96% of interfaces as a
+target before #482. A codec that cannot translate port names should not
+be offered as a target.
 
 **`_svi_absorption.py`-style doc modules** are encouraged when a
 codec has a cross-cutting invariant spanning 3+ code paths.  The
