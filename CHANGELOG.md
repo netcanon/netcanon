@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-09-23
+
 ### Fixed
 
 - **VLANs carried only on a trunk were dropped at parse time, on every
