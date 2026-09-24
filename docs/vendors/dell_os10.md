@@ -140,6 +140,21 @@ Declared `unsupported` — the loss is reported, never silent:
   [Tier 3](../CAPABILITIES.md#tier-3--opaque-carry--not-auto-rendered),
   captured for the dropped-Tier-3 banner and never auto-rendered.
 - **VLT** (Dell's MLAG) — detected for the Tier-3 banner, not modelled.
+  Both halves are reported: the column-0 `vlt-domain` block *and* the
+  per-bundle `vlt-port-channel <N>` marker, the latter carrying its
+  bundle id so you can see which Port-Channels changed meaning.  That
+  second half was missed until 2026-09-24 (it is indented inside the
+  interface stanza, and every other Dell pattern is anchored at column
+  0), so a **dual-homed** bundle rendered as an ordinary
+  **single-chassis** port-channel with no marker and no banner line —
+  present in 6 of the 9 committed captures.  Note what "modelled" would
+  buy on a Cisco IOS-XE target: very little.  VLT is a two-peer
+  construct and IOS-XE has no peer MLAG (StackWise Virtual fuses two
+  chassis into one logical switch), so there is no faithful target form
+  — the honest ceiling is a comment block carrying the parameters.  The
+  isomorphic target is NX-OS `vpc`, which netcanon does not model
+  either.  Arista's MLAG is the same story — see
+  [`arista_eos.md`](arista_eos.md).
 - Management-plane scalars: `ip domain-name`, `ip name-server`,
   `ntp server`, `logging server`, DHCP pools and `radius-server`.
 

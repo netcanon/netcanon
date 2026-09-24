@@ -26,6 +26,53 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **MLAG dual-homing was silently dropped on Dell OS10 and Arista EOS.**
+  Two vendors, one defect: the line that makes a bundle dual-homed
+  *across* a peer pair is **indented** inside the interface stanza, while
+  every other Tier-3 pattern for those platforms is anchored at column 0.
+  So `vlt-port-channel <N>` (Dell) and `mlag <N>` (Arista) matched
+  nothing, and a dual-homed bundle rendered as an ordinary
+  single-chassis port-channel — no marker in the output, no line in the
+  Tier-3 banner.  Arista was the worse of the two: its `mlag
+  configuration` peer block (domain-id / peer-address / peer-link) was
+  not detected either, so MLAG was dropped with no operator notice at
+  all.
+
+  Both are now reported, **with the bundle id**, because the id is the
+  payload — an operator told "VLT existed" cannot act; one told which
+  Port-Channels changed meaning can.  Measured on the committed corpus:
+  `vlt-port-channel` in 6 of 9 Dell captures (detected in 0), `mlag` in
+  2 of the Arista captures (detected in 0).  The shared IOS-XE/Arista
+  pattern set is inert on plain IOS-XE, which has no `mlag` grammar.
+
+  This is the same shape as the existing indented `ip access-group`
+  entry, added for the same reason: a dropped packet filter that
+  validated `severity=ok` with no banner.  Column-0 anchoring is a
+  recurring blind spot in stanza-header detection, not a one-off.
+
+  Note this is a *detection* fix, not a translation one.  Neither MLAG
+  form has a canonical surface and none is proposed: VLT and Arista MLAG
+  are two-peer constructs, and the primary Cisco target — IOS-XE — has
+  no peer MLAG at all (StackWise Virtual fuses two chassis into one
+  logical switch).  There is no faithful target form to render, so the
+  honest outcome is an accurate banner rather than invented syntax.  The
+  isomorphic target would be NX-OS `vpc`, which netcanon also does not
+  model.
+
+### Changed
+
+- **`docs/vendors/arista_eos.md` corrected an over-claim.**  It stated
+  the parser "correctly identifies `mlag` per Port-Channel and
+  round-trips the peer-link mapping".  Measured: zero `mlag` references
+  in that codec's `parse.py` or `render.py`, nothing MLAG-related on the
+  canonical tree, and nothing in the rendered output.  What round-trips
+  is the Port-Channel's name / members / description via `CanonicalLAG`
+  — a LAG surviving, not an MLAG surviving.  `docs/vendors/dell_os10.md`
+  gained the matching detail for VLT, including why modelling it for an
+  IOS-XE target would buy little.
+
 ## [0.7.6] - 2026-09-23
 
 ### Fixed
