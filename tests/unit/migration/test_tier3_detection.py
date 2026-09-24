@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from netcanon.migration._tier3_detection import (
+    detect_tier3_sections_dellos10,
     detect_tier3_sections_fortios,
     detect_tier3_sections_iosxe_cli,
     detect_tier3_sections_iosxe_xml,
@@ -499,3 +500,212 @@ class TestCodecWiring:
         )
         intent = CiscoIOSXECLICodec().parse(raw)
         assert intent.dropped_tier3_sections == []
+
+
+# ---------------------------------------------------------------------------
+# Dell OS10 detector — VLT
+# ---------------------------------------------------------------------------
+
+
+class TestDellOS10VLT:
+    """`vlt-port-channel` is the half of VLT that silently changes meaning.
+
+    `vlt-domain` is a column-0 stanza and was always detected.  The
+    per-bundle marker that makes a LAG dual-homed ACROSS the peer pair is
+    INDENTED inside an `interface port-channel` stanza, so the column-0
+    anchoring every other Dell pattern uses missed it entirely.
+
+    Consequence before 2026-09-24: a dual-homed bundle rendered as an
+    ordinary single-chassis port-channel, with no marker in the output AND
+    no line in the Tier-3 banner.  The operator was told VLT existed (via
+    `vlt-domain`) but not which bundles had changed meaning — a semantic
+    downgrade wearing a clean LAG translation.  Measured on the committed
+    corpus: present in 6 of 9 captures, detected in 0.
+    """
+
+    _STANZA = (
+        "vlt-domain 1\n"
+        " backup destination 192.0.2.7\n"
+        " discovery-interface ethernet1/1/13\n"
+        "!\n"
+        "interface port-channel102\n"
+        " description dual-homed-to-host\n"
+        " switchport mode trunk\n"
+        " vlt-port-channel 102\n"
+        "!\n"
+    )
+
+    def test_vlt_port_channel_is_detected(self) -> None:
+        found = detect_tier3_sections_dellos10(self._STANZA)
+        assert any("vlt-port-channel" in s for s in found), (
+            f"dual-homed bundle marker not surfaced; got {found!r}"
+        )
+
+    def test_the_bundle_id_survives_into_the_label(self) -> None:
+        """The id is the payload.
+
+        "VLT existed somewhere" is not actionable; "port-channel 102 was
+        dual-homed" is.  Unlike `interface breakout`, this pattern keeps
+        its tail on purpose — pin that so a future tidy-up doesn't strip
+        it for symmetry.
+        """
+        found = detect_tier3_sections_dellos10(self._STANZA)
+        assert "vlt-port-channel 102" in found
+
+    def test_indentation_is_the_whole_point(self) -> None:
+        """Guard the guard.
+
+        If this line ever appears at column 0 in a capture, the original
+        `^vlt-domain`-style anchoring would have been sufficient and this
+        pattern is no longer pinning what its docstring claims.
+        """
+        indented = " vlt-port-channel 7\n"
+        assert detect_tier3_sections_dellos10(indented) == [
+            "vlt-port-channel 7"
+        ]
+
+    def test_vlt_domain_still_detected(self) -> None:
+        """The pre-existing half must not regress."""
+        assert "vlt-domain 1" in detect_tier3_sections_dellos10(self._STANZA)
+
+    def test_no_false_positive_on_a_plain_bundle(self) -> None:
+        """A single-chassis port-channel is fully modelled and must NOT
+        raise a Tier-3 line — a detector that fires everywhere is noise."""
+        raw = (
+            "interface port-channel10\n"
+            " description plain-lag\n"
+            " switchport mode trunk\n"
+            "!\n"
+        )
+        found = detect_tier3_sections_dellos10(raw)
+        assert not [s for s in found if "vlt" in s], found
+
+    def test_committed_corpus_every_marker_is_surfaced(self) -> None:
+        """The real regression guard, measured rather than asserted.
+
+        Walks the committed Dell captures and requires that any capture
+        carrying a `vlt-port-channel` line produces a matching banner
+        label.  This is the assertion that would have failed before the
+        fix, on 6 of 9 files.
+        """
+        from pathlib import Path
+
+        corpus = (
+            Path(__file__).resolve().parents[2]
+            / "fixtures"
+            / "real"
+            / "dell_os10"
+        )
+        if not corpus.is_dir():  # pragma: no cover - corpus always present
+            pytest.skip("dell_os10 corpus absent")
+
+        checked = 0
+        missed: list[str] = []
+        for path in sorted(corpus.iterdir()):
+            if not path.is_file() or path.suffix.lower() == ".md":
+                continue
+            raw = path.read_text(encoding="utf-8", errors="replace")
+            carries = any(
+                line.strip().startswith("vlt-port-channel")
+                for line in raw.splitlines()
+            )
+            if not carries:
+                continue
+            checked += 1
+            found = detect_tier3_sections_dellos10(raw)
+            if not any("vlt-port-channel" in s for s in found):
+                missed.append(path.name)
+
+        assert checked, (
+            "no committed Dell capture carries a `vlt-port-channel` line — "
+            "this guard would pass vacuously"
+        )
+        assert not missed, (
+            "dual-homed bundles silently downgraded to single-chassis in: "
+            f"{missed}"
+        )
+
+
+class TestAristaMLAG:
+    """Arista's MLAG is the same defect as Dell's VLT, one vendor over.
+
+    Neither half had a canonical surface OR a Tier-3 pattern, so both were
+    dropped with no banner line at all — a silent loss, not a declared
+    one.  Found 2026-09-24 while checking an over-claim in
+    `docs/vendors/arista_eos.md`, which asserted the parser "round-trips
+    the peer-link mapping"; measured, nothing MLAG-related reached the
+    canonical tree or the rendered output.
+    """
+
+    _RAW = (
+        "hostname leaf1\n"
+        "!\n"
+        "mlag configuration\n"
+        "   domain-id MLAG1\n"
+        "   peer-address 10.0.0.2\n"
+        "   peer-link Port-Channel1000\n"
+        "!\n"
+        "interface Port-Channel10\n"
+        "   description dual-homed\n"
+        "   mlag 10\n"
+        "!\n"
+    )
+
+    def test_peer_block_is_surfaced(self) -> None:
+        assert "mlag configuration" in detect_tier3_sections_iosxe_cli(
+            self._RAW
+        )
+
+    def test_per_bundle_marker_is_surfaced_with_its_id(self) -> None:
+        """The indented half — the one that changes a bundle's meaning."""
+        assert "mlag 10" in detect_tier3_sections_iosxe_cli(self._RAW)
+
+    def test_plain_iosxe_is_unaffected(self) -> None:
+        """This pattern set is SHARED with cisco_iosxe_cli.  IOS-XE has no
+        `mlag` grammar, so the addition must be inert there."""
+        raw = (
+            "hostname r1\n"
+            "interface GigabitEthernet0/0\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!\n"
+        )
+        found = detect_tier3_sections_iosxe_cli(raw)
+        assert not [s for s in found if "mlag" in s.lower()], found
+
+    def test_committed_arista_corpus_every_marker_is_surfaced(self) -> None:
+        """Measured guard over the real captures.
+
+        Two committed Arista captures carry MLAG; before the fix both
+        produced zero MLAG banner lines.
+        """
+        from pathlib import Path
+
+        corpus = (
+            Path(__file__).resolve().parents[2]
+            / "fixtures"
+            / "real"
+            / "arista_eos"
+        )
+        if not corpus.is_dir():  # pragma: no cover - corpus always present
+            pytest.skip("arista_eos corpus absent")
+
+        checked = 0
+        missed: list[str] = []
+        for path in sorted(corpus.iterdir()):
+            if not path.is_file() or path.suffix.lower() == ".md":
+                continue
+            raw = path.read_text(encoding="utf-8", errors="replace")
+            if not any(
+                line.strip().startswith("mlag") for line in raw.splitlines()
+            ):
+                continue
+            checked += 1
+            found = detect_tier3_sections_iosxe_cli(raw)
+            if not any("mlag" in s.lower() for s in found):
+                missed.append(path.name)
+
+        assert checked, (
+            "no committed Arista capture carries an `mlag` line — this "
+            "guard would pass vacuously"
+        )
+        assert not missed, f"MLAG silently dropped, no banner, in: {missed}"

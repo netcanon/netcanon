@@ -69,6 +69,24 @@ _IOSXE_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^route-map\s+\S+", re.MULTILINE),
     re.compile(r"^crypto (?:isakmp|ipsec|map|pki)\b.*$", re.MULTILINE),
     re.compile(r"^zone-pair security\b.*$", re.MULTILINE),
+    # Arista MLAG.  Neither half has a canonical surface — there is no
+    # MLAG/peer record on `CanonicalIntent` and no codec models one — so
+    # before 2026-09-24 BOTH were dropped with no banner at all, which is
+    # a silent loss rather than a declared one.
+    #
+    # `mlag configuration` is the column-0 peer block (domain-id,
+    # peer-address, peer-link).  `mlag <N>` is the INDENTED per-bundle
+    # marker that makes a Port-Channel dual-homed across the pair; without
+    # it the same Port-Channel is local to one switch.  Same shape as the
+    # `ip access-group` entry above and as `vlt-port-channel` in the Dell
+    # set: the meaning-bearing line is indented, so the column-0 anchors
+    # every other entry uses walked straight past it.
+    #
+    # The bundle id is kept in the label because it is the payload — an
+    # operator told "MLAG existed" cannot act; one told WHICH
+    # Port-Channels were dual-homed can.
+    re.compile(r"^mlag configuration\b", re.MULTILINE),
+    re.compile(r"^\s+mlag\s+\d+\s*$", re.MULTILINE),
 )
 
 # FortiOS shape — `config <path>` headers for sections the FortiGate
@@ -260,6 +278,22 @@ _DELLOS10_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     # VLT (Dell's MLAG) — no canonical surface; present in 10 of 12
     # OS10 captures, so this banner fires on most real configs.
     re.compile(r"^vlt-domain\s+\d+", re.MULTILINE),
+    # The SECOND half of VLT, and the one that silently changes meaning.
+    # `vlt-port-channel <N>` is what makes a bundle dual-homed ACROSS the
+    # peer pair; without it the same `port-channel <N>` is local to one
+    # chassis.  Nothing models it, so the bundle renders as an ordinary
+    # single-chassis LAG — a semantic downgrade that looks like a clean
+    # translation.  The `vlt-domain` pattern above does NOT cover it: this
+    # line is INDENTED inside an `interface port-channel` stanza, and every
+    # other entry here is anchored at column 0.  Measured 2026-09-24: 6 of
+    # the 9 committed captures carry it and none was detected.
+    #
+    # Unlike `interface breakout` the tail is KEPT.  The bundle id is the
+    # payload — an operator told "VLT existed" still cannot act; one told
+    # WHICH port-channels were dual-homed can.  Cardinality is bounded by
+    # the number of dual-homed bundles (1 per capture on the committed
+    # corpus), not by port count, so this does not flood the banner.
+    re.compile(r"^\s*vlt-port-channel\s+\d+", re.MULTILINE),
     re.compile(r"^interface breakout\b", re.MULTILINE),
     # `system-user linuxadmin` is the switch's underlying LINUX shell
     # account, not a NOS login, so the codec deliberately does not model it

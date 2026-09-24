@@ -178,9 +178,21 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
 
 ## Common gotchas
 
-- **MLAG peer-link** — the parser correctly identifies `mlag` per
-  Port-Channel and round-trips the peer-link mapping; cross-vendor
-  rename surfaces correctly.
+- **MLAG is NOT translated** — corrected 2026-09-24; this entry
+  previously claimed the parser "round-trips the peer-link mapping",
+  which was wrong in both halves.  There is no MLAG or peer record on
+  the canonical tree and no codec models one, so neither the
+  `mlag configuration` block (domain-id / peer-address / peer-link) nor
+  the per-bundle `mlag <N>` marker reaches the canonical tree or the
+  rendered output.  What *does* round-trip is the Port-Channel itself —
+  its name, members and description, via `CanonicalLAG` — and
+  cross-vendor renaming of that name works.  That is a LAG surviving,
+  not an MLAG surviving: a bundle that was dual-homed across the peer
+  pair becomes an ordinary single-chassis Port-Channel on the target.
+  Both halves are now reported in the Tier-3 banner (with the bundle id,
+  so you can see which Port-Channels changed meaning) rather than
+  dropped silently.  The same defect, and the same fix, applies to Dell
+  OS10's VLT — see [`dell_os10.md`](dell_os10.md).
 - **`channel-group` emission on member Ethernets** — render-side
   bug fixed early in the codec history (`channel-group N mode
   <mode>` on member Ethernet interfaces was missing); regression
