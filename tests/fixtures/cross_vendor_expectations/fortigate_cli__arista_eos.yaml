@@ -213,6 +213,18 @@ per_field_expectation:
       may be inconsistent in v1), vrf (unsupported — see
       routing_instances; FortiGate codec does not parse ``set
       vrf <id>`` in v1).
+      A second loss MECHANISM also applies and is why the observed
+      count drift is larger than naming alone explains: an
+      unconfigured FortiOS port carries ``set ip 0.0.0.0 0.0.0.0``,
+      which is the "no address" sentinel rather than an address and
+      is (correctly) not parsed as one.  Such a port then has no
+      renderable attribute at all, so Arista's foreign-vendor
+      empty-stub eliser drops it rather than emitting ``interface
+      wan1`` — which would not be a valid EOS stanza either.  The
+      operator loses the port INVENTORY (that ``wan1`` / ``ha1``
+      existed), not any configured state.  On
+      ``user_contrib_fg100e_fos7213`` this accounts for the drift
+      moving 34 -> 31 to 34 -> 15.
     references: [interfaces, interfaces_arista]
 
   vlans:

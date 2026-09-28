@@ -26,6 +26,38 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Changed
+
+- **Unevidenced-loss ratchet tightened 157 → 144, back to measured
+  reality.**  The per-pair baseline in
+  `tests/integration/test_cross_mesh_ci_guard.py` allows each pair a quota
+  of declarations whose loss the corpus never actually exhibits.  Those
+  entries do **not** tighten themselves when a codec improves, so slack
+  accumulates silently — and slack is precisely where a future hedged
+  `lossy` declaration can hide without failing CI.
+
+  Re-measured after the trunk-only VLAN fix: 157 allowed against **144
+  observed**, i.e. 13 of slack — exactly the `METHODOLOGY_ISSUE_under`
+  reduction that fix produced.  11 entries lowered; all 53 pairs now sit at
+  zero slack (verified: setting any entry one lower fails the guard).  The
+  table's comment now says to re-measure whenever a change moves
+  `METHODOLOGY_ISSUE_under`, using the test's own `_unevidenced_by_pair`
+  helper against the newest archive rather than by hand.
+
+  ⚠️ Deliberately **not** a bulk "correct the pessimistic YAMLs" pass.  The
+  guard records that the earlier Fid-F7 sweep already investigated that
+  class and found most candidates are *honest* sub-canonical lossy — the
+  loss is real, just finer-grained than the mesh compares at.  Re-litigating
+  it in bulk risks re-introducing silent loss, which is why matrix pessimism
+  is the safe bias and the promotion pass stays deprioritised.
+
+- **`fortigate_cli__arista_eos` expectation YAML: the `interfaces` reason
+  now describes both loss mechanisms.**  It explained naming only, which no
+  longer accounts for the observed drift now that the FortiOS "no address"
+  sentinel is handled: an unconfigured port ends up with no renderable
+  attribute and is dropped by the foreign-vendor empty-stub eliser, so the
+  operator loses the port *inventory* rather than any configured state.
+
 ### Fixed
 
 - **`snmp-server host <ip>` was emitted with no community string** on
