@@ -753,8 +753,20 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append(f"snmp-server location {s.location}")
         if s.contact:
             out.append(f"snmp-server contact {s.contact}")
+        # IOS-XE requires the community (or v3 user) as the trailing
+        # argument; a bare `snmp-server host <ip>` is rejected AND
+        # silently discarded s.community.  Authentic corpus form:
+        # `snmp-server host 10.1.2.3 version 2c dummycommunity`.
         for host in s.trap_hosts:
-            out.append(f"snmp-server host {host}")
+            community = s.community or "public"
+            out.append(f"snmp-server host {host} version 2c {community}")
+            if not s.community:
+                out.append(
+                    f"! snmp-server host {host} -- review: the source "
+                    f"carried no SNMP community, so `public` was "
+                    f"synthesised to keep the trap target valid; set the "
+                    f"real community or convert this host to v3"
+                )
         # SNMPv3 USM users.  Cisco syntax pairs auth/priv with
         # the v3 keyword; ``aes128`` canonical → ``aes 128`` two
         # tokens; ``aes192``/``aes256`` similarly split.

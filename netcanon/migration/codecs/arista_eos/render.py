@@ -230,8 +230,22 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append(f"snmp-server location {tree.snmp.location}")
         if tree.snmp.contact:
             out.append(f"snmp-server contact {tree.snmp.contact}")
+        # A trap host REQUIRES a community (or v3 user) on EOS: a bare
+        # `snmp-server host <ip>` is rejected, and it also threw away
+        # tree.snmp.community, which the source populated.  Fall back to
+        # `public` rather than dropping the target -- the same call
+        # aruba_aoss and fortigate_cli already make -- but SAY SO, because
+        # a synthesised community is config the operator never wrote.
         for host in tree.snmp.trap_hosts:
-            out.append(f"snmp-server host {host}")
+            community = tree.snmp.community or "public"
+            out.append(f"snmp-server host {host} version 2c {community}")
+            if not tree.snmp.community:
+                out.append(
+                    f"! snmp-server host {host} -- review: the source "
+                    f"carried no SNMP community, so `public` was "
+                    f"synthesised to keep the trap target valid; set the "
+                    f"real community or convert this host to v3"
+                )
         # SNMPv3 users.  ``aes128`` canonical → ``aes`` on EOS wire
         # (Arista accepts both but the bare form is the
         # platform-natural default); ``aes192`` / ``aes256`` emit

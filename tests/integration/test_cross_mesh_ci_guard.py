@@ -412,6 +412,16 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # and found most candidates are honest sub-canonical lossy the mesh is blind to
 # (the loss is real, just below the granularity Phase 1 compares at).  Lowering
 # an entry is always allowed; raising one is a conscious edit.
+#
+# ⚠️ These entries do NOT tighten themselves when a codec improves, so slack
+# accumulates silently and a future hedged declaration can hide inside it.
+# Re-measured 2026-09-28 after the trunk-only VLAN fix: the total had drifted
+# to 157 allowed against 144 observed — 13 of slack, exactly the
+# METHODOLOGY_under reduction that fix produced.  Lowered 11 entries back to
+# measured reality.  **Re-measure this table whenever a change moves
+# METHODOLOGY_ISSUE_under**, with the same helper the test uses
+# (``_unevidenced_by_pair`` against the newest ``_phase4_runs`` archive) —
+# never by hand, and never from the capability matrices.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -426,7 +436,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "aruba_aoss__cisco_iosxe": 2,
     "aruba_aoss__cisco_iosxe_cli": 3,
     "aruba_aoss__fortigate_cli": 2,
-    "aruba_aoss__juniper_junos": 5,
+    "aruba_aoss__juniper_junos": 2,
     "aruba_aoss__mikrotik_routeros": 4,
     "aruba_aoss__opnsense": 6,
     "cisco_iosxe__aruba_aoss": 1,
@@ -442,16 +452,16 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "cisco_iosxe_cli__mikrotik_routeros": 1,
     "cisco_iosxe_cli__opnsense": 4,
     "fortigate_cli__arista_eos": 1,
-    "fortigate_cli__aruba_aoss": 2,
+    "fortigate_cli__aruba_aoss": 1,
     "fortigate_cli__cisco_iosxe": 3,
-    "fortigate_cli__cisco_iosxe_cli": 2,
-    "fortigate_cli__juniper_junos": 6,
-    "fortigate_cli__mikrotik_routeros": 3,
-    "fortigate_cli__opnsense": 6,
-    "juniper_junos__arista_eos": 3,
-    "juniper_junos__aruba_aoss": 3,
+    "fortigate_cli__cisco_iosxe_cli": 1,
+    "fortigate_cli__juniper_junos": 5,
+    "fortigate_cli__mikrotik_routeros": 2,
+    "fortigate_cli__opnsense": 5,
+    "juniper_junos__arista_eos": 2,
+    "juniper_junos__aruba_aoss": 2,
     "juniper_junos__cisco_iosxe": 2,
-    "juniper_junos__cisco_iosxe_cli": 8,
+    "juniper_junos__cisco_iosxe_cli": 7,
     "juniper_junos__fortigate_cli": 4,
     "juniper_junos__mikrotik_routeros": 2,
     "juniper_junos__opnsense": 5,
@@ -459,8 +469,8 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "mikrotik_routeros__aruba_aoss": 1,
     "mikrotik_routeros__cisco_iosxe": 1,
     "mikrotik_routeros__cisco_iosxe_cli": 1,
-    "mikrotik_routeros__fortigate_cli": 4,
-    "mikrotik_routeros__juniper_junos": 3,
+    "mikrotik_routeros__fortigate_cli": 3,
+    "mikrotik_routeros__juniper_junos": 2,
     "mikrotik_routeros__opnsense": 5,
     "opnsense__arista_eos": 3,
     "opnsense__cisco_iosxe": 3,

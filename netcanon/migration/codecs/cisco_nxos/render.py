@@ -326,8 +326,20 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
         lines.append(f"snmp-server location {snmp.location}")
     if snmp.contact:
         lines.append(f"snmp-server contact {snmp.contact}")
+    # NX-OS needs `traps version 2c <community>`; a bare
+    # `snmp-server host <ip>` is rejected AND silently discarded
+    # snmp.community.  Authentic corpus form:
+    # `snmp-server host 10.1.1.1 traps version 2c networktocode`.
     for host in snmp.trap_hosts:
-        lines.append(f"snmp-server host {host}")
+        community = snmp.community or "public"
+        lines.append(f"snmp-server host {host} traps version 2c {community}")
+        if not snmp.community:
+            lines.append(
+                f"! snmp-server host {host} -- review: the source carried "
+                f"no SNMP community, so `public` was synthesised to keep "
+                f"the trap target valid; set the real community or convert "
+                f"this host to v3"
+            )
     for user in snmp.v3_users:
         # ⚠️ An SNMPv3 USM key is localised against the agent's OWN engine ID.
         # This render emitted whatever key it was handed and then appended
