@@ -99,6 +99,22 @@ def _split_cidr(destination: str) -> tuple[str, int]:
     return destination, 32
 
 
+def _is_unset_address(ip: str) -> bool:
+    """Is this FortiOS's "no address configured" sentinel rather than an address?
+
+    An unconfigured FortiOS interface carries ``set ip 0.0.0.0 0.0.0.0``.  No
+    interface can legitimately hold ``0.0.0.0``, so the value is unambiguous
+    whatever mask accompanies it, and treating it as real produced
+    ``ip address 0.0.0.0/0`` in every target render — rejected by EOS / NX-OS
+    / IOS-XE, meaningless on IOS-XR and Junos.
+
+    Deliberately narrow: only the all-zeros host. ``0.0.0.0/0`` as a static
+    route DESTINATION is a real default route and is parsed elsewhere
+    (:func:`_split_cidr`); this helper must never be applied there.
+    """
+    return ip.strip() == "0.0.0.0"
+
+
 # ---------------------------------------------------------------------------
 # LACP-mode mapping (parse uses forward; render imports the inverse)
 # ---------------------------------------------------------------------------
@@ -347,10 +363,21 @@ def _apply_system_interface(  # noqa: C901
         ip_tokens = edit.settings.get("ip")
         if ip_tokens and len(ip_tokens) >= 2:
             ip, mask = ip_tokens[0], ip_tokens[1]
-            iface.ipv4_addresses.append(CanonicalIPv4Address(
-                ip=ip,
-                prefix_length=_mask_to_prefix(mask, vendor="fortigate_cli"),
-            ))
+            # ``set ip 0.0.0.0 0.0.0.0`` is FortiOS's "no address
+            # configured" encoding — the default an unconfigured interface
+            # carries — NOT an address.  Taking it literally produced
+            # ``ip address 0.0.0.0/0`` on 18 interfaces of one capture,
+            # which EOS / NX-OS / IOS-XE reject outright and which is
+            # meaningless on IOS-XR and Junos.  No interface can legitimately
+            # hold 0.0.0.0, so the sentinel is unambiguous and is skipped
+            # whatever mask accompanies it.
+            if not _is_unset_address(ip):
+                iface.ipv4_addresses.append(CanonicalIPv4Address(
+                    ip=ip,
+                    prefix_length=_mask_to_prefix(
+                        mask, vendor="fortigate_cli",
+                    ),
+                ))
 
         # Additional interface IPs live in a nested ``config secondaryip``
         # sub-table (``set secondary-IP enable`` gates it).  Without this
@@ -362,7 +389,11 @@ def _apply_system_interface(  # noqa: C901
                 continue
             for sec in sub.edits:
                 sec_tokens = sec.settings.get("ip")
-                if sec_tokens and len(sec_tokens) >= 2:
+                if (
+                    sec_tokens
+                    and len(sec_tokens) >= 2
+                    and not _is_unset_address(sec_tokens[0])
+                ):
                     iface.ipv4_addresses.append(CanonicalIPv4Address(
                         ip=sec_tokens[0],
                         prefix_length=_mask_to_prefix(

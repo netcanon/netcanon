@@ -28,6 +28,54 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`snmp-server host <ip>` was emitted with no community string** on
+  `arista_eos`, `cisco_iosxe_cli`, `cisco_nxos` and `dell_os10`.  Two
+  defects in one line: the community (or v3 user) is a *required* trailing
+  argument on all four platforms, so the line is rejected — and it also
+  silently discarded `tree.snmp.community`, which sources had populated
+  ('secure', 'dummycommunity', 'xxxx' on real captures).  16 cells across
+  the committed corpus emitted the bare form.
+
+  Now renders each platform's authentic form, taken from the real captures
+  rather than from grammar recall — `version 2c <community>` on IOS-XE and
+  EOS, `traps version 2c <community>` on NX-OS and OS10.  Where the source
+  carried no community, `public` is synthesised so the operator's trap
+  target survives (the call `aruba_aoss` and `fortigate_cli` already made)
+  **and a `review:` note says so**, because a synthesised community is
+  config the operator never wrote.  All four `_SNMP_HOST_RE` patterns
+  capture only the address and ignore the tail, so the host still
+  round-trips with no parser change — pinned rather than assumed.
+
+  `dell_os10` was not in the oracle's list: Batfish does not parse OS10, so
+  that fourth site was found by reading the render paths.
+
+- **FortiGate's "no address" sentinel was parsed as a real address.**  An
+  unconfigured FortiOS interface carries `set ip 0.0.0.0 0.0.0.0`; taking it
+  literally produced `ip address 0.0.0.0/0` on 18 interfaces of one capture,
+  in *every* target render — rejected outright by EOS / NX-OS / IOS-XE and
+  meaningless on IOS-XR and Junos.  No interface can legitimately hold
+  `0.0.0.0`, so the sentinel is unambiguous and is now skipped on both the
+  primary and `secondaryip` harvests.
+
+  ⚠️ Visible side effect: `fortigate_cli → arista_eos` interface count drift
+  moves `34 → 31` to `34 → 15`.  Those ports now carry no renderable
+  attribute at all, so the pre-existing foreign-vendor empty-stub eliser
+  drops them — which is the more correct output, since `interface wan1` is
+  not a valid EOS stanza either.  The loss is already declared (`interfaces:
+  disposition: lossy` on that pair), CODEC_BUG held at 5 and the variance
+  aggregate did not move; but the declaration's *reason* prose describes
+  naming only and does not yet mention stub elision.  Logged for the
+  expectation-YAML accuracy pass rather than patched per-pair here.
+
+  Both defects come from the Batfish independent-parser oracle
+  (`docs/reviews/2026-09-22-api-full-mesh/13-batfish-validity.md` §6, items
+  #4 and #6).  The cross-mesh harness structurally cannot catch this class:
+  it scores round-trip *preservation*, so a render that preserves every
+  canonical field while emitting a line the platform rejects scores ALIGNED.
+  Items #3 and #5 of that list were checked and are **not** product defects
+  — they are artifacts of the bare mesh path, which skips
+  `translate_port_names` by design.
+
 - **MLAG dual-homing was silently dropped on Dell OS10 and Arista EOS.**
   Two vendors, one defect: the line that makes a bundle dual-homed
   *across* a peer pair is **indented** inside the interface stanza, while
