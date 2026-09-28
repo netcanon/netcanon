@@ -96,7 +96,14 @@ highest-impact contribution to the project.
 
 Every codec parser is exercised against:
 - **Synthetic kitchen-sink fixtures** — hand-crafted to exercise
-  every grammar form the codec models
+  every grammar form the codec models.  Each one has a paired
+  content-assertion module (`test_synthetic_<codec>_kitchen_sink.py`)
+  alongside the shared round-trip sweep, because a round-trip proves
+  canonical *stability* rather than *correctness*: a fixture that
+  silently lost a surface would still round-trip on the smaller tree.
+  The pairing is enforced — `test_kitchen_sink_module_parity.py` fails
+  for any fixture without a module, and for any public codec without a
+  fixture
 - **Real-capture fixtures** — sanitized configs from public
   sources (Batfish, ntc-templates, vendor docs, community forum
   shares) and operator contributions, listed in

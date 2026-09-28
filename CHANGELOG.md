@@ -26,6 +26,30 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Added
+
+- **Kitchen-sink content assertions for the last two codecs, plus a parity
+  guard.**  A synthetic `kitchen_sink.*` fixture reached only by the shared
+  round-trip sweep proves canonical *stability*, not *correctness* — a
+  fixture that silently lost a surface would still round-trip on the smaller
+  tree, while the per-codec content assertions elsewhere read inline sample
+  strings.  The 2026-09-21 audit measured 13 fixtures against 9 assertion
+  modules; `cisco_nxos` and `cisco_iosxr` were the last two missing and now
+  have one each, so the set is 13/13.
+
+  Both were authored from a **measured parse** of the committed fixture
+  rather than by reading the config text — assertions derived from the
+  config merely restate the fixture, while assertions derived from the parse
+  pin the codec's behaviour.  Each module also carries a breadth floor, so a
+  shrunken fixture that happens to satisfy the specific assertions still
+  fails.  Mutation-checked: removing one interface stanza fails 3 tests on
+  NX-OS and 4 on IOS-XR.
+
+  `test_kitchen_sink_module_parity.py` stops the gap reopening — it fails for
+  any fixture without a module, any module without a fixture, and any public
+  codec without a fixture.  Deliberately a parity check rather than a
+  hard-coded count, which would rot the moment a codec lands.
+
 ### Changed
 
 - **Unevidenced-loss ratchet tightened 157 → 144, back to measured
