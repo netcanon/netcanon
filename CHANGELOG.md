@@ -84,6 +84,29 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Two physically distinct ports could fuse into one target port with no
+  warning at all.**  When a rename sends two source ports to the same target
+  name, their VLAN memberships merge on the target.  The detector has two
+  sweeps; the second (for ports named only inside a VLAN's port list) skipped
+  every final name that appeared in `intent.interfaces` -- whether or not the
+  first sweep had actually warned about it.  So a single `interface 1/1`
+  record was enough to suppress the report for a `1/A1` living only in a
+  VLAN list: both rendered as `ge-1/0/1` with `warnings == []`.
+
+  Measured on the committed corpus: **12 real fusions went out silently**
+  (fusion warnings 476 -> 488 across 1188 cells).  The regression guard that
+  existed used a capture with zero interface stanzas -- the one shape this
+  did not mask -- and asserts that it has none.
+
+  Also closed beside it: identity pairs were excluded, so a port renamed
+  ONTO a name another port still held counted as a single source.
+
+  This corrects a statement in the 0.7.6-era notes that every duplicate-name
+  outcome was warned.  That held for duplicates among interface records; it
+  did not hold for fusions living in VLAN membership.  Behaviour is otherwise
+  unchanged -- the translator still warns rather than inventing a distinct
+  port, and an explicit `port_rename_map` entry still resolves it.
+
 - **`snmp-server host <ip>` was emitted with no community string** on
   `arista_eos`, `cisco_iosxe_cli`, `cisco_nxos` and `dell_os10`.  Two
   defects in one line: the community (or v3 user) is a *required* trailing

@@ -602,11 +602,16 @@ def translate_port_names(  # noqa: C901
     # NOT drop/merge here: some targets already dedupe + annotate the collision
     # at render time (FortiGate emits ``# port collision``), and dropping at the
     # orchestrator would pre-empt that and silently discard a port's config.
+    #: Final names a sweep below has ACTUALLY warned about.  The membership
+    #: sweep further down must skip exactly these and nothing more.
+    warned_finals: set[str] = set()
+
     def _warn_collisions(objs: list, kind: str) -> None:
         counts: dict[str, int] = {}
         for obj in objs:
             counts[obj.name] = counts.get(obj.name, 0) + 1
         for final in sorted(n for n, c in counts.items() if c > 1):
+            warned_finals.add(final)
             sources = sorted(s for s, f in memo.items() if f == final) or [final]
             warnings.append(
                 f"port_rename: multiple source ports map to {final!r} "
@@ -642,18 +647,25 @@ def translate_port_names(  # noqa: C901
     # synthesising an offset port number would fabricate topology the
     # operator never wrote.  An explicit `port_rename_map` entry still
     # overrides, which is the documented escape hatch.
-    already_warned = {
-        obj.name
-        for objs in (intent.interfaces, intent.lags)
-        for obj in objs
-    }
-    fused: dict[str, list[str]] = {}
+    #
+    # Two mistakes used to hide fusions here, both found 2026-10-07:
+    #
+    # 1. The skip-set was every final interface / LAG NAME, not the names
+    #    the sweeps above had warned about.  One `interface 1/1` record
+    #    (count 1, so no warning) was enough to suppress the report for a
+    #    `1/A1` living only in a VLAN's port list -- both rendered as
+    #    `ge-1/0/1` with `warnings == []`.  The regression test that
+    #    existed used a capture with ZERO interface stanzas, the one shape
+    #    this did not mask.
+    # 2. Identity pairs were excluded, so a port that KEPT its name while
+    #    another was renamed onto it counted as a single source.
+    fused: dict[str, set[str]] = {}
     for source, final in memo.items():
-        if source != final:
-            fused.setdefault(final, []).append(source)
+        if final is not None:
+            fused.setdefault(final, set()).add(source)
     for final in sorted(fused):
         sources = sorted(fused[final])
-        if len(sources) < 2 or final in already_warned:
+        if len(sources) < 2 or final in warned_finals:
             continue
         warnings.append(
             f"port_rename: multiple source ports map to {final!r} "

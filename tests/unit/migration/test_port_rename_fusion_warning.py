@@ -154,3 +154,87 @@ def test_an_explicit_map_entry_resolves_the_fusion() -> None:
     assert not _fusion_warnings(result), (
         "an explicit distinct mapping did not clear the collision"
     )
+
+
+# ---------------------------------------------------------------------------
+# The masked shape (found 2026-10-07).
+#
+# Everything above runs against a capture with ZERO interface stanzas -- and
+# `test_the_fixture_has_no_interface_stanzas` insists on it.  That is the one
+# shape the following defect did NOT hide behind: the membership sweep skipped
+# any final name present in `intent.interfaces`, whether or not anything had
+# warned about it.  So a single `interface 1/1` record suppressed the report
+# for a `1/A1` that lived only in a VLAN's port list.  Measured on the
+# committed corpus, 12 real fusions went out with no warning at all.
+# ---------------------------------------------------------------------------
+
+
+def _tree_with_one_stanza_and_a_vlan_only_twin():
+    from netcanon.migration.canonical.intent import (
+        CanonicalIntent,
+        CanonicalInterface,
+        CanonicalVlan,
+    )
+
+    return CanonicalIntent(
+        source_vendor="aruba_aoss",
+        interfaces=[CanonicalInterface(name="1/1")],
+        vlans=[CanonicalVlan(id=10, untagged_ports=["1/1", "1/A1"])],
+    )
+
+
+def test_an_interface_stanza_does_not_mask_a_vlan_only_fusion() -> None:
+    intent = _tree_with_one_stanza_and_a_vlan_only_twin()
+    result = translate_port_names(
+        intent, get_codec("aruba_aoss"), get_codec("juniper_junos"),
+        rename_map={},
+    )
+    # The fusion itself is unchanged -- we warn, we do not invent topology.
+    assert intent.vlans[0].untagged_ports == ["ge-1/0/1", "ge-1/0/1"]
+    warnings = _fusion_warnings(result)
+    assert warnings, "two distinct ports fused with no warning"
+    assert "1/A1" in warnings[0] and "1/1" in warnings[0]
+
+
+def test_a_fusion_is_reported_once_not_twice() -> None:
+    """The fix must not turn one collision into two warnings: when the
+    interface sweep already reported a name, the membership sweep stays
+    quiet about it."""
+    from netcanon.migration.canonical.intent import (
+        CanonicalIntent,
+        CanonicalInterface,
+    )
+
+    intent = CanonicalIntent(
+        source_vendor="aruba_aoss",
+        interfaces=[
+            CanonicalInterface(name="1/1"),
+            CanonicalInterface(name="1/A1"),
+        ],
+    )
+    result = translate_port_names(
+        intent, get_codec("aruba_aoss"), get_codec("juniper_junos"),
+        rename_map={},
+    )
+    assert len(_fusion_warnings(result)) == 1
+
+
+def test_a_port_that_keeps_its_name_still_counts_as_a_source() -> None:
+    """Identity pairs used to be excluded, so a port renamed ONTO a name
+    another port already held looked like a single source."""
+    from netcanon.migration.canonical.intent import (
+        CanonicalIntent,
+        CanonicalVlan,
+    )
+
+    intent = CanonicalIntent(
+        source_vendor="aruba_aoss",
+        vlans=[CanonicalVlan(id=10, untagged_ports=["1/1", "1/2"])],
+    )
+    result = translate_port_names(
+        intent, get_codec("aruba_aoss"), get_codec("aruba_aoss"),
+        rename_map={"1/2": "1/1"},
+    )
+    assert _fusion_warnings(result), (
+        "1/2 was mapped onto 1/1, which 1/1 still holds, with no warning"
+    )
