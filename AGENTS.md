@@ -160,7 +160,7 @@ mapping below is concrete; audit every applicable row before you run
 | A new file under `netcanon/templates/` with a non-`.html` extension OR in a new subdirectory not covered by the existing globs | `pyproject.toml` `[tool.setuptools.package-data]` — extend the `netcanon = [...]` list with a glob covering the new pattern (e.g. `templates/_partials/*.js`, `templates/_components/*.svg`).  Editable installs (`pip install -e`) hide this because they import from the source tree directly; production wheels do not.  Missing template files in the wheel result in `jinja2.exceptions.TemplateNotFound` 500-on-render at runtime — the bug that broke v0.1.0-rc1 / rc2.  The CI `docker-build-smoke` job catches dashboard-rendering regressions of this class but only for the dashboard page; if your new pattern only affects a different page, also add a smoke-test step that visits that page. |
 | A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class |
 | A new module inside an existing codec (e.g. `port_names.py`, `vlan_heuristics.py`, `_svi_absorption.py`) | `netcanon/migration/codecs/README.md` "Module layout" section if the pattern is worth propagating to other codecs |
-| A new target-profile YAML under `netcanon/definitions/library/target_profiles/` | Per-profile unit test in `tests/unit/migration/test_target_profile_shipped.py` asserting exact port-name list + count (regression guard against copy-paste mistakes) |
+| A new target-profile YAML under `netcanon/definitions/library/target_profiles/` | (1) Per-profile unit test in `tests/unit/migration/test_target_profile_shipped.py` asserting exact port-name list + count (regression guard against copy-paste mistakes).  (2) Provenance per [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) §4: `deployment_state` whenever `stacking` is set, `evidence` + `evidence_ref`, and the key added to the pinned set for its grade in `tests/unit/migration/test_target_profile_evidence.py` — `CAPTURE_MODEL_MARKER` (with a line only a capture of that model contains), `EXPECTED_VENDOR_DOC_GRADED`, or `KNOWN_DOUBTFUL`.  The sets are compared for equality with what the YAMLs declare, so a graded profile that skips this fails CI |
 | A target-profile gains `modules:` (migrates to module-variant shape) | Add its `{vendor}/{model}` key to the canonical allowlist at `tests/fixtures/module_variants.py`.  Both the unit-tier and integration-tier tests import from there; a CI-guard (`test_module_variant_allowlist_shared_with_integration_tier`) enforces the single-source invariant so no manual sync is required. |
 | A new canonical field on `CanonicalIntent` / `CanonicalInterface` / etc. | `docs/adding-a-canonical-field.md` — the MTU wire-through is the reference worked example |
 | A new route, endpoint, or public function in a module whose top-of-file docstring enumerates contents (e.g. `netcanon/api/routes/migration.py`, `netcanon/services/migration_pipeline.py`) | The module docstring itself — if it lists endpoints / phases / public surface, your addition changes that list.  "Phase 2 *will* add …" comments become lies the instant Phase 2 lands.  Module docstrings that describe *intent* rather than *inventory* are unaffected. |
@@ -456,6 +456,26 @@ tests use these exclusively — never CSS classes or element structure.  See
   `device_classes[0]` means it is read from a declaration rather than
   re-derived from a measurement every time someone asks.  Full workings in
   `docs/reviews/2026-08-10-firewall-scope-exit/`.
+- **Never** take a target-profile port id from `format_port_identity`, a
+  sibling model, or recall.  A profile id is written **verbatim** into the
+  generated config when an operator picks it, so it must be the name the
+  hardware itself prints: take it from a capture of that exact model or the
+  vendor's own documentation, and grade it (`evidence` + `evidence_ref`).  If
+  the right name is not established for that model, **flag** the profile
+  (`evidence: inferred` + `caveat`) rather than swapping one plausible name
+  for another.  Failure mode: a third of the shipped profiles named ports the
+  device does not have — `1/A1` uplinks on a switch with no module slot, a
+  stacking module and a power supply offered as 40G uplink modules, an
+  AOS-CX switch filed under AOS-S — because the authoring guide said to
+  derive ids from the formatter, and because part numbers were paired with
+  the wrong row of a vendor table.  Two corollaries.  (1) A port's name is a
+  function of the model **and** its deployment state (stacking, breakout,
+  port speed), so a profile describes one state and says which.  (2) A
+  self-consistency check is worthless here: a profile that agrees with the
+  codec proves nothing, since both can be wrong together.  Guarded by
+  `tests/unit/migration/test_target_profile_evidence.py`, which re-proves
+  every `capture` grade against a fixture that must identify itself as that
+  model.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

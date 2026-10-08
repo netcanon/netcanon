@@ -1,25 +1,33 @@
 # MikroTik CRS310-8G+2S+
-# 8 × 2.5G BASE-T RJ45 (PoE+ 802.3bt on ether1-8, max 170W budget)
+# 8 × 2.5G BASE-T RJ45 (ether1..8) — NO PoE
 # 2 × 10G SFP+ uplink cages (sfp-sfpplus1..2)
 # 1 × management interface is typically reached via any enabled ether,
 #     not a dedicated mgmt port — the CRS310 doesn't have an OOB port.
 #
+# PoE.  The CRS310-8G+2S+IN has no PoE-out and no PoE-in (MikroTik
+# product page; 34 W maximum consumption), and nothing in the real
+# capture below carries a PoE property either.
+#
 # Validation: grounded in user-contributed real capture
 # (tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc), which
 # exercises all 8 ether* + both sfp-sfpplus* interfaces under
-# RouterOS 7.18.2.  HIGH confidence on interface naming.
+# RouterOS 7.18.2.  Every id below appears in it;
+# tests/unit/migration/test_target_profile_evidence.py re-proves that
+# on every run.
 vendor: mikrotik_routeros
 model: CRS310-8G+2S+
 display_name: "MikroTik CRS310-8G+2S+"
 device_class: switch
 stacking: ""   # CRS310 has no native stacking
+evidence: capture
+evidence_ref: "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc"
 ports:
-  - {range: "ether1-8", kind: physical, speed: 2.5gig, poe: true}
+  - {range: "ether1-8", kind: physical, speed: 2.5gig, poe: false}
   - {range: "sfp-sfpplus1-2", kind: uplink, speed: 10gig, sfp: true}
 lags: {max: 16, prefix: bond}
 
 # RouterOS 7.x supports the full 802.1Q range (1-4094) on every
 # modern MikroTik; switch chips expose the same ceiling via sw-VLANs.
-# max_local_users left unset \u2014 RouterOS user count is software-
+# max_local_users left unset — RouterOS user count is software-
 # unbounded and not a useful fit-check signal.
 max_vlans: 4094

@@ -1389,6 +1389,10 @@ TIER 3 — interactive rename modal in /migrate UI.
     # Same class of issue on:
     #   * Aruba 3810M 1-slot expansion — JL083A (4×10G), JL084A
     #     (4×40G QSFP+), JL085A (1×40G QSFP+)
+    #     [CORRECTED 2026-10: JL084A is the 3810M STACKING module and
+    #     JL085A a 250 W power supply.  The real flexible modules are
+    #     JL083A (4×SFP+), JL078A (1×QSFP+), JL079A (2×QSFP+) and
+    #     JL081A (4×Smart Rate).  The mentions below predate this.]
     #   * Aruba 5400R / zl2 chassis (many blade options)
     #   * Cisco Cat 9500 NM slot variants
     #   * FortiGate 200F/300F+ SFP cage configs

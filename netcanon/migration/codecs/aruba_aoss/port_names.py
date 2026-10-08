@@ -10,9 +10,10 @@ render machinery.
 AOS-S port-name forms handled here:
 
 * ``24``       — standalone switch, port 24.
-* ``1/24``     — stacked VSF, member 1, port 24.
-* ``1/A1``     — stacked VSF with letter-slot uplink module
-                 (A / B / C / ...), member 1, port 1.
+* ``1/24``     — stack or VSF member 1, port 24.
+* ``1/A1``     — stack member 1, port 1 of flexible module A
+                 (A / B / C / ...): 2920 / 2930M / 3810M, and 5400R
+                 line cards.  Never a 2930F, which has no module slot.
 * ``Trk1``     — LAG (case-insensitive: forums vary between
                  ``Trk1`` and ``trk1``).
 
@@ -42,9 +43,13 @@ from ...canonical.port_names import PortIdentity
 #: LAG: ``Trk<n>`` or ``trk<n>`` (forum pastes use either case).
 _TRUNK_RE = re.compile(r"^[Tt]rk(\d+)$")
 
-#: Stacked VSF with letter-slot uplink module: ``<stack>/<A-Z><port>``
-#: (e.g. ``1/A1``, ``2/B24``).  Uplink modules on 2930F/3810M/6300M
-#: chassis use letter subslots A through D+.
+#: Stacked member with a letter-slot module: ``<stack>/<A-Z><port>``
+#: (e.g. ``1/A1``, ``2/B24``).  The letter is a flexible-module slot,
+#: so this form belongs to the backplane-stacked families that HAVE
+#: one (2920 / 2930M / 3810M) and to chassis line cards (5400R).  A
+#: 2930F has no module slot -- its uplinks continue the access
+#: numbering (``49``..``52``, or ``1/49``..``1/52`` under VSF) -- and a
+#: 6300M runs AOS-CX, which has no letter slots at all.
 _STACKED_LETTER_RE = re.compile(r"^(\d+)/([A-Za-z])(\d+)$")
 
 #: Stacked VSF plain: ``<stack>/<port>``.  Order matters — the

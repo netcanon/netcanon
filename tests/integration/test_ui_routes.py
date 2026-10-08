@@ -323,7 +323,7 @@ class TestDefinitionsPageEnriched:
     backup device definitions, version/model overlays, migration
     target profiles (with module variants), and vendor codec
     capabilities.  Before this enrichment only the first section
-    rendered — the 54 target profiles + 8 vendors + module variants
+    rendered — the target profiles, vendors and module variants
     were invisible.
     """
 
@@ -355,7 +355,7 @@ class TestDefinitionsPageEnriched:
     def test_target_profiles_section_rendered_when_loaded(
         self, client: TestClient,
     ) -> None:
-        """54 target profiles ship with Netcanon by default.
+        """Dozens of target profiles ship with Netcanon by default.
         The vendor-group + row testids must appear in the rendered
         HTML (a regression would drop the whole section)."""
         resp = client.get("/definitions")
@@ -393,6 +393,25 @@ class TestDefinitionsPageEnriched:
             "broken"
         )
         assert 'data-testid="profile-module-sku"' in resp.text
+
+    def test_profile_provenance_rows_emitted(
+        self, client: TestClient,
+    ) -> None:
+        """A profile's deployment state, evidence grade and caveat are
+        listed on its detail card, so an operator browsing the
+        registry can see which port names are checked against a real
+        capture, which rest on documentation, and which are flagged
+        as unverified."""
+        resp = client.get("/definitions")
+        assert 'data-testid="profile-deployment-state"' in resp.text
+        assert 'data-testid="profile-caveat"' in resp.text
+        for grade in ("capture", "vendor-doc", "inferred"):
+            assert (
+                f'data-testid="profile-evidence" data-evidence="{grade}"'
+                in resp.text
+            ), grade
+        # The CX 6300M is grouped under its real OS.
+        assert 'data-vendor="aruba_aoscx"' in resp.text
 
     def test_profile_base_ports_emitted(
         self, client: TestClient,

@@ -1,19 +1,43 @@
 # Juniper QFX5120-48Y
-# 48 x 25G SFP28 + 8 x 100G QSFP28 uplinks.  DC leaf/spine
-# workhorse; common replacement for Cisco Nexus 9300-FX2 and
-# Arista 7050SX3 in EVPN-VXLAN fabrics.  Each 100G QSFP28 supports
-# 4x25G breakout (Ethernet<parent>:<lane> in Junos native form,
-# modelled as et-0/0/<N>:<M> sub-notation not exposed in v1).
+# 48 × SFP28 (1/10/25G) + 8 × 100G QSFP28.  DC leaf/spine workhorse.
+#
+# Port naming.  Junos names a port after the speed it is RUNNING at,
+# and on this switch the 48 SFP28 ports run at 10G by default -- so in
+# the factory-default state they are `xe-0/0/0`..`xe-0/0/47`.  Set to
+# 25G a port becomes `et-0/0/N`; at 1G, `ge-0/0/N`.  Speed is set four
+# ports at a time (0-3, 4-7, ...), so the prefix changes in quads.
+# This profile describes the default state.
+#
+# `xle-` is not a QFX5120 prefix at all: it is the 40G interface type
+# on QFX3500 / QFX3600 / QFX5100 running a QFabric software package.
+# Management is `em0` (jack C0) and `em1` (jack C1), not `me0`.
+#
+# The QSFP28 ports are `et-0/0/48`..`et-0/0/55`; channelised they
+# become `et-0/0/48:0`..`:3` (or `xe-0/0/48:0`..`:3` at 4x10G) -- not
+# modelled.
+#
+# Validation: Juniper's QFX5120 hardware guide, and Juniper's own
+# published QFX5120-48Y device configurations (github.com/Juniper/jvd),
+# which carry all 56 data-port ids and `em0`; `em1` is from the
+# hardware guide.  No capture of this model is committed here.
 vendor: juniper_junos
 model: QFX5120-48Y
-display_name: "Juniper QFX5120-48Y (48x 25G + 8x 100G)"
+display_name: "Juniper QFX5120-48Y (48x SFP28 + 8x 100G)"
 device_class: switch
 stacking: virtual-chassis
+deployment_state: "standalone (FPC 0), factory-default port speeds (SFP28 ports at 10G)"
+evidence: vendor-doc
+evidence_ref: "Juniper QFX5120 System Overview (SFP28 ports run at 10G by default; QSFP28 ports 48-55); QFX5120 Configure Junos OS (em0 = C0, em1 = C1); Juniper Validated Designs device configurations for qfx5120-48y (github.com/Juniper/jvd)"
+caveat: "An SFP28 port set to 25G is et-0/0/N and at 1G is ge-0/0/N (changed four ports at a time); only the default xe- names are listed. A Virtual Chassis member N uses N as the first number."
 ports:
-  - {range: "xle-0/0/0-47", kind: physical, speed: 25gig, sfp: true, notes: "25G SFP28 access"}
-  - {range: "et-0/0/48-55", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28 uplink (4x25G breakout capable)"}
-  - {id: "me0", kind: mgmt, speed: gig, notes: "OOBM"}
-lags: {max: 128, prefix: ae}
+  - {range: "xe-0/0/0-47", kind: physical, speed: 25gig, sfp: true, notes: "SFP28 cage; 10G (xe-) by default, 25G = et-, 1G = ge-"}
+  - {range: "et-0/0/48-55", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28 uplink (channelisable)"}
+  - {id: "em0", kind: mgmt, speed: gig, notes: "OOBM, jack C0"}
+  - {id: "em1", kind: mgmt, speed: gig, notes: "OOBM, jack C1"}
+lags: {max: 80, prefix: ae}
 
-max_vlans: 4094
-max_vlans_source: "Junos 18.x+ VLAN capacity (QFX platform datasheet)"
+# 80 LAGs and 4093 VLAN ids per Juniper's QFX5120 datasheet.  That
+# document was read on a reseller mirror (juniper.net now redirects),
+# so these two figures are less directly sourced than the port names.
+max_vlans: 4093
+max_vlans_source: "Juniper QFX5120 datasheet 1000639-016-EN: VLAN IDs 4093 (read on a reseller mirror)"

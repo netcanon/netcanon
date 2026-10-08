@@ -220,6 +220,22 @@ mapping is distinct.
 ⚠️ If you migrated from AOS-S before #482, this was **silent** —
 re-run the translation and check for these warnings.
 
+### "The Auto target says `1/1` but my switch's ports are `1`"
+
+You picked a target model in the rename modal, its dropdown lists the
+names your device really uses, and the *Auto target* column shows
+something else — marked amber, "not on profile".
+
+Both are behaving as designed, and the profile is the one to trust.
+The translator derives each target name from the **shape** of the
+source name (Cisco `GigabitEthernet1/0/1` becomes Aruba `1/1`); it is
+not told which model you chose, so it cannot know that a standalone
+2930F numbers that port `1`.  Until it is, set the names yourself:
+pick each port from the row's dropdown, or pass a `port_rename_map`
+to the API.  See [`CAPABILITIES.md`](CAPABILITIES.md) § F for what
+the line under the fit-check banner tells you about the profile's
+names.
+
 ### "The migrate page reports 'paramiko-shell capture artifact'"
 
 Specific to OPNsense backups via SSH + `cat /conf/config.xml`.

@@ -1,21 +1,29 @@
 # Cisco Catalyst 9300-24P
 # 24 × 10/100/1000 BASE-T RJ45 + PoE+ (30W/port, 445W budget)
 # 1 × network module slot — swappable.  Common SKUs modelled below:
-#   C9300-NM-8X  — 8x 10G SFP+  (default when unspecified)
+#   C9300-NM-8X  — 8x 10G SFP+  (preselected here; the chassis ships with no module)
 #   C9300-NM-2Q  — 2x 40G QSFP+
-# Additional real-world SKUs (NM-4G, NM-4M, NM-8M, NM-2Y) are not
+# Additional real-world SKUs (NM-4G, NM-4M, NM-2Y) are not
 # yet modelled — add here as users encounter them.
-# StackWise-480, 48 Port-channels max.
+# StackWise-480, 128 EtherChannels max.
 #
 # Mirrors the module-variant structure of the -24UX / -48UXM
-# profiles.  The Cat 9300 NM slot is identical across all plain
-# -P / -U / -UX / -UXM chassis — only the access-port speed
-# differs (1G RJ45 here, mGig on -UX/-UXM).
+# profiles.  The NM slot is shared with all Cat 9300 chassis.  The
+# downlinks are 1G RJ45 here; on the mGig chassis they differ in
+# interface TYPE NAME as well as speed (`TenGigabitEthernet` on the
+# -24UX, `TwoGigabitEthernet` + `TenGigabitEthernet` on the -48UXM).
+#
+# Real-device output corroborating these names (public, not committed
+# here) -- Cisco Community messages 4974931 (IOS XE 17.6), 4168279 (16.9, a three-member stack).
 vendor: cisco_iosxe
 model: C9300-24P
 display_name: "Cisco Catalyst 9300-24P (1G + PoE+)"
 device_class: switch
 stacking: stackwise
+deployment_state: "stack member 1 (the factory default; a standalone C9300 keeps whatever member number it was last given)"
+evidence: vendor-doc
+evidence_ref: "Cisco Catalyst 9300 Hardware Installation Guide, Product Overview; IOS XE 17.12 Interface and Hardware Components Configuration Guide (interface types and numbering); corroborated by public real-device output from two C9300-24P"
+caveat: "Uplink ids depend on the network module fitted. A C9300 config lists every module's interface names whichever is installed, so a name appearing does not mean the port exists. An NM-2Q with 4x10G breakout cables uses TenGigabitEthernet1/1/1-8."
 # Chassis-fixed ports — always present regardless of NM selection.
 ports:
   - {range: "GigabitEthernet1/0/1-24", kind: physical, speed: gig, poe: true}
@@ -32,7 +40,7 @@ modules:
     description: "2x 40G QSFP+ uplinks (C9300-NM-2Q)"
     ports:
       - {range: "FortyGigabitEthernet1/1/1-2", kind: uplink, speed: 40gig, sfp: true, notes: "NM-2Q QSFP+ cage"}
-lags: {max: 48, prefix: Port-channel}
+lags: {max: 128, prefix: Port-channel}
 
 # Datasheet capacity limits (IOS-XE 17.x C9300 family).
 # max_local_users left unset — IOS-XE's effective limit is

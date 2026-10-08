@@ -1,46 +1,46 @@
-# Netgate SG-3100 (ARM-based desktop firewall)
-# Marvell Armada 38x SoC (dual-core Cortex-A9 @ 1.6 GHz)
-# 1 × 1GbE WAN (direct SoC MAC) + 4 × 1GbE LAN (switched via
-#   Marvell MV88E6141 DSA + VLAN uplink)
-# Netgate front-panel: WAN / LAN1 / LAN2 / LAN3 / LAN4
+# Netgate SG-3100 (ARM desktop firewall; end of life 2023-10)
+# Dual-core Cortex-A9 @ 1.6 GHz (ARMv7)
+# 2 × routed 1GbE (WAN, OPT1) + a 4-port 1GbE LAN switch
+#   (Marvell 88E6141) -- six jacks, on the rear
 #
-# IMPORTANT: same ARM / pfSense-centric caveat as SG-1100 —
-# OPNsense on this hardware is community-grade; interface naming
-# here follows pfSense's published DSA + VLAN-tag convention and
-# may vary on stock FreeBSD arm OPNsense.  File an override
-# profile if your ifconfig output disagrees.
+# IMPORTANT -- this is pfSense Plus hardware.  OPNsense publishes amd64
+# images only, and no community ARM build targets this board, so no
+# OPNsense system exists to load a config onto.  The profile is kept,
+# flagged, for port planning until the registry has somewhere better
+# to file it; the names below are Netgate's pfSense names.
 #
-# Switch-VLAN layout (per Netgate docs + forum):
-#   mvneta0        → WAN       (direct SoC MAC, no switch)
-#   mvneta2.4091   → LAN1      (front port 1)
-#   mvneta2.4092   → LAN2      (front port 2)
-#   mvneta2.4093   → LAN3      (front port 3)
-#   mvneta2.4094   → LAN4      (front port 4)
-#   mvneta2 itself is the switch-uplink MAC; the four LAN ports
-#   appear as VLAN-tagged children.
+# Interface names (Netgate's SG-3100 I/O ports table):
+#   mvneta2  -> WAN   (routed)
+#   mvneta0  -> OPT1  (routed)
+#   mvneta1  -> LAN   ONE interface for all four LAN jacks, which are
+#                     ports of an internal switch uplinked to it
 #
-# Operators who bridge all four LAN ports together in OPNsense
-# create a bridge interface over the four mvneta2.40xx tagged
-# children; the profile lists the children individually so the
-# rename modal can target specific ports.
+# There are no per-jack VLAN children in the default state (that is
+# the SG-1100's scheme, on `mvneta0`).  Netgate does document optional
+# per-jack VLANs for this switch -- on `mvneta1`, suggested tags
+# 4081-4084 -- but only in an operator-configured 802.1Q mode, so they
+# are not listed.
 vendor: opnsense
 model: Netgate-SG3100
-display_name: "Netgate SG-3100 (1x WAN + 4x LAN switch via mvneta2 VLAN tags)"
+display_name: "Netgate SG-3100 (WAN + OPT1 + 4-port LAN switch) - pfSense hardware"
 device_class: firewall
 stacking: ""
+deployment_state: "pfSense Plus factory default (LAN switch in Port VLAN mode)"
+evidence: inferred
+evidence_ref: "Netgate SG-3100 manual, Input and Output Ports -- names documented for pfSense Plus, not for OPNsense"
+caveat: "pfSense Plus hardware: OPNsense has no image for this board, official or community. These are Netgate's pfSense interface names; all four LAN jacks are the single interface mvneta1."
 ports:
-  - {id: "mvneta0", kind: uplink, speed: gig, notes: "WAN — direct SoC MAC"}
-  - {id: "mvneta2.4091", kind: physical, speed: gig, notes: "LAN1 switch port"}
-  - {id: "mvneta2.4092", kind: physical, speed: gig, notes: "LAN2 switch port"}
-  - {id: "mvneta2.4093", kind: physical, speed: gig, notes: "LAN3 switch port"}
-  - {id: "mvneta2.4094", kind: physical, speed: gig, notes: "LAN4 switch port"}
-lags: {max: 4, prefix: lagg}
+  - {id: "mvneta2", kind: uplink, speed: gig, notes: "WAN (routed)"}
+  - {id: "mvneta0", kind: physical, speed: gig, notes: "OPT1 (routed)"}
+  - {id: "mvneta1", kind: physical, speed: gig, notes: "LAN -- one interface for jacks LAN1-LAN4 (internal switch)"}
+# Three OS-visible interfaces, of which only the two routed ports
+# could be aggregated.
+lags: {max: 1, prefix: lagg}
 
-# OPNsense runs FreeBSD's netgraph VLAN stack; the only hard limit
-# on VLAN IDs is the 802.1Q protocol ceiling (1-4094).  As with
-# the SG-1100, VLAN 4091-4094 are RESERVED by the Marvell DSA
-# driver for front-port-to-SoC uplink tagging — operator-defined
-# VLANs should pick IDs outside that range.
+# OPNsense uses FreeBSD's vlan(4) interfaces; the only hard limit
+# on VLAN IDs is the 802.1Q protocol ceiling (1-4094).  VLANs carried
+# through the LAN switch are further limited by the switch chip (128,
+# per Netgate).  No VLAN IDs are reserved on this box.
 # max_local_users intentionally unset — OPNsense user config is
 # software-unbounded and not a useful fit-check signal.
 max_vlans: 4094

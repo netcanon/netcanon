@@ -1,16 +1,46 @@
-# Aruba 2930F-24G (JL258A)
+# Aruba 2930F-24G-4SFP+ (JL253A)
 # 24 × 10/100/1000 BASE-T RJ45 (no PoE)
-# 4 × 1G/10G SFP+ uplink
+# 4 × 1G/10G SFP+ uplink — ports 25-28
+#
+# The JL259A (2930F-24G-4SFP) has the same port numbering with 1G SFP
+# uplinks.
+#
+# Port naming.  A 2930F has NO module slot, so there is no letter slot:
+# the uplinks continue the access numbering.  With VSF disabled (the
+# factory default) every port is a bare number.  With VSF enabled
+# every port gains its member number as a prefix, uplinks included
+# (`1/1`, `1/25` on member 1); a VSF stack holds up to 8 members (4
+# before WC.16.06).  This profile describes the standalone unit; an
+# `A1`-style id is never valid on a 2930F.
+#
+# Validation: vendor documentation -- no capture of a JL253A is committed.
+# Port count and uplink type come from the HPE QuickSpecs and data
+# sheet.  The uplink range 25-28 comes from HPE's VSF best-practices
+# paper; the 16.10 Management and Configuration Guide shows two of
+# the four in use on this J-number, in VSF form.  The bare standalone
+# form is proven on two sibling 2930F captures (JL260A, JL258A).
 vendor: aruba_aoss
 model: 2930F-24G
-display_name: "Aruba 2930F-24G (JL258A)"
+display_name: "Aruba 2930F-24G-4SFP+ (JL253A)"
 device_class: switch
 stacking: vsf-capable
+deployment_state: "standalone (VSF disabled)"
+evidence: vendor-doc
+evidence_ref: "HPE QuickSpecs c05052929 V20 (JL253A); Aruba 'Backplane Stacking and VSF Best Practices on ArubaOS-Switch' 16.08; 2930 M/F Management and Configuration Guide 16.10 pp.642,647"
+caveat: "With VSF enabled every port, uplinks included, takes its member number as a prefix (25 becomes 1/25 on member 1)."
 ports:
-  - {range: "1/1-1/24", kind: physical, speed: gig, poe: false}
-  - {range: "1/A1-1/A4", kind: uplink, speed: 10gig, sfp: true}
-lags: {max: 24, prefix: Trk}
+  - {range: "1-24", kind: physical, speed: gig, poe: false}
+  - {range: "25-28", kind: uplink, speed: 10gig, sfp: true, notes: "1G/10G SFP+ cage"}
+lags: {max: 60, prefix: Trk}
 
-# Datasheet capacity limits (AOS-S 16.11 2930F family).
+# Capacity.  60 trunk groups (`trk1`..`trk60`): HPE data sheet,
+# QuickSpecs and Management and Configuration Guides.  2048 VLANs is
+# the `max-vlans` ceiling; the factory default is 256 until it is
+# raised and the switch rebooted.
+#
+# max_local_users is deliberately unset.  HPE documents one manager and
+# one operator credential plus up to 100 `aaa authorization local-user`
+# accounts; which of those the local-users fit-check should count for
+# an AOS-S target is undecided, and an unsourced cap is worse than none.
 max_vlans: 2048
-max_local_users: 16
+max_vlans_source: "AOS-S 16.11 2930F/2930M Advanced Traffic Management Guide: max-vlans 16-2048, factory default 256"

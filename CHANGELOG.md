@@ -26,6 +26,153 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Target profiles that named ports the device does not have.**  A port
+  id picked from a target profile in the rename modal is written verbatim
+  into the generated config, so a wrong id is a config that names a
+  non-existent port.  A registry audit found a wrong port name or count in
+  a third of the shipped profiles.  Each is now corrected -- from a capture
+  committed here, from the vendor's own documentation, or from public
+  real-device output of the exact model -- or flagged as unverified, or
+  removed.  Every replacement was checked against its sources by a second
+  reader before landing.
+
+  - **Aruba 2930F** (all four).  Uplinks were `1/A1`-`1/A4` on a switch
+    with no module slot; they are `49`-`52` (`25`-`28` on the 24-port),
+    continuing the access numbering.  The profiles now describe the
+    standalone switch -- bare `1`..`52` -- which is the factory default and
+    what the committed JL260A capture shows.  Also: `2930F-24G` was
+    labelled JL258A (the 8-port model; it is JL253A), `2930F-48G` gave the
+    1G-SFP JL260A 10G uplinks, `2930F-48G-PoEP` declared 2 uplinks of 4,
+    and all four capped trunk groups at 24 where HPE documents 60.
+  - **Aruba 3810M** (both).  The module list offered JL084A as "4x 40G
+    QSFP+" and JL085A as "1x 40G QSFP+".  JL084A is the 3810M *stacking*
+    module and JL085A a 250 W power supply.  The real flexible modules
+    modelled are JL083A (4x SFP+) and JL078A (1x QSFP+); the 48G chassis is
+    JL074A, not JL076A.
+  - **Aruba CX 6300M.**  Filed under `aruba_aoss` with AOS-S ids
+    (`1/1-1/48`, `1/A1-1/A4`) and `vsx-stacking`.  It is an AOS-CX switch:
+    now `aruba_aoscx`, `1/1/1`-`1/1/48` + `1/1/49`-`1/1/52`, VSF, JL661A.
+    Its LAG prefix is `lag ` with a trailing space, because AOS-CX writes
+    `interface lag 1` and `lag1` is not a name the codec recognises.
+  - **Cisco Catalyst 9300.**  C9300-24UX downlinks were
+    `GigabitEthernet1/0/N`; they are `TenGigabitEthernet1/0/N` (0 of 24
+    matched the committed capture).  C9300-48UXM listed 48 x
+    `GigabitEthernet` at 5G; it is `TwoGigabitEthernet1/0/1-36` +
+    `TenGigabitEthernet1/0/37-48`.  All six capped EtherChannels at 48;
+    the limit is 128.
+  - **Juniper.**  QFX5120-48Y used `xle-0/0/N` -- a QFabric 40G type no
+    QFX5120 port carries; the factory-default names are `xe-0/0/0-47`.
+    EX4600-40F listed its fixed QSFP+ ports as `et-0/1/0-3` (an expansion
+    module's ports); they are `et-0/0/24-27`.  Both said `me0` for
+    management; it is `em0` / `em1`.  All three profiles gave 4094 VLANs
+    under a source string naming a datasheet that prints 4093 / 4091 /
+    4093; the QFX5120 said 128 LAGs where its datasheet says 80.
+  - **Arista** (all four).  QSFP / OSFP cages were bare `EthernetN`; EOS
+    names a multi-lane cage `EthernetN/1`.  The 7060CX-32S profile omitted
+    its two SFP+ ports, and the 7280CR3-32P4's 400G ports are OSFP, not
+    QSFP-DD.
+  - **Netgate SG-3100.**  Every role was wrong (`mvneta0` as WAN, no OPT1,
+    four invented VLAN children for the LAN jacks).  Per Netgate: WAN
+    `mvneta2`, OPT1 `mvneta0`, LAN `mvneta1`.  Its LAG ceiling drops from 4
+    to 1 and the SG-1100's from 2 to 0 (three VLAN children of one MAC
+    cannot be aggregated); the SG-1100's VLAN ceiling is 128, the limit of
+    the switch chip every jack sits behind.
+  - **MikroTik CRS310-8G+2S+.**  Marked all eight copper ports PoE with a
+    "170 W budget"; the switch has no PoE-out.
+  - **Aruba AOS-S local-user ceiling.**  The six AOS-S profiles declared
+    `max_local_users: 16`, which is not a vendor figure and drove a
+    fit-check banner that was confidently wrong.  Now unset, so that banner
+    is hidden for those targets.
+
+  Over a dozen test assertions pinned the wrong values and moved in the
+  same change, so they now guard the corrections instead of the errors.
+- **The ports fit-check banner reappeared on the VLAN and user panes.**
+  Editing an override on another pane refreshed the summary, which
+  re-rendered the ports banner there.  It is ports-pane only again.
+- **A module SKU reached the fit-check banner unescaped.**  The SKU is a
+  profile-YAML dict key and profile YAML is operator-authorable; it is now
+  escaped like every other profile string the modal renders.
+
+### Added
+
+- **Provenance on target profiles.**  Optional fields record what is
+  actually known about a profile's port names: `deployment_state` (the one
+  state the ids describe -- a port's name depends on how the device is
+  deployed, not only on its model), `evidence` (`capture` / `vendor-doc` /
+  `inferred`, with `evidence_ref`), and an operator-visible `caveat`.
+  `capture` is a checked claim, not a label:
+  `tests/unit/migration/test_target_profile_evidence.py` parses the cited
+  fixture on every run and fails unless the fixture identifies itself as
+  that model, belongs to the profile's vendor, and contains every profile
+  port id as a hardware port.  The graded sets are pinned, so a grade can
+  neither appear nor vanish unreviewed.  Mutation-checked: eleven
+  deliberate regressions -- the four original errors re-introduced, an SVI
+  and a LAG listed as ports, a profile graded against a sibling model's
+  capture, a dropped or misspelt grade, a missing caveat, a missing
+  deployment state -- each fail it.  Three profiles carry the `capture`
+  grade, eighteen `vendor-doc`, two `inferred`.
+- **The rename modal says what a profile's port names are worth.**  A
+  notice under the fit-check banner shows the deployment state, the
+  evidence grade and the caveat for the selected profile, turns amber when
+  the names are unverified, and says "not yet graded" for a profile nobody
+  has checked.  The definitions page lists the same per profile.  Web and
+  desktop alike.
+- **Rows whose auto-translated name is not a port on the selected profile
+  are marked.**  Selecting a profile does not change auto-translation (see
+  Known limitations), so with a standalone 2930F profile a Cisco source's
+  `1/1` is a port the chosen device does not have.  Such rows are now
+  amber, with "N not on profile" on the section header, until the operator
+  picks a real port.
+- `test_all_profiles_load` now loads every profile YAML strictly.  The
+  runtime loader skips a file that fails validation, so a typo in a
+  constrained field used to remove a profile from the product with every
+  test green.
+- A Hard Rule in `AGENTS.md`: a profile port id comes from a capture of
+  that model or the vendor's documentation, never from the formatter, a
+  sibling model or recall; when the right name is not established, flag
+  the profile rather than swapping one plausible name for another.
+
+### Changed
+
+- **Profile keys and ids that API clients may have hard-coded.**
+  `aruba_aoss/6300M-48G-PoE4-SFP56` is now
+  `aruba_aoscx/6300M-48G-PoE4-SFP56`.  The 2930F profiles list bare ids
+  (`12`, `49`) where they listed `1/12`, `1/A1`.  The 3810M module SKUs are
+  `JL083A` / `JL078A`.  `target_profile` remains advisory -- none of this
+  changes rendered output.
+- **`docs/adding-a-target-profile.md` rewritten** around a capture-backed
+  worked example and the evidence-first order of work.  The previous
+  worked example was the 6300M, which was wrong on five axes.
+- The two Netgate ARM profiles (SG-1100, SG-3100) are kept but graded
+  `inferred` and flagged in the modal: they are pfSense Plus hardware,
+  OPNsense has no image for either board, and the names are pfSense's.
+- The two C9500 profiles state their deployment (`standalone, switch 1`),
+  as every stack-capable profile now must.  Their port ids were not
+  examined and they remain ungraded.
+
+### Removed
+
+- **`opnsense/DEC600-IGC`.**  It described a 5-port Celeron N5105 Deciso
+  appliance that does not exist.  The current DEC600 2.5GbE units (DEC677
+  / DEC697; the rack DEC2687 shares the board) are the 4-port Netboard A8,
+  which already ships as `opnsense/Netboard-A8-I225` and now carries those
+  model numbers in its display name.
+
+### Known limitations
+
+- **Selecting a profile still does not change auto-translated names.**
+  The translator derives a target name from the shape of the source name
+  (Cisco `GigabitEthernet1/0/1` becomes AOS-S `1/1`) whatever model is
+  selected, because it is not told the model.  The new row marker shows
+  where the two disagree; the operator still has to choose the port.
+- Thirty profiles are not yet graded, and say so.
+- The evidence grade covers port names and counts only.  Capacity figures
+  are sourced separately: the four Arista profiles' `lags.max` is not a
+  vendor figure (Arista publishes ports per LAG, not a LAG count), and the
+  QFX5120 figures were read from a reseller's copy of Juniper's datasheet.
+
 ## [0.7.7] - 2026-10-07
 
 ### Added

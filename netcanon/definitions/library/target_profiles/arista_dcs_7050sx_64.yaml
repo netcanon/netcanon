@@ -1,25 +1,47 @@
-# Arista DCS-7050SX-64-CL
-# 48 x 10GbE SFP+ + 4 x 40GbE QSFP+ (break-outable to 4x10GbE).
+# Arista DCS-7050SX-64
+# 48 x 10GbE SFP+ + 4 x 40GbE QSFP+ (each breaks out to 4x10GbE).
 # Fixed-configuration TOR switch, no modular uplinks.
-# Matches the real-capture fixture at
-# tests/fixtures/real/arista_eos/ksator_dcs_7150s64_eos4224.txt
-# (actually a 7150S-64 with 64 ports at 10G — the 7050SX-64 has 48
-# SFP+ + 4 QSFP+ in a similar TOR shape).  Interface naming is flat
-# Ethernet<N> with Ethernet<parent>/<lane> for QSFP breakout children.
+#
+# Port naming.  EOS names a single-lane port `Ethernet<port>` and a
+# multi-lane (breakout-capable) port `Ethernet<port>/<lane>`.  Every
+# QSFP+ cage on this model is multi-lane, so a cage running as one
+# port is `EthernetN/1` -- there is no bare `EthernetN` for it.  Broken
+# out, the same cage also has `/2`..`/4`.  This profile lists lane 1 of
+# each cage.
+#
+# Validation: Arista's 7050X Q&A (ports 49-52 are "4 x 10G or 1 x
+# 40G") and EOS manual (the lane-naming rule); the exact id set below
+# is what public running-configs of a DCS-7050SX-64 show:
+#   saparikh/arista-demo  snapshot0/configs/do342.cfg, do417.cfg
+#                         (commit 07325f77b7)
+#   xvzf/lanarama-infra   roles/infra/core/templates/core0.conf
+#                         (commit 20a21ad387)
+# None is committed here.  The Arista fixture in this repo
+# (ksator_dcs_7150s64_eos4224.txt) is a DCS-7150S-64 -- a different
+# model, which an earlier header cited as if it matched.
 vendor: arista_eos
 model: DCS-7050SX-64
 display_name: "Arista DCS-7050SX-64 (48x 10G + 4x 40G)"
 device_class: switch
 stacking: ""   # Arista doesn't support traditional stacking; MLAG +
                # EVPN are the scale-out patterns.
+deployment_state: "every QSFP+ cage running as one 40G port (lane /1)"
+evidence: vendor-doc
+evidence_ref: "Arista 7050X Series Q&A (ports 49-52 are 4x10G or 1x40G); EOS User Manual, Ethernet Ports (multi-lane ports are Ethernet<port>/<lane>); id set seen on public running-configs of DCS-7050SX-64 (EOS 4.21, 4.23), none committed here"
+caveat: "A QSFP+ cage broken out to 4x10G also has Ethernet49/2-/4 (and so on for 50-52), which is how EOS brings these cages up until lane 1 is set to 40G; only lane /1 of each cage is listed."
 ports:
   - {range: "Ethernet1-48", kind: physical, speed: 10gig, sfp: true, notes: "10G SFP+ cage"}
-  - {range: "Ethernet49-52", kind: uplink, speed: 40gig, sfp: true, notes: "40G QSFP+ cage (4x10G breakout capable)"}
+  - {id: "Ethernet49/1", kind: uplink, speed: 40gig, sfp: true, notes: "40G QSFP+ cage, lane 1 (4x10G breakout capable)"}
+  - {id: "Ethernet50/1", kind: uplink, speed: 40gig, sfp: true, notes: "40G QSFP+ cage, lane 1 (4x10G breakout capable)"}
+  - {id: "Ethernet51/1", kind: uplink, speed: 40gig, sfp: true, notes: "40G QSFP+ cage, lane 1 (4x10G breakout capable)"}
+  - {id: "Ethernet52/1", kind: uplink, speed: 40gig, sfp: true, notes: "40G QSFP+ cage, lane 1 (4x10G breakout capable)"}
   - {id: "Management1", kind: mgmt, speed: gig, notes: "OOBM"}
+# lags.max is NOT a vendor figure: Arista's datasheets give ports per
+# LAG, not a LAG count (EOS itself allows 2000 port channels).
 lags: {max: 64, prefix: Port-Channel}
 
 # EOS supports up to 4094 active VLANs on modern platforms.
 # max_local_users unset — EOS allows an effectively-unbounded
 # number of usernames; fit-check banner stays hidden.
 max_vlans: 4094
-max_vlans_source: "Arista EOS 4.x VLAN capacity per platform datasheet"
+max_vlans_source: "802.1Q VLAN-id range (1-4094); the Arista datasheet prints 4096 VLANs"

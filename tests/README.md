@@ -49,7 +49,8 @@ tests/
     ├── test_tray.py         TrayIcon construction, callbacks, stop()
     ├── test_window.py       WebViewWindow lifecycle and _handle_close()
     ├── test_settings.py     Path resolution in frozen vs. dev mode
-    └── test_backups_<vendor>_desktop.py  Per-vendor embedded-server smoke tests
+    ├── test_backups_<vendor>_desktop.py  Per-vendor embedded-server smoke tests
+    └── …                    (etc. — see tests/desktop/ for the full set)
 ```
 
 ## Running Tests

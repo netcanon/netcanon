@@ -212,10 +212,46 @@ class TestRenameModalTargetProfileTwoStage:
         model = page.locator(
             '[data-testid="migrate-rename-target-model-select"]'
         )
-        # Model dropdown now contains all Aruba profiles we shipped.
+        # Model dropdown now contains all Aruba AOS-S profiles we shipped.
         options = model.locator("option").all_text_contents()
-        assert any("2930F-48G-PoEP" in o for o in options)
+        assert any("2930F-48G-PoE+" in o for o in options)
         assert any("3810M-48G-PoE" in o for o in options)
+        # The CX 6300M runs AOS-CX and is no longer offered here.
+        assert not any("6300M" in o for o in options), options
+
+    def test_aoscx_profile_offers_lag_names_the_codec_accepts(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        """The CX 6300M is filed under Aruba AOS-CX, and its LAG
+        options are spelled the way AOS-CX writes them -- ``lag 1``,
+        with a space.  The modal builds the option as prefix + number,
+        so this proves the profile's trailing-space prefix survives the
+        loader, the API and the option value: ``lag1`` is not a LAG
+        name the aruba_aoscx codec recognises."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        ).select_option(value="aruba_aoscx")
+        page.locator(
+            '[data-testid="migrate-rename-target-model-select"]'
+        ).select_option(value="6300M-48G-PoE4-SFP56")
+        lag = page.locator(
+            '[data-testid="migrate-rename-override-Port-channel1"]'
+        )
+        values = lag.locator("option").evaluate_all(
+            "els => els.map(e => e.value)"
+        )
+        assert "lag 1" in values and "lag 256" in values, values[:6]
+        assert "lag1" not in values
+        # Access rows are offered member/slot/port names.
+        access = page.locator(
+            '[data-testid="migrate-rename-override-GigabitEthernet1/0/1"]'
+        )
+        access_values = access.locator("option").evaluate_all(
+            "els => els.map(e => e.value)"
+        )
+        assert "1/1/1" in access_values and "1/1/48" in access_values
+        assert "1/A1" not in access_values
 
 
 class TestRenameModalOrphanedOverride:
@@ -236,10 +272,11 @@ class TestRenameModalOrphanedOverride:
         page.locator(
             '[data-testid="migrate-rename-target-model-select"]'
         ).select_option(value="2930F-48G-PoEP")
-        # Override GigabitEthernet1/0/1 → 1/12 (valid on 2930F-48G-PoEP).
+        # Override GigabitEthernet1/0/1 → 12 (valid on the standalone
+        # 2930F-48G-PoEP, whose ports are bare numbers).
         page.locator(
             '[data-testid="migrate-rename-override-GigabitEthernet1/0/1"]'
-        ).select_option(value="1/12")
+        ).select_option(value="12")
         # Now switch profile to one that has DIFFERENT port names
         # (Cisco uses GigabitEthernet1/0/N style).
         page.locator(
@@ -248,15 +285,15 @@ class TestRenameModalOrphanedOverride:
         page.locator(
             '[data-testid="migrate-rename-target-model-select"]'
         ).select_option(value="C9300-24UX")
-        # The override of "1/12" doesn't exist in Cisco C9300-24UX
-        # (ports are "GigabitEthernet1/0/N").  Dropdown should
-        # surface it as "(custom: 1/12 — not in profile)".
+        # The override of "12" doesn't exist in Cisco C9300-24UX
+        # (ports are "TenGigabitEthernet1/0/N").  Dropdown should
+        # surface it as "(custom: 12 — not in profile)".
         override = page.locator(
             '[data-testid="migrate-rename-override-GigabitEthernet1/0/1"]'
         )
         options_text = override.locator("option").all_text_contents()
         assert any(
-            "custom:" in o and "1/12" in o and "not in profile" in o
+            "custom: 12 " in o and "not in profile" in o
             for o in options_text
         ), f"expected orphaned-override custom option; got: {options_text}"
 
@@ -283,8 +320,8 @@ class TestRenameModalCollisionDetection:
 
 class TestRenameModalModuleDropdown:
     """Third-stage module dropdown — chassis with swappable uplink
-    modules (Cisco Cat 9300 NM-8X/NM-2Q, Aruba 3810M JL083A/JL084A/
-    JL085A).  UI rule: dropdown hidden for legacy profiles, visible
+    modules (Cisco Cat 9300 NM-8X/NM-2Q, Aruba 3810M JL083A/JL078A).
+    UI rule: dropdown hidden for legacy profiles, visible
     and populated when profile declares modules.  Changing the
     selected module re-scopes target-port dropdowns to that module's
     uplink inventory."""
@@ -407,10 +444,11 @@ class TestRenameModalModuleDropdown:
     def test_aruba_3810m_exposes_jl_module_variants(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
     ):
-        """Aruba 3810M JL083A (10G SFP+) / JL084A (40G QSFP+) /
-        JL085A (1x 40G QSFP+) must all surface as module options
-        so operators doing a Cisco → Aruba 3810M migration can
-        pick their specific module hardware."""
+        """Aruba 3810M JL083A (4x SFP+) and JL078A (1x QSFP+) must
+        both surface as module options so operators doing a Cisco →
+        Aruba 3810M migration can pick the module actually fitted.
+        JL084A (the stacking module) and JL085A (a power supply)
+        must NOT be offered -- both were, as 40G uplink modules."""
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         page.locator(
             '[data-testid="migrate-rename-target-vendor-select"]'
@@ -424,8 +462,9 @@ class TestRenameModalModuleDropdown:
         expect(module_sel).to_be_visible()
         options = module_sel.locator("option").all_text_contents()
         assert any("JL083A" in o for o in options), options
-        assert any("JL084A" in o for o in options), options
-        assert any("JL085A" in o for o in options), options
+        assert any("JL078A" in o for o in options), options
+        assert not any("JL084A" in o for o in options), options
+        assert not any("JL085A" in o for o in options), options
 
 
 class TestRenameModalFitCheck:
@@ -457,7 +496,7 @@ class TestRenameModalFitCheck:
         source-vs-target counts for whichever kinds have non-zero
         values on either side.  The Cisco fixture has 2 physical
         access ports + 1 LAG + 1 loopback — target 2930F-48G-PoEP
-        has 48 access + 2 uplinks, so no overage expected."""
+        has 48 access + 4 uplinks, so no overage expected."""
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         page.locator(
             '[data-testid="migrate-rename-target-vendor-select"]'
@@ -481,7 +520,7 @@ class TestRenameModalFitCheck:
         overage per kind so they see the capacity shortfall before
         committing mappings.  The Cisco fixture's Port-channel1 +
         uplink-flavoured ports should expose overage when target is
-        a 24-port legacy 2930F with only 2 uplinks."""
+        a 24-port legacy 2930F with 4 uplinks."""
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         page.locator(
             '[data-testid="migrate-rename-target-vendor-select"]'
@@ -547,6 +586,219 @@ class TestRenameModalFitCheck:
         )
         # Note element never gets rendered for legacy profiles.
         expect(note).to_have_count(0)
+
+
+class TestRenameModalProfileNotice:
+    """Target-profile provenance notice — which deployment state the
+    profile's port names describe, how well they are established, and
+    any caveat.  A port id picked from a profile is written verbatim
+    into the generated config, so the operator has to be told when the
+    names on offer are unverified."""
+
+    NOTICE = '[data-testid="migrate-rename-profile-notice"]'
+
+    def _pick(self, page: Page, vendor: str, model: str) -> None:
+        page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        ).select_option(value=vendor)
+        page.locator(
+            '[data-testid="migrate-rename-target-model-select"]'
+        ).select_option(value=model)
+
+    def test_notice_hides_and_resets_when_the_profile_is_cleared(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        """Shown first, so this cannot pass on an element that simply
+        ships ``display:none``.  Clearing the model, then the vendor,
+        must hide the notice AND drop the stale grade attribute."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        notice = page.locator(self.NOTICE)
+        self._pick(page, "cisco_iosxe", "C9300-24UX")
+        expect(notice).to_be_visible()
+        assert notice.get_attribute("data-evidence") == "capture"
+        page.locator(
+            '[data-testid="migrate-rename-target-model-select"]'
+        ).select_option(value="")
+        expect(notice).to_be_hidden()
+        assert notice.get_attribute("data-evidence") is None
+        self._pick(page, "cisco_iosxe", "C9300-24UX")
+        expect(notice).to_be_visible()
+        page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        ).select_option(value="")
+        expect(notice).to_be_hidden()
+        assert notice.get_attribute("data-evidence") is None
+
+    def test_ungraded_profile_says_it_is_ungraded(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+        live_server_url: str,
+    ):
+        """Unset ``evidence`` means nobody has checked the names, not
+        that they are fine -- so the notice says so instead of staying
+        blank.  Resolved from the live registry so grading a profile
+        later does not break this test."""
+        profiles = page.request.get(
+            live_server_url + "/api/v1/migration/target-profiles"
+        ).json()
+        ungraded = [
+            p for p in profiles if not p.get("evidence") and p.get("ports")
+        ]
+        assert ungraded, "every profile is graded now -- retire this test"
+        target = ungraded[0]
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        self._pick(page, target["vendor"], target["model"])
+        notice = page.locator(self.NOTICE)
+        expect(notice).to_be_visible()
+        assert notice.get_attribute("data-evidence") == "ungraded"
+        assert "notice-warn" not in (notice.get_attribute("class") or "")
+        expect(page.locator(
+            '[data-testid="migrate-rename-profile-notice-evidence"]'
+        )).to_contain_text("not yet graded")
+
+    def test_notice_states_the_deployment_the_port_names_describe(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        """An Aruba 2930F port is ``24`` standalone and ``1/24`` as a
+        VSF member; the profile describes one of those and says which."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        self._pick(page, "aruba_aoss", "2930F-48G-PoEP")
+        notice = page.locator(self.NOTICE)
+        expect(notice).to_be_visible()
+        state = page.locator(
+            '[data-testid="migrate-rename-profile-notice-state"]'
+        )
+        expect(state).to_contain_text("standalone")
+
+    def test_capture_backed_profile_says_so_without_alarm(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        self._pick(page, "cisco_iosxe", "C9300-24UX")
+        notice = page.locator(self.NOTICE)
+        expect(notice).to_be_visible()
+        assert notice.get_attribute("data-evidence") == "capture"
+        # The C9300 profiles carry a caveat about network modules, but
+        # the notice goes amber only for an `inferred` grade.
+        expect(page.locator(
+            '[data-testid="migrate-rename-profile-notice-caveat"]'
+        )).to_contain_text("network module")
+        assert "notice-warn" not in (notice.get_attribute("class") or "")
+        expect(page.locator(
+            '[data-testid="migrate-rename-profile-notice-evidence"]'
+        )).to_contain_text("real capture")
+
+    def test_unverified_profile_is_flagged_amber_with_its_caveat(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+        live_server_url: str,
+    ):
+        """Resolves an ``inferred`` profile from the live registry
+        rather than naming one, so regrading a profile once its real
+        port names are established does not break this test.  The set
+        itself is pinned by
+        ``tests/unit/migration/test_target_profile_evidence.py``."""
+        profiles = page.request.get(
+            live_server_url + "/api/v1/migration/target-profiles"
+        ).json()
+        inferred = [p for p in profiles if p.get("evidence") == "inferred"]
+        assert inferred, "no profile is graded `inferred` any more"
+        target = inferred[0]
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        self._pick(page, target["vendor"], target["model"])
+        notice = page.locator(self.NOTICE)
+        expect(notice).to_be_visible()
+        assert "notice-warn" in (notice.get_attribute("class") or "")
+        caveat = page.locator(
+            '[data-testid="migrate-rename-profile-notice-caveat"]'
+        )
+        expect(caveat).to_have_text(target["caveat"])
+
+    def test_notice_is_ports_pane_only(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        """The notice is about PORT names; it must not follow the
+        operator onto the VLAN pane, and must come back with them."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        self._pick(page, "aruba_aoss", "2930F-48G-PoEP")
+        notice = page.locator(self.NOTICE)
+        expect(notice).to_be_visible()
+        fitcheck = page.locator('[data-testid="migrate-rename-fitcheck"]')
+        expect(fitcheck).to_be_visible()
+        page.locator('[data-testid="migrate-rename-rail-vlans"]').click()
+        expect(notice).to_be_hidden()
+        expect(fitcheck).to_be_hidden()
+        # An override edit on the VLAN pane refreshes the summary, which
+        # re-runs both renderers.  Neither may come back while the
+        # ports pane is inactive (the ports banner used to).
+        page.locator(
+            '[data-testid="migrate-rename-vlan-override-10"]'
+        ).fill("110")
+        expect(notice).to_be_hidden()
+        expect(fitcheck).to_be_hidden()
+        page.locator('[data-testid="migrate-rename-rail-ports"]').click()
+        expect(notice).to_be_visible()
+        expect(fitcheck).to_be_visible()
+
+
+class TestRenameModalOffProfileAutoTarget:
+    """Selecting a profile does not change auto-translated names: the
+    translator derives a target name from the shape of the source name
+    (Cisco ``GigabitEthernet1/0/1`` becomes AOS-S ``1/1``) whatever
+    model is chosen.  When the auto name is not a port the selected
+    profile lists, the row says so -- otherwise the default the operator
+    leaves in place is a port the chosen device does not have."""
+
+    ROW = '[data-testid="migrate-rename-row-GigabitEthernet1/0/1"]'
+    MARK = '[data-testid="migrate-rename-offprofile-GigabitEthernet1/0/1"]'
+
+    def _pick(self, page: Page, vendor: str, model: str) -> None:
+        page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        ).select_option(value=vendor)
+        page.locator(
+            '[data-testid="migrate-rename-target-model-select"]'
+        ).select_option(value=model)
+
+    def test_auto_name_absent_from_the_profile_is_marked(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        """A standalone 2930F lists bare ``1``..``52``; the auto name
+        is the stacked form ``1/1``."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        row = page.locator(self.ROW)
+        # No profile -> nothing to compare against -> no mark.
+        assert "has-offprofile" not in (row.get_attribute("class") or "")
+        self._pick(page, "aruba_aoss", "2930F-48G-PoEP")
+        row = page.locator(self.ROW)
+        assert "has-offprofile" in (row.get_attribute("class") or "")
+        mark = page.locator(self.MARK)
+        expect(mark).to_be_visible()
+        assert "1/1 is not a port on" in (mark.get_attribute("title") or "")
+        expect(page.locator(
+            '[data-testid="migrate-rename-offprofile-count-physical"]'
+        )).to_contain_text("not on profile")
+        # Choosing a real port clears it.
+        page.locator(
+            '[data-testid="migrate-rename-override-GigabitEthernet1/0/1"]'
+        ).select_option(value="12")
+        row = page.locator(self.ROW)
+        assert "has-offprofile" not in (row.get_attribute("class") or "")
+        expect(page.locator(self.MARK)).to_have_count(0)
+
+    def test_auto_name_the_profile_lists_is_not_marked(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        """The 3810M profile describes stack member 1, whose ports ARE
+        ``1/1``.. -- so the same auto name is on-profile there."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        self._pick(page, "aruba_aoss", "3810M-48G-PoEP")
+        row = page.locator(self.ROW)
+        assert "has-offprofile" not in (row.get_attribute("class") or "")
+        expect(page.locator(self.MARK)).to_have_count(0)
+        # The LAG row's auto name (Trk1) is one of the profile's LAGs.
+        lag_row = page.locator(
+            '[data-testid="migrate-rename-row-Port-channel1"]'
+        )
+        assert "has-offprofile" not in (lag_row.get_attribute("class") or "")
 
 
 class TestRenameModalLeftRail:

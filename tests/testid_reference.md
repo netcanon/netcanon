@@ -281,6 +281,9 @@ The page exposes four sections — one `section-*` testid per container.
 | `target-profile-row`            | `<details>` | One collapsible per model; carries `data-vendor`, `data-model`, `data-haystack` (pre-lowercased for filter match) |
 | `profile-display-name`          | `<span>` | Human-readable model label inside the profile summary |
 | `profile-module-count`          | `<span>` | "N module variant(s)" hint in the summary (absent when profile has no modules) |
+| `profile-deployment-state`      | `<dd>`   | Which single deployment state the profile's port ids describe (e.g. "standalone (VSF disabled)").  Absent when the profile declares none |
+| `profile-evidence`              | `<dd>`   | Evidence grade for the port names; `data-evidence` is `capture` / `vendor-doc` / `inferred` (followed by `evidence_ref` when set) or `ungraded`.  Absent only for a profile that lists no ports.  The grade is also in the row's `data-haystack`, so the filter box finds `inferred` |
+| `profile-caveat`                | `<dd>`   | Operator-visible caveat text.  Absent when the profile has none |
 | `profile-base-ports-heading`    | `<div>` | Sub-heading for the chassis-fixed port chip list |
 | `profile-base-ports`            | `<div>` | Port-chip container for the base ports |
 | `profile-modules-heading`       | `<div>` | Sub-heading for the modules section (absent when profile has no modules) |
@@ -624,6 +627,12 @@ migrate.html):
 | `migrate-rename-fitcheck`             | `<div>`    | Hardware fit-check banner.  CSS class `fit-ok` / `fit-warn` / `fit-block` encodes overall state |
 | `migrate-fitcheck-kind-<kind>`        | `<span>`   | Per-kind count line ("access: 24 / 24"); `<kind>` is one of `physical`, `uplink`, `mgmt` — **closed enumeration** as of this writing (fit-check.js hardcodes the list in `KIND_ORDER`).  Adding a new kind requires touching both the partial and this doc |
 | `migrate-fitcheck-module-note`        | `<span>`   | "(module: NM-8X)" suffix on the banner when a module SKU is selected; omitted for legacy profiles |
+| `migrate-rename-profile-notice`       | `<div>`    | Target-profile provenance notice under the fit-check banner (ports pane only).  Hidden when no profile is selected.  CSS class `notice-warn` only when the grade is `inferred` (a caveat on a verified profile is guidance, not an alarm); `data-evidence` is the grade (`capture` / `vendor-doc` / `inferred`) or `ungraded`, and is absent while hidden |
+| `migrate-rename-profile-notice-state` | `<span>`   | "Port names describe: <deployment_state>" — present only when the profile declares one |
+| `migrate-rename-profile-notice-evidence` | `<span>` | Human wording of the evidence grade, or "Port names not yet graded" for a profile that declares none |
+| `migrate-rename-offprofile-<source>`  | `<span>`   | ⚠ marker on a ports-pane row whose auto-translated target is not a port the selected profile lists; the row carries CSS class `has-offprofile`.  Absent once the operator overrides or drops the row, and whenever no profile is selected |
+| `migrate-rename-offprofile-count-<kind>` | `<span>` | "N not on profile" chip on a kind section's header, present only when that section has off-profile rows |
+| `migrate-rename-profile-notice-caveat` | `<span>`  | The profile's caveat text — present only when the profile has one |
 
 **Left-rail category nav + VLAN pane** (P2C3 — per-category override
 surfaces under a shared left-rail navigation):

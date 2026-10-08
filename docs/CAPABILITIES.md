@@ -784,6 +784,47 @@ prevents the ghost-success
 bug where rename overrides apply to canonical but vanish from
 rendered output.
 
+### F. Target-profile provenance notice
+
+When you pick a target model in the rename modal, the port names in
+its dropdowns come from a target profile, and a name you pick is
+written into the generated config exactly as shown.  A line under the
+fit-check banner (`migrate-rename-profile-notice`) says what those
+names are worth:
+
+* **Port names describe: …** — the one deployment state the profile
+  covers.  A port's name depends on how the device is deployed, not
+  only on its model: an Aruba 2930F port is `24` standalone and `1/24`
+  as a VSF member; a 3810M says `1/24` with stacking enabled and `24`
+  without; a Juniper QFX5120-48Y port is `xe-` at its default 10G and
+  `et-` at 25G.  If your device is in a different state, the listed
+  names are not yours.
+* **How the names were established** — *checked against a real capture
+  of this model* (re-proven by the test suite on every run), *from
+  published documentation* (the vendor's guides, sometimes public
+  real-device output; nothing re-checks it), or **not verified for
+  this target**, which turns the notice amber.
+* **A caveat**, where there is something that would make the names
+  wrong on your device — an uplink module that may not be fitted, a
+  breakout mode, a stacking prerequisite.
+
+A profile nobody has graded says **Port names not yet graded**.  That
+is not a clean bill of health: check the names against your device.
+The grade covers port names and counts only — not the profile's
+capacity figures (LAG and VLAN ceilings), which are sourced
+separately and, for some vendors, not at all.
+
+Known limitation: choosing a profile does **not** change the
+auto-translated names.  The translator derives each target name from
+the *shape* of the source name — Cisco `GigabitEthernet1/0/1` becomes
+Aruba AOS-S `1/1` — whatever model you select, so with a standalone
+2930F profile the *Auto target* column shows `1/1` while the profile,
+correctly, offers `1`.  Each such row is marked amber with "not on
+profile" counted on its section header; left alone, it renders a port
+name the selected device does not have.  Pick the right port from the
+row's dropdown, or set them all at once through the API's
+`port_rename_map`.
+
 ---
 
 ## Backup-side limitations

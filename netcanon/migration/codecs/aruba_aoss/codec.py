@@ -536,9 +536,10 @@ class ArubaAOSSCodec(CodecBase):
         #   ``; J9850A Configuration Editor`` — older J-prefix part
         #     numbers (J9729A, J9850A, etc.)
         #   ``; JL260A Configuration Editor`` — newer JL-prefix part
-        #     numbers (JL256A, JL260A — found on 2930F / 2930M)
+        #     numbers (JL256A, JL260A — both 2930F)
         #   ``; hpStack_WC Configuration Editor`` — stacking banner
-        #     (multi-member 2930M / 5400 stacks)
+        #     (any stacked or VSF-enabled unit, including a one-member
+        #     stack)
         # All three are unambiguously Aruba/HPE.  Match anywhere in
         # the input (not just first line) because operators sometimes
         # include the prompt-echo + ``show running-config`` command

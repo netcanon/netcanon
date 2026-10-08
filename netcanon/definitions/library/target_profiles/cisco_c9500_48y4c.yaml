@@ -6,6 +6,9 @@ model: C9500-48Y4C
 display_name: "Cisco Catalyst 9500-48Y4C (48x25G + 4x100G)"
 device_class: switch
 stacking: stackwise-virtual
+# deployment_state and the ids below were NOT examined by the 2026-10
+# registry audit; this profile is ungraded.
+deployment_state: "standalone, switch 1"
 ports:
   - {range: "TwentyFiveGigE1/0/1-48", kind: physical, speed: 25gig, sfp: true, notes: "SFP28 1/10/25G"}
   - {range: "HundredGigE1/0/49-52", kind: uplink, speed: 100gig, sfp: true, notes: "QSFP28 40/100G"}

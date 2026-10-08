@@ -9,15 +9,18 @@ YAML files under ``definitions/target_profiles/`` and used by:
 
 1. **UI dropdown options** — the per-port target-name dropdown in the
    Tier 3 rename modal lists only ports the target device actually
-   has.  A 2930F-48 offers ports 1-48 + uplink A1/A2, not a free-form
-   number picker.
+   has.  A standalone 2930F-48G offers ports 1-48 + uplinks 49-52,
+   not a free-form number picker.  An id chosen there is written
+   VERBATIM into the generated config, which is why a profile must
+   describe the hardware and not the codec's formatter (see
+   ``docs/adding-a-target-profile.md`` §3).
 
 2. **Collision detection** — the UI validates uniqueness of target
    port assignments against the profile's known port set.
 
 3. **Fit check** — when the source config has more ports than the
-   selected target profile, the UI surfaces a summary: "source has 52
-   interfaces; target 2930F-48 has 48 + 2 uplinks = 50; 2 interfaces
+   selected target profile, the UI surfaces a summary: "source has 56
+   interfaces; target 2930F-48G has 48 + 4 uplinks = 52; 4 interfaces
    can't be mapped."
 
 4. **Speed compatibility warnings** — source port is 10G but target
@@ -32,18 +35,39 @@ YAML shape (see ``definitions/target_profiles/*.yaml`` for examples)::
 
     vendor: aruba_aoss
     model: 2930F-48G-PoEP
-    display_name: "Aruba 2930F-48G-PoEP (JL256A)"
+    display_name: "Aruba 2930F-48G-PoE+-4SFP+ (JL256A)"
     device_class: switch
     stacking: vsf-capable
+    deployment_state: "standalone (VSF disabled)"
+    evidence: vendor-doc
+    evidence_ref: "HPE QuickSpecs c05052929 V20 (JL256A); ..."
+    caveat: "With VSF enabled every port, uplinks included, takes its member number as a prefix."
     ports:
-      - {id: "1",    kind: physical, speed: gig,   poe: true}
-      - {id: "2",    kind: physical, speed: gig,   poe: true}
+      - {id: "1",  kind: physical, speed: gig,   poe: true}
+      - {id: "2",  kind: physical, speed: gig,   poe: true}
       # ... ports 1-48
-      - {id: "1/A1", kind: uplink,   speed: 10gig}
-      - {id: "1/A2", kind: uplink,   speed: 10gig}
+      - {id: "49", kind: uplink,   speed: 10gig, sfp: true}
+      # ... uplinks 49-52
     lags:
-      max: 24
+      max: 60
       prefix: Trk
+
+Provenance (optional, but required of any profile whose port names
+are doubtful)::
+
+    deployment_state: "pfSense Plus factory default"
+    evidence: inferred          # capture | vendor-doc | inferred
+    evidence_ref: "Netgate manual ..."   # capture: repo-relative fixture path
+    caveat: "pfSense Plus hardware: OPNsense has no image for this board."
+
+``deployment_state`` exists because a port's name is a function of
+the model AND how it is deployed: an Aruba 2930F port is ``24``
+standalone and ``1/24`` as a VSF member, and a profile's flat port
+list can describe only one of those.  ``evidence`` grades the port
+names and counts in that state; ``capture`` is a checked claim — a
+test parses the file named by ``evidence_ref`` and fails if any
+profile port id is absent from it.  ``caveat`` is shown to the
+operator when the profile is selected.
 
 Module variants (chassis-based platforms with swappable uplink
 modules, e.g. Cisco Cat 9300 NM slot, Aruba 3810M expansion slot)::
@@ -51,7 +75,7 @@ modules, e.g. Cisco Cat 9300 NM slot, Aruba 3810M expansion slot)::
     vendor: cisco_iosxe
     model: C9300-24UX
     ports:                              # chassis-fixed access ports
-      - {range: "GigabitEthernet1/0/1-24", kind: physical, speed: 10gig, poe: true}
+      - {range: "TenGigabitEthernet1/0/1-24", kind: physical, speed: 10gig, poe: true}
       - {id: "GigabitEthernet0/0", kind: mgmt, speed: gig}
     modules:
       NM-8X:
@@ -106,14 +130,47 @@ PortKindYaml = Literal[
     "console",   # RS-232 / USB console (rarely in running-config)
 ]
 
+#: How well a profile's port names and counts are established, in the
+#: profile's stated ``deployment_state``.  Ordered strongest first.
+#:
+#: * ``capture`` — every port id appears as a hardware port in a
+#:   committed real capture of this exact model; ``evidence_ref`` names
+#:   the fixture and
+#:   ``tests/unit/migration/test_target_profile_evidence.py`` re-proves
+#:   it on every run, including that the fixture identifies itself as
+#:   this model.  A label that is checked, not asserted.  Two limits:
+#:   the check is one-directional (it does not notice a port the
+#:   profile omits), and on a platform that lists absent hardware in
+#:   its config (a Catalyst 9300 prints every network module's
+#:   interfaces) it proves a module port's NAME, not that the module
+#:   is fitted.
+#: * ``vendor-doc`` — the ids are established for this exact model from
+#:   published sources: the vendor's own documentation (hardware guide,
+#:   data sheet, configuration guide, published device configs) and/or
+#:   real-device output of that model that is public but not committed
+#:   here.  The name is historical; ``evidence_ref`` says which kind of
+#:   source carries each part.  No capture in this repository backs
+#:   them, so nothing re-checks the claim.
+#: * ``inferred`` — derived by analogy with a sibling model, or doubtful
+#:   for the target it is filed under.  Always paired with a ``caveat``.
+ProfileEvidence = Literal["capture", "vendor-doc", "inferred"]
+
 
 class TargetPort(BaseModel):
     """A single port slot on a target device.
 
-    ``id`` is the vendor-native name the user would see in the
-    generated target config (``1``, ``1/A1``, ``port1``, ``ether5``,
-    etc.).  Matches what the corresponding codec's
-    ``format_port_identity`` would emit.
+    ``id`` is the vendor-native name the hardware itself uses, in the
+    profile's stated :attr:`TargetProfile.deployment_state` (``1``,
+    ``1/A1``, ``port1``, ``ether5``, etc.) — the name a real
+    ``show running-config`` from that device prints.  It is written
+    verbatim into the generated target config when the operator picks
+    it.
+
+    It is **not** defined as whatever the codec's
+    ``format_port_identity`` emits.  That reversed rule is how the
+    2930F profiles came to list ``1/A1`` uplinks on a switch with no
+    module slot; the formatter is a heuristic over a name's shape and
+    does not know the model.
     """
 
     id: str
@@ -149,8 +206,10 @@ class TargetModule(BaseModel):
     choice = ``profile.ports + profile.modules[sku].ports``.
 
     ``sku`` is the vendor's part-number-style SKU (``NM-8X``,
-    ``NM-2Q``, ``JL084A``, etc.) when one exists; freeform label
-    otherwise.  Used as the dict key in
+    ``NM-2Q``, ``JL083A``, etc.) when one exists; freeform label
+    otherwise.  Only modules that contribute DATA ports belong here —
+    a stacking module or a power supply shares the J-number namespace
+    on Aruba hardware and is not an uplink choice.  Used as the dict key in
     :attr:`TargetProfile.modules` and as the wire-format value for
     module selection in ``MigrationPlanRequest``.
     """
@@ -176,10 +235,15 @@ class TargetLAGCaps(BaseModel):
     """Maximum number of LAGs the target supports."""
 
     prefix: str = ""
-    """Vendor-native LAG name prefix.  Aruba uses ``Trk``, Cisco uses
-    ``Port-channel``, MikroTik uses ``bond``, OPNsense uses ``lagg``,
-    FortiGate LAGs are user-named (leave empty to indicate free
-    user-chosen name).
+    """Vendor-native LAG name prefix.  Aruba AOS-S uses ``Trk``, Cisco
+    uses ``Port-channel``, MikroTik uses ``bond``, OPNsense uses
+    ``lagg``, FortiGate LAGs are user-named (leave empty to indicate
+    free user-chosen name).
+
+    The rename modal builds each LAG option as ``prefix + number``,
+    verbatim, so whitespace is significant: Aruba AOS-CX writes
+    ``interface lag 1`` and its profile's prefix is ``"lag "`` with a
+    trailing space.
     """
 
 
@@ -193,9 +257,10 @@ class TargetProfile(BaseModel):
     """
 
     vendor: str
-    """Vendor identifier matching one of the codec vendor IDs
-    (``cisco_iosxe``, ``aruba_aoss``, ``mikrotik_routeros``,
-    ``opnsense``, ``fortigate``)."""
+    """Vendor identifier matching one of the codec vendor IDs —
+    ``cisco_iosxe``, ``aruba_aoss``, ``aruba_aoscx``,
+    ``mikrotik_routeros``, ``opnsense``, ``fortigate`` and so on (see
+    ``netcanon/migration/vendors/`` for the full set)."""
 
     model: str
     """Vendor-specific model code, e.g. ``2930F-48G-PoEP`` or ``100E``.
@@ -210,7 +275,41 @@ class TargetProfile(BaseModel):
     stacking: str = ""
     """Free-form stacking capability note: ``""`` (no stacking),
     ``vsf-capable`` (Aruba), ``stackwise`` (Cisco Cat9k), ``""`` for
-    firewalls/routers with no stacking concept."""
+    firewalls/routers with no stacking concept.  This says what the
+    model CAN do; :attr:`deployment_state` says which state the port
+    ids below actually describe."""
+
+    deployment_state: str = ""
+    """The single deployment state the port ids describe, in words an
+    operator recognises — ``"standalone (VSF disabled)"``,
+    ``"stack member 1"``, ``"standalone / Virtual Chassis member 0"``.
+
+    A port's name depends on how the device is deployed, not only on
+    its model: an Aruba 2930F port is ``24`` standalone and ``1/24``
+    as a VSF member, and a flat port list can describe only one.
+    Required (test-enforced) whenever :attr:`stacking` is non-empty.
+    May be empty for a device with no stacking concept, but set it
+    anyway when some other state decides the names — breakout mode
+    (Arista), port speed (Junos), the host OS (Netgate)."""
+
+    evidence: ProfileEvidence | None = None
+    """How well the port names and counts are established — see
+    :data:`ProfileEvidence`.  ``None`` means the profile has not been
+    graded, which is NOT a clean bill of health — the UI says "not
+    yet graded" rather than staying silent.  The 2026-10 registry
+    audit graded the profiles it found a defect in and left the rest."""
+
+    evidence_ref: str = ""
+    """What backs :attr:`evidence`.  For ``capture`` this is the
+    repo-relative path of the committed fixture (test-enforced: the
+    file must exist and contain every port id).  For ``vendor-doc`` it
+    names the document.  Free text otherwise."""
+
+    caveat: str = ""
+    """Operator-visible warning shown when the profile is selected —
+    what is known to be wrong or unverified about it, in one or two
+    sentences.  Required (test-enforced) when ``evidence`` is
+    ``inferred``.  Empty means nothing to warn about."""
 
     ports: list[TargetPort] = Field(default_factory=list)
     """Chassis-fixed ports — always present regardless of module choice.
@@ -246,8 +345,8 @@ class TargetProfile(BaseModel):
     the FortiOS version, Aruba firmware release, Cisco IOS-XE train,
     MikroTik RouterOS branch, etc. against which the cap was
     validated (e.g. ``"FortiOS 7.2 Maximum Values Table, per-VDOM
-    system.interface type vlan"`` or ``"Aruba AOS-S 16.11
-    datasheet"``).  Empty string (default) means the cap was
+    system.interface type vlan"`` or ``"AOS-S 16.11 2930F/2930M
+    Advanced Traffic Management Guide: max-vlans 16-2048"``).  Empty string (default) means the cap was
     populated without a specific version-pin — historically most
     profiles fell into this bucket.  Structured provenance makes
     per-vendor version-tuning passes (e.g. "bump FortiGate caps for
@@ -259,7 +358,7 @@ class TargetProfile(BaseModel):
 
     max_local_users: int | None = None
     """Maximum number of local user accounts.  Real examples:
-    Aruba AOS-S 2930F declares a ``max-users-local`` around 16-64;
+    Aruba CX 6300 documents 64 (63 plus admin);
     Cisco IOS-XE allows up to 65535 concurrently; OPNsense is
     essentially unbounded.  Same None-default + pane-scoped
     banner semantics as ``max_vlans``."""
