@@ -84,6 +84,27 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Every port on an IOS-XR card translated to the same cross-vendor name.**
+  IOS-XR names are `rack/slot/module/port` -- four segments into a
+  three-field identity.  The codec carried the *module* (almost always 0)
+  as the port and parked the real port index where no other vendor looks,
+  so `GigabitEthernet0/0/0/0`, `/5` and `/17` all became `ge-0/0/0` /
+  `GigabitEthernet0/0/0` / `Ethernet0`.  39 ports collapsed onto one in the
+  single hardware capture in the corpus.
+
+  The rack is parked instead: it is 0 on every non-clustered system, so it
+  is the segment that carries no information cross-vendor.  Slot, module
+  and port now survive (`Gi0/0/0/5 -> ge-0/0/5`), same-vendor round-trip is
+  exact, and a foreign three-part name lands at rack 0
+  (`Gi1/0/24 -> GigabitEthernet0/1/0/24`, previously
+  `GigabitEthernet1/0/24/0` with the port in the module position).
+
+  The capability matrix and `docs/vendors/cisco_iosxr.md` described the old
+  behaviour as the fourth segment "dropping to 0", which understated a
+  many-to-one collapse as a cosmetic per-port loss.  Both now say what is
+  actually not carried.  **Re-check any IOS-XR-sourced translation made on
+  v0.7.6 or earlier.**
+
 - **Two physically distinct ports could fuse into one target port with no
   warning at all.**  When a rename sends two source ports to the same target
   name, their VLAN memberships merge on the target.  The detector has two

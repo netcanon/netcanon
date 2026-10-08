@@ -10,13 +10,14 @@ machinery.  Mirrors the shape of
 IOS-XR diverges from IOS-XE in two ways that matter here:
 
 * **4-segment physical port names** — ``GigabitEthernet0/0/0/0``
-  (rack / slot / instance / port), not IOS-XE's 3-segment
-  ``GigabitEthernet0/0/0``.  The 4th segment has no slot in the
-  cross-vendor :class:`PortIdentity` (which models stack / module /
-  port), so it is preserved in ``meta["iosxr_port_index"]`` for the
-  same-vendor round-trip and drops to ``0`` when renaming to a
-  3-segment target (IOS-XE / Arista).  A legacy 3-segment XR form
-  (older CRS) is also accepted defensively.
+  (rack / slot / module / port), not IOS-XE's 3-segment
+  ``GigabitEthernet0/0/0``.  Four segments do not fit the three-field
+  cross-vendor :class:`PortIdentity`, so one is parked in ``meta``:
+  the RACK (``meta["iosxr_rack"]``), which is 0 on every non-clustered
+  system.  Slot, module and port are carried as stack / module / port.
+  (Until 2026-10 it was the PORT that was parked, which collapsed every
+  port on a card onto one cross-vendor name.)  A legacy 3-segment XR
+  form (older CRS) is also accepted defensively.
 * **``Bundle-Ether<N>`` LAGs** (not ``Port-channel<N>``) and
   **``MgmtEth0/RP0/CPU0/0``** management ports.
 
@@ -111,18 +112,34 @@ def classify_port_name(name: str) -> PortIdentity:
         b = int(m.group("b"))
         c = int(m.group("c"))
         d = m.group("d")
+        if d is None:
+            # Three-segment form: no rack segment to park.
+            return PortIdentity(
+                kind="physical", stack=a, module=b, port=c,
+                name_speed_hint=speed, original=name,
+            )
+        # IOS-XR is rack/slot/module/port -- FOUR segments into a
+        # three-field identity, so one must be parked in ``meta``.
+        #
+        # It used to be the PORT.  The module segment (almost always 0)
+        # went into ``PortIdentity.port`` and the real port index into
+        # meta, where no other codec looks -- so EVERY port on a card
+        # formatted to one cross-vendor name: ``Gi0/0/0/0``, ``/5`` and
+        # ``/17`` all became ``ge-0/0/0``.  39 ports collapsed onto one in
+        # the single hardware capture in the corpus.
+        #
+        # Park the RACK instead.  It is 0 on every non-clustered system
+        # (nV Edge, the only multi-rack mode, is unsupported from 6.0.1),
+        # so it is the segment that carries no information cross-vendor.
         ident = PortIdentity(
             kind="physical",
-            stack=a,           # rack
-            module=b,          # slot
-            port=c,            # instance
+            stack=b,           # slot (line card; 0 on a fixed chassis)
+            module=c,          # module / PIC within the slot
+            port=int(d),       # the port -- the segment that must survive
             name_speed_hint=speed,
             original=name,
         )
-        if d is not None:
-            # Preserve the 4th (per-PIC port) segment for same-vendor
-            # round-trip; it has no cross-vendor PortIdentity slot.
-            ident.meta["iosxr_port_index"] = d
+        ident.meta["iosxr_rack"] = str(a)
         return ident
 
     mg = _MGMT_RE.match(name)
@@ -149,11 +166,9 @@ def classify_port_name(name: str) -> PortIdentity:
 def format_port_identity(identity: PortIdentity) -> str | None:
     """Render a :class:`PortIdentity` as a Cisco IOS-XR port name.
 
-    Same-vendor round-trip restores the 4th segment from
-    ``meta["iosxr_port_index"]``; cross-vendor input from a 3-segment
-    naming scheme (IOS-XE / Arista) appends ``/0`` for the missing
-    instance segment (a documented lossy translation surfaced via the
-    rename modal).
+    Same-vendor round-trip restores the rack from ``meta["iosxr_rack"]``;
+    cross-vendor input from a 3-segment naming scheme (IOS-XE / Arista)
+    is placed at rack 0 as ``0/<stack>/<module>/<port>``.
 
     Returns ``None`` for kinds IOS-XR has no native v1 representation for
     (``tunnel`` / ``svi`` / ``vtep`` / ``breakout`` / ``hw_aggregate`` /
@@ -164,11 +179,13 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         prefix = _SPEED_TO_PREFIX.get(
             identity.name_speed_hint, "GigabitEthernet",
         )
-        idx = identity.meta.get("iosxr_port_index", "0")
-        a = identity.stack if identity.stack is not None else 0
-        b = identity.module if identity.module is not None else 0
-        c = identity.port if identity.port is not None else 0
-        return f"{prefix}{a}/{b}/{c}/{idx}"
+        # rack/slot/module/port.  The rack comes back from meta on a
+        # same-vendor round-trip and is 0 for every cross-vendor source.
+        rack = identity.meta.get("iosxr_rack", "0")
+        slot = identity.stack if identity.stack is not None else 0
+        module = identity.module if identity.module is not None else 0
+        port = identity.port if identity.port is not None else 0
+        return f"{prefix}{rack}/{slot}/{module}/{port}"
     if identity.kind == "lag":
         return f"Bundle-Ether{identity.index or 1}"
     if identity.kind == "loopback":
