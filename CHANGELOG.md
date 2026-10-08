@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-10-07
+
 ### Added
 
 - **Kitchen-sink content assertions for the last two codecs, plus a parity
@@ -92,6 +94,16 @@ timestamp if your timezone matters for an audit.
   sentinel is handled: an unconfigured port ends up with no renderable
   attribute and is dropped by the foreign-vendor empty-stub eliser, so the
   operator loses the port *inventory* rather than any configured state.
+
+- **`docs/vendors/arista_eos.md` corrected an over-claim.**  It stated
+  the parser "correctly identifies `mlag` per Port-Channel and
+  round-trips the peer-link mapping".  Measured: zero `mlag` references
+  in that codec's `parse.py` or `render.py`, nothing MLAG-related on the
+  canonical tree, and nothing in the rendered output.  What round-trips
+  is the Port-Channel's name / members / description via `CanonicalLAG`
+  — a LAG surviving, not an MLAG surviving.  `docs/vendors/dell_os10.md`
+  gained the matching detail for VLT, including why modelling it for an
+  IOS-XE target would buy little.
 
 ### Fixed
 
@@ -228,18 +240,6 @@ timestamp if your timezone matters for an audit.
   honest outcome is an accurate banner rather than invented syntax.  The
   isomorphic target would be NX-OS `vpc`, which netcanon also does not
   model.
-
-### Changed
-
-- **`docs/vendors/arista_eos.md` corrected an over-claim.**  It stated
-  the parser "correctly identifies `mlag` per Port-Channel and
-  round-trips the peer-link mapping".  Measured: zero `mlag` references
-  in that codec's `parse.py` or `render.py`, nothing MLAG-related on the
-  canonical tree, and nothing in the rendered output.  What round-trips
-  is the Port-Channel's name / members / description via `CanonicalLAG`
-  — a LAG surviving, not an MLAG surviving.  `docs/vendors/dell_os10.md`
-  gained the matching detail for VLT, including why modelling it for an
-  IOS-XE target would buy little.
 
 ## [0.7.6] - 2026-09-23
 
