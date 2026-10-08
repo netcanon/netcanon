@@ -627,11 +627,49 @@ class TestCapabilityMatrix:
 
 class TestPortNames:
     def test_classify_4seg_physical(self, codec):
+        """rack/slot/module/port: the PORT is carried as the port and the
+        rack is parked in meta.
+
+        This used to assert ``(stack, module, port) == (0, 1, 2)`` with the
+        real port index (3) in meta -- which is the layout that made every
+        port on a card format to one cross-vendor name.
+        """
         ident = codec.classify_port_name("TenGigE0/1/2/3")
         assert ident.kind == "physical"
-        assert (ident.stack, ident.module, ident.port) == (0, 1, 2)
-        assert ident.meta["iosxr_port_index"] == "3"
+        assert (ident.stack, ident.module, ident.port) == (1, 2, 3)
+        assert ident.meta["iosxr_rack"] == "0"
         assert ident.name_speed_hint == "10gig"
+
+    def test_ports_on_one_card_stay_distinct_cross_vendor(self, codec):
+        """The defect, pinned as a property.
+
+        Every port of a fixed XR box shares rack/slot/module ``0/0/0``; only
+        the fourth segment tells them apart.  Each must reach a DIFFERENT
+        name on every other platform -- 39 ports of the one hardware capture
+        in the corpus used to collapse onto a single name.
+        """
+        from netcanon.migration.codecs.registry import get_codec
+
+        names = [f"GigabitEthernet0/0/0/{n}" for n in range(40)]
+        for target in ("juniper_junos", "cisco_iosxe_cli", "arista_eos",
+                       "cisco_nxos", "aruba_aoscx", "dell_os10"):
+            out = [
+                get_codec(target).format_port_identity(
+                    codec.classify_port_name(n)
+                )
+                for n in names
+            ]
+            assert len(set(out)) == len(names), (
+                f"{target}: {len(names)} XR ports collapsed to "
+                f"{len(set(out))} names"
+            )
+
+    def test_4seg_round_trips_exactly(self, codec):
+        for name in ("GigabitEthernet0/0/0/5", "TenGigE0/0/1/2",
+                     "HundredGigE0/3/0/17", "TenGigE1/2/0/4"):
+            assert codec.format_port_identity(
+                codec.classify_port_name(name)
+            ) == name
 
     def test_classify_logical_kinds(self, codec):
         assert codec.classify_port_name("Bundle-Ether5").kind == "lag"
@@ -658,12 +696,13 @@ class TestPortNames:
             assert codec.format_port_identity(ident) == name
 
     def test_format_cross_vendor_3seg_to_4seg(self, codec):
-        """An IOS-XE 3-segment identity (no 4th segment) formats as a
-        4-segment XR name with the instance segment defaulting to 0."""
+        """A three-field foreign identity lands as rack 0 / slot / module /
+        port.  It used to render ``GigabitEthernet1/0/24/0`` -- the port in
+        the MODULE position with a constant port index of 0."""
         iosxe_ident = PortIdentity(
             kind="physical", stack=1, module=0, port=24, name_speed_hint="gig",
         )
-        assert codec.format_port_identity(iosxe_ident) == "GigabitEthernet1/0/24/0"
+        assert codec.format_port_identity(iosxe_ident) == "GigabitEthernet0/1/0/24"
 
     def test_format_lag_cross_vendor(self, codec):
         """A Port-channel (IOS-XE) identity renders as Bundle-Ether."""

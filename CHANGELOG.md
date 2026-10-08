@@ -52,6 +52,17 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **Target profiles must describe hardware, not the formatter.**
+  `docs/adding-a-target-profile.md` instructed authors to derive each port
+  id from `format_port_identity` output.  That reversed dependency is how
+  shipped profiles came to contradict real captures of the same model, and
+  it made a self-consistency check useless -- profile and codec could be
+  wrong together.  The rule now requires a real `show running-config` or
+  the vendor's hardware guide, cited, and lists the four things a port name
+  depends on beyond the model number (deployment state, port speed class,
+  installed module, index base).  The profiles themselves are corrected
+  separately.
+
 - **Unevidenced-loss ratchet tightened 157 → 144, back to measured
   reality.**  The per-pair baseline in
   `tests/integration/test_cross_mesh_ci_guard.py` allows each pair a quota
@@ -83,6 +94,59 @@ timestamp if your timezone matters for an audit.
   operator loses the port *inventory* rather than any configured state.
 
 ### Fixed
+
+- **25G ports translated to Junos were named `xle-`**, a prefix no 25G
+  Junos port has.  `xle` is 40GbE under the QFabric package only; 25G is
+  `et-`.  The literal prefix is now also carried for the same-vendor
+  round-trip, since the speed hint cannot recover it (25G / 40G / 100G all
+  share `et`).
+- **RouterOS port names could carry a negative index.**  A 0-based source
+  (Junos FPC 0, IOS-XR slot 0) drove `stack - 1` below zero, so `xe-0/2/0`
+  rendered as `sfp-sfpplus-800`.
+
+- **Every port on an IOS-XR card translated to the same cross-vendor name.**
+  IOS-XR names are `rack/slot/module/port` -- four segments into a
+  three-field identity.  The codec carried the *module* (almost always 0)
+  as the port and parked the real port index where no other vendor looks,
+  so `GigabitEthernet0/0/0/0`, `/5` and `/17` all became `ge-0/0/0` /
+  `GigabitEthernet0/0/0` / `Ethernet0`.  39 ports collapsed onto one in the
+  single hardware capture in the corpus.
+
+  The rack is parked instead: it is 0 on every non-clustered system, so it
+  is the segment that carries no information cross-vendor.  Slot, module
+  and port now survive (`Gi0/0/0/5 -> ge-0/0/5`), same-vendor round-trip is
+  exact, and a foreign three-part name lands at rack 0
+  (`Gi1/0/24 -> GigabitEthernet0/1/0/24`, previously
+  `GigabitEthernet1/0/24/0` with the port in the module position).
+
+  The capability matrix and `docs/vendors/cisco_iosxr.md` described the old
+  behaviour as the fourth segment "dropping to 0", which understated a
+  many-to-one collapse as a cosmetic per-port loss.  Both now say what is
+  actually not carried.  **Re-check any IOS-XR-sourced translation made on
+  v0.7.6 or earlier.**
+
+- **Two physically distinct ports could fuse into one target port with no
+  warning at all.**  When a rename sends two source ports to the same target
+  name, their VLAN memberships merge on the target.  The detector has two
+  sweeps; the second (for ports named only inside a VLAN's port list) skipped
+  every final name that appeared in `intent.interfaces` -- whether or not the
+  first sweep had actually warned about it.  So a single `interface 1/1`
+  record was enough to suppress the report for a `1/A1` living only in a
+  VLAN list: both rendered as `ge-1/0/1` with `warnings == []`.
+
+  Measured on the committed corpus: **12 real fusions went out silently**
+  (fusion warnings 476 -> 488 across 1188 cells).  The regression guard that
+  existed used a capture with zero interface stanzas -- the one shape this
+  did not mask -- and asserts that it has none.
+
+  Also closed beside it: identity pairs were excluded, so a port renamed
+  ONTO a name another port still held counted as a single source.
+
+  This corrects a statement in the 0.7.6-era notes that every duplicate-name
+  outcome was warned.  That held for duplicates among interface records; it
+  did not hold for fusions living in VLAN membership.  Behaviour is otherwise
+  unchanged -- the translator still warns rather than inventing a distinct
+  port, and an explicit `port_rename_map` entry still resolves it.
 
 - **`snmp-server host <ip>` was emitted with no community string** on
   `arista_eos`, `cisco_iosxe_cli`, `cisco_nxos` and `dell_os10`.  Two

@@ -69,12 +69,17 @@ translatable with caveats:
   `l3_vni` (EVPN Type-5) is not modelled — IOS-XR EVPN is a Tier-3
   `l2vpn` / `evpn` surface.
 - **`/interfaces/interface/4th-port-segment`** — IOS-XR port names
-  have **4 segments** (rack/slot/instance/port) while the
-  cross-vendor `PortIdentity` supports 3 (stack/module/port).  The
-  4th segment is preserved via `PortIdentity.meta['iosxr_port_index']`
-  for the same-vendor round-trip but **drops to `0`** when renaming to
-  a 3-segment target (IOS-XE / Arista).  Verify port mappings via the
-  rename modal.
+  have **4 segments** (rack/slot/module/port) while the
+  cross-vendor `PortIdentity` supports 3 (stack/module/port).  Slot,
+  module and port are carried; the **rack** is kept for the same-vendor
+  round-trip only and is not carried cross-vendor (it is `0` on every
+  non-clustered system).  Verify port mappings via the rename modal.
+  ⚠️ Releases up to and including v0.7.6 parked the *port* instead:
+  every port on a card translated to the **same** cross-vendor name
+  (`Gi0/0/0/0`, `/5` and `/17` all became `ge-0/0/0`).  This page
+  described that as the segment "dropping to 0", which understated a
+  many-to-one collapse.  Re-check any IOS-XR-sourced translation made
+  on those releases.
 - **`/interfaces/interface/config/type`** — interface type is
   inferred from the name prefix (GigabitEthernet → ethernetCsmacd,
   Bundle-Ether → ieee8023adLag, etc.); sub-interfaces with

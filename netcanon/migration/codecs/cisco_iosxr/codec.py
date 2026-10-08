@@ -257,14 +257,13 @@ class CiscoIOSXRCodec(CodecBase):
                 path="/interfaces/interface/4th-port-segment",
                 reason=(
                     "IOS-XR port names use 4 segments (rack/slot/"
-                    "instance/port) while the cross-vendor PortIdentity "
-                    "supports only 3 (stack/module/port).  The 4th "
-                    "segment is preserved via "
-                    "PortIdentity.meta['iosxr_port_index'] for the "
-                    "same-vendor round-trip but DROPS to '0' when "
-                    "renaming to a 3-segment target (IOS-XE / Arista). "
-                    "Operators must verify port mappings via the rename "
-                    "modal."
+                    "module/port) while the cross-vendor PortIdentity "
+                    "supports only 3 (stack/module/port).  Slot, module "
+                    "and port are carried; the RACK segment is kept in "
+                    "PortIdentity.meta['iosxr_rack'] for the same-vendor "
+                    "round-trip and is not carried cross-vendor (it is 0 "
+                    "on every non-clustered system).  Operators must "
+                    "verify port mappings via the rename modal."
                 ),
                 severity="warn",
             ),
