@@ -158,20 +158,45 @@ max_local_users: 64
 
 ### 3. Enumerate ports correctly
 
-Each `id` (or each value the `range:` shorthand expands to) MUST
-match the codec's `format_port_identity` output for the corresponding
-vendor — operators see these strings in the rename UI's target
-dropdowns.  A mismatch silently breaks rename-mesh suggestion
-("source `1/1` cannot be mapped to anything in the target's port
-list").
+Each `id` (or each value the `range:` shorthand expands to) MUST be
+the name **the hardware itself uses** for that port — taken from a real
+`show running-config` of that exact model, or failing that from the
+vendor's hardware installation guide.  Cite which in a comment.
 
-For Aruba AOS-S, `format_port_identity` in
-[`netcanon/migration/codecs/aruba_aoss/port_names.py`](../netcanon/migration/codecs/aruba_aoss/port_names.py)
-emits forms like `1/24` (two-part stack/port) and `1/A1` (uplink with
-subslot letter).  That's why the profile uses `1/N` access ports and
-`1/A1`-style uplink ids — exactly what AOS-S would render.  Cisco's
-`format_port_identity` emits `GigabitEthernet1/0/1`, not `Gi1/0/1` —
-target profiles use the long form for the same reason.
+**Never derive a port id from `format_port_identity` output.**  This
+section used to instruct exactly that, and it is how shipped profiles
+came to describe the formatter instead of the device: the 2930F
+profiles listed `1/A1-1/A4` uplinks on a switch that has no module slot
+(a real 2930F-48G names them `49-52`), and the C9300-24UX profile
+listed `GigabitEthernet1/0/N` where the committed capture of that model
+shows `TenGigabitEthernet1/0/N`.  A profile that agrees with the codec
+proves nothing — both can be wrong together, and a self-consistency
+check cannot see it.  The 2026-10 audit found a wrong port name or
+count in 17 of 54 profiles.
+
+Things a port name depends on that the model number alone does not
+settle — check each against the capture or guide:
+
+* **Deployment state.**  An AOS-S 2930F is `24` standalone and `1/24`
+  under VSF; a 2930M / 3810M / 2920 flips the same way with stacking.
+  A profile describes ONE state; say which.
+* **Port speed class.**  The interface-type prefix follows the port's
+  hardware class, not a speed table: C9300-24U is `GigabitEthernet`,
+  C9300-24UX is `TenGigabitEthernet`.
+* **Installed module.**  Uplink names come from the module fitted, and
+  "no module" is a valid configuration.
+* **Index base.**  Junos starts at 0, Catalyst switches at 1, IOS-XE
+  routers at 0.  It is per platform, not per vendor.
+
+Use the long form the device prints (`GigabitEthernet1/0/1`, not
+`Gi1/0/1`).  If the codec cannot classify or reproduce a name the
+hardware genuinely uses, that is a codec gap to report — not a reason
+to change the profile.
+
+> ⚠️ The worked example in step 2 above (the 6300M) is itself wrong and
+> is kept only until the profile is corrected: the 6300 runs AOS-CX, not
+> AOS-S; it stacks with VSF, not VSX; and its ports are `1/1/1-1/1/48`
+> with uplinks `1/1/49-1/1/52` — AOS-CX has no letter slots.
 
 ### 4. Set `max_vlans` and `max_local_users`
 
