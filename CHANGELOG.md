@@ -52,6 +52,17 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **Target profiles must describe hardware, not the formatter.**
+  `docs/adding-a-target-profile.md` instructed authors to derive each port
+  id from `format_port_identity` output.  That reversed dependency is how
+  shipped profiles came to contradict real captures of the same model, and
+  it made a self-consistency check useless -- profile and codec could be
+  wrong together.  The rule now requires a real `show running-config` or
+  the vendor's hardware guide, cited, and lists the four things a port name
+  depends on beyond the model number (deployment state, port speed class,
+  installed module, index base).  The profiles themselves are corrected
+  separately.
+
 - **Unevidenced-loss ratchet tightened 157 → 144, back to measured
   reality.**  The per-pair baseline in
   `tests/integration/test_cross_mesh_ci_guard.py` allows each pair a quota
@@ -83,6 +94,15 @@ timestamp if your timezone matters for an audit.
   operator loses the port *inventory* rather than any configured state.
 
 ### Fixed
+
+- **25G ports translated to Junos were named `xle-`**, a prefix no 25G
+  Junos port has.  `xle` is 40GbE under the QFabric package only; 25G is
+  `et-`.  The literal prefix is now also carried for the same-vendor
+  round-trip, since the speed hint cannot recover it (25G / 40G / 100G all
+  share `et`).
+- **RouterOS port names could carry a negative index.**  A 0-based source
+  (Junos FPC 0, IOS-XR slot 0) drove `stack - 1` below zero, so `xe-0/2/0`
+  rendered as `sfp-sfpplus-800`.
 
 - **Every port on an IOS-XR card translated to the same cross-vendor name.**
   IOS-XR names are `rack/slot/module/port` -- four segments into a

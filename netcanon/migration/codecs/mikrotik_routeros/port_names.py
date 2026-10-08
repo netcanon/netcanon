@@ -242,7 +242,10 @@ def _flat_port_index(identity: PortIdentity) -> int:
     port = identity.port if identity.port is not None else 1
     if stack <= 1 and module == 0:
         return port
-    return (stack - 1) * 1000 + module * 100 + port
+    # ``max(..., 0)``: a 0-based source (Junos FPC 0, IOS-XR slot 0) has
+    # stack == 0, and ``stack - 1`` made the whole index NEGATIVE --
+    # ``xe-0/2/0`` rendered as ``sfp-sfpplus-800``, which is not a name.
+    return max(stack - 1, 0) * 1000 + module * 100 + port
 
 
 def format_port_identity(identity: PortIdentity) -> str | None:

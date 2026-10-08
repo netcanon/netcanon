@@ -75,7 +75,11 @@ _MEDIA_TO_SPEED: dict[str, str] = {
     "fe": "fast",
     "ge": "gig",
     "mge": "2.5gig",   # multi-gigabit ethernet (newer EX/QFX)
-    "xle": "25gig",    # 25G
+    # ``xle`` is 40GbE, and only under the QFabric software package on
+    # QFX3500 / 3600 / 5100.  It was mapped to 25G here until 2026-10,
+    # which made every 25G port translated TO Junos come out as
+    # ``xle-...`` -- a name no 25G Junos port has.  25G is ``et-``.
+    "xle": "40gig",
     "xe": "10gig",
     "et": "100gig",    # 40G or 100G; Junos uses the same prefix
 }
@@ -92,6 +96,12 @@ def classify_port_name(name: str) -> PortIdentity:
             stack=int(m.group("fpc")),
             module=int(m.group("pic")),
             port=int(m.group("port")),
+            # The literal prefix, for the same-vendor round-trip: the
+            # speed hint is lossy (25G / 40G / 100G all share ``et``, and
+            # ``xle`` is a QFabric-only spelling of 40G), so re-deriving
+            # the prefix from it could rename a Junos port on its way
+            # back to Junos.
+            meta={"junos_media": media},
             name_speed_hint=_MEDIA_TO_SPEED.get(media, ""),
             original=name,
         )
@@ -156,13 +166,13 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         # Speed hint drives media prefix.  Default to ``ge`` when no
         # hint — better than refusing to render altogether.
         speed = identity.name_speed_hint or "gig"
-        media = {
+        media = identity.meta.get("junos_media") or {
             "fast": "fe",
             "gig": "ge",
             "2.5gig": "mge",
             "5gig": "mge",     # 5G is less common; folded into mge
             "10gig": "xe",
-            "25gig": "xle",
+            "25gig": "et",     # 25G / 40G / 100G / 400G all use et-
             "40gig": "et",
             "100gig": "et",
             "400gig": "et",
