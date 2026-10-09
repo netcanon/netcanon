@@ -56,6 +56,8 @@ netcanon/migration/codecs/<vendor>/
 ├── render.py           # (fortigate_cli) canonical tree → vendor text;
 │                       # thin codec.render() delegates here
 ├── port_names.py       # pure classify_port_name + format_port_identity
+│                       # (+ the model naming rule, physical_port_name,
+│                       # where a device-model family names its ports)
 │                       # (ALL four CLI codecs have this — mandatory
 │                       # when the codec participates in the Tier-3
 │                       # rename orchestrator; see cross-vendor mesh
@@ -167,6 +169,36 @@ class MyVendorCodec(CodecBase):
     # see up-front that overrides won't reach rendered output.  Remove
     # entries as the codec gains each category's round-trip coverage.
     unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset()
+
+    # Can a name that differs from an interface's only in letter case
+    # be ANOTHER interface on this platform?  True where an operator
+    # chooses interface names as free text and case keeps them apart
+    # (FortiOS, RouterOS).  False where the device reads two spellings
+    # as one (IOS, EOS, AOS-S) -- and also where every interface name
+    # is the system's and is lower-case (Junos, VyOS, OPNsense), since
+    # another case is then a misspelling of the same port.
+    # Model-to-model port mapping compares final names by this rule.
+    # There is no safe default: False where case tells two interfaces
+    # apart merges an operator's interface into a port in a job that
+    # reports success; True where it does not lets a misspelling pass
+    # beside the port.  State it in every codec's class body --
+    # `test_the_codecs_say_which_they_are` fails for a public codec
+    # that inherits it.
+    port_names_case_sensitive: ClassVar[bool] = False
+
+    # Does the platform find a port by a factory name kept beside the
+    # name an operator gave it (RouterOS `set [ find
+    # default-name=ether1 ] name=WAN`)?  Leave it out unless your
+    # parser fills `CanonicalInterface.default_name`: then set it to
+    # True, and model-to-model port mapping will set that field to
+    # the port of the declared target each placed port is on -- and
+    # then parse your renderer's OUTPUT again to see that each port
+    # has a line of its own that looks it up, so your parser must
+    # read that lookup back from your own output.
+    # `test_the_flag_is_what_the_captures_show`
+    # (tests/unit/migration/test_port_name_universe.py) reads the
+    # flag off your committed captures.
+    # ports_keep_a_factory_name: ClassVar[bool] = True
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         vendor_id="myvendor",

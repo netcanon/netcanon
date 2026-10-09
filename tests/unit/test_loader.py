@@ -467,6 +467,25 @@ class TestResolveLongestMatch:
         assert hit.notes == "overlay 17.12"
 
 
+# Shaped like a real definitions/model_families/*.yaml — a model FAMILY
+# (netcanon.migration.device_models.FamilyDef), again not a
+# DeviceDefinition.
+MODEL_FAMILY = textwrap.dedent("""\
+    schema: 1
+    vendor: aruba_aoss
+    family: Testbox
+    naming: aoss
+    default_mode: standalone
+    modes:
+      standalone: {label: "standalone", naming: {grade: vendor-doc}}
+    models:
+      TB-8:
+        panel: {grade: vendor-doc}
+        ports:
+          - {role: access, count: 8}
+""")
+
+
 # ---------------------------------------------------------------------------
 # Reserved sibling subdirectories (target_profiles/) are skipped
 # ---------------------------------------------------------------------------
@@ -523,6 +542,50 @@ class TestLoaderReservedSubdirs:
         (tp / "opnsense_generic.yaml").write_text(TARGET_PROFILE, encoding="utf-8")
         with pytest.raises(RuntimeError, match=r"No \*.yaml"):
             DefinitionLoader(tmp_path).load_all()
+
+    def test_model_families_subdir_is_skipped_without_a_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        """``model_families/`` is the third schema under the definitions
+        root.  Unreserved, every family file would fail
+        ``DeviceDefinition`` validation and log a WARNING at boot."""
+        (tmp_path / "cisco.yaml").write_text(VALID_CISCO, encoding="utf-8")
+        families = tmp_path / "model_families"
+        families.mkdir()
+        (families / "aruba_aoss_testbox.yaml").write_text(
+            MODEL_FAMILY, encoding="utf-8"
+        )
+        with caplog.at_level(logging.WARNING, logger="netcanon.definitions.loader"):
+            profiles = DefinitionLoader(tmp_path).load_all()
+        assert list(profiles) == ["Cisco"]
+        assert "Validation error" not in caplog.text
+        assert "model_families" not in caplog.text
+
+    @pytest.mark.parametrize("reserved", ["target_profiles", "model_families"])
+    def test_a_same_named_folder_deeper_in_the_tree_is_not_reserved(
+        self, tmp_path: Path, reserved: str,
+    ):
+        """Only an immediate child of the root is another loader's.
+        An operator who files ordinary backup definitions under
+        ``site-a/model_families/`` must not find those device types
+        gone, with no message, after an upgrade reserves the name."""
+        nested = tmp_path / "site-a" / reserved
+        nested.mkdir(parents=True)
+        (nested / "cisco.yaml").write_text(VALID_CISCO, encoding="utf-8")
+        assert "Cisco" in DefinitionLoader(tmp_path).load_all()
+
+    def test_the_shipped_library_loads_without_a_validation_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ):
+        """Every YAML under the shipped library is either a device
+        definition or sits in a reserved subdirectory.  A new sibling
+        directory that is not reserved shows up here as a WARNING per
+        file."""
+        from netcanon.definitions import LIBRARY_DIR
+
+        with caplog.at_level(logging.WARNING, logger="netcanon.definitions.loader"):
+            DefinitionLoader(LIBRARY_DIR).load_all()
+        assert "Validation error" not in caplog.text, caplog.text[:2000]
 
     def test_non_reserved_subdir_still_loads(self, tmp_path: Path):
         """Exclusion is scoped to the reserved name only — other nested

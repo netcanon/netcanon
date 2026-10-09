@@ -193,6 +193,29 @@ pipeline — they just aren't pinned by a fixture yet").
   there is no correct target port to invent.  Supply an explicit
   `port_rename_map` entry per uplink port, e.g.
   `{"1/A1": "xe-1/1/1"}`, to place them somewhere distinct.
+- **Moving between AOS-S models** — an AOS-S port's name depends on
+  the model, its uplink module and whether stacking or VSF is on, and
+  a same-vendor translation does not rename ports by itself.  Declare
+  both switches on the API and the ports are paired by position: a
+  standalone 2930F's `49`-`52` become a stacked 2930M's `1/A1`-`1/A4`.
+  A VSF fabric or a stack of several switches can be declared on
+  either side, or on both: its members pair in the order you list
+  them, not by member number (see
+  [`CAPABILITIES.md`](../CAPABILITIES.md) section G).  The `vsf` or
+  `stacking` stanza itself — which switches the stack is made of,
+  their priorities, the ports a fabric uses as its links — and the
+  `oobm` block, per-member addresses included, are not carried into
+  the output; set the target stack up as its own.  The job has no
+  warning for this: it is said here, and in the plan's `caveats`
+  where the 2930F fabric or 2930M stack is declared from a model
+  family.
+  The 2930F and 2930M series are modelled; a 3810M can be declared
+  through its target profile; a switch with neither cannot be declared
+  yet.  Only the port names are translated: a config that removes
+  ports from VLAN 1 with `no untagged` does not get that line back, so
+  on a factory-default target those ports stay untagged members of
+  VLAN 1 unless another VLAN claims them — check VLAN 1 on the result.
+  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **Hash portability** — `sha1` hashes don't translate to all
   targets cleanly; review-comment surfaces in the rendered output
   when targeting incompatible vendors.

@@ -16,12 +16,17 @@ API surface).
 from __future__ import annotations
 
 import heapq
+import json
 import logging
+import math
 from collections import defaultdict
 from http import HTTPStatus
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -131,8 +136,21 @@ def _render_error_page(request: Request, status_code: int) -> Response:
     )
 
 
+def _finite(value: Any) -> Any:
+    """*value* with every ``NaN`` / ``Infinity`` float replaced by its
+    text, at any depth."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _finite(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_finite(item) for item in value]
+    return value
+
+
 def register_exception_handlers(app: FastAPI) -> None:
-    """Wire the themed 404/500 handlers onto *app*.
+    """Wire the themed 404/500 handlers, and the handler for a
+    request that fails validation, onto *app*.
 
     Called from ``create_app`` after the routers are mounted.  Lives
     here (not in ``main.py``) so it can reuse this module's configured
@@ -151,6 +169,28 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=exc.status_code,
             headers=getattr(exc, "headers", None),
         )
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error_handler(
+        request: Request, exc: RequestValidationError
+    ) -> Response:
+        # The same body FastAPI builds by default, ASCII-escaped.  Its
+        # own handler echoes the offending input and then encodes the
+        # response as UTF-8; a lone surrogate in that input (which is
+        # valid JSON: "\ud800") cannot be encoded, and the 422 became
+        # a 500 with a traceback in the log.  Escaped, any input can be
+        # sent back, and for every request that was a 422 before the
+        # body parses to exactly the same JSON.
+        #
+        # One more thing the JSON parser takes on the way in and JSON
+        # does not have on the way out: NaN and Infinity.  They are
+        # echoed as text, so the body is always strict JSON (a browser's
+        # JSON.parse refuses a bare NaN).
+        body = json.dumps(
+            {"detail": _finite(jsonable_encoder(exc.errors()))},
+            ensure_ascii=True, allow_nan=False, separators=(",", ":"),
+        )
+        return Response(body, status_code=422, media_type="application/json")
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(

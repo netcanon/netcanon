@@ -301,6 +301,43 @@ structural shift, create `netcanon/migration/canonical/transforms.py`
 helpers and wire them in each codec's `parse()` after the per-line
 extraction.
 
+### A field that holds a port name
+
+If the new field references a port or interface by name (as
+`static_routes[].interface` and `vxlan_vnis[].source_interface` do), it
+has two more places to go in the same change, both in
+`netcanon/migration/canonical/port_names.py`: the rename pass in
+`translate_port_names`, so the name is translated with the rest, and
+`collect_port_names`, the list of port names a tree holds.
+Model-to-model port mapping checks a finished translation over that
+list — a place missing from it is a name the check never looks at,
+and a place missing from the rename pass is a name that stays behind
+when its port moves.
+
+Two tests hold you to it, both in `test_port_name_universe.py`.  One
+builds a canonical tree from the schema, with a name of its own in
+every `str` and `list[str]` field, and requires the rename pass, the
+collector and the module's table of places (`_PLACES`) to name the
+same fields: a field you add to one and not the others fails, and
+there is no fixture to remember.  If your field holds text in another
+shape — a dict, a tuple, a set, a union — the builder itself fails
+until you teach it the shape (`_filled`) or list the field as holding
+no port name (`_TEXT_NOT_FILLED`).
+The other, because lists that agree can all be incomplete, sends
+port names to one another on the committed captures and fails for a
+value of the re-parsed output that did not follow.  That experiment
+reaches your field only if a committed capture puts a port name in it
+and the codec's parser reads it back — so, unless
+`TestWhatTheExperimentReaches` shows a capture catching it, add a
+small config to `_SMALL_CONFIGS`.
+
+A field that says *which hardware* a port is, rather than referring
+to a port by name, is a different thing and does not go in the sweep:
+RouterOS's factory name (`interfaces[].default_name`) is the worked
+example.  Rewritten with the port's name it broke every entry that
+merely names a port; see "A port's hardware identity is not a
+reference to it" in `ARCHITECTURE.md`.
+
 ### Per-vendor quirks go in codec code, not canonical
 
 The canonical model should stay cross-vendor-clean.  Vendor-specific

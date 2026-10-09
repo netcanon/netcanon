@@ -169,6 +169,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings.definitions_dir / "target_profiles"
         )
 
+        # Load device-model families (model-to-model port mapping).
+        # The shipped families always load; an operator's own
+        # ``model_families/`` under a relocated definitions directory
+        # is laid over them.
+        from .migration.device_models import load_model_families
+        _app.state.model_families = load_model_families(
+            settings.definitions_dir
+        )
+
         # Verify storage directories are writable before proceeding.
         # ``effective_data_dir`` honours an explicit Settings.data_dir
         # override (used by desktop preferences) and otherwise falls back

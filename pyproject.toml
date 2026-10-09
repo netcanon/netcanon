@@ -188,7 +188,8 @@ netcanon = [
     "templates/_vendor/*.css",
     "templates/_vendor/*.js",
     # Device-definition library (per-vendor `*.yaml` + Tier-3
-    # `target_profiles/`).  These MUST ship in the wheel: the app loads
+    # `target_profiles/` + `model_families/`).  These MUST ship in the
+    # wheel: the app loads
     # them at startup via DefinitionLoader, and the default
     # `definitions_dir` resolves to this packaged copy
     # (`netcanon/definitions/library/`, see netcanon.config).  A wheel

@@ -18,6 +18,26 @@ definitions/
 The path is purely cosmetic — the loader uses recursive glob (`*.yaml`) and
 ignores directory names.  Use the tree to keep things organised.
 
+These directory names are **reserved** directly under the definitions root,
+because the YAML in them belongs to a different loader and a different
+schema:
+
+| Directory | Holds | Schema / guide |
+|---|---|---|
+| `target_profiles/` | one hardware-shape file per model, for the rename modal | [`docs/adding-a-target-profile.md`](../../../docs/adding-a-target-profile.md) |
+| `model_families/` | one file per device family, for model-to-model port mapping | [`docs/adding-a-device-model.md`](../../../docs/adding-a-device-model.md) |
+
+Everything beneath either is skipped by the device-definition loader.  Only
+an immediate child of the root is reserved: a folder of the same name
+further down your own tree (`site-a/model_families/`) is ordinary and its
+definitions load.  That cuts both ways: target-profile or model-family
+files kept in such a nested folder are not read by their own loader, and
+the device-definition loader logs a validation warning for each.
+
+A model-family file of your own adds a new family.  It cannot replace a
+family netcanon ships, nor add a model to one, and one that cannot be
+loaded is logged and skipped.
+
 ## Full Schema Reference
 
 ```yaml

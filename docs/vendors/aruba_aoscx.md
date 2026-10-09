@@ -161,6 +161,12 @@ source, plus configs exercising symmetric-IRB **L3VNI**, **VSX**, and
   **inverse** of NX-OS (where ports are L2 by default).  A physical
   port with no `no routing` is a routed interface; the switchport L2
   model engages only when the port opts out of routing.
+- **Declaring an AOS-CX switch as the source device** — no model
+  family describes an AOS-CX switch yet, so it is declared through a
+  target profile.  The shipped 6300M profile lists no management
+  port, so a config that uses `interface mgmt` reports it as
+  off-inventory and the job is `partial`.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **`active-gateway` is the anycast, not VRRP.**  The supported
   distributed-gateway surface is `active-gateway ip` / `active-gateway
   ip mac`; classic VRRP (`vrrp <vrid>`) is a later phase and drops.

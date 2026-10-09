@@ -122,6 +122,55 @@ def classify_port_name(name: str) -> PortIdentity:
     return PortIdentity(kind="unknown", original=name)
 
 
+def physical_port_name(*, member: int | None, slot: str, port: int) -> str:
+    """Compose the name AOS-S gives a physical port.
+
+    This is the AOS-S naming GRAMMAR, written down once:
+    ``[member "/"] [slot-letter] port-number``.  It is used by
+    :mod:`netcanon.migration.device_models` to render a model's port
+    inventory, and is deliberately separate from
+    :func:`format_port_identity`, which guesses an AOS-S name from the
+    shape of another vendor's name and does not know the model.
+
+    * ``member`` is the stack / VSF member id, or ``None`` when the
+      switch is not in stacking mode.  The segment is then ABSENT —
+      not ``1/``: a standalone 2930F port is ``24``, the same port as
+      a VSF member is ``1/24``, and a lone member need not be 1.
+    * ``slot`` is the flexible-module or line-card letter (``A``), or
+      ``""`` for the fixed front panel.  AOS-S has no numeric module
+      segment; fixed ports simply have no letter.
+    * ``port`` is 1-based.  On the fixed panel it runs straight on
+      through built-in uplinks (``49``..``52`` on a 48-port 2930F);
+      inside a lettered slot it restarts at 1.
+
+    There is no media or speed prefix in an AOS-S port name.
+
+    Args:
+        member: Member id, or ``None`` outside stacking mode.
+        slot: Slot letter, or ``""`` for the fixed panel.
+        port: 1-based port number within the slot.
+
+    Returns:
+        The port name, e.g. ``24``, ``A1``, ``1/24``, ``1/A1``.
+
+    Raises:
+        ValueError: *port* or *member* is below 1, or *slot* is not
+            empty or a single ASCII letter.
+    """
+    if port < 1:
+        raise ValueError(f"AOS-S port numbers are 1-based; got {port}")
+    if member is not None and member < 1:
+        raise ValueError(f"AOS-S member ids are 1-based; got {member}")
+    # ASCII only: ``str.isalpha`` admits letters whose upper-case form
+    # is not one character (``"\u00df".upper()`` is ``"SS"``).
+    if slot and not (len(slot) == 1 and slot.isascii() and slot.isalpha()):
+        raise ValueError(
+            f"an AOS-S slot is a single letter or empty; got {slot!r}"
+        )
+    token = f"{slot.upper()}{port}"
+    return token if member is None else f"{member}/{token}"
+
+
 def format_port_identity(identity: PortIdentity) -> str | None:
     """Render a :class:`PortIdentity` as an AOS-S port name.
 

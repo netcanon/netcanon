@@ -417,6 +417,7 @@ Full workflow is in [`BUG_REPORTING.md`](BUG_REPORTING.md).
 | Add or change an HTTP route | [`netcanon/api/routes/README.md`](netcanon/api/routes/README.md) — frozen pipeline-stage signatures, endpoint inventory |
 | Add a new codec | [`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md) |
 | Add a new device definition / target profile | [`netcanon/definitions/library/README.md`](netcanon/definitions/library/README.md) |
+| Add a device model family (model-to-model port mapping) | [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md) |
 | Add a new canonical field | [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) |
 | Ship a feature across web + desktop | [`docs/feature-parity-walkthrough.md`](docs/feature-parity-walkthrough.md) |
 | See what's shipped recently | [`CHANGELOG.md`](CHANGELOG.md) |

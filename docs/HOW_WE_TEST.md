@@ -115,6 +115,67 @@ parse → render → parse → assert structural equality.
 Per-codec round-trip suites live under
 `tests/unit/migration/codecs/<vendor>/`.
 
+**Port names are checked against the hardware, not against the
+code.**  A port name from a target profile or a device model is
+written verbatim into a generated config, and a self-consistency
+check cannot catch a wrong one — the data and the codec can be wrong
+together.  So the model data has guards of its own
+(`test_target_profile_evidence.py`, `test_device_models_shipped.py`):
+every `capture` grade is re-proven against the committed real capture
+it cites, which must identify itself as that exact model; the port
+names and roles of every shipped model, in every deployment mode and
+with every module, are pinned from hand-typed tables in the test
+rather than regenerated from the code under test; and which part
+number is which model is a table, not a comment.  A model-to-model
+translation is additionally checked, on the jobs of
+`test_run_plan_with_models.py`, in two ways: for a hardware port
+sharing a target name with another name (the grouping recomputed in
+the test), and — reading the rendered output back with the target
+codec — for an interface that is not on the port the job reports, a
+port in the output the job does not report, a name that moved and is
+still there, an interface carrying the addresses of two, or — on a
+target that finds a port by a factory name — a paired port that
+carries no address going by a name the output uses and nothing
+defines.  Between two AOS-S configs, whose ports carry no address,
+every VLAN list and LAG member list is compared as well: between two
+stacks nothing else can tell one member's config from another's.
+Each of
+those checks is also handed a defective job and required to fail: a
+check nobody has seen fail is not known to check anything — and the
+wrapper is handed one for each of its assertions, since a check that
+is never called passes every test as well.  The
+cross-mesh audit below does not exercise model-to-model mapping: it
+runs without declared devices.
+
+**A renamed port must take everything with it.**  The port
+translator rewrites port names in a list of places.  A list cannot
+show that it is complete, and a test that walks the same list agrees
+with it — a place nobody listed stays invisible to both.  So
+`test_port_name_universe.py` also runs an experiment that needs no
+list.  On the committed captures it sends port names to one another
+through the real translator and renderer, and compares the output,
+parsed again, with the unmoved output in which the same names are
+sent to one another.
+
+What that reaches is narrower than "no list" suggests, and the
+module tests it rather than asserting it.  It reaches a field only
+where a committed capture puts a moved name in it *and* the codec's
+own parser reads the field back from its own rendering; the captures
+that have no two ports to exchange are pinned by name, so the
+experiment cannot shrink unnoticed.  The translator is then broken at
+each place in turn: which places a capture catches is pinned, and
+each of the others has a small config in the module that does.  The
+module's table of places, the rename pass and the collector are
+compared on a tree built from the canonical schema — a name in every
+`str` and `list[str]` field — so a new field cannot be in one and not
+the others; a field that holds text in another shape fails the
+builder until someone says what it is.  It
+moves names the device already has, so what happens to a name that
+is *new* — a RouterOS port an operator calls `WAN` — is pinned by
+hand beside it.  And it runs twice: without devices declared, where
+a port's hardware identity must stand still, and with the device
+declared on both sides, where it must follow.
+
 ### Layer 2: Integration tests
 
 `pytest tests/integration` — HTTP API surface via FastAPI

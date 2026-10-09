@@ -84,6 +84,13 @@ behaviours the current codec hasn't been tested against.
 * **OPNsense 24.x or 23.x `config.xml`** with VLAN tagging on parent
   interfaces (not 802.1Q sub-interfaces).  We have grammar for VLANs
   but no real-capture for that exact form.
+* **An Aruba AOS-S stack or VSF fabric of more than one member**
+  (2930F VSF; 2930M / 3810M backplane stack): a `show running-config`
+  that names ports of a second member (`2/1`, `2/A1`), with its `vsf`
+  or `stacking` stanza and a `trunk` that a VLAN lists.  The corpus
+  has one-member stacks only (the five-member template is rendered
+  with member 1's ports alone), so pairing two stacks member by
+  member is tested on configs written for the tests.
 * **FortiGate physical-appliance VPN/IPsec heavy config** from any
   OS version.  Current FortiGate fixtures are SD-WAN / firewall
   focussed; an IPsec-heavy capture (multiple phase1-interface /

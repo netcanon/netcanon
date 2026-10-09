@@ -1,0 +1,212 @@
+# Aruba 2930M switch series (ArubaOS-Switch, WC firmware branch)
+#
+# A fixed-port access switch with ONE uplink bay, lettered `A`, and a
+# separate slot for a backplane stacking module.  Both ship EMPTY.
+# Three facts decide every port name on it:
+#
+#   * The fixed panel is numbered 1-24 or 1-48 with no gaps.  A
+#     dual-personality (combo) port is ONE interface: its RJ-45 jack and
+#     its SFP cage share a number, so a 24-port model has exactly 24
+#     fixed names.
+#   * A module's ports take the bay letter and restart at 1: `A1`..`A4`
+#     for a four-port module, `A1` for the one-port QSFP+ module.  With
+#     the bay empty there is no `A` port at all.
+#   * Stacking decides whether names carry a member number.  With
+#     stacking enabled every port is `<member>/<port>` -- `1/48`,
+#     `1/A1` -- and that is true of a lone switch too, which is then a
+#     one-member stack.  With stacking disabled the same ports are `48`
+#     and `A1`.  Which state a unit is in depends on its history, not
+#     its model: stacking is enabled by default if the stacking module
+#     (JL325A) is fitted at first power-up, and disabled, and saved as
+#     disabled, if it is not.
+#
+# `ports:` lists are in PORT-NUMBER order.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   QS    HPE QuickSpecs "HPE Aruba Networking 2930M Switch Series",
+#         a00004551enw, V30 (27 February 2026): per-J-number I/O ports
+#         and slots.
+#   IGSG  Aruba 2930M Switches Installation and Getting Started
+#         Guide, part number 5200-5214b, Edition 3 (July 2019), HPE
+#         document a00015161en_us: Table 3 (network ports per
+#         J-number), Table 9 (which module each chassis accepts),
+#         stacking chapter.
+#   ATMG  AOS-S 2930F / 2930M Advanced Traffic Management Guide for
+#         AOS-S 16.11: stack management (pp.252-260, 291-293: "port 10
+#         on [member 3] would be identified as port 3/10") and Flexible
+#         Uplink Modules (pp.296-307: "with stacking disabled
+#         (standalone) ... A1, A2, A3...AN"; "with stacking enabled ...
+#         1/A1, 1/A2...1/AN"), with printed configs of a JL322A in both
+#         states, and of each kind of module.
+#   MCG   Aruba 2930 M/F Management and Configuration Guide for AOS-S
+#         16.10 (pp.69, 765-769): printed JL320A and JL323A configs.
+#
+# Public device output that agrees with the documents (HPE community
+# threads, by title and date): "PTP on 2930M: Invalid input: ptp",
+# Nov 2019 -- a JL323A with a JL083A, stacking disabled, ports 1-48
+# and A1-A4; "Not Seeing 10 GIg interfaces on 2930M switch", Sep 2017
+# -- a JL320A, ports 1-24.
+#
+# Where the combo and Smart Rate ports SIT within the numbering is not
+# stated in any of those documents; they give counts only.  The
+# positions used here -- combo ports last (21-24, 45-48), and on the
+# JL323A / R0M67A the eight Smart Rate ports FIRST (1-8) -- are read
+# from the chassis silk-screen ("HPE Smart Rate (1/2.5/5/10GbE) PoE+
+# Ports (1-8)", "10/100/1000 BASE-T PoE+ Ports (9-48T)", "45T..48T" /
+# "45S..48S") in product photographs (reseller-hosted copies; the
+# cover photograph of HPE's QuickSpecs shows the same layout at lower
+# resolution).  They decide a port's `speed` and `cage`, never its
+# name, and each model that depends on them says so in its `caveat`.
+# QS lists the port types
+# in a different order ("36 ..., 4 Combo ..., 8 802.3bz ..."); that is
+# a listing order, not the faceplate.
+#
+# Not modules of this switch, and deliberately absent: JL325A (the
+# stacking module -- its two ports are not interfaces), JL079A (the
+# 2-port QSFP+ module, 3810M only), and any management port (AOS-S
+# out-of-band management is the `oobm` context, not an interface name).
+schema: 1
+vendor: aruba_aoss
+family: 2930M
+display_name: "Aruba 2930M"
+naming: aoss
+default_mode: stacked
+
+modes:
+  stacked:
+    label: "stacking enabled (JL325A stacking module fitted)"
+    member_ids: [1, 10]
+    naming:
+      grade: vendor-doc
+      ref: "2930F/2930M Advanced Traffic Management Guide 16.11 pp.252-260, 291-293 (member/port) and 296-299 (member/A1)"
+    caveat: "Names carry the stack member number even on a switch that is alone. A 2930M first powered on without a stacking module has stacking disabled and names the same ports without the prefix (48, A1). The stack's own configuration - the stacking stanza, its members and their priorities, and the oobm block, per-member addresses included - is not translated."
+  standalone:
+    label: "stacking disabled"
+    naming:
+      grade: vendor-doc
+      ref: "2930F/2930M Advanced Traffic Management Guide 16.11 pp.297, 300, 303, 307; 2930 M/F Management and Configuration Guide 16.10 pp.765-766, 769; HPE community thread 'PTP on 2930M: Invalid input: ptp' (Nov 2019), a JL323A with stacking disabled"
+    caveat: "With stacking enabled every port gains the member number as a prefix (48 becomes 1/48, A1 becomes 1/A1)."
+
+modules:
+  JL083A:
+    description: "4-port 100M/1G/10G SFP+ MACsec module"
+    inventory: {grade: vendor-doc, ref: "2930M Installation Guide 5200-5214b p.23 and Table 9 (4 SFP+); 2930F/2930M Advanced Traffic Management Guide 16.11 p.291 (5/A1-5/A4)"}
+    ports:
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+  JL078A:
+    description: "1-port QSFP+ 40GbE module"
+    inventory: {grade: vendor-doc, ref: "2930M Installation Guide 5200-5214b Table 9; 2930F/2930M Advanced Traffic Management Guide 16.11 pp.299 (1/A1), 307 (A1)"}
+    caveat: "The JL078A is modelled as a single 40G port."
+    ports:
+      - {role: uplink, count: 1, speed: 40gig, cage: qsfp+}
+  JL081A:
+    description: "4-port HPE Smart Rate 1/2.5/5/10GBASE-T PoE+ module"
+    inventory: {grade: vendor-doc, ref: "2930M Installation Guide 5200-5214b Table 9; 2930F/2930M Advanced Traffic Management Guide 16.11 p.300 (A1-A4); 2930 M/F Management and Configuration Guide 16.10 p.765 (A1-A4, type 10GbE-T)"}
+    caveat: "JL081A: its ports supply PoE+ in a PoE chassis and none in a JL319A or JL321A. The inventory does not model that: they are listed without PoE, so a PoE warning about one of these ports is not reliable."
+    ports:
+      - {role: uplink, count: 4, speed: 10gig, cage: rj45, notes: "HPE Smart Rate; PoE+ depends on the chassis"}
+
+models:
+  # --- 24 ports: 1-24 -------------------------------------------------------
+  2930M-24G:
+    skus: [JL319A]
+    display_name: "Aruba 2930M-24G (JL319A)"
+    panel: {grade: vendor-doc, ref: "HPE QuickSpecs a00004551enw V30 p.18; 2930M Installation Guide 5200-5214b Table 3; 2930F/2930M Advanced Traffic Management Guide 16.11 p.291 (JL319A members 2/1-2/24, 4/1-4/24)"}
+    caveat: "JL319A: the positions of the four dual-personality ports (21-24) are read from product photographs of the chassis, not from an HPE document. That decides the speed and cage shown for those ports, never a port name."
+    ports:
+      - {role: access, count: 20, speed: gig, cage: rj45}
+      - {role: access, count: 4, speed: gig, cage: combo, notes: "dual-personality: RJ-45 or 100M/1G SFP"}
+    bays:
+      A: {accepts: [JL083A, JL078A, JL081A]}
+
+  2930M-24G-PoEP:
+    skus: [JL320A]
+    display_name: "Aruba 2930M-24G-PoE+ (JL320A)"
+    panel: {grade: vendor-doc, ref: "HPE QuickSpecs a00004551enw V30; 2930M Installation Guide 5200-5214b Table 3; 2930 M/F Management and Configuration Guide 16.10 pp.69, 765-766 (JL320A configs); HPE community thread 'Not Seeing 10 GIg interfaces on 2930M switch' (Sep 2017)"}
+    caveat: "JL320A: the positions of the four dual-personality ports (21-24) are read from product photographs of the chassis, not from an HPE document. That decides the speed and cage shown for those ports, never a port name."
+    ports:
+      - {role: access, count: 20, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 4, speed: gig, cage: combo, poe: true, notes: "dual-personality: RJ-45 or 100M/1G SFP"}
+    bays:
+      A: {accepts: [JL083A, JL078A, JL081A]}
+
+  2930M-24SR-PoEP:
+    skus: [JL324A]
+    display_name: "Aruba 2930M-24SR-PoE+ (JL324A)"
+    panel: {grade: vendor-doc, ref: "HPE QuickSpecs a00004551enw V30 p.26 (24 Smart Rate 100M/1/2.5/5GBASE-T PoE+, no combo); 2930M Installation Guide 5200-5214b Table 3"}
+    caveat: "JL324A: the port count is HPE's for this J-number and the naming rule is HPE's for the family, but no configuration of a JL324A was seen."
+    ports:
+      - {role: access, count: 24, speed: 5gig, cage: rj45, poe: true, notes: "HPE Smart Rate 1/2.5/5G"}
+    bays:
+      A: {accepts: [JL083A, JL078A, JL081A]}
+
+  2930M-24SR-PoE-Class6:
+    skus: [R0M68A]
+    display_name: "Aruba 2930M-24SR-PoE Class 6 (R0M68A)"
+    panel: {grade: vendor-doc, ref: "HPE QuickSpecs a00004551enw V30 p.28 (24 Smart Rate, PoE Class 6); 2930M Installation Guide 5200-5214b Table 3"}
+    caveat: "R0M68A: the port count is HPE's for this part number and the naming rule is HPE's for the family, but no configuration of an R0M68A was seen."
+    ports:
+      - {role: access, count: 24, speed: 5gig, cage: rj45, poe: true, notes: "HPE Smart Rate 1/2.5/5G"}
+    bays:
+      A: {accepts: [JL083A, JL078A, JL081A]}
+
+  # --- 48 ports: 1-48 -------------------------------------------------------
+  2930M-48G:
+    skus: [JL321A]
+    display_name: "Aruba 2930M-48G (JL321A)"
+    panel: {grade: vendor-doc, ref: "HPE QuickSpecs a00004551enw V30 p.20; 2930M Installation Guide 5200-5214b Table 3; 2930F/2930M Advanced Traffic Management Guide 16.11 pp.291, 299 (JL321A members 1/1-1/48, 2/1-2/48)"}
+    caveat: "JL321A: the positions of the four dual-personality ports (45-48) are read from product photographs of the chassis, not from an HPE document. That decides the speed and cage shown for those ports, never a port name."
+    ports:
+      - {role: access, count: 44, speed: gig, cage: rj45}
+      - {role: access, count: 4, speed: gig, cage: combo, notes: "dual-personality: RJ-45 or 100M/1G SFP"}
+    bays:
+      A: {accepts: [JL083A, JL078A, JL081A]}
+
+  2930M-48G-PoEP:
+    skus: [JL322A]
+    display_name: "Aruba 2930M-48G-PoE+ (JL322A)"
+    panel: {grade: vendor-doc, ref: "HPE QuickSpecs a00004551enw V30; 2930M Installation Guide 5200-5214b Table 3; 2930F/2930M Advanced Traffic Management Guide 16.11 pp.299 (1/1-1/48), 300, 303, 307 (1-48, A1-A4, A1)"}
+    caveat: "JL322A: the positions of the four dual-personality ports (45-48) are read from product photographs of the chassis, not from an HPE document. That decides the speed and cage shown for those ports, never a port name."
+    ports:
+      - {role: access, count: 44, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 4, speed: gig, cage: combo, poe: true, notes: "dual-personality: RJ-45 or 100M/1G SFP"}
+    bays:
+      A: {accepts: [JL083A, JL078A, JL081A]}
+
+  2930M-40G-8SR-PoEP:
+    skus: [JL323A]
+    display_name: "Aruba 2930M-40G-8SR-PoE+ (JL323A)"
+    panel: {grade: vendor-doc, ref: "HPE QuickSpecs a00004551enw V30; 2930M Installation Guide 5200-5214b Table 3; 2930 M/F Management and Configuration Guide 16.10 p.769 (JL323A, untagged 1-48); HPE community thread 'PTP on 2930M: Invalid input: ptp' (Nov 2019)"}
+    caveat: "JL323A: the positions of the eight Smart Rate ports (1-8) and of the four dual-personality ports (45-48) are read from product photographs of the chassis, not from an HPE document. That decides the speed and cage shown for those ports, never a port name."
+    ports:
+      # Silk-screen: Smart Rate "Ports (1-8)" FIRST, then "(9-48T)".
+      - {role: access, count: 8, speed: 10gig, cage: rj45, poe: true, notes: "HPE Smart Rate 1/2.5/5/10G"}
+      - {role: access, count: 36, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 4, speed: gig, cage: combo, poe: true, notes: "dual-personality: RJ-45 or 100M/1G SFP"}
+    bays:
+      A: {accepts: [JL083A, JL078A, JL081A]}
+
+  2930M-40G-8SR-PoE-Class6:
+    skus: [R0M67A]
+    display_name: "Aruba 2930M-40G-8SR-PoE Class 6 (R0M67A)"
+    panel: {grade: vendor-doc, ref: "HPE QuickSpecs a00004551enw V30 p.23 (36 + 4 combo + 8 Smart Rate, PoE Class 6); 2930M Installation Guide 5200-5214b Table 3"}
+    caveat: "R0M67A: the port count is HPE's for this part number and the naming rule is HPE's for the family, but no port names of an R0M67A were seen; the positions of the eight Smart Rate ports (1-8) and of the four dual-personality ports (45-48) are read from product photographs of the chassis, not from an HPE document. That decides the speed and cage shown for those ports, never a port name."
+    ports:
+      - {role: access, count: 8, speed: 10gig, cage: rj45, poe: true, notes: "HPE Smart Rate 1/2.5/5/10G"}
+      - {role: access, count: 36, speed: gig, cage: rj45, poe: true}
+      - {role: access, count: 4, speed: gig, cage: combo, poe: true, notes: "dual-personality: RJ-45 or 100M/1G SFP"}
+    bays:
+      A: {accepts: [JL083A, JL078A, JL081A]}
+
+captures:
+  # A one-member stack: JL323A with a JL083A, as member 1.  The banner of
+  # a stacked config (`hpStack_WC`) names no model, so the capture
+  # identifies itself by its `stacking` stanza.
+  - fixture: tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg
+    marker: 'member 1 type "jl323a"'
+    mode: stacked
+    members:
+      - {model: 2930M-40G-8SR-PoEP, id: 1, modules: {A: JL083A}}

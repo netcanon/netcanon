@@ -346,6 +346,105 @@ Covered by `tests/unit/test_models.py` → `TestDeviceTarget` host validation ca
 
 ---
 
+## Input Validation — Device Declarations
+
+**Files:** `netcanon/models/port_inventory.py`, `netcanon/migration/device_models.py`,
+`netcanon/api/routes/_migration_helpers.py`
+
+A plan or inventory request may declare a device: a model family, a mode,
+members and modules.  The declaration only ever selects among entries the
+server has already loaded; it never supplies a port name, a count or a path.
+
+- Unknown fields **inside a declaration** are rejected (`extra="forbid"`), so
+  a misspelt `modules` is a 422 rather than a silently empty bay.  The plan
+  request itself still ignores unknown top-level keys, as it always has, so a
+  misspelt `source_deployment` is not caught as a misspelling: beside a
+  `target_profile` the response simply carries no `port_mapping_plan`, and
+  beside a `target_deployment` the request is refused as a target declared
+  without a source.
+- A request is bounded.  A deployment holds a capped number of members
+  (`MAX_DEPLOYMENT_MEMBERS`), each resolved against a family the server has
+  already loaded, and every name in it has a capped length
+  (`MAX_DECLARED_NAME`), so a request cannot make the server build a port list
+  larger than the loaded families allow.  A member id is an integer and
+  nothing else: `"2"`, `2.0` and `true` are refused rather than coerced.
+- The vendor is taken from the codec the request names, never from the body.
+- A deployment that names an unknown model, mode, bay, module or member id,
+  and a profile key that is unknown, belongs to another vendor, or has no
+  module of the name given, is a 422 that says what was wrong.  Mode, bay,
+  module and member-id errors also list what is allowed.
+- Which declarations may be combined is checked in the route helper and
+  refused with a short string.  It is deliberately not a validator on the
+  request model: a pydantic error raised at the body level echoes the whole
+  body — the pasted config included — in the 422.
+- A field-level validation error is a 422 whatever the input.  The error
+  body is written ASCII-escaped, because it echoes the offending value and a
+  lone UTF-16 surrogate (valid JSON, `"\ud800"`) cannot be encoded as
+  UTF-8: FastAPI's default handler turned such a request into a 500.  A
+  `NaN` or `Infinity` the request parser accepted is echoed as text, so the
+  body is always strict JSON.  This handler is application-wide.
+- A name in a rename map (`port_rename_map` and the local-user and SNMP
+  maps) must be text that can be written back.  A job echoes those names,
+  and one holding a lone surrogate could not be serialised: it is refused
+  with a 422 that echoes the map, never the pasted config.
+- An operator's `port_rename_map` target is read as the declared target
+  device spells its ports where another letter case cannot be another
+  interface on the target platform (it has no case, or it names every
+  interface itself), and
+  a blank target is ignored.  So a target that differs from a port only in
+  case or surrounding space cannot be passed off as another port, and a
+  blank cannot be passed off as a decision.  An abbreviation the device
+  would accept (`Gi1/0/1`) can: it is not recognised as the port, and is
+  reported as a target the model does not list rather than as two ports
+  on one.
+- A name in a rename map is not otherwise restricted: it is written into
+  the generated config as typed, control characters included (a request
+  that declares devices strips white space from the ends of a target
+  first), so a name holding a line break comes out as a line break, with
+  and without a device declaration.  The map is the operator's own
+  input to their own output; it is noted here because the output is a
+  config someone may paste into a device.
+
+Model-family YAML is operator-authorable, and is trusted like a device
+definition: these checks stop a mistake, not an attacker with write access to
+the definitions directory.
+
+- It is read with `yaml.safe_load`.  A YAML alias is refused outright, which
+  removes a self-referential document, an alias bomb and the merge key in one
+  rule; a duplicate-key check then walks the composed node tree and constructs
+  nothing.
+- It is validated against a schema that forbids unknown keys.  A family name,
+  model key and module SKU must be a plain token, so a key YAML would read as
+  a number or a boolean is an error rather than a model called `True`.
+- Every bay-and-module combination of a model is compiled before the family is
+  registered.  Each dimension of that work is capped: the ports of one group
+  (`_MAX_GROUP_PORTS`), the groups of one panel or module
+  (`_MAX_PORT_GROUPS`), the member ids of one mode, and the combinations of one
+  model (`_MAX_BAY_COMBINATIONS`).  Each is bounded on its own; their product
+  is not, so a file that stays inside every cap can still take minutes to
+  compile.  That is a slow start caused by the operator's own file, not a
+  hang: the file is compiled or refused, and the application then starts.
+- A file that cannot be loaded for any reason — unreadable, not UTF-8, not
+  YAML, the wrong schema — is logged and skipped.  It cannot stop the
+  application starting.
+- A family in an operator's directory can add new families.  It cannot replace
+  a shipped family, nor add a model to one: a file that re-declares a shipped
+  family is refused whole.
+- It cannot award itself the strongest evidence grade.  `capture` means a
+  test re-proves the claim against a committed fixture, so only the claims
+  listed in `PROVEN_CAPTURE_CLAIMS` — which the shipped-data test requires to
+  equal the claims it re-proves — grant it.  An entry is the whole claim
+  (family, fixture, mode, and each member's model, id and modules), so this
+  holds wherever a file is loaded from: a claim that cites a proven fixture
+  for another model is a different claim, is logged, and grants nothing.
+
+Covered by `tests/unit/migration/test_device_models.py` (each bound is tested
+at its boundary, against the named constant),
+`tests/unit/migration/test_device_models_shipped.py` and
+`tests/integration/test_migration_models_api.py`.
+
+---
+
 ## Data Directory Isolation
 
 Runtime data directories (`devices/`, `schedules/`, `jobs/`, `configs/`)

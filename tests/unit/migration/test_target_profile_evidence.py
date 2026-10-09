@@ -45,34 +45,27 @@ from pathlib import Path, PurePosixPath
 import pytest
 
 from netcanon.definitions import LIBRARY_DIR
-from netcanon.migration.codecs.registry import get_codec, list_public_codecs
+from netcanon.migration.codecs.registry import list_public_codecs
 from netcanon.migration.target_profiles import (
     TargetProfile,
     load_profile_file,
     load_profiles_dir,
 )
-from netcanon.services.migration_detect import detect_codec
 from tests.fixtures.target_profiles import (
     UNVERIFIED_PROFILE_KEY,
     UNVERIFIED_PROFILE_YAML,
 )
 
+# The reading of a capture is shared with the device-model guard
+# (test_device_models_shipped.py), so the two registries cannot be
+# proven against different ideas of what a hardware port is.
+from ._capture_ports import ports_in_capture as _ports_in_capture
+from ._capture_ports import vendor_of as _vendor_of
+
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PROFILES = load_profiles_dir(LIBRARY_DIR / "target_profiles")
-
-#: Canonical interface types that are not hardware ports.  A capture's
-#: SVIs, LAGs, loopbacks, bridges and tunnels are real names in the
-#: config, but a profile that lists one as a port is wrong.
-_NOT_A_PORT = frozenset({
-    "ianaift:l3ipvlan",
-    "ianaift:l2vlan",
-    "ianaift:ieee8023adLag",
-    "ianaift:softwareLoopback",
-    "ianaift:bridge",
-    "ianaift:tunnel",
-})
 
 
 def _all_port_ids(profile: TargetProfile) -> list[str]:
@@ -81,47 +74,6 @@ def _all_port_ids(profile: TargetProfile) -> list[str]:
     for module in profile.modules.values():
         ids.extend(p.id for p in module.ports)
     return ids
-
-
-def _vendor_of(codec_name: str) -> str:
-    # ``_CAPS`` is the class-level capability matrix; there is no public
-    # accessor for a codec's vendor id (``api/routes/ui.py`` reads it the
-    # same way).
-    return get_codec(codec_name)._CAPS.vendor_id
-
-
-def _ports_in_capture(path: Path, vendor: str) -> tuple[set[str], str]:
-    """Hardware port names a real capture mentions, and its lower-cased text.
-
-    A running-config names a port in an ``interface`` stanza only when
-    the port carries non-default config; an unconfigured access port
-    appears solely in a VLAN's membership list (``untagged 1-47``), and
-    a LAG member solely under the LAG.  All three are evidence that the
-    device has a port of that name.  A LAG's OWN name, an SVI, a
-    loopback or a bridge is not — and LAG names also arrive through
-    VLAN membership, so they are subtracted after the union.
-    """
-    raw = path.read_text(encoding="utf-8", errors="replace")
-    candidates = detect_codec(raw)
-    assert candidates, f"{path.name}: no codec recognises this capture"
-    capture_vendor = _vendor_of(candidates[0].codec)
-    assert capture_vendor == vendor, (
-        f"{path.name} is a {capture_vendor} capture; the profile citing it "
-        f"is filed under {vendor}"
-    )
-    intent = get_codec(candidates[0].codec).parse(raw)
-    names = {iface.name for iface in intent.interfaces}
-    for vlan in intent.vlans:
-        names.update(vlan.tagged_ports or [])
-        names.update(vlan.untagged_ports or [])
-    for lag in intent.lags or []:
-        names.update(lag.members or [])
-    names -= {
-        iface.name for iface in intent.interfaces
-        if iface.interface_type in _NOT_A_PORT
-    }
-    names -= {lag.name for lag in intent.lags or []}
-    return names, raw.lower()
 
 
 CAPTURE_GRADED = sorted(

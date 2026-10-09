@@ -18,7 +18,8 @@ Translation pipeline entries:
           ``local_user_rename_map``, ``snmp_community_rename_map``,
           ``snmpv3_user_rename_map``); engages the rename-aware
           pipeline when any is present or when a target_profile is
-          selected.
+          selected.  Positional port mapping engages when the body
+          declares both devices (see "Device models" below).
 
     POST /api/v1/migration/plan/ports
         → per-pane override endpoint for port-name rewrites
@@ -77,9 +78,39 @@ Target profiles (for the Tier-3 rename modal's dropdown population):
     GET  /api/v1/migration/target-profiles/{vendor}/{model}
         → one profile, including module-variants when declared
 
-All POST endpoints accept the same :class:`MigrationPlanRequest`
-body (input mode is raw_text XOR source_filename) and return a
-:class:`MigrationJob`.  Future per-pane categories
+Device models (model-to-model port mapping):
+
+    GET  /api/v1/migration/model-families[?vendor=<vendor_id>]
+        → the loaded model families: models, modes, module bays.
+          No port names — those depend on the deployment.
+    POST /api/v1/migration/inventory
+        → compile one device declaration (a deployment from a model
+          family, or a target-profile key) to its port inventory:
+          every port by its real name, with role, position and
+          evidence grade.
+
+Declaring both devices on a plan request — ``source_deployment`` or
+``source_profile``, with ``target_deployment`` or ``target_profile`` —
+makes every plan endpoint pair ports by POSITION between the two
+(:func:`~netcanon.services.migration_pipeline.run_plan_with_models`)
+instead of guessing from name shape, and puts the pairing on
+``MigrationJob.port_mapping_plan``.  ``target_profile`` on its own
+stays advisory; ``target_deployment`` on its own is a 422.  All seven
+job-running handlers dispatch through
+:func:`._migration_helpers.run_translation`, so the same body renders
+the same port names whichever of them it is posted to.
+
+Where an entry above says a handler "dispatches to
+run_plan_with_overrides" with only its own map engaged, that is the
+path of a request that does not declare its devices.  One that does
+goes to ``run_plan_with_models`` with the same category map and with
+the body's own ``port_rename_map``, which is then the operator's edits
+to the pairing — on every endpoint, the per-pane ones included.
+
+The job-running POST endpoints accept the same
+:class:`MigrationPlanRequest` body (input mode is raw_text XOR
+source_filename) and return a :class:`MigrationJob`.  Future per-pane
+categories
 (``radius``, ``snmp_trap_hosts``, ...) will extend the endpoint set
 by adding siblings under ``/plan/<category>`` per the pattern
 established by /plan/ports, /plan/vlans, /plan/local_users, and
@@ -98,6 +129,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from ...migration.codecs.registry import get_codec
+from ...migration.device_models import FamilyDef
 from ...migration.target_profiles import TargetProfile
 from ...models.migration import (
     CapabilityMatrix,
@@ -105,18 +137,19 @@ from ...models.migration import (
     MigrationJob,
     MigrationPlanRequest,
 )
+from ...models.port_inventory import DeploymentSpec, Inventory
 from ...services.migration_detect import DetectCandidate, detect_codec
-from ...services.migration_pipeline import (
-    run_plan_with_overrides,
-)
 from ...storage.base import BaseConfigStore
 from ..deps import get_storage
 from ._migration_helpers import (
     build_codec_info_list,
+    compile_declared_device,
+    get_model_families,
     get_target_profiles,
     request_has_overrides_or_profile,
     resolve_adapter_or_422,
     resolve_input_text,
+    run_translation,
 )
 
 
@@ -134,6 +167,28 @@ class MigrationDetectRequest(BaseModel):
     raw_text: str | None = Field(default=None, max_length=10_000_000)
     source_filename: str | None = None
     min_confidence: int = Field(default=1, ge=0, le=100)
+
+
+class InventoryRequest(BaseModel):
+    """Body for ``POST /api/v1/migration/inventory``.
+
+    Exactly one of ``deployment`` / ``profile`` is required.
+    """
+
+    codec: str
+    """Registered codec name.  Its vendor is the vendor of the device."""
+
+    deployment: DeploymentSpec | None = None
+    """Model(s), fitted modules and mode, from a model family."""
+
+    profile: str | None = None
+    """``vendor/model`` key of a flat target profile."""
+
+    module: str | None = None
+    """Module SKU within ``profile``, in any case.  Absent selects the
+    profile's default module, ``""`` states that none is fitted, and
+    a SKU the profile does not list is a 422."""
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/migration", tags=["migration"])
@@ -164,7 +219,11 @@ _JOB_STATUS_RESPONSES: dict[int | str, dict] = {
         },
     },
     404: {"description": "source_filename does not exist"},
-    422: {"description": "Invalid adapter name or input specification"},
+    422: {
+        "description": (
+            "Invalid adapter name, input specification or device declaration"
+        ),
+    },
 }
 
 
@@ -211,6 +270,7 @@ def get_codec_capabilities(name: str) -> CapabilityMatrix:
 )
 def plan_migration(
     body: MigrationPlanRequest,
+    request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
@@ -218,7 +278,8 @@ def plan_migration(
 
     Stages executed: class-guard → parse → (transforms) → validate →
     render.  Per-pane override transforms (port / VLAN / local_user /
-    SNMP community / SNMPv3 user) are dispatched via
+    SNMP community / SNMPv3 user) are dispatched through
+    :func:`._migration_helpers.run_translation` to
     :func:`run_plan_with_overrides`.  When the body carries any
     override map or a ``target_profile``, every supplied category is
     threaded; when it carries none the endpoint STILL engages the auto
@@ -235,13 +296,29 @@ def plan_migration(
     * ``completed`` — every stage ran, validation severity is ``ok``
       or ``warn``, rendered output is in ``job.rendered``.
     * ``partial``  — rendered output exists but it is not a clean
-      success: EITHER validation severity is ``block`` (target can't
-      faithfully consume the tree), OR the input was non-empty yet
-      parsed to an empty configuration (0 recognized paths, banner-only
-      render — the source vendor most likely doesn't match the input).
-      ``job.error`` explains which.  Review before deploying; an
-      automation gate should treat ``partial`` as a non-success.
+      success, for one or more of these reasons, which ``job.error``
+      states: validation severity is ``block`` (target can't
+      faithfully consume the tree); the input was non-empty yet
+      parsed to an empty configuration (0 recognized paths,
+      banner-only render — the source vendor most likely doesn't
+      match the input); or, when the body declares both devices, the
+      port mapping needs a decision (see below).  Review before
+      deploying; an automation gate should treat ``partial`` as a
+      non-success.
     * ``failed``   — a stage raised; ``job.error`` has the summary.
+
+    **Declared devices.**  When the body says which device the config
+    came from and which it is going to (``source_deployment`` or
+    ``source_profile``, with ``target_deployment`` or
+    ``target_profile``), ports are paired by position between the two
+    instead of being guessed from the shape of their names, and the
+    job carries ``port_mapping_plan``.  Such a job is ``partial``
+    while ``port_mapping_plan.unresolved_ports`` or ``.fused`` is not
+    empty, or when ``.applied`` is ``false``.  An entry in
+    ``port_rename_map`` is the operator deciding that port.  A source
+    declared without a target, or a ``target_deployment`` without a
+    source, is a 422.  ``POST /migration/inventory`` shows the port
+    names a declaration produces.
 
     Use ``force=true`` in the request body to override the stage-0
     device-class guard for deliberate cross-class experiments.
@@ -260,8 +337,8 @@ def plan_migration(
         # signature-frozen and only accepts port_rename_map, so
         # calling it here would silently drop VLAN / local-user /
         # SNMP overrides posted in the same body.
-        job = run_plan_with_overrides(
-            source, target, raw_text,
+        job = run_translation(
+            request, body, source, target, raw_text,
             # Default to {} (auto port-name translation ENGAGED) whenever the
             # caller didn't pass an explicit port_rename_map — matching the
             # bare-request else branch and the v0.3.2 auto-translate-by-default
@@ -291,8 +368,8 @@ def plan_migration(
         # verbatim.  port_rename_map={} = auto-only; the other per-pane
         # categories stay disengaged (None) so a bare request only
         # rewrites port names.
-        job = run_plan_with_overrides(
-            source, target, raw_text, port_rename_map={}, force=body.force,
+        job = run_translation(
+            request, body, source, target, raw_text, port_rename_map={}, force=body.force,
         )
     logger.info(
         "Migration plan %s: %s -> %s = %s",
@@ -317,6 +394,7 @@ def plan_migration(
 )
 def plan_migration_ports(
     body: MigrationPlanRequest,
+    request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
@@ -326,8 +404,9 @@ def plan_migration_ports(
     pattern that subsequent category endpoints (``/plan/vlans``,
     ``/plan/snmp``, ``/plan/local_users``, ``/plan/snmpv3``)
     will follow: each accepts the same :class:`MigrationPlanRequest`
-    body and dispatches to :func:`run_plan_with_overrides` with only
-    its category's override map populated.
+    body and dispatches (through :func:`._migration_helpers.run_translation`) to
+    :func:`run_plan_with_overrides` with only its category's override
+    map populated.
 
     Semantically equivalent to ``POST /plan`` when the request body
     carries a ``port_rename_map``.  The distinction is purely
@@ -349,8 +428,8 @@ def plan_migration_ports(
     # Always engage the rename-aware pipeline from this endpoint —
     # hitting /plan/ports signals clear intent even when the map is
     # empty ({} = "auto-heuristic only, please").
-    job = run_plan_with_overrides(
-        source, target, raw_text,
+    job = run_translation(
+        request, body, source, target, raw_text,
         port_rename_map=body.port_rename_map or {},
         force=body.force,
     )
@@ -376,6 +455,7 @@ def plan_migration_ports(
 )
 def plan_migration_vlans(
     body: MigrationPlanRequest,
+    request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
@@ -383,7 +463,8 @@ def plan_migration_vlans(
 
     Second concrete per-pane override endpoint (ports was the first,
     see ``POST /plan/ports``).  Accepts the same
-    :class:`MigrationPlanRequest` body and dispatches to
+    :class:`MigrationPlanRequest` body and
+    dispatches (through :func:`._migration_helpers.run_translation`) to
     :func:`run_plan_with_overrides` with only ``vlan_rename_map``
     populated.
 
@@ -403,16 +484,24 @@ def plan_migration_vlans(
     Ignores other override maps if the body carries them — hitting
     ``/plan/vlans`` applies the VLAN category only.  Use
     ``POST /plan`` for multi-category overrides in a single call.
+
+    A request that declares both devices is the exception to the
+    last paragraph: its ports are paired by position here as on
+    ``/plan``, and its ``port_rename_map`` is read as the operator's
+    edits to that pairing (see
+    :func:`._migration_helpers.run_translation`).
     """
     source = resolve_adapter_or_422(body.source, side="source")
     target = resolve_adapter_or_422(body.target, side="target")
     raw_text = resolve_input_text(body, storage)
-    job = run_plan_with_overrides(
-        source, target, raw_text,
+    job = run_translation(
+        request, body, source, target, raw_text,
         # (#16) Engage auto port-name translation like /plan's default path;
         # {} is auto-only (an explicit port map on this VLAN pane stays
         # ignored) — without it the render leaks invalid source-vendor
         # interface names that /plan translates.
+        # Not so when the body declares both devices: run_translation then
+        # takes the body's own port map, as edits to the positional pairing.
         port_rename_map={},
         vlan_rename_map=body.vlan_rename_map or {},
         force=body.force,
@@ -436,6 +525,7 @@ def plan_migration_vlans(
 )
 def plan_migration_local_users(
     body: MigrationPlanRequest,
+    request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
@@ -444,7 +534,8 @@ def plan_migration_local_users(
     Third concrete per-pane override endpoint (ports + vlans came
     first, see ``POST /plan/ports`` and ``POST /plan/vlans``).
     Accepts the same :class:`MigrationPlanRequest` body and
-    dispatches to :func:`run_plan_with_overrides` with only
+    dispatches (through :func:`._migration_helpers.run_translation`) to
+    :func:`run_plan_with_overrides` with only
     ``local_user_rename_map`` populated.
 
     Local-user rename is a string → string rewrite applied to
@@ -471,14 +562,22 @@ def plan_migration_local_users(
     ``/plan/local_users`` applies the local-users category only.
     Use ``POST /plan`` for multi-category overrides in a single
     call.
+
+    A request that declares both devices is the exception to the
+    last paragraph: its ports are paired by position here as on
+    ``/plan``, and its ``port_rename_map`` is read as the operator's
+    edits to that pairing (see
+    :func:`._migration_helpers.run_translation`).
     """
     source = resolve_adapter_or_422(body.source, side="source")
     target = resolve_adapter_or_422(body.target, side="target")
     raw_text = resolve_input_text(body, storage)
-    job = run_plan_with_overrides(
-        source, target, raw_text,
+    job = run_translation(
+        request, body, source, target, raw_text,
         # (#16) Engage auto port-name translation like /plan; {} is auto-only
         # (an explicit port map on this pane stays ignored).
+        # Not so when the body declares both devices: run_translation then
+        # takes the body's own port map, as edits to the positional pairing.
         port_rename_map={},
         local_user_rename_map=body.local_user_rename_map or {},
         force=body.force,
@@ -502,6 +601,7 @@ def plan_migration_local_users(
 )
 def plan_migration_snmp(
     body: MigrationPlanRequest,
+    request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
@@ -509,7 +609,8 @@ def plan_migration_snmp(
 
     Fourth concrete per-pane override endpoint (ports + vlans +
     local_users came first).  Accepts the same
-    :class:`MigrationPlanRequest` body and dispatches to
+    :class:`MigrationPlanRequest` body and
+    dispatches (through :func:`._migration_helpers.run_translation`) to
     :func:`run_plan_with_overrides` with only
     ``snmp_community_rename_map`` populated.
 
@@ -538,14 +639,22 @@ def plan_migration_snmp(
     Ignores other override maps if the body carries them — hitting
     ``/plan/snmp`` applies the SNMP category only.  Use
     ``POST /plan`` for multi-category overrides in a single call.
+
+    A request that declares both devices is the exception to the
+    last paragraph: its ports are paired by position here as on
+    ``/plan``, and its ``port_rename_map`` is read as the operator's
+    edits to that pairing (see
+    :func:`._migration_helpers.run_translation`).
     """
     source = resolve_adapter_or_422(body.source, side="source")
     target = resolve_adapter_or_422(body.target, side="target")
     raw_text = resolve_input_text(body, storage)
-    job = run_plan_with_overrides(
-        source, target, raw_text,
+    job = run_translation(
+        request, body, source, target, raw_text,
         # (#16) Engage auto port-name translation like /plan; {} is auto-only
         # (an explicit port map on this pane stays ignored).
+        # Not so when the body declares both devices: run_translation then
+        # takes the body's own port map, as edits to the positional pairing.
         port_rename_map={},
         snmp_community_rename_map=body.snmp_community_rename_map or {},
         force=body.force,
@@ -569,6 +678,7 @@ def plan_migration_snmp(
 )
 def plan_migration_snmpv3(
     body: MigrationPlanRequest,
+    request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
@@ -577,8 +687,9 @@ def plan_migration_snmpv3(
     Fifth concrete per-pane override endpoint after
     ``/plan/ports``, ``/plan/vlans``, ``/plan/local_users``, and
     ``/plan/snmp``.  Accepts the same :class:`MigrationPlanRequest`
-    body and dispatches to :func:`run_plan_with_overrides` with
-    only ``snmpv3_user_rename_map`` populated.
+    body and dispatches (through :func:`._migration_helpers.run_translation`) to
+    :func:`run_plan_with_overrides` with only
+    ``snmpv3_user_rename_map`` populated.
 
     SNMPv3 user rename is a string → string rewrite applied to
     :attr:`CanonicalSNMPv3User.name` (the USM securityName).  The
@@ -605,14 +716,22 @@ def plan_migration_snmpv3(
 
     Ignores other override maps if the body carries them — hitting
     ``/plan/snmpv3`` applies the SNMPv3-user category only.
+
+    A request that declares both devices is the exception to the
+    last paragraph: its ports are paired by position here as on
+    ``/plan``, and its ``port_rename_map`` is read as the operator's
+    edits to that pairing (see
+    :func:`._migration_helpers.run_translation`).
     """
     source = resolve_adapter_or_422(body.source, side="source")
     target = resolve_adapter_or_422(body.target, side="target")
     raw_text = resolve_input_text(body, storage)
-    job = run_plan_with_overrides(
-        source, target, raw_text,
+    job = run_translation(
+        request, body, source, target, raw_text,
         # (#16) Engage auto port-name translation like /plan; {} is auto-only
         # (an explicit port map on this pane stays ignored).
+        # Not so when the body declares both devices: run_translation then
+        # takes the body's own port map, as edits to the positional pairing.
         port_rename_map={},
         snmpv3_user_rename_map=body.snmpv3_user_rename_map or {},
         force=body.force,
@@ -636,6 +755,7 @@ def plan_migration_snmpv3(
 )
 def render_migration(
     body: MigrationPlanRequest,
+    request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
@@ -649,7 +769,7 @@ def render_migration(
     ``response`` is threaded through so the X-Netcanon-Job-Status
     header is set here too.
     """
-    return plan_migration(body, response, storage)
+    return plan_migration(body, request, response, storage)
 
 
 @router.post(
@@ -747,3 +867,69 @@ def get_target_profile(
             detail=f"target profile not found: {key!r}",
         )
     return profiles[key]
+
+
+# ---------------------------------------------------------------------------
+# Device-model families and inventories (model-to-model port mapping)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/model-families",
+    response_model=list[FamilyDef],
+    summary="List device-model families",
+)
+def list_model_families(
+    request: Request,
+    vendor: str | None = None,
+) -> list[FamilyDef]:
+    """Return the loaded device-model families.
+
+    A family is a set of models that share a naming rule, deployment
+    modes and modules — what a client needs to build a "which device
+    is this?" picker: the models (with their part numbers and module
+    bays), the modes (with the member-id range, where names carry
+    one) and the modules.  It does NOT contain port names; those
+    depend on the mode, the member ids and the fitted modules, and
+    come from ``POST /migration/inventory``.
+
+    Args:
+        vendor: Return only families of this vendor id (the
+            ``vendor_id`` of a codec, as ``GET /migration/adapters``
+            reports it).
+    """
+    families = get_model_families(request).families.values()
+    return [f for f in families if vendor is None or f.vendor == vendor]
+
+
+@router.post(
+    "/inventory",
+    response_model=Inventory,
+    summary="Compile a device declaration to its port inventory",
+    responses={422: {"description": "Invalid codec or device declaration"}},
+)
+def compile_inventory(body: InventoryRequest, request: Request) -> Inventory:
+    """Return the ports a declared device has, by their real names.
+
+    The same declaration a plan request carries as
+    ``source_deployment`` / ``target_deployment`` (or as a profile
+    key) — compiled on its own, so a client can show the names before
+    any config is translated, and offer them as override choices.
+
+    The response says what was resolved as well as what was asked: the
+    model key a part number resolved to, the mode (and whether it was
+    defaulted), each member's id and modules, every port with its
+    role, position and its own evidence grade, and the caveats that
+    apply.  Port names are computed here, by the same naming rule the
+    translation uses; a client must not re-derive them.
+    """
+    codec = resolve_adapter_or_422(body.codec, side="device")
+    if (body.deployment is None) == (body.profile is None):
+        raise HTTPException(
+            status_code=422,
+            detail="Exactly one of `deployment` or `profile` is required.",
+        )
+    return compile_declared_device(
+        "", codec, body.deployment, body.profile, body.module,
+        get_target_profiles(request), get_model_families(request),
+    )

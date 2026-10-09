@@ -1,0 +1,251 @@
+# Aruba 2930F switch series (ArubaOS-Switch, WC firmware branch)
+#
+# A fixed-port access switch with built-in uplinks, NO module slot, NO
+# stacking slot and no management port.  Two facts decide every port
+# name on it:
+#
+#   * The uplinks continue the access numbering.  A 48-port model's
+#     uplinks are 49-52, a 24-port model's are 25-28, the 8-port
+#     model's are 9-10.  A letter port (`A1`) never exists on a 2930F.
+#   * VSF decides whether names carry a member number.  With VSF
+#     disabled -- the factory default -- every port is a bare number.
+#     With VSF enabled every port, uplinks included, is
+#     `<member>/<port>`, and that is true of a lone switch too: one
+#     switch with VSF enabled is a one-member fabric, and its member
+#     number need not be 1.
+#
+# `ports:` lists are in PORT-NUMBER order, which is not left-to-right
+# on the panel: on every pictured 2930F the SFP cages are the LEFTMOST
+# ports and are numbered LAST.
+#
+# Model keys follow the form of the stock host name the switch gives
+# itself (`Aruba-2930F-48G-PoEP-4SFP`; seen for five models, the others
+# are built the same way from the model string the vendor MIB gives).
+# That form is what separates the twins that differ only in uplink
+# class: "4SFP" is 1G SFP cages, "4SFPP" is 1G/10G SFP+.
+#
+# Sources.  Each `ref` field names its document in full, because the
+# refs are served to API clients who cannot read this comment.  The
+# short tags below are used in the comments of this file only:
+#
+#   IGSG  Aruba 2930F Switch Series Installation and Getting Started
+#         Guide, part number 5200-1194d, Edition 5 (October 2019):
+#         Figure 1 (faceplate pictures with the printed port numbers,
+#         for 12 of the 16 models), Table 1, and Table 3 (network ports
+#         per J-number, all 16).
+#   QS    HPE QuickSpecs "HPE Aruba Networking 2930F Switch Series",
+#         c05052929, V33 (27 February 2026): per-J-number I/O ports and
+#         switching capacity.
+#   DS    Aruba 2930F Switch Series data sheet, 4AA6-5469ENW.
+#   MCG   Aruba 2930 M/F Management and Configuration Guide for AOS-S
+#         16.10: interface naming under VSF (p.631), "Port numbers are
+#         prefixed with member numbers" (p.635), and the `show vsf` /
+#         `show vsf link detail` examples (pp.642, 647) whose port
+#         numbers agree with each member's model.
+#   BP    Aruba "Backplane Stacking and VSF Best Practices on
+#         ArubaOS-Switch" (AOS-S 16.08).
+#
+# Public device output that agrees with the documents (HPE community
+# threads, by slug and post date; each standalone paste carries the
+# banner of that exact model and names every port of it, and the VSF
+# paste names its members by `type`):
+#
+#   JL253A  vlan-problems-with-aruba-2930f-24g, 3 Jun 2019
+#   JL254A  probleme-vlan-defaut-sur-2930f-48g-4sfp, 10 Oct 2019
+#   JL255A  2930f-dhcp-server, 18 Apr 2021
+#   JL256A  issue-connecting-to-the-router-on-different-vlan, 22 Mar 2018
+#   JL259A  aruba-2930f-vlan-and-dhcp-configurations, 5 Apr 2022
+#   JL261A  wireless-virtual-controller-and-vlans, 23 Sep 2020
+#   JL262A  2930f-inter-vlan-routing-issue-what-im-i-missing, 1 Apr 2025
+#   JL558A  aruba-2930-ap-disconnects, 7 Dec 2021
+#   VSF     vsf-config-on-2930f-and-l2l3-load-balancing-in-vsf,
+#           23 Jul 2018 (three JL557A, names 1/1 .. 3/52)
+#
+# Three places where a vendor document is wrong and must not be used to
+# "correct" this file:
+#
+#   * QS prints "4 SFP+" in the JL557A block.  The JL557A has 1G SFP
+#     cages: the same block gives a switching capacity of 104 Gb/s and
+#     no 10 Gb/s latency row, and IGSG Table 3, the data sheet and the
+#     product name ("4SFP") all say SFP.
+#   * QS V33's ordering table gives the JL558A the 1G-only transceiver
+#     rule set ("1, 3, 10" -- no rule 2, the SFP+ transceivers), and
+#     V20's ordering table printed "4 SFP 1G ports" for it.  It has
+#     SFP+: its own block says "4 SFP+ 1/10GbE ports", 176 Gb/s.
+#   * IGSG Figure 1 labels the cages of the JL260A and JL262A "10GbE
+#     SFP Ports".  They are 1G SFP (IGSG's own Table 3; QS 104 Gb/s).
+#     Take NUMBERS from the drawings, never speed.
+#
+# A capture is declared under `captures:` and is granted to that exact
+# J-number, in that mode, only.  A TAA twin has the same ports but is a
+# different J-number, so it has its own entry and does not inherit.
+schema: 1
+vendor: aruba_aoss
+family: 2930F
+display_name: "Aruba 2930F"
+naming: aoss
+default_mode: standalone
+
+modes:
+  standalone:
+    label: "standalone (VSF disabled, the factory default)"
+    naming:
+      grade: vendor-doc
+      ref: "2930F Installation Guide 5200-1194d Figure 1 (printed port numbers); 2930 M/F Management and Configuration Guide 16.10 p.635; HPE community thread vlan-problems-with-aruba-2930f-24g (3 Jun 2019) and other standalone 2930F configs posted there"
+  vsf:
+    label: "VSF enabled"
+    member_ids: [1, 8]
+    naming:
+      grade: vendor-doc
+      ref: "2930 M/F Management and Configuration Guide 16.10 pp.631, 635, 642, 647; HPE white paper Backplane Stacking and VSF Best Practices (AOS-S 16.08)"
+    caveat: "A port bound to a VSF link carries no port configuration, so some ports of a real fabric are not assignable. A fabric holds 8 members from WC.16.06 and 4 before it, and runs one VSF port speed: the 4SFP models have no 10G port. The fabric's own configuration - the vsf stanza, its members, their priorities and link ports - is not translated."
+
+models:
+  # --- 24 access + 4 uplinks: 1-24, 25-28 -----------------------------------
+  2930F-24G-4SFPP:
+    skus: [JL253A]
+    display_name: "Aruba 2930F-24G-4SFP+ (JL253A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 + Table 3; HPE QuickSpecs c05052929 V33 p.23; 2930 M/F Management and Configuration Guide 16.10 pp.642, 647-648 (JL253A members at 6/25, 6/27)"}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  2930F-24G-PoEP-4SFPP:
+    skus: [JL255A]
+    display_name: "Aruba 2930F-24G-PoE+-4SFP+ (JL255A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 + Table 3; HPE QuickSpecs c05052929 V33 p.25; 2930 M/F Management and Configuration Guide 16.10 pp.642, 647-648 (JL255A members at 4/25, 4/27)"}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  2930F-24G-PoEP-4SFPP-TAA:
+    skus: [JL263A]
+    display_name: "Aruba 2930F-24G-PoE+-4SFP+ TAA (JL263A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 (JL263A picture) + Table 3; HPE QuickSpecs c05052929 V33 p.39"}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  2930F-24G-4SFP:
+    skus: [JL259A]
+    display_name: "Aruba 2930F-24G-4SFP (JL259A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 (1GbE SFP Ports, 25-28) + Table 3; HPE QuickSpecs c05052929 V33 p.33"}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: gig, cage: sfp}
+
+  2930F-24G-PoEP-4SFP:
+    skus: [JL261A, JL261ACM]
+    display_name: "Aruba 2930F-24G-PoE+-4SFP (JL261A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 + Table 3; HPE QuickSpecs c05052929 V33 p.36"}
+    ports:
+      - {role: access, count: 24, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: gig, cage: sfp}
+
+  # --- 48 access + 4 uplinks: 1-48, 49-52 -----------------------------------
+  2930F-48G-4SFPP:
+    skus: [JL254A]
+    display_name: "Aruba 2930F-48G-4SFP+ (JL254A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 + Table 3; HPE QuickSpecs c05052929 V33 p.24; 2930 M/F Management and Configuration Guide 16.10 pp.642, 647-648 (JL254A member at 2/49, 2/51)"}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  2930F-48G-PoEP-4SFPP:
+    skus: [JL256A, JL256ACM]
+    display_name: "Aruba 2930F-48G-PoE+-4SFP+ (JL256A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 + Table 3; HPE QuickSpecs c05052929 V33 p.27; HPE white paper Backplane Stacking and VSF Best Practices (AOS-S 16.08) (jl256a links 2/49-2/52); 2930 M/F Management and Configuration Guide 16.10 pp.642, 647-648"}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  2930F-48G-PoEP-4SFPP-TAA:
+    skus: [JL264A]
+    display_name: "Aruba 2930F-48G-PoE+-4SFP+ TAA (JL264A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 (JL264A picture) + Table 3; HPE QuickSpecs c05052929 V33 p.40"}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  2930F-48G-4SFP:
+    skus: [JL260A]
+    display_name: "Aruba 2930F-48G-4SFP (JL260A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 (numbers only) + Table 3 (4 SFP); HPE QuickSpecs c05052929 V33 (104 Gb/s); 2930F data sheet 4AA6-5469ENW"}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45}
+      - {role: uplink, count: 4, speed: gig, cage: sfp}
+
+  2930F-48G-PoEP-4SFP:
+    skus: [JL262A, JL262ACM]
+    display_name: "Aruba 2930F-48G-PoE+-4SFP (JL262A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 (numbers only) + Table 3 (4 SFP); HPE QuickSpecs c05052929 V33 p.37 (104 Gb/s)"}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: gig, cage: sfp}
+
+  2930F-48G-740W-PoEP-4SFP:
+    skus: [JL557A]
+    display_name: "Aruba 2930F-48G-PoE+-4SFP 740W (JL557A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Table 3 (4 SFP); 2930F data sheet 4AA6-5469ENW (4 SFP, 104 Gb/s); HPE QuickSpecs c05052929 V33 p.42 capacity 104 Gb/s -- NOT its '4 SFP+' line"}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: gig, cage: sfp}
+
+  2930F-48G-740W-PoEP-4SFPP:
+    skus: [JL558A, JL558ACM]
+    display_name: "Aruba 2930F-48G-PoE+-4SFP+ 740W (JL558A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Table 3 (4 SFP+); 2930F data sheet 4AA6-5469ENW; HPE QuickSpecs c05052929 V33 p.43 (4 SFP+ 1/10GbE, 176 Gb/s); 2930 M/F Management and Configuration Guide 16.10 p.643"}
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  2930F-48G-740W-PoEP-4SFPP-TAA:
+    skus: [JL559A]
+    display_name: "Aruba 2930F-48G-PoE+-4SFP+ 740W TAA (JL559A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Table 3; HPE QuickSpecs c05052929 V33 p.45 (port counts); HPE white paper Backplane Stacking and VSF Best Practices (AOS-S 16.08) (48-port 2930F uplinks are 49-52)"}
+    caveat: "JL559A: the port counts are HPE's for this J-number, but the numbering rests on the series rule and on its twin, the JL558A. No picture or output of a JL559A was seen."
+    ports:
+      - {role: access, count: 48, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 4, speed: 10gig, cage: sfp+}
+
+  # --- 8 access + 2 uplinks: 1-8, 9-10 --------------------------------------
+  2930F-8G-PoEP-2SFPP:
+    skus: [JL258A, JL258ACM]
+    display_name: "Aruba 2930F-8G-PoE+-2SFP+ (JL258A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 + Table 3; HPE QuickSpecs c05052929 V33; 2930 M/F Management and Configuration Guide 16.10 pp.642, 647-648 (JL258A member at 1/9)"}
+    ports:
+      - {role: access, count: 8, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, speed: 10gig, cage: sfp+}
+
+  2930F-8G-PoEP-2SFPP-TAA:
+    skus: [JL692A]
+    display_name: "Aruba 2930F-8G-PoE+-2SFP+ TAA (JL692A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Table 1 (the JL258A picture is given for both J-numbers) + Table 3; HPE QuickSpecs c05052929 V33 p.30"}
+    ports:
+      - {role: access, count: 8, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, speed: 10gig, cage: sfp+}
+
+  # --- 12 access + 4 uplinks of two kinds: 1-12, 13-14, 15-16 ---------------
+  # HPE describes this model as "12x 1Gbps Ethernet PoE+ ports and four
+  # built-in uplinks (2x SFP+ and 2x 1GBASE-T)": ports 13-14 are copper
+  # gigabit WITHOUT PoE, 15-16 are SFP+.  Counting 13-14 as uplinks is
+  # the vendor's wording, not a property of the faceplate.
+  2930F-12G-PoEP-2G-2SFPP:
+    skus: [JL693A]
+    display_name: "Aruba 2930F-12G-PoE+-2G/2SFP+ (JL693A)"
+    panel: {grade: vendor-doc, ref: "2930F Installation Guide 5200-1194d Figure 1 item 15 (photograph: 1-12, 13-14, 15-16) + Table 3; HPE QuickSpecs c05052929 V33 pp.4, 31"}
+    caveat: "JL693A: port numbers are read from HPE's faceplate photograph; no device output of this model was seen. Its uplinks are two copper gigabit ports (13-14, no PoE) followed by two SFP+ (15-16)."
+    ports:
+      - {role: access, count: 12, speed: gig, cage: rj45, poe: true}
+      - {role: uplink, count: 2, speed: gig, cage: rj45}
+      - {role: uplink, count: 2, speed: 10gig, cage: sfp+}
+
+captures:
+  - fixture: tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg
+    marker: "module 1 type jl260a"
+    mode: standalone
+    members: [{model: 2930F-48G-4SFP}]
+  - fixture: tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg
+    marker: "module 1 type jl258a"
+    mode: standalone
+    members: [{model: 2930F-8G-PoEP-2SFPP}]

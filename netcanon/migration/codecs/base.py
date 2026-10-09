@@ -256,6 +256,47 @@ class CodecBase(ABC):
     #: from the affected codec classes when shipped.
     unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset()
 
+    #: Whether a name that differs from an interface's only in letter
+    #: case can be ANOTHER interface on this platform.
+    #:
+    #: ``True`` where an operator chooses interface names as free text
+    #: and the platform keeps them apart by case: FortiOS (``DMZ``
+    #: beside a port ``dmz``), RouterOS.
+    #:
+    #: ``False`` where the device reads two spellings as one interface
+    #: (IOS, EOS, AOS-S: ``1/a1`` is the port ``1/A1``) — and also
+    #: where every interface name is chosen by the system and is
+    #: lower-case (Junos, VyOS, OPNsense).  Names there are
+    #: case-sensitive, and that is the wrong question: ``GE-0/0/2`` is
+    #: never a second interface, it is ``ge-0/0/2`` misspelt, and has
+    #: to be seen as the same port.
+    #:
+    #: Read by model-to-model port mapping, which compares the name
+    #: every interface ended on.  There is no safe default.  ``False``
+    #: on a platform where case tells two interfaces apart merges an
+    #: operator's own interface into a port, in a job that reports
+    #: success; ``True`` on one where it does not lets an override pass
+    #: beside the port it misspells.  So every codec states its own
+    #: (``test_the_codecs_say_which_they_are`` fails for one that
+    #: leaves it to the value below).
+    port_names_case_sensitive: ClassVar[bool] = False
+
+    #: This platform finds a port by a FACTORY name that is not the
+    #: name an operator may give it, and its renderer writes that
+    #: lookup from ``CanonicalInterface.default_name`` (RouterOS:
+    #: ``set [ find default-name=ether1 ] name=WAN``).
+    #:
+    #: Read by model-to-model port mapping.  For such a target every
+    #: port the mapping placed that the config has an interface for
+    #: has its factory name set to the port of the declared target it
+    #: is on, whatever vendor the config came from — otherwise a port
+    #: an operator names is looked up by that name, which no device
+    #: has.  The rendered output is then parsed again with this
+    #: codec, so its parser must return ``default_name`` for the
+    #: lookup its renderer writes.  ``False`` where a port has one
+    #: name, which is every other platform that ships.
+    ports_keep_a_factory_name: ClassVar[bool] = False
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Wrap each subclass's ``parse`` at the class boundary so a pydantic
         ``ValidationError`` raised while building a canonical model surfaces

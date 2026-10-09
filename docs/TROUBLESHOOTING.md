@@ -204,7 +204,8 @@ correct mapping.
 Check the job warnings for `port_rename: multiple source ports map
 to ...`.  This is a **real loss**, not cosmetic: two physically
 distinct source ports resolved to a single name on the target, and
-their VLAN memberships merged.
+their VLAN memberships merged.  (One exception: an AOS-S LAG named in
+two letter cases, `sources: Trk1, trk1`, is one LAG and not a loss.)
 
 The common case is Aruba AOS-S uplink-module ports.  `1/A1` (module
 **A**, port 1) and `1/1` (access port 1) are different ports, but no
@@ -235,6 +236,232 @@ pick each port from the row's dropdown, or pass a `port_rename_map`
 to the API.  See [`CAPABILITIES.md`](CAPABILITIES.md) § F for what
 the line under the fit-check banner tells you about the profile's
 names.
+
+Through the API there is now a way to tell it: declare the source
+device as well as the target, and the ports are paired by position
+between the two.  See [`CAPABILITIES.md`](CAPABILITIES.md) § G.
+
+### "Port mapping is incomplete" — the job is `partial`
+
+You declared both devices (`source_deployment` / `target_deployment`)
+and some ports the config uses could not be settled.
+`port_mapping_plan.unresolved_ports` on the job lists them; the lists
+below say why each is there:
+
+* **`unplaced`** — the source has more ports of a kind than the
+  target.  A 48-port config onto a 24-port switch leaves ports 25-48
+  with nowhere to go; uplinks onto a switch whose module bay you
+  declared empty have no uplink ports at all.  These ports were
+  **dropped from the output** (they are in `port_drops`).  Decide each
+  one: give it a target in `port_rename_map`, or map it to `null` to
+  confirm the drop.  Either way the job stops being `partial` on that
+  port's account — on `/plan` and on every per-pane endpoint.
+
+  With a stack as the source an entry can say `reason: "no-member"`:
+  the port belongs to a source member with no target member in the
+  same position.  Members pair in the order the two declarations list
+  them, so check how many members you declared on each side, and in
+  what order.  A port is never moved to another member to find it a
+  place; do that yourself in `port_rename_map` if it is what you
+  want.
+
+  A management port is treated differently.  With no management port
+  in the target model it is handed to the ordinary port translation
+  (the name-shape translator) rather than dropped.  Where the target
+  has a form for out-of-band management it is kept — on AOS-S it
+  becomes the `oobm` block — and the entry shows `dropped: false`
+  and where it `landed`; where the target has no such form the
+  translator drops it and the entry shows `dropped: true`.  Either
+  way the port is in `unresolved_ports`: netcanon does not know
+  whether the target device has a management interface.  Name the
+  port in `port_rename_map` — the same target to confirm it, or
+  `null` to drop it.
+* **`off_inventory`** — the config names ports the source device you
+  declared does not have.  Those names were handed to the name-shape
+  translator, the old way — which may rename one, or drop it when
+  the target has no name for it (check `port_drops`).  Almost always
+  the declaration is wrong: the wrong model (a 24-port model for a
+  48-port
+  config), the wrong mode (bare `24` against a stacked declaration
+  whose ports are `1/24`), a module you did not declare (`A1` with
+  an empty bay), or — for a stack — a member you did not declare, or
+  one whose number is not the config's (`3/1` against members
+  numbered 1 and 2: a member with no `id` is numbered from 1).
+  `POST /api/v1/migration/inventory` with
+  `{"codec": "<source codec>", "deployment": {...}}` shows the names
+  your declaration produces — compare them with the config.  A few
+  causes leave the declaration right: the config
+  spells a port another way than the device prints it
+  (`gigabitethernet1/0/1`, `Gi1/0/1`); it has an `interface Null0`
+  stanza; or it is a Catalyst or a FortiGate, whose configs list
+  interfaces their profile does not.  Map or drop such a name by
+  hand in `port_rename_map`.
+
+  On RouterOS the key of an entry is the name the CONFIG uses for a
+  port.  A port you named `core-a` is `core-a` in the plan and in
+  your map (`labelled_ports` says which port of the model it is).
+  With both devices declared an entry keyed by its factory name is
+  taken for that port; without, it matches nothing and is ignored
+  with a warning.
+* **`displaced`** — a name nobody decided that the name-shape
+  translator would have put on a name another interface ends on, or
+  on a port of the target: a name from either list above, or a
+  logical interface such as a firewall's aggregate.  Two interfaces
+  on one name is one's config merged into the other's, so the name
+  was **dropped** instead.  Give it a target of its own in
+  `port_rename_map`, or map it to `null`.
+* **`landed_off_target`** — a logical name nobody decided (a VLAN
+  interface or an aggregate, on a FortiGate usually) that the
+  name-shape translator gave a port-shaped name the target device
+  does not have.  Nothing shares that name, so it was **kept** — with
+  its config on a port that does not exist.  Give it a target in
+  `port_rename_map`, or map it to `null`.
+
+The message can also say **"N static route(s) still name, as next
+hop, an interface that has another name in the output, or is not in
+it"**.
+`port_mapping_plan.stale_next_hops` lists their destinations.  A next
+hop that is exactly an interface's name follows the interface; a
+RouterOS list of gateways (`gateway=ether1,ether2`), a routing-table
+suffix (`ether3@main`) and, across vendors, a Junos unit
+(`next-hop et-0/0/24.0`) are left as written.  The job is `partial`
+while a route names an interface that has another name in the output.
+No entry rewrites the route: correct it in the output, or keep the
+names it uses — on a RouterOS target an entry that gives each such
+port its old name (`{"ether3": "ether3"}`) leaves the route right,
+since a name does not decide a port's hardware there.
+
+The message can also say **"N port(s) are not looked up by their
+hardware in the output"** — on a RouterOS target only.
+`port_mapping_plan.unbound_ports` lists them, each with the factory
+name it should be looked up by.  RouterOS finds a port by its factory
+name, and there are three ways to end without a line that does:
+
+* The port's name reads as a VLAN, a bridge, a LAG or a loopback
+  (`bond1`, `bridge-uplink`, `vlan-trunk`, `uplink.10`, `lo0`).  The
+  output has no Ethernet line for such a name, so the address and
+  every other reference are on a name nothing defines — or, for a
+  name like `vlan10`, on a VLAN interface the renderer creates on
+  another port.  Give the port another name in `port_rename_map`, or
+  a port of the target.
+* The config has no interface for the port — it names it only as a
+  LAG member or in a route — and an entry gave it a name.  No line
+  can carry its factory name, so the name is written where the port
+  is referenced (`slaves=`, `gateway=`) and defined nowhere.  Use a
+  port of the target as the entry's target, or remove the entry: the
+  name the mapping gives the port needs no line.
+* Two ports of another vendor were given one name.  The output finds
+  the first by it, and the second is listed.  Give each a name of its
+  own.
+
+If the job also says **"the output could not be read back with the
+target codec"**, no port could be checked at all: every port that
+could have been checked is listed for that reason, whatever its name,
+and the three causes above do not apply.  That is a fault in netcanon
+— report it with the config.
+
+If the plan lists `emptied_lags`, `shrunk_lags`, `lost_routes`,
+`lost_dhcp_pools`, `lost_tracking` or `lost_vtep_sources`, a dropped
+port took something with it: a LAG loses a dropped member (and may be
+left with none), a static route or a DHCP pool that names a dropped
+port is removed whole, an interface that stays loses the VRRP track
+entry that named it, and a VTEP loses the source interface it was
+bound to.
+
+If the plan lists `off_target`, one of your targets is not a name the
+target model lists.  That is allowed — but check it is not another
+spelling of a port that is already taken.  Only letter case and
+surrounding space are understood; `Gi1/0/1` is not recognised as
+`GigabitEthernet1/0/1`, and the device would put both source ports on
+that one interface.  On a RouterOS target a target that is not a port
+of the declared device is a NAME for the port, not a place: the
+port's hardware stays where the mapping put it
+(`port_mapping_plan.target_hardware`), the name is not listed here,
+and a line of the plan says the entry was taken as a name.  If
+nobody placed the port, the name is listed here — unless the target
+happens to have a port with the factory name the port had, in which
+case `target_hardware` shows it on that port, which the mapping did
+not choose for it.  Between two RouterOS configs `source_hardware`
+then names a factory name the target lacks; from another vendor the
+output finds the port by the name you typed, which no port has, or
+only refers to it, and a line of the plan says so.  Where the name
+reads as another kind of interface (`bridge-x`, `bond7`) no Ethernet
+line is written at all: between two RouterOS configs the port is then
+in `unbound_ports` and the name is not listed here; from another
+vendor the name is listed here and the address is on a name nothing
+defines.
+
+The message can also say **"N target port(s) received more than one
+source port"**.  `port_mapping_plan.fused` names them.  Only your own
+`port_rename_map` can cause this — two entries pointing at one name,
+or an entry pointing at a name the pairing already used (on a
+same-vendor pair, keeping an unplaced port under its old name can do
+exactly that).  A target is read as the target device spells it, so
+on a platform without case `1/a1` is the port `1/A1` — and on Junos
+or OPNsense, which name every interface themselves in lower
+case, `GE-0/0/2` is the port `ge-0/0/2`.  On RouterOS two ports can
+also be fused without sharing a name: a port that keeps a name of its
+own is on the hardware it was paired with, and another port sent to
+that hardware is on it too.  Naming the ports again does not clear
+it; give each a target of its own.
+
+**"Port mapping was not made"** means no pairing was possible at all —
+one side is a profile that lists no ports, or lists a port name
+twice; or a RouterOS config gives a port the name another port of the
+source device still has, or looks two interfaces up by one factory
+name (a renamed port beside a line that still uses its old name), so
+its ports cannot be told apart.  Every port name was then translated
+by name shape.
+
+A job that is `partial` for another reason as well (the usual state
+of a cross-vendor run) carries both messages in `error`.
+
+A Catalyst source is a special case: IOS-XE prints the interfaces of
+every network module the chassis could take, so the modules you did
+not declare show up as off-inventory even when the declaration is
+right.  A sub-interface (`GigabitEthernet1/0/1.100`) follows its
+parent port only between two configs of the same codec; across
+vendors it is reported separately and does not move with its port.
+
+### "A stack member's config came out on another member"
+
+Two stacks are paired member by member in the ORDER the two
+declarations list them — the first member of `source_deployment` with
+the first of `target_deployment` — and not by member number.  A
+fabric numbered 1 and 3 onto a stack numbered 1 and 2 puts `3/5` on
+`2/5`; list the source as 3 then 1 and member 3 lands on member 1.
+The job says so in a line (`stack members pair in the order they are
+declared, not by member number: source member 3 with target member
+2`), and `port_mapping_plan.source.members` / `.target.members` give
+each member's place (`rank`) and number.  To pair them another way,
+change the order of one list.
+
+Where a member is put beside a member of its own number instead of
+on it — for instance the same members listed 2, 1 on one side and
+1, 2 on the other — the line is another one: `N stack member(s) are
+paired with a member of ANOTHER number while one of the two numbers
+is declared on both sides`.  That is a **crossing**: every port of
+those members is on another switch.  The job is still `completed`,
+since the order of a list is yours to choose; if you did not mean it,
+give the members of one number the same place in both lists.
+
+A member states its number with `id` in the request
+(`{"model": "JL260A", "id": 3}`); one that leaves it out is numbered
+from the lowest number no other member states.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § G.
+
+### "On RouterOS my port was renamed, not moved"
+
+An entry of `port_rename_map` such as `{"ether1": "ether5"}` came out
+as `set [ find default-name=ether1 ] name=ether5`: the port is still
+`ether1`, now CALLED `ether5`.  That is what an entry means on
+RouterOS when no devices are declared — it names a port, and nothing
+in a name says whether hardware was meant (`sfp1` is a port of one
+model and a short name for a port of another).  To move a port's
+config onto other hardware, declare both device models (API:
+`source_profile` / `target_profile`); an entry whose target is a port
+of the declared target then moves the port there.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § G.
 
 ### "The migrate page reports 'paramiko-shell capture artifact'"
 

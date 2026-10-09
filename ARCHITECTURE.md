@@ -274,6 +274,12 @@ API routes depend on the exact shape.  Later phases add NEW public
 functions (e.g. `plan_with_deploy`, `plan_with_diff`); existing
 stages stay frozen.  See the module docstring.
 
+`run_plan_with_models` is one such addition: it takes the port
+inventory of the source device and of the target device, pairs the
+ports the config uses by position, and forwards the resulting rename
+map to the frozen `run_plan_with_overrides`.  See "Device models and
+inventories" below.
+
 ---
 
 ## Per-pane overrides (Tier-3 rename modal)
@@ -364,7 +370,7 @@ once version-targeted rendering grows an operator-facing surface).
 
 **Source-shape capture:** `run_plan_with_overrides` injects a
 capture-first transform that populates `MigrationJob.source_vlans`,
-`source_local_users`, `source_snmp_community`, and
+`source_local_users`, `source_snmp_community`, `source_ports` and
 `source_hostname` from the post-parse, pre-transform tree.  This
 is load-bearing for the VLAN / local-users / SNMP panes (they
 have no "auto-rewritten" rows to fall back on if the operator
@@ -660,8 +666,12 @@ whatever model is selected, so the auto column can disagree with a
 profile that describes a standalone switch.  The rename table marks
 each row whose auto name is not a port the selected profile lists
 (`has-offprofile`, "N not on profile" on the section header), so the
-disagreement is visible per port.  Closing it needs the translator
-to be told the source and target models, which it is not yet.
+disagreement is visible per port.  Closing it needs the pipeline to
+be told the source and target models.  Through the API it now can
+be: a request that declares both devices is paired by position (see
+"Device models and inventories" below).  The rename modal has no
+source-device picker yet, so in the modal the paragraph above still
+holds.
 
 ### Per-category capacity limits
 
@@ -762,6 +772,414 @@ display_name concatenated).  See
 [`tests/testid_reference.md`](tests/testid_reference.md) for
 the full testid inventory (one `section-*` testid per
 container, plus per-row, per-module, per-codec testids).
+
+---
+
+## Device models and inventories (model-to-model port mapping)
+
+**Where:** `netcanon/migration/device_models.py` (schema, compiler,
+loader), `netcanon/migration/port_mapping.py` (the mapper),
+`netcanon/models/port_inventory.py` (the data shapes),
+`netcanon/definitions/library/model_families/*.yaml` (the data), and
+one naming rule per grammar beside each vendor's codec.
+
+**The problem.**  A port name cannot be translated from its shape.
+The same string means different ports on different models, and the
+same port has different names depending on how the device is
+deployed: an Aruba 2930F port is `24` standalone and `1/24` as a VSF
+member; a 2930M's first uplink is `A1` with stacking disabled, `1/A1`
+with it enabled, and does not exist with the bay empty.  The
+name-shape translator (`canonical/port_names.py`) is not told the
+model, so on a same-vendor pair it can only be the identity, and it
+could never know that port `49` of one switch is `1/A1` of another.
+
+**The approach: translate positions, not names.**  Each end of a
+migration is declared as a *deployment* — a mode, and an ordered list
+of members, each a model with its fitted modules.  A deployment
+compiles to an *inventory*: the ordered list of the ports that exist,
+each with its real name.  Two inventories are paired by position, and
+the pairing is an ordinary `port_rename_map`, which the translator
+already applies ahead of its own guess.  The translator is shared with
+every translation, so what this feature needs from it is kept small
+and applies to all of them: a name the target cannot express is
+stripped before anything is renamed, and a route's next hop that is
+the name of an interface follows that interface.  Everything that
+depends on knowing the target device is done by the caller that knows
+it.
+
+```
+   declared source device                    declared target device
+   (deployment, or a profile key)            (deployment, or a profile key)
+              │ compile                                  │ compile
+              ▼                                          ▼
+          Inventory ──────── plan_port_mapping ──────── Inventory
+                                   │   (only the ports the config uses)
+                                   ▼
+                MappingPlan { rename_map, pairings, unplaced,
+                              off_inventory, evidence, ... }
+                                   │
+       operator port_rename_map ───┤   always wins
+                                   ▼
+                     run_plan_with_overrides   (unchanged)
+                                   │
+                                   ▼
+        check the finished run, over EVERY name the config
+        references: did two names end on one target name, or a
+        logical name on a port of the target?  A name nobody
+        decided that caused it is dropped and the translation run
+        once more; then settle_plan records what happened.
+```
+
+**Families, models, modes.**  The registry does not list names; it
+lists facts.  A *family* file holds models that share a naming rule, a
+set of deployment modes and a set of modules.  A *model* is one part
+number's fixed panel (port groups in port-number order) plus its
+module bays.  A *mode* is a deployment state that changes names.  A
+*naming rule* is a small pure function beside the codec — one per
+naming grammar, not per product line — that renders one port's name
+from its coordinates, and declares which roles it can name at all (a
+group in a role the rule cannot name is refused at load: AOS-S
+out-of-band management is the `oobm` context, not a numbered port).
+
+**Pairing policy** (`port_mapping.py`):
+
+* Members pair by rank, never by vendor member id — ids are sticky and
+  sparse, so a lone ex-member can be `3/N`.  A member's rank is its
+  place in the declaration's list, so two stacks pair in the order
+  their members are listed, and that order is how an operator chooses
+  which member goes where.  Where it puts a member the config uses
+  on a member of another number, the plan says which went to which
+  (`_member_lines`): in one line for a RENUMBERING, where neither
+  number is declared on the other side, and in another for a
+  CROSSING, where one is — for instance the same members listed in
+  another order — with what to do about it.  Neither holds a job.  A
+  side read from a
+  flat profile states no member number, and gets neither line.
+* Within a member, ports pair role to role, in order.  A port never
+  changes member to find a place.
+* A used port with no position on the target is **dropped,
+  explicitly**, and reported.  It is never spilled onto a port of
+  another role, and never left out of the map: left to the name-shape
+  translator it would keep its old name on a same-vendor pair, which
+  can be the very name another port was just mapped to.
+* Between two configs of the **same codec**, a sub-interface
+  (`ge-0/0/0.54`) follows its parent port: the unit suffix means the
+  same thing on both sides.  Across codecs it does not, and the name
+  is left to the name-shape translator like any other the inventory
+  does not list.
+* Some names are left to the name-shape translator — the ordinary
+  port translation, which derives a target name from the shape of
+  the source name without knowing either model.  An unplaced
+  *management* port, because the translator knows what each target
+  does with out-of-band management (AOS-S has an `oobm` block, not a
+  management interface).  A name the config uses that is not a port
+  of the declared source — **off-inventory**, the tripwire for a
+  source model declared wrongly.  And every *logical* name (a LAG, an
+  SVI, a loopback), which was never the mapper's to decide.
+* **What the translator makes of those names is checked — all of
+  them.**  Its answer can be a port the pairing gave to something
+  else: a management port whose role comes from a profile rather
+  than from its name is, by shape, just port 1; a FortiGate aggregate
+  whose codec classifies its name as a physical port becomes the
+  first port of every target.  The mapper cannot know that in advance
+  without re-deriving the translator, so the pipeline asks the
+  finished run instead (`fused_targets`), over every name the config
+  references and not only the hardware ports the plan was made for.
+  Where a hardware port and another name ended on one target, or a
+  logical name ended on a port of the target, every name that
+  neither the pairing nor the operator decided is dropped —
+  **displaced** — and the translation is run once more.  Where no
+  name in a clash was decided, one keeps the name — a port of the
+  declared source if there is one, else a hardware port, else the
+  first: its place was good.  A fusion that is left is the
+  operator's own override; it is recorded (`fused`) and the job is
+  not a clean success, whatever was acknowledged.  (Two *logical*
+  names the ordinary translation puts on one name — two loopbacks on
+  a target with one loopback form — are outside this check and are
+  warned about by the translator, as they always were.)
+* **Whether another letter case can be another interface is a fact
+  about the platform**, and each codec states it
+  (`CodecBase.port_names_case_sensitive`).  On AOS-S or IOS `1/a1` is
+  the port `1/A1`, and an override that hides behind its spelling
+  would put two ports on one.  On FortiOS and RouterOS, where an
+  operator chooses interface names as free text, `DMZ` and `dmz` are
+  two interfaces, and folding them together turned an operator's own
+  name for a VLAN interface into the physical port beside it.  Junos,
+  VyOS and OPNsense names are case-sensitive too, and that is the
+  wrong question there: every interface name is the system's, in
+  lower case, so `GE-0/0/2` is `ge-0/0/2` misspelt and is compared as
+  that port.  Source names are compared by the source platform's rule
+  and target names by the target's.  There is no safe default — the
+  wrong value either merges two interfaces in silence or lets a
+  misspelling pass beside the port — so every codec states its own,
+  and a test fails for one that does not.
+* **The plan's flags and warnings describe the outcome, not the
+  intention.**  `settle_plan` reconciles the plan with the run: an
+  unplaced port the operator gave a target was kept; a management
+  port the target cannot express was dropped by the translator and
+  is reported as dropped; a route, a DHCP pool, a VRRP track entry or
+  a VTEP source that named a dropped port went with it and is
+  listed.  `unresolved_ports`, `displaced`, `fused`, `off_target`,
+  `target_hardware`, `source_hardware`, `unbound_ports`,
+  `landed_off_target`, `stale_next_hops`,
+  `sub_interfaces`, `emptied_lags`, `shrunk_lags`, `lost_routes`,
+  `lost_dhcp_pools`, `lost_tracking` and `lost_vtep_sources` are
+  stored fields, so a client reads the outcome as data.  `pairings` and
+  `rename_map` stay the pairing as it was made, before the
+  operator's map: `overridden` names the pairings a client must not
+  read as final.
+* A run with an unresolved name — dropped for want of a place, a
+  management port kept although the target lists none,
+  off-inventory, displaced, or a logical name given a port-shaped
+  name the target does not list, and not named in the operator's own
+  map — or with a fused target, or with a route left naming a port
+  that moved, or with a port the output does not look up by
+  its hardware, or for which no pairing could be made at all, is
+  `partial`, not `completed`.
+* An operator's target is read as the declared target spells its
+  ports (`1/a1` is `1/A1`) where another letter case cannot be
+  another interface on the target platform — it has no case, or it
+  names every interface itself in lower case; on FortiOS and RouterOS
+  it is stripped and taken as typed.  An entry with a blank target is
+  set aside: it decides
+  nothing.  Only case and surrounding space are understood: an
+  abbreviation the device accepts (`Gi1/0/1`) is not recognised as
+  the port it names, and is reported as a target the model does not
+  list.
+
+**Which names a mapping is made for.**  `collect_port_names` is the
+list of the port names a canonical tree holds: every place the
+translator's rename pass rewrites.  They are the names the CONFIG
+uses.  A route's next hop can name an interface too (RouterOS
+`gateway=ether1`, Junos `next-hop et-0/0/24.0`): where it is exactly
+an interface's name — or, between two configs of one codec, such a
+name with a unit — the route follows its interface and goes with a
+dropped one.  Any other form (a list of gateways, a routing-table
+suffix, a unit across vendors) is left as written, and
+`run_plan_with_models` lists the route (`stale_next_hops`) — as it
+does a next hop naming a port of the declared source that the config
+has no interface record for.  A list whose members only changed
+places among themselves still says what it said, and is not listed.
+
+**A port's hardware identity is not a reference to it.**  RouterOS
+keeps a port's *factory name* (`ether2`) beside the name an operator
+may have given it (`core-a`).  The rest of the config uses the
+second; the renderer finds the port on the device by the first
+(`set [ find default-name=ether2 ] name=core-a`).  An entry of a
+rename map can therefore mean two things, and nothing in the entry
+says which: MOVE this port's config onto other hardware, or NAME this
+port.  `sfp1` is a port of one RouterOS model and a short name for
+`sfp-sfpplus1` on another, so the shape of the name cannot decide it.
+A declared target device can.  So:
+
+* the translator — shared with every translation — never touches the
+  factory name.  Without devices declared an entry names a port, and
+  the output finds it by the factory name it had, as it always did;
+* `run_plan_with_models` finds such a port in the source model by its
+  factory name, and speaks of it everywhere else — the plan, the
+  job's lists, the key of an operator's entry — by the name the
+  config uses (`labelled_ports` says which port of the model that
+  is);
+* onto a target that finds a port by a factory name — the codec
+  says so (`ports_keep_a_factory_name`; RouterOS) — it sets the
+  factory name itself, after the translator has run, on every port
+  the mapping can account for, whatever vendor the config came from.
+  Which port of the SOURCE an interface of the translated tree is:
+  the one whose factory name it still carries, where the source
+  config recorded one; else the port of the declared source whose
+  name the rename map sent to this interface's name.  (A RouterOS
+  config states a factory name only on a port it has an
+  `/interface ethernet` line for, and another vendor's config states
+  none.)  Where that port then is: a port whose name in the output is
+  a port of the declared target IS that port; a port under any other
+  name — one an operator gave it, in the source config or in their
+  map — is on the hardware its pairing gave it.  Where each port's
+  hardware ended is read back from the tree that is rendered
+  (`target_hardware`; `source_hardware` where that hardware is not a
+  port of the target), and two ports on one piece of hardware are a
+  clash although they share no name;
+* the tree is not the output.  The RouterOS renderer writes no
+  Ethernet line for an interface whose name reads as a VLAN, a
+  bridge, a LAG or a loopback, whatever factory name the interface
+  carries.  None of that rule is re-derived: the rendered output is
+  parsed again with the target's own parser, and a port that no line
+  OF ITS OWN looks up by its hardware is listed (`unbound_ports`) and
+  leaves the job `partial`.  That another interface is looked up by
+  the same hardware says nothing for the port;
+* and the binder's reach is not the pairing's.  The binder walks
+  interfaces; the pairing is over every port the config uses, and a
+  port named only as a LAG member or in a route has no interface.
+  Under the target port's name it needs no line.  Under a name an
+  operator gave it nothing defines it, so the read-back is handed the
+  pairing's list as well as the binder's and reports such a port
+  where the output uses its name;
+* onto any other vendor a port has one name, so a port an operator
+  named takes the name of the port it was paired with.
+
+The field was first missing from the check altogether, while every
+moved RouterOS port was rendered as "find the port with the old
+name"; it was then rewritten in the translator, which was right for
+two declared devices and broke the commonest entry of a rename map
+for everyone else; and the handling that replaced that acted only
+between two RouterOS configs, on a port whose factory name the config
+happened to state — so a port named from any other vendor, or an SFP
+port with no line of its own, was still rendered as "find the port
+with this name".  All three are the same mistake: a rule made total
+over the case in view, in code that serves a wider one.
+
+That list of places was written by reading the tree, and a list
+written that way cannot show that it is complete.  So it is also
+checked by an experiment that needs no list
+([`tests/unit/migration/test_port_name_universe.py`](tests/unit/migration/test_port_name_universe.py)):
+send port names to one another through the translator on the
+committed captures, and compare the output, parsed again, with the
+unmoved output in which the same names are sent to one another.
+What it reaches is limited and is itself tested: a field only where
+a capture puts a moved name in it and the codec's parser reads the
+field back; names the device already has; two configs of one codec.
+The module breaks the translator at each place in turn and pins
+which places a capture catches; each of the others has a small
+config there that does.  Its table of places, the rename pass and
+the collector are compared on a tree built from the canonical schema
+— a name of its own in every `str` and `list[str]` field — so a field
+added to one of the three and not the others fails without anyone
+keeping a fixture.  A field that holds text in another shape (a dict,
+a set, a union) fails the builder itself until it is taught the shape
+or listed as holding no port name: left empty, it would be missing
+from all three alike.
+
+The places are of two kinds.  An interface stanza, a VLAN's
+membership list and a LAG's member list are *evidence* that the
+device has a port of that name.
+A static route's or DHCP pool's interface, a VRRP track entry and a
+VTEP source are *references*: a real port named only there must be
+part of the mapping, but what those fields hold is not always an
+interface — a route to `Null0`, a pool keyed by a zone name, a VTEP
+source address — so a reference counts only when the declared
+inventory lists it or the source codec's classifier positively calls
+it a hardware port.  From the evidence is taken what is not
+hardware: an interface whose canonical type says SVI, LAG, loopback,
+bridge or tunnel; a LAG's name; and a name the classifier
+*positively* calls logical.  `unknown` is never grounds for leaving
+evidence out (on AOS-S it is what a real uplink named `A1`
+classifies as), and a port of the declared source always counts,
+whatever the classifier says.  This set is what the mapping is made
+FOR; the check on the finished run reads every name.
+
+**Evidence is per port, and `capture` is granted.**  A name is the
+product of separately evidenced facts — the mode's naming, the
+model's panel, the module's port count — each graded `vendor-doc` or
+`inferred` where it is stated; a port takes the weakest of the facts
+that produced it.  None of them may be `capture`: a capture proves one
+deployment, so it is declared as a *capture claim* (fixture, a line
+only that model's capture contains, mode, members) and granted only
+where a deployment matches exactly — same model, same mode, same
+member id, and for a bay port the same module.  A sibling model, a TAA
+twin, another member id or another module does not inherit it.
+
+`capture` means a test re-proves the claim on every run, so only the
+claims that test re-proves grant it: the engine holds their list
+(`PROVEN_CAPTURE_CLAIMS`) and the shipped-data test requires that
+list to equal the claims it re-proves.  An entry is the whole claim —
+fixture, mode, each member's model, id and modules — so a proven
+fixture cited for another model grants nothing either.  A claim in
+an operator's own family file names a fixture nothing reads; it is
+logged and grants nothing.  And a capture proves *names*: it retires the caveat of the
+naming fact and keeps the caveat of the panel or module fact, because
+which ports are uplinks is not something a config shows.  For the
+same reason the grade on a pairing or a plan says how well the two
+port names are established, not that the pairing was observed.
+
+**Guards**
+([`tests/unit/migration/test_device_models_shipped.py`](tests/unit/migration/test_device_models_shipped.py)):
+every shipped file loads strictly; every capture claim is pinned
+whole and re-proven against its fixture, whose ports must equal the
+compiled inventory (a capture that names only some ports cannot be
+claimed); the `(name, role)` sequence of every shipped model in every
+mode with every module is pinned from hand-typed tables in the test,
+not regenerated from the code under test (a capture cannot prove
+which ports are uplinks), as are which part number is
+which model and which facts are graded `inferred`; every compiled
+name the vendor's classifier recognises round-trips to the member,
+slot and port that produced it — the bare-letter module port of a
+switch that is not stacked (`A1`) is not recognised by the AOS-S
+classifier yet and is pinned as a known gap, which the mapping does
+not depend on because an explicit rename entry is applied before
+classification; and where a flat target profile describes the same
+device, the two must list the same ports with the same roles.
+The pipeline's central promise — no hardware port on a target name
+another name ends on, unless the operator asked for it — is asserted
+on the jobs of
+[`tests/unit/migration/test_run_plan_with_models.py`](tests/unit/migration/test_run_plan_with_models.py),
+whose wrapper also reads each job's RENDERED OUTPUT back: an
+interface that can be recognised by its address must be on the port
+the job reports, the output must name no port the job does not
+report, no name that moved may still be in it, and no interface may
+carry the addresses of two source interfaces; and, on a target that
+finds a port by a factory name, for a port that carries no address at
+all (a LAG member, a route's interface), the name it has in the
+output must be a port of the target or an interface the output looks
+up by a factory name.  An AOS-S port carries no address either, so
+between two stacks — where the names of one member are names of the
+other — none of those can tell one member's config from another's:
+between two AOS-S configs the wrapper also compares every VLAN list
+and LAG member list of the output with the source's, each name moved
+as the job says.  The address checks
+and the old-name check take nothing from the engine's list of places;
+the port-list check reads both sides with the engine's collectors.
+Each is handed a job with the defect it is for, in the same module,
+and has to fail — and the wrapper is handed such a job for each of
+its assertions, and has to refuse it in that assertion's own words,
+so that none can be taken out of the wrapper unnoticed.  (Where a
+test expects two ports on one name, the checks that read a port's
+place off its address and the list comparison are not run: a parser
+gives back one interface per name.)
+
+**Relationship to target profiles.**  A target profile is one model in
+one stated state, as a flat list.  `inventory_from_profile` reads one
+into the same `Inventory` shape, so a device no family describes yet
+can still be declared — as one device, with its ports in the
+profile's list order, which the mapping plan flags as unvouched.
+Where a family and a profile describe the same device, the family is
+authoritative for port mapping and the profile keeps feeding the
+rename modal's dropdowns until it is retired.
+
+**Loading.**  The shipped families always load.  An operator's own
+`model_families/` directory under a relocated definitions directory is
+laid over them: it can add new families, each with its own models.  A
+file that re-declares a shipped family — even to add one model to it
+— is refused and logged, so a shipped family is never replaced.  A
+file that cannot be loaded for any reason (not UTF-8, not YAML, a
+YAML alias, a key that is not a plain name, the wrong schema) is
+logged and skipped; none of them can stop the application starting.
+Both `target_profiles/` and `model_families/` are reserved as
+immediate children of the definitions root, so the backup-side
+definition loader does not try to read them.
+
+**API.**  `GET /api/v1/migration/model-families` lists families;
+`POST /api/v1/migration/inventory` compiles one declaration to its
+ports; a plan request that declares both devices
+(`source_deployment` or `source_profile`, with `target_deployment` or
+`target_profile`) is paired by position on every plan endpoint and
+returns the pairing on `MigrationJob.port_mapping_plan`; the body's
+own `port_rename_map` is the operator's edits to that pairing on
+every one of them, the per-pane endpoints included.
+`target_profile` on its own stays advisory; a `target_deployment` on
+its own is refused.
+
+**Not modelled yet:** modular chassis (every bay-and-module
+combination of a model is compiled when its family loads, and that
+product is capped), breakout lanes, ports a stack consumes as links,
+ports that belong to a stack rather than a member, literal
+non-systematic names, a sub-interface following its parent port
+across codecs, and whether a model has an out-of-band management
+port at all (a kept management port therefore always needs the
+operator's decision).  Reading the source model out of the config,
+and a picker in the rename modal, do not exist yet; today the
+feature is reachable through the API.
+
+Authoring guide:
+[`docs/adding-a-device-model.md`](docs/adding-a-device-model.md).
 
 ---
 
@@ -1086,6 +1504,7 @@ What's queued:
 - [`docs/glossary.md`](docs/glossary.md) — project-jargon reference
 - [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) — worked example: MTU wire-through across every codec
 - [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) — worked example: shipping a hardware-shape YAML for the rename UI fit-checks
+- [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md) — model families, deployment modes and port inventories for model-to-model port mapping
 - [`docs/feature-parity-walkthrough.md`](docs/feature-parity-walkthrough.md) — worked example: SNMPv3 USM landing across canonical + codec + pipeline + UI + tests + docs
 - [`translator-plans.txt`](translator-plans.txt) — active roadmap and backlog
 - [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) — per-codec certification state

@@ -55,7 +55,7 @@ lives entirely in `../codecs/`.
 
 | File | Category | Factory |
 |---|---|---|
-| `port_names.py` | physical + logical port names | `build_port_rename_transform(source_codec, target_codec, rename_map, strip_unmappable=True)` |
+| `port_names.py` | physical + logical port names (also `collect_port_names` / `collect_hardware_port_names`: where a tree holds port names, and which of them are evidence of a hardware port) | `build_port_rename_transform(source_codec, target_codec, rename_map, strip_unmappable=True)` |
 | `vlan_names.py` | VLAN ID rewrite (1-4094 → 1-4094) | `build_vlan_rename_transform(rename_map)` |
 | `local_user_names.py` | local user account names | `build_local_user_rename_transform(rename_map)` |
 | `snmp_names.py` | SNMPv1 / v2c community string | `build_snmp_community_rename_transform(rename_map)` |

@@ -103,6 +103,10 @@ class CiscoIOSXECLICodec(CodecBase):
     )
     output_extension: ClassVar[str] = "cfg"
 
+    #: IOS reads an interface name in any letter case as the one interface.
+    #: See ``CodecBase.port_names_case_sensitive``.
+    port_names_case_sensitive: ClassVar[bool] = False
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="cisco_iosxe_cli",
         vendor_id="cisco_iosxe",

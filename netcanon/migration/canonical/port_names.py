@@ -15,6 +15,25 @@ This module defines the **vendor-agnostic bridge**:
    and rewrites every port-name field from source convention to target
    convention, using ONLY each codec's own ``classify_port_name`` /
    ``format_port_identity`` methods.  Never conditionals vendor pair.
+3. :func:`collect_port_names` — the port names a canonical tree
+   holds, in the places the sweep rewrites.  And
+   :func:`collect_hardware_port_names`, the subset that is evidence
+   of a hardware port.  A new canonical field that holds a port
+   name is added to the first and to the sweep in the same change;
+   ``tests/unit/migration/test_port_name_universe.py`` looks for
+   one that was not, by sending port names to one another on the
+   committed captures and comparing the two outputs parsed again.
+4. :func:`route_port_reference` — a route's next hop that is the
+   name of an interface, which follows that interface.
+
+What the sweep does NOT rewrite is a port's FACTORY name
+(``interfaces[].default_name``, RouterOS).  That field is the port's
+hardware identity, not a reference to it: an entry of the rename map
+gives a port a name, and the renderer then writes "find the port
+with this factory name and call it that".  Whether an entry instead
+MOVES the config onto other hardware can only be told from a
+declared target device, so it is decided where one is declared
+(:func:`~netcanon.services.migration_pipeline.run_plan_with_models`).
 
 **Modular boundary:** each codec knows ONLY its own vendor's naming
 convention.  Cisco's codec classifies ``Gi1/0/24`` → ``PortIdentity``
@@ -30,14 +49,14 @@ implementing the two methods; zero edits here.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Iterable, Iterator
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from ..codecs.base import CodecBase
-    from .intent import CanonicalIntent
+    from .intent import CanonicalIntent, CanonicalStaticRoute
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +256,265 @@ class PortRenameResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Where port names live in a canonical tree
+# ---------------------------------------------------------------------------
+
+#: Canonical interface types that are not hardware ports.  An SVI, a
+#: LAG, a loopback, a bridge or a tunnel is a real NAME in a config and
+#: is rewritten like any other, but it is not a port a device model
+#: lists.
+NON_HARDWARE_INTERFACE_TYPES: frozenset[str] = frozenset({
+    "ianaift:l3ipvlan",
+    "ianaift:l2vlan",
+    "ianaift:ieee8023adLag",
+    "ianaift:softwareLoopback",
+    "ianaift:bridge",
+    "ianaift:tunnel",
+})
+
+#: Kinds a codec's classifier gives only to a name that is not a
+#: hardware port.  ``unknown`` is deliberately absent: it is what a
+#: classifier returns for a name it does not recognise, and on AOS-S
+#: that includes a real uplink named ``A1``.
+NON_HARDWARE_PORT_KINDS: frozenset[str] = frozenset({
+    "lag", "svi", "loopback", "tunnel", "vtep", "virtual",
+    "hw_aggregate",
+})
+
+#: Kinds a classifier gives to a name it recognises AS a hardware
+#: port.  With :data:`NON_HARDWARE_PORT_KINDS` and ``unknown`` this
+#: is every :data:`PortKind`.
+HARDWARE_PORT_KINDS: frozenset[str] = frozenset({
+    "physical", "breakout", "mgmt",
+})
+
+
+def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
+    """The port names in the places the rename sweep rewrites, in the
+    order the sweep visits them, one per value it resolves."""
+    for iface in intent.interfaces:
+        yield iface.name
+        if iface.lag_member_of:
+            yield iface.lag_member_of
+        # VRRP track-interface references are port names too.
+        for grp in iface.vrrp_groups:
+            yield from grp.track_interfaces
+    for vlan in intent.vlans:
+        yield from vlan.tagged_ports
+        yield from vlan.untagged_ports
+    for lag in intent.lags:
+        yield lag.name
+        yield from lag.members
+    for route in intent.static_routes:
+        if route.interface:
+            yield route.interface
+    for pool in intent.dhcp_servers:
+        if pool.interface:
+            yield pool.interface
+    # A VXLAN VTEP source-interface is a port name (Loopback0 / lo0.0).
+    for vx in intent.vxlan_vnis:
+        if vx.source_interface:
+            yield vx.source_interface
+
+
+def collect_port_names(intent: CanonicalIntent) -> list[str]:
+    """Every port name *intent* holds, in first-seen order: the
+    names in the places :func:`translate_port_names` rewrites
+    (:func:`_swept_names`).
+
+    These are the names the CONFIG uses.  A port's factory name
+    (``interfaces[].default_name``) is not one of them where an
+    operator gave the port a name of their own: nothing in the config
+    refers to the port by it, and an entry of a rename map keyed by
+    it matches nothing.
+
+    A route's ``gateway`` can hold an interface name too (RouterOS
+    ``gateway=ether1``, Junos ``next-hop et-0/0/24.0``).  It adds no
+    name to this list — it counts only when it is the name of an
+    interface the tree already has — but the sweep rewrites it and a
+    drop takes the route; see :func:`route_port_reference`.
+
+    A new canonical field that holds a port name belongs here and in
+    the sweep, in the same change.  Reading two functions side by
+    side proves they agree with each other, not that they are
+    complete: ``tests/unit/migration/test_port_name_universe.py``
+    sends port names to one another through the translator on the
+    committed captures and fails for a value of the re-parsed output
+    that did not follow, where a capture fills the field.
+
+    Returns:
+        Names without duplicates.  Includes LAG, SVI and loopback
+        names; see :func:`collect_hardware_port_names` for the subset
+        a device model can account for.
+    """
+    seen: dict[str, None] = {}
+    for name in _swept_names(intent):
+        if name:
+            seen.setdefault(name, None)
+    return list(seen)
+
+
+def route_port_reference(
+    route: CanonicalStaticRoute,
+    interface_names: Collection[str],
+    units: bool = True,
+) -> tuple[str, str] | None:
+    """The interface a route's ``gateway`` names, when it names one.
+
+    Some parsers keep a next hop that is an interface, not an
+    address, in ``gateway``: RouterOS ``gateway=ether1``, Junos
+    ``next-hop et-0/0/24.0``.  Such a route follows its interface
+    when the interface is renamed and goes with it when it is
+    dropped, exactly as a route bound through ``interface`` does.
+
+    A gateway counts as an interface reference only when it is
+    exactly the name of an interface of the tree, or (with *units*)
+    such a name followed by a numeric unit — never by its shape, so
+    an address is never taken for a port.
+
+    Args:
+        route: The route.
+        interface_names: The names of the tree's interfaces.
+        units: Also accept ``<name>.<unit>``.
+
+    Returns:
+        ``(interface name, unit suffix)`` — the suffix is ``".0"``
+        style or ``""`` — or ``None``.
+    """
+    gateway = route.gateway
+    if not gateway:
+        return None
+    if gateway in interface_names:
+        return gateway, ""
+    if units:
+        port, dot, unit = gateway.rpartition(".")
+        if dot and unit.isdigit() and port in interface_names:
+            return port, dot + unit
+    return None
+
+
+def collect_hardware_port_names(
+    intent: CanonicalIntent,
+    classify: Callable[[str], PortIdentity] | None = None,
+    always: Iterable[str] = (),
+    fold: bool = True,
+) -> list[str]:
+    """The hardware ports *intent* references, in first-seen order.
+
+    **Evidence and reference.**  A running-config names a port in an
+    interface stanza only when the port carries non-default config; an
+    unconfigured access port appears solely in a VLAN's membership
+    list, and a LAG member solely under the LAG.  Each of those three
+    is EVIDENCE that the device has a port of that name.
+
+    A static route's or a DHCP pool's interface, a VRRP track entry and
+    a VTEP source are REFERENCES.  The rename sweep rewrites them, so a
+    real port named only there must be part of any mapping — but what
+    those fields hold is not always an interface: a route to ``Null0``
+    or to the keyword ``dhcp``, a pool keyed by a zone name, a track
+    OBJECT number, a VTEP source address.  A reference therefore counts
+    only when something says it is a port: the declared inventory lists
+    it (*always*), or *classify* positively calls it a hardware kind.
+
+    What is taken away from the evidence:
+
+    * an interface whose canonical ``interface_type`` says SVI, LAG,
+      loopback, bridge or tunnel;
+    * a LAG's own name, and the name an interface gives as its
+      ``lag_member_of``.  LAG names also arrive through VLAN
+      membership, in either case (AOS-S prints both ``Trk1`` and
+      ``trk1``), so they are subtracted after the union — compared
+      as the platform compares names (*fold*): where an operator's
+      names are kept apart by case, a port called ``BOND1`` is not
+      the LAG ``bond1``;
+    * when *classify* is given, a name it POSITIVELY calls one of
+      :data:`NON_HARDWARE_PORT_KINDS`.  Several codecs never set
+      ``interface_type`` (OPNsense, VyOS) or type everything that is
+      not a LAG or a VLAN interface as Ethernet (FortiGate), and for
+      those the classifier is the only thing that knows ``lo0`` or
+      ``ssl.root`` is not a port.
+
+    ``unknown`` is never grounds for leaving EVIDENCE out: on AOS-S the
+    classifier returns it both for the synthesised SVI name ``Vlan2``
+    and for a real uplink named ``A1``.  What a classifier does not
+    recognise, and no type marks, is still returned — a sub-interface
+    (``GigabitEthernet1/0/1.100``) and some firewall pseudo-interfaces
+    are.  A classifier that raises on a name is treated as not
+    recognising it: reading a config's port names must not be able to
+    fail a job.
+
+    **A port with two names.**  RouterOS keeps a port's factory name
+    (``ether2``) beside the name an operator gave it (``core-a``).
+    This function returns the name the CONFIG uses (``core-a``): it
+    is the one every other line refers to, and the key an entry of a
+    rename map has to carry.  A caller that pairs ports with a device
+    model looks such a port up in the model by its factory name
+    (``interfaces[].default_name``); see
+    :func:`~netcanon.services.migration_pipeline.run_plan_with_models`.
+
+    This is the set a positional mapping is made FOR.  It is not the
+    set a finished run is checked over: the sweep rewrites every name
+    in :func:`collect_port_names`, logical ones included, and the
+    check for two names on one target has to look at all of them.
+
+    Args:
+        intent: The parsed source tree.
+        classify: The SOURCE codec's ``classify_port_name``.
+        always: Names that count whatever *classify* says — the ports
+            of a declared source inventory.  A classifier that misread
+            a real port must not be able to take it out of the set a
+            mapping is made for.  (The type and LAG-name tests above
+            still apply to it.)
+        fold: Names of the source platform compare without regard to
+            case (``not codec.port_names_case_sensitive``).
+    """
+    def key(name: str) -> str:
+        return name.lower() if fold else name
+
+    not_hardware: set[str] = {
+        iface.name for iface in intent.interfaces
+        if iface.interface_type in NON_HARDWARE_INTERFACE_TYPES
+    }
+    lag_names = {key(lag.name) for lag in intent.lags if lag.name}
+    lag_names.update(
+        key(iface.lag_member_of) for iface in intent.interfaces
+        if iface.lag_member_of
+    )
+    evidenced: set[str] = {iface.name for iface in intent.interfaces if iface.name}
+    for vlan in intent.vlans:
+        evidenced.update(vlan.tagged_ports)
+        evidenced.update(vlan.untagged_ports)
+    for lag in intent.lags:
+        evidenced.update(lag.members)
+    keep = set(always)
+
+    def kind_of(name: str) -> str:
+        if classify is None:
+            return "unknown"
+        try:
+            identity = classify(name)
+        except Exception:
+            # One of the per-vendor classifiers, on an arbitrary
+            # string from a pasted config.  "Could not read it" is what
+            # ``unknown`` already means.
+            return "unknown"
+        return identity.kind if identity is not None else "unknown"
+
+    names: list[str] = []
+    for name in collect_port_names(intent):
+        if name in not_hardware or key(name) in lag_names:
+            continue
+        if name not in keep:
+            kind = kind_of(name)
+            if kind in NON_HARDWARE_PORT_KINDS:
+                continue
+            if name not in evidenced and kind not in HARDWARE_PORT_KINDS:
+                continue
+        names.append(name)
+    return names
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator — vendor-agnostic cross-vendor rewrite
 # ---------------------------------------------------------------------------
 
@@ -300,6 +578,23 @@ def translate_port_names(  # noqa: C901
         * ``intent.static_routes[].interface``
         * ``intent.dhcp_servers[].interface``
         * ``intent.vxlan_vnis[].source_interface``
+
+    One more field follows a port without being resolved itself:
+    ``intent.static_routes[].gateway``, when it is the name of an
+    interface of the tree (:func:`route_port_reference`).
+
+    One field is deliberately left alone:
+    ``intent.interfaces[].default_name``, a port's factory name
+    (RouterOS).  An entry of *rename_map* gives the port a NAME; the
+    factory name is which hardware it is, and stays.  Rendered, that
+    is ``set [ find default-name=ether1 ] name=WAN`` — what such an
+    entry has always produced.  Rewriting the field with the name
+    renders ``find default-name=WAN``, a lookup that matches no port,
+    and nothing here can tell a name from a move: ``sfp1`` is a port
+    of one RouterOS model and a short name for ``sfp-sfpplus1`` on
+    another.  Moving a port onto other hardware is done where the
+    target device is declared
+    (:func:`~netcanon.services.migration_pipeline.run_plan_with_models`).
 
     Mutates *intent* in place.
 
@@ -368,11 +663,10 @@ def translate_port_names(  # noqa: C901
     str_map: dict[str, str] = {
         name: tgt for name, tgt in user_map.items() if isinstance(tgt, str)
     }
-    # Auto-drops accumulate DURING resolve() when ``strip_unmappable`` removes a
-    # name the target codec can't format.  Unlike user drops, these names stay
-    # verbatim through the sweep (they were never renamed to something else), so
-    # their post-sweep name still equals their source name and stripping them
-    # AFTER the sweep is safe.
+    # Auto-drops accumulate in resolve() when ``strip_unmappable`` removes a
+    # name the target codec can't format.  Every name is resolved in a pass of
+    # its own before the sweep, and these are stripped then, while every name
+    # is still in source form (see below).
     auto_dropped: set[str] = set()
 
     # Per-interface kind overrides — populated by source codecs that
@@ -528,39 +822,35 @@ def translate_port_names(  # noqa: C901
     # entries that named a port absent from the config, and (b) avoid
     # over-reporting those absent names as "dropped" (mirrors local_user /
     # snmpv3 honesty).
-    present_names: set[str] = set()
-    for iface in intent.interfaces:
-        present_names.add(iface.name)
-        if iface.lag_member_of:
-            present_names.add(iface.lag_member_of)
-        # (#3) VRRP track-interface references are port names too.
-        for grp in iface.vrrp_groups:
-            present_names.update(grp.track_interfaces)
-    for vlan in intent.vlans:
-        present_names.update(vlan.tagged_ports)
-        present_names.update(vlan.untagged_ports)
-    for lag in intent.lags:
-        present_names.add(lag.name)
-        present_names.update(lag.members)
-    for route in intent.static_routes:
-        if route.interface:
-            present_names.add(route.interface)
-    for pool in intent.dhcp_servers:
-        if pool.interface:
-            present_names.add(pool.interface)
-    # (#3) VXLAN VTEP source-interface is a port name (Loopback0 / lo0.0).
-    for vx in intent.vxlan_vnis:
-        if vx.source_interface:
-            present_names.add(vx.source_interface)
+    present_names: set[str] = set(collect_port_names(intent))
 
     # (#6) Strip operator-requested drops BEFORE the rename sweep so a rename
     # TARGET that reuses a dropped SOURCE name isn't itself deleted afterwards.
     if user_dropped:
         _strip_dropped_ports(intent, user_dropped)
 
+    # Resolve every name BEFORE anything is rewritten, in the order the
+    # sweep visits them (so warnings come out in the order they always
+    # did), and strip the names the target cannot express while every
+    # name is still in source form.  Stripping them after the sweep, by
+    # string, also deleted a DIFFERENT port that had just been renamed
+    # ONTO that string — the failure (#6) describes for operator drops,
+    # reachable without one once a device model renames every port.
+    for name in list(_swept_names(intent)):
+        resolve(name)
+    if auto_dropped:
+        _strip_dropped_ports(intent, auto_dropped)
+
+    # Interface names as the config wrote them: a route's next hop can
+    # name one (see route_port_reference).  A unit suffix means the same
+    # thing on both sides only between two configs of one codec.
+    named_before = {iface.name for iface in intent.interfaces}
+    same_codec = source_codec.name == target_codec.name
+
     # Rewrite everywhere a port name might be referenced.  Order doesn't
     # matter — memoisation keeps us idempotent.
     for iface in intent.interfaces:
+        # ``default_name`` is not touched: see the docstring.
         iface.name = resolve(iface.name)
         if iface.lag_member_of:
             iface.lag_member_of = resolve(iface.lag_member_of)
@@ -577,6 +867,10 @@ def translate_port_names(  # noqa: C901
     for route in intent.static_routes:
         if route.interface:
             route.interface = resolve(route.interface)
+        # A next hop that is an interface follows the interface.
+        reference = route_port_reference(route, named_before, units=same_codec)
+        if reference is not None:
+            route.gateway = resolve(reference[0]) + reference[1]
     for pool in intent.dhcp_servers:
         if pool.interface:
             pool.interface = resolve(pool.interface)
@@ -585,13 +879,6 @@ def translate_port_names(  # noqa: C901
     for vx in intent.vxlan_vnis:
         if vx.source_interface:
             vx.source_interface = resolve(vx.source_interface)
-
-    # Strip pass: remove every reference to an AUTO-dropped (unmappable) name
-    # from the canonical tree.  Runs AFTER the rename sweep — these names stay
-    # verbatim through the sweep so their post-sweep name equals their source
-    # name.  (User drops were already stripped above, pre-sweep — see #6.)
-    if auto_dropped:
-        _strip_dropped_ports(intent, auto_dropped)
 
     # (#17) Detect rename TARGET collisions: two+ source ports resolving to the
     # same final interface/LAG name render duplicate stanzas (same-vendor) or
@@ -612,7 +899,14 @@ def translate_port_names(  # noqa: C901
             counts[obj.name] = counts.get(obj.name, 0) + 1
         for final in sorted(n for n, c in counts.items() if c > 1):
             warned_finals.add(final)
-            sources = sorted(s for s, f in memo.items() if f == final) or [final]
+            # A name the translator dropped reached no target, so it
+            # shares none -- the same rule the membership sweep below
+            # applies.  (An operator's drop is stripped before any name
+            # is resolved, and is never among these.)
+            sources = sorted(
+                s for s, f in memo.items()
+                if f == final and s not in auto_dropped
+            ) or [final]
             warnings.append(
                 f"port_rename: multiple source ports map to {final!r} "
                 f"(sources: {', '.join(sources)}); the target will render "
@@ -660,8 +954,10 @@ def translate_port_names(  # noqa: C901
     # 2. Identity pairs were excluded, so a port that KEPT its name while
     #    another was renamed onto it counted as a single source.
     fused: dict[str, set[str]] = {}
+    gone = user_dropped | auto_dropped
     for source, final in memo.items():
-        if final is not None:
+        # A dropped name reached no target, so it shares none.
+        if final is not None and source not in gone:
             fused.setdefault(final, set()).add(source)
     for final in sorted(fused):
         sources = sorted(fused[final])
@@ -736,7 +1032,9 @@ def _strip_dropped_ports(
         * ``intent.lags`` — LAGs whose name is dropped are deleted;
           surviving LAGs get their ``members`` list filtered.
         * ``intent.static_routes`` — routes whose ``interface`` is
-          dropped are deleted (they no longer have a viable egress).
+          dropped are deleted (they no longer have a viable egress),
+          and so are routes whose ``gateway`` names a dropped
+          interface (:func:`route_port_reference`).
         * ``intent.dhcp_servers`` — pools whose ``interface`` is
           dropped are deleted (pool has no interface to serve).
         * ``intent.interfaces[].vrrp_groups[].track_interfaces`` — dropped
@@ -748,6 +1046,7 @@ def _strip_dropped_ports(
     Mutates *intent* in place.  Idempotent: subsequent calls with the
     same *dropped* set are no-ops.
     """
+    named = {iface.name for iface in intent.interfaces}
     intent.interfaces = [
         i for i in intent.interfaces if i.name not in dropped
     ]
@@ -772,9 +1071,14 @@ def _strip_dropped_ports(
     # (#19) Guard on a truthy interface: a gateway-only route / unbound pool
     # has ``interface == ''`` and must never be matched by a drop set (an
     # empty-string drop key would otherwise delete every one of them).
+    def next_hop_dropped(route: CanonicalStaticRoute) -> bool:
+        reference = route_port_reference(route, named)
+        return reference is not None and reference[0] in dropped
+
     intent.static_routes = [
         r for r in intent.static_routes
         if not (r.interface and r.interface in dropped)
+        and not next_hop_dropped(r)
     ]
     intent.dhcp_servers = [
         p for p in intent.dhcp_servers

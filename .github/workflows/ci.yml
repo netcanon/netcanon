@@ -301,6 +301,11 @@ jobs:
           # 1) The packaged library must be importable + populated — this is
           #    exactly what the app's lifespan does at startup.
           "${RUNNER_TEMP}/clean-venv/bin/python" -c "from netcanon.definitions import LIBRARY_DIR, DefinitionLoader; assert LIBRARY_DIR.is_dir(), LIBRARY_DIR; d = DefinitionLoader(LIBRARY_DIR).load_all(); assert len(d) >= 10, sorted(d); print('packaged library OK:', len(d), 'family-base definitions')"
+          #    The model families (model-to-model port mapping) ship in the same
+          #    tree and load from it at startup.  A wheel without them does not
+          #    crash: the registry is just empty and the feature silently gone,
+          #    so assert it here.
+          "${RUNNER_TEMP}/clean-venv/bin/python" -c "from netcanon.definitions import LIBRARY_DIR; from netcanon.migration.device_models import load_model_families; r = load_model_families(LIBRARY_DIR); assert len(r) >= 1, 'no model families in the wheel'; print('packaged model families OK:', sorted(r.families))"
           # 2) End-to-end: the documented bare-uvicorn path must boot + serve
           #    /health from the empty dir.
           "${RUNNER_TEMP}/clean-venv/bin/python" -m uvicorn netcanon.main:app --host 127.0.0.1 --port 8137 > "${RUNNER_TEMP}/uvicorn.log" 2>&1 &

@@ -119,6 +119,7 @@ import yaml
 from pydantic import BaseModel, Field, ValidationError
 
 from ..models.migration import DeviceClass
+from ..models.port_inventory import EvidenceGrade
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,10 @@ PortKindYaml = Literal[
 #:   them, so nothing re-checks the claim.
 #: * ``inferred`` — derived by analogy with a sibling model, or doubtful
 #:   for the target it is filed under.  Always paired with a ``caveat``.
-ProfileEvidence = Literal["capture", "vendor-doc", "inferred"]
+#:
+#: The vocabulary is shared with device-model inventories and is
+#: defined once, in :mod:`netcanon.models.port_inventory`.
+ProfileEvidence = EvidenceGrade
 
 
 class TargetPort(BaseModel):
@@ -641,6 +645,17 @@ def load_profiles_dir(directory: Path) -> dict[str, TargetProfile]:
             profile = load_profile_file(path)
         except ProfileLoadError as exc:
             logger.warning("target_profiles: skip %s: %s", path.name, exc)
+            continue
+        except Exception as exc:
+            # "The API surfaces whatever succeeded rather than failing
+            # the whole app on a single bad profile" has to hold for a
+            # file that is not UTF-8, is a folder, or has a key that
+            # is not a string, as well as for one that is merely
+            # invalid.
+            logger.warning(
+                "target_profiles: skip %s: %s: %s",
+                path.name, type(exc).__name__, exc,
+            )
             continue
         if profile.key in profiles:
             logger.warning(

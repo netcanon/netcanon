@@ -190,6 +190,19 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
 
 ## Common gotchas
 
+- **A static route whose next hop is an interface**
+  (`next-hop et-0/0/24.0`) follows that interface when a translation
+  between two Junos configs renames it, and is removed with it when
+  it is dropped.  Across vendors the unit form is left as written;
+  with both devices declared on the API the route is then listed
+  (`stale_next_hops`) and the job is `partial`.
+- **Declaring a Junos device** — every interface name is the system's
+  and is lower-case, so an override typed in another case
+  (`GE-0/0/2`) is read as the port `ge-0/0/2`, not as a second
+  interface.  A non-zero unit of a management port (`me0 unit 5`)
+  follows its port under a name Junos does not accept
+  (`set interfaces me0.5 unit 0 ...`); map it by hand.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **`apply-groups` content** is preserved byte-for-byte but is
   **opaque to translation** — group content stays in source-vendor
   syntax; the renaming operation (port / VLAN / user-name etc.)

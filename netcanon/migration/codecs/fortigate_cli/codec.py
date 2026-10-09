@@ -106,6 +106,11 @@ class FortiGateCLICodec(CodecBase):
     # incorrect assumption that user handling was Tier-3-only —
     # cleared as part of Option A.
 
+    #: FortiOS interface names are an operator's free text, kept apart by
+    #: case: ``DMZ`` and ``dmz`` are two interfaces.
+    #: See ``CodecBase.port_names_case_sensitive``.
+    port_names_case_sensitive: ClassVar[bool] = True
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="fortigate_cli",
         vendor_id="fortigate",
