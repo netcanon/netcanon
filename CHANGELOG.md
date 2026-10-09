@@ -142,9 +142,11 @@ timestamp if your timezone matters for an audit.
     source device.  Names that need a decision are marked, counted
     on the strip above the table, and can be accepted as shown in
     one click.  The strip also says when a logical name was given a
-    port name the target does not have, and when a route was left
-    naming a port that moved; and a RouterOS port you had named says
-    which port of the model it is and where its hardware went.
+    port name the target does not have, when a route was left
+    naming a port that moved, and when a RouterOS target's output has
+    no line that finds a port by its hardware; and a RouterOS port
+    you had named, or named in the modal, says which port of the
+    model it is and which port of the target it is on.
   - A same-vendor translation (Aruba to Aruba, say) renames nothing
     by itself and used to open on "No port names recognised"; the
     table now lists every port the config uses.

@@ -653,7 +653,7 @@ position, counted from 0:
 | `migrate-device-source-note-config-says` | `<span>` | Shown once the operator chose a different device: what the config states |
 | `migrate-device-source-use-detected`  | `<button>` | "use it" -- puts the detected device back |
 | `migrate-device-source-note-unknown-parts` | `<span>` | The config names a part no model family describes |
-| `migrate-rename-plan`                 | `<div>`    | Where the mapping by position stands.  `data-state`: `ready` (devices declared, not applied yet -- or a hint about what is missing), `stale` (devices changed since the plan on screen), `unapplied` (the server could not pair), `ok`, `warn` (names need a decision), `block` (a target port was given two sources).  Hidden with no device declared and no plan |
+| `migrate-rename-plan`                 | `<div>`    | Where the mapping by position stands.  `data-state`: `ready` (devices declared, not applied yet -- or a hint about what is missing), `stale` (devices changed since the plan on screen), `unapplied` (the server could not pair), `ok`, `warn` (names need a decision), `block` (a target port was given two sources, or a port is not found by its hardware in the output).  Hidden with no device declared and no plan |
 | `migrate-rename-plan-hint`            | `<span>`   | What to do next, while there is no current plan |
 | `migrate-rename-plan-unapplied`       | `<span>`   | Why no pairing was made |
 | `migrate-rename-plan-paired`          | `<span>`   | "N paired" |
@@ -662,6 +662,7 @@ position, counted from 0:
 | `migrate-rename-plan-displaced`       | `<span>`   | "N displaced"; absent at zero |
 | `migrate-rename-plan-landed`          | `<span>`   | "N on a port the target does not have" -- logical names given a port-shaped name the target lacks; absent at zero |
 | `migrate-rename-plan-fused`           | `<span>`   | Target ports given more than one source; absent at zero |
+| `migrate-rename-plan-unbound`         | `<span>`   | "N not found by its/their hardware in the output" -- a RouterOS target writes no Ethernet line for a port whose name reads as a VLAN, a bridge or a LAG; only another name clears it; absent at zero |
 | `migrate-rename-plan-stale-routes`    | `<span>`   | "N route(s) still name a port that moved" -- nothing in the port map clears it; absent at zero |
 | `migrate-rename-plan-pending`         | `<span>`   | "N need your decision", or "decisions recorded -- Apply to confirm" once the operator has decided them in the modal |
 | `migrate-rename-plan-accept`          | `<button>` | "Accept as shown" -- records the outcome on screen as the operator's decision for every undecided name (a dropped port stays dropped, a kept one stays where it landed).  Apply confirms it |

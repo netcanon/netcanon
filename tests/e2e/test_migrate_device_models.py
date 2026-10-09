@@ -707,9 +707,32 @@ class TestWhatThePlanSaysBeyondPairs:
         expect(_plan(page)).to_have_attribute("data-state", "ok")
         row = page.locator(_tid("migrate-rename-row-core-a"))
         expect(row).to_contain_text("ether2 in the device model")
-        expect(row).to_contain_text("keeps its name")
-        expect(row).to_contain_text("sfp-sfpplus2")
+        expect(row).to_contain_text("a name, not a place")
+        expect(row).to_contain_text("the port is on sfp-sfpplus2")
         expect(mp.status_summary).to_contain_text("completed")
+
+    def test_a_port_no_line_of_the_output_finds_is_said(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """RouterOS output has no Ethernet line for a port whose name
+        reads as a LAG.  The strip says so in a blocking chip, the row
+        says what to do, and the job is not a success."""
+        mp = _translate(
+            page, live_server_url, "mikrotik_routeros", "mikrotik_routeros",
+            _ROUTEROS_NAMED.replace("core-a", "bond1"),
+        )
+        _declare(page, "CRS310-8G+2S+", "CCR2004-1G-12S+2XS")
+        _apply(page)
+        expect(_plan(page)).to_have_attribute("data-state", "block")
+        expect(page.locator(_tid("migrate-rename-plan-unbound"))).to_contain_text(
+            "1 not found by its hardware in the output"
+        )
+        row = page.locator(_tid("migrate-rename-row-bond1"))
+        expect(row).to_contain_text("no line of the output finds this port (sfp-sfpplus2)")
+        expect(page.locator(_tid("migrate-rename-plan-report"))).to_contain_text(
+            "bond1 on sfp-sfpplus2"
+        )
+        expect(mp.status_summary).to_contain_text("partial")
 
     def test_a_route_left_naming_a_port_that_moved_is_said(
         self, page: Page, live_server_url: str,

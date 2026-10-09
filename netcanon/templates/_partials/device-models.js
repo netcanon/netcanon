@@ -905,8 +905,31 @@
     var undecided = new Set(plan.unresolved_ports || []);
     var labelled = plan.labelled_ports || {};
     var hardware = plan.target_hardware || {};
+    var sourceHardware = plan.source_hardware || {};
+    var unbound = plan.unbound_ports || {};
     var landed = plan.landed_off_target || {};
     var order = 0;
+    // RouterOS finds a port by its factory name.  What the plan says
+    // about that, for a row: the port of the model the config's own
+    // name stands for; where the port's hardware is when the name in
+    // the output is not it; and whether any line of the output finds
+    // the port at all.
+    function hardwareFlags(name) {
+      var flags = [];
+      if (labelled[name]) flags.push(labelled[name] + ' in the device model');
+      if (hardware[name]) {
+        flags.push('a name, not a place — the port is on ' + hardware[name]);
+      }
+      if (sourceHardware[name]) {
+        flags.push('still looked up as ' + sourceHardware[name]
+          + ', which the target does not have');
+      }
+      if (unbound[name]) {
+        flags.push('no line of the output finds this port ('
+          + unbound[name] + ') — give it another name');
+      }
+      return flags;
+    }
     function where(rank, role, position) {
       return role + ' ' + (position + 1)
         + (stacked && rank !== null && rank !== undefined
@@ -921,12 +944,7 @@
           + (p.target_speed || '?'));
       }
       if (p.poe_lost) flags.push('no PoE on the target port');
-      // RouterOS: a port you named is found in the model by its
-      // factory name, and may keep your name while its hardware moves.
-      if (labelled[p.source]) flags.push(labelled[p.source] + ' in the device model');
-      if (hardware[p.source]) {
-        flags.push('keeps its name — its hardware is ' + hardware[p.source]);
-      }
+      flags = flags.concat(hardwareFlags(p.source));
       meta[p.source] = {
         state: 'paired', role: p.role, kind: _PLAN_ROLE_KIND[p.role],
         auto: p.target, text: '',
@@ -957,7 +975,7 @@
         state: 'unplaced', role: p.role, kind: _PLAN_ROLE_KIND[p.role],
         auto: auto, text: text,
         why: where(p.member_rank, p.role, p.position),
-        flags: labelled[p.source] ? [labelled[p.source] + ' in the device model'] : [],
+        flags: hardwareFlags(p.source),
         order: order,
       };
     });
@@ -1144,6 +1162,7 @@
     var fused = Object.keys(plan.fused || {}).length;
     var landed = Object.keys(plan.landed_off_target || {}).length;
     var stale = (plan.stale_next_hops || []).length;
+    var unbound = Object.keys(plan.unbound_ports || {}).length;
     var pending = pendingPlanDecisions(plan);
 
     var title = document.createElement('strong');
@@ -1170,6 +1189,14 @@
       _planChip(el, 'migrate-rename-plan-fused',
         fused + ' target port' + (fused === 1 ? '' : 's')
         + ' given more than one source', 'chip-block');
+    }
+    if (unbound) {
+      // RouterOS output has no Ethernet line for a port whose name
+      // reads as a VLAN, a bridge or a LAG.  Only another name for
+      // the port clears it.
+      _planChip(el, 'migrate-rename-plan-unbound',
+        unbound + ' not found by ' + (unbound === 1 ? 'its' : 'their')
+        + ' hardware in the output', 'chip-block');
     }
     if (stale) {
       // Nothing in the port map clears this one: the route has to be
@@ -1213,10 +1240,11 @@
         list.appendChild(item);
       });
       details.appendChild(list);
-      if (fused || pending.length || stale) details.open = true;
+      if (fused || unbound || pending.length || stale) details.open = true;
       el.appendChild(details);
     }
-    var state = fused ? 'block' : ((pending.length || stale) ? 'warn' : 'ok');
+    var state = (fused || unbound) ? 'block'
+      : ((pending.length || stale) ? 'warn' : 'ok');
     el.className = 'plan-' + state;
     el.setAttribute('data-state', state);
     el.style.display = '';
