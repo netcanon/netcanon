@@ -32,7 +32,7 @@ inner layers.
 | `device_profiles.py` | `/api/v1/devices` | Device-class metadata (saved connection profiles) |
 | `docs.py` | `/docs` (no `/api/v1` prefix) | Custom Swagger UI page + OpenAPI JSON |
 | `health.py` | `/health` (no `/api/v1` prefix) | Liveness/readiness probe — returns `{status, version, ...}` for orchestrators (Docker / K8s / uptime monitors) |
-| `migration.py` | `/api/v1/migration` | Translation orchestration + per-pane plan endpoints + adapter introspection |
+| `migration.py` | `/api/v1/migration` | Translation orchestration + per-pane plan endpoints + adapter introspection + target-profile and model-family listings + inventory compile |
 | `sanitize.py` | `/api/v1/sanitize` | `POST` — operator-supplied config text → sanitised + per-category replacement counts (programmatic complement to the browser UI at `/sanitize` and the `netcanon sanitize` CLI) |
 | `schedules.py` | `/api/v1/schedules` | Recurring (APScheduler) backup jobs |
 | `ui.py` | (root) | Server-rendered Jinja2 pages (`/`, `/configs`, `/migrate`, `/definitions`, `/jobs`, `/sanitize`) — `include_in_schema=False` (the `/docs` Swagger page is served by `docs.py`) |
@@ -115,8 +115,11 @@ helpers consumed only by sibling routes), lift them into a sibling
 `migration.py` + `_migration_helpers.py` is the worked example —
 helpers extracted for adapter-name resolution (422-translation),
 input-text resolution (`raw_text` XOR `source_filename`),
-target-profile lookup, codec-info shaping, and the
-"engage-rename-aware-pipeline?" predicate.  The leading underscore
+target-profile lookup, codec-info shaping, the
+"engage-rename-aware-pipeline?" predicate, and the device-declaration
+helpers (compile a declared device to a port inventory; dispatch a
+request to the model-aware pipeline when it declares both devices).
+The leading underscore
 marks the module as routes-only (don't import it from services or
 templates) and keeps the public surface — the FastAPI route handlers
 themselves — visible at the top of the corresponding non-underscore
@@ -130,6 +133,20 @@ the Tier-3 rename modal.  Each one delegates to a single function,
 `run_plan_with_overrides`, with one category map populated and the
 others left empty.  This keeps the routes nearly identical and the
 service-layer work in one place.
+
+Every job-running handler reaches the pipeline through
+`_migration_helpers.run_translation`, not by calling the pipeline
+directly.  When the request declares both devices
+(`source_deployment` / `source_profile` with `target_deployment` /
+`target_profile`) that helper sends the handler's own arguments to
+`run_plan_with_models` instead — with the body's own
+`port_rename_map` in place of whatever the handler passed, because
+the per-pane handlers other than `/plan/ports` pass an empty one on
+purpose and the positional pairing is itself a port map the operator
+edits.  So the
+same body renders the same port names, and an acknowledged drop
+stays acknowledged, on `/plan` and on every per-pane endpoint.  A
+new job-running handler must dispatch the same way.
 
 **Hard Rule** (`AGENTS.md`): never change the
 `run_plan_with_overrides` signature.  New rename categories ride on
@@ -178,12 +195,14 @@ Some signatures are load-bearing across dozens of tests and route
 handlers.  **Never change them**; add new functions instead.
 
 - `migration_pipeline.run_plan`, `run_plan_with_rename`,
-  `run_plan_with_overrides` — the three pipeline entry points
-  consumed by `migration.py`.  Per-pane endpoints rely on the
-  exact override-dict shape; tests rely on the keyword arguments.
+  `run_plan_with_overrides` — the three frozen pipeline entry
+  points.  Per-pane endpoints rely on the exact override-dict
+  shape; tests rely on the keyword arguments.
   See the module docstring in
   `netcanon/services/migration_pipeline.py` for the
-  freeze-and-extend contract.
+  freeze-and-extend contract.  `run_plan_with_models` is the
+  contract in action: model-aware port mapping was added as a NEW
+  function that calls the frozen one, not as a new parameter on it.
 - `POST /api/v1/backups` response shape — the entire test tier
   assumes the synchronous response is `pending` and that final
   state comes from a follow-up GET.  Changing this would silently

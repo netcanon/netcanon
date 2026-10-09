@@ -144,6 +144,38 @@ by concern and listed alphabetically within each section.
   **evidence grade** (`capture` / `vendor-doc` / `inferred`) for them;
   one that carries no grade has not been checked yet. See
   ARCHITECTURE.md, "Provenance".
+- **Model family** — one YAML under
+  `netcanon/definitions/library/model_families/`: models that share a
+  naming rule, a set of deployment modes and a set of modules. Unlike a
+  target profile it lists facts, not names; names are computed for one
+  stated deployment. See ARCHITECTURE.md, "Device models and
+  inventories".
+- **Deployment** — a device as actually deployed: a **mode** (the state
+  that decides port names — standalone, VSF, stacked) plus an ordered
+  list of members, each a model with its fitted modules. What a request
+  declares for the source and the target.
+- **Inventory** — what a deployment compiles to: the ordered list of
+  ports that exist, each with its real name, role, position and
+  evidence grade.
+- **Naming rule** — a small pure function beside a vendor's codec that
+  renders one port's name from its coordinates. One per naming grammar,
+  not per product line.
+- **Positional port mapping** — pairing the ports of two inventories
+  by member rank, role and order, instead of translating names by their
+  shape. Produces an ordinary `port_rename_map`.
+- **Unplaced / off-inventory / displaced** — the ways a used
+  source name can be left without a paired target. *Unplaced*: a port
+  of the declared source with no position on the target (dropped,
+  unless it is a management port). *Off-inventory*: a name the config
+  uses that is not a port of the declared source at all. *Displaced*:
+  one of either kind that the name-shape translator would have put on
+  a target port another source port holds, and that was dropped
+  instead.
+- **Fused** — a target port that more than one source port ended on.
+  Positional mapping never produces one; an operator override can.
+- **Capture claim** — a committed real capture plus the exact
+  deployment it is of. The only source of a `capture` evidence grade
+  for a model family, granted only where a deployment matches exactly.
 - **MODULE_VARIANT_PROFILES** — allowlist (`tests/fixtures/module_variants.py`)
   of `{vendor}/{model}` keys whose target profiles ship `modules:`
   declarations. Both unit + integration test tiers import from this

@@ -274,6 +274,12 @@ API routes depend on the exact shape.  Later phases add NEW public
 functions (e.g. `plan_with_deploy`, `plan_with_diff`); existing
 stages stay frozen.  See the module docstring.
 
+`run_plan_with_models` is one such addition: it takes the port
+inventory of the source device and of the target device, pairs the
+ports the config uses by position, and forwards the resulting rename
+map to the frozen `run_plan_with_overrides`.  See "Device models and
+inventories" below.
+
 ---
 
 ## Per-pane overrides (Tier-3 rename modal)
@@ -660,8 +666,12 @@ whatever model is selected, so the auto column can disagree with a
 profile that describes a standalone switch.  The rename table marks
 each row whose auto name is not a port the selected profile lists
 (`has-offprofile`, "N not on profile" on the section header), so the
-disagreement is visible per port.  Closing it needs the translator
-to be told the source and target models, which it is not yet.
+disagreement is visible per port.  Closing it needs the pipeline to
+be told the source and target models.  Through the API it now can
+be: a request that declares both devices is paired by position (see
+"Device models and inventories" below).  The rename modal has no
+source-device picker yet, so in the modal the paragraph above still
+holds.
 
 ### Per-category capacity limits
 
@@ -762,6 +772,206 @@ display_name concatenated).  See
 [`tests/testid_reference.md`](tests/testid_reference.md) for
 the full testid inventory (one `section-*` testid per
 container, plus per-row, per-module, per-codec testids).
+
+---
+
+## Device models and inventories (model-to-model port mapping)
+
+**Where:** `netcanon/migration/device_models.py` (schema, compiler,
+loader), `netcanon/migration/port_mapping.py` (the mapper),
+`netcanon/models/port_inventory.py` (the data shapes),
+`netcanon/definitions/library/model_families/*.yaml` (the data), and
+one naming rule per grammar beside each vendor's codec.
+
+**The problem.**  A port name cannot be translated from its shape.
+The same string means different ports on different models, and the
+same port has different names depending on how the device is
+deployed: an Aruba 2930F port is `24` standalone and `1/24` as a VSF
+member; a 2930M's first uplink is `A1` with stacking disabled, `1/A1`
+with it enabled, and does not exist with the bay empty.  The
+name-shape translator (`canonical/port_names.py`) is not told the
+model, so on a same-vendor pair it can only be the identity, and it
+could never know that port `49` of one switch is `1/A1` of another.
+
+**The approach: translate positions, not names.**  Each end of a
+migration is declared as a *deployment* — a mode, and an ordered list
+of members, each a model with its fitted modules.  A deployment
+compiles to an *inventory*: the ordered list of the ports that exist,
+each with its real name.  Two inventories are paired by position, and
+the pairing is an ordinary `port_rename_map`, which the translator
+already applies ahead of its own guess.  Nothing in the translator
+changes.
+
+```
+   declared source device                    declared target device
+   (deployment, or a profile key)            (deployment, or a profile key)
+              │ compile                                  │ compile
+              ▼                                          ▼
+          Inventory ──────── plan_port_mapping ──────── Inventory
+                                   │   (only the ports the config uses)
+                                   ▼
+                MappingPlan { rename_map, pairings, unplaced,
+                              off_inventory, evidence, ... }
+                                   │
+       operator port_rename_map ───┤   always wins
+                                   ▼
+                     run_plan_with_overrides   (unchanged)
+                                   │
+                                   ▼
+        check the finished run: did two source ports end on one
+        target name?  A name nobody decided that caused it is
+        dropped and the translation run once more; then
+        settle_plan records what happened on the plan.
+```
+
+**Families, models, modes.**  The registry does not list names; it
+lists facts.  A *family* file holds models that share a naming rule, a
+set of deployment modes and a set of modules.  A *model* is one part
+number's fixed panel (port groups in port-number order) plus its
+module bays.  A *mode* is a deployment state that changes names.  A
+*naming rule* is a small pure function beside the codec — one per
+naming grammar, not per product line — that renders one port's name
+from its coordinates, and declares which roles it can name at all (a
+group in a role the rule cannot name is refused at load: AOS-S
+out-of-band management is the `oobm` context, not a numbered port).
+
+**Pairing policy** (`port_mapping.py`):
+
+* Members pair by rank, never by vendor member id — ids are sticky and
+  sparse, so a lone ex-member can be `3/N`.
+* Within a member, ports pair role to role, in order.
+* A used port with no position on the target is **dropped,
+  explicitly**, and reported.  It is never spilled onto a port of
+  another role, and never left out of the map: left to the name-shape
+  translator it would keep its old name on a same-vendor pair, which
+  can be the very name another port was just mapped to.
+* Some names are left to the name-shape translator.  An
+  unplaced *management* port, because the translator knows what each
+  target does with out-of-band management (AOS-S has an `oobm` block,
+  not a management interface).  And a name the config uses that is
+  not a port of the declared source — **off-inventory**, the tripwire
+  for a source model declared wrongly.
+* **What the translator makes of those names is checked.**  Its
+  answer can be a port the pairing gave to something else: a
+  management port whose role comes from a profile rather than from
+  its name is, by shape, just port 1.  The mapper cannot know that in
+  advance without re-deriving the translator, so the pipeline asks
+  the finished run instead (`fused_targets`): where two used source
+  ports ended on one target name, every one of them that neither the
+  pairing nor the operator decided is dropped — **displaced** — and
+  the translation is run once more.  A fusion that is left can only
+  be the operator's own override; it is recorded (`fused`) and the
+  job is not a clean success, whatever was acknowledged.
+* **The plan describes the outcome, not the intention.**
+  `settle_plan` reconciles the plan with the run: an unplaced port
+  the operator gave a target was kept; a management port the target
+  cannot express was dropped by the translator and is reported as
+  dropped.  `unresolved_ports`, `displaced`, `fused`, `off_target`
+  and `emptied_lags` are stored fields, so a client reads the
+  outcome as data.
+* A run with an unresolved port — dropped, off-inventory or displaced,
+  and not named in the operator's own map — or with a fused target,
+  or for which no pairing could be made at all, is `partial`, not
+  `completed`.
+
+**Which names a mapping is made for.**  The used set starts from
+every place the rename sweep rewrites a port name
+(`collect_port_names`: interface stanzas, VLAN membership, LAG
+members, a static route's or DHCP pool's interface, VRRP track
+lists) — fewer places would leave a port the sweep renames outside
+the plan — and takes away what is not hardware: an interface whose
+canonical type says SVI, LAG, loopback, bridge or tunnel; a LAG's
+name; and a name the source codec's classifier *positively* calls
+logical.  `unknown` is never grounds for leaving a name out (on
+AOS-S it is what a real uplink named `A1` classifies as), and a port
+of the declared source always counts, whatever the classifier says.
+
+**Evidence is per port, and `capture` is granted.**  A name is the
+product of separately evidenced facts — the mode's naming, the
+model's panel, the module's port count — each graded `vendor-doc` or
+`inferred` where it is stated; a port takes the weakest of the facts
+that produced it.  None of them may be `capture`: a capture proves one
+deployment, so it is declared as a *capture claim* (fixture, a line
+only that model's capture contains, mode, members) and granted only
+where a deployment matches exactly — same model, same mode, same
+member id, and for a bay port the same module.  A sibling model, a TAA
+twin, another member id or another module does not inherit it.
+
+`capture` means a test re-proves the claim on every run, so only the
+claims that test re-proves grant it: the engine holds their list
+(`PROVEN_CAPTURE_CLAIMS`) and the shipped-data test requires that
+list to equal the claims it re-proves.  A claim in an operator's own
+family file names a fixture nothing reads; it is logged and grants
+nothing.  And a capture proves *names*: it retires the caveat of the
+naming fact and keeps the caveat of the panel or module fact, because
+which ports are uplinks is not something a config shows.  For the
+same reason the grade on a pairing or a plan says how well the two
+port names are established, not that the pairing was observed.
+
+**Guards**
+([`tests/unit/migration/test_device_models_shipped.py`](tests/unit/migration/test_device_models_shipped.py)):
+every shipped file loads strictly; every capture claim is pinned
+whole and re-proven against its fixture, whose ports must equal the
+compiled inventory (a capture that names only some ports cannot be
+claimed); the `(name, role)` sequence of every shipped model in every
+mode with every module is pinned as hand-typed literals (a capture
+cannot prove which ports are uplinks), as are which part number is
+which model and which facts are graded `inferred`; every compiled
+name the vendor's classifier recognises round-trips to the member,
+slot and port that produced it — the bare-letter module port of a
+switch that is not stacked (`A1`) is not recognised by the AOS-S
+classifier yet and is pinned as a known gap, which the mapping does
+not depend on because an explicit rename entry is applied before
+classification; and where a flat target profile describes the same
+device, the two must list the same ports with the same roles.
+The pipeline's central promise — no two used source ports on one
+target name unless the operator asked for it — is asserted on every
+job in
+[`tests/unit/migration/test_run_plan_with_models.py`](tests/unit/migration/test_run_plan_with_models.py).
+
+**Relationship to target profiles.**  A target profile is one model in
+one stated state, as a flat list.  `inventory_from_profile` reads one
+into the same `Inventory` shape, so a device no family describes yet
+can still be declared — as one device, with its ports in the
+profile's list order, which the mapping plan flags as unvouched.
+Where a family and a profile describe the same device, the family is
+authoritative for port mapping and the profile keeps feeding the
+rename modal's dropdowns until it is retired.
+
+**Loading.**  The shipped families always load.  An operator's own
+`model_families/` directory under a relocated definitions directory is
+laid over them: it can add new families, each with its own models.  A
+file that re-declares a shipped family — even to add one model to it
+— is refused and logged, so a shipped family is never replaced.  A
+file that cannot be loaded for any reason (not UTF-8, not YAML, a
+YAML alias, a key that is not a plain name, the wrong schema) is
+logged and skipped; none of them can stop the application starting.
+Both `target_profiles/` and `model_families/` are reserved as
+immediate children of the definitions root, so the backup-side
+definition loader does not try to read them.
+
+**API.**  `GET /api/v1/migration/model-families` lists families;
+`POST /api/v1/migration/inventory` compiles one declaration to its
+ports; a plan request that declares both devices
+(`source_deployment` or `source_profile`, with `target_deployment` or
+`target_profile`) is paired by position on every plan endpoint and
+returns the pairing on `MigrationJob.port_mapping_plan`; the body's
+own `port_rename_map` is the operator's edits to that pairing on
+every one of them, the per-pane endpoints included.
+`target_profile` on its own stays advisory; a `target_deployment` on
+its own is refused.
+
+**Not modelled yet:** modular chassis (every bay-and-module
+combination of a model is compiled when its family loads, and that
+product is capped), breakout lanes, ports a stack consumes as links,
+ports that belong to a stack rather than a member, literal
+non-systematic names, and a sub-interface following its parent port.
+Source-model detection and the
+picker in the rename modal are later phases; today the feature is
+reachable through the API.
+
+Authoring guide:
+[`docs/adding-a-device-model.md`](docs/adding-a-device-model.md).
 
 ---
 
@@ -1086,6 +1296,7 @@ What's queued:
 - [`docs/glossary.md`](docs/glossary.md) — project-jargon reference
 - [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) — worked example: MTU wire-through across every codec
 - [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) — worked example: shipping a hardware-shape YAML for the rename UI fit-checks
+- [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md) — model families, deployment modes and port inventories for model-to-model port mapping
 - [`docs/feature-parity-walkthrough.md`](docs/feature-parity-walkthrough.md) — worked example: SNMPv3 USM landing across canonical + codec + pipeline + UI + tests + docs
 - [`translator-plans.txt`](translator-plans.txt) — active roadmap and backlog
 - [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) — per-codec certification state

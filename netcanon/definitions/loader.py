@@ -75,7 +75,21 @@ logger = logging.getLogger(__name__)
 #: spurious WARNING at boot — noise that would mask a genuine bad
 #: definition.  See ``netcanon/main.py`` where both loaders are wired to
 #: the same ``definitions_dir`` root.
-_RESERVED_SUBDIRS: frozenset[str] = frozenset({"target_profiles"})
+#:
+#: ``model_families/`` holds the model-family files loaded by
+#: :func:`netcanon.migration.device_models.load_model_families_dir` —
+#: the same situation, a third schema under the same root.  A new
+#: sibling directory with its own loader MUST be added here in the
+#: same change that creates it.
+#:
+#: Only an IMMEDIATE child of the root is reserved.  An operator's own
+#: tree may well have a folder of the same name further down
+#: (``site-a/target_profiles/`` holding ordinary backup definitions),
+#: and swallowing it would stop those device types loading with no
+#: message at all.
+_RESERVED_SUBDIRS: frozenset[str] = frozenset(
+    {"target_profiles", "model_families"}
+)
 
 
 class DefinitionLoader:
@@ -303,9 +317,11 @@ class DefinitionLoader:
 
         Reserved subdirs (see :data:`_RESERVED_SUBDIRS`) hold YAML owned
         by a different loader/schema and must be skipped so they don't
-        fail ``DeviceDefinition`` validation.  Matching is on any path
-        component relative to ``self._dir``, so an arbitrarily nested
-        ``target_profiles/.../x.yaml`` is excluded too.
+        fail ``DeviceDefinition`` validation.  Matching is on the FIRST
+        path component relative to ``self._dir``: everything beneath
+        ``<root>/target_profiles/`` is excluded however deeply nested,
+        while a same-named folder elsewhere in an operator's tree
+        (``<root>/site-a/target_profiles/``) is ordinary and loads.
         """
         try:
             rel = path.relative_to(self._dir)
@@ -313,7 +329,7 @@ class DefinitionLoader:
             # Not under our root (shouldn't happen for rglob results) —
             # don't exclude it.
             return False
-        return any(part in _RESERVED_SUBDIRS for part in rel.parts)
+        return len(rel.parts) > 1 and rel.parts[0] in _RESERVED_SUBDIRS
 
 
 def _highest_priority(

@@ -3,13 +3,13 @@ Translator pipeline orchestrator — load-bearing migration engine.
 
 This module is THE migration orchestrator: every code path that turns
 a parsed source-vendor canonical tree into a rendered target-vendor
-config funnels through one of the three public functions defined
+config funnels through one of the public functions defined
 here.  API routes (``netcanon.api.routes.migration``), the desktop
 UI's preview/plan endpoints, integration tests, and dozens of unit
 tests all bind directly to these signatures.
 
-Public surface (frozen signatures — see Hard Rules below).
-The three entries differ only in how much per-pane override
+Public surface (the first three signatures are frozen — see Hard
+Rules below).  Those three differ only in how much per-pane override
 plumbing they pre-compose ahead of caller-supplied transforms;
 the capture-first transform installed by
 :func:`run_plan_with_overrides` (described further down) lets the
@@ -34,6 +34,16 @@ before any rename engages.
     back onto the :class:`MigrationJob`, and snapshots source-side
     enumerations for the UI's rename modal via the capture-first
     transform (see below).
+
+  * :func:`run_plan_with_models` — the model-aware entry.  Takes the
+    port inventory of the source device and of the target device,
+    pairs the ports the config uses by POSITION, and forwards the
+    resulting rename map (under any operator overrides) to
+    :func:`run_plan_with_overrides`.  It then checks the finished
+    run for two source ports on one target name, drops any name
+    nobody decided that caused one, and records the outcome on
+    ``MigrationJob.port_mapping_plan``.  Its signature is not one of
+    the three frozen ones.
 
 Per-pane override categories supported on :func:`run_plan_with_overrides`
 (all SHIPPED):
@@ -78,6 +88,9 @@ enumerations and stashes them onto the :class:`MigrationJob` as:
   * ``source_snmpv3_users`` — SNMPv3 USM user names as parsed.
   * ``source_hostname`` — canonical hostname (drives the modal's
     localStorage ack key).
+  * ``source_ports`` — hardware port names as parsed, including
+    ports no rename touches (``port_renames`` records only names
+    that changed).
 
 These fields are populated even when no overrides are engaged
 because the Tier-3 rename modal needs to enumerate every entity the
@@ -111,6 +124,7 @@ from ..models.migration import (
     MigrationJobStatus,
     TransformSpec,
 )
+from ..models.port_inventory import Inventory
 from .migration_validate import (
     check_class_compat,
     check_scope_advisory,
@@ -504,13 +518,21 @@ def run_plan_with_overrides(  # noqa: C901
             list when the source config had v1/v2c only.
           * ``source_hostname`` — canonical hostname, feeds the
             modal's localStorage ack key.
+          * ``source_ports`` — hardware port names the source config
+            references, whether or not any rename touched them, as
+            far as the source codec can tell a port from a logical
+            interface (see ``collect_hardware_port_names``).
     """
     # Lazy imports to avoid circular dependency at module import time
     # (these modules import CodecBase; this module imports CodecBase).
+    from ..migration.canonical.intent import CanonicalIntent
     from ..migration.canonical.local_user_names import (
         build_local_user_rename_transform,
     )
-    from ..migration.canonical.port_names import build_port_rename_transform
+    from ..migration.canonical.port_names import (
+        build_port_rename_transform,
+        collect_hardware_port_names,
+    )
     from ..migration.canonical.snmp_names import (
         build_snmp_community_rename_transform,
     )
@@ -567,6 +589,7 @@ def run_plan_with_overrides(  # noqa: C901
         "hostname": "",
         "snmp_community": "",
         "snmpv3_user_names": [],
+        "ports": [],
     }
 
     def _capture_source_shape(tree: Any) -> Any:
@@ -600,6 +623,13 @@ def run_plan_with_overrides(  # noqa: C901
         captured["snmpv3_user_names"] = [
             n for n in captured["snmpv3_user_names"] if n
         ]
+        # Hardware port names -- every one, including a port that will
+        # keep its name (which `port_renames` never records).  Only a
+        # real canonical tree has the structure to enumerate.
+        if isinstance(tree, CanonicalIntent):
+            captured["ports"] = collect_hardware_port_names(
+                tree, classify=getattr(source, "classify_port_name", None),
+            )
         return tree
 
     override_transforms.append(_capture_source_shape)
@@ -725,6 +755,7 @@ def run_plan_with_overrides(  # noqa: C901
     job.source_snmp_community = captured.get("snmp_community", "") or ""
     job.source_snmpv3_users = list(captured.get("snmpv3_user_names", []))
     job.source_hostname = captured.get("hostname", "") or ""
+    job.source_ports = list(captured.get("ports", []))
 
     # Post-run DEBUG summary — mirrors the per-category outcome
     # fields the UI will read.  Useful for post-hoc debugging when
@@ -799,3 +830,242 @@ def run_plan_with_rename(
         transform_specs=transform_specs,
         force=force,
     )
+
+
+def run_plan_with_models(
+    source: CodecBase,
+    target: CodecBase,
+    raw_text: str,
+    source_inventory: Inventory,
+    target_inventory: Inventory,
+    port_rename_map: dict[str, str | None] | None = None,
+    vlan_rename_map: dict[int, int | None] | None = None,
+    local_user_rename_map: dict[str, str | None] | None = None,
+    snmp_community_rename_map: dict[str, str | None] | None = None,
+    snmpv3_user_rename_map: dict[str, str | None] | None = None,
+    transforms: list[TransformCallable] | None = None,
+    transform_specs: list[TransformSpec] | None = None,
+    force: bool = False,
+) -> MigrationJob:
+    """Model-aware pipeline entry: pair ports by position, then translate.
+
+    The name-shape translator cannot know that the 49th port of one
+    switch is the first uplink of another.  Given the inventory of
+    each device (see :mod:`netcanon.migration.device_models`), this
+    function pairs the ports the source config uses with the target's
+    by position (:func:`~netcanon.migration.port_mapping.plan_port_mapping`),
+    merges the operator's own overrides over that pairing, and runs
+    :func:`run_plan_with_overrides` with the result.  Nothing in the
+    translator changes: an explicit rename entry already wins over
+    its guess.
+
+    What the pairing decides:
+
+    * a used source port with a position on the target is renamed to
+      the target port there;
+    * a used access or uplink port with NO position on the target is
+      dropped from the output and listed in ``job.port_drops`` — never
+      left under its old name, which on a same-vendor pair could be
+      the name another port was just mapped to.
+
+    What it leaves to the name-shape translator, and then checks:
+
+    * a name the config uses that is not a port of the declared
+      source (off-inventory), and an unplaced management port.  What
+      the translator makes of such a name can be a port the pairing
+      gave to something else — the same fusion, by another door.  So
+      the finished run is inspected: where two used source ports ended
+      on one target name, every one of them that neither the pairing
+      nor the operator decided is dropped (it is **displaced**) and
+      the translation is run once more.  The translator is its own
+      oracle here; none of its rules is re-derived.
+
+    An entry in *port_rename_map* replaces the plan's entry for that
+    port, whatever the plan decided.  Where the operator's own entries
+    point two ports at one target name, that is done as they asked and
+    reported (``port_mapping_plan.fused``).
+
+    Status.  A job that would have been ``completed`` is ``partial``,
+    with ``job.error`` saying why, when
+
+    * a used port was dropped, was off-inventory or was displaced, and
+      the operator's map does not name it — an entry for the port (a
+      target, or an explicit ``None``) is them deciding it;
+    * a target port received more than one source port, whoever
+      decided it; or
+    * no pairing could be made at all (one side lists no ports), so
+      every name went by name shape although devices were declared.
+
+    A job that is already ``partial`` for another reason keeps its
+    status and has the same sentence appended to ``job.error``.  The
+    detail is on the plan as fields — ``unresolved_ports``,
+    ``displaced``, ``fused``, ``off_target``, ``emptied_lags`` — so no
+    client has to read it out of prose.
+
+    The source is parsed here first, to learn which ports it uses, and
+    again inside :func:`run_plan_with_overrides` — a third time when a
+    name is displaced.  If that first parse fails, or yields something
+    that is not a canonical tree, no pairing is attempted and the
+    canonical failure is produced by the code that already produces
+    it.
+
+    New function, per the frozen-signatures rule: the three older
+    entries are unchanged.
+
+    Args:
+        source: Source codec.
+        target: Target codec.
+        raw_text: Source-vendor config text.
+        source_inventory: The device the config came from.
+        target_inventory: The device it is going to.
+        port_rename_map: Operator overrides; they win over the pairing.
+        vlan_rename_map: As :func:`run_plan_with_overrides`.
+        local_user_rename_map: As :func:`run_plan_with_overrides`.
+        snmp_community_rename_map: As :func:`run_plan_with_overrides`.
+        snmpv3_user_rename_map: As :func:`run_plan_with_overrides`.
+        transforms: Applied after every override transform.
+        transform_specs: Serialisable transform record.
+        force: Skip the cross-device-class guard.
+
+    Returns:
+        The :class:`MigrationJob`, with ``port_mapping_plan`` set when
+        a pairing was attempted and the output was rendered.  It is
+        ``None`` when the source did not parse to a canonical tree or
+        the job did not render (a parse failure, a refused device-class
+        pair), whatever was declared.
+    """
+    from ..migration.canonical.intent import CanonicalIntent
+    from ..migration.canonical.port_names import collect_hardware_port_names
+    from ..migration.port_mapping import (
+        fused_targets,
+        plan_port_mapping,
+        settle_plan,
+    )
+
+    operator_map: dict[str, str | None] = dict(port_rename_map or {})
+    plan = None
+    used: list[str] = []
+    try:
+        tree = source.parse(raw_text)
+    except Exception:
+        # Not reported here: run_plan parses again below and turns the
+        # same failure into the failed job it has always produced.
+        tree = None
+    if isinstance(tree, CanonicalIntent):
+        # A port of the declared source always counts as used when the
+        # config names it, whatever the codec's classifier makes of the
+        # name; only a name OUTSIDE the inventory can be set aside as
+        # "positively not hardware" (a loopback, a tunnel, an SVI).
+        used = collect_hardware_port_names(
+            tree,
+            classify=getattr(source, "classify_port_name", None),
+            always=source_inventory.names(),
+        )
+        plan = plan_port_mapping(source_inventory, target_inventory, used)
+
+    merged: dict[str, str | None] = dict(plan.rename_map) if plan else {}
+    merged.update(operator_map)
+
+    def translate(port_map: dict[str, str | None]) -> MigrationJob:
+        return run_plan_with_overrides(
+            source=source,
+            target=target,
+            raw_text=raw_text,
+            port_rename_map=port_map,
+            vlan_rename_map=vlan_rename_map,
+            local_user_rename_map=local_user_rename_map,
+            snmp_community_rename_map=snmp_community_rename_map,
+            snmpv3_user_rename_map=snmpv3_user_rename_map,
+            transforms=transforms,
+            transform_specs=transform_specs,
+            force=force,
+        )
+
+    job = translate(merged)
+    if plan is None or job.rendered is None:
+        return job
+
+    # The plan decides paired and unplaced data ports.  Every other
+    # name went to the name-shape translator, whose answer nobody has
+    # checked against the targets the plan assigned.  Ask the run: any
+    # name that shares a target and that neither the plan nor the
+    # operator decided is dropped, and the run repeated.
+    displaced: list[str] = []
+    if plan.applied:
+        collisions = fused_targets(used, job.port_renames, job.port_drops)
+        displaced = sorted({
+            name for names in collisions.values() for name in names
+            if name not in merged
+        })
+        if displaced:
+            merged.update(dict.fromkeys(displaced))
+            job = translate(merged)
+            if job.rendered is None:
+                return job
+
+    dropped = set(job.port_drops)
+    emptied_lags: list[str] = []
+    for lag in tree.lags:
+        members = {member for member in lag.members if member}
+        members.update(
+            iface.name for iface in tree.interfaces
+            if lag.name and iface.lag_member_of == lag.name
+        )
+        if members and members <= dropped:
+            emptied_lags.append(lag.name)
+
+    settle_plan(
+        plan,
+        operator_map=operator_map,
+        used_names=used,
+        port_renames=job.port_renames,
+        port_drops=job.port_drops,
+        target_names=target_inventory.names(),
+        displaced=displaced,
+        emptied_lags=emptied_lags,
+    )
+    job.port_mapping_plan = plan
+    job.warnings.extend(plan.warnings)
+
+    message = ""
+    if not plan.applied:
+        reason = plan.warnings[0].removeprefix("port mapping: ") if plan.warnings else ""
+        message = f"Port mapping was not made: {reason}." if reason else (
+            "Port mapping was not made."
+        )
+    else:
+        sentences: list[str] = []
+        if plan.unresolved_ports:
+            sentences.append(
+                f"{len(plan.unresolved_ports)} port(s) the source config "
+                f"uses have no place on the target device, or are not "
+                f"ports of the declared source device. Unplaced ports "
+                f"were dropped from the output."
+            )
+        if plan.fused:
+            sentences.append(
+                f"{len(plan.fused)} target port(s) received more than "
+                f"one source port."
+            )
+        if sentences:
+            message = (
+                "Port mapping is incomplete: " + " ".join(sentences)
+                + " Review the port mapping and map or drop each one."
+            )
+    if message:
+        if job.status == MigrationJobStatus.completed:
+            job.status = MigrationJobStatus.partial
+            job.error = message
+        elif job.status == MigrationJobStatus.partial:
+            # Already partial for another reason (validation, usually).
+            # Say this as well rather than leave it to the warnings.
+            job.error = f"{job.error} {message}" if job.error else message
+    logger.debug(
+        "run_plan_with_models %s: paired=%d unplaced=%d off_inventory=%d "
+        "overridden=%d displaced=%d fused=%d unresolved=%d",
+        job.id[:8],
+        len(plan.used_pairings), len(plan.used_unplaced),
+        len(plan.off_inventory), len(plan.overridden),
+        len(plan.displaced), len(plan.fused), len(plan.unresolved_ports),
+    )
+    return job

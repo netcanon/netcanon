@@ -115,6 +115,21 @@ parse → render → parse → assert structural equality.
 Per-codec round-trip suites live under
 `tests/unit/migration/codecs/<vendor>/`.
 
+**Port names are checked against the hardware, not against the
+code.**  A port name from a target profile or a device model is
+written verbatim into a generated config, and a self-consistency
+check cannot catch a wrong one — the data and the codec can be wrong
+together.  So the model data has guards of its own
+(`test_target_profile_evidence.py`, `test_device_models_shipped.py`):
+every `capture` grade is re-proven against the committed real capture
+it cites, which must identify itself as that exact model; the port
+names and roles of every shipped model, in every deployment mode and
+with every module, are pinned as hand-typed literals rather than
+regenerated from the code under test; and which part number is which
+model is a table, not a comment.  A model-to-model translation is
+additionally checked, on every test run of it, for two source ports
+ending on one target name.
+
 ### Layer 2: Integration tests
 
 `pytest tests/integration` — HTTP API surface via FastAPI

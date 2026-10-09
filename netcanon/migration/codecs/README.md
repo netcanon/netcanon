@@ -56,6 +56,8 @@ netcanon/migration/codecs/<vendor>/
 ├── render.py           # (fortigate_cli) canonical tree → vendor text;
 │                       # thin codec.render() delegates here
 ├── port_names.py       # pure classify_port_name + format_port_identity
+│                       # (+ the model naming rule, physical_port_name,
+│                       # where a device-model family names its ports)
 │                       # (ALL four CLI codecs have this — mandatory
 │                       # when the codec participates in the Tier-3
 │                       # rename orchestrator; see cross-vendor mesh

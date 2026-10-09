@@ -823,7 +823,158 @@ correctly, offers `1`.  Each such row is marked amber with "not on
 profile" counted on its section header; left alone, it renders a port
 name the selected device does not have.  Pick the right port from the
 row's dropdown, or set them all at once through the API's
-`port_rename_map`.
+`port_rename_map` — or declare both devices, which is what section G
+is for.
+
+### G. Model-to-model port mapping
+
+Tell netcanon which device the config came from and which one it is
+going to, and it pairs the ports by **position** instead of guessing
+from the shape of their names: the third access port of the source
+with the third access port of the target, the first uplink with the
+first uplink.  That is what makes a standalone Aruba 2930F-48G land
+correctly on a 2930M-48G with an SFP+ module in a one-member stack —
+`1`..`48` become `1/1`..`1/48`, and the built-in uplinks `49`..`52`
+become the module's `1/A1`..`1/A4`.
+
+**Today this is an API feature**; the pickers in the rename modal come
+later.
+
+1. `GET /api/v1/migration/model-families` lists the device families
+   netcanon models, with each one's models, modes and modules.
+2. `POST /api/v1/migration/inventory` shows the ports a declared
+   device has, by their real names, before you translate anything.
+3. `POST /api/v1/migration/plan` with `source_deployment` and
+   `target_deployment` does the translation.
+
+```json
+{
+  "source": "aruba_aoss", "target": "aruba_aoss", "raw_text": "...",
+  "source_deployment": {"mode": "standalone",
+                        "members": [{"model": "JL260A"}]},
+  "target_deployment": {"mode": "stacked",
+                        "members": [{"model": "JL322A",
+                                     "modules": {"A": "JL083A"}}]}
+}
+```
+
+A model is named by its key or by its part number.  `mode` says how
+the device is deployed, which decides its port names; leave it out (or
+send it empty) and the family's default is used, and the response
+tells you which that was.  `modules` says what is fitted in each bay; a
+bay you do not mention is treated as empty, and reported back as *not
+stated*.
+
+**Both devices must be declared.**  A source without a target, or a
+`target_deployment` without a source, is a 422.  The response carries
+`port_mapping_plan` when a pairing was made; if it is `null`, nothing
+was paired — check the spelling of the field names, because the plan
+request ignores top-level fields it does not know.
+
+What you get back, on the job's `port_mapping_plan`:
+
+* **`pairings`** — every source port and the target port it landed on,
+  flagged (`slower`, `poe_lost`) where a faster port lands on a slower
+  one or a PoE port on a port without PoE.
+* **`unplaced`** — source ports with no place on the target: a 48-port
+  config on a 24-port switch, or uplinks with no uplink ports to go
+  to.  An access or uplink port is **dropped from the output** and
+  listed in `port_drops`: it is never moved onto a spare port of
+  another kind, and never left in the output under its old name.  Each
+  entry's `dropped` says what happened to that port.
+
+  The exception is a management port with no management port on the
+  target.  It is handed to the name-shape translator, which knows what
+  each target does with out-of-band management (on AOS-S it becomes
+  the `oobm` block), and it then has `dropped: false`.  Where the
+  target has no form for a management port at all, the translator
+  drops it; the entry then says `dropped: true` and the job is
+  `partial`.
+* **`off_inventory`** — names in the config that are not ports of the
+  source device you declared.  They are handed to the name-shape
+  translator, which may rename them or drop them.  Usually this means
+  the source model, its mode or its modules were declared wrongly —
+  check them.
+* **`displaced`** — names from either group above that the
+  name-shape translator would have put on a target port another
+  source port holds.  Rather than merge two ports into one, netcanon
+  **drops** such a name and says so.
+* **`fused`** — target ports that received more than one source port.
+  The pairing never does this and a displaced name is dropped before
+  it can, so an entry here means your own `port_rename_map` points
+  two ports at one name.
+* **`off_target`** — targets in your `port_rename_map` that are not
+  ports of the declared target device.  Allowed, and reported.
+* **`emptied_lags`** — LAGs every member port of which was dropped.
+* **`unresolved_ports`** — the used source names that still need a
+  decision from you.
+* **`source` / `target`** — what each declaration resolved to: the
+  model, the mode, each member's id and modules, and how well the port
+  names are established.  That grade is about the names at each end;
+  it does not mean the pairing itself was observed.
+
+The job is `partial` rather than `completed` while `unresolved_ports`
+is not empty: a used port that was dropped for want of a place, was
+off-inventory or was displaced, and that you have not decided
+yourself.  An entry for that port in `port_rename_map` — a target
+name, or `null` to drop it — is you deciding it.  It always wins over
+the pairing, on `/plan` and on every per-pane endpoint.  The job is
+also `partial` while `fused` is not empty, whatever you acknowledged,
+and when no pairing could be made at all (a profile that lists no
+ports).
+
+**Devices no family describes yet** can be declared by the key of a
+target profile instead (`source_profile` / `source_module`,
+`target_profile` / `target_module`).  The profile is read as one
+device in the one state it documents, with its ports in the order the
+profile lists them; the plan warns that this order has not been
+checked against the faceplate.  For a profile with modules, leave the
+module out to take the profile's default, send `""` to say none is
+fitted, or name one (in any case); a module the profile does not list
+is a 422.  `target_profile` *without* a source declaration changes
+nothing, as before.
+
+**Known limitations**
+
+* Model families ship for a first set of Aruba AOS-S switches only;
+  `GET /model-families` is the current list.  Everything else goes
+  through target profiles, and a device with neither a family nor a
+  profile cannot be declared yet.
+* **Only port names are translated.**  An AOS-S config that removes
+  ports from VLAN 1 with `no untagged` does not get that line back: on
+  a factory-default target those ports remain untagged members of
+  VLAN 1 unless another VLAN claims them untagged.  Check VLAN 1 on
+  the result.
+* A same-vendor AOS-S run warns `could not classify port name
+  'Vlan<N>'` once for each routed VLAN.  The name is left as it is,
+  which is correct.
+* A Catalyst config lists the interfaces of every network module the
+  chassis could take, whichever one is fitted, plus an
+  application-hosting port.  Declared with one module, the other
+  modules' interface names come back as off-inventory, and one that
+  would land on a paired port is displaced.  The job is `partial`
+  although the model is right, because netcanon cannot yet tell these
+  names from a wrongly declared model.
+* What is "a port the config uses" depends on how well the source
+  codec tells a port from a logical interface.  Loopbacks, tunnels,
+  SVIs and LAGs are left out.  A **sub-interface**
+  (`GigabitEthernet1/0/1.100`) is not: it is reported, and it does
+  **not** move with its parent port.  Some firewall pseudo-interfaces
+  the codec does not classify are reported as off-inventory too.
+* On an AOS-S module with HPE Smart Rate ports (JL081A), whether a
+  port supplies PoE depends on the chassis.  The inventory lists those
+  ports without PoE and says so; a PoE warning about one of them is
+  not reliable.
+* A dropped port can leave a LAG with no members.  The plan names the
+  LAG (`emptied_lags`); the VLANs that refer to it are not cleaned up.
+* Not modelled: modular chassis, breakout lanes, and ports a stack
+  uses as its links (which carry no configuration on the real device).
+* The pairing is a starting point.  Two switches of the same shape
+  pair exactly; a switch onto a firewall, or onto a device with a
+  different mix of port types, needs a human look.
+* The stack's own configuration (`stacking`, `vsf`, member
+  provisioning) is not translated.  Only the port names are made
+  right.
 
 ---
 

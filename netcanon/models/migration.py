@@ -32,6 +32,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from .port_inventory import DeploymentSpec, MappingPlan
+
 # ---------------------------------------------------------------------------
 # DeviceClass — coarse category of the target network function
 # ---------------------------------------------------------------------------
@@ -630,6 +632,34 @@ class MigrationJob(BaseModel):
     #: transform.  Empty list when source config had v1/v2c only.
     source_snmpv3_users: list[str] = Field(default_factory=list)
 
+    #: Hardware port names the source config references, in first-seen
+    #: order, captured post-parse and pre-transform.  Every place a
+    #: config can name a port counts (interface stanzas, VLAN
+    #: membership, LAG members, a static route's or DHCP pool's
+    #: interface, a VRRP track list).  A LAG name is left out, and so
+    #: is a name the source codec marks or classifies as an SVI,
+    #: loopback, bridge, tunnel or other logical interface — as far
+    #: as that codec can tell: a sub-interface, and a pseudo-interface
+    #: the codec's classifier does not know, is still listed.
+    #:
+    #: :attr:`port_renames` holds only names that CHANGED, so on a
+    #: same-vendor translation it is empty and the rename modal's
+    #: ports pane shows nothing.  This field is the data that fix
+    #: needs; the modal does not read it yet.  Populated by
+    #: :func:`run_plan_with_overrides` via the capture transform.
+    source_ports: list[str] = Field(default_factory=list)
+
+    #: The positional port pairing made when the request declared both
+    #: device models (:func:`run_plan_with_models`): every pair, every
+    #: source port that had no place on the target, every name that is
+    #: not a port of the declared source, what each declaration
+    #: resolved to, and how the run came out (``unresolved_ports``,
+    #: ``displaced``, ``fused``).  ``None`` when no models were
+    #: declared, and also when they were but the job did not render —
+    #: a parse failure or a refused device-class pair.  Structured so
+    #: a client never has to parse :attr:`warnings` for it.
+    port_mapping_plan: MappingPlan | None = None
+
     #: Tier-3 stanza headers detected in the source bytes that the
     #: codec parser deliberately drops (firewall rules, NAT, QoS,
     #: route-maps, IPsec, etc.).  Surfaced from
@@ -723,17 +753,67 @@ class MigrationPlanRequest(BaseModel):
 
     target_profile: str | None = None
     """Optional target-device profile key (``vendor/model`` form, e.g.
-    ``aruba_aoss/2930F-48G-PoEP``).  Advisory only — the rename modal
-    uses this to drive dropdown options and validate port ids against
-    the target device's known port set.  Does not affect rendering."""
+    ``aruba_aoss/2930F-48G-PoEP``).
+
+    On its own it is advisory: the rename modal uses it to drive
+    dropdown options and validate port ids against the target
+    device's known port set, and rendering is unaffected.
+
+    Sent together with a declared source (:attr:`source_deployment`
+    or :attr:`source_profile`) and no :attr:`target_deployment`, it
+    is the declared TARGET device: its port list is paired by
+    position and its ids are what gets rendered."""
 
     target_module: str | None = None
     """Optional module SKU within :attr:`target_profile` (e.g.
     ``NM-8X``, ``NM-2Q``, ``JL083A``).  Used when the selected profile
     declares module variants (chassis + swappable uplink module) —
     tells the rename modal which of the module's uplink port-ids to
-    offer in the target-name dropdown.  Advisory only (mirrors
-    ``target_profile`` semantics — does not affect rendering)."""
+    offer in the target-name dropdown.
+
+    Advisory when :attr:`target_profile` is.  When the profile is the
+    declared target device it selects which module's ports are part
+    of the target inventory: absent takes the profile's default
+    module, ``""`` states that none is fitted, and a SKU the profile
+    does not list is a 422.  Ignored when :attr:`target_deployment`
+    is sent."""
+
+    source_deployment: DeploymentSpec | None = None
+    """The device the config came FROM: model(s), fitted modules and
+    deployment mode (see
+    :class:`~netcanon.models.port_inventory.DeploymentSpec`).  A model
+    is one of ``GET /migration/model-families`` for the source codec's
+    vendor.
+
+    Declaring the source — with this field or :attr:`source_profile` —
+    together with a target (:attr:`target_deployment` or
+    :attr:`target_profile`) is what engages positional port mapping:
+    ports are then paired by position between the two declared
+    devices instead of being guessed from the shape of their names,
+    and the response carries
+    :attr:`MigrationJob.port_mapping_plan`.  :attr:`port_rename_map`
+    entries still win over the pairing, on every plan endpoint.
+    Mutually exclusive with :attr:`source_profile` (a 422)."""
+
+    source_profile: str | None = None
+    """The source device as a flat target-profile key
+    (``vendor/model``), for a model no family describes yet.  The
+    profile is read as one device in the single state it documents.
+    Mutually exclusive with :attr:`source_deployment`."""
+
+    source_module: str | None = None
+    """Module SKU within :attr:`source_profile`, in any case.  Absent
+    takes the profile's default module, ``""`` states that none is
+    fitted, and a SKU the profile does not list is a 422.  Never
+    advisory: it decides which ports the source device has.  Needs
+    :attr:`source_profile`."""
+
+    target_deployment: DeploymentSpec | None = None
+    """The device the config is going TO, in the same form as
+    :attr:`source_deployment`.  Takes precedence over
+    :attr:`target_profile` when both are sent.  Sent without a
+    source declaration it is refused (422): unlike a bare
+    ``target_profile`` it can only be half a declaration."""
 
     local_user_rename_map: dict[str, str | None] | None = None
     """Optional source-username → target-username override map.
@@ -844,6 +924,21 @@ class MigrationPlanRequest(BaseModel):
     legacy behaviour (v3 users pass through unchanged).  Callers
     that set it to ``{}`` opt into the SNMPv3-rename pipeline
     with no explicit overrides."""
+
+    # Which declarations may be combined is checked where they are
+    # read (``resolve_port_inventories`` in the routes' helpers), not
+    # by a validator here: a model-level pydantic error echoes the
+    # whole request body, the pasted config included, in its 422.
+
+    @property
+    def declares_source_device(self) -> bool:
+        """The request says which device the config came from."""
+        return self.source_deployment is not None or self.source_profile is not None
+
+    @property
+    def declares_target_device(self) -> bool:
+        """The request says which device the config is going to."""
+        return self.target_deployment is not None or self.target_profile is not None
 
 
 class CodecInfo(BaseModel):

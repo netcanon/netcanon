@@ -119,6 +119,7 @@ import yaml
 from pydantic import BaseModel, Field, ValidationError
 
 from ..models.migration import DeviceClass
+from ..models.port_inventory import EvidenceGrade
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,10 @@ PortKindYaml = Literal[
 #:   them, so nothing re-checks the claim.
 #: * ``inferred`` — derived by analogy with a sibling model, or doubtful
 #:   for the target it is filed under.  Always paired with a ``caveat``.
-ProfileEvidence = Literal["capture", "vendor-doc", "inferred"]
+#:
+#: The vocabulary is shared with device-model inventories and is
+#: defined once, in :mod:`netcanon.models.port_inventory`.
+ProfileEvidence = EvidenceGrade
 
 
 class TargetPort(BaseModel):

@@ -510,3 +510,8 @@ Nothing checks that a `vendor-doc` or ungraded profile's names are
   "Provenance: a profile describes hardware, in one stated state"
 * [`../AGENTS.md`](../AGENTS.md) — Documentation Sync Checklist row
   for new target profiles
+* [`adding-a-device-model.md`](adding-a-device-model.md) — model
+  families: the same hardware, described so that its port names can be
+  computed for any deployment state.  Where a family and a profile
+  describe the same device, the family is authoritative for port
+  mapping and a test holds the two to the same ports

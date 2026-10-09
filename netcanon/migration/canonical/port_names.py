@@ -30,7 +30,7 @@ implementing the two methods; zero edits here.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
@@ -234,6 +234,146 @@ class PortRenameResult(BaseModel):
     rather than mapped (e.g. Cisco ``AppGigabitEthernet1/0/1``
     app-hosting bridge, loopbacks where the target has no loopback
     concept, unused physical ports)."""
+
+
+# ---------------------------------------------------------------------------
+# Where port names live in a canonical tree
+# ---------------------------------------------------------------------------
+
+#: Canonical interface types that are not hardware ports.  An SVI, a
+#: LAG, a loopback, a bridge or a tunnel is a real NAME in a config and
+#: is rewritten like any other, but it is not a port a device model
+#: lists.
+NON_HARDWARE_INTERFACE_TYPES: frozenset[str] = frozenset({
+    "ianaift:l3ipvlan",
+    "ianaift:l2vlan",
+    "ianaift:ieee8023adLag",
+    "ianaift:softwareLoopback",
+    "ianaift:bridge",
+    "ianaift:tunnel",
+})
+
+#: Kinds a codec's classifier gives only to a name that is not a
+#: hardware port.  ``unknown`` is deliberately absent: it is what a
+#: classifier returns for a name it does not recognise, and on AOS-S
+#: that includes a real uplink named ``A1``.  ``mgmt``, ``physical``
+#: and ``breakout`` are hardware.
+NON_HARDWARE_PORT_KINDS: frozenset[str] = frozenset({
+    "lag", "svi", "loopback", "tunnel", "vtep", "virtual",
+    "hw_aggregate",
+})
+
+
+def collect_port_names(intent: CanonicalIntent) -> list[str]:
+    """Every port name *intent* references, in first-seen order.
+
+    The single statement of where a canonical tree holds port names —
+    the same places :func:`translate_port_names` rewrites.  A new
+    canonical field that references a port belongs here and in the
+    rewrite sweep, in the same change.
+
+    Returns:
+        Names without duplicates.  Includes LAG, SVI and loopback
+        names; see :func:`collect_hardware_port_names` for the subset
+        a device model can account for.
+    """
+    seen: dict[str, None] = {}
+
+    def note(name: str | None) -> None:
+        if name:
+            seen.setdefault(name, None)
+
+    for iface in intent.interfaces:
+        note(iface.name)
+        note(iface.lag_member_of)
+        # VRRP track-interface references are port names too.
+        for grp in iface.vrrp_groups:
+            for tracked in grp.track_interfaces:
+                note(tracked)
+    for vlan in intent.vlans:
+        for port in (*vlan.tagged_ports, *vlan.untagged_ports):
+            note(port)
+    for lag in intent.lags:
+        note(lag.name)
+        for member in lag.members:
+            note(member)
+    for route in intent.static_routes:
+        note(route.interface)
+    for pool in intent.dhcp_servers:
+        note(pool.interface)
+    # A VXLAN VTEP source-interface is a port name (Loopback0 / lo0.0).
+    for vx in intent.vxlan_vnis:
+        note(vx.source_interface)
+    return list(seen)
+
+
+def collect_hardware_port_names(
+    intent: CanonicalIntent,
+    classify: Callable[[str], PortIdentity] | None = None,
+    always: Iterable[str] = (),
+) -> list[str]:
+    """The hardware ports *intent* references, in first-seen order.
+
+    A running-config names a port in an interface stanza only when the
+    port carries non-default config; an unconfigured access port
+    appears solely in a VLAN's membership list, a LAG member solely
+    under the LAG, and a port can be named by nothing but a static
+    route, a DHCP pool or a VRRP track list.  Each is evidence that
+    the device has a port of that name, so this starts from
+    :func:`collect_port_names` — every place the rename sweep rewrites
+    — and takes away what is not hardware.  Starting from fewer places
+    would leave a port the sweep renames outside the set a positional
+    mapping is made for.
+
+    What is taken away:
+
+    * an interface whose canonical ``interface_type`` says SVI, LAG,
+      loopback, bridge or tunnel;
+    * a LAG's own name, and the name an interface gives as its
+      ``lag_member_of``.  LAG names also arrive through VLAN
+      membership, in either case (AOS-S prints both ``Trk1`` and
+      ``trk1``), so they are subtracted after the union;
+    * when *classify* is given, a name it POSITIVELY calls one of
+      :data:`NON_HARDWARE_PORT_KINDS`.  Several codecs never set
+      ``interface_type`` (OPNsense, VyOS) or set one type for
+      everything (FortiGate), and for those the classifier is the only
+      thing that knows ``lo0`` or ``ssl.root`` is not a port.
+
+    ``unknown`` is never grounds for leaving a name out: on AOS-S the
+    classifier returns it both for the synthesised SVI name ``Vlan2``
+    and for a real uplink named ``A1``.  What a classifier does not
+    recognise, and no type marks, is still returned — a sub-interface
+    (``GigabitEthernet1/0/1.100``) and some firewall pseudo-interfaces
+    are.
+
+    Args:
+        intent: The parsed source tree.
+        classify: The SOURCE codec's ``classify_port_name``.
+        always: Names that count whatever *classify* says — the ports
+            of a declared source inventory.  A classifier that misread
+            a real port must not be able to take it out of the set a
+            mapping is made for.
+    """
+    not_hardware: set[str] = {
+        iface.name for iface in intent.interfaces
+        if iface.interface_type in NON_HARDWARE_INTERFACE_TYPES
+    }
+    lag_names = {lag.name.lower() for lag in intent.lags if lag.name}
+    lag_names.update(
+        iface.lag_member_of.lower() for iface in intent.interfaces
+        if iface.lag_member_of
+    )
+    keep = set(always)
+    names: list[str] = []
+    for name in collect_port_names(intent):
+        if name in not_hardware or name.lower() in lag_names:
+            continue
+        if classify is not None and name not in keep:
+            identity = classify(name)
+            if identity is not None and identity.kind in NON_HARDWARE_PORT_KINDS:
+                continue
+        names.append(name)
+    return names
 
 
 # ---------------------------------------------------------------------------
@@ -528,30 +668,7 @@ def translate_port_names(  # noqa: C901
     # entries that named a port absent from the config, and (b) avoid
     # over-reporting those absent names as "dropped" (mirrors local_user /
     # snmpv3 honesty).
-    present_names: set[str] = set()
-    for iface in intent.interfaces:
-        present_names.add(iface.name)
-        if iface.lag_member_of:
-            present_names.add(iface.lag_member_of)
-        # (#3) VRRP track-interface references are port names too.
-        for grp in iface.vrrp_groups:
-            present_names.update(grp.track_interfaces)
-    for vlan in intent.vlans:
-        present_names.update(vlan.tagged_ports)
-        present_names.update(vlan.untagged_ports)
-    for lag in intent.lags:
-        present_names.add(lag.name)
-        present_names.update(lag.members)
-    for route in intent.static_routes:
-        if route.interface:
-            present_names.add(route.interface)
-    for pool in intent.dhcp_servers:
-        if pool.interface:
-            present_names.add(pool.interface)
-    # (#3) VXLAN VTEP source-interface is a port name (Loopback0 / lo0.0).
-    for vx in intent.vxlan_vnis:
-        if vx.source_interface:
-            present_names.add(vx.source_interface)
+    present_names: set[str] = set(collect_port_names(intent))
 
     # (#6) Strip operator-requested drops BEFORE the rename sweep so a rename
     # TARGET that reuses a dropped SOURCE name isn't itself deleted afterwards.

@@ -236,6 +236,71 @@ to the API.  See [`CAPABILITIES.md`](CAPABILITIES.md) § F for what
 the line under the fit-check banner tells you about the profile's
 names.
 
+Through the API there is now a way to tell it: declare the source
+device as well as the target, and the ports are paired by position
+between the two.  See [`CAPABILITIES.md`](CAPABILITIES.md) § G.
+
+### "Port mapping is incomplete" — the job is `partial`
+
+You declared both devices (`source_deployment` / `target_deployment`)
+and some ports the config uses could not be settled.
+`port_mapping_plan.unresolved_ports` on the job lists them; the lists
+below say why each is there:
+
+* **`unplaced`** — the source has more ports of a kind than the
+  target.  A 48-port config onto a 24-port switch leaves ports 25-48
+  with nowhere to go; uplinks onto a switch whose module bay you
+  declared empty have no uplink ports at all.  These ports were
+  **dropped from the output** (they are in `port_drops`).  Decide each
+  one: give it a target in `port_rename_map`, or map it to `null` to
+  confirm the drop.  Either way the job stops being `partial` on that
+  port's account — on `/plan` and on every per-pane endpoint.
+
+  A management port is treated differently.  With no management port
+  on the target it is handed to the name-shape translator and shows
+  `dropped: false`, which does not make the job `partial` (on AOS-S
+  it becomes the `oobm` block).  If the target has no form for a
+  management port at all, the translator drops it; the entry then
+  shows `dropped: true` and the port is in `unresolved_ports`.
+* **`off_inventory`** — the config names ports the source device you
+  declared does not have.  Those names were handed to the name-shape
+  translator, the old way — which may rename one, or drop it when
+  the target has no name for it (check `port_drops`).  Almost always
+  the declaration is wrong: the wrong model (a 24-port model for a
+  48-port
+  config), the wrong mode (bare `24` against a stacked declaration
+  whose ports are `1/24`), or a module you did not declare (`A1` with
+  an empty bay).  `POST /api/v1/migration/inventory` with your
+  declaration shows the names it produces — compare them with the
+  config.
+* **`displaced`** — a name from either list above that the name-shape
+  translator would have put on a target port another source port
+  already holds.  Two ports on one name is one port's config merged
+  into another's, so the name was **dropped** instead.  Give it a
+  target of its own in `port_rename_map`, or map it to `null`.
+
+The message can also say **"N target port(s) received more than one
+source port"**.  `port_mapping_plan.fused` names them.  Only your own
+`port_rename_map` can cause this — two entries pointing at one name,
+or an entry pointing at a name the pairing already used (keeping an
+unplaced port under its old name does exactly that on a same-vendor
+pair).  Naming the ports again does not clear it; give each a target
+of its own.
+
+**"Port mapping was not made"** means no pairing was possible at all —
+one side is a profile that lists no ports, or lists a port name twice.
+Every port name was then translated by name shape, as if no device
+had been declared.
+
+A job that is `partial` for another reason as well (the usual state
+of a cross-vendor run) carries both messages in `error`.
+
+A Catalyst source is a special case: IOS-XE prints the interfaces of
+every network module the chassis could take, so the modules you did
+not declare show up as off-inventory even when the declaration is
+right.  So do sub-interfaces (`GigabitEthernet1/0/1.100`), which are
+reported separately and do not move with their parent port.
+
 ### "The migrate page reports 'paramiko-shell capture artifact'"
 
 Specific to OPNsense backups via SSH + `cat /conf/config.xml`.
