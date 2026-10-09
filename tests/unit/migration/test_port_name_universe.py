@@ -52,7 +52,7 @@ import types
 from collections import defaultdict
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any, Union, get_args, get_origin, get_type_hints
+from typing import Any, NewType, Union, get_args, get_origin, get_type_hints
 
 import pytest
 from pydantic import BaseModel, create_model
@@ -899,9 +899,10 @@ _TEXT_NOT_FILLED = {"raw_sections", "group_content"}
 
 
 def _can_hold_text(annotation: Any) -> bool:
-    """Is ``str`` -- or a model, which may hold one -- anywhere in
-    *annotation*?"""
-    if annotation is str:
+    """Is ``str`` -- or a model, which may hold one, or a type that
+    says nothing of what it holds -- anywhere in *annotation*?"""
+    annotation = getattr(annotation, "__supertype__", annotation)  # a NewType
+    if annotation in (str, Any, object, list, dict, set, frozenset, tuple):
         return True
     if isinstance(annotation, type) and issubclass(annotation, BaseModel):
         return True
@@ -916,10 +917,17 @@ def _filled(model: type[BaseModel], path: str, where: dict[str, str]) -> BaseMod
     valid address or keyword.
 
     A field that can hold text in any OTHER shape -- a dict, a tuple,
-    a set, a union -- is refused, not skipped: left empty, a port name
-    kept in it would be in none of the three lists this tree compares,
-    and the comparison would pass.  Teach this helper the shape, or
-    list the field in ``_TEXT_NOT_FILLED`` as holding no port name."""
+    a set, a union, ``Any``, a container that does not say what it
+    holds -- is refused, not skipped: left empty, a port name kept in
+    it would be in none of the three lists this tree compares, and
+    the comparison would pass.  Teach this helper the shape, or list
+    the field in ``_TEXT_NOT_FILLED`` as holding no port name.  A
+    ``NewType`` of ``str`` is a ``str`` and is filled like one.
+
+    What this cannot know is what a field MEANS: a new plain ``str``
+    field that holds a port name and is in neither the table nor the
+    sweep is filled and compared like any other text.  Only a capture
+    that puts a name there shows that."""
     values: dict[str, Any] = {}
     # The declared types, resolved here: pydantic leaves a forward
     # reference unresolved on ``model_fields`` until the model is first
@@ -929,6 +937,8 @@ def _filled(model: type[BaseModel], path: str, where: dict[str, str]) -> BaseMod
         here = f"{path}.{name}" if path else name
         kind = _unwrapped(declared[name])
         item = _unwrapped(get_args(kind)[0]) if get_origin(kind) is list and get_args(kind) else None
+        kind = getattr(kind, "__supertype__", kind)
+        item = getattr(item, "__supertype__", item)
         if kind is str:
             values[name] = _named(here, where)
         elif isinstance(kind, type) and issubclass(kind, BaseModel):
@@ -983,8 +993,15 @@ class TestTheTwoListsAgree:
         assert "interfaces[].default_name" in where.values()
 
     @pytest.mark.parametrize(
-        "shape", [dict[str, str], tuple[str, ...], set[str], str | int, list[list[str]]],
-        ids=["dict", "tuple", "set", "union", "nested-list"],
+        "shape",
+        [
+            dict[str, str], tuple[str, ...], set[str], str | int, list[list[str]],
+            Any, list[Any], dict[int, Any], list, dict, object,
+        ],
+        ids=[
+            "dict", "tuple", "set", "union", "nested-list",
+            "any", "list-of-any", "dict-of-any", "bare-list", "bare-dict", "object",
+        ],
     )
     def test_the_builder_refuses_a_text_field_it_cannot_fill(self, shape: Any) -> None:
         """A port name kept in a shape the builder leaves empty would
@@ -994,6 +1011,21 @@ class TestTheTwoListsAgree:
         odd = create_model("Odd", holds_text=(shape, None))
         with pytest.raises(AssertionError, match="a field that can hold text"):
             _filled(odd, "", {})
+
+    def test_a_named_kind_of_text_is_filled_like_text(self) -> None:
+        """``NewType("PortName", str)`` is the likeliest way a field
+        that holds a port name will ever be typed."""
+        port_name = NewType("PortName", str)
+        named = create_model("Named", one=(port_name, ""), many=(list[port_name], []))
+        where: dict[str, str] = {}
+        built = _filled(named, "", where)
+        assert sorted(where.values()) == ["many[]", "one"]
+        assert built.one in where and built.many[0] in where
+
+    @pytest.mark.parametrize("shape", [int, bool, bytes, list[int]], ids=str)
+    def test_a_field_that_cannot_hold_a_name_is_left_at_its_default(self, shape: Any) -> None:
+        plain = create_model("Plain", holds_no_text=(shape, None))
+        assert _filled(plain, "", {}).holds_no_text is None
 
     def test_the_two_fields_it_leaves_alone_hold_no_port_name(self) -> None:
         declared = get_type_hints(CanonicalIntent)

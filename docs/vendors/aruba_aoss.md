@@ -203,8 +203,12 @@ pipeline — they just aren't pinned by a fixture yet").
   them, not by member number (see
   [`CAPABILITIES.md`](../CAPABILITIES.md) section G).  The `vsf` or
   `stacking` stanza itself — which switches the stack is made of,
-  their priorities, the ports a fabric uses as its links — is not
-  carried into the output; set the target stack up as its own.
+  their priorities, the ports a fabric uses as its links — and the
+  `oobm` block, per-member addresses included, are not carried into
+  the output; set the target stack up as its own.  The job has no
+  warning for this: it is said here, and in the plan's `caveats`
+  where the 2930F fabric or 2930M stack is declared from a model
+  family.
   The 2930F and 2930M series are modelled; a 3810M can be declared
   through its target profile; a switch with neither cannot be declared
   yet.  Only the port names are translated: a config that removes

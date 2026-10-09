@@ -140,39 +140,75 @@ def _summary(names: Iterable[str], limit: int = 8, sep: str = ", ") -> str:
     return shown if len(items) <= limit else f"{shown} and {len(items) - limit} more"
 
 
-def _member_lines(plan: MappingPlan) -> list[str]:
-    """The line for members that were paired with a member of another
-    NUMBER, or no line.
+def _member_lines(plan: MappingPlan, decided: Iterable[str] = ()) -> list[str]:
+    """The lines for members that were paired with a member of another
+    NUMBER, if any.
 
     Members pair in the order they are declared (their rank), never by
     the vendor's member id.  Where the two ids differ every port of
-    the member changes its name for that reason alone, so the plan
-    says which member went to which -- for a member the config uses.
-    A device that stands alone has no member id and is not listed.
+    the member changes its name -- or loses its place -- for that
+    reason alone, so the plan says which member went to which.  Two
+    cases, each with a line of its own:
 
-    Not a problem, and it holds no job: it is the rule the pairing
-    follows, said where it changed a name.  The order of the two
-    declarations is the operator's way to choose which member goes
-    where.
+    * a RENUMBERING: neither number is declared on the other side (a
+      fabric numbered 1 and 3 onto a stack numbered 1 and 2).  Nothing
+      an operator could have meant is contradicted;
+    * a CROSSING: one of the two numbers is declared on both sides,
+      and the members of that number were not put together (2, 1
+      onto 1, 2; and 2, 3 onto 1, 2, where member 2 lands beside its
+      namesake).  That is what a list typed in another order looks
+      like, so the line says how to keep them together: the same
+      place in both lists.
+
+    Said for a member the config uses -- a used port of it was paired,
+    or has no place on the member it was paired with -- and whose
+    ports the operator did not decide one by one (*decided*).  A
+    device that stands alone has no member id and is not listed, and
+    neither is either side of a flat profile: the number in its names
+    is not known apart from them.  A member beyond the target's last
+    has the ``no-member`` line instead.
+
+    Neither line is a problem, and neither holds a job: the order of
+    the two declarations is the operator's way to choose which member
+    goes where.
     """
     if plan.source is None or plan.target is None:
         return []
     theirs = {member.rank: member.member_id for member in plan.target.members}
-    used = {pairing.member_rank for pairing in plan.used_pairings}
-    renumbered = [
-        f"source member {member.member_id} with target member {theirs[member.rank]}"
-        for member in plan.source.members
-        if member.rank in used
-        and member.member_id is not None
-        and theirs.get(member.rank) is not None
-        and theirs[member.rank] != member.member_id
-    ]
-    if not renumbered:
-        return []
-    return [
-        f"port mapping: stack members pair in the order they are declared, "
-        f"not by member number: {_summary(renumbered, sep='; ')}"
-    ]
+    on_target = {number for number in theirs.values() if number is not None}
+    on_source = {
+        member.member_id for member in plan.source.members if member.member_id is not None
+    }
+    seen = set(decided)
+    used = {
+        port.member_rank for port in (*plan.used_pairings, *plan.used_unplaced)
+        if port.source not in seen
+    }
+    renumbered: list[str] = []
+    crossed: list[str] = []
+    for member in plan.source.members:
+        there = theirs.get(member.rank)
+        if member.rank not in used or member.member_id is None or there in (None, member.member_id):
+            continue
+        pair = f"source member {member.member_id} with target member {there}"
+        both = member.member_id in on_target or there in on_source
+        (crossed if both else renumbered).append(pair)
+    lines: list[str] = []
+    if renumbered:
+        lines.append(
+            f"port mapping: stack members pair in the order they are declared, "
+            f"not by member number: {_summary(renumbered, limit=10, sep='; ')}"
+        )
+    if crossed:
+        lines.append(
+            f"port mapping: {len(crossed)} stack member(s) are paired with a "
+            f"member of ANOTHER number while one of the two numbers is "
+            f"declared on both sides "
+            f"({_summary(crossed, limit=10, sep='; ')}); members pair in the "
+            f"order the two declarations list them — to keep the members of "
+            f"one number together, give them the same place in both lists"
+        )
+    return lines
 
 
 def _by_position(
@@ -495,12 +531,15 @@ def settle_plan(
             those that are ports of the target are kept as
             :attr:`MappingPlan.target_hardware`, and an operator's
             entry for such a port NAMED it and is not off-target.
+            For a placed port with no interface that the read-back
+            reported, it carries the target port the port was PAIRED
+            with, which no tree states.
         landed_off_target: See :attr:`MappingPlan.landed_off_target`.
         stale_next_hops: See :attr:`MappingPlan.stale_next_hops`.
         units: A unit of a target port (``ge-0/0/7.54``) is a name of
             the target — true between two configs of one codec.
         unbound: Keys of *target_hardware* whose hardware no line of
-            the rendered output looks up; see
+            their own in the rendered output looks up; see
             :attr:`MappingPlan.unbound_ports`.  Such a port is on no
             hardware in the output, and counts for none.
         by_factory_name: The target finds a port by a factory name
@@ -679,9 +718,10 @@ def _loss_lines(plan: MappingPlan) -> list[str]:
     if plan.stale_next_hops:
         lines.append(
             f"port mapping: {len(plan.stale_next_hops)} static route(s) "
-            f"still name, as next hop, a source interface that was renamed "
-            f"or dropped ({_summary(plan.stale_next_hops)}); the next hop "
-            f"was left as written — correct the route by hand"
+            f"still name, as next hop, an interface that has another name "
+            f"in the output, or is not in it "
+            f"({_summary(plan.stale_next_hops)}); the next hop was left as "
+            f"written — correct the route by hand"
         )
     return lines
 
@@ -733,8 +773,9 @@ def describe_plan(
     if no_member:
         lines.append(
             f"port mapping: {len(no_member)} source port(s) belong to a "
-            f"member the target does not have and were DROPPED from the "
-            f"output: {_summary(no_member)}"
+            f"member with no target member in its position (the target "
+            f"lists fewer members) and were DROPPED from the output: "
+            f"{_summary(no_member)}"
         )
     for role in ("access", "uplink"):
         overflow = [
@@ -852,10 +893,13 @@ def describe_plan(
                 "paired to it — use the names the device model lists"
             )
         lines.append(line)
-    unplaced = {p.source for p in plan.used_unplaced}
+    # A port the pairing placed "is on" its hardware.  Any other -- one
+    # with no place, or a name that is no port of the declared source
+    # -- "stays on" hardware nobody chose for it.
+    placed = {p.source for p in plan.used_pairings}
     named = [
-        f"{name} stays on {where}, which the mapping did not choose for it"
-        if name in unplaced else f"{name} is on {where}"
+        f"{name} is on {where}" if name in placed
+        else f"{name} stays on {where}, which the mapping did not choose for it"
         for name, where in plan.target_hardware.items() if name in seen
     ]
     if named:
@@ -877,8 +921,8 @@ def describe_plan(
     if loose:
         lines.append(
             f"port mapping: {len(loose)} port(s) the mapping did not place "
-            f"were kept under a name, and the output looks each up by that "
-            f"name, which no port of the target has "
+            f"were kept under a name no port of the target has; the output "
+            f"finds each by that name, or only refers to it "
             f"({_summary(loose, limit=6, sep='; ')}); give each a port of "
             f"the target, or drop it"
         )
@@ -899,9 +943,10 @@ def describe_plan(
             f"({_summary(lost, limit=6, sep='; ')}) — the target writes no "
             f"line of its own for a port whose name reads as another kind "
             f"of interface (a VLAN, a bridge, a LAG, a loopback), or for a "
-            f"port the config has no interface for; name each with a port "
-            f"of the target, or, where the config has an interface for it, "
-            f"with a name that does not read that way"
+            f"port the config has no interface for, and of two ports given "
+            f"one name it finds the first; name each with a port of the "
+            f"target, or, where the config has an interface for it, with a "
+            f"name of its own that does not read that way"
         )
     if plan.landed_off_target:
         shown = [
@@ -922,7 +967,7 @@ def describe_plan(
         )
     lines.extend(_loss_lines(plan))
 
-    lines.extend(_member_lines(plan))
+    lines.extend(_member_lines(plan, seen))
 
     # A pairing the operator replaced is no longer the plan's: its
     # speed and PoE flags describe a target the port did not go to --

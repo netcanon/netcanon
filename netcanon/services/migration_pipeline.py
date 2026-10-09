@@ -1247,10 +1247,13 @@ def _key_by_the_configs_name(
     made and the job still reported success.
 
     Only where it cannot be read two ways: the key is not itself a
-    name the config uses, and the port has no entry under its own
-    name.  Otherwise the entry is left as it is, and the translator
-    says it matched nothing.  An entry that was set aside for a blank
-    target is re-keyed the same way, so that it is still reported.
+    name the config uses, and the port has no real entry under its
+    own name.  Otherwise the entry is left as it is, and the
+    translator says it matched nothing.  An entry that was set aside
+    for a blank target is re-keyed the same way, so that it is still
+    reported, once.  A blank entry beside a real one for the same
+    port decided nothing and is nobody's: the real one stands, and
+    nothing is said to have been ignored.
 
     Args:
         operator_map: The operator's entries, as applied; re-keyed in
@@ -1271,6 +1274,7 @@ def _key_by_the_configs_name(
         name = by_factory.get(key)
         if key not in present and name is not None and name not in operator_map:
             ignored[index] = name
+    ignored[:] = list(dict.fromkeys(key for key in ignored if key not in operator_map))
 
 
 def _management_forms(
@@ -1424,17 +1428,29 @@ def _unbound_hardware(
     That another interface is looked up by the same hardware says
     nothing for this port.  Two allowances, both for what a parser
     cannot give back: where several names ended on one name the
-    parser keeps one of their lines, so a line under that name counts
-    for each; and where the parser reads a name back otherwise than
-    it was written (a line break in it), a line looked up by the
-    port's hardware under a name NO name of the job ended on counts.
+    parser keeps one of their lines, so a line under that name that
+    looks up the hardware of ONE of them counts for each; and where
+    the parser reads a name back otherwise than it was written (a
+    line break in it), a line looked up by the port's hardware under
+    a name NO name of the job ended on counts.
 
     *expected* is the other half.  A port the config names only as a
     LAG member or in a route has no interface, so the binder had
     nothing to write a factory name on and the renderer no line to
     write.  Under the name of the target port it was paired with it
     needs none.  Under any other name it is looked up by nothing, and
-    that matters where the output USES the name.
+    that matters where the output USES the name.  An allowance
+    applies there too: a list is written unquoted (``slaves=``,
+    ``gateway=``), so a name with white space, a comma, ``@`` or
+    ``%`` in it is not given back whole, and is judged by the part of
+    it before the first such character.  That is what a member list
+    reads where the character is white space or a comma, and a next
+    hop where it is any of the four; a name that begins with one of
+    them, holds ``@`` or ``%`` ahead of the white space or comma as a
+    LAG member, is wrapped in double quotes, or has a line break in
+    it is NOT caught (its entry is then listed off-target only).
+    Quoting the two lists in the renderer is what would retire the
+    whole case.
 
     Args:
         target: The target codec.
@@ -1483,6 +1499,10 @@ def _unbound_hardware(
         return [*hardware, *expected], False
 
     ends = Counter(final(name) for name in {*every, *hardware} if name not in gone)
+    # The hardware of every recorded port, by the name the port ended on.
+    on: dict[str, set[str]] = {}
+    for name, where in hardware.items():
+        on.setdefault(final(name), set()).add(where)
     holders: dict[str, set[str]] = {}
     for shown, factories in looked_up.items():
         for factory in factories:
@@ -1492,12 +1512,29 @@ def _unbound_hardware(
         mine = final(name)
         if where in looked_up.get(mine, ()):
             return True
-        if ends[mine] > 1 and looked_up.get(mine):
+        # The line under a shared name has to look one of the sharers
+        # up.  A parser can report a factory name it never read (the
+        # RouterOS one gives ``ether1.10`` itself as one), and that is
+        # no line.
+        if ends[mine] > 1 and looked_up.get(mine, set()) & on.get(mine, set()):
             return True
         return any(not ends[shown] for shown in holders.get(where, ()))
 
+    def refers_to(name: str) -> bool:
+        if name in used:
+            return True
+        # A list is written unquoted (``slaves=``, ``gateway=``), so the
+        # parser gives a name back only up to its first white space or
+        # comma -- or, in a next hop, ``@`` or ``%``.  A name that holds
+        # one is judged by the part before the first of them (see the
+        # docstring for what that does not catch).
+        cut = next(
+            (at for at, ch in enumerate(name) if ch.isspace() or ch in ",@%"), len(name),
+        )
+        return 0 < cut < len(name) and name[:cut] in used
+
     unbound = [name for name, where in hardware.items() if not bound(name, where)]
-    unbound.extend(name for name in expected if final(name) in used)
+    unbound.extend(name for name in expected if refers_to(final(name)))
     return unbound, True
 
 
@@ -1532,14 +1569,15 @@ def _mapping_message(plan: MappingPlan, dropped: set[str]) -> str:
     if plan.stale_next_hops:
         sentences.append(
             f"{len(plan.stale_next_hops)} static route(s) still name, "
-            f"as next hop, an interface that was renamed or dropped; "
-            f"correct them by hand."
+            f"as next hop, an interface that has another name in the "
+            f"output, or is not in it; correct them by hand."
         )
     if plan.unbound_ports:
         sentences.append(
             f"{len(plan.unbound_ports)} port(s) are not looked up by "
             f"their hardware in the output; give each a port of the "
-            f"target, or another name."
+            f"target, or - where the config has an interface for it - "
+            f"another name."
         )
     return "Port mapping is incomplete: " + " ".join(sentences) if sentences else ""
 
@@ -1618,9 +1656,13 @@ def run_plan_with_models(
 
     **A target that finds a port by a factory name**
     (``CodecBase.ports_keep_a_factory_name``; RouterOS) is given one
-    for every port the mapping placed, whatever vendor the config
-    came from and whether or not the source config stated one
-    (:func:`_hardware_binder`).  An operator's entry whose target is
+    for every port the mapping placed that the config has an
+    interface for, whatever vendor the config came from and whether
+    or not the source config stated one (:func:`_hardware_binder`).
+    A placed port with no interface -- a LAG member, a route's
+    interface -- has no line to carry one; it needs none under the
+    target port's name, and is reported if an entry names it
+    (:func:`_unbound_hardware`).  An operator's entry whose target is
     a port of the declared target moves the port there; one whose
     target is not gives the port that NAME and changes nothing about
     its hardware.  Only a declared target can tell the two apart —
@@ -1658,8 +1700,9 @@ def run_plan_with_models(
       target, or an explicit ``None``) is them deciding it;
     * a target port received more than one source port, whoever
       decided it;
-    * a static route still names, as next hop, an interface that was
-      renamed or dropped (``stale_next_hops``);
+    * a static route still names, as next hop, an interface that
+      has another name in the output, or is not in it
+      (``stale_next_hops``);
     * a port is looked up by its hardware nowhere in the output
       (``unbound_ports``); or
     * no pairing could be made at all (one side lists no ports), so
@@ -1911,12 +1954,16 @@ def run_plan_with_models(
         by_factory_name=bool(binders),
     )
     job.port_mapping_plan = plan
-    job.warnings.extend(plan.warnings)
     if not read_back:
-        job.warnings.append(
+        # On the plan as well as on the job: a client that reads only
+        # the plan must not take every port for one with a naming
+        # problem.
+        plan.warnings.append(
             "port mapping: the output could not be read back with the target "
-            "codec, so no port could be confirmed as looked up by its hardware"
+            "codec, so no port could be confirmed as looked up by its hardware; "
+            "every port is listed for that reason, whatever its name"
         )
+    job.warnings.extend(plan.warnings)
 
     message = _mapping_message(plan, dropped)
     if message:

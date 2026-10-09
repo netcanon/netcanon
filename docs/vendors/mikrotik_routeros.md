@@ -192,13 +192,18 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   both devices declared the plan lists such a port (`unbound_ports`)
   and the job is `partial`; without, nothing is reported.  Give the
   port another name.
-- **A port the config names only as a LAG member or in a route** has
-  no interface of its own, and so no line of its own in the output.
-  The name the mapping gives it — the target port's — needs none.  A
-  name YOU give it in `port_rename_map` is written into `slaves=` or
-  `gateway=` and defined nowhere; with both devices declared the plan
-  lists the port (`unbound_ports`) and the job is `partial`.  Give
-  such a port a port of the target, not a name.
+- **A port a config from another vendor names only as a LAG member
+  or in a route** (an AOS-S trunk member, an IOS route's interface)
+  has no interface of its own, and so no line of its own in the
+  output.  The name the mapping gives it — the target port's — needs
+  none.  A name YOU give it in `port_rename_map` is written into
+  `slaves=` or `gateway=` and defined nowhere; with both devices
+  declared the plan lists a port the mapping PLACED (`unbound_ports`)
+  and the job is `partial`.  Give such a port a port of the target,
+  not a name.  A port with no place that you keep under a name is
+  written the same way, and is said in a line of the plan, not in
+  `unbound_ports`.  (Both lists are written unquoted: a name with
+  white space or a comma in it breaks the line.)
 - **`gateway=<interface>` routes** follow the interface when it is
   renamed, and are removed with it when it is dropped.  A list of
   gateways (`gateway=ether1,ether2`) and a routing-table suffix

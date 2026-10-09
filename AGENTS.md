@@ -555,14 +555,26 @@ tests use these exclusively — never CSS classes or element structure.  See
   parsed again with the target's own parser, and a port no line of
   its own looks up is reported (`unbound_ports`) rather than said to
   be where the tree put it.  **And a check must not inherit the reach
-  of what it checks**: that read-back first walked only the ports the
-  binder had recorded, so a paired port the config has no interface
+  of what it checks**: that read-back first walked only the ports
+  recorded by the step that sets the factory name on the tree
+  (`_hardware_binder`), so a paired port the config has no interface
   for — a LAG member, a route's interface — was written under an
-  operator's name into `slaves=` or `gateway=`, defined by nothing
-  and reported by nothing; and it asked whether ANY line looked a
+  operator's name into `slaves=` or `gateway=`, defined by nothing,
+  and reported only as a name the device model does not list, in a
+  job that said `completed`; and it asked whether ANY line looked a
   piece of hardware up, not whether the port's own did.  Feed a check
-  from the widest list there is (the pairing, not the binder's
-  record), and judge each item by its own evidence.
+  from the widest list there is (the pairing, not that step's
+  record), and judge each item by its own evidence.  **And what a
+  parser cannot give back, it cannot give back anywhere**: one half
+  of that read-back allowed for a name the parser reads otherwise
+  than it was written, the other looked a name up as an exact string
+  — and a port named `my port`, written into an unquoted list, went
+  unreported once more, past a test oracle that asked the same
+  parser the same question.  Where a check compares a name with what
+  was read back, allow for the reader's losses in every branch and
+  for every list (a member list and a next hop are not cut at the
+  same characters), and give its oracle another way to look (the
+  text).
   A list of places written by reading the tree cannot show that it is
   complete, and a test that walks the same list agrees with it.  So
   completeness is also checked by experiment:

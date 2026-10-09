@@ -866,13 +866,47 @@ bay you do not mention is treated as empty, and reported back as *not
 stated*.
 
 **A stack on both sides.**  Each `members` list can hold more than
-one switch, and two stacks are paired member by member **in the order
-the two lists give them**: the first member you list for the source
-with the first you list for the target, whatever their member numbers
-are.  A VSF fabric whose members are numbered 1 and 3 lands on a stack
-numbered 1 and 2 with `3/5` as `2/5`, and the plan says in a line
-which member went to which.  The order of each list is therefore
-yours to choose: list the members in the order you want them paired.
+one switch:
+
+```json
+{
+  "source_deployment": {"mode": "vsf",
+                        "members": [{"model": "JL260A", "id": 1},
+                                    {"model": "JL260A", "id": 3}]},
+  "target_deployment": {"mode": "stacked",
+                        "members": [{"model": "JL322A", "id": 1,
+                                     "modules": {"A": "JL083A"}},
+                                    {"model": "JL322A", "id": 2,
+                                     "modules": {"A": "JL083A"}}]}
+}
+```
+
+`id` is the member's number — the one the device prints in front of
+each of its port names (`3/5`).  Leave it out and the members are
+numbered in the order listed, from the lowest number the mode allows
+that no other member states (1, 2, 3 ...);
+`port_mapping_plan.source.members[].member_id` says what each got.
+The numbers must be the config's own: a config that names `3/5`
+against members numbered 1 and 2 comes back with every `3/...` name in
+`off_inventory`.  (The response calls the number `member_id`; in a
+request it is `id`.)
+
+Two stacks are paired member by member **in the order the two lists
+give them**: the first member you list for the source with the first
+you list for the target, whatever their member numbers are.  The
+fabric above, numbered 1 and 3, lands on the stack numbered 1 and 2
+with `3/5` as `2/5`, and the plan says in a line which member went to
+which — between two declared deployments, for a member the config
+uses and whose ports you did not decide one by one.  The order of
+each list is therefore yours to choose: list the members in the order
+you want them paired.  If that puts a member beside a member of its
+own number instead of on it — for instance the same two members
+listed 2, 1 on one side and 1, 2 on the other — the plan says so in a
+line of its own (`... paired with a member of ANOTHER number while
+one of the two numbers is declared on both sides ...`): a
+**crossing**, which is what a list typed in another order looks like.
+The job is still `completed`, because the order is yours to choose.
+
 Within a member the ports pair as they do on one switch — a 2930F
 member's built-in uplinks become the module ports of the 2930M member
 in the same position.  A port never changes member to find a place.
@@ -882,8 +916,18 @@ member has ports to spare; and a source member beyond the target's
 last has no place at all (`reason: "no-member"` on each of its
 `unplaced` entries) — its used ports are dropped and listed, like any
 other unplaced port.  A target member the source has no member for is
-listed in `unused_target` and left alone.  What makes the switches a
-stack is not translated: see the last limitation below.
+listed in `unused_target` and left alone — unless the config names
+ports of a member you did not declare: those names are off-inventory
+and stay as they are, which can be on that member.
+
+Two things are yours to do.  A target VSF fabric of more than one
+member needs at least one port of each member for its links, and the
+pairing does not know
+which: it can give configuration to every port.  Send the source
+ports that land on the links elsewhere, or drop them, in
+`port_rename_map`.  And what makes the switches a stack is not
+translated: see *The stack's own configuration* under Known
+limitations.
 
 **Both devices must be declared.**  A source without a target, or a
 `target_deployment` without a source, is a 422.  The response carries
@@ -931,8 +975,8 @@ What you get back, on the job's `port_mapping_plan`:
 * **`off_inventory`** — names in the config that are not ports of the
   source device you declared.  They are handed to the name-shape
   translator, which may rename them or drop them.  Usually this means
-  the source model, its mode or its modules were declared wrongly —
-  check them.
+  the source model, its mode, its modules or — for a stack — its
+  members' numbers were declared wrongly: check them.
 * **`labelled_ports`** — source ports the config knows by a name of
   its own, each with the port's name in the device model.  RouterOS
   only: it keeps a port's factory name (`ether2`) beside the name you
@@ -974,8 +1018,9 @@ What you get back, on the job's `port_mapping_plan`:
   `fused`.  Use the names `POST /inventory` prints.  Between two
   configs of one codec a unit of a listed port (`ge-0/0/7.54`) is not
   off-target.  On a RouterOS target a NAME you give a port is not
-  off-target while the port's hardware has a place; the plan says in
-  a line of its own that the entry was taken as a name.
+  listed here while the port's hardware has a place, or while the
+  port is in `unbound_ports`; the plan says in a line of its own what
+  became of the entry.
 * **`target_hardware`** — RouterOS targets only: source names whose
   port is on a target port that is not the name they have in the
   output, each with that port.  RouterOS finds a port by its factory
@@ -991,7 +1036,9 @@ What you get back, on the job's `port_mapping_plan`:
   where its hardware is.  A port nobody placed that you kept under a
   name is still looked up by the factory name it had: it is listed
   here if the target has a port of that name, and in
-  `source_hardware` if it has not.
+  `source_hardware` if it has not — or in `unbound_ports`, if the
+  name you kept it under reads as another kind of interface, since no
+  line is then written for it.
 * **`source_hardware`** — between two RouterOS configs only: ports
   nobody placed that the output still looks up by the factory name
   they had on the source device, which the declared target does not
@@ -1001,18 +1048,23 @@ What you get back, on the job's `port_mapping_plan`:
 * **`unbound_ports`** — RouterOS targets only: ports that no line of
   their own in the output looks up by their hardware, each with that
   hardware.  The finished output is read back to find them, and each
-  port is judged by its own line.  Two ways.  The port's name reads
+  port is judged by its own line.  Three ways.  The port's name reads
   as another kind of interface: RouterOS output has no Ethernet line
   for a name shaped like a VLAN, a bridge, a LAG or a loopback
   (`bond1`, `bridge-uplink`, `vlan-trunk`, `uplink.10`, `lo0`),
-  whoever chose the name.  Or the config has no interface for the
-  port — it names it only as a LAG member or in a route — and your
-  entry gave it a name that is no port of the target, which the
-  output then uses (`slaves=`, `gateway=`) and nothing defines.  Such
-  a name is not in `off_target` as well.  The job is `partial` while
-  this is not empty: name the port with a port of the target (that
-  moves it there), or — where the config has an interface for it —
-  with a name that does not read that way.
+  whoever chose the name — and between two RouterOS configs that
+  holds for a port nobody placed as well, which is then listed with
+  the factory name it had.  Or the mapping placed a port the config
+  has no interface for — it names it only as a LAG member or in a
+  route — and your entry gave it a name that is no port of the
+  target, which the output then uses (`slaves=`, `gateway=`) and
+  nothing defines.  Or you gave two ports of another vendor one name:
+  the output finds the first by it, and the second is listed.  The
+  entry for such a port is not listed in `off_target` as well.  The
+  job is `partial` while this is not empty: name the port with a port
+  of the target (that moves it there), or — where the config has an
+  interface for it — with a name of its own that does not read that
+  way.
 * **`landed_off_target`** — logical names nobody decided (a VLAN
   interface, an aggregate) that the name-shape translator gave a
   port-shaped name the declared target does not list — a data port's
@@ -1021,7 +1073,8 @@ What you get back, on the job's `port_mapping_plan`:
   config is on a port the device does not have, so it is in
   `unresolved_ports` until you map or drop it.
 * **`stale_next_hops`** — destinations of static routes whose next
-  hop still names a source interface that was renamed or dropped: a
+  hop still names an interface that has another name in the output,
+  or is not in it: a
   RouterOS list of gateways (`gateway=ether1,ether2`), a routing-table
   suffix (`ether3@main`), or — across vendors — a Junos unit
   (`next-hop et-0/0/24.0`).  A next hop that is exactly an
@@ -1077,10 +1130,15 @@ target is ignored.  The
 job is also `partial` while `fused`, `stale_next_hops` or
 `unbound_ports` is not empty, whatever you acknowledged, and when no
 pairing could be made at all.  `unresolved_ports` also holds every
-name in `landed_off_target`.  A port that HAS a place and is not put
-there (`unbound_ports`) holds the job; a port with no place that you
-keep under a name is your decision — it is reported in a line (and
-in `source_hardware` between two RouterOS configs), and does not.
+name in `landed_off_target`.  A port the mapping PLACED that no line
+of its own looks up (`unbound_ports`) holds the job.  A port with no
+place that you keep under a name is your decision: it is reported in
+a line (and in `source_hardware` between two RouterOS configs) and
+does not hold the job — with one exception.  Between two RouterOS
+configs, a name that reads as another kind of interface (`bridge-x`,
+`bond7`, `lo0`) leaves such a port with no line at all, and it is
+listed in `unbound_ports` like a placed one, with the factory name it
+had.
 
 **Devices no family describes yet** can be declared by the key of a
 target profile instead (`source_profile` / `source_module`,
@@ -1162,11 +1220,24 @@ nothing, as before.
   devices declared the plan lists such a port (`unbound_ports`) and
   the job is `partial`; give the port another name in
   `port_rename_map`.
-* A port the config names only as a LAG member or in a route has no
-  line of its own in RouterOS output.  Naming it in `port_rename_map`
-  writes the name where the port is referenced and nowhere else; the
-  plan lists it (`unbound_ports`) and the job is `partial`.  Give
-  such a port a port of the target, not a name.
+* A port the mapping placed that the config names only as a LAG
+  member or in a route has no line of its own in RouterOS output.
+  Naming it in `port_rename_map` writes the name where the port is
+  referenced and nowhere else; the plan lists it (`unbound_ports`)
+  and the job is `partial`.  Give such a port a port of the target,
+  not a name.  A port with NO place that you keep under a name is
+  written the same way — into `slaves=` or `gateway=`, defined by
+  nothing — and that is said in a line of the plan, not in
+  `unbound_ports`: the job is `completed`, because keeping it was
+  your decision.
+* RouterOS output writes a LAG's members and a route's next hop
+  unquoted, so a name with white space or a comma in it breaks the
+  line it is written into, whether or not the port has an interface.
+  A placed port with no interface is still reported under such a
+  name in the ordinary cases (`my port`, `a,b`).  It is not where the
+  name begins with a comma, `@` or `%`, holds `@` or `%` ahead of the
+  white space or comma, is wrapped in double quotes, or has a line
+  break in it: the entry is then listed in `off_target` only.
 * **A next hop that is not exactly an interface's name is not
   followed** when the interface moves: a RouterOS route with several
   gateways or a routing-table suffix, and — across vendors — a Junos
@@ -1208,9 +1279,18 @@ nothing, as before.
 * The pairing is a starting point.  Two switches of the same shape
   pair exactly; a switch onto a firewall, or onto a device with a
   different mix of port types, needs a human look.
-* The stack's own configuration (`stacking`, `vsf`, member
-  provisioning) is not translated.  Only the port names are made
-  right.
+* **The stack's own configuration** (`stacking`, `vsf`, member
+  provisioning, and the `oobm` block, per-member addresses included)
+  is not translated.  Only the port names are made right.  The job
+  has no warning for it; with a 2930F fabric or a 2930M stack
+  declared from a model family, the plan's `caveats` say so.
+* An AOS-S config that defines a LAG as `trk1` and lists it in a VLAN
+  as `Trk1` is reported, whenever a port map is in play (always, with
+  devices declared), as `multiple source ports map to 'Trk1'
+  (sources: Trk1, trk1)`.  For a LAG written in two letter cases that
+  line is false: it is one LAG, and nothing is merged.  The two
+  spellings are also two names to a rename map: an entry for one of
+  them (a drop, a new name) leaves the other as it was — give both.
 
 ---
 

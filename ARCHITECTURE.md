@@ -847,9 +847,14 @@ out-of-band management is the `oobm` context, not a numbered port).
   sparse, so a lone ex-member can be `3/N`.  A member's rank is its
   place in the declaration's list, so two stacks pair in the order
   their members are listed, and that order is how an operator chooses
-  which member goes where.  Where it puts a member on a member of
-  another number, the plan says which went to which
-  (`describe_plan`).
+  which member goes where.  Where it puts a member the config uses
+  on a member of another number, the plan says which went to which
+  (`_member_lines`): in one line for a RENUMBERING, where neither
+  number is declared on the other side, and in another for a
+  CROSSING, where one is — for instance the same members listed in
+  another order — with what to do about it.  Neither holds a job.  A
+  side read from a
+  flat profile states no member number, and gets neither line.
 * Within a member, ports pair role to role, in order.  A port never
   changes member to find a place.
 * A used port with no position on the target is **dropped,
@@ -1110,10 +1115,16 @@ whose wrapper also reads each job's RENDERED OUTPUT back: an
 interface that can be recognised by its address must be on the port
 the job reports, the output must name no port the job does not
 report, no name that moved may still be in it, and no interface may
-carry the addresses of two source interfaces; and, for a port that
-carries no address at all (a LAG member, a route's interface), the
-name it has in the output must be a port of the target or an
-interface the output looks up by a factory name.  The address checks
+carry the addresses of two source interfaces; and, on a target that
+finds a port by a factory name, for a port that carries no address at
+all (a LAG member, a route's interface), the name it has in the
+output must be a port of the target or an interface the output looks
+up by a factory name.  An AOS-S port carries no address either, so
+between two stacks — where the names of one member are names of the
+other — none of those can tell one member's config from another's:
+between two AOS-S configs the wrapper also compares every VLAN list
+and LAG member list of the output with the source's, each name moved
+as the job says.  The address checks
 and the old-name check take nothing from the engine's list of places;
 the port-list check reads both sides with the engine's collectors.
 Each is handed a job with the defect it is for, in the same module,
@@ -1121,8 +1132,8 @@ and has to fail — and the wrapper is handed such a job for each of
 its assertions, and has to refuse it in that assertion's own words,
 so that none can be taken out of the wrapper unnoticed.  (Where a
 test expects two ports on one name, the checks that read a port's
-place off its address are not run: a parser gives back one interface
-per name.)
+place off its address and the list comparison are not run: a parser
+gives back one interface per name.)
 
 **Relationship to target profiles.**  A target profile is one model in
 one stated state, as a flat list.  `inventory_from_profile` reads one

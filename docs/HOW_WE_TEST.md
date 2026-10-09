@@ -133,9 +133,13 @@ sharing a target name with another name (the grouping recomputed in
 the test), and — reading the rendered output back with the target
 codec — for an interface that is not on the port the job reports, a
 port in the output the job does not report, a name that moved and is
-still there, an interface carrying the addresses of two, or a paired
-port that carries no address going by a name the output uses and
-nothing defines.  Each of
+still there, an interface carrying the addresses of two, or — on a
+target that finds a port by a factory name — a paired port that
+carries no address going by a name the output uses and nothing
+defines.  Between two AOS-S configs, whose ports carry no address,
+every VLAN list and LAG member list is compared as well: between two
+stacks nothing else can tell one member's config from another's.
+Each of
 those checks is also handed a defective job and required to fail: a
 check nobody has seen fail is not known to check anything — and the
 wrapper is handed one for each of its assertions, since a check that

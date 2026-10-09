@@ -857,8 +857,10 @@ vlan 1
 
 class TestEveryPlacedPortIsFoundByItsHardware:
     """A RouterOS target finds a port by its factory name.  With both
-    devices declared, every port the mapping placed is looked up by
-    the port of the target it is on -- from any source vendor."""
+    devices declared, every placed port the config has an interface
+    for is looked up by the port of the target it is on -- from any
+    source vendor; a placed port with none is reported when an entry
+    names it."""
 
     def test_a_port_from_another_vendor_that_the_operator_names(
         self, client: TestClient,
@@ -916,6 +918,26 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         assert plan["off_target"] == []
         assert job["status"] == "partial"
         assert "1 port(s) are not looked up by their hardware in the output" in job["error"]
+
+    @pytest.mark.parametrize("name", ["my port", "a,b"])
+    def test_and_so_is_one_under_a_name_that_cannot_be_read_back(
+        self, client: TestClient, name: str,
+    ) -> None:
+        """The member list is written unquoted, so a name with white
+        space or a comma in it is not read back whole.  The port is
+        reported all the same; this used to be ``completed``."""
+        resp = client.post("/api/v1/migration/plan", json={
+            "source": "aruba_aoss", "target": "mikrotik_routeros",
+            "raw_text": _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA,
+            "source_deployment": {"mode": "standalone", "members": [{"model": "JL259A"}]},
+            "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+            "port_rename_map": {"1": name},
+        })
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial"
+        job = resp.json()
+        assert f"slaves={name},sfp-sfpplus2" in job["rendered"]
+        assert job["port_mapping_plan"]["unbound_ports"] == {"1": "sfp-sfpplus1"}
+        assert job["port_mapping_plan"]["off_target"] == []
 
     def test_a_port_no_line_of_the_output_finds_is_reported(
         self, client: TestClient,
@@ -1058,10 +1080,15 @@ class TestAStackOnBothSides:
         assert (job["port_renames"]["2/1"], job["port_renames"]["1/1"]) == ("1/1", "2/1")
         lines = [line.strip() for line in job["rendered"].splitlines()]
         assert lines[lines.index("interface 1/1") + 1] == 'name "desk-b"'
+        # Each member's number is declared on the other side too: that
+        # is a crossing, said with what to do about it, and it holds
+        # no job.
         (line,) = [w for w in job["warnings"] if w.startswith("port mapping:")]
-        assert line.endswith(
-            "source member 2 with target member 1; source member 1 with target member 2"
+        assert "2 stack member(s) are paired with a member of ANOTHER number" in line
+        assert (
+            "(source member 2 with target member 1; source member 1 with target member 2)" in line
         )
+        assert line.endswith("give them the same place in both lists")
 
     def test_a_member_the_target_does_not_have_is_dropped_and_said(
         self, client: TestClient,
@@ -1079,7 +1106,7 @@ class TestAStackOnBothSides:
         assert plan["unresolved_ports"] == sorted(job["port_drops"])
         assert [name.lower() for name in plan["shrunk_lags"]] == ["trk1"]
         assert "trunk 1/A1 trk1 lacp" in job["rendered"]
-        assert any("a member the target does not have" in w for w in job["warnings"])
+        assert any("no target member in its position" in w for w in job["warnings"])
         assert "Port mapping is incomplete: 50 name(s)" in job["error"]
 
     @pytest.mark.parametrize(
@@ -1105,6 +1132,19 @@ class TestAStackOnBothSides:
         assert len(names) == 104
         assert (names[0], names[51], names[52], names[103]) == ("2/1", "2/A4", "1/1", "1/A4")
         assert [(m["rank"], m["member_id"]) for m in inventory["members"]] == [(0, 2), (1, 1)]
+
+    def test_the_api_document_says_how_to_number_and_order_members(
+        self, client: TestClient,
+    ) -> None:
+        """An API client reads the OpenAPI document, not a docstring:
+        how a member is given its number, and that the order of the
+        list is the order of the pairing, are in it."""
+        schemas = client.get("/api/v1/openapi.json").json()["components"]["schemas"]
+        number = schemas["MemberSpec"]["properties"]["id"]["description"]
+        assert "member number" in number and "Omitted" in number
+        order = schemas["DeploymentSpec"]["properties"]["members"]["description"]
+        assert "in list order" in order and "whatever their member numbers" in order
+        assert "states its number with ``id``" in schemas["DeploymentSpec"]["description"]
 
     def test_a_member_number_declared_twice_is_a_422(self, client: TestClient) -> None:
         resp = client.post(

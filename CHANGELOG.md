@@ -131,12 +131,15 @@ timestamp if your timezone matters for an audit.
     device no family describes yet can be declared by a target-profile
     key instead (`source_profile` / `source_module`, with the existing
     `target_profile` / `target_module`).
-  - A stack can be declared on both sides.  Members pair in the order
-    the two declarations list them, not by member number, and the plan
-    says in a line where that put a member on a member of another
-    number.  A port never changes member to find a place, and a source
-    member the target has no member for is dropped port by port and
-    reported.
+  - A stack can be declared on both sides.  A member states its
+    number with `id`.  Members pair in the order the two declarations
+    list them, not by member number, and the plan says in a line
+    where that put a member on a member of another number — in one
+    line for a renumbering (1, 3 onto 1, 2), in another, with what to
+    do about it, for a crossing (2, 1 onto 1, 2), which holds no job
+    either.  A port never changes member to find a place, and a source
+    member with no target member in its position is dropped port by
+    port and reported.
   - The pairing comes back as data on `MigrationJob.port_mapping_plan`:
     every pair, every source port with no place on the target, every
     name in the config that is not a port of the declared source, what
@@ -201,20 +204,23 @@ timestamp if your timezone matters for an audit.
     factory name is taken for it) — and the plan says which port of
     the model it is (`labelled_ports`) and where its hardware ended
     (`target_hardware`; `source_hardware` for a port nobody placed
-    that the operator kept under a name).  A config that looks two
+    that the output still finds by the factory name it had).  A config
+    that looks two
     interfaces up by one factory name is not paired at all.  Without
     devices declared nothing about a factory name changes: an entry
     names the port, as it always has.
   - On a RouterOS target the finished output is read back, and each
     port is judged by its own line.  A port that no line of its own
     looks up by its hardware is listed (`unbound_ports`) and the job
-    is `partial`.  Two ways: RouterOS output has no Ethernet line for
-    a port whose name reads as a VLAN, a bridge, a LAG or a loopback
-    (`bond1`, `bridge-uplink`, `vlan-trunk`, `lo0`), whoever chose
-    the name; and a port the config has no interface for, given a
-    name that is no port of the target, is written under that name
-    where it is referenced (`slaves=`, `gateway=`) and defined
-    nowhere.
+    is `partial`.  Three ways: RouterOS output has no Ethernet line
+    for a port whose name reads as a VLAN, a bridge, a LAG or a
+    loopback (`bond1`, `bridge-uplink`, `vlan-trunk`, `lo0`), whoever
+    chose the name; a placed port the config has no interface for,
+    given a name that is no port of the target, is written under that
+    name where it is referenced (`slaves=`, `gateway=`) and defined
+    nowhere — for most names that hold white space or a comma and
+    cannot be read back whole as well; and of two ports of another
+    vendor given one name only the first is found.
   - A static route left naming, as next hop, an interface that has
     another name in the output, or is gone, is listed
     (`stale_next_hops`), and the job is `partial`.  No entry rewrites

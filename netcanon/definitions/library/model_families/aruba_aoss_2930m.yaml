@@ -82,7 +82,7 @@ modes:
     naming:
       grade: vendor-doc
       ref: "2930F/2930M Advanced Traffic Management Guide 16.11 pp.252-260, 291-293 (member/port) and 296-299 (member/A1)"
-    caveat: "Names carry the stack member number even on a switch that is alone. A 2930M first powered on without a stacking module has stacking disabled and names the same ports without the prefix (48, A1)."
+    caveat: "Names carry the stack member number even on a switch that is alone. A 2930M first powered on without a stacking module has stacking disabled and names the same ports without the prefix (48, A1). The stack's own configuration - the stacking stanza, its members and their priorities, and the oobm block, per-member addresses included - is not translated."
   standalone:
     label: "stacking disabled"
     naming:

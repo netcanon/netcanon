@@ -204,7 +204,8 @@ correct mapping.
 Check the job warnings for `port_rename: multiple source ports map
 to ...`.  This is a **real loss**, not cosmetic: two physically
 distinct source ports resolved to a single name on the target, and
-their VLAN memberships merged.
+their VLAN memberships merged.  (One exception: an AOS-S LAG named in
+two letter cases, `sources: Trk1, trk1`, is one LAG and not a loss.)
 
 The common case is Aruba AOS-S uplink-module ports.  `1/A1` (module
 **A**, port 1) and `1/1` (access port 1) are different ports, but no
@@ -256,9 +257,9 @@ below say why each is there:
   confirm the drop.  Either way the job stops being `partial` on that
   port's account — on `/plan` and on every per-pane endpoint.
 
-  Between two stacks an entry can say `reason: "no-member"`: the port
-  belongs to a source member with no target member in the same
-  position.  Members pair in the order the two declarations list
+  With a stack as the source an entry can say `reason: "no-member"`:
+  the port belongs to a source member with no target member in the
+  same position.  Members pair in the order the two declarations list
   them, so check how many members you declared on each side, and in
   what order.  A port is never moved to another member to find it a
   place; do that yourself in `port_rename_map` if it is what you
@@ -282,10 +283,14 @@ below say why each is there:
   the declaration is wrong: the wrong model (a 24-port model for a
   48-port
   config), the wrong mode (bare `24` against a stacked declaration
-  whose ports are `1/24`), or a module you did not declare (`A1` with
-  an empty bay).  `POST /api/v1/migration/inventory` with your
-  declaration shows the names it produces — compare them with the
-  config.  A few causes leave the declaration right: the config
+  whose ports are `1/24`), a module you did not declare (`A1` with
+  an empty bay), or — for a stack — a member you did not declare, or
+  one whose number is not the config's (`3/1` against members
+  numbered 1 and 2: a member with no `id` is numbered from 1).
+  `POST /api/v1/migration/inventory` with
+  `{"codec": "<source codec>", "deployment": {...}}` shows the names
+  your declaration produces — compare them with the config.  A few
+  causes leave the declaration right: the config
   spells a port another way than the device prints it
   (`gigabitethernet1/0/1`, `Gi1/0/1`); it has an `interface Null0`
   stanza; or it is a Catalyst or a FortiGate, whose configs list
@@ -313,7 +318,8 @@ below say why each is there:
   `port_rename_map`, or map it to `null`.
 
 The message can also say **"N static route(s) still name, as next
-hop, an interface that was renamed or dropped"**.
+hop, an interface that has another name in the output, or is not in
+it"**.
 `port_mapping_plan.stale_next_hops` lists their destinations.  A next
 hop that is exactly an interface's name follows the interface; a
 RouterOS list of gateways (`gateway=ether1,ether2`), a routing-table
@@ -329,7 +335,7 @@ The message can also say **"N port(s) are not looked up by their
 hardware in the output"** — on a RouterOS target only.
 `port_mapping_plan.unbound_ports` lists them, each with the factory
 name it should be looked up by.  RouterOS finds a port by its factory
-name, and there are two ways to end without a line that does:
+name, and there are three ways to end without a line that does:
 
 * The port's name reads as a VLAN, a bridge, a LAG or a loopback
   (`bond1`, `bridge-uplink`, `vlan-trunk`, `uplink.10`, `lo0`).  The
@@ -344,6 +350,15 @@ name, and there are two ways to end without a line that does:
   is referenced (`slaves=`, `gateway=`) and defined nowhere.  Use a
   port of the target as the entry's target, or remove the entry: the
   name the mapping gives the port needs no line.
+* Two ports of another vendor were given one name.  The output finds
+  the first by it, and the second is listed.  Give each a name of its
+  own.
+
+If the job also says **"the output could not be read back with the
+target codec"**, no port could be checked at all: every port that
+could have been checked is listed for that reason, whatever its name,
+and the three causes above do not apply.  That is a fault in netcanon
+— report it with the config.
 
 If the plan lists `emptied_lags`, `shrunk_lags`, `lost_routes`,
 `lost_dhcp_pools`, `lost_tracking` or `lost_vtep_sources`, a dropped
@@ -368,8 +383,13 @@ happens to have a port with the factory name the port had, in which
 case `target_hardware` shows it on that port, which the mapping did
 not choose for it.  Between two RouterOS configs `source_hardware`
 then names a factory name the target lacks; from another vendor the
-output looks the port up by the name you typed, which no port has,
-and a line of the plan says so.
+output finds the port by the name you typed, which no port has, or
+only refers to it, and a line of the plan says so.  Where the name
+reads as another kind of interface (`bridge-x`, `bond7`) no Ethernet
+line is written at all: between two RouterOS configs the port is then
+in `unbound_ports` and the name is not listed here; from another
+vendor the name is listed here and the address is on a name nothing
+defines.
 
 The message can also say **"N target port(s) received more than one
 source port"**.  `port_mapping_plan.fused` names them.  Only your own
@@ -414,7 +434,20 @@ The job says so in a line (`stack members pair in the order they are
 declared, not by member number: source member 3 with target member
 2`), and `port_mapping_plan.source.members` / `.target.members` give
 each member's place (`rank`) and number.  To pair them another way,
-change the order of one list.  See
+change the order of one list.
+
+Where a member is put beside a member of its own number instead of
+on it — for instance the same members listed 2, 1 on one side and
+1, 2 on the other — the line is another one: `N stack member(s) are
+paired with a member of ANOTHER number while one of the two numbers
+is declared on both sides`.  That is a **crossing**: every port of
+those members is on another switch.  The job is still `completed`,
+since the order of a list is yours to choose; if you did not mean it,
+give the members of one number the same place in both lists.
+
+A member states its number with `id` in the request
+(`{"model": "JL260A", "id": 3}`); one that leaves it out is numbered
+from the lowest number no other member states.  See
 [`CAPABILITIES.md`](CAPABILITIES.md) § G.
 
 ### "On RouterOS my port was renamed, not moved"

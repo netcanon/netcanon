@@ -214,7 +214,7 @@ class TestUnplaced:
             ("2/1", "no-member"), ("2/2", "no-member"),
         ]
         assert plan.unused_target == ["3", "4"]
-        assert "a member the target does not have" in plan.warnings[0]
+        assert "a member with no target member in its position" in plan.warnings[0]
 
     def test_members_pair_by_rank_not_by_vendor_id(self):
         """A lone member that calls itself 3 is still the first member."""
@@ -286,8 +286,11 @@ class TestTwoStacks:
         assert plan_port_mapping(alone, lone_three).warnings == []
         assert plan_port_mapping(lone_three, alone).warnings == []
 
-    def test_every_member_that_changed_number_is_named(self):
-        """Two stacks declared in opposite orders."""
+    def test_two_stacks_listed_in_opposite_orders_are_said_to_cross(self):
+        """Each member has a namesake on the other side and was not
+        put on it.  That is what a list typed in another order looks
+        like, so it is said in other words than a renumbering, with
+        what to do about it."""
         swapped = _inventory(
             (0, "access", ["2/1", "2/2"]), (0, "uplink", ["2/A1"]),
             (1, "access", ["1/1", "1/2"]), (1, "uplink", ["1/A1"]),
@@ -295,10 +298,102 @@ class TestTwoStacks:
         )
         plan = plan_port_mapping(self.TARGET, swapped)
         assert plan.rename_map["1/1"] == "2/1" and plan.rename_map["2/1"] == "1/1"
-        (line,) = plan.warnings
-        assert line.endswith(
-            "source member 1 with target member 2; source member 2 with target member 1"
+        assert plan.warnings == [
+            "port mapping: 2 stack member(s) are paired with a member of ANOTHER number "
+            "while one of the two numbers is declared on both sides "
+            "(source member 1 with target member 2; source member 2 with target member 1); "
+            "members pair in the order the two declarations list them — to keep the "
+            "members of one number together, give them the same place in both lists"
+        ]
+        # It holds no job: the order of a list is the operator's to choose.
+        assert plan.is_clean
+
+    def test_a_shift_is_a_crossing_too(self):
+        """Members 2 and 3 onto 1 and 2: member 2 has a namesake on
+        the target and lands beside it."""
+        source = _inventory((0, "access", ["2/1"]), (1, "access", ["3/1"]), member_ids=[2, 3])
+        target = _inventory((0, "access", ["1/1"]), (1, "access", ["2/1"]), member_ids=[1, 2])
+        (line,) = plan_port_mapping(source, target).warnings
+        assert line.startswith("port mapping: 2 stack member(s) are paired with a member of ANOTHER")
+        assert "(source member 2 with target member 1; source member 3 with target member 2)" in line
+
+    def test_a_member_put_beside_its_namesake_is_a_crossing(self):
+        """1 and 3 onto 1, 2 and 3: the target HAS a member 3, and the
+        fabric's member 3 is on member 2."""
+        target = _inventory(
+            (0, "access", ["1/1", "1/2"]), (0, "uplink", ["1/A1"]),
+            (1, "access", ["2/1", "2/2"]), (1, "uplink", ["2/A1"]),
+            (2, "access", ["3/1", "3/2"]), (2, "uplink", ["3/A1"]),
+            member_ids=[1, 2, 3],
         )
+        (line,) = plan_port_mapping(self.SOURCE, target).warnings
+        assert "1 stack member(s) are paired with a member of ANOTHER number" in line
+        assert "(source member 3 with target member 2)" in line
+
+    def test_a_renumbering_and_a_crossing_each_have_their_line(self):
+        source = _inventory(
+            (0, "access", ["3/1"]), (1, "access", ["2/1"]), (2, "access", ["9/1"]),
+            member_ids=[3, 2, 9],
+        )
+        target = _inventory(
+            (0, "access", ["1/1"]), (1, "access", ["9/1"]), (2, "access", ["2/1"]),
+            member_ids=[1, 9, 2],
+        )
+        renumbered, crossed = plan_port_mapping(source, target).warnings
+        assert renumbered.endswith("not by member number: source member 3 with target member 1")
+        assert "(source member 2 with target member 9; source member 9 with target member 2)" in crossed
+
+    def test_a_member_whose_used_ports_all_lost_their_place_is_named(self):
+        """Its one used port is an uplink, and the member it was paired
+        with has none.  The drop line says the target has no uplink
+        port left; this one says WHICH member that port was paired
+        with."""
+        source = _inventory(
+            (0, "access", ["1/1"]), (1, "access", ["2/1"]), (1, "uplink", ["2/49"]),
+            member_ids=[1, 2],
+        )
+        target = _inventory((0, "access", ["1/1"]), (1, "access", ["5/1"]), member_ids=[1, 5])
+        plan = plan_port_mapping(source, target, ["1/1", "2/49"])
+        assert [(p.source, p.reason) for p in plan.used_unplaced] == [("2/49", "no-position")]
+        (line,) = [w for w in plan.warnings if "stack member" in w]
+        assert line.endswith("not by member number: source member 2 with target member 5")
+
+    def test_nothing_is_said_of_a_member_the_operator_decided_port_by_port(self):
+        """Every used port of member 3 was sent somewhere or dropped by
+        an entry: no name followed the pairing, so there is nothing to
+        explain."""
+        plan = plan_port_mapping(self.SOURCE, self.TARGET)
+        assert [w for w in plan.warnings if "stack member" in w]
+        _settled(
+            plan, list(plan.rename_map), target=self.TARGET,
+            operator={"3/1": "2/2", "3/2": None, "3/49": None},
+        )
+        assert not [w for w in plan.warnings if "stack member" in w]
+
+    def test_ten_members_are_all_named(self):
+        """The largest shipped mode has ten; a line that promises which
+        member went to which does not stop at eight."""
+        source = _inventory(
+            *((rank, "access", [f"{rank + 11}/1"]) for rank in range(10)),
+            member_ids=list(range(11, 21)),
+        )
+        target = _inventory(
+            *((rank, "access", [f"{rank + 1}/1"]) for rank in range(10)),
+            member_ids=list(range(1, 11)),
+        )
+        (line,) = plan_port_mapping(source, target).warnings
+        assert "more" not in line
+        assert line.count("source member") == 10
+        assert line.endswith("source member 20 with target member 10")
+        # ...nor does the line for a crossing: the same ten, the target
+        # listed the other way round.
+        reverse = _inventory(
+            *((rank, "access", [f"{10 - rank}/1"]) for rank in range(10)),
+            member_ids=list(range(10, 0, -1)),
+        )
+        (line,) = plan_port_mapping(target, reverse).warnings
+        assert line.startswith("port mapping: 10 stack member(s) are paired with a member of ANOTHER")
+        assert "more" not in line and line.count("source member") == 10
 
     def test_a_member_that_overflows_does_not_spill_into_another(self):
         source = _inventory(
@@ -314,6 +409,22 @@ class TestTwoStacks:
         assert plan.unused_target == ["1/3", "1/4"]
         assert plan.rename_map == {
             "1/1": "1/1", "1/2": "1/2", "2/1": "2/1", "2/2": "2/2", "2/3": None, "2/4": None,
+        }
+
+    def test_nor_does_an_earlier_member_spill_into_a_later_one(self):
+        source = _inventory(
+            (0, "access", ["1/1", "1/2", "1/3", "1/4"]), (1, "access", ["2/1", "2/2"]),
+        )
+        target = _inventory(
+            (0, "access", ["1/1", "1/2"]), (1, "access", ["2/1", "2/2", "2/3", "2/4"]),
+        )
+        plan = plan_port_mapping(source, target)
+        assert [(p.source, p.reason, p.member_rank) for p in plan.unplaced] == [
+            ("1/3", "no-position", 0), ("1/4", "no-position", 0),
+        ]
+        assert plan.unused_target == ["2/3", "2/4"]
+        assert plan.rename_map == {
+            "1/1": "1/1", "1/2": "1/2", "1/3": None, "1/4": None, "2/1": "2/1", "2/2": "2/2",
         }
 
     def test_a_role_one_member_lacks_is_not_taken_from_another(self):
@@ -1056,7 +1167,7 @@ class TestNoWarningCanBeReadAsATableRow:
             "the mapping did not place",
             "were given a port name the declared target device does not list",
             "still name, as next hop",
-            "belong to a member the target does not have",
+            "belong to a member with no target member in its position",
             "pair in the order they are declared",
             "source management port(s) have no management port",
             "nobody decided",
@@ -1078,6 +1189,30 @@ class TestNoWarningCanBeReadAsATableRow:
         assert plan.warnings == describe_plan(
             plan, decided={"1/1", "nope", "49.7"}, dropped={"A1", "mgmt0", "2/1"},
         )
+
+    def test_the_line_for_a_port_kept_under_a_name(self):
+        """Said only on a target that finds a port by a factory name,
+        and only of a name the target does not list -- with an
+        apostrophe in the name written as a typographic one."""
+        source = _inventory((0, "access", ["e1", "e2"]))
+        target = _inventory((0, "access", ["x1"]), (0, "uplink", ["u1"]))
+        used = ["e1", "e2"]
+
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, operator={"e2": "bob's port"}, by_factory_name=True)
+        (line,) = [w for w in plan.warnings if "were kept under a name" in w]
+        assert "'" not in line
+        assert "(e2 as bob\u2019s port)" in line and line.endswith("or drop it")
+
+        # Sent to a free port of the target, it was given a place.
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, operator={"e2": "u1"}, by_factory_name=True)
+        assert not [w for w in plan.warnings if "were kept under a name" in w]
+
+        # And where a port has one name, the off-target line covers it.
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, operator={"e2": "bob's port"})
+        assert not [w for w in plan.warnings if "were kept under a name" in w]
 
     def test_an_apostrophe_in_a_port_name_does_not_make_one(self):
         """RouterOS and FortiGate interface names are free text."""

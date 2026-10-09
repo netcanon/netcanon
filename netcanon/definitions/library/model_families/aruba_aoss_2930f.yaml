@@ -98,7 +98,7 @@ modes:
     naming:
       grade: vendor-doc
       ref: "2930 M/F Management and Configuration Guide 16.10 pp.631, 635, 642, 647; HPE white paper Backplane Stacking and VSF Best Practices (AOS-S 16.08)"
-    caveat: "A port bound to a VSF link carries no port configuration, so some ports of a real fabric are not assignable. A fabric holds 8 members from WC.16.06 and 4 before it, and runs one VSF port speed: the 4SFP models have no 10G port."
+    caveat: "A port bound to a VSF link carries no port configuration, so some ports of a real fabric are not assignable. A fabric holds 8 members from WC.16.06 and 4 before it, and runs one VSF port speed: the 4SFP models have no 10G port. The fabric's own configuration - the vsf stanza, its members, their priorities and link ports - is not translated."
 
 models:
   # --- 24 access + 4 uplinks: 1-24, 25-28 -----------------------------------

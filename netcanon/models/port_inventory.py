@@ -267,12 +267,22 @@ class MemberSpec(BaseModel):
     """Model key within the vendor (``2930M-48G-PoEP``).  A SKU the
     model lists (``JL322A``, any case) resolves too."""
 
-    id: StrictInt | None = None
-    """The vendor's member id.  ``None`` takes the lowest free id of
-    the mode's range, so a deployment that lists three members with
-    no ids gets 1, 2, 3.  Must be ``None`` in a mode whose names
-    carry no member id.  An integer and nothing else: ``"2"``,
-    ``2.0`` and ``true`` are refused rather than read as one."""
+    id: StrictInt | None = Field(
+        default=None,
+        description=(
+            "The member number the device prints in front of this member's "
+            "port names (3 in 3/5).  Omitted: the lowest number of the mode's "
+            "range that no member states, in list order (1, 2, 3 ...)."
+        ),
+    )
+    """The vendor's member id: the number the device prints in front
+    of the member's port names.  ``None`` takes the lowest id of the
+    mode's range that no member STATES, in list order: a deployment
+    that lists three members with no ids gets 1, 2, 3, and a member
+    listed before one that states ``1`` gets ``2``.  Must be ``None``
+    in a mode whose names carry no member id.  An integer and nothing
+    else: ``"2"``, ``2.0`` and ``true`` are refused rather than read
+    as one.  (A response calls the resolved number ``member_id``.)"""
 
     modules: dict[_DeclaredName, _DeclaredName | None] = Field(
         default_factory=dict, max_length=MAX_DECLARED_BAYS,
@@ -289,6 +299,11 @@ class DeploymentSpec(BaseModel):
 
     The form a request carries: the vendor is not repeated, because it
     is the vendor of the codec the request already names.
+
+    ``members`` is ordered: two stacks are paired member by member in
+    the order listed, whatever their member numbers are.  A member
+    states its number with ``id``; one that leaves it out takes the
+    lowest number no other member states.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -300,6 +315,11 @@ class DeploymentSpec(BaseModel):
 
     members: list[MemberSpec] = Field(
         min_length=1, max_length=MAX_DEPLOYMENT_MEMBERS,
+        description=(
+            "Ordered.  Two stacks are paired member by member in list order: "
+            "the first listed for the source with the first listed for the "
+            "target, whatever their member numbers."
+        ),
     )
     """Ordered.  A member's rank is its position in this list, and
     two stacks are paired member by member in that order: the first
@@ -503,9 +523,9 @@ class MappingPlan(BaseModel):
     configs of one codec a unit of a listed port
     (``ge-0/0/7.54``) is not off-target.  On a RouterOS target an
     entry whose target is not a port NAMES the port; while the
-    port's hardware has a place (:attr:`target_hardware`) the name
-    is not listed here, and the plan says in a line of its own that
-    it was taken as a name."""
+    port's hardware has a place (:attr:`target_hardware`), or the
+    port is in :attr:`unbound_ports`, that entry is not listed here,
+    and the plan says in a line of its own what became of it."""
 
     target_hardware: dict[str, str] = Field(default_factory=dict)
     """Source names whose port is on a target port that is not the
@@ -521,7 +541,9 @@ class MappingPlan(BaseModel):
     :attr:`unused_target` count a port where its hardware is.  A port
     nobody placed keeps the factory name it had: it is here if the
     target has a port of that name, and in :attr:`source_hardware` if
-    it has not."""
+    it has not -- or in :attr:`unbound_ports`, if the name it was kept
+    under reads as another kind of interface, since no line is then
+    written for it."""
 
     source_hardware: dict[str, str] = Field(default_factory=dict)
     """Source names whose port nobody placed and which the output
@@ -538,20 +560,24 @@ class MappingPlan(BaseModel):
     """Source names of ports that no line of their own in the
     output looks up by their hardware: source name to that hardware.
     Read back from the rendered output with the target's own parser,
-    on a target that finds a port by a factory name (RouterOS).  Two
-    ways.  The port's name reads to the target as another kind of
-    interface — the RouterOS renderer writes no Ethernet line for a
-    name shaped like a VLAN, a bridge, a LAG or a loopback
+    on a target that finds a port by a factory name (RouterOS).
+    Three ways.  The port's name reads to the target as another kind
+    of interface — the RouterOS renderer writes no Ethernet line for
+    a name shaped like a VLAN, a bridge, a LAG or a loopback
     (``bond1``, ``bridge-uplink``, ``vlan-trunk``, ``uplink.10``,
-    ``lo0``), whoever chose the name.  Or the config has no interface
-    for the port — it names it only as a LAG member or in a route —
-    and an entry gave it a name that is no port of the target, which
-    the output then uses and nothing defines.  Such a port is in
+    ``lo0``), whoever chose the name; between two RouterOS configs
+    that holds for a port nobody placed as well, which is then listed
+    with the factory name it had.  Or the mapping placed a port the
+    config has no interface for — it names it only as a LAG member or
+    in a route — and an entry gave it a name that is no port of the
+    target, which the output then uses and nothing defines.  Or two
+    ports of another vendor were given one name: the output finds
+    the first by it, and the second is listed.  Such a port is in
     neither :attr:`target_hardware` nor :attr:`source_hardware`, nor
-    is its name in :attr:`off_target`, and the job is ``partial``
-    while this is not empty: name the port with a port of the target,
-    or — where the config has an interface for it — with a name that
-    does not read that way."""
+    is its entry listed in :attr:`off_target`, and the job is
+    ``partial`` while this is not empty: name the port with a port of
+    the target, or — where the config has an interface for it — with
+    a name of its own that does not read that way."""
 
     landed_off_target: dict[str, str] = Field(default_factory=dict)
     """Logical names nobody decided — a VLAN interface, say — that

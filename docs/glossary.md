@@ -189,16 +189,17 @@ by concern and listed alphabetically within each section.
   hardware.
 - **Unbound port** — on a RouterOS target, a port that no line of
   its own in the output looks up by its hardware: its name reads as
-  another kind of interface (a VLAN, a bridge, a LAG, a loopback), or
-  the config has no interface for it and an entry gave it a name.
+  another kind of interface (a VLAN, a bridge, a LAG, a loopback),
+  the config has no interface for it and an entry gave it a name, or
+  it was given the name of another port and only the first is found.
   Found by reading the output back; the job is `partial` until the
   port has a port of the target, or a name that can carry a line.
 - **Landed off-target** — a logical name nobody decided that the
   name-shape translator gave a port-shaped name the declared target
   does not list. Kept, reported, and in need of a decision.
 - **Stale next hop** — a static route left naming, as next hop, an
-  interface that was renamed or dropped, because the next hop was not
-  exactly that interface's name.
+  interface that has another name in the output, or is not in it,
+  because the next hop was not exactly that interface's name.
 - **Capture claim** — a committed real capture plus the exact
   deployment it is of. The only source of a `capture` evidence grade
   for a model family, granted only where a deployment matches exactly.

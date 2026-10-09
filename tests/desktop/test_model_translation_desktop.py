@@ -350,6 +350,20 @@ class TestModelTranslationServedByEmbeddedServer:
                     "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
                     "port_rename_map": {"Ethernet1": "bridge-uplink"},
                 })
+                # ...and so is a placed port the config has no interface
+                # for -- an AOS-S trunk member -- that an entry names.
+                loose = _post(port, "/api/v1/migration/plan", {
+                    "source": "aruba_aoss", "target": "mikrotik_routeros",
+                    "raw_text": (
+                        "; JL259A Configuration Editor; Created on release #WC.16.11.0003\n"
+                        'hostname "sw"\ntrunk 1-2 trk1 lacp\n'
+                    ),
+                    "source_deployment": {
+                        "mode": "standalone", "members": [{"model": "JL259A"}],
+                    },
+                    "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+                    "port_rename_map": {"1": "up-a"},
+                })
                 status, refused = _post_raw(
                     port, "/api/v1/migration/plan",
                     b'{"source":"aruba_aoss","target":"aruba_aoss","raw_text":"x",'
@@ -375,6 +389,10 @@ class TestModelTranslationServedByEmbeddedServer:
         assert "default-name=sfp-sfpplus1" not in unbound["rendered"]
         assert unbound["port_mapping_plan"]["unbound_ports"] == {"Ethernet1": "sfp-sfpplus1"}
         assert unbound["status"] == "partial"
+
+        assert "slaves=up-a,sfp-sfpplus2" in loose["rendered"]
+        assert loose["port_mapping_plan"]["unbound_ports"] == {"1": "sfp-sfpplus1"}
+        assert loose["status"] == "partial"
 
         assert status == 422
         assert refused["detail"][0]["loc"] == ["body", "port_rename_map"]
