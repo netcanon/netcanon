@@ -175,21 +175,30 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   ignored with a warning.
 - **Moving a port onto other hardware needs both device models
   declared** (API: `source_profile` / `target_profile`).  Then every
-  port the mapping places is looked up by the port of the target it
-  is on — also when the config came from another vendor, or stated
-  no factory name for the port — and a name you gave it is kept; an
+  port the mapping places that the config has an interface for is
+  looked up by the port of the target it is on — also when the config
+  came from another vendor, or stated no factory name for the port —
+  and a name you gave it is kept, unless that name is itself a port
+  of the target; an
   entry whose target is a port of the declared target moves the port
   there, and one whose target is not names it (the plan says so in a
   line).  Nothing else can tell a move from a name: `sfp1` is a port
   of some RouterOS models and not of others.  Onto another vendor a
   port you named takes the name of the port it was paired with.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
-- **A port named like a VLAN, a bridge or a LAG** (`bond1`,
-  `bridge-uplink`, `vlan10`) gets no Ethernet line in the output: the
-  renderer goes by the shape of the name.  With both devices declared
-  the plan lists such a port (`unbound_ports`) and the job is
-  `partial`; without, nothing is reported.  Give the port another
-  name.
+- **A port named like a VLAN, a bridge, a LAG or a loopback**
+  (`bond1`, `bridge-uplink`, `vlan10`, `lo0`) gets no Ethernet line
+  in the output: the renderer goes by the shape of the name.  With
+  both devices declared the plan lists such a port (`unbound_ports`)
+  and the job is `partial`; without, nothing is reported.  Give the
+  port another name.
+- **A port the config names only as a LAG member or in a route** has
+  no interface of its own, and so no line of its own in the output.
+  The name the mapping gives it — the target port's — needs none.  A
+  name YOU give it in `port_rename_map` is written into `slaves=` or
+  `gateway=` and defined nowhere; with both devices declared the plan
+  lists the port (`unbound_ports`) and the job is `partial`.  Give
+  such a port a port of the target, not a name.
 - **`gateway=<interface>` routes** follow the interface when it is
   renamed, and are removed with it when it is dropped.  A list of
   gateways (`gateway=ether1,ether2`) and a routing-table suffix

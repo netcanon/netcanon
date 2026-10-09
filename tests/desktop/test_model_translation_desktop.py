@@ -94,6 +94,16 @@ def _post_raw(port: int, path: str, body: bytes) -> tuple[int, object]:
         return exc.code, json.loads(exc.read().decode("utf-8"))
 
 
+_EOS_ONE_ROUTED_PORT = """hostname sw
+!
+interface Ethernet1
+   no switchport
+   ip address 192.0.2.1/24
+!
+end
+"""
+
+
 class TestModelTranslationServedByEmbeddedServer:
     def test_families_inventory_and_a_declared_plan(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture,
@@ -256,6 +266,15 @@ class TestModelTranslationServedByEmbeddedServer:
                     "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
                     "port_rename_map": {"Ethernet1": "WAN"},
                 })
+                # ...and a name RouterOS writes no line for is reported,
+                # not said to be on the hardware.
+                unbound = _post(port, "/api/v1/migration/plan", {
+                    "source": "arista_eos", "target": "mikrotik_routeros",
+                    "raw_text": _EOS_ONE_ROUTED_PORT,
+                    "source_profile": "arista_eos/DCS-7050SX-64",
+                    "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+                    "port_rename_map": {"Ethernet1": "bridge-uplink"},
+                })
                 status, refused = _post_raw(
                     port, "/api/v1/migration/plan",
                     b'{"source":"aruba_aoss","target":"aruba_aoss","raw_text":"x",'
@@ -277,6 +296,10 @@ class TestModelTranslationServedByEmbeddedServer:
 
         assert "set [ find default-name=sfp-sfpplus1 ] name=WAN" in foreign["rendered"]
         assert foreign["port_mapping_plan"]["target_hardware"] == {"Ethernet1": "sfp-sfpplus1"}
+
+        assert "default-name=sfp-sfpplus1" not in unbound["rendered"]
+        assert unbound["port_mapping_plan"]["unbound_ports"] == {"Ethernet1": "sfp-sfpplus1"}
+        assert unbound["status"] == "partial"
 
         assert status == 422
         assert refused["detail"][0]["loc"] == ["body", "port_rename_map"]

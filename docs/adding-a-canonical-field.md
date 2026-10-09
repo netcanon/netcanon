@@ -316,10 +316,13 @@ when its port moves.
 
 Two tests hold you to it, both in `test_port_name_universe.py`.  One
 builds a canonical tree from the schema, with a name of its own in
-every text field, and requires the rename pass, the collector and
-the module's table of places (`_PLACES`) to name the same fields: a
-field you add to one and not the others fails, and there is no
-fixture to remember.
+every `str` and `list[str]` field, and requires the rename pass, the
+collector and the module's table of places (`_PLACES`) to name the
+same fields: a field you add to one and not the others fails, and
+there is no fixture to remember.  If your field holds text in another
+shape — a dict, a tuple, a set, a union — the builder itself fails
+until you teach it the shape (`_filled`) or list the field as holding
+no port name (`_TEXT_NOT_FILLED`).
 The other, because lists that agree can all be incomplete, sends
 port names to one another on the committed captures and fails for a
 value of the re-parsed output that did not follow.  That experiment

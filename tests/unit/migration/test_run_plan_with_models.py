@@ -13,6 +13,7 @@ itself is pinned on synthetic inventories in ``test_port_mapping.py``.
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
@@ -333,6 +334,53 @@ def _ports_nobody_reported(source, target, raw_text: str, job: MigrationJob) -> 
     return sorted(name for name in found if _same(target, name) not in said)
 
 
+def _is_an_address(text: str) -> bool:
+    try:
+        ipaddress.ip_address(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _names_nothing_defines(target, job: MigrationJob, target_ports: set[str]) -> list[str]:
+    """Paired ports whose name the rendered output USES -- as a LAG
+    member or as a next hop -- and nothing in it defines.
+
+    For a target that finds a port by a factory name.  A port that
+    carries no address is invisible to
+    :func:`_not_where_the_job_says`, and a LAG member or a route's
+    interface need have no interface in the config at all.  Such a
+    port's name in the output has to be a port of the declared
+    target, or an interface the output looks up by a factory name --
+    unless the job says the port is looked up by nothing
+    (``unbound_ports``).
+    """
+    if not getattr(target, "ports_keep_a_factory_name", False):
+        return []
+    plan = job.port_mapping_plan
+    tree = target.parse(job.rendered)
+    defined = set(target_ports)
+    defined.update(_same(target, iface.name) for iface in tree.interfaces if iface.default_name)
+    used = {member for lag in tree.lags for member in lag.members}
+    for route in tree.static_routes:
+        if route.interface:
+            used.add(route.interface)
+        for hop in (route.gateway or "").split(","):
+            hop = hop.partition("@")[0].strip().rpartition("%")[2]
+            if hop and not _is_an_address(hop):
+                used.add(hop)
+    dropped = set(job.port_drops)
+    loose = []
+    for pairing in plan.used_pairings:
+        name = job.port_renames.get(pairing.source, pairing.source)
+        if (
+            pairing.source not in dropped and pairing.source not in plan.unbound_ports
+            and name in used and _same(target, name) not in defined
+        ):
+            loose.append(f"{pairing.source} as {name}")
+    return loose
+
+
 def run_plan_with_models(
     *args, expect_fused: bool = False, free_text: tuple[str, ...] = (), **kwargs,
 ) -> MigrationJob:
@@ -358,9 +406,16 @@ def run_plan_with_models(
       the job does not report (:func:`_ports_nobody_reported`); no
       name that moved or was dropped is still in it
       (:func:`_names_left_behind`); no interface carries the addresses
-      of two source interfaces (:func:`_merged_addresses`); and no two
+      of two source interfaces (:func:`_merged_addresses`); no two
       interfaces are looked up by one factory name
-      (:func:`_shared_hardware`).
+      (:func:`_shared_hardware`); and no paired port goes by a name
+      the output uses and nothing defines
+      (:func:`_names_nothing_defines`).
+
+    The two checks that read a port's place off its address are not
+    run on a job a test expects to be fused: a parser gives back one
+    interface per name, so where two ports share a name the output
+    cannot be read port by port.
 
     What these can and cannot see is pinned below, in
     ``TestTheChecksOnEveryJobCanFail``: each is handed a job with the
@@ -383,11 +438,17 @@ def run_plan_with_models(
         **_shared_hardware(target, job),
     }
     if expect_fused:
-        assert shared and plan.fused
-        assert {_same(target, t) for t in plan.fused} == set(shared)
+        assert shared and plan.fused, (
+            f"expected two names on one target; the output has {shared}, the plan {plan.fused}"
+        )
+        assert {_same(target, t) for t in plan.fused} == set(shared), (
+            f"the plan's fused targets are not the output's: {plan.fused} / {shared}"
+        )
     else:
         assert shared == {}, f"two names on one target name: {shared}"
-        assert plan.fused == {}
+        assert plan.fused == {}, (
+            f"the plan reports a fusion the output does not have: {plan.fused}"
+        )
         merged = _merged_addresses(source, target, raw_text, job)
         assert merged == {}, f"two source interfaces in one output interface: {merged}"
         elsewhere = _not_where_the_job_says(source, target, raw_text, job, target_ports)
@@ -399,11 +460,19 @@ def run_plan_with_models(
         if name not in free_text
     ]
     assert left == [], f"names that moved are still in the output: {left}"
+    loose = _names_nothing_defines(target, job, target_ports)
+    assert loose == [], f"the output uses a name for a paired port that nothing defines: {loose}"
     if plan.fused or plan.unresolved_ports or plan.unbound_ports:
-        assert job.status != MigrationJobStatus.completed
+        assert job.status != MigrationJobStatus.completed, (
+            "the plan leaves something open and the job is completed"
+        )
     for port in plan.used_unplaced:
-        assert port.dropped == (port.source in job.port_drops), port.source
-        assert bool(port.landed) == (not port.dropped), port.source
+        assert port.dropped == (port.source in job.port_drops), (
+            f"{port.source}: dropped is not what the job did"
+        )
+        assert bool(port.landed) == (not port.dropped), (
+            f"{port.source}: landed does not agree with dropped"
+        )
     return job
 
 
@@ -1713,6 +1782,8 @@ class TestWhatADroppedPortTakesWithIt:
             return tree.model_copy(deep=True) if len(seen) == 1 else real(raw)
 
         monkeypatch.setattr(AOSS, "parse", parse)
+        # Not through the wrapper: it parses the source again, and the
+        # parse is patched to answer once.
         job = migration_pipeline.run_plan_with_models(
             AOSS, AOSS, _CONFIG_WITH_A_TRUNK, SOURCE_2930F_48G,
             _device("stacked", {"model": "JL322A", "modules": {"A": None}}),
@@ -1873,6 +1944,8 @@ class TestTheRunIsRepeatedOnlyWhenItMustBe:
 
         monkeypatch.setattr(migration_pipeline, "run_plan_with_overrides", spy)
         empty = inventory_from_profile(TargetProfile(vendor="aruba_aoss", model="Generic"))
+        # Not through the wrapper: no pairing is made, so it has
+        # nothing to check.
         job = migration_pipeline.run_plan_with_models(
             AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, empty,
         )
@@ -1897,6 +1970,8 @@ class TestTheRunIsRepeatedOnlyWhenItMustBe:
 
         monkeypatch.setattr(migration_pipeline, "run_plan_with_overrides", flaky)
         mikrotik = get_codec("mikrotik_routeros")
+        # Not through the wrapper: the second run is made to fail, and
+        # there is no output to read.
         job = migration_pipeline.run_plan_with_models(
             mikrotik, mikrotik, _ROUTEROS,
             _profile("mikrotik_routeros/CCR2004-1G-12S+2XS"),
@@ -2264,7 +2339,10 @@ class TestAPortsFactoryName:
     def test_a_port_named_like_another_port_cannot_be_told_apart(self) -> None:
         """``ether1`` is called ``ether2`` and the config says nothing
         of the real ``ether2``.  A name then no longer says which port
-        is meant, and no pairing is made rather than a wrong one."""
+        is meant, and no pairing is made rather than a wrong one.
+
+        Not through the wrapper: with no pairing it has nothing to
+        check."""
         mikrotik = get_codec("mikrotik_routeros")
         job = migration_pipeline.run_plan_with_models(
             mikrotik, mikrotik,
@@ -3505,6 +3583,8 @@ class TestOneFactoryNameOnTwoInterfaces:
             "add address=198.51.100.1/24 interface=ether5\n"
         )
         for entries in (None, {"ether5": "ether5"}):
+            # Not through the wrapper: no pairing is made, so it has
+            # nothing to check.
             job = migration_pipeline.run_plan_with_models(
                 mikrotik, mikrotik, text, _profile(_CRS310), _profile(_CCR2004),
                 port_rename_map=entries,
@@ -3522,10 +3602,8 @@ class TestAPortNamedLikeALagInAnotherCase:
         bond by the shape of its name -- two interfaces' addresses on
         one, ``completed``.
 
-        Called without the wrapper for the reason given in
-        ``test_a_name_that_reads_like_a_lag_is_still_the_port``: the
-        RouterOS renderer writes no ``/interface ethernet`` line for a
-        port whose name reads as a bond."""
+        The renderer writes no Ethernet line for a port whose name
+        reads as a bond in either case, and the job says so."""
         mikrotik = get_codec("mikrotik_routeros")
         text = (
             "/interface ethernet\n"
@@ -3538,10 +3616,12 @@ class TestAPortNamedLikeALagInAnotherCase:
             "add address=192.0.2.1/24 interface=BOND1\n"
             "add address=10.70.0.1/24 interface=bond1\n"
         )
-        job = migration_pipeline.run_plan_with_models(
+        job = run_plan_with_models(
             mikrotik, mikrotik, text, _profile(_CRS310), _profile(_CCR2004),
         )
         plan = job.port_mapping_plan
+        assert plan.unbound_ports == {"BOND1": "sfp-sfpplus2"}
+        assert job.status == MigrationJobStatus.partial
         assert ("BOND1", "sfp-sfpplus2") in [(p.source, p.target) for p in plan.used_pairings]
         assert "BOND1" not in job.port_renames
         assert "add address=192.0.2.1/24 interface=BOND1" in job.rendered
@@ -3804,6 +3884,12 @@ class TestWhatTheBinderLeavesAlone:
         assert "set [ find name=spare ]" in job.rendered
         assert (plan.target_hardware, plan.source_hardware) == ({}, {})
         assert plan.off_target == ["spare"]
+        # The operator's own decision about a port with no place:
+        # reported in a line, and not a reason to hold the job.
+        assert plan.unbound_ports == {}
+        assert job.status == MigrationJobStatus.completed
+        (line,) = [w for w in plan.warnings if "were kept under a name" in w]
+        assert "(Ethernet13 as spare)" in line
 
     def test_a_named_port_nobody_placed_stays_on_the_hardware_it_had(self) -> None:
         """Between two RouterOS configs, a port the config calls
@@ -3823,6 +3909,9 @@ class TestWhatTheBinderLeavesAlone:
         assert plan.source_hardware == {"core-z": "sfp-sfpplus9"}
         assert plan.target_hardware == {}
         assert plan.off_target == ["far-end"]
+        # Said once, as a port still on its source hardware -- not a
+        # second time as a port looked up by a name.
+        assert not [w for w in plan.warnings if "were kept under a name" in w]
 
     def test_a_logical_interface_an_operator_puts_on_a_port_is_not_a_port(self) -> None:
         """A LAG's address sent onto ``sfp-sfpplus5`` is an address on
@@ -3901,7 +3990,7 @@ class TestAPortTheOutputDoesNotLookUp:
         assert not plan.is_clean and job.status == MigrationJobStatus.partial
         assert job.error == (
             "Port mapping is incomplete: 1 port(s) are not looked up by their "
-            "hardware in the output; give each another name."
+            "hardware in the output; give each a port of the target, or another name."
         )
         (line,) = [w for w in plan.warnings if "not looked up by their hardware" in w]
         assert "(bond1 on sfp-sfpplus2)" in line
@@ -3932,7 +4021,9 @@ class TestAPortTheOutputDoesNotLookUp:
         assert "sfp-sfpplus1" not in job.rendered
         assert plan.unbound_ports == {"Ethernet1": "sfp-sfpplus1"}
         assert plan.target_hardware == {}
-        assert plan.off_target == [name]
+        # Said once, in the line for a port no line finds -- not a
+        # second time as a target the model does not list.
+        assert plan.off_target == []
         assert not [w for w in plan.warnings if "taken as NAMES" in w]
         assert job.status == MigrationJobStatus.partial
 
@@ -3941,25 +4032,501 @@ class TestAPortTheOutputDoesNotLookUp:
             def parse(self, _text: str) -> None:
                 raise ValueError("not a config")
 
-        job = SimpleNamespace(rendered="x")
+        job = SimpleNamespace(rendered="x", port_renames={}, port_drops=[])
         assert migration_pipeline._unbound_hardware(
-            Unreadable(), job, {"a": "ether1", "b": "ether2"},
-        ) == ["a", "b"]
+            Unreadable(), job, {"a": "ether1", "b": "ether2"}, {"c": "ether3"}, ["a", "b", "c"],
+        ) == (["a", "b", "c"], False)
+
+    def test_a_job_whose_output_cannot_be_read_back_says_so(self, monkeypatch) -> None:
+        """Every placed port is then unconfirmed, the job is not a
+        success, and a line of its own says why -- "give the port
+        another name" would be the wrong advice."""
+        eos, mikrotik = get_codec("arista_eos"), get_codec("mikrotik_routeros")
+
+        def unreadable(_text: str) -> None:
+            raise ValueError("not a config")
+
+        monkeypatch.setattr(mikrotik, "parse", unreadable)
+        # Not through the wrapper: it reads the output back with the
+        # same parser.
+        job = migration_pipeline.run_plan_with_models(
+            eos, mikrotik, _EOS_TWO_ROUTED_PORTS,
+            _profile("arista_eos/DCS-7050SX-64"), _profile(_CCR2004),
+        )
+        assert job.port_mapping_plan.unbound_ports == {
+            "Ethernet1": "sfp-sfpplus1", "Ethernet2": "sfp-sfpplus2",
+        }
+        assert job.status == MigrationJobStatus.partial
+        (line,) = [w for w in job.warnings if "could not be read back" in w]
+        assert line.startswith("port mapping: ")
 
     def test_with_no_port_to_confirm_nothing_is_read(self) -> None:
-        assert migration_pipeline._unbound_hardware(None, None, {}) == []
+        assert migration_pipeline._unbound_hardware(None, None, {}, {}, []) == ([], True)
 
-    def test_a_port_is_confirmed_by_its_factory_name_and_by_nothing_else(self) -> None:
+    def test_a_port_is_confirmed_by_its_own_line_and_by_nothing_else(self) -> None:
+        """``a`` has a line under its name.  ``b`` has none.  ``c`` is
+        named in an address and looked up by nothing.  ``d`` and ``e``
+        were both meant for one port: the only line that looks it up is
+        under the name ``e`` ended on, so it is ``e``'s line and says
+        nothing for ``d``."""
         mikrotik = get_codec("mikrotik_routeros")
-        job = SimpleNamespace(rendered=(
-            "/interface ethernet\n"
-            "set [ find default-name=sfp-sfpplus1 ] name=WAN\n"
-            "/ip address\n"
-            "add address=10.0.0.1/24 interface=LAN\n"
-        ))
+        job = SimpleNamespace(
+            rendered=_OUTPUT_WITH_TWO_LINES_AND_TWO_LOOSE_ADDRESSES,
+            port_renames={"a": "WAN", "c": "LAN", "d": "bridge-a", "e": "sfp-sfpplus3"},
+            port_drops=[],
+        )
+        hardware = {
+            "a": "sfp-sfpplus1", "b": "sfp-sfpplus2", "c": "LAN",
+            "d": "sfp-sfpplus3", "e": "sfp-sfpplus3",
+        }
         assert migration_pipeline._unbound_hardware(
-            mikrotik, job, {"a": "sfp-sfpplus1", "b": "sfp-sfpplus2", "c": "LAN"},
-        ) == ["b", "c"]
+            mikrotik, job, hardware, {}, list(hardware),
+        ) == (["b", "c", "d"], True)
+
+    def test_a_logical_name_on_the_ports_hardware_does_not_vouch_either(self) -> None:
+        """The name that ended on the port's hardware need not be a
+        port: a VLAN interface an operator called ``ether3`` is read
+        back as looked up by ``ether3`` all the same."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = SimpleNamespace(
+            rendered=_OUTPUT_WITH_AN_ADDRESS_ON_ETHER3,
+            port_renames={"p": "vlan-trunk", "Vlan10": "ether3"}, port_drops=[],
+        )
+        assert migration_pipeline._unbound_hardware(
+            mikrotik, job, {"p": "ether3"}, {}, ["p", "Vlan10"],
+        ) == (["p"], True)
+
+    def test_two_names_on_one_name_share_its_line(self) -> None:
+        """The parser keeps one interface per name, and so one of the
+        two lines.  A line under the shared name counts for each: the
+        job is not a success either way (two names on one), and saying
+        the second port has no line would be false."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = SimpleNamespace(
+            rendered=_OUTPUT_WITH_TWO_PORTS_UNDER_ONE_NAME,
+            port_renames={"a": "WAN", "b": "WAN"}, port_drops=[],
+        )
+        assert migration_pipeline._unbound_hardware(
+            mikrotik, job, {"a": "sfp-sfpplus1", "b": "sfp-sfpplus2"}, {}, ["a", "b"],
+        ) == ([], True)
+
+    def test_a_line_under_a_name_the_parser_reads_otherwise_still_counts(self) -> None:
+        """A name with a line break in it reads back as something
+        else.  The line is there, and no other name of the job ended
+        on what it reads as."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = SimpleNamespace(
+            rendered=_OUTPUT_WITH_TWO_LINES_AND_TWO_LOOSE_ADDRESSES,
+            port_renames={"a": "W" + chr(10) + "AN"}, port_drops=[],
+        )
+        assert migration_pipeline._unbound_hardware(
+            mikrotik, job, {"a": "sfp-sfpplus1"}, {}, ["a"],
+        ) == ([], True)
+
+    def test_a_port_with_no_interface_counts_where_the_output_uses_its_name(self) -> None:
+        """A LAG member, a next hop, a next hop after an address -- and
+        a name the output never uses, which is harmless."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = SimpleNamespace(
+            rendered=_OUTPUT_THAT_REFERS_TO_THREE_NAMES,
+            port_renames={"1": "up-a", "3": "wan-b", "5": "wan-c", "7": "srv"}, port_drops=[],
+        )
+        expected = {
+            "1": "sfp-sfpplus1", "3": "sfp-sfpplus3", "5": "sfp-sfpplus5", "7": "sfp-sfpplus7",
+        }
+        assert migration_pipeline._unbound_hardware(
+            mikrotik, job, {}, expected, list(expected),
+        ) == (["1", "3", "5"], True)
+
+
+_OUTPUT_WITH_TWO_LINES_AND_TWO_LOOSE_ADDRESSES = """/interface ethernet
+set [ find default-name=sfp-sfpplus1 ] name=WAN
+set [ find default-name=sfp-sfpplus3 ] comment="e"
+/ip address
+add address=10.0.0.1/24 interface=LAN
+add address=10.0.1.1/24 interface=bridge-a
+"""
+
+_OUTPUT_WITH_AN_ADDRESS_ON_ETHER3 = """/ip address
+add address=10.10.0.1/24 interface=ether3
+add address=192.0.2.1/24 interface=vlan-trunk
+"""
+
+_OUTPUT_WITH_TWO_PORTS_UNDER_ONE_NAME = """/interface ethernet
+set [ find default-name=sfp-sfpplus1 ] name=WAN comment="wan"
+set [ find default-name=sfp-sfpplus2 ] name=WAN comment="lan"
+/ip address
+add address=192.0.2.2/30 interface=WAN
+add address=10.0.0.1/24 interface=WAN
+"""
+
+_OUTPUT_THAT_REFERS_TO_THREE_NAMES = """/interface bonding
+add mode=802.3ad name=bond1 slaves=up-a,sfp-sfpplus2
+/ip route
+add dst-address=10.9.0.0/16 gateway=wan-b
+add dst-address=10.5.0.0/16 gateway=10.0.5.2%wan-c
+"""
+
+_ROUTEROS_TWO_PORTS = """/interface ethernet
+set [ find default-name=ether1 ] comment="wan"
+set [ find default-name=ether2 ] comment="lan"
+/ip address
+add address=192.0.2.2/30 interface=ether1
+add address=10.0.0.1/24 interface=ether2
+"""
+
+_EOS_TWO_PORTS_AND_AN_SVI = """hostname sw
+!
+vlan 10
+!
+interface Vlan10
+   ip address 10.10.0.1/24
+!
+interface Ethernet3
+   no switchport
+   ip address 192.0.2.1/24
+!
+interface Ethernet4
+   no switchport
+   ip address 10.0.4.1/24
+!
+end
+"""
+
+_AOSS_TRUNK_MEMBERS_WITH_NO_STANZA = """; JL259A Configuration Editor; Created on release #WC.16.11.0003
+hostname "sw"
+trunk 1-2 trk1 lacp
+vlan 1
+   name "DEFAULT_VLAN"
+   untagged 3-4
+   ip address 10.0.0.2 255.255.255.0
+   exit
+"""
+
+_IOS_ROUTES_BY_PORTS_WITH_NO_STANZA = """hostname r1
+!
+interface GigabitEthernet1/0/1
+ no switchport
+ ip address 192.0.2.1 255.255.255.0
+!
+ip route 10.9.0.0 255.255.0.0 GigabitEthernet1/0/3
+ip route 10.5.0.0 255.255.0.0 GigabitEthernet1/0/5 10.0.5.2
+!
+end
+"""
+
+_UNBOUND_SENTENCE = (
+    "port(s) are not looked up by their hardware in the output; give each a "
+    "port of the target, or another name."
+)
+
+
+class TestAPortIsJudgedByItsOwnLine:
+    """The read-back asks whether THIS port has a line that looks it
+    up by its hardware.  It first asked whether any line looks that
+    hardware up -- so a port with no line was said to be on a piece of
+    hardware because another interface was, and the plan reported two
+    ports merged there when the output merged nothing."""
+
+    @pytest.mark.parametrize("other", [{"Ethernet4": "ether3"}, {"Vlan10": "ether3"}])
+    def test_another_interface_on_the_same_hardware_does_not_vouch_for_it(
+        self, other: dict[str, str],
+    ) -> None:
+        """``Ethernet3`` is paired with ``ether3`` and given a name
+        RouterOS writes no Ethernet line for.  Another port, or a VLAN
+        interface, is sent to ``ether3``."""
+        job = run_plan_with_models(
+            get_codec("arista_eos"), get_codec("mikrotik_routeros"), _EOS_TWO_PORTS_AND_AN_SVI,
+            _profile("arista_eos/DCS-7050SX-64"), _profile(_CRS310),
+            port_rename_map={"Ethernet3": "vlan-trunk", **other},
+        )
+        plan = job.port_mapping_plan
+        assert "add address=192.0.2.1/24 interface=vlan-trunk" in job.rendered
+        assert plan.unbound_ports == {"Ethernet3": "ether3"}
+        assert plan.target_hardware == {} and plan.fused == {}
+        assert job.status == MigrationJobStatus.partial
+
+    def test_a_name_and_a_move_onto_one_port(self) -> None:
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_TWO_PORTS, _profile(_CRS310), _profile(_CCR2004),
+            port_rename_map={"ether1": "bridge-a", "ether2": "sfp-sfpplus1"},
+        )
+        plan = job.port_mapping_plan
+        assert _find_lines(job) == ['set [ find default-name=sfp-sfpplus1 ] comment="lan" disabled=no']
+        assert plan.unbound_ports == {"ether1": "sfp-sfpplus1"}
+        assert plan.target_hardware == {} and plan.fused == {}
+
+    def test_two_ports_given_one_name_are_both_looked_up(self) -> None:
+        """Both lines are in the output; the parser gives back one.
+        The second port is not reported as having none."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_TWO_PORTS, _profile(_CRS310), _profile(_CCR2004),
+            port_rename_map={"ether1": "WAN", "ether2": "WAN"}, expect_fused=True,
+        )
+        plan = job.port_mapping_plan
+        assert len(_find_lines(job)) == 2
+        assert plan.unbound_ports == {}
+        assert plan.target_hardware == {"ether1": "sfp-sfpplus1", "ether2": "sfp-sfpplus2"}
+        assert plan.fused == {"WAN": ["ether1", "ether2"]}
+        assert "sfp-sfpplus2" not in plan.unused_target
+
+    def test_a_port_on_the_hardware_it_already_had(self) -> None:
+        """Between two devices of one model a port's hardware is its
+        own source name.  Named so that no line is written, it is
+        reported like any other."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_TWO_PORTS, _profile(_CRS310), _profile(_CRS310),
+            port_rename_map={"ether2": "bond1"},
+        )
+        assert job.port_mapping_plan.unbound_ports == {"ether2": "ether2"}
+        assert job.status == MigrationJobStatus.partial
+
+    def test_a_job_with_two_names_on_one_and_no_line_for_either_says_both(self) -> None:
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_TWO_PORTS, _profile(_CRS310), _profile(_CCR2004),
+            port_rename_map={"ether1": "bond1", "ether2": "bond1"}, expect_fused=True,
+        )
+        plan = job.port_mapping_plan
+        assert plan.unbound_ports == {"ether1": "sfp-sfpplus1", "ether2": "sfp-sfpplus2"}
+        assert "1 target port(s) received more than one source port." in job.error
+        assert "2 " + _UNBOUND_SENTENCE in job.error
+
+    def test_a_name_with_a_line_break_in_it_is_still_found(self) -> None:
+        mikrotik = get_codec("mikrotik_routeros")
+        # Not through the wrapper: its own checks compare names with
+        # what a parser reads back, and this name does not read back.
+        job = migration_pipeline.run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_TWO_PORTS, _profile(_CRS310), _profile(_CCR2004),
+            port_rename_map={"ether1": "line" + chr(10) + "break"},
+        )
+        plan = job.port_mapping_plan
+        assert plan.unbound_ports == {}
+        assert plan.target_hardware == {"ether1": "sfp-sfpplus1"}
+        assert job.status == MigrationJobStatus.completed
+
+
+class TestAPortTheConfigHasNoInterfaceFor:
+    """The pairing is over every port the config USES: an interface
+    stanza, a VLAN's membership, a LAG's member list, a route.  The
+    binder walks interfaces.  A port named only as a LAG member or in
+    a route has none, so there is nothing to write a factory name on
+    and no line for the renderer to write.  Under the name of the
+    target port it was paired with it needs none.  Under a name an
+    operator gave it, it is looked up by nothing -- and the job once
+    said ``completed`` with that name in ``slaves=`` or ``gateway=``."""
+
+    @pytest.fixture(scope="class")
+    def devices(self):
+        return _device("standalone", {"model": "JL259A"}), _profile(_CCR2004)
+
+    def test_under_the_mappings_name_it_needs_no_line(self, devices) -> None:
+        job = run_plan_with_models(
+            AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
+        )
+        # The config's one interface is the routed VLAN: no port has one.
+        parsed = AOSS.parse(_AOSS_TRUNK_MEMBERS_WITH_NO_STANZA)
+        assert [iface.name for iface in parsed.interfaces] == ["Vlan1"]
+        assert [(lag.name, lag.members) for lag in parsed.lags] == [("trk1", ["1", "2"])]
+        assert "slaves=sfp-sfpplus1,sfp-sfpplus2" in job.rendered
+        assert job.port_mapping_plan.unbound_ports == {}
+
+    def test_named_by_an_entry_it_is_reported(self, devices) -> None:
+        job = run_plan_with_models(
+            AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
+            port_rename_map={"1": "up-a"},
+        )
+        plan = job.port_mapping_plan
+        assert "slaves=up-a,sfp-sfpplus2" in job.rendered
+        assert "default-name=sfp-sfpplus1" not in job.rendered
+        assert plan.unbound_ports == {"1": "sfp-sfpplus1"}
+        assert plan.target_hardware == {} and plan.off_target == []
+        assert job.status == MigrationJobStatus.partial
+        assert "1 " + _UNBOUND_SENTENCE in job.error
+        (line,) = [w for w in plan.warnings if "not looked up by their hardware" in w]
+        assert "(1 on sfp-sfpplus1)" in line
+        assert "or for a port the config has no interface for" in line
+
+    def test_given_a_port_of_the_target_it_is_that_port(self, devices) -> None:
+        job = run_plan_with_models(
+            AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
+            port_rename_map={"1": "sfp-sfpplus9"},
+        )
+        assert "slaves=sfp-sfpplus9,sfp-sfpplus2" in job.rendered
+        assert job.port_mapping_plan.unbound_ports == {}
+
+    def test_a_name_the_output_never_uses_is_not_reported(self, devices) -> None:
+        """Port ``3`` is known only from a VLAN's membership, which
+        RouterOS output does not carry.  The name reaches no line, and
+        the plan says only that it is no port of the target -- without
+        the warning about another spelling of a port, which on this
+        target a name cannot be."""
+        job = run_plan_with_models(
+            AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
+            port_rename_map={"3": "srv"},
+        )
+        plan = job.port_mapping_plan
+        assert "srv" not in job.rendered
+        assert plan.unbound_ports == {} and plan.off_target == ["srv"]
+        (line,) = [w for w in plan.warnings if "override target(s) are not names" in w]
+        assert line.endswith("lists for its ports: srv")
+
+    def test_a_route_by_a_port_with_no_stanza(self) -> None:
+        """Alone as the next hop, and after an address."""
+        job = run_plan_with_models(
+            get_codec("cisco_iosxe_cli"), get_codec("mikrotik_routeros"),
+            _IOS_ROUTES_BY_PORTS_WITH_NO_STANZA,
+            _profile("cisco_iosxe/C9300-24P"), _profile(_CCR2004),
+            port_rename_map={"GigabitEthernet1/0/3": "wan-b", "GigabitEthernet1/0/5": "wan-c"},
+        )
+        plan = job.port_mapping_plan
+        assert "gateway=wan-b" in job.rendered and "gateway=10.0.5.2%wan-c" in job.rendered
+        assert plan.unbound_ports == {
+            "GigabitEthernet1/0/3": "sfp-sfpplus3", "GigabitEthernet1/0/5": "sfp-sfpplus5",
+        }
+        assert job.status == MigrationJobStatus.partial
+        assert "2 " + _UNBOUND_SENTENCE in job.error
+
+    def test_the_same_route_under_the_mappings_names_is_right(self) -> None:
+        job = run_plan_with_models(
+            get_codec("cisco_iosxe_cli"), get_codec("mikrotik_routeros"),
+            _IOS_ROUTES_BY_PORTS_WITH_NO_STANZA,
+            _profile("cisco_iosxe/C9300-24P"), _profile(_CCR2004),
+        )
+        assert "gateway=sfp-sfpplus3" in job.rendered
+        assert "gateway=10.0.5.2%sfp-sfpplus5" in job.rendered
+        assert job.port_mapping_plan.unbound_ports == {}
+
+
+class TestWhatElseTheRoundLeftUnpinned:
+    def test_no_pairing_leaves_the_ordinary_output(self) -> None:
+        """Where no pairing is made nothing of the factory-name
+        handling runs: the output is the ordinary translation's, byte
+        for byte."""
+        mikrotik = get_codec("mikrotik_routeros")
+        text = _ROUTEROS_ONE_FACTORY_NAME_TWICE
+        entries = {"sfp-sfpplus1": "core"}
+        # Not through the wrapper: no pairing is made, so it has
+        # nothing to check.
+        job = migration_pipeline.run_plan_with_models(
+            mikrotik, mikrotik, text, _profile(_CRS310), _profile(_CCR2004),
+            port_rename_map=entries,
+        )
+        assert job.port_mapping_plan.applied is False
+        plain = run_plan_with_overrides(mikrotik, mikrotik, text, port_rename_map=entries)
+        assert job.rendered == plain.rendered
+
+    def test_an_entry_keyed_by_a_logical_name_the_config_uses_is_for_it(self) -> None:
+        """A VLAN interface CALLED ``ether5``, on a port whose factory
+        name is ``ether5`` and which the config calls ``lan5``.  The
+        key ``ether5`` is a name the config uses, so the entry is for
+        the VLAN interface -- not re-keyed to the port.
+
+        (The VLAN itself stays, and the renderer keeps its name as a
+        comment: free text, not a port.)"""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_A_VLAN_NAMED_LIKE_A_FACTORY_NAME,
+            _profile(_CRS310), _profile(_CCR2004),
+            port_rename_map={"ether5": None}, free_text=("ether5",),
+        )
+        assert job.port_mapping_plan.labelled_ports == {"lan5": "ether5"}
+        assert job.port_drops == ["ether5"]
+        assert "198.51.100.1" not in job.rendered
+        assert "add address=192.0.2.1/24 interface=lan5" in job.rendered
+
+    def test_a_blank_entry_keyed_by_a_factory_name_is_still_reported(self) -> None:
+        """A blank target decides nothing and is set aside.  Keyed by
+        the factory name of a port the config calls ``core-a``, it is
+        listed for that port -- it used to vanish without a word."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_NAMED, _profile(_CCR2004), _profile(_CCR2004),
+            port_rename_map={"sfp-sfpplus1": "  "},
+        )
+        plan = job.port_mapping_plan
+        assert plan.labelled_ports == {"core-a": "sfp-sfpplus1"}
+        assert plan.ignored_overrides == ["core-a"]
+        (line,) = [w for w in plan.warnings if "had no usable target" in w]
+        assert line.endswith("stands for: core-a")
+
+    def test_a_next_hop_naming_an_unplaced_port_with_no_interface_is_stale(self) -> None:
+        """``sfp-sfpplus9`` has no place on the CRS310 and no interface
+        in the config, so the translator does not know it is a port
+        and leaves the route as written: naming a port that is gone."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_A_HOP_BY_A_NINTH_PORT,
+            _profile(_CCR2004), _profile(_CRS310),
+            port_rename_map={"ether1": None},
+        )
+        assert job.port_mapping_plan.stale_next_hops == ["10.9.0.0/16"]
+        assert job.status == MigrationJobStatus.partial
+
+    def test_a_lag_known_only_from_its_members_is_compared_the_same_way(self) -> None:
+        tree = CanonicalIntent.model_validate({"interfaces": [
+            {"name": "port1", "lag_member_of": "lacp1"}, {"name": "LACP1"},
+        ]})
+        assert collect_hardware_port_names(tree, fold=False) == ["port1", "LACP1"]
+        assert collect_hardware_port_names(tree, fold=True) == ["port1"]
+
+    def test_the_ordinary_path_compares_a_lags_name_as_the_platform_does(self) -> None:
+        """Shared code: with no devices declared ``source_ports`` is
+        read the same way.  On FortiOS a port ``LACP1`` beside an
+        aggregate ``lacp1`` is a port."""
+        fortigate = get_codec("fortigate_cli")
+        job = run_plan_with_overrides(
+            fortigate, fortigate, _FORTIGATE_A_PORT_NAMED_LIKE_AN_AGGREGATE, port_rename_map={},
+        )
+        assert job.source_ports == ["port1", "LACP1"]
+
+
+_ROUTEROS_ONE_FACTORY_NAME_TWICE = """/interface ethernet
+set [ find default-name=ether5 ] name=lan5 comment="first"
+/ip address
+add address=192.0.2.1/24 interface=lan5
+add address=198.51.100.1/24 interface=ether5
+add address=10.3.0.1/24 interface=sfp-sfpplus1
+"""
+
+_ROUTEROS_A_VLAN_NAMED_LIKE_A_FACTORY_NAME = """/interface ethernet
+set [ find default-name=ether5 ] name=lan5
+/interface vlan
+add interface=lan5 name=ether5 vlan-id=10
+/ip address
+add address=192.0.2.1/24 interface=lan5
+add address=198.51.100.1/24 interface=ether5
+"""
+
+_ROUTEROS_A_HOP_BY_A_NINTH_PORT = """/interface ethernet
+set [ find default-name=ether1 ] comment="oob"
+/ip address
+add address=192.0.2.9/24 interface=ether1
+add address=10.66.0.1/24 interface=sfp-sfpplus1
+/ip route
+add dst-address=10.9.0.0/16 gateway=sfp-sfpplus9
+add dst-address=10.8.0.0/16 gateway=sfp-sfpplus1
+"""
+
+_FORTIGATE_A_PORT_NAMED_LIKE_AN_AGGREGATE = """config system interface
+    edit "port1"
+        set ip 10.1.1.1 255.255.255.0
+        set type physical
+    next
+    edit "LACP1"
+        set ip 10.7.0.1 255.255.255.0
+        set type physical
+    next
+    edit "lacp1"
+        set ip 10.8.0.1 255.255.255.0
+        set type aggregate
+        set member "port1"
+    next
+end
+"""
 
 
 class TestTheWrapperAppliesEveryCheck:
@@ -4081,14 +4648,91 @@ class TestTheWrapperAppliesEveryCheck:
             job.status = MigrationJobStatus.completed
 
         self._engine_that(spoils, monkeypatch)
-        with pytest.raises(AssertionError):
+        with pytest.raises(AssertionError, match="leaves something open and the job is completed"):
             run_plan_with_models(AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, TARGET_2930M_24G)
 
-    def test_what_the_plan_says_of_an_unplaced_port_is_what_happened(self, monkeypatch) -> None:
+    def test_nor_is_a_port_no_line_of_the_output_finds(self, monkeypatch) -> None:
+        """The one job in this module that is open for that reason
+        alone: nothing unresolved, nothing fused."""
+        def spoils(job: MigrationJob) -> None:
+            assert not job.port_mapping_plan.unresolved_ports and not job.port_mapping_plan.fused
+            job.status = MigrationJobStatus.completed
+
+        self._engine_that(spoils, monkeypatch)
+        mikrotik = get_codec("mikrotik_routeros")
+        with pytest.raises(AssertionError, match="leaves something open and the job is completed"):
+            run_plan_with_models(
+                mikrotik, mikrotik, _ROUTEROS_NAMED_LIKE_A_LAG,
+                _profile(_CRS310), _profile(_CCR2004),
+            )
+
+    def test_nor_are_two_names_on_one_target(self, monkeypatch) -> None:
+        def spoils(job: MigrationJob) -> None:
+            plan = job.port_mapping_plan
+            assert not plan.unresolved_ports and not plan.unbound_ports
+            job.status = MigrationJobStatus.completed
+
+        self._engine_that(spoils, monkeypatch)
+        mikrotik = get_codec("mikrotik_routeros")
+        with pytest.raises(AssertionError, match="leaves something open and the job is completed"):
+            run_plan_with_models(
+                mikrotik, mikrotik, _ROUTEROS_TWO_PORTS, _profile(_CRS310), _profile(_CCR2004),
+                port_rename_map={"ether1": "WAN", "ether2": "WAN"}, expect_fused=True,
+            )
+
+    def test_a_fusion_the_plan_reports_and_the_output_does_not_have(self, monkeypatch) -> None:
+        def spoils(job: MigrationJob) -> None:
+            job.port_mapping_plan.fused = {"1/1": ["1", "2"]}
+
+        self._engine_that(spoils, monkeypatch)
+        with pytest.raises(AssertionError, match="reports a fusion the output does not have"):
+            run_plan_with_models(AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, TARGET_2930M_48G)
+
+    def test_a_fusion_the_plan_reports_on_another_target(self, monkeypatch) -> None:
+        def spoils(job: MigrationJob) -> None:
+            job.port_mapping_plan.fused = {"LAN": ["ether1", "ether2"]}
+
+        self._engine_that(spoils, monkeypatch)
+        mikrotik = get_codec("mikrotik_routeros")
+        with pytest.raises(AssertionError, match="fused targets are not the output's"):
+            run_plan_with_models(
+                mikrotik, mikrotik, _ROUTEROS_TWO_PORTS, _profile(_CRS310), _profile(_CCR2004),
+                port_rename_map={"ether1": "WAN", "ether2": "WAN"}, expect_fused=True,
+            )
+
+    def test_a_fusion_a_test_expects_and_the_job_does_not_have(self) -> None:
+        with pytest.raises(AssertionError, match="expected two names on one target"):
+            run_plan_with_models(
+                AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, TARGET_2930M_48G, expect_fused=True,
+            )
+
+    def test_an_unplaced_port_the_plan_says_was_kept_and_the_job_dropped(self, monkeypatch) -> None:
         def spoils(job: MigrationJob) -> None:
             job.port_mapping_plan.unplaced[0].dropped = False
+
+        self._engine_that(spoils, monkeypatch)
+        with pytest.raises(AssertionError, match="dropped is not what the job did"):
+            run_plan_with_models(AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, TARGET_2930M_24G)
+
+    def test_an_unplaced_port_the_plan_says_was_dropped_and_landed(self, monkeypatch) -> None:
+        def spoils(job: MigrationJob) -> None:
             job.port_mapping_plan.unplaced[0].landed = "1/1"
 
         self._engine_that(spoils, monkeypatch)
-        with pytest.raises(AssertionError):
+        with pytest.raises(AssertionError, match="landed does not agree with dropped"):
             run_plan_with_models(AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, TARGET_2930M_24G)
+
+    def test_a_name_the_output_uses_and_nothing_defines(self, monkeypatch) -> None:
+        """A LAG member carries no address, so the address check
+        cannot see it.  The engine once wrote an operator's name for
+        such a port into ``slaves=`` and said nothing."""
+        def spoils(job: MigrationJob) -> None:
+            job.port_mapping_plan.unbound_ports = {}
+
+        self._engine_that(spoils, monkeypatch)
+        with pytest.raises(AssertionError, match="uses a name for a paired port that nothing defines"):
+            run_plan_with_models(
+                AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA,
+                _device("standalone", {"model": "JL259A"}), _profile(_CCR2004),
+                port_rename_map={"1": "up-a"},
+            )

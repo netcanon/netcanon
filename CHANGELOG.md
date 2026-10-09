@@ -101,7 +101,9 @@ timestamp if your timezone matters for an audit.
   matching it AFTER renaming, which also removed a different port that
   had just been renamed onto that name.  Such names are now removed
   before anything is renamed, and the warning that called the two
-  ports "merged" is no longer raised for a name that was dropped.  No
+  ports "merged" is no longer raised for a name that was dropped;
+  where two or more ports were renamed onto that name they now
+  survive, and the translator's duplicate-name warning names them.  No
   committed capture is affected unless the request's own
   `port_rename_map` renames a port onto a name the target cannot
   express.
@@ -174,11 +176,15 @@ timestamp if your timezone matters for an audit.
   - RouterOS keeps a port's factory name beside the name an operator
     gives it, and finds a port on the device by the first.  With both
     devices declared, every port the mapping places on a RouterOS
-    target is looked up by the port of that device it is on
+    target that the config has an interface for is looked up by the
+    port of that device it is on
     (`set [ find default-name=sfp-sfpplus2 ] name=core-a`) — from
     any source vendor, and whether or not the source config stated a
-    factory name for the port.  A name the operator gave a port in a
-    RouterOS config is kept.  An entry of `port_rename_map` whose
+    factory name for the port.  (A port the config names only as a
+    LAG member or in a route has no line of its own; under the name
+    the mapping gives it, the target port's, it needs none.)  A name
+    the operator gave a port in a RouterOS config is kept, unless it
+    is itself a port of the target.  An entry of `port_rename_map` whose
     target is a port of the declared target moves the port there; one
     whose target is not gives the port that NAME, changes nothing
     about its hardware, and is said in a line of the plan.  Onto
@@ -193,16 +199,23 @@ timestamp if your timezone matters for an audit.
     interfaces up by one factory name is not paired at all.  Without
     devices declared nothing about a factory name changes: an entry
     names the port, as it always has.
-  - On a RouterOS target the finished output is read back for the
-    line that looks each port up.  A port no line finds by its
-    hardware is listed (`unbound_ports`) and the job is `partial`:
-    RouterOS output has no Ethernet line for a port whose name reads
-    as a VLAN, a bridge or a LAG (`bond1`, `bridge-uplink`,
-    `vlan-trunk`), whoever chose the name.
-  - A static route left naming, as next hop, an interface that moved
-    or was dropped is listed (`stale_next_hops`), and the job is
-    `partial`.  No entry of `port_rename_map` clears it: the route
-    has to be corrected in the output.  A next hop naming a port of
+  - On a RouterOS target the finished output is read back, and each
+    port is judged by its own line.  A port that no line of its own
+    looks up by its hardware is listed (`unbound_ports`) and the job
+    is `partial`.  Two ways: RouterOS output has no Ethernet line for
+    a port whose name reads as a VLAN, a bridge, a LAG or a loopback
+    (`bond1`, `bridge-uplink`, `vlan-trunk`, `lo0`), whoever chose
+    the name; and a port the config has no interface for, given a
+    name that is no port of the target, is written under that name
+    where it is referenced (`slaves=`, `gateway=`) and defined
+    nowhere.
+  - A static route left naming, as next hop, an interface that has
+    another name in the output, or is gone, is listed
+    (`stale_next_hops`), and the job is `partial`.  No entry rewrites
+    the route: correct it in the output, or keep the names it uses —
+    on a RouterOS target an entry that gives each such port its old
+    name (`{"ether3": "ether3"}`) leaves the route right, since a
+    name does not decide a port's hardware there.  A next hop naming a port of
     the declared source that the config has no interface record for
     is listed too; a list of gateways whose members only changed
     places among themselves is not.
@@ -269,7 +282,10 @@ timestamp if your timezone matters for an audit.
   port; a sub-interface, and a pseudo-interface the codec does not
   classify, is still listed.  A RouterOS port the operator named is
   listed by that name — the one the config uses, and the key an entry
-  of `port_rename_map` has to carry.
+  of `port_rename_map` carries.  (A name the codec reads as a LAG or
+  a loopback is left out even when it is a port's; a declared device
+  pairs such a port all the same, and `port_mapping_plan.pairings`
+  lists it.)
   `port_renames` records only names that changed, so for a same-vendor
   translation a client had no way to list the ports at all.
 - **Provenance on target profiles.**  Optional fields record what is

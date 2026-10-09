@@ -191,9 +191,13 @@ class MyVendorCodec(CodecBase):
     # default-name=ether1 ] name=WAN`)?  Leave it out unless your
     # parser fills `CanonicalInterface.default_name`: then set it to
     # True, and model-to-model port mapping will set that field to
-    # the port of the declared target each placed port is on.
-    # `test_the_flag_is_what_the_captures_show` reads it off your
-    # committed captures.
+    # the port of the declared target each placed port is on -- and
+    # then parse your renderer's OUTPUT again to see that each port
+    # has a line of its own that looks it up, so your parser must
+    # read that lookup back from your own output.
+    # `test_the_flag_is_what_the_captures_show`
+    # (tests/unit/migration/test_port_name_universe.py) reads the
+    # flag off your committed captures.
     # ports_keep_a_factory_name: ClassVar[bool] = True
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(

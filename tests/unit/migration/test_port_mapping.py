@@ -1143,7 +1143,8 @@ class TestWhereTheHardwareIs:
         )
         assert plan.unbound_ports == {"core-a": "sfp2"}
         assert plan.target_hardware == {} and plan.source_hardware == {}
-        assert plan.off_target == ["bridge9"]
+        # Said once, in the line for a port no line finds.
+        assert plan.off_target == []
         assert plan.unused_target == ["sfp2", "sfp3"]
         assert plan.fused == {} and not plan.is_clean
         assert not [w for w in plan.warnings if "taken as NAMES" in w]
@@ -1157,6 +1158,62 @@ class TestWhereTheHardwareIs:
             target_hardware={"core-a": "sfp2"}, unbound=["core-a"],
         )
         assert plan.unbound_ports == {}
+
+    def test_a_name_on_a_port_nobody_placed_says_the_mapping_did_not_choose_it(self):
+        """The factory name an unplaced port had happens to be a port
+        of the target too.  The output has the port on it -- by a
+        coincidence of names, and the line does not read like a
+        placement."""
+        source = _inventory((0, "access", ["sfp1"]), (0, "mgmt", ["ether1"]))
+        target = _inventory((0, "access", ["ether1"]))
+        plan = plan_port_mapping(source, target, ["ether1"])
+        assert [p.source for p in plan.used_unplaced] == ["ether1"]
+        _settled(
+            plan, ["ether1"], operator={"ether1": "mgmt-old"}, target=target,
+            target_hardware={"ether1": "ether1"},
+        )
+        assert plan.target_hardware == {"ether1": "ether1"}
+        (line,) = [w for w in plan.warnings if "taken as NAMES" in w]
+        assert "(ether1 stays on ether1, which the mapping did not choose for it)" in line
+        assert "'" not in line
+
+    def test_where_a_port_is_found_by_factory_name_a_name_is_only_a_name(self):
+        """On any other target an override that is no port of the
+        device may be another spelling of one, and the line warns of
+        it.  Where a port is found by its factory name it cannot be,
+        and the line stops at the list."""
+        for by_factory_name, ending in ((True, ": mgmt-vlan"), (False, "the device model lists")):
+            plan = plan_port_mapping(self.SOURCE, self.TARGET, ["ether1"])
+            _settled(
+                plan, ["ether1"], every=["ether1", "vl"], operator={"vl": "mgmt-vlan"},
+                target=self.TARGET, by_factory_name=by_factory_name,
+            )
+            assert plan.off_target == ["mgmt-vlan"]
+            (line,) = [w for w in plan.warnings if "override target(s) are not names" in w]
+            assert line.endswith(ending)
+            assert ("another spelling" in line) is (not by_factory_name)
+
+    def test_a_port_nobody_placed_kept_under_a_name_with_no_factory_name_to_fall_back_on(self):
+        """From another vendor an unplaced port the operator names has
+        no factory name this target knows: the output looks it up by
+        the name, which no port has.  Said in a line of its own -- on
+        a target that finds ports that way, and only there."""
+        source = _inventory((0, "access", ["Ethernet1", "Ethernet2"]))
+        target = _inventory((0, "access", ["sfp1"]))
+        used = ["Ethernet1", "Ethernet2"]
+        for by_factory_name in (True, False):
+            plan = plan_port_mapping(source, target, used)
+            _settled(
+                plan, used, operator={"Ethernet2": "spare"}, target=target,
+                target_hardware={"Ethernet1": "sfp1"}, by_factory_name=by_factory_name,
+            )
+            assert plan.off_target == ["spare"]
+            assert plan.is_clean
+            lines = [w for w in plan.warnings if "were kept under a name" in w]
+            assert len(lines) == (1 if by_factory_name else 0)
+            if lines:
+                assert "1 port(s) the mapping did not place" in lines[0]
+                assert "(Ethernet2 as spare)" in lines[0] and "'" not in lines[0]
 
     def test_a_port_that_kept_its_configs_name_is_not_news(self):
         """Nobody typed anything for ``core-a``: no line."""

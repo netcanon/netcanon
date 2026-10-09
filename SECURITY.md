@@ -398,9 +398,10 @@ server has already loaded; it never supplies a port name, a count or a path.
   reported as a target the model does not list rather than as two ports
   on one.
 - A name in a rename map is not otherwise restricted: it is written into
-  the generated config as typed, control characters included, so a name
-  holding a line break comes out as a line break.  This is the same with
-  and without a device declaration, and the map is the operator's own
+  the generated config as typed, control characters included (a request
+  that declares devices strips white space from the ends of a target
+  first), so a name holding a line break comes out as a line break, with
+  and without a device declaration.  The map is the operator's own
   input to their own output; it is noted here because the output is a
   config someone may paste into a device.
 

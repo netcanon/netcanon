@@ -984,15 +984,24 @@ A declared target device can.  So:
   name — one an operator gave it, in the source config or in their
   map — is on the hardware its pairing gave it.  Where each port's
   hardware ended is read back from the tree that is rendered
-  (`target_hardware`; `source_hardware` for a port nobody placed),
-  and two ports on one piece of hardware are a clash although they
-  share no name;
+  (`target_hardware`; `source_hardware` where that hardware is not a
+  port of the target), and two ports on one piece of hardware are a
+  clash although they share no name;
 * the tree is not the output.  The RouterOS renderer writes no
-  Ethernet line for an interface whose name reads as a VLAN, a bridge
-  or a LAG, whatever factory name the interface carries.  None of
-  that rule is re-derived: the rendered output is parsed again with
-  the target's own parser, and a port no line looks up by its
-  hardware is listed (`unbound_ports`) and leaves the job `partial`;
+  Ethernet line for an interface whose name reads as a VLAN, a
+  bridge, a LAG or a loopback, whatever factory name the interface
+  carries.  None of that rule is re-derived: the rendered output is
+  parsed again with the target's own parser, and a port that no line
+  OF ITS OWN looks up by its hardware is listed (`unbound_ports`) and
+  leaves the job `partial`.  That another interface is looked up by
+  the same hardware says nothing for the port;
+* and the binder's reach is not the pairing's.  The binder walks
+  interfaces; the pairing is over every port the config uses, and a
+  port named only as a LAG member or in a route has no interface.
+  Under the target port's name it needs no line.  Under a name an
+  operator gave it nothing defines it, so the read-back is handed the
+  pairing's list as well as the binder's and reports such a port
+  where the output uses its name;
 * onto any other vendor a port has one name, so a port an operator
   named takes the name of the port it was paired with.
 
@@ -1021,8 +1030,12 @@ The module breaks the translator at each place in turn and pins
 which places a capture catches; each of the others has a small
 config there that does.  Its table of places, the rename pass and
 the collector are compared on a tree built from the canonical schema
-— a name of its own in every text field — so a field added to one of
-the three and not the others fails without anyone keeping a fixture.
+— a name of its own in every `str` and `list[str]` field — so a field
+added to one of the three and not the others fails without anyone
+keeping a fixture.  A field that holds text in another shape (a dict,
+a set, a union) fails the builder itself until it is taught the shape
+or listed as holding no port name: left empty, it would be missing
+from all three alike.
 
 The places are of two kinds.  An interface stanza, a VLAN's
 membership list and a LAG's member list are *evidence* that the
@@ -1091,13 +1104,19 @@ whose wrapper also reads each job's RENDERED OUTPUT back: an
 interface that can be recognised by its address must be on the port
 the job reports, the output must name no port the job does not
 report, no name that moved may still be in it, and no interface may
-carry the addresses of two source interfaces.  The address checks
+carry the addresses of two source interfaces; and, for a port that
+carries no address at all (a LAG member, a route's interface), the
+name it has in the output must be a port of the target or an
+interface the output looks up by a factory name.  The address checks
 and the old-name check take nothing from the engine's list of places;
 the port-list check reads both sides with the engine's collectors.
 Each is handed a job with the defect it is for, in the same module,
-and has to fail — and the wrapper is handed such a job for each
-check, and has to refuse it, so that a check cannot be taken out of
-the wrapper unnoticed.
+and has to fail — and the wrapper is handed such a job for each of
+its assertions, and has to refuse it in that assertion's own words,
+so that none can be taken out of the wrapper unnoticed.  (Where a
+test expects two ports on one name, the checks that read a port's
+place off its address are not run: a parser gives back one interface
+per name.)
 
 **Relationship to target profiles.**  A target profile is one model in
 one stated state, as a flat list.  `inventory_from_profile` reads one

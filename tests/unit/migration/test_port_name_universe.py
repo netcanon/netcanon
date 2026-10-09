@@ -55,7 +55,7 @@ from pathlib import Path
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 
 from netcanon.migration.canonical import port_names
 from netcanon.migration.canonical.intent import CanonicalIntent
@@ -893,12 +893,33 @@ def _unwrapped(annotation: Any) -> Any:
     return annotation
 
 
+#: Fields that hold text in a shape :func:`_filled` does not fill, and
+#: no port name: verbatim sections, and Junos group bodies.
+_TEXT_NOT_FILLED = {"raw_sections", "group_content"}
+
+
+def _can_hold_text(annotation: Any) -> bool:
+    """Is ``str`` -- or a model, which may hold one -- anywhere in
+    *annotation*?"""
+    if annotation is str:
+        return True
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return True
+    return any(_can_hold_text(arg) for arg in get_args(annotation))
+
+
 def _filled(model: type[BaseModel], path: str, where: dict[str, str]) -> BaseModel:
-    """An instance of *model* with a name of its own in every text
-    field, one element in every list of text or of models, and every
-    other field at its default.  Built without validation: the port
-    translator reads attributes, and a made-up name is not a valid
-    address or keyword."""
+    """An instance of *model* with a name of its own in every ``str``
+    and ``list[str]`` field, one element in every list of models, and
+    every other field at its default.  Built without validation: the
+    port translator reads attributes, and a made-up name is not a
+    valid address or keyword.
+
+    A field that can hold text in any OTHER shape -- a dict, a tuple,
+    a set, a union -- is refused, not skipped: left empty, a port name
+    kept in it would be in none of the three lists this tree compares,
+    and the comparison would pass.  Teach this helper the shape, or
+    list the field in ``_TEXT_NOT_FILLED`` as holding no port name."""
     values: dict[str, Any] = {}
     # The declared types, resolved here: pydantic leaves a forward
     # reference unresolved on ``model_fields`` until the model is first
@@ -916,6 +937,10 @@ def _filled(model: type[BaseModel], path: str, where: dict[str, str]) -> BaseMod
             values[name] = [_named(here + "[]", where)]
         elif isinstance(item, type) and issubclass(item, BaseModel):
             values[name] = [_filled(item, here + "[]", where)]
+        elif _can_hold_text(declared[name]) and here not in _TEXT_NOT_FILLED:
+            raise AssertionError(
+                f"{here}: a field that can hold text, in a shape this helper does not fill"
+            )
     return model.model_construct(**values)
 
 
@@ -956,6 +981,26 @@ class TestTheTwoListsAgree:
         _tree, where = _a_name_in_every_text_field()
         assert set(_PLACES) <= set(where.values())
         assert "interfaces[].default_name" in where.values()
+
+    @pytest.mark.parametrize(
+        "shape", [dict[str, str], tuple[str, ...], set[str], str | int, list[list[str]]],
+        ids=["dict", "tuple", "set", "union", "nested-list"],
+    )
+    def test_the_builder_refuses_a_text_field_it_cannot_fill(self, shape: Any) -> None:
+        """A port name kept in a shape the builder leaves empty would
+        be missing from all three lists alike, and the comparison
+        would pass.  So a new field of such a shape fails HERE until
+        someone decides what it is."""
+        odd = create_model("Odd", holds_text=(shape, None))
+        with pytest.raises(AssertionError, match="a field that can hold text"):
+            _filled(odd, "", {})
+
+    def test_the_two_fields_it_leaves_alone_hold_no_port_name(self) -> None:
+        declared = get_type_hints(CanonicalIntent)
+        assert set(declared) >= _TEXT_NOT_FILLED
+        tree, where = _a_name_in_every_text_field()
+        assert not _TEXT_NOT_FILLED & set(where.values())
+        assert tree.raw_sections == {} and tree.group_content == {}
 
     def test_a_factory_name_is_not_a_place_the_sweep_rewrites(self) -> None:
         """A port's hardware identity is not a reference to it, and

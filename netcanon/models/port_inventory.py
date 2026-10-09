@@ -523,24 +523,31 @@ class MappingPlan(BaseModel):
     """Source names whose port nobody placed and which the output
     still looks up by the factory name the port had on the SOURCE
     device, under another name: source name to that factory name.
-    The declared target has no such port.  It happens when an
-    operator's entry NAMES a port the mapping could not place (it is
-    also in :attr:`off_target`, by the name they typed).  Only on a
-    target that finds a port by a factory name (RouterOS)."""
+    The declared target has no such port.  Two ways: an operator's
+    entry NAMES a port the mapping could not place (it is also in
+    :attr:`off_target`, by the name they typed), or the config names
+    a port that is not a port of the declared source.  Between two
+    configs of one codec only, on a target that finds a port by a
+    factory name (RouterOS)."""
 
     unbound_ports: dict[str, str] = Field(default_factory=dict)
-    """Source names of ports whose hardware NO line of the output
-    looks up: source name to that hardware.  Read back from the
-    rendered output with the target's
-    own parser, on a target that finds a port by a factory name
-    (RouterOS).  It happens when the port's name reads to the target
-    as another kind of interface — the RouterOS renderer writes no
-    Ethernet line for a name shaped like a VLAN, a bridge or a LAG
-    (``bond1``, ``bridge-uplink``, ``vlan-trunk``, ``uplink.10``),
-    whoever chose the name.  Such a port is in neither
-    :attr:`target_hardware` nor :attr:`source_hardware`, and the job
-    is ``partial`` while this is not empty: give the port another
-    name."""
+    """Source names of ports that no line of their own in the
+    output looks up by their hardware: source name to that hardware.
+    Read back from the rendered output with the target's own parser,
+    on a target that finds a port by a factory name (RouterOS).  Two
+    ways.  The port's name reads to the target as another kind of
+    interface — the RouterOS renderer writes no Ethernet line for a
+    name shaped like a VLAN, a bridge, a LAG or a loopback
+    (``bond1``, ``bridge-uplink``, ``vlan-trunk``, ``uplink.10``,
+    ``lo0``), whoever chose the name.  Or the config has no interface
+    for the port — it names it only as a LAG member or in a route —
+    and an entry gave it a name that is no port of the target, which
+    the output then uses and nothing defines.  Such a port is in
+    neither :attr:`target_hardware` nor :attr:`source_hardware`, nor
+    is its name in :attr:`off_target`, and the job is ``partial``
+    while this is not empty: name the port with a port of the target,
+    or — where the config has an interface for it — with a name that
+    does not read that way."""
 
     landed_off_target: dict[str, str] = Field(default_factory=dict)
     """Logical names nobody decided — a VLAN interface, say — that
@@ -551,14 +558,21 @@ class MappingPlan(BaseModel):
     (:attr:`unresolved_ports`)."""
 
     stale_next_hops: list[str] = Field(default_factory=list)
-    """Destinations of static routes whose next hop still names a
-    source interface that was renamed or dropped.  A next hop that is
-    exactly an interface name follows that interface; a list of them
-    (RouterOS ``gateway=ether1,ether2``), a routing-table suffix
-    (``ether3@main``), and — across vendors — a unit of an interface
-    (Junos ``next-hop et-0/0/24.0``) are left as written.  The job is
-    ``partial`` while this is not empty: the route has to be
-    corrected by hand."""
+    """Destinations of static routes whose next hop names an
+    interface that has another name in the output, or is gone.  A
+    next hop that is exactly an interface name follows that
+    interface; a list of them (RouterOS ``gateway=ether1,ether2``), a
+    routing-table suffix (``ether3@main``), and — across vendors — a
+    unit of an interface (Junos ``next-hop et-0/0/24.0``) are left as
+    written, and so is a next hop naming a port of the declared
+    source that the config has no interface for.  A list whose
+    members only changed places among themselves is not listed.  The
+    job is ``partial`` while this is not empty.  No entry rewrites
+    the route: correct it in the output, or keep the names it uses —
+    an entry that gives each such port its old name leaves the route
+    right where a name does not decide a port's hardware (RouterOS),
+    and elsewhere leaves the port under a name the target does not
+    list, which is reported."""
 
     ignored_overrides: list[str] = Field(default_factory=list)
     """Source names the config uses whose operator override had no
@@ -644,8 +658,8 @@ class MappingPlan(BaseModel):
         """A mapping was made and nothing about it needs a decision:
         :attr:`unresolved_ports` is empty, no target port received
         two source ports, no route still names a port that moved
-        (:attr:`stale_next_hops`), and every port the mapping put on
-        a piece of hardware is looked up by it in the output
+        (:attr:`stale_next_hops`), and no port was found without a
+        line of the output that looks it up by its hardware
         (:attr:`unbound_ports`).  This is the condition under which
         the port mapping leaves a job ``completed``."""
         return (

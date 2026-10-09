@@ -844,6 +844,17 @@ end
 """
 
 
+_AOSS_TRUNK_MEMBERS_WITH_NO_STANZA = """; JL259A Configuration Editor; Created on release #WC.16.11.0003
+hostname "sw"
+trunk 1-2 trk1 lacp
+vlan 1
+   name "DEFAULT_VLAN"
+   untagged 3-4
+   ip address 10.0.0.2 255.255.255.0
+   exit
+"""
+
+
 class TestEveryPlacedPortIsFoundByItsHardware:
     """A RouterOS target finds a port by its factory name.  With both
     devices declared, every port the mapping placed is looked up by
@@ -885,6 +896,26 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         assert job["port_drops"] == ["core-a"]
         assert "10.0.0.1" not in job["rendered"]
         assert job["port_mapping_plan"]["overridden"] == ["core-a"]
+
+    def test_a_named_port_the_config_has_no_interface_for_is_reported(
+        self, client: TestClient,
+    ) -> None:
+        """An AOS-S trunk member has no ``interface`` stanza.  Named
+        by an entry, it is written into ``slaves=`` under a name no
+        line defines; that used to be ``completed``."""
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "aruba_aoss", "target": "mikrotik_routeros",
+            "raw_text": _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA,
+            "source_deployment": {"mode": "standalone", "members": [{"model": "JL259A"}]},
+            "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+            "port_rename_map": {"1": "up-a"},
+        }).json()
+        plan = job["port_mapping_plan"]
+        assert "slaves=up-a,sfp-sfpplus2" in job["rendered"]
+        assert plan["unbound_ports"] == {"1": "sfp-sfpplus1"}
+        assert plan["off_target"] == []
+        assert job["status"] == "partial"
+        assert "1 port(s) are not looked up by their hardware in the output" in job["error"]
 
     def test_a_port_no_line_of_the_output_finds_is_reported(
         self, client: TestClient,

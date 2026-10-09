@@ -959,7 +959,8 @@ What you get back, on the job's `port_mapping_plan`:
 * **`target_hardware`** — RouterOS targets only: source names whose
   port is on a target port that is not the name they have in the
   output, each with that port.  RouterOS finds a port by its factory
-  name, so every port the mapping places — from any source vendor —
+  name, so every port the mapping places that the config has an
+  interface for — from any source vendor —
   is looked up by the port of the target it is on.  A port you had
   named in a RouterOS config keeps the name, and an entry whose
   target is not a port of the declared target NAMES the port; in both
@@ -972,18 +973,26 @@ What you get back, on the job's `port_mapping_plan`:
   here if the target has a port of that name, and in
   `source_hardware` if it has not.
 * **`source_hardware`** — between two RouterOS configs only: ports
-  the mapping could not place that you kept by NAMING them, each with
-  the factory name it had on the source device.  The output still
-  looks the port up by that name, which the declared target does not
-  have.  Give the port a port of the target, or drop it.
-* **`unbound_ports`** — RouterOS targets only: ports that NO line of
-  the output looks up by their hardware, each with that hardware.
-  The finished output is read back
-  to find them.  It happens when the port's name reads as another
-  kind of interface: RouterOS output has no Ethernet line for a name
-  shaped like a VLAN, a bridge or a LAG (`bond1`, `bridge-uplink`,
-  `vlan-trunk`, `uplink.10`), whoever chose the name.  The job is
-  `partial` while this is not empty; give the port another name.
+  nobody placed that the output still looks up by the factory name
+  they had on the source device, which the declared target does not
+  have — one you kept by NAMING it, or one the config names that is
+  not a port of the declared source.  Give the port a port of the
+  target, or drop it.
+* **`unbound_ports`** — RouterOS targets only: ports that no line of
+  their own in the output looks up by their hardware, each with that
+  hardware.  The finished output is read back to find them, and each
+  port is judged by its own line.  Two ways.  The port's name reads
+  as another kind of interface: RouterOS output has no Ethernet line
+  for a name shaped like a VLAN, a bridge, a LAG or a loopback
+  (`bond1`, `bridge-uplink`, `vlan-trunk`, `uplink.10`, `lo0`),
+  whoever chose the name.  Or the config has no interface for the
+  port — it names it only as a LAG member or in a route — and your
+  entry gave it a name that is no port of the target, which the
+  output then uses (`slaves=`, `gateway=`) and nothing defines.  Such
+  a name is not in `off_target` as well.  The job is `partial` while
+  this is not empty: name the port with a port of the target (that
+  moves it there), or — where the config has an interface for it —
+  with a name that does not read that way.
 * **`landed_off_target`** — logical names nobody decided (a VLAN
   interface, an aggregate) that the name-shape translator gave a
   port-shaped name the declared target does not list — a data port's
@@ -1000,8 +1009,10 @@ What you get back, on the job's `port_mapping_plan`:
   members only changed places among themselves.  A next hop naming a
   port of the declared source that the config has no interface
   record for is listed.  The job is `partial` while this is not
-  empty, and no entry of `port_rename_map` clears it: correct the
-  route in the output.
+  empty.  No entry rewrites the route: correct it in the output, or
+  keep the names it uses — on a RouterOS target an entry that gives
+  each such port its old name (`{"ether3": "ether3"}`) leaves the
+  route right, since a name does not decide a port's hardware there.
 * **`ignored_overrides`** — entries in your `port_rename_map` whose
   target was blank, for a name the config uses.  A blank target is
   ignored: it decides nothing.
@@ -1044,7 +1055,10 @@ target is ignored.  The
 job is also `partial` while `fused`, `stale_next_hops` or
 `unbound_ports` is not empty, whatever you acknowledged, and when no
 pairing could be made at all.  `unresolved_ports` also holds every
-name in `landed_off_target`.
+name in `landed_off_target`.  A port that HAS a place and is not put
+there (`unbound_ports`) holds the job; a port with no place that you
+keep under a name is your decision — it is reported in a line (and
+in `source_hardware` between two RouterOS configs), and does not.
 
 **Devices no family describes yet** can be declared by the key of a
 target profile instead (`source_profile` / `source_module`,
@@ -1119,12 +1133,18 @@ nothing, as before.
   called `SFP-SFPPLUS1`) is translated by that reading, as it is
   without devices declared, and is displaced if that puts it on a
   port of the target.  And a port named so that it reads as a LAG, a
-  VLAN or a bridge is paired as the port it is, but the RouterOS
-  renderer goes by the shape of the name: for `bond1` or `bridge1` it
-  writes no line for the port, and for `vlan10` a VLAN interface on
-  another port — with or without devices declared.  With devices
-  declared the plan lists such a port (`unbound_ports`) and the job
-  is `partial`; give the port another name in `port_rename_map`.
+  VLAN, a bridge or a loopback is paired as the port it is, but the
+  RouterOS renderer goes by the shape of the name: for `bond1` or
+  `bridge1` it writes no line for the port, and for `vlan10` a VLAN
+  interface on another port — with or without devices declared.  With
+  devices declared the plan lists such a port (`unbound_ports`) and
+  the job is `partial`; give the port another name in
+  `port_rename_map`.
+* A port the config names only as a LAG member or in a route has no
+  line of its own in RouterOS output.  Naming it in `port_rename_map`
+  writes the name where the port is referenced and nowhere else; the
+  plan lists it (`unbound_ports`) and the job is `partial`.  Give
+  such a port a port of the target, not a name.
 * **A next hop that is not exactly an interface's name is not
   followed** when the interface moves: a RouterOS route with several
   gateways or a routing-table suffix, and — across vendors — a Junos

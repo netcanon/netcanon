@@ -158,7 +158,7 @@ mapping below is concrete; audit every applicable row before you run
 | A new interactive HTML element (button, input, link, row, `<select>`, `<option>` inside a form) | `tests/testid_reference.md` — document the new `data-testid` in the appropriate page section.  **Self-check:** run `grep -r 'data-testid="<new-id>"' tests/testid_reference.md` before committing; if it returns nothing, you haven't done the update. |
 | A new Jinja partial (`templates/_partials/<name>.js`) | The file-level comment block in the parent template (e.g. `migrate.html`'s "Contents map" comment) **and** the "Template organisation" section of `ARCHITECTURE.md` if the partial introduces a new pattern |
 | A new file under `netcanon/templates/` with a non-`.html` extension OR in a new subdirectory not covered by the existing globs | `pyproject.toml` `[tool.setuptools.package-data]` — extend the `netcanon = [...]` list with a glob covering the new pattern (e.g. `templates/_partials/*.js`, `templates/_components/*.svg`).  Editable installs (`pip install -e`) hide this because they import from the source tree directly; production wheels do not.  Missing template files in the wheel result in `jinja2.exceptions.TemplateNotFound` 500-on-render at runtime — the bug that broke v0.1.0-rc1 / rc2.  The CI `docker-build-smoke` job catches dashboard-rendering regressions of this class but only for the dashboard page; if your new pattern only affects a different page, also add a smoke-test step that visits that page. |
-| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names), and `ports_keep_a_factory_name = True` if its parser records a factory name beside a port's own (`test_the_flag_is_what_the_captures_show` fails for one that records it and does not say so) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class |
+| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class.  Set `ports_keep_a_factory_name = True` ONLY if its parser records a factory name beside a port's own; every other codec leaves it to the base class (`test_the_flag_is_what_the_captures_show` in `tests/unit/migration/test_port_name_universe.py` fails for a codec whose captures and flag disagree) |
 | A new module inside an existing codec (e.g. `port_names.py`, `vlan_heuristics.py`, `_svi_absorption.py`) | `netcanon/migration/codecs/README.md` "Module layout" section if the pattern is worth propagating to other codecs |
 | A new target-profile YAML under `netcanon/definitions/library/target_profiles/` | (1) Per-profile unit test in `tests/unit/migration/test_target_profile_shipped.py` asserting exact port-name list + count (regression guard against copy-paste mistakes).  (2) Provenance per [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) §4: `deployment_state` whenever `stacking` is set, `evidence` + `evidence_ref`, and the key added to the pinned set for its grade in `tests/unit/migration/test_target_profile_evidence.py` — `CAPTURE_MODEL_MARKER` (with a line only a capture of that model contains), `EXPECTED_VENDOR_DOC_GRADED`, or `KNOWN_DOUBTFUL`.  The sets are compared for equality with what the YAMLs declare, so a graded profile that skips this fails CI |
 | A new or changed model-family YAML under `netcanon/definitions/library/model_families/` (a family, a model, a mode, a module) | Per [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md): (1) the hand-typed `(access names, uplink names)` entry for every model × mode × module combination in `EXPECTED_INVENTORIES` in `tests/unit/migration/test_device_models_shipped.py` — the test fails for any shipped combination that is not pinned; (2) each part number in `EXPECTED_PART_NUMBERS`, and a part graded `inferred` in `KNOWN_INFERRED_PARTS`, in the same file; (3) a `captures:` claim if a committed capture of that exact model exists AND names every port of it, mirrored whole in `EXPECTED_CLAIMS` and listed in `PROVEN_CAPTURE_CLAIMS` in `netcanon/migration/device_models.py` — a claim not in that list grants nothing (never grade a part `capture`; the schema refuses it); (4) the pair in `PROFILE_AGREES_WITH` if a flat target profile describes the same device.  Port groups go in port-NUMBER order, not left-to-right on the faceplate.  Write every `ref` so it stands on its own — it is served to API clients, who cannot read a legend in a YAML comment |
@@ -551,10 +551,18 @@ tests use these exclusively — never CSS classes or element structure.  See
   not where the config came from.  **And the tree is not the
   output**: a factory name set on the tree is not a line that finds
   the port — the RouterOS renderer writes none for a name shaped like
-  a VLAN, a bridge or a LAG — so the rendered output is parsed again
-  with the target's own parser, and a port no line looks up is
-  reported (`unbound_ports`) rather than said to be where the tree
-  put it.
+  a VLAN, a bridge, a LAG or a loopback — so the rendered output is
+  parsed again with the target's own parser, and a port no line of
+  its own looks up is reported (`unbound_ports`) rather than said to
+  be where the tree put it.  **And a check must not inherit the reach
+  of what it checks**: that read-back first walked only the ports the
+  binder had recorded, so a paired port the config has no interface
+  for — a LAG member, a route's interface — was written under an
+  operator's name into `slaves=` or `gateway=`, defined by nothing
+  and reported by nothing; and it asked whether ANY line looked a
+  piece of hardware up, not whether the port's own did.  Feed a check
+  from the widest list there is (the pairing, not the binder's
+  record), and judge each item by its own evidence.
   A list of places written by reading the tree cannot show that it is
   complete, and a test that walks the same list agrees with it.  So
   completeness is also checked by experiment:
@@ -569,8 +577,10 @@ tests use these exclusively — never CSS classes or element structure.  See
   that holds a port name goes in `collect_port_names` and in the rename
   pass, and — unless a committed capture fills it — gets a small config
   in that module; the table, the pass and the collector are compared
-  on a tree built from the schema, so no hand-kept fixture stands
-  between them.  Whether a name in another letter case can be another
+  on a tree built from the schema (a name in every `str` and
+  `list[str]` field; a field holding text in another shape fails the
+  builder until it is taught the shape), so no hand-kept fixture
+  stands between them.  Whether a name in another letter case can be another
   interface is a fact about the platform, and there is no safe default
   for it: every codec states `port_names_case_sensitive` in its own
   class body (`True` only where an operator chooses interface names as
@@ -595,8 +605,8 @@ tests use these exclusively — never CSS classes or element structure.  See
   addresses of two source interfaces.  A check nobody has seen fail is
   not known to check anything: each of those is handed a job with the
   defect it is for, in the same module, and has to fail — and so is
-  the wrapper, once per check, because a check that is never CALLED
-  passes every test too.
+  the wrapper, once per assertion, because a check that is never
+  CALLED passes every test too.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

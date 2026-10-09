@@ -310,18 +310,32 @@ hop, an interface that was renamed or dropped"**.
 hop that is exactly an interface's name follows the interface; a
 RouterOS list of gateways (`gateway=ether1,ether2`), a routing-table
 suffix (`ether3@main`) and, across vendors, a Junos unit
-(`next-hop et-0/0/24.0`) are left as written.  Nothing in
-`port_rename_map` clears this: correct the route in the output.
+(`next-hop et-0/0/24.0`) are left as written.  The job is `partial`
+while a route names an interface that has another name in the output.
+No entry rewrites the route: correct it in the output, or keep the
+names it uses — on a RouterOS target an entry that gives each such
+port its old name (`{"ether3": "ether3"}`) leaves the route right,
+since a name does not decide a port's hardware there.
 
 The message can also say **"N port(s) are not looked up by their
 hardware in the output"** — on a RouterOS target only.
 `port_mapping_plan.unbound_ports` lists them, each with the factory
-name it should be looked up by.  RouterOS finds a port by its factory name, and its
-output has no Ethernet line for a port whose name reads as a VLAN, a
-bridge or a LAG (`bond1`, `bridge-uplink`, `vlan-trunk`,
-`uplink.10`) — so the address and every other reference are on a
-name nothing defines.  Give the port another name in
-`port_rename_map`.
+name it should be looked up by.  RouterOS finds a port by its factory
+name, and there are two ways to end without a line that does:
+
+* The port's name reads as a VLAN, a bridge, a LAG or a loopback
+  (`bond1`, `bridge-uplink`, `vlan-trunk`, `uplink.10`, `lo0`).  The
+  output has no Ethernet line for such a name, so the address and
+  every other reference are on a name nothing defines — or, for a
+  name like `vlan10`, on a VLAN interface the renderer creates on
+  another port.  Give the port another name in `port_rename_map`, or
+  a port of the target.
+* The config has no interface for the port — it names it only as a
+  LAG member or in a route — and an entry gave it a name.  No line
+  can carry its factory name, so the name is written where the port
+  is referenced (`slaves=`, `gateway=`) and defined nowhere.  Use a
+  port of the target as the entry's target, or remove the entry: the
+  name the mapping gives the port needs no line.
 
 If the plan lists `emptied_lags`, `shrunk_lags`, `lost_routes`,
 `lost_dhcp_pools`, `lost_tracking` or `lost_vtep_sources`, a dropped
@@ -340,10 +354,14 @@ that one interface.  On a RouterOS target a target that is not a port
 of the declared device is a NAME for the port, not a place: the
 port's hardware stays where the mapping put it
 (`port_mapping_plan.target_hardware`), the name is not listed here,
-and a line of the plan says the entry was taken as a name.  If the
-port had no place at all, the name IS listed here and
-`source_hardware` says which factory name the output still looks the
-port up by — one the target does not have.
+and a line of the plan says the entry was taken as a name.  If
+nobody placed the port, the name is listed here — unless the target
+happens to have a port with the factory name the port had, in which
+case `target_hardware` shows it on that port, which the mapping did
+not choose for it.  Between two RouterOS configs `source_hardware`
+then names a factory name the target lacks; from another vendor the
+output looks the port up by the name you typed, which no port has,
+and a line of the plan says so.
 
 The message can also say **"N target port(s) received more than one
 source port"**.  `port_mapping_plan.fused` names them.  Only your own

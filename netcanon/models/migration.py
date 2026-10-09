@@ -647,7 +647,10 @@ class MigrationJob(BaseModel):
     #: These are the names the CONFIG uses.  On RouterOS a port an
     #: operator named is listed by that name and not by its factory
     #: name: it is the one every other line refers to, and the key an
-    #: entry of ``port_rename_map`` has to carry.
+    #: entry of ``port_rename_map`` carries.  (A name the codec reads
+    #: as a LAG or a loopback is left out even when it is a port's; a
+    #: declared device pairs such a port all the same, and
+    #: ``port_mapping_plan.pairings`` lists it.)
     #:
     #: :attr:`port_renames` holds only names that CHANGED, so on a
     #: same-vendor translation it is empty and the rename modal's

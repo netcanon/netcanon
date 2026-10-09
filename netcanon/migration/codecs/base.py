@@ -287,10 +287,13 @@ class CodecBase(ABC):
     #: ``set [ find default-name=ether1 ] name=WAN``).
     #:
     #: Read by model-to-model port mapping.  For such a target every
-    #: port the mapping placed has its factory name set to the port of
-    #: the declared target it is on, whatever vendor the config came
-    #: from — otherwise a port an operator names is looked up by that
-    #: name, which no device has.  ``False`` where a port has one
+    #: port the mapping placed that the config has an interface for
+    #: has its factory name set to the port of the declared target it
+    #: is on, whatever vendor the config came from — otherwise a port
+    #: an operator names is looked up by that name, which no device
+    #: has.  The rendered output is then parsed again with this
+    #: codec, so its parser must return ``default_name`` for the
+    #: lookup its renderer writes.  ``False`` where a port has one
     #: name, which is every other platform that ships.
     ports_keep_a_factory_name: ClassVar[bool] = False
 

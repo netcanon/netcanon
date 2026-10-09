@@ -230,8 +230,10 @@ def plan_port_mapping(
         return _not_applied(
             plan,
             f"the config looks more than one interface up by one factory "
-            f"name ({_summary(twice)}), so which of them is the port cannot "
-            f"be told",
+            f"name ({_summary(twice)}) — a renamed port beside a line that "
+            f"still uses its old name, or two set lines for one port, which "
+            f"are read as two interfaces — and which of them is the port "
+            f"cannot be told",
         )
     shown = dict(known_as or {})
 
@@ -388,6 +390,7 @@ def settle_plan(
     stale_next_hops: Iterable[str] = (),
     units: bool = False,
     unbound: Iterable[str] = (),
+    by_factory_name: bool = False,
 ) -> None:
     """Reconcile *plan* with what the translation run actually did.
 
@@ -462,6 +465,10 @@ def settle_plan(
             the rendered output looks up; see
             :attr:`MappingPlan.unbound_ports`.  Such a port is on no
             hardware in the output, and counts for none.
+        by_factory_name: The target finds a port by a factory name
+            beside its own (``CodecBase.ports_keep_a_factory_name``),
+            so an override target that is not a port is a NAME there
+            and never another spelling of a port.
     """
     dropped = set(port_drops)
     decided = set(operator_map)
@@ -511,9 +518,12 @@ def settle_plan(
         and where != port_renames.get(name, name)
     }
     on_target = {name_key(name, fold_target) for name in targets}
-    # The field is the PLACE a port has: a port of the target.  A port
-    # nobody placed is still looked up by the hardware it had on the
-    # source; that counts for a clash, and is no place.
+    # The field holds hardware the target HAS.  For a port the mapping
+    # placed that is its place; for a port nobody placed it is a
+    # coincidence of names -- the factory name it had happens to be a
+    # port of the target too -- and not a place the mapping chose.
+    # Hardware the target lacks is no place; it still counts for a
+    # clash.
     plan.target_hardware = {
         name: where for name, where in hardware.items()
         if name_key(where, fold_target) in on_target
@@ -558,11 +568,13 @@ def settle_plan(
         }
         # An entry whose target is not a port of the device is
         # off-target -- unless it only NAMED a port whose hardware has
-        # a place (RouterOS), which is said in a line of its own.
+        # a place (RouterOS), or a port no line of the output looks
+        # up; each of those is said in a line of its own.
         plan.off_target = sorted({
             value for key, value in operator_map.items()
             if isinstance(value, str) and key in present
             and key not in plan.target_hardware
+            and key not in plan.unbound_ports
             and not listed_by_target(value)
             and forms.get(key) != name_key(value, fold_target)
         })
@@ -579,7 +591,9 @@ def settle_plan(
         ]
     plan.unresolved_ports = plan.unresolved(decided)
     if plan.applied:
-        plan.warnings = describe_plan(plan, decided=decided, dropped=dropped)
+        plan.warnings = describe_plan(
+            plan, decided=decided, dropped=dropped, by_factory_name=by_factory_name,
+        )
 
 
 def _loss_lines(plan: MappingPlan) -> list[str]:
@@ -639,6 +653,7 @@ def describe_plan(
     *,
     decided: Iterable[str] = (),
     dropped: Iterable[str] | None = None,
+    by_factory_name: bool = False,
 ) -> list[str]:
     """Operator-readable lines for *plan*, one per kind of problem.
 
@@ -653,6 +668,11 @@ def describe_plan(
         dropped: What the run dropped, once there has been a run;
             ``None`` before one, when the lines can only say what is
             intended.
+        by_factory_name: The target finds a port by a factory name
+            beside its own.  An override target that is not a port is
+            then a name, so the line about such targets does not warn
+            of another spelling of a port, and a port nobody placed
+            that was kept under a name is said in a line of its own.
     """
     seen = set(decided)
     ran = dropped is not None
@@ -779,16 +799,25 @@ def describe_plan(
         # What is known is that the name is not one the device model
         # lists.  It may still be a port: an abbreviation the device
         # accepts (Gi1/0/1) is not recognised as the port it names.
-        lines.append(
+        line = (
             f"port mapping: {len(plan.off_target)} override target(s) are "
             f"not names the declared target device lists for its ports: "
-            f"{_summary(plan.off_target)}; if one is another spelling of "
-            f"a port (an abbreviation, say) it may share that port with "
-            f"the source port already paired to it — use the names the "
-            f"device model lists"
+            f"{_summary(plan.off_target)}"
         )
+        if not by_factory_name:
+            # Where a port has one name, a target the model does not
+            # list may still BE a port.  Where a port is found by its
+            # factory name it cannot: it is a name, and nothing more.
+            line += (
+                "; if one is another spelling of a port (an abbreviation, "
+                "say) it may share that port with the source port already "
+                "paired to it — use the names the device model lists"
+            )
+        lines.append(line)
+    unplaced = {p.source for p in plan.used_unplaced}
     named = [
-        f"{name} is on {where}"
+        f"{name} stays on {where}, which the mapping did not choose for it"
+        if name in unplaced else f"{name} is on {where}"
         for name, where in plan.target_hardware.items() if name in seen
     ]
     if named:
@@ -796,10 +825,24 @@ def describe_plan(
         # between two readings of what they typed.  So it is said.
         lines.append(
             f"port mapping: {len(named)} override target(s) are not ports "
-            f"of the declared target device and were taken as NAMES for "
-            f"the port, whose hardware that does not change "
+            f"of the declared target device and were taken as NAMES, which "
+            f"does not move a port "
             f"({_summary(named, limit=6, sep='; ')}); if a port was meant, "
             f"use a name the device model lists"
+        )
+    loose = [
+        f"{p.source} as {p.landed}" for p in plan.used_unplaced
+        if by_factory_name and not p.dropped and p.landed in plan.off_target
+        and p.source not in plan.source_hardware
+        and p.source not in plan.unbound_ports
+    ]
+    if loose:
+        lines.append(
+            f"port mapping: {len(loose)} port(s) the mapping did not place "
+            f"were kept under a name, and the output looks each up by that "
+            f"name, which no port of the target has "
+            f"({_summary(loose, limit=6, sep='; ')}); give each a port of "
+            f"the target, or drop it"
         )
     if plan.source_hardware:
         still = [f"{name} by {where}" for name, where in plan.source_hardware.items()]
@@ -815,10 +858,12 @@ def describe_plan(
         lines.append(
             f"port mapping: {len(lost)} port(s) are not "
             f"looked up by their hardware anywhere in the output "
-            f"({_summary(lost, limit=6, sep='; ')}) — the target writes an "
-            f"interface with such a name as another kind of interface (a "
-            f"VLAN, a bridge, a LAG) or not at all; give each port another "
-            f"name"
+            f"({_summary(lost, limit=6, sep='; ')}) — the target writes no "
+            f"line of its own for a port whose name reads as another kind "
+            f"of interface (a VLAN, a bridge, a LAG, a loopback), or for a "
+            f"port the config has no interface for; name each with a port "
+            f"of the target, or, where the config has an interface for it, "
+            f"with a name that does not read that way"
         )
     if plan.landed_off_target:
         shown = [
