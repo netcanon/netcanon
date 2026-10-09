@@ -167,7 +167,8 @@ by concern and listed alphabetically within each section.
   it can pair, and what still handles every other name.
 - **Positional port mapping** — pairing the ports of two inventories
   by member rank, role and order, instead of translating names by their
-  shape. Produces an ordinary `port_rename_map`.
+  shape. Produces an ordinary `port_rename_map`. A member's rank is its
+  place in the declaration's list, not its member number.
 - **Unplaced / off-inventory / displaced** — the ways a used
   source name can be left without a paired target. *Unplaced*: a port
   of the declared source with no position on the target (dropped,

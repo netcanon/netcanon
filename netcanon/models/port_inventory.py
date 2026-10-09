@@ -301,7 +301,11 @@ class DeploymentSpec(BaseModel):
     members: list[MemberSpec] = Field(
         min_length=1, max_length=MAX_DEPLOYMENT_MEMBERS,
     )
-    """Ordered.  A member's rank is its position in this list."""
+    """Ordered.  A member's rank is its position in this list, and
+    two stacks are paired member by member in that order: the first
+    member listed for the source with the first listed for the target,
+    whatever their member ids are.  List them in the order they are
+    to be paired."""
 
 
 class Deployment(DeploymentSpec):

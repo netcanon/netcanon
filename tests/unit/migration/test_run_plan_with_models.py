@@ -784,6 +784,476 @@ class TestOtherShapes:
 
 
 # ---------------------------------------------------------------------------
+# A stack on both sides
+# ---------------------------------------------------------------------------
+
+#: Two 2930F-48G-4SFP as one VSF fabric; ``{m}`` is the number of the
+#: second member.  NOT a capture: no committed capture names a port of
+#: a second member (the five-member template under
+#: ``tests/fixtures/real/aruba_aoss`` configures ports of member 1
+#: only).  The port names are the ones the family's VSF mode gives --
+#: ``<member>/<port>``, uplinks included -- and the ``vsf`` stanza is
+#: the nested form of HPE's guide, with placeholder addresses.  Ports
+#: 51-52 of each member are the fabric's own links, so nothing else
+#: names them.
+#:
+#: The two members are configured DIFFERENTLY on purpose.  With the
+#: same VLANs on both, a config written under the other member's names
+#: would read back exactly the same.
+_VSF_FABRIC_OF = """; hpStack_WC Configuration Editor; Created on release #WC.16.07.0002
+hostname "fabric"
+vsf
+   enable domain 1
+   member 1
+      type "JL260A" mac-address aabbcc-000001
+      priority 200
+      link 1 1/51-1/52
+      exit
+   member {m}
+      type "JL260A" mac-address aabbcc-00000{m}
+      link 1 {m}/51-{m}/52
+      exit
+   port-speed 1g
+   exit
+trunk 1/49,{m}/49 trk1 lacp
+interface 1/1
+   name "desk-a"
+   exit
+interface {m}/1
+   name "desk-b"
+   exit
+interface {m}/48
+   name "printer"
+   exit
+vlan 1
+   name "DEFAULT_VLAN"
+   no untagged 1/1-1/10,{m}/1-{m}/30
+   untagged 1/11-1/48,1/50,{m}/31-{m}/48,{m}/50
+   tagged Trk1
+   exit
+vlan 10
+   name "users"
+   untagged 1/1-1/10,{m}/1-{m}/4
+   tagged Trk1,{m}/50
+   ip address 192.0.2.1 255.255.255.0
+   exit
+vlan 20
+   name "voice"
+   untagged {m}/5-{m}/30
+   tagged Trk1,1/50
+   exit
+"""
+_VSF_FABRIC = _VSF_FABRIC_OF.format(m=2)
+
+#: The same fabric with a third member, which the LAG reaches too.
+_VSF_FABRIC_OF_THREE = _VSF_FABRIC.replace(
+    "trunk 1/49,2/49 trk1 lacp", "trunk 1/49,2/49,3/49 trk1 lacp",
+).replace("   port-speed 1g", """   member 3
+      type "JL260A" mac-address aabbcc-000003
+      link 1 3/51-3/52
+      exit
+   port-speed 1g""") + """vlan 30
+   name "third"
+   untagged 3/1-3/4
+   exit
+"""
+
+_F48 = {"model": "JL260A"}
+_M48 = {"model": "JL322A", "modules": {"A": "JL083A"}}
+VSF_PAIR = _device("vsf", {**_F48, "id": 1}, {**_F48, "id": 2})
+STACK_PAIR = _device("stacked", {**_M48, "id": 1}, {**_M48, "id": 2})
+
+
+def _vlans_not_where_the_job_says(raw_text: str, job: MigrationJob) -> list[str]:
+    """VLAN lists of the rendered output that are not the source's
+    with every name moved to where the job says it went.
+
+    An AOS-S port carries no address, so the address checks every job
+    gets cannot say which port its config is on -- and between two
+    stacks the names of one member are names of the other, so a
+    member written under the other's names leaves the SET of names in
+    the output exactly right.  What a port does carry is its VLANs.
+    This compares, VLAN by VLAN, the names the output lists with the
+    names the source lists, each put through the job's own report.
+    """
+    dropped = set(job.port_drops)
+    after = {vlan.id: vlan for vlan in AOSS.parse(job.rendered).vlans}
+    wrong: list[str] = []
+    for vlan in AOSS.parse(raw_text).vlans:
+        for kind in ("untagged_ports", "tagged_ports"):
+            said = {
+                job.port_renames.get(name, name).casefold()
+                for name in getattr(vlan, kind) if name not in dropped
+            }
+            found = {name.casefold() for name in getattr(after.get(vlan.id), kind, [])}
+            if said != found:
+                wrong.append(
+                    f"vlan {vlan.id} {kind}: not in the output {sorted(said - found)}, "
+                    f"not in the report {sorted(found - said)}"
+                )
+    return wrong
+
+
+def _stanza_names(rendered: str) -> dict[str, str]:
+    """Interface to the name its stanza gives it, in a rendered config."""
+    lines = [line.strip() for line in rendered.splitlines()]
+    return {
+        line.split()[1]: lines[at + 1].removeprefix("name ").strip('"')
+        for at, line in enumerate(lines)
+        if line.startswith("interface ") and lines[at + 1].startswith("name ")
+    }
+
+
+def _slashed(names) -> dict[str, str]:
+    """The entries of a rename map for ports (a LAG has no slash)."""
+    return {name: final for name, final in names.items() if "/" in name}
+
+
+class TestAStackOnBothSides:
+    """A two-member 2930F VSF fabric onto a two-member 2930M stack,
+    each member with a JL083A.  Members pair in the order the two
+    declarations list them; within a member the ports pair as they do
+    on a single switch."""
+
+    @pytest.fixture(scope="class")
+    def job(self):
+        return run_plan_with_models(AOSS, AOSS, _VSF_FABRIC, VSF_PAIR, STACK_PAIR)
+
+    def test_every_used_port_of_both_members_has_a_place(self, job) -> None:
+        plan = job.port_mapping_plan
+        assert plan.applied and plan.is_clean
+        assert job.status == MigrationJobStatus.completed
+        assert job.port_drops == [] and plan.unplaced == [] and plan.off_inventory == []
+        # 104 ports, less the four the fabric uses as its own links.
+        assert len(plan.pairings) == 104 and len(plan.used_pairings) == 100
+        assert [p.source for p in plan.pairings if not p.used] == [
+            "1/51", "1/52", "2/51", "2/52",
+        ]
+
+    def test_each_member_goes_to_the_member_in_its_position(self, job) -> None:
+        """An access port keeps its name, member number and all; an
+        uplink becomes a module port of the SAME member."""
+        assert _slashed(job.port_renames) == {
+            "1/49": "1/A1", "1/50": "1/A2", "2/49": "2/A1", "2/50": "2/A2",
+        }
+        placed = {p.source: (p.target, p.role, p.member_rank, p.position)
+                  for p in job.port_mapping_plan.pairings}
+        assert placed["1/48"] == ("1/48", "access", 0, 47)
+        assert placed["2/48"] == ("2/48", "access", 1, 47)
+        assert placed["2/49"] == ("2/A1", "uplink", 1, 0)
+        assert placed["2/52"] == ("2/A4", "uplink", 1, 3)
+        for source, (target, _role, rank, _position) in placed.items():
+            assert (source.partition("/")[0], target.partition("/")[0]) == (
+                str(rank + 1), str(rank + 1),
+            ), source
+
+    def test_the_plan_says_what_each_stack_is(self, job) -> None:
+        plan = job.port_mapping_plan
+        assert [(m.rank, m.member_id, m.model) for m in plan.source.members] == [
+            (0, 1, "2930F-48G-4SFP"), (1, 2, "2930F-48G-4SFP"),
+        ]
+        assert [(m.rank, m.member_id, m.model, m.modules) for m in plan.target.members] == [
+            (0, 1, "2930M-48G-PoEP", {"A": "JL083A"}),
+            (1, 2, "2930M-48G-PoEP", {"A": "JL083A"}),
+        ]
+        assert (plan.source.mode, plan.target.mode) == ("vsf", "stacked")
+        assert (plan.source.port_count, plan.target.port_count) == (104, 104)
+        # The fabric's links are ports that take no configuration; the
+        # plan carries the family's own words for it.
+        assert any("bound to a VSF link" in caveat for caveat in plan.caveats)
+
+    def test_the_output_is_written_in_the_target_stacks_names(self, job) -> None:
+        names = _hardware_names(job.rendered)
+        assert names == {p.target for p in job.port_mapping_plan.used_pairings}
+        assert names < set(STACK_PAIR.names())
+        # A LAG with a port on each member keeps one on each.
+        assert "trunk 1/A1,2/A1 trk1 lacp" in job.rendered
+        assert _stanza_names(job.rendered) == {
+            "1/1": "desk-a", "2/1": "desk-b", "2/48": "printer",
+        }
+
+    def test_every_port_took_its_vlans_with_it(self, job) -> None:
+        assert _vlans_not_where_the_job_says(_VSF_FABRIC, job) == []
+        # ...and two of the lists typed out, so that this does not rest
+        # on the job's report alone.
+        vlans = {vlan.id: vlan for vlan in AOSS.parse(job.rendered).vlans}
+        assert set(vlans[10].untagged_ports) == (
+            {f"1/{n}" for n in range(1, 11)} | {f"2/{n}" for n in range(1, 5)}
+        )
+        assert set(vlans[10].tagged_ports) == {"Trk1", "2/A2"}
+        assert set(vlans[20].untagged_ports) == {f"2/{n}" for n in range(5, 31)}
+        assert set(vlans[20].tagged_ports) == {"Trk1", "1/A2"}
+
+    def test_the_fabrics_own_stanza_is_not_carried(self, job) -> None:
+        """Which switches the fabric is made of, their addresses and
+        its link ports are the SOURCE fabric's.  They are not
+        translated (the documents say so), and they do not leak into
+        the config of another stack either."""
+        for text in ("vsf", "aabbcc", "JL260A", "port-speed", "1/51", "2/52"):
+            assert text not in job.rendered, text
+
+    def test_nothing_is_said_where_the_member_numbers_agree(self, job) -> None:
+        assert not [w for w in job.warnings if w.startswith("port mapping:")]
+
+    def test_and_back_again(self, job) -> None:
+        """The output, as the config of the 2930M stack it now is, onto
+        the fabric it came from: every port is back under its name."""
+        back = run_plan_with_models(AOSS, AOSS, job.rendered, STACK_PAIR, VSF_PAIR)
+        assert back.status == MigrationJobStatus.completed
+        assert _slashed(back.port_renames) == {
+            "1/A1": "1/49", "1/A2": "1/50", "2/A1": "2/49", "2/A2": "2/50",
+        }
+        before, after = AOSS.parse(_VSF_FABRIC), AOSS.parse(back.rendered)
+        assert [(lag.name, lag.members) for lag in after.lags] == [
+            (lag.name, lag.members) for lag in before.lags
+        ]
+        assert {
+            (vlan.id, tuple(sorted(vlan.untagged_ports)), tuple(sorted(vlan.tagged_ports)))
+            for vlan in after.vlans
+        } == {
+            (vlan.id, tuple(sorted(vlan.untagged_ports)), tuple(sorted(vlan.tagged_ports)))
+            for vlan in before.vlans
+        }
+        assert _stanza_names(back.rendered) == {
+            "1/1": "desk-a", "2/1": "desk-b", "2/48": "printer",
+        }
+
+    def test_members_pair_by_position_not_by_number(self) -> None:
+        """A fabric whose second member is number 3 -- member numbers
+        stay with a switch when another leaves -- onto a stack numbered
+        1 and 2.  Member 3 is the second member, and lands on member 2;
+        the plan says in a line why every one of its ports was renamed."""
+        raw = _VSF_FABRIC_OF.format(m=3)
+        source = _device("vsf", {**_F48, "id": 1}, {**_F48, "id": 3})
+        job = run_plan_with_models(AOSS, AOSS, raw, source, STACK_PAIR)
+        assert job.status == MigrationJobStatus.completed
+        assert job.port_mapping_plan.is_clean
+        renames = _slashed(job.port_renames)
+        assert (renames["3/1"], renames["3/48"], renames["3/49"], renames["3/50"]) == (
+            "2/1", "2/48", "2/A1", "2/A2",
+        )
+        assert {name for name in renames if name.startswith("1/")} == {"1/49", "1/50"}
+        assert "trunk 1/A1,2/A1 trk1 lacp" in job.rendered
+        assert not [name for name in _hardware_names(job.rendered) if name.startswith("3/")]
+        assert _stanza_names(job.rendered) == {
+            "1/1": "desk-a", "2/1": "desk-b", "2/48": "printer",
+        }
+        assert _vlans_not_where_the_job_says(raw, job) == []
+        (line,) = [w for w in job.warnings if w.startswith("port mapping:")]
+        assert line == (
+            "port mapping: stack members pair in the order they are declared, "
+            "not by member number: source member 3 with target member 2"
+        )
+
+    def test_the_order_of_a_declaration_chooses_which_member_goes_where(self) -> None:
+        """The same two stacks, with the fabric's members listed the
+        other way round: its member 2 lands on member 1 of the stack.
+        Every name of one member is then a name of the other -- the
+        renames are a permutation, which no check that looks for an old
+        name left behind can read.  The VLAN lists can."""
+        source = _device("vsf", {**_F48, "id": 2}, {**_F48, "id": 1})
+        job = run_plan_with_models(AOSS, AOSS, _VSF_FABRIC, source, STACK_PAIR)
+        assert job.status == MigrationJobStatus.completed
+        renames = _slashed(job.port_renames)
+        assert len(renames) == 100
+        assert (renames["1/1"], renames["2/1"], renames["2/48"]) == ("2/1", "1/1", "1/48")
+        assert (renames["1/49"], renames["2/49"]) == ("2/A1", "1/A1")
+        assert _stanza_names(job.rendered) == {
+            "2/1": "desk-a", "1/1": "desk-b", "1/48": "printer",
+        }
+        assert _vlans_not_where_the_job_says(_VSF_FABRIC, job) == []
+        vlans = {vlan.id: vlan for vlan in AOSS.parse(job.rendered).vlans}
+        assert set(vlans[20].untagged_ports) == {f"1/{n}" for n in range(5, 31)}
+        assert set(vlans[20].tagged_ports) == {"Trk1", "2/A2"}
+        (line,) = [w for w in job.warnings if w.startswith("port mapping:")]
+        assert line.endswith(
+            "source member 2 with target member 1; source member 1 with target member 2"
+        )
+
+    def test_a_member_the_target_does_not_have(self) -> None:
+        """Three members onto two.  The third member's ports have no
+        member to go to: they are dropped and reported, not put on a
+        spare port of another member, and the first two members land
+        as they do without it."""
+        source = _device("vsf", *({**_F48, "id": n} for n in (1, 2, 3)))
+        job = run_plan_with_models(AOSS, AOSS, _VSF_FABRIC_OF_THREE, source, STACK_PAIR)
+        plan = job.port_mapping_plan
+        assert job.status == MigrationJobStatus.partial
+        assert job.port_drops == ["3/1", "3/2", "3/3", "3/4", "3/49"]
+        assert plan.unresolved_ports == ["3/1", "3/2", "3/3", "3/4", "3/49"]
+        assert {(p.reason, p.dropped, p.member_rank) for p in plan.used_unplaced} == {
+            ("no-member", True, 2),
+        }
+        # The whole member is without a place, whichever of its ports
+        # the config uses.
+        assert [p.source for p in plan.unplaced] == [
+            name for name in source.names() if name.startswith("3/")
+        ]
+        (line,) = [w for w in job.warnings if "a member the target does not have" in w]
+        assert line.startswith("port mapping: 5 source port(s)") and line.endswith(
+            "3/1, 3/2, 3/3, 3/4, 3/49"
+        )
+        # The LAG keeps its ports on the two members that are there.
+        assert [name.casefold() for name in plan.shrunk_lags] == ["trk1"]
+        assert "trunk 1/A1,2/A1 trk1 lacp" in job.rendered
+        assert plan.unused_target == ["1/A3", "1/A4", "2/A3", "2/A4"]
+        assert _slashed(job.port_renames) == {
+            "1/49": "1/A1", "1/50": "1/A2", "2/49": "2/A1", "2/50": "2/A2",
+        }
+        assert _vlans_not_where_the_job_says(_VSF_FABRIC_OF_THREE, job) == []
+        assert not [name for name in _hardware_names(job.rendered) if name.startswith("3/")]
+
+    def test_deciding_the_missing_members_ports_completes_the_job(self) -> None:
+        source = _device("vsf", *({**_F48, "id": n} for n in (1, 2, 3)))
+        decided: dict[str, str | None] = dict.fromkeys(("3/1", "3/2", "3/3", "3/4"))
+        # One of them is given a free port of a member that is there.
+        decided["3/49"] = "2/A3"
+        job = run_plan_with_models(
+            AOSS, AOSS, _VSF_FABRIC_OF_THREE, source, STACK_PAIR, port_rename_map=decided,
+        )
+        assert job.status == MigrationJobStatus.completed and job.error is None
+        assert job.port_drops == ["3/1", "3/2", "3/3", "3/4"]
+        assert "trunk 1/A1,2/A1,2/A3 trk1 lacp" in job.rendered
+        assert job.port_mapping_plan.overridden == sorted(decided)
+
+    def test_a_spare_member_of_the_target_is_listed_and_left_alone(self) -> None:
+        target = _device("stacked", *({**_M48, "id": n} for n in (1, 2, 3)))
+        job = run_plan_with_models(AOSS, AOSS, _VSF_FABRIC, VSF_PAIR, target)
+        plan = job.port_mapping_plan
+        assert job.status == MigrationJobStatus.completed and plan.is_clean
+        third = [name for name in target.names() if name.startswith("3/")]
+        assert len(third) == 52
+        assert plan.unused_target == ["1/A3", "1/A4", "2/A3", "2/A4", *third]
+        assert not [name for name in _hardware_names(job.rendered) if name.startswith("3/")]
+
+    def test_a_port_a_member_has_no_place_for_is_not_put_on_another_member(self) -> None:
+        """A 24-port and a 48-port switch onto a 48-port and a 24-port
+        one.  The second source member has twenty-four access ports too
+        many for the second target member, and the first target member
+        has twenty-four to spare.  They stay spare."""
+        raw = (
+            "; hpStack_WC Configuration Editor; Created on release #WC.16.07.0002\n"
+            'hostname "uneven"\nvlan 1\n   name "DEFAULT_VLAN"\n'
+            "   untagged 1/1-1/28,2/1-2/52\n   exit\n"
+        )
+        source = _device("vsf", {"model": "JL259A", "id": 1}, {**_F48, "id": 2})
+        target = _device(
+            "stacked", {**_M48, "id": 1},
+            {"model": "JL320A", "id": 2, "modules": {"A": "JL083A"}},
+        )
+        job = run_plan_with_models(AOSS, AOSS, raw, source, target)
+        plan = job.port_mapping_plan
+        overflow = [f"2/{n}" for n in range(25, 49)]
+        assert job.status == MigrationJobStatus.partial
+        assert job.port_drops == overflow
+        assert {(p.source, p.reason, p.member_rank) for p in plan.used_unplaced} == {
+            (name, "no-position", 1) for name in overflow
+        }
+        spare = [f"1/{n}" for n in range(25, 49)]
+        assert plan.unused_target == spare
+        assert _hardware_names(job.rendered) == set(target.names()) - set(spare)
+        # Each member's uplinks went to its own module.
+        assert [job.port_renames[n] for n in ("1/25", "1/28", "2/49", "2/52")] == [
+            "1/A1", "1/A4", "2/A1", "2/A4",
+        ]
+        (line,) = [w for w in job.warnings if w.startswith("port mapping:")]
+        assert "24 source access port(s) have no access port left on the target" in line
+
+    def test_an_override_can_send_a_port_to_another_member(self) -> None:
+        job = run_plan_with_models(
+            AOSS, AOSS, _VSF_FABRIC, VSF_PAIR, STACK_PAIR, port_rename_map={"2/48": "1/A3"},
+        )
+        plan = job.port_mapping_plan
+        assert job.status == MigrationJobStatus.completed
+        assert plan.overridden == ["2/48"] and plan.rename_map["2/48"] == "2/48"
+        assert _stanza_names(job.rendered) == {
+            "1/1": "desk-a", "2/1": "desk-b", "1/A3": "printer",
+        }
+        assert plan.unused_target == ["1/A4", "2/48", "2/A3", "2/A4"]
+        assert _vlans_not_where_the_job_says(_VSF_FABRIC, job) == []
+
+    def test_a_stack_onto_a_switch_that_stands_alone(self) -> None:
+        """The first member's ports lose their member number; the
+        second member has no switch to go to."""
+        target = _device("standalone", {"model": "JL254A"})
+        job = run_plan_with_models(AOSS, AOSS, _VSF_FABRIC, VSF_PAIR, target)
+        plan = job.port_mapping_plan
+        assert job.status == MigrationJobStatus.partial
+        renames = _slashed(job.port_renames)
+        assert (renames["1/1"], renames["1/48"], renames["1/49"], renames["1/50"]) == (
+            "1", "48", "49", "50",
+        )
+        used_of_two = [p.source for p in plan.pairings + plan.unplaced
+                       if p.used and p.source.startswith("2/")]
+        assert len(used_of_two) == 50 and sorted(job.port_drops) == sorted(used_of_two)
+        assert {p.reason for p in plan.used_unplaced} == {"no-member"}
+        assert "trunk 49 trk1 lacp" in job.rendered
+        assert [name.casefold() for name in plan.shrunk_lags] == ["trk1"]
+        assert _hardware_names(job.rendered) == {str(n) for n in range(1, 51)}
+        assert _vlans_not_where_the_job_says(_VSF_FABRIC, job) == []
+
+    def test_a_fabric_declared_one_member_short(self) -> None:
+        """The config names ports of two members and one is declared.
+        The second member's names are not ports of the declared source:
+        the job says so and is not a success.  The first member is
+        paired all the same."""
+        source = _device("vsf", {**_F48, "id": 1})
+        job = run_plan_with_models(AOSS, AOSS, _VSF_FABRIC, source, STACK_PAIR)
+        plan = job.port_mapping_plan
+        assert job.status == MigrationJobStatus.partial
+        assert len(plan.off_inventory) == 50
+        assert {name.partition("/")[0] for name in plan.off_inventory} == {"2"}
+        assert plan.unresolved_ports == plan.off_inventory
+        (line,) = [w for w in job.warnings if "not ports of the declared source device" in w]
+        assert "50 port name(s)" in line and "check the source model" in line
+        assert (job.port_renames["1/49"], job.port_renames["1/50"]) == ("1/A1", "1/A2")
+
+
+class TestTheVlanCheckCanFail:
+    """The check the stack tests lean on, handed what it is for."""
+
+    @pytest.fixture(scope="class")
+    def job(self):
+        return run_plan_with_models(AOSS, AOSS, _VSF_FABRIC, VSF_PAIR, STACK_PAIR)
+
+    def test_a_good_job_passes(self, job) -> None:
+        assert _vlans_not_where_the_job_says(_VSF_FABRIC, job) == []
+
+    def test_one_members_config_under_the_other_members_names(self, job) -> None:
+        """The whole output with the two member numbers exchanged: the
+        same set of port names, every one a port of the target, and
+        nothing where the job says it is."""
+        swapped = job.rendered.replace("1/", "@/").replace("2/", "1/").replace("@/", "2/")
+        assert _hardware_names(swapped) == _hardware_names(job.rendered)
+        wrong = _vlans_not_where_the_job_says(
+            _VSF_FABRIC, job.model_copy(update={"rendered": swapped}),
+        )
+        # Every list but the one that holds the LAG alone.
+        assert [line.partition(":")[0] for line in wrong] == [
+            "vlan 1 untagged_ports", "vlan 10 untagged_ports", "vlan 10 tagged_ports",
+            "vlan 20 untagged_ports", "vlan 20 tagged_ports",
+        ]
+
+    def test_a_port_missing_from_one_list(self, job) -> None:
+        spoiled = job.rendered.replace("2/5,", "", 1)
+        assert spoiled != job.rendered
+        (wrong,) = _vlans_not_where_the_job_says(
+            _VSF_FABRIC, job.model_copy(update={"rendered": spoiled}),
+        )
+        assert wrong.startswith("vlan 20 untagged_ports: not in the output ['2/5']")
+
+    def test_a_port_the_report_puts_somewhere_else(self, job) -> None:
+        """The output as it is, and a report that says ``2/50`` went to
+        ``2/A3``."""
+        lying = job.model_copy(update={
+            "port_renames": {**job.port_renames, "2/50": "2/A3"},
+        })
+        wrong = _vlans_not_where_the_job_says(_VSF_FABRIC, lying)
+        assert len(wrong) == 2
+        assert all("['2/a3']" in line and "['2/a2']" in line for line in wrong)
+
+
+# ---------------------------------------------------------------------------
 # Flat target profiles as either end
 # ---------------------------------------------------------------------------
 

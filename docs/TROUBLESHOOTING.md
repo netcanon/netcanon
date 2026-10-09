@@ -256,6 +256,14 @@ below say why each is there:
   confirm the drop.  Either way the job stops being `partial` on that
   port's account — on `/plan` and on every per-pane endpoint.
 
+  Between two stacks an entry can say `reason: "no-member"`: the port
+  belongs to a source member with no target member in the same
+  position.  Members pair in the order the two declarations list
+  them, so check how many members you declared on each side, and in
+  what order.  A port is never moved to another member to find it a
+  place; do that yourself in `port_rename_map` if it is what you
+  want.
+
   A management port is treated differently.  With no management port
   in the target model it is handed to the ordinary port translation
   (the name-shape translator) rather than dropped.  Where the target
@@ -394,6 +402,20 @@ not declare show up as off-inventory even when the declaration is
 right.  A sub-interface (`GigabitEthernet1/0/1.100`) follows its
 parent port only between two configs of the same codec; across
 vendors it is reported separately and does not move with its port.
+
+### "A stack member's config came out on another member"
+
+Two stacks are paired member by member in the ORDER the two
+declarations list them — the first member of `source_deployment` with
+the first of `target_deployment` — and not by member number.  A
+fabric numbered 1 and 3 onto a stack numbered 1 and 2 puts `3/5` on
+`2/5`; list the source as 3 then 1 and member 3 lands on member 1.
+The job says so in a line (`stack members pair in the order they are
+declared, not by member number: source member 3 with target member
+2`), and `port_mapping_plan.source.members` / `.target.members` give
+each member's place (`rank`) and number.  To pair them another way,
+change the order of one list.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § G.
 
 ### "On RouterOS my port was renamed, not moved"
 

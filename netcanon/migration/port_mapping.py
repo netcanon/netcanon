@@ -30,8 +30,11 @@ Two stages:
 
 Policy, in order:
 
-1. Members pair by rank — first with first.  A source member beyond
-   the target's member count is not folded onto another member.
+1. Members pair by rank — first with first, in the order each
+   deployment lists them, whatever their member numbers are.  A
+   source member beyond the target's member count is not folded onto
+   another member, and a port one member has no place for is never
+   put on another.
 2. Within a member, ports pair role to role, in port-number order:
    access to access, uplink to uplink, management to management.
 3. A source port with no position on the target is **unplaced**.  It
@@ -135,6 +138,41 @@ def _summary(names: Iterable[str], limit: int = 8, sep: str = ", ") -> str:
     items = [_plain(name) for name in names]
     shown = sep.join(items[:limit])
     return shown if len(items) <= limit else f"{shown} and {len(items) - limit} more"
+
+
+def _member_lines(plan: MappingPlan) -> list[str]:
+    """The line for members that were paired with a member of another
+    NUMBER, or no line.
+
+    Members pair in the order they are declared (their rank), never by
+    the vendor's member id.  Where the two ids differ every port of
+    the member changes its name for that reason alone, so the plan
+    says which member went to which -- for a member the config uses.
+    A device that stands alone has no member id and is not listed.
+
+    Not a problem, and it holds no job: it is the rule the pairing
+    follows, said where it changed a name.  The order of the two
+    declarations is the operator's way to choose which member goes
+    where.
+    """
+    if plan.source is None or plan.target is None:
+        return []
+    theirs = {member.rank: member.member_id for member in plan.target.members}
+    used = {pairing.member_rank for pairing in plan.used_pairings}
+    renumbered = [
+        f"source member {member.member_id} with target member {theirs[member.rank]}"
+        for member in plan.source.members
+        if member.rank in used
+        and member.member_id is not None
+        and theirs.get(member.rank) is not None
+        and theirs[member.rank] != member.member_id
+    ]
+    if not renumbered:
+        return []
+    return [
+        f"port mapping: stack members pair in the order they are declared, "
+        f"not by member number: {_summary(renumbered, sep='; ')}"
+    ]
 
 
 def _by_position(
@@ -883,6 +921,8 @@ def describe_plan(
             f"stands for: {_summary(plan.ignored_overrides)}"
         )
     lines.extend(_loss_lines(plan))
+
+    lines.extend(_member_lines(plan))
 
     # A pairing the operator replaced is no longer the plan's: its
     # speed and PoE flags describe a target the port did not go to --

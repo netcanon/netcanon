@@ -198,6 +198,13 @@ pipeline — they just aren't pinned by a fixture yet").
   a same-vendor translation does not rename ports by itself.  Declare
   both switches on the API and the ports are paired by position: a
   standalone 2930F's `49`-`52` become a stacked 2930M's `1/A1`-`1/A4`.
+  A VSF fabric or a stack of several switches can be declared on
+  either side, or on both: its members pair in the order you list
+  them, not by member number (see
+  [`CAPABILITIES.md`](../CAPABILITIES.md) section G).  The `vsf` or
+  `stacking` stanza itself — which switches the stack is made of,
+  their priorities, the ports a fabric uses as its links — is not
+  carried into the output; set the target stack up as its own.
   The 2930F and 2930M series are modelled; a 3810M can be declared
   through its target profile; a switch with neither cannot be declared
   yet.  Only the port names are translated: a config that removes

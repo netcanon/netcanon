@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from netcanon.migration.device_models import Inventory, PhysicalPort
+from netcanon.migration.device_models import Inventory, InventoryMember, PhysicalPort
 from netcanon.migration.port_mapping import (
     MappingPlan,
     describe_plan,
@@ -31,8 +31,14 @@ def _inventory(
     speed: dict[str, str] | None = None,
     poe: set[str] | None = None,
     origin: str = "family",
+    member_ids: list[int | None] | None = None,
 ) -> Inventory:
-    """``(member_rank, role, names)`` groups, in port-number order."""
+    """``(member_rank, role, names)`` groups, in port-number order.
+
+    *member_ids* gives each rank the member number its names carry
+    (``None`` for a device that stands alone); without it the
+    inventory states no members, as a flat profile's does not.
+    """
     ports: list[PhysicalPort] = []
     for rank, role, names in groups:
         for ordinal, name in enumerate(names):
@@ -44,6 +50,10 @@ def _inventory(
     return Inventory(
         vendor="x", origin=origin, description=description, ports=ports,
         port_count=len(ports),
+        members=[
+            InventoryMember(rank=rank, member_id=member_id, model="m")
+            for rank, member_id in enumerate(member_ids or [])
+        ],
         evidence=evidence if ports else None, caveats=caveats or [],
     )
 
@@ -217,6 +227,128 @@ class TestUnplaced:
         plan = plan_port_mapping(STACKED_24_MODULE, STANDALONE_48)
         assert plan.unused_target == _bare(24, 25)
         assert plan.is_clean
+
+
+class TestTwoStacks:
+    """More than one member on both sides.  Members pair in the order
+    each inventory lists them; a port never changes member to find a
+    place."""
+
+    SOURCE = _inventory(
+        (0, "access", ["1/1", "1/2"]), (0, "uplink", ["1/49"]),
+        (1, "access", ["3/1", "3/2"]), (1, "uplink", ["3/49"]),
+        member_ids=[1, 3],
+    )
+    TARGET = _inventory(
+        (0, "access", ["1/1", "1/2"]), (0, "uplink", ["1/A1"]),
+        (1, "access", ["2/1", "2/2"]), (1, "uplink", ["2/A1"]),
+        member_ids=[1, 2],
+    )
+
+    def test_each_member_pairs_with_the_member_in_its_position(self):
+        plan = plan_port_mapping(self.SOURCE, self.TARGET)
+        assert plan.rename_map == {
+            "1/1": "1/1", "1/2": "1/2", "1/49": "1/A1",
+            "3/1": "2/1", "3/2": "2/2", "3/49": "2/A1",
+        }
+        assert [(p.source, p.member_rank, p.role, p.position) for p in plan.pairings] == [
+            ("1/1", 0, "access", 0), ("1/2", 0, "access", 1), ("1/49", 0, "uplink", 0),
+            ("3/1", 1, "access", 0), ("3/2", 1, "access", 1), ("3/49", 1, "uplink", 0),
+        ]
+        assert plan.unplaced == [] and plan.unused_target == [] and plan.is_clean
+
+    def test_the_plan_says_which_member_went_to_a_member_of_another_number(self):
+        """Every port of member 3 is renamed for that reason alone."""
+        plan = plan_port_mapping(self.SOURCE, self.TARGET)
+        assert plan.warnings == [
+            "port mapping: stack members pair in the order they are declared, "
+            "not by member number: source member 3 with target member 2"
+        ]
+        assert plan.is_clean
+
+    def test_and_says_it_again_after_a_run(self):
+        plan = plan_port_mapping(self.SOURCE, self.TARGET)
+        _settled(plan, list(plan.rename_map), target=self.TARGET)
+        (line,) = plan.warnings
+        assert line.endswith("source member 3 with target member 2")
+
+    def test_it_says_nothing_of_a_member_the_config_does_not_use(self):
+        plan = plan_port_mapping(self.SOURCE, self.TARGET, ["1/1", "1/49"])
+        assert plan.warnings == []
+
+    def test_nor_where_the_numbers_agree(self):
+        plan = plan_port_mapping(self.TARGET, self.TARGET)
+        assert plan.warnings == []
+
+    def test_nor_of_a_device_that_has_no_member_number(self):
+        alone = _inventory((0, "access", ["1", "2"]), member_ids=[None])
+        lone_three = _inventory((0, "access", ["3/1", "3/2"]), member_ids=[3])
+        assert plan_port_mapping(alone, lone_three).warnings == []
+        assert plan_port_mapping(lone_three, alone).warnings == []
+
+    def test_every_member_that_changed_number_is_named(self):
+        """Two stacks declared in opposite orders."""
+        swapped = _inventory(
+            (0, "access", ["2/1", "2/2"]), (0, "uplink", ["2/A1"]),
+            (1, "access", ["1/1", "1/2"]), (1, "uplink", ["1/A1"]),
+            member_ids=[2, 1],
+        )
+        plan = plan_port_mapping(self.TARGET, swapped)
+        assert plan.rename_map["1/1"] == "2/1" and plan.rename_map["2/1"] == "1/1"
+        (line,) = plan.warnings
+        assert line.endswith(
+            "source member 1 with target member 2; source member 2 with target member 1"
+        )
+
+    def test_a_member_that_overflows_does_not_spill_into_another(self):
+        source = _inventory(
+            (0, "access", ["1/1", "1/2"]), (1, "access", ["2/1", "2/2", "2/3", "2/4"]),
+        )
+        target = _inventory(
+            (0, "access", ["1/1", "1/2", "1/3", "1/4"]), (1, "access", ["2/1", "2/2"]),
+        )
+        plan = plan_port_mapping(source, target)
+        assert [(p.source, p.reason, p.member_rank) for p in plan.unplaced] == [
+            ("2/3", "no-position", 1), ("2/4", "no-position", 1),
+        ]
+        assert plan.unused_target == ["1/3", "1/4"]
+        assert plan.rename_map == {
+            "1/1": "1/1", "1/2": "1/2", "2/1": "2/1", "2/2": "2/2", "2/3": None, "2/4": None,
+        }
+
+    def test_a_role_one_member_lacks_is_not_taken_from_another(self):
+        source = _inventory(
+            (0, "access", ["1/1"]), (1, "access", ["2/1"]), (1, "uplink", ["2/49"]),
+        )
+        target = _inventory(
+            (0, "access", ["1/1"]), (0, "uplink", ["1/A1"]), (1, "access", ["2/1"]),
+        )
+        plan = plan_port_mapping(source, target)
+        assert [(p.source, p.role, p.reason) for p in plan.unplaced] == [
+            ("2/49", "uplink", "no-position"),
+        ]
+        assert plan.unused_target == ["1/A1"]
+
+    def test_three_members_onto_two(self):
+        three = _inventory(
+            (0, "access", ["1/1"]), (1, "access", ["2/1"]), (2, "access", ["3/1"]),
+        )
+        two = _inventory((0, "access", ["1/1", "1/2"]), (1, "access", ["2/1", "2/2"]))
+        plan = plan_port_mapping(three, two)
+        assert plan.rename_map == {"1/1": "1/1", "2/1": "2/1", "3/1": None}
+        assert [(p.source, p.reason, p.member_rank) for p in plan.unplaced] == [
+            ("3/1", "no-member", 2),
+        ]
+        assert plan.unused_target == ["1/2", "2/2"]
+
+    def test_two_members_onto_three(self):
+        two = _inventory((0, "access", ["1/1"]), (1, "access", ["2/1"]))
+        three = _inventory(
+            (0, "access", ["1/1"]), (1, "access", ["2/1"]), (2, "access", ["3/1", "3/2"]),
+        )
+        plan = plan_port_mapping(two, three)
+        assert plan.unplaced == [] and plan.is_clean
+        assert plan.unused_target == ["3/1", "3/2"]
 
 
 class TestManagementPorts:
@@ -900,8 +1032,11 @@ class TestNoWarningCanBeReadAsATableRow:
     as extra rows of its rename table."""
 
     def test_every_kind_of_line_and_none_has_a_quote(self):
-        two = _inventory((0, "access", ["1/1"]), (1, "access", ["2/1"]), (0, "mgmt", ["mgmt0"]))
-        one = _inventory((0, "access", ["x1"]))
+        two = _inventory(
+            (0, "access", ["1/1"]), (1, "access", ["2/1"]), (0, "mgmt", ["mgmt0"]),
+            member_ids=[1, 2],
+        )
+        one = _inventory((0, "access", ["x1"]), member_ids=[4])
         used = ["1/1", "2/1", "mgmt0", "A1", "1/1.5", "49.7"]
         plan = plan_port_mapping(two, one, used)
         _settled(
@@ -922,6 +1057,7 @@ class TestNoWarningCanBeReadAsATableRow:
             "were given a port name the declared target device does not list",
             "still name, as next hop",
             "belong to a member the target does not have",
+            "pair in the order they are declared",
             "source management port(s) have no management port",
             "nobody decided",
             "could not be given a name of their own",

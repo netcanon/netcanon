@@ -131,6 +131,12 @@ timestamp if your timezone matters for an audit.
     device no family describes yet can be declared by a target-profile
     key instead (`source_profile` / `source_module`, with the existing
     `target_profile` / `target_module`).
+  - A stack can be declared on both sides.  Members pair in the order
+    the two declarations list them, not by member number, and the plan
+    says in a line where that put a member on a member of another
+    number.  A port never changes member to find a place, and a source
+    member the target has no member for is dropped port by port and
+    reported.
   - The pairing comes back as data on `MigrationJob.port_mapping_plan`:
     every pair, every source port with no place on the target, every
     name in the config that is not a port of the declared source, what

@@ -955,3 +955,160 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         assert plan["landed_off_target"] == {"MGMT": "em1"}
         assert plan["unresolved_ports"] == ["MGMT"]
         assert job["status"] == "partial"
+
+
+# ---------------------------------------------------------------------------
+# A stack on both sides
+# ---------------------------------------------------------------------------
+
+#: A two-member VSF fabric of 2930F-48G-4SFP.  Not a capture: no
+#: committed capture names a port of a second member.  The names are
+#: the ones the family's VSF mode gives.  The two members carry
+#: different VLANs, so that one written under the other's names shows.
+_VSF_FABRIC = """; hpStack_WC Configuration Editor; Created on release #WC.16.07.0002
+hostname "fabric"
+trunk 1/49,2/49 trk1 lacp
+interface 2/1
+   name "desk-b"
+   exit
+vlan 1
+   name "DEFAULT_VLAN"
+   no untagged 1/1-1/10,2/1-2/30
+   untagged 1/11-1/48,1/50,2/31-2/48,2/50
+   tagged Trk1
+   exit
+vlan 10
+   name "users"
+   untagged 1/1-1/10,2/1-2/4
+   tagged Trk1,2/50
+   exit
+vlan 20
+   name "voice"
+   untagged 2/5-2/30
+   tagged Trk1,1/50
+   exit
+"""
+
+
+def _fabric(*ids: int) -> dict:
+    return {"mode": "vsf", "members": [{"model": "JL260A", "id": n} for n in ids]}
+
+
+def _stack(*ids: int) -> dict:
+    return {
+        "mode": "stacked",
+        "members": [{"model": "JL322A", "id": n, "modules": {"A": "JL083A"}} for n in ids],
+    }
+
+
+def _stack_body(source: dict, target: dict, raw_text: str = _VSF_FABRIC, **extra) -> dict:
+    return {
+        "source": "aruba_aoss", "target": "aruba_aoss", "raw_text": raw_text,
+        "source_deployment": source, "target_deployment": target, **extra,
+    }
+
+
+class TestAStackOnBothSides:
+    """More than one member in ``source_deployment`` AND in
+    ``target_deployment``: the members pair in the order the two lists
+    give them."""
+
+    def test_each_member_lands_on_the_member_in_its_position(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/migration/plan", json=_stack_body(_fabric(1, 2), _stack(1, 2)),
+        )
+        assert resp.status_code == 200
+        assert resp.headers["X-Netcanon-Job-Status"] == "completed"
+        job = resp.json()
+        plan = job["port_mapping_plan"]
+        assert {k: v for k, v in job["port_renames"].items() if "/" in k} == {
+            "1/49": "1/A1", "1/50": "1/A2", "2/49": "2/A1", "2/50": "2/A2",
+        }
+        assert "trunk 1/A1,2/A1 trk1 lacp" in job["rendered"]
+        assert [(m["rank"], m["member_id"]) for m in plan["source"]["members"]] == [(0, 1), (1, 2)]
+        assert [(m["rank"], m["member_id"]) for m in plan["target"]["members"]] == [(0, 1), (1, 2)]
+        assert (plan["source"]["port_count"], plan["target"]["port_count"]) == (104, 104)
+        second = next(p for p in plan["pairings"] if p["source"] == "2/49")
+        assert (second["target"], second["role"], second["member_rank"], second["position"]) == (
+            "2/A1", "uplink", 1, 0,
+        )
+        assert plan["unplaced"] == [] and plan["unresolved_ports"] == []
+        assert not [w for w in job["warnings"] if w.startswith("port mapping:")]
+
+    def test_a_member_with_another_number_is_said(self, client: TestClient) -> None:
+        """Members 1 and 3 of the fabric onto members 1 and 2 of the
+        stack: the second listed goes to the second listed."""
+        raw = _VSF_FABRIC.replace("2/", "3/")
+        job = client.post(
+            "/api/v1/migration/plan", json=_stack_body(_fabric(1, 3), _stack(1, 2), raw),
+        ).json()
+        assert job["status"] == "completed"
+        assert job["port_renames"]["3/1"] == "2/1"
+        assert job["port_renames"]["3/49"] == "2/A1"
+        assert "1/1" not in job["port_renames"]
+        assert "interface 2/1" in job["rendered"] and "3/" not in job["rendered"]
+        (line,) = [w for w in job["warnings"] if w.startswith("port mapping:")]
+        assert line.endswith("source member 3 with target member 2")
+
+    def test_the_order_of_the_list_is_the_order_of_the_pairing(self, client: TestClient) -> None:
+        job = client.post(
+            "/api/v1/migration/plan", json=_stack_body(_fabric(2, 1), _stack(1, 2)),
+        ).json()
+        assert job["status"] == "completed"
+        assert (job["port_renames"]["2/1"], job["port_renames"]["1/1"]) == ("1/1", "2/1")
+        lines = [line.strip() for line in job["rendered"].splitlines()]
+        assert lines[lines.index("interface 1/1") + 1] == 'name "desk-b"'
+        (line,) = [w for w in job["warnings"] if w.startswith("port mapping:")]
+        assert line.endswith(
+            "source member 2 with target member 1; source member 1 with target member 2"
+        )
+
+    def test_a_member_the_target_does_not_have_is_dropped_and_said(
+        self, client: TestClient,
+    ) -> None:
+        resp = client.post(
+            "/api/v1/migration/plan", json=_stack_body(_fabric(1, 2), _stack(1)),
+        )
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial"
+        job = resp.json()
+        plan = job["port_mapping_plan"]
+        assert len(job["port_drops"]) == 50
+        assert {name.partition("/")[0] for name in job["port_drops"]} == {"2"}
+        assert {(p["reason"], p["dropped"], p["member_rank"])
+                for p in plan["unplaced"] if p["used"]} == {("no-member", True, 1)}
+        assert plan["unresolved_ports"] == sorted(job["port_drops"])
+        assert [name.lower() for name in plan["shrunk_lags"]] == ["trk1"]
+        assert "trunk 1/A1 trk1 lacp" in job["rendered"]
+        assert any("a member the target does not have" in w for w in job["warnings"])
+        assert "Port mapping is incomplete: 50 name(s)" in job["error"]
+
+    @pytest.mark.parametrize(
+        "path",
+        ["/plan", "/plan/ports", "/plan/vlans", "/plan/local_users",
+         "/plan/snmp", "/plan/snmpv3", "/render"],
+    )
+    def test_on_every_plan_endpoint(self, client: TestClient, path: str) -> None:
+        job = client.post(
+            f"/api/v1/migration{path}", json=_stack_body(_fabric(1, 3), _stack(1, 2),
+                                                         _VSF_FABRIC.replace("2/", "3/")),
+        ).json()
+        assert job["port_renames"]["3/49"] == "2/A1", path
+        assert job["port_mapping_plan"]["applied"] is True, path
+
+    def test_an_inventory_lists_every_member_in_the_order_declared(
+        self, client: TestClient,
+    ) -> None:
+        inventory = client.post("/api/v1/migration/inventory", json={
+            "codec": "aruba_aoss", "deployment": _stack(2, 1),
+        }).json()
+        names = [port["name"] for port in inventory["ports"]]
+        assert len(names) == 104
+        assert (names[0], names[51], names[52], names[103]) == ("2/1", "2/A4", "1/1", "1/A4")
+        assert [(m["rank"], m["member_id"]) for m in inventory["members"]] == [(0, 2), (1, 1)]
+
+    def test_a_member_number_declared_twice_is_a_422(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/migration/plan", json=_stack_body(_fabric(1, 2), _stack(2, 2)),
+        )
+        assert resp.status_code == 422
+        assert "member id 2 is declared twice" in json.dumps(resp.json())

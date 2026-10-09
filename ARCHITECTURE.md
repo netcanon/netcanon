@@ -844,8 +844,14 @@ out-of-band management is the `oobm` context, not a numbered port).
 **Pairing policy** (`port_mapping.py`):
 
 * Members pair by rank, never by vendor member id — ids are sticky and
-  sparse, so a lone ex-member can be `3/N`.
-* Within a member, ports pair role to role, in order.
+  sparse, so a lone ex-member can be `3/N`.  A member's rank is its
+  place in the declaration's list, so two stacks pair in the order
+  their members are listed, and that order is how an operator chooses
+  which member goes where.  Where it puts a member on a member of
+  another number, the plan says which went to which
+  (`describe_plan`).
+* Within a member, ports pair role to role, in order.  A port never
+  changes member to find a place.
 * A used port with no position on the target is **dropped,
   explicitly**, and reported.  It is never spilled onto a port of
   another role, and never left out of the map: left to the name-shape

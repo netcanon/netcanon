@@ -163,6 +163,81 @@ class TestModelTranslationServedByEmbeddedServer:
         assert len(job["port_mapping_plan"]["pairings"]) == 52
         assert "untagged 1/48,1/A1,1/A2,1/A3,1/A4" in job["rendered"]
 
+    def test_a_stack_on_both_sides(self, tmp_path: Path) -> None:
+        """Two members declared for the source AND for the target,
+        through the embedded server: the members pair in the order
+        listed, and a member whose number changes is said."""
+        app = create_app(_settings(tmp_path))
+        port = _free_port()
+        # Not a capture: no committed capture names a port of a second
+        # member.  The names are the ones the family's VSF mode gives.
+        fabric = (
+            "; hpStack_WC Configuration Editor; Created on release #WC.16.07.0002\n"
+            'hostname "fabric"\n'
+            "trunk 1/49,3/49 trk1 lacp\n"
+            'interface 3/1\n   name "desk-b"\n   exit\n'
+            'vlan 10\n   name "users"\n   untagged 1/1-1/10,3/1-3/4\n'
+            "   tagged Trk1,3/50\n   exit\n"
+        )
+        body = {
+            "source": "aruba_aoss", "target": "aruba_aoss", "raw_text": fabric,
+            "source_deployment": {
+                "mode": "vsf",
+                "members": [{"model": "JL260A", "id": 1}, {"model": "JL260A", "id": 3}],
+            },
+            "target_deployment": {
+                "mode": "stacked",
+                "members": [
+                    {"model": "JL322A", "id": 1, "modules": {"A": "JL083A"}},
+                    {"model": "JL322A", "id": 2, "modules": {"A": "JL083A"}},
+                ],
+            },
+        }
+        short = {
+            **body,
+            "target_deployment": {
+                "mode": "stacked",
+                "members": [{"model": "JL322A", "id": 1, "modules": {"A": "JL083A"}}],
+            },
+        }
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=FakeCollector(output="! noop\n"),
+        ):
+            server = ServerThread(app, port=port, log_level="critical")
+            server.start()
+            try:
+                server.wait_ready(timeout=10.0)
+                job = _post(port, "/api/v1/migration/plan", body)
+                partial = _post(port, "/api/v1/migration/plan", short)
+            finally:
+                server.stop()
+                server.join(timeout=5.0)
+
+        assert job["status"] == "completed"
+        assert {k: v for k, v in job["port_renames"].items() if "/" in k} == {
+            "1/49": "1/A1", "3/1": "2/1", "3/2": "2/2", "3/3": "2/3", "3/4": "2/4",
+            "3/49": "2/A1", "3/50": "2/A2",
+        }
+        lines = [line.strip() for line in job["rendered"].splitlines()]
+        assert "trunk 1/A1,2/A1 trk1 lacp" in lines
+        assert lines[lines.index("interface 2/1") + 1] == 'name "desk-b"'
+        assert not [line for line in lines if "3/" in line]
+        plan = job["port_mapping_plan"]
+        assert [m["member_id"] for m in plan["source"]["members"]] == [1, 3]
+        assert [m["member_id"] for m in plan["target"]["members"]] == [1, 2]
+        (line,) = [w for w in job["warnings"] if w.startswith("port mapping:")]
+        assert line.endswith("source member 3 with target member 2")
+
+        # One member short on the target: the second member's ports are
+        # dropped and the job is not a success.
+        assert partial["status"] == "partial"
+        assert sorted(partial["port_drops"]) == ["3/1", "3/2", "3/3", "3/4", "3/49", "3/50"]
+        assert {p["reason"] for p in partial["port_mapping_plan"]["unplaced"] if p["used"]} == {
+            "no-member",
+        }
+        assert "trunk 1/A1 trk1 lacp" in partial["rendered"]
+
     def test_the_finished_run_is_checked_and_a_bad_body_is_a_422(
         self, tmp_path: Path,
     ) -> None:

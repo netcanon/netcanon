@@ -865,6 +865,26 @@ tells you which that was.  `modules` says what is fitted in each bay; a
 bay you do not mention is treated as empty, and reported back as *not
 stated*.
 
+**A stack on both sides.**  Each `members` list can hold more than
+one switch, and two stacks are paired member by member **in the order
+the two lists give them**: the first member you list for the source
+with the first you list for the target, whatever their member numbers
+are.  A VSF fabric whose members are numbered 1 and 3 lands on a stack
+numbered 1 and 2 with `3/5` as `2/5`, and the plan says in a line
+which member went to which.  The order of each list is therefore
+yours to choose: list the members in the order you want them paired.
+Within a member the ports pair as they do on one switch — a 2930F
+member's built-in uplinks become the module ports of the 2930M member
+in the same position.  A port never changes member to find a place.
+Where a source member has more access ports than the target member in
+its position, the extra ones are unplaced even if another target
+member has ports to spare; and a source member beyond the target's
+last has no place at all (`reason: "no-member"` on each of its
+`unplaced` entries) — its used ports are dropped and listed, like any
+other unplaced port.  A target member the source has no member for is
+listed in `unused_target` and left alone.  What makes the switches a
+stack is not translated: see the last limitation below.
+
 **Both devices must be declared.**  A source without a target, or a
 `target_deployment` without a source, is a 422.  The response carries
 `port_mapping_plan` when both devices were declared and the job
@@ -1025,7 +1045,9 @@ What you get back, on the job's `port_mapping_plan`:
   (`lost_tracking` lists the interface); and a VXLAN source
   interface that was dropped leaves the VTEP without the source it
   was bound to.
-* **`unused_target`** — target ports nothing ended on.
+* **`unused_target`** — target ports nothing ended on.  Between two
+  stacks that includes every port of a target member the source has
+  no member for.
 * **`rename_map`** — the pairing as a rename map, before your own
   entries: what the server handed to the translator for the ports it
   decided.
