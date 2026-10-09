@@ -55,10 +55,10 @@ YAML shape (see ``definitions/target_profiles/*.yaml`` for examples)::
 Provenance (optional, but required of any profile whose port names
 are doubtful)::
 
-    deployment_state: "pfSense Plus factory default"
+    deployment_state: "factory default, no breakout"
     evidence: inferred          # capture | vendor-doc | inferred
-    evidence_ref: "Netgate manual ..."   # capture: repo-relative fixture path
-    caveat: "pfSense Plus hardware: OPNsense has no image for this board."
+    evidence_ref: "sibling model's hardware guide ..."   # capture: repo-relative fixture path
+    caveat: "Port names taken from the 48-port sibling; not checked for this model."
 
 ``deployment_state`` exists because a port's name is a function of
 the model AND how it is deployed: an Aruba 2930F port is ``24``
@@ -290,7 +290,7 @@ class TargetProfile(BaseModel):
     Required (test-enforced) whenever :attr:`stacking` is non-empty.
     May be empty for a device with no stacking concept, but set it
     anyway when some other state decides the names — breakout mode
-    (Arista), port speed (Junos), the host OS (Netgate)."""
+    (Arista), port speed (Junos)."""
 
     evidence: ProfileEvidence | None = None
     """How well the port names and counts are established — see

@@ -53,6 +53,35 @@ class TestTargetProfilesList:
         assert body["lags"]["max"] == 60
         assert body["lags"]["prefix"] == "Trk"
 
+    @pytest.mark.usefixtures("unverified_profile_installed")
+    def test_unverified_profile_serialises_its_grade_and_caveat(
+        self, client: TestClient,
+    ):
+        """The rename modal turns its notice amber on ``inferred`` and
+        prints the caveat, so both have to reach the wire.  Exercised on
+        a synthetic profile: no shipped profile carries that grade."""
+        from tests.fixtures.target_profiles import (
+            UNVERIFIED_PROFILE_CAVEAT,
+            UNVERIFIED_PROFILE_KEY,
+        )
+
+        resp = client.get(
+            "/api/v1/migration/target-profiles/" + UNVERIFIED_PROFILE_KEY
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["evidence"] == "inferred"
+        assert body["caveat"] == UNVERIFIED_PROFILE_CAVEAT
+
+    def test_no_shipped_profile_is_flagged_unverified(self, client: TestClient):
+        data = client.get("/api/v1/migration/target-profiles").json()
+        assert data, "no profiles loaded"
+        flagged = [
+            f"{p['vendor']}/{p['model']}" for p in data
+            if p["evidence"] == "inferred"
+        ]
+        assert flagged == []
+
     def test_missing_profile_returns_404(self, client: TestClient):
         resp = client.get(
             "/api/v1/migration/target-profiles/aruba_aoss/NONEXISTENT"

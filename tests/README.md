@@ -11,6 +11,7 @@ tests/
 │   ├── definitions.py       Pre-built DeviceDefinition factory functions
 │   ├── ssh_responses.py     Canned SSH output strings per vendor
 │   ├── module_variants.py   Canonical module-variant allowlist shared with integration tier
+│   ├── target_profiles/     Synthetic target profiles (never shipped) for grades no shipped profile carries
 │   ├── synthetic/<vendor>/  Hand-crafted minimal configs per vendor (parser-feature focus)
 │   ├── real/<vendor>/       Real-capture corpus + RESULTS.md + NOTICE.md + CROSS_MESH_RESULTS.md
 │   └── cross_vendor_expectations/  Phase 3 mechanical-drift expectation tables

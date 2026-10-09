@@ -34,9 +34,8 @@ timestamp if your timezone matters for an audit.
   non-existent port.  A registry audit found a wrong port name or count in
   a third of the shipped profiles.  Each is now corrected -- from a capture
   committed here, from the vendor's own documentation, or from public
-  real-device output of the exact model -- or flagged as unverified, or
-  removed.  Every replacement was checked against its sources by a second
-  reader before landing.
+  real-device output of the exact model -- or removed.  Every replacement
+  was checked against its sources by a second reader before landing.
 
   - **Aruba 2930F** (all four).  Uplinks were `1/A1`-`1/A4` on a switch
     with no module slot; they are `49`-`52` (`25`-`28` on the 24-port),
@@ -73,12 +72,6 @@ timestamp if your timezone matters for an audit.
     names a multi-lane cage `EthernetN/1`.  The 7060CX-32S profile omitted
     its two SFP+ ports, and the 7280CR3-32P4's 400G ports are OSFP, not
     QSFP-DD.
-  - **Netgate SG-3100.**  Every role was wrong (`mvneta0` as WAN, no OPT1,
-    four invented VLAN children for the LAN jacks).  Per Netgate: WAN
-    `mvneta2`, OPT1 `mvneta0`, LAN `mvneta1`.  Its LAG ceiling drops from 4
-    to 1 and the SG-1100's from 2 to 0 (three VLAN children of one MAC
-    cannot be aggregated); the SG-1100's VLAN ceiling is 128, the limit of
-    the switch chip every jack sits behind.
   - **MikroTik CRS310-8G+2S+.**  Marked all eight copper ports PoE with a
     "170 W budget"; the switch has no PoE-out.
   - **Aruba AOS-S local-user ceiling.**  The six AOS-S profiles declared
@@ -107,12 +100,13 @@ timestamp if your timezone matters for an audit.
   fixture on every run and fails unless the fixture identifies itself as
   that model, belongs to the profile's vendor, and contains every profile
   port id as a hardware port.  The graded sets are pinned, so a grade can
-  neither appear nor vanish unreviewed.  Mutation-checked: eleven
+  neither appear nor vanish unreviewed.  Mutation-checked: fifteen
   deliberate regressions -- the four original errors re-introduced, an SVI
   and a LAG listed as ports, a profile graded against a sibling model's
-  capture, a dropped or misspelt grade, a missing caveat, a missing
-  deployment state -- each fail it.  Three profiles carry the `capture`
-  grade, eighteen `vendor-doc`, two `inferred`.
+  capture, a dropped or misspelt grade, a profile flagged with no caveat,
+  a missing deployment state, a deleted profile re-added -- each fail.
+  Three profiles carry the `capture` grade and eighteen `vendor-doc`; none
+  is graded `inferred`.
 - **The rename modal says what a profile's port names are worth.**  A
   notice under the fit-check banner shows the deployment state, the
   evidence grade and the caveat for the selected profile, turns amber when
@@ -145,9 +139,6 @@ timestamp if your timezone matters for an audit.
 - **`docs/adding-a-target-profile.md` rewritten** around a capture-backed
   worked example and the evidence-first order of work.  The previous
   worked example was the 6300M, which was wrong on five axes.
-- The two Netgate ARM profiles (SG-1100, SG-3100) are kept but graded
-  `inferred` and flagged in the modal: they are pfSense Plus hardware,
-  OPNsense has no image for either board, and the names are pfSense's.
 - The two C9500 profiles state their deployment (`standalone, switch 1`),
   as every stack-capable profile now must.  Their port ids were not
   examined and they remain ungraded.
@@ -159,6 +150,15 @@ timestamp if your timezone matters for an audit.
   / DEC697; the rack DEC2687 shares the board) are the 4-port Netboard A8,
   which already ships as `opnsense/Netboard-A8-I225` and now carries those
   model numbers in its display name.
+- **`opnsense/Netgate-SG1100` and `opnsense/Netgate-SG3100`.**  Both are
+  ARM boards that ship with pfSense Plus.  OPNsense publishes amd64
+  images only and has no build for either, so a profile filed under
+  OPNsense described a target that cannot exist -- and the SG-3100
+  profile also had every port role wrong (`mvneta0` as WAN, no OPT1, four
+  invented VLAN children for the LAN jacks).  The x86 `Netgate-SG5100`
+  profile is unaffected.  With these gone no shipped profile is graded
+  `inferred`; the grade and its amber notice remain, tested on a synthetic
+  profile under `tests/fixtures/target_profiles/`.
 
 ### Known limitations
 

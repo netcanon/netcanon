@@ -692,10 +692,11 @@ class TestRenameModalProfileNotice:
         live_server_url: str,
     ):
         """Resolves an ``inferred`` profile from the live registry
-        rather than naming one, so regrading a profile once its real
-        port names are established does not break this test.  The set
-        itself is pinned by
-        ``tests/unit/migration/test_target_profile_evidence.py``."""
+        rather than naming one.  No shipped profile carries that grade
+        (the set is pinned empty by
+        ``tests/unit/migration/test_target_profile_evidence.py``), so
+        the one found here is the synthetic profile ``conftest.py``
+        adds to the e2e server's definitions directory."""
         profiles = page.request.get(
             live_server_url + "/api/v1/migration/target-profiles"
         ).json()

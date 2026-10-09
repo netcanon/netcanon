@@ -261,6 +261,11 @@ names for that exact model, **flag it, don't rename it**: set
 `KNOWN_DOUBTFUL` in the evidence test.  Replacing one plausible name
 with another is how the registry got into this state.
 
+Flagging is for a profile whose target is real but whose names are in
+doubt.  If the target OS does not run on the hardware at all, delete
+the profile instead — there is no device for the names to be right
+on.  Two Netgate ARM profiles filed under OPNsense went that way.
+
 ### 5. Create the YAML
 
 Path: `netcanon/definitions/library/target_profiles/aruba_2930f_8g_poep.yaml`.  The

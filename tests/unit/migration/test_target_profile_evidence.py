@@ -46,8 +46,16 @@ import pytest
 
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
-from netcanon.migration.target_profiles import TargetProfile, load_profiles_dir
+from netcanon.migration.target_profiles import (
+    TargetProfile,
+    load_profile_file,
+    load_profiles_dir,
+)
 from netcanon.services.migration_detect import detect_codec
+from tests.fixtures.target_profiles import (
+    UNVERIFIED_PROFILE_KEY,
+    UNVERIFIED_PROFILE_YAML,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -164,20 +172,28 @@ EXPECTED_VENDOR_DOC_GRADED = {
 
 #: Profiles whose port names cannot be vouched for on the target they
 #: are filed under — so they are flagged to the operator rather than
-#: quietly offered.  Today that is the two Netgate ARM boxes: the names
-#: are Netgate's own, but for pfSense Plus; OPNsense has no image for
-#: either board and would not accept the SG-1100's ``mvneta0.4090``
-#: spelling in any case.
+#: quietly offered.  EMPTY today, and meant to be.  The two profiles
+#: that used to be here (Netgate SG-1100 / SG-3100, filed under
+#: OPNsense) were deleted rather than left flagged: they are pfSense
+#: Plus hardware and OPNsense has no image for either board, so no
+#: target existed for the names to be right on.
 #:
-#: Rot-fail by design.  Whoever resolves one (re-files it, deletes it,
-#: or establishes the names) changes the YAML and this set in the same
-#: PR; whoever finds a NEW profile that is wrong without an established
-#: replacement flags it and adds it here, rather than swapping one
-#: plausible name for another — which is how the registry got this way.
-KNOWN_DOUBTFUL = {
-    "opnsense/Netgate-SG1100",
-    "opnsense/Netgate-SG3100",
-}
+#: Rot-fail by design.  Whoever finds a shipped profile that is wrong
+#: without an established replacement flags it (``evidence: inferred``
+#: plus a ``caveat``) and adds its key here, rather than swapping one
+#: plausible name for another — which is how the registry got into the
+#: state the 2026-10 audit found.  Whoever resolves one (re-files it,
+#: deletes it, or establishes the names) changes the YAML and this set
+#: in the same PR.
+KNOWN_DOUBTFUL: set[str] = set()
+
+
+def _inferred_without_a_caveat(profiles: dict[str, TargetProfile]) -> list[str]:
+    """Keys of ``inferred`` profiles that do not tell the operator why."""
+    return sorted(
+        key for key, profile in profiles.items()
+        if profile.evidence == "inferred" and not profile.caveat.strip()
+    )
 
 
 class TestCaptureGradeIsChecked:
@@ -228,13 +244,31 @@ class TestGradesCarryWhatTheyPromise:
         inferred = {k for k, p in PROFILES.items() if p.evidence == "inferred"}
         assert inferred == KNOWN_DOUBTFUL
 
-    @pytest.mark.parametrize("key", sorted(KNOWN_DOUBTFUL))
-    def test_an_inferred_profile_tells_the_operator_why(self, key: str) -> None:
-        assert PROFILES[key].evidence == "inferred", key
-        assert PROFILES[key].caveat.strip(), (
-            f"{key}: `evidence: inferred` without a caveat hides the doubt "
-            f"from the one person who needs it"
+    def test_an_inferred_profile_tells_the_operator_why(self) -> None:
+        silent = _inferred_without_a_caveat(PROFILES)
+        assert not silent, (
+            f"{silent}: `evidence: inferred` without a caveat hides the "
+            f"doubt from the one person who needs it"
         )
+
+    def test_the_caveat_check_is_not_vacuous(self) -> None:
+        """No shipped profile is graded ``inferred`` today, so the test
+        above passes over an empty set.  Prove the check itself on the
+        synthetic profile the UI tests use for the amber notice: it must
+        pass as written and fail the moment its caveat is removed."""
+        fixture = load_profile_file(UNVERIFIED_PROFILE_YAML)
+        assert fixture.key == UNVERIFIED_PROFILE_KEY
+        assert fixture.evidence == "inferred"
+        assert _inferred_without_a_caveat({fixture.key: fixture}) == []
+        bare = fixture.model_copy(update={"caveat": "   "})
+        assert _inferred_without_a_caveat({bare.key: bare}) == [fixture.key]
+
+    def test_the_synthetic_unverified_profile_is_not_shipped(self) -> None:
+        """It lives under ``tests/fixtures/`` and names no real device;
+        it must never be offered to an operator."""
+        assert UNVERIFIED_PROFILE_KEY not in PROFILES
+        shipped = {p.name for p in (LIBRARY_DIR / "target_profiles").glob("*.yaml")}
+        assert UNVERIFIED_PROFILE_YAML.name not in shipped
 
     @pytest.mark.parametrize(
         "key", sorted(EXPECTED_VENDOR_DOC_GRADED | set(CAPTURE_MODEL_MARKER)),

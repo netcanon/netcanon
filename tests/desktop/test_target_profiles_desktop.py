@@ -29,6 +29,11 @@ from netcanon.definitions import LIBRARY_DIR
 from netcanon.main import create_app
 from netcanon_desktop.server import ServerThread
 from tests.conftest import FakeCollector
+from tests.fixtures.target_profiles import (
+    UNVERIFIED_PROFILE_CAVEAT,
+    UNVERIFIED_PROFILE_KEY,
+    UNVERIFIED_PROFILE_YAML,
+)
 
 pytestmark = pytest.mark.desktop
 
@@ -45,6 +50,12 @@ def _settings(tmp_path) -> Settings:
     # least one device definition to render.
     defs = tmp_path / "definitions"
     shutil.copytree(LIBRARY_DIR, defs)
+    # Plus one synthetic profile graded `inferred`: no shipped profile
+    # carries that grade, and the caveat path still has to be proven.
+    shutil.copyfile(
+        UNVERIFIED_PROFILE_YAML,
+        defs / "target_profiles" / UNVERIFIED_PROFILE_YAML.name,
+    )
     configs_dir = tmp_path / "configs"
     configs_dir.mkdir()
     return Settings(
@@ -94,9 +105,10 @@ class TestProfileProvenanceServedByEmbeddedServer:
         assert c9300["deployment_state"]
 
         # An unverified profile carries the caveat the operator must see.
-        inferred = [p for p in profiles if p["evidence"] == "inferred"]
-        assert inferred, "no profile is graded `inferred` any more"
-        assert all(p["caveat"].strip() for p in inferred)
+        # Only the synthetic one is graded `inferred`: nothing shipped is.
+        inferred = {k for k, p in by_key.items() if p["evidence"] == "inferred"}
+        assert inferred == {UNVERIFIED_PROFILE_KEY}
+        assert by_key[UNVERIFIED_PROFILE_KEY]["caveat"] == UNVERIFIED_PROFILE_CAVEAT
 
         # The rename modal ships the element that renders them, and the
         # definitions browser lists them.

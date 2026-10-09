@@ -341,9 +341,7 @@ class TestRealProfilesShipped:
             16.11 Advanced Traffic Management Guide)
           * Aruba 3810M / 6300M / Cisco C9x00: 4094 (protocol ceiling,
             device enforces at full range)
-          * MikroTik / OPNsense: 4094 (protocol ceiling) -- except the
-            Netgate SG-1100, whose every jack is behind a switch chip
-            that carries at most 128 VLANs
+          * MikroTik / OPNsense: 4094 (protocol ceiling)
           * Juniper: the figure each model's datasheet prints (4093 /
             4091 / 4093), not the VLAN-id range
           * FortiGate 40F / 60F: 512 (FortiOS 7.2 Max Values Table,
@@ -385,14 +383,12 @@ class TestRealProfilesShipped:
         for key, p in profiles.items():
             if key.startswith("cisco_iosxe/C9300-"):
                 assert p.max_vlans == 4094, key
-        # OPNsense profiles ship 4094 -- bar the SG-1100 (switch-chip
-        # limit, per Netgate).
+        # OPNsense profiles uniformly ship 4094.
         opnsense_profiles = {k: p for k, p in profiles.items()
                              if k.startswith("opnsense/")}
         assert len(opnsense_profiles) >= 16  # at least what we shipped
         for key, p in opnsense_profiles.items():
-            expected = 128 if key == "opnsense/Netgate-SG1100" else 4094
-            assert p.max_vlans == expected, key
+            assert p.max_vlans == 4094, key
         # Arista EOS family uniformly 4094: the usable VLAN-id range.
         # (Arista's datasheets print "4096 VLANs"; the source string
         # in each profile says so rather than citing them for 4094.)
@@ -454,50 +450,25 @@ class TestRealProfilesShipped:
                 f"'FortiOS 7.x'); got: {p.max_vlans_source!r}"
             )
 
-    def test_netgate_sg1100_shape(self):
-        """Netgate SG-1100 -- the three jacks as pfSense Plus exposes
-        them, VLAN children of ``mvneta0``.  The names are Netgate's;
-        the box is pfSense hardware with no OPNsense image, so the
-        profile is graded ``inferred`` and says so to the operator."""
+    def test_no_profile_for_hardware_opnsense_does_not_run_on(self):
+        """The Netgate SG-1100 and SG-3100 are ARM boards that ship
+        with pfSense Plus.  OPNsense publishes amd64 images only and
+        has no build for either, so a profile filed under ``opnsense``
+        described a target that cannot exist; both were deleted in
+        2026-10.  (Their port names had also been wrong: the SG-3100
+        profile had every role reversed.)  This keeps them from coming
+        back, and keeps any other ``mvneta`` -- the Marvell ARM
+        Ethernet driver -- port from being offered for OPNsense.  The
+        x86 SG-5100 stays: OPNsense installs on it."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
-        p = profiles["opnsense/Netgate-SG1100"]
-        assert p.port_count == 3
-        assert p.port_ids() == [
-            "mvneta0.4090", "mvneta0.4091", "mvneta0.4092",
-        ]
-        # WAN default is the first port (uplink kind).
-        assert p.lookup_port("mvneta0.4090").kind == "uplink"
-        assert p.lookup_port("mvneta0.4091").kind == "physical"
-        assert p.lookup_port("mvneta0.4092").kind == "physical"
-        assert p.evidence == "inferred"
-        assert "pfSense" in p.caveat
-        # Every jack is behind the switch chip, which carries 128 VLANs.
-        assert p.max_vlans == 128
-        assert p.max_local_users is None
-
-    def test_netgate_sg3100_shape(self):
-        """Netgate SG-3100 -- two routed ports and ONE interface for the
-        4-port LAN switch, per Netgate's I/O ports table: WAN is
-        ``mvneta2``, OPT1 is ``mvneta0``, LAN is ``mvneta1``.
-
-        Until 2026-10 this test pinned five ids with every role wrong
-        (``mvneta0`` as WAN, no OPT1, and the LAN jacks as VLAN
-        children ``mvneta2.4091``-``4094``)."""
-        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
-        p = profiles["opnsense/Netgate-SG3100"]
-        assert p.port_ids() == ["mvneta2", "mvneta0", "mvneta1"]
-        assert p.port_ids(kind="uplink") == ["mvneta2"]       # WAN
-        assert p.port_ids(kind="physical") == ["mvneta0", "mvneta1"]
-        assert "WAN" in p.lookup_port("mvneta2").notes
-        assert "OPT1" in p.lookup_port("mvneta0").notes
-        assert "LAN" in p.lookup_port("mvneta1").notes
-        # The fictitious per-jack VLAN children are gone.
-        for i in range(1, 5):
-            assert p.lookup_port(f"mvneta2.409{i}") is None
-        assert p.evidence == "inferred"
-        assert "pfSense" in p.caveat
-        assert p.max_vlans == 4094
-        assert p.max_local_users is None
+        assert "opnsense/Netgate-SG1100" not in profiles
+        assert "opnsense/Netgate-SG3100" not in profiles
+        assert "opnsense/Netgate-SG5100" in profiles
+        for key, p in profiles.items():
+            if not key.startswith("opnsense/"):
+                continue
+            arm = [pid for pid in p.port_ids() if pid.startswith("mvneta")]
+            assert not arm, f"{key}: {arm}"
 
     def test_deciso_dec600_is_the_netboard_a8_profile(self):
         """There is no 5-port Celeron Deciso DEC600.  The DEC600 series

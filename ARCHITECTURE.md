@@ -649,7 +649,9 @@ The rename modal shows all three under the fit-check banner
 `inferred`), and `/definitions` lists them per profile.  A profile
 that is known wrong but whose correct names are not established for
 the exact model is **flagged, not renamed** — replacing one
-plausible name with another is how the registry got here.
+plausible name with another is how the registry got here.  A profile
+for hardware its target OS does not run on is neither: it is deleted,
+since no device exists for the names to be right on.
 
 Selecting a profile still has **no effect on auto-translated names**:
 the codec formatter derives a target name from the shape of the
@@ -682,9 +684,7 @@ profile currently declares `max_vlans`; per-vendor rationale:
 * Aruba 3810M / 6300M + Cisco C9300 / C9500 — 4094 (enforced
   protocol ceiling).
 * MikroTik RouterOS + OPNsense — 4094 (protocol ceiling;
-  software-VLAN stacks have no hardware cap).  One exception: the
-  Netgate SG-1100 is 128, because every jack sits behind a switch
-  chip that carries no more.
+  software-VLAN stacks have no hardware cap).
 * Juniper — the figure each model's datasheet prints (4093 / 4091 /
   4093), which is one or three short of the VLAN-id range.
 * Arista — 4094, the usable VLAN-id range (the datasheets print
