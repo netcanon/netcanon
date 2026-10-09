@@ -147,6 +147,9 @@ timestamp if your timezone matters for an audit.
     no line that finds a port by its hardware; and a RouterOS port
     you had named, or named in the modal, says which port of the
     model it is and which port of the target it is on.
+  - A stack can be declared on both sides, a member to a row; the
+    rows pair in order, and where that puts a member on a member of
+    another number the strip and each port's row say so.
   - A same-vendor translation (Aruba to Aruba, say) renames nothing
     by itself and used to open on "No port names recognised"; the
     table now lists every port the config uses.

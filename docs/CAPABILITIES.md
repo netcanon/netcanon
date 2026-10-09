@@ -843,6 +843,11 @@ Ports pane choose the *Source device* and the *Target device*.
 * A device is a model from a model family — then you also choose its
   deployment mode, the module in each bay and, for a stack, its
   members — or a profile, where no family describes the device yet.
+* A stack has one row of controls per member (**+ stack member** adds
+  one).  Two stacks pair row by row — the first source member with
+  the first target member — whatever numbers the members carry; where
+  the numbers differ the strip above the table says which member went
+  to which, and each port's row says its member.
 * The source device is filled in from the config where the config
   states it; open "Read from the config" under it to see the lines.
   It is a proposal: a `member` or `flexible-module` line shows what a

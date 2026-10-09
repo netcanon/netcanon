@@ -187,6 +187,13 @@
     display:inline-flex; align-items:center; gap:.4rem;
     padding-left:.5rem; border-left:2px solid var(--border-strong);
   }
+  /* A stack of several switches: a line per member under the row,
+     in line with the selects above it. */
+  .mig-device-members-stack {
+    flex:1 1 100%; display:flex; flex-direction:column;
+    align-items:flex-start; gap:.25rem; padding-left:6.9rem;
+  }
+  .mig-device-members-stack + .mig-device-add { margin-left:6.9rem; }
   #mig-rename-modal-toolbar .mig-device-member label {
     font-weight:400; display:inline-flex; align-items:center; gap:.25rem;
   }

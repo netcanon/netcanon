@@ -379,6 +379,11 @@
     var decl = _deviceDecl[side];
     var fam = _declFamily(decl);
     membersEl.textContent = '';
+    // More than one switch: a line per member, so that a member's
+    // number, model and modules read as one thing.
+    membersEl.classList.toggle(
+      'mig-device-members-stack', !!fam && decl.members.length > 1,
+    );
     modeSel.textContent = '';
     if (!fam) {
       modeSel.style.display = 'none';
@@ -406,8 +411,10 @@
     box.className = 'mig-device-member';
     var base = 'migrate-device-' + side + '-member-' + rank;
     box.setAttribute('data-testid', base);
+    // The member's number comes first on its line, then what it is.
+    var modelSel = null;
     if (rank > 0) {
-      var modelSel = document.createElement('select');
+      modelSel = document.createElement('select');
       modelSel.setAttribute('data-testid', base + '-model');
       modelSel.setAttribute('aria-label', 'Model of stack member ' + (rank + 1));
       Object.keys(fam.models || {}).forEach(function(modelKey) {
@@ -421,7 +428,6 @@
         member.modules = {};
         deviceDeclChanged(side, true);
       });
-      box.appendChild(modelSel);
     }
     if (range) {
       var idLabel = document.createElement('label');
@@ -443,6 +449,7 @@
       idLabel.appendChild(idInput);
       box.appendChild(idLabel);
     }
+    if (modelSel) box.appendChild(modelSel);
     var bays = ((fam.models || {})[member.model] || {}).bays || {};
     Object.keys(bays).forEach(function(bay) {
       var bayLabel = document.createElement('label');
@@ -901,7 +908,9 @@
     if (!plan || !plan.applied) return meta;
     var renames = (_lastJob && _lastJob.port_renames) || {};
     var dropped = new Set((_lastJob && _lastJob.port_drops) || []);
-    var stacked = ((plan.source && plan.source.members) || []).length > 1;
+    var sourceMembers = (plan.source && plan.source.members) || [];
+    var targetMembers = (plan.target && plan.target.members) || [];
+    var stacked = sourceMembers.length > 1;
     var undecided = new Set(plan.unresolved_ports || []);
     var labelled = plan.labelled_ports || {};
     var hardware = plan.target_hardware || {};
@@ -930,10 +939,25 @@
       }
       return flags;
     }
+    // Stack members pair in the order they are listed, so a member's
+    // place and its number are two things.  A row names its member by
+    // NUMBER, as the port's own name does, and says where that member
+    // went when it is a member of another number, or no member at all.
+    function memberOf(rank) {
+      var from = sourceMembers[rank];
+      var number = (from && from.member_id !== null && from.member_id !== undefined)
+        ? from.member_id : rank + 1;
+      var to = targetMembers[rank];
+      if (!to) return ' · member ' + number + ' → no member';
+      if (to.member_id !== null && to.member_id !== undefined
+          && to.member_id !== number) {
+        return ' · member ' + number + ' → member ' + to.member_id;
+      }
+      return ' · member ' + number;
+    }
     function where(rank, role, position) {
       return role + ' ' + (position + 1)
-        + (stacked && rank !== null && rank !== undefined
-            ? ' · member ' + (rank + 1) : '');
+        + (stacked && rank !== null && rank !== undefined ? memberOf(rank) : '');
     }
     (plan.pairings || []).forEach(function(p) {
       order += 1;
@@ -1077,6 +1101,25 @@
     }
   }
 
+  /** Members the pairing put on a member of another NUMBER.  Only a
+   *  member the config uses is named, as in the plan's own line. */
+  function renumberedMembers(plan) {
+    var theirs = (plan.target && plan.target.members) || [];
+    var used = {};
+    (plan.pairings || []).forEach(function(p) {
+      if (p.used) used[p.member_rank] = true;
+    });
+    return ((plan.source && plan.source.members) || []).filter(function(m) {
+      var to = theirs[m.rank];
+      return used[m.rank] && to
+        && m.member_id !== null && m.member_id !== undefined
+        && to.member_id !== null && to.member_id !== undefined
+        && to.member_id !== m.member_id;
+    }).map(function(m) {
+      return 'member ' + m.member_id + ' → member ' + theirs[m.rank].member_id;
+    });
+  }
+
   function _planChip(el, testid, text, extraClass) {
     var chip = document.createElement('span');
     chip.className = 'mig-plan-chip' + (extraClass ? ' ' + extraClass : '');
@@ -1169,6 +1212,12 @@
     title.textContent = 'Ports paired by position';
     el.appendChild(title);
     _planChip(el, 'migrate-rename-plan-paired', paired + ' paired');
+    var renumbered = renumberedMembers(plan);
+    if (renumbered.length) {
+      // Not a problem: stack members pair in the order they are
+      // listed, and this is where that changed a member's number.
+      _planChip(el, 'migrate-rename-plan-members', renumbered.join('; '), 'chip-info');
+    }
     if (unplaced) {
       _planChip(el, 'migrate-rename-plan-unplaced',
         unplaced + ' with no place on the target', 'chip-warn');
@@ -1199,8 +1248,8 @@
         + ' hardware in the output', 'chip-block');
     }
     if (stale) {
-      // Nothing in the port map clears this one: the route has to be
-      // corrected in the output.
+      // The route has to name interfaces the output has: corrected in
+      // the output, or by entries that keep the names it uses.
       _planChip(el, 'migrate-rename-plan-stale-routes',
         stale + ' route' + (stale === 1 ? '' : 's')
         + ' still name' + (stale === 1 ? 's' : '') + ' a port that moved',

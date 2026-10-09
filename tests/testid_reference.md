@@ -657,18 +657,19 @@ position, counted from 0:
 | `migrate-rename-plan-hint`            | `<span>`   | What to do next, while there is no current plan |
 | `migrate-rename-plan-unapplied`       | `<span>`   | Why no pairing was made |
 | `migrate-rename-plan-paired`          | `<span>`   | "N paired" |
+| `migrate-rename-plan-members`         | `<span>`   | "member 3 → member 2" -- a stack member the pairing put on a member of another number (members pair in the order they are listed); absent when every number agrees |
 | `migrate-rename-plan-unplaced`        | `<span>`   | "N with no place on the target"; absent at zero |
 | `migrate-rename-plan-off-inventory`   | `<span>`   | "N not on the source device"; absent at zero |
 | `migrate-rename-plan-displaced`       | `<span>`   | "N displaced"; absent at zero |
 | `migrate-rename-plan-landed`          | `<span>`   | "N on a port the target does not have" -- logical names given a port-shaped name the target lacks; absent at zero |
 | `migrate-rename-plan-fused`           | `<span>`   | Target ports given more than one source; absent at zero |
 | `migrate-rename-plan-unbound`         | `<span>`   | "N not found by its/their hardware in the output" -- a RouterOS target writes no Ethernet line for a port whose name reads as a VLAN, a bridge or a LAG; only another name clears it; absent at zero |
-| `migrate-rename-plan-stale-routes`    | `<span>`   | "N route(s) still name a port that moved" -- nothing in the port map clears it; absent at zero |
+| `migrate-rename-plan-stale-routes`    | `<span>`   | "N route(s) still name a port that moved" -- cleared by correcting the route in the output, or by entries that keep the names it uses; absent at zero |
 | `migrate-rename-plan-pending`         | `<span>`   | "N need your decision", or "decisions recorded -- Apply to confirm" once the operator has decided them in the modal |
 | `migrate-rename-plan-accept`          | `<button>` | "Accept as shown" -- records the outcome on screen as the operator's decision for every undecided name (a dropped port stays dropped, a kept one stays where it landed).  Apply confirms it |
 | `migrate-rename-plan-report`          | `<details>`| The plan's own warning lines, in the server's words |
 | `migrate-rename-plan-state-<source>`  | `<td>`     | In a port's row, in place of an auto target: what the plan did with a name it could not pair |
-| `migrate-rename-why-<source>`         | `<td>`     | The "Position" column, present while a plan is on screen: the role and position that decided the pairing ("uplink 1"), and flags (slower target port, no PoE) |
+| `migrate-rename-why-<source>`         | `<td>`     | The "Position" column, present while a plan is on screen: the role and position that decided the pairing ("uplink 1"), and flags (slower target port, no PoE).  For a source of more than one member, the member's NUMBER too ("uplink 1 · member 2"), and where that member went when it is another number or none ("· member 3 → member 2", "· member 3 → no member") |
 | `migrate-rename-decision-<source>`    | `<span>`   | "?" marker on a row whose port still needs the operator's decision; the row carries CSS class `needs-decision` |
 | `migrate-rename-decision-count-<kind>` | `<span>`  | "N need a decision" chip on a kind section's header |
 

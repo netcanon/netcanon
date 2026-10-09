@@ -345,6 +345,12 @@
           autoCell = '<td class="mig-rename-no-auto" data-testid="'
             + 'migrate-rename-plan-state-' + escapeHtml(row.source) + '">'
             + escapeHtml(meta.text) + '</td>';
+        } else if (meta && meta.state === 'paired' && !isAutoDropped) {
+          // The port plan gave this port a place.  Where that place
+          // has the port's own name -- an access port between two
+          // stacks, any port between two switches of one model -- it
+          // is still a pairing, and the name is shown as one.
+          autoCell = '<td>' + escapeHtml(row.auto) + '</td>';
         } else if (row.plain && row.auto === row.source && !isAutoDropped) {
           autoCell = '<td class="mig-rename-no-auto">(unchanged)</td>';
         } else if (isAutoDropped) {

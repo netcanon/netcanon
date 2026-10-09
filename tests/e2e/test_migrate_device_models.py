@@ -274,6 +274,29 @@ class TestStandalone2930FOntoStacked2930M:
         expect(note).to_have_attribute("data-evidence", "vendor-doc")
         expect(_plan(page)).to_have_attribute("data-state", "ready")
 
+    def test_a_port_paired_with_a_port_of_the_same_name_is_shown_as_paired(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """The same model on both sides: every port is paired with its
+        namesake.  A row shows that name as its target -- not a note
+        that nothing was mapped."""
+        expect(_source_note(page)).to_be_visible()
+        _pick_target(page, SOURCE_2930F_48G)
+        expect(page.locator(_tid("migrate-device-target-note-ports"))).to_contain_text("52 ports")
+        _apply(page)
+        expect(_plan(page)).to_have_attribute("data-state", "ok")
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("52 paired")
+        row = page.locator(_tid("migrate-rename-row-49"))
+        expect(row).to_have_attribute("data-plan-state", "paired")
+        expect(row.locator("td").nth(1)).to_have_text("49")
+        expect(page.locator(_tid("migrate-rename-row-1")).locator("td").nth(1)).to_have_text("1")
+        # No paired row says nothing was mapped.  (A row for a name the
+        # translator left as it was -- a VLAN interface, a LAG -- still
+        # may: that is what the note is for.)
+        expect(
+            page.locator('tr[data-plan-state="paired"]').get_by_text("needs override")
+        ).to_have_count(0)
+
     def test_apply_pairs_every_port_by_position(
         self, aoss_2930f: MigratePage, page: Page,
     ) -> None:
@@ -506,6 +529,193 @@ class TestStackMembers:
         expect(page.locator(_tid("migrate-device-target-note-ports"))).to_have_text(
             re.compile(r"^52 ports: 1 . A4$")
         )
+
+
+# ---------------------------------------------------------------------------
+# A stack on both sides
+# ---------------------------------------------------------------------------
+
+#: Two 2930F-48G-4SFP as one VSF fabric; ``{m}`` is the number of the
+#: second member.  Not a capture: no committed capture names a port of
+#: a second member.  The port names are the ones the family's VSF mode
+#: gives, the ``vsf`` stanza is the nested form of HPE's guide with
+#: placeholder addresses, and ports 51-52 of each member are the
+#: fabric's own links.  The two members carry different VLANs.
+_VSF_FABRIC_OF = """; hpStack_WC Configuration Editor; Created on release #WC.16.07.0002
+hostname "fabric"
+vsf
+   enable domain 1
+   member 1
+      type "JL260A" mac-address aabbcc-000001
+      priority 200
+      link 1 1/51-1/52
+      exit
+   member {m}
+      type "JL260A" mac-address aabbcc-00000{m}
+      link 1 {m}/51-{m}/52
+      exit
+   port-speed 1g
+   exit
+trunk 1/49,{m}/49 trk1 lacp
+interface 1/1
+   name "desk-a"
+   exit
+interface {m}/1
+   name "desk-b"
+   exit
+vlan 1
+   name "DEFAULT_VLAN"
+   no untagged 1/1-1/10,{m}/1-{m}/30
+   untagged 1/11-1/48,1/50,{m}/31-{m}/48,{m}/50
+   tagged Trk1
+   exit
+vlan 10
+   name "users"
+   untagged 1/1-1/10,{m}/1-{m}/4
+   tagged Trk1,{m}/50
+   exit
+vlan 20
+   name "voice"
+   untagged {m}/5-{m}/30
+   tagged Trk1,1/50
+   exit
+"""
+
+
+def _open_fabric(page: Page, base: str, second: int = 2) -> MigratePage:
+    """The fabric translated AOS-S to AOS-S, modal open, source read."""
+    mp = _translate(page, base, "aruba_aoss", "aruba_aoss", _VSF_FABRIC_OF.format(m=second))
+    page.locator(_tid("migrate-rename-open-btn")).click()
+    expect(_source_note(page)).to_be_visible()
+    return mp
+
+
+def _pick_a_two_member_stack(page: Page) -> None:
+    _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+    page.locator(_tid("migrate-device-target-add-member")).click()
+    expect(page.locator(_tid("migrate-device-target-note-ports"))).to_have_text(
+        re.compile(r"^104 ports: 1/1 . 2/A4$")
+    )
+
+
+class TestAStackOnBothSides:
+    """A two-member VSF fabric as the source and a two-member 2930M
+    stack as the target.  The members pair row by row, in the order
+    the two pickers list them."""
+
+    def test_the_fabric_is_read_from_the_config_member_by_member(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """Each ``member N`` block of the ``vsf`` stanza is a row of
+        the source picker, with the number the config gives it."""
+        _open_fabric(page, live_server_url, second=3)
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value(
+            SOURCE_2930F_48G
+        )
+        expect(page.locator(_tid("migrate-device-source-mode-select"))).to_have_value("vsf")
+        expect(page.locator(_tid("migrate-device-source-member-0-id"))).to_have_value("1")
+        expect(page.locator(_tid("migrate-device-source-member-1-id"))).to_have_value("3")
+        expect(page.locator(_tid("migrate-device-source-member-1-model"))).to_have_value(
+            "2930F-48G-4SFP"
+        )
+        expect(page.locator(_tid("migrate-device-source-member-2"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-device-source-note-ports"))).to_have_text(
+            re.compile(r"^104 ports: 1/1 . 3/52$")
+        )
+
+    def test_two_stacks_pair_member_by_member(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        mp = _open_fabric(page, live_server_url)
+        _pick_a_two_member_stack(page)
+        body = _apply(page)
+        assert body["source_deployment"]["mode"] == "vsf"
+        assert [(m["model"], m["id"]) for m in body["source_deployment"]["members"]] == [
+            ("2930F-48G-4SFP", 1), ("2930F-48G-4SFP", 2),
+        ]
+        assert [(m["id"], m["modules"]) for m in body["target_deployment"]["members"]] == [
+            (1, {"A": "JL083A"}), (2, {"A": "JL083A"}),
+        ]
+        expect(_plan(page)).to_have_attribute("data-state", "ok")
+        # 104 ports, less the four the fabric uses as its own links.
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("100 paired")
+        # The member numbers agree, so there is nothing to say of them.
+        expect(page.locator(_tid("migrate-rename-plan-members"))).to_have_count(0)
+        # An uplink of the SECOND member lands on the second member's module.
+        row = page.locator(_tid("migrate-rename-row-2/49"))
+        expect(row).to_have_attribute("data-plan-state", "paired")
+        expect(row.locator("td").nth(1)).to_have_text("2/A1")
+        expect(page.locator(_tid("migrate-rename-why-2/49"))).to_have_text("uplink 1 · member 2")
+        expect(page.locator(_tid("migrate-rename-why-1/50"))).to_have_text("uplink 2 · member 1")
+        expect(page.locator(_tid("migrate-rename-why-2/30"))).to_have_text("access 30 · member 2")
+        # An access port keeps its name between the two stacks.  That is
+        # a pairing like any other, and the row shows it as one.
+        expect(page.locator(_tid("migrate-rename-row-2/30")).locator("td").nth(1)).to_have_text("2/30")
+        expect(page.locator(_tid("migrate-rename-row-1/1")).locator("td").nth(1)).to_have_text("1/1")
+        # No paired row says nothing was mapped.  (A row for a name the
+        # translator left as it was -- a VLAN interface, a LAG -- still
+        # may: that is what the note is for.)
+        expect(
+            page.locator('tr[data-plan-state="paired"]').get_by_text("needs override")
+        ).to_have_count(0)
+        # A LAG with a port on each member keeps one on each.
+        expect(mp.output).to_contain_text("trunk 1/A1,2/A1 trk1 lacp")
+        expect(mp.output).to_contain_text("tagged 1/A2,Trk1")
+
+    def test_a_member_that_lands_on_another_number_is_said(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """The fabric's second member is number 3; the stack's is 2.
+        Rows pair in order, so every port of member 3 is renamed --
+        and the strip and each row say why."""
+        mp = _open_fabric(page, live_server_url, second=3)
+        _pick_a_two_member_stack(page)
+        _apply(page)
+        expect(_plan(page)).to_have_attribute("data-state", "ok")
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("100 paired")
+        expect(page.locator(_tid("migrate-rename-plan-members"))).to_have_text(
+            "member 3 → member 2"
+        )
+        row = page.locator(_tid("migrate-rename-row-3/49"))
+        expect(row.locator("td").nth(1)).to_have_text("2/A1")
+        expect(page.locator(_tid("migrate-rename-why-3/49"))).to_have_text(
+            "uplink 1 · member 3 → member 2"
+        )
+        expect(page.locator(_tid("migrate-rename-row-3/7")).locator("td").nth(1)).to_have_text("2/7")
+        expect(page.locator(_tid("migrate-rename-why-1/1"))).to_have_text("access 1 · member 1")
+        expect(page.locator(_tid("migrate-rename-plan-report"))).to_contain_text(
+            "stack members pair in the order they are declared, not by member number: "
+            "source member 3 with target member 2"
+        )
+        expect(mp.output).to_contain_text("trunk 1/A1,2/A1 trk1 lacp")
+        expect(mp.output).not_to_contain_text("3/")
+
+    def test_a_member_the_target_has_no_member_for(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """Two members onto one switch: the second member's ports have
+        no member to go to.  They are dropped, each row says so, and
+        the plan waits for a decision."""
+        mp = _open_fabric(page, live_server_url)
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        expect(page.locator(_tid("migrate-device-target-note-ports"))).to_contain_text("52 ports")
+        _apply(page)
+        expect(_plan(page)).to_have_attribute("data-state", "warn")
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("50 paired")
+        expect(page.locator(_tid("migrate-rename-plan-unplaced"))).to_have_text(
+            "50 with no place on the target"
+        )
+        row = page.locator(_tid("migrate-rename-row-2/1"))
+        expect(row).to_have_attribute("data-plan-state", "unplaced")
+        expect(page.locator(_tid("migrate-rename-plan-state-2/1"))).to_contain_text(
+            "the target has no stack member in this position"
+        )
+        expect(page.locator(_tid("migrate-rename-why-2/1"))).to_have_text(
+            "access 1 · member 2 → no member"
+        )
+        expect(page.locator(_tid("migrate-rename-why-1/1"))).to_have_text("access 1 · member 1")
+        # The LAG keeps its port on the member that is there.
+        expect(mp.output).to_contain_text("trunk 1/A1 trk1 lacp")
 
 
 # ---------------------------------------------------------------------------
