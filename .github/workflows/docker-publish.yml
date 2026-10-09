@@ -204,7 +204,7 @@ jobs:
           exit 1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       # Resolve whether the optional Docker Hub mirror is configured.  The
       # `secrets` context is NOT available in a step-level `if:`, so we map
@@ -321,7 +321,7 @@ jobs:
       # tests/unit/test_docker_publish_signing_window.py.
       - name: Build and push
         id: build
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
           push: true
@@ -451,7 +451,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v4.37.9
+        uses: github/codeql-action/upload-sarif@v4.38.1
         continue-on-error: true   # reporting only; never fail a publish (image is signed + attested by now)
         if: always()      # upload even if Trivy failed, so partial findings still surface
         with:
