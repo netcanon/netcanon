@@ -88,6 +88,13 @@ Device models (model-to-model port mapping):
           family, or a target-profile key) to its port inventory:
           every port by its real name, with role, position and
           evidence grade.
+    POST /api/v1/migration/detect-deployment
+        → read the source device out of the config itself: the
+          part numbers, modules and stacking state it states,
+          resolved against the model families and checked against
+          the port names the config uses.  A proposal to confirm,
+          with the config lines it was read from; never applied
+          by itself.
 
 Declaring both devices on a plan request — ``source_deployment`` or
 ``source_profile``, with ``target_deployment`` or ``target_profile`` —
@@ -129,6 +136,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from ...migration.codecs.registry import get_codec
+from ...migration.deployment_detect import propose_deployment
 from ...migration.device_models import FamilyDef
 from ...migration.target_profiles import TargetProfile
 from ...models.migration import (
@@ -137,7 +145,7 @@ from ...models.migration import (
     MigrationJob,
     MigrationPlanRequest,
 )
-from ...models.port_inventory import DeploymentSpec, Inventory
+from ...models.port_inventory import DeploymentProposal, DeploymentSpec, Inventory
 from ...services.migration_detect import DetectCandidate, detect_codec
 from ...storage.base import BaseConfigStore
 from ..deps import get_storage
@@ -167,6 +175,23 @@ class MigrationDetectRequest(BaseModel):
     raw_text: str | None = Field(default=None, max_length=10_000_000)
     source_filename: str | None = None
     min_confidence: int = Field(default=1, ge=0, le=100)
+
+
+class DeploymentDetectRequest(BaseModel):
+    """Body for ``POST /api/v1/migration/detect-deployment``.
+
+    Exactly one of ``raw_text`` / ``source_filename`` is required,
+    as on a plan request.
+    """
+
+    source: str
+    """Registered source codec name.  Its vendor selects the detector
+    and the model families a part number is looked up in."""
+
+    # The same cap as MigrationPlanRequest: this endpoint parses the
+    # text too.
+    raw_text: str | None = Field(default=None, max_length=10_000_000)
+    source_filename: str | None = None
 
 
 class InventoryRequest(BaseModel):
@@ -933,3 +958,47 @@ def compile_inventory(body: InventoryRequest, request: Request) -> Inventory:
         "", codec, body.deployment, body.profile, body.module,
         get_target_profiles(request), get_model_families(request),
     )
+
+
+@router.post(
+    "/detect-deployment",
+    response_model=DeploymentProposal,
+    summary="Propose the source device from the config itself",
+    responses={
+        404: {"description": "source_filename does not exist"},
+        422: {"description": "Invalid codec or input specification"},
+    },
+)
+def detect_source_deployment(
+    body: DeploymentDetectRequest,
+    request: Request,
+    storage: BaseConfigStore = Depends(get_storage),
+) -> DeploymentProposal:
+    """Read which device a config says it came from.
+
+    A ``show running-config`` often states its own hardware — the
+    chassis part number, the fitted modules, whether it is stacked.
+    This reads those lines, resolves them against the model families,
+    and returns a ``deployment`` ready to send back as a plan
+    request's ``source_deployment``, so an operator confirms the
+    source device instead of typing it.
+
+    It is a proposal, and says how far to trust it:
+
+    * ``evidence`` — the config lines it was read from;
+    * ``notes`` — what those lines can and cannot show (a member or
+      module line states what the device is PROVISIONED for, not what
+      is fitted), and why no deployment was proposed when none was;
+    * ``missing_ports`` / ``consistent`` — the check against the
+      config: port names it uses that the proposed device does not
+      have.  A module the config does not state is the usual cause.
+
+    ``deployment`` is ``null`` when the config does not state its
+    device, when no model family describes the part number it states
+    (``unknown_parts``), or when no detector exists for the vendor
+    yet.  That is a 200, not an error: "the config does not say" is an
+    answer.  Nothing is translated and nothing is stored.
+    """
+    codec = resolve_adapter_or_422(body.source, side="source")
+    raw_text = resolve_input_text(body, storage)
+    return propose_deployment(codec, raw_text, get_model_families(request))

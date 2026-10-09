@@ -4,6 +4,7 @@ API integration tests for model-to-model port mapping.
 Covers:
   * GET  /api/v1/migration/model-families — the families a picker is built from
   * POST /api/v1/migration/inventory — one declared device, compiled to its ports
+  * POST /api/v1/migration/detect-deployment — the source device, read from the config
   * POST /api/v1/migration/plan (and the per-pane endpoints) with
     ``source_deployment`` / ``target_deployment`` or profile keys —
     positional port pairing and ``port_mapping_plan`` on the job
@@ -1152,3 +1153,123 @@ class TestAStackOnBothSides:
         )
         assert resp.status_code == 422
         assert "member id 2 is declared twice" in json.dumps(resp.json())
+
+
+# ---------------------------------------------------------------------------
+# Reading the source device from the config
+# ---------------------------------------------------------------------------
+
+#: A real one-member 2930M stack: JL323A with a JL083A.
+CAPTURE_2930M = (
+    REPO_ROOT / "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg"
+).read_text(encoding="utf-8")
+
+
+class TestDetectDeployment:
+    URL = "/api/v1/migration/detect-deployment"
+
+    def test_a_standalone_switch_is_read_from_its_banner(self, client: TestClient) -> None:
+        resp = client.post(self.URL, json={"source": "aruba_aoss", "raw_text": CAPTURE_2930F})
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["stated"] is True
+        assert proposal["deployment"] == SOURCE_2930F | {
+            "members": [{"model": "2930F-48G-4SFP", "id": None, "modules": {}}],
+        }
+        assert (proposal["family"], proposal["mode"]) == ("aruba_aoss/2930F", "standalone")
+        assert proposal["evidence"] == [
+            "; JL260A Configuration Editor", "module 1 type jl260a",
+        ]
+        assert (proposal["consistent"], proposal["missing_ports"]) == (True, [])
+        assert proposal["inventory"]["port_count"] == 52
+
+    def test_a_stack_is_read_from_its_stanza(self, client: TestClient) -> None:
+        proposal = client.post(
+            self.URL, json={"source": "aruba_aoss", "raw_text": CAPTURE_2930M},
+        ).json()
+        assert proposal["fabric"] == "stacking"
+        assert proposal["deployment"] == {
+            "mode": "stacked",
+            "members": [
+                {"model": "2930M-40G-8SR-PoEP", "id": 1, "modules": {"A": "JL083A"}},
+            ],
+        }
+        # What the lines can and cannot show is part of the answer.
+        assert any("provisioned for" in note for note in proposal["notes"])
+        # A MAC address identifies one device and is not echoed back.
+        assert "mac-address" not in resp_text(proposal)
+
+    def test_the_proposal_is_accepted_as_a_source_deployment(self, client: TestClient) -> None:
+        """The point of the endpoint: what it returns goes straight
+        back in as ``source_deployment``."""
+        proposal = client.post(
+            self.URL, json={"source": "aruba_aoss", "raw_text": CAPTURE_2930F},
+        ).json()
+        job = client.post("/api/v1/migration/plan", json=_plan_body(
+            source_deployment=proposal["deployment"], target_deployment=TARGET_2930M,
+        )).json()
+        assert job["status"] == "completed"
+        assert job["port_renames"]["49"] == "1/A1"
+
+    def test_a_device_no_family_describes_is_an_answer_not_an_error(
+        self, client: TestClient,
+    ) -> None:
+        raw = (
+            REPO_ROOT / "tests/fixtures/real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg"
+        ).read_text(encoding="utf-8")
+        resp = client.post(self.URL, json={"source": "aruba_aoss", "raw_text": raw})
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["stated"] is True
+        assert proposal["deployment"] is None and proposal["consistent"] is None
+        assert proposal["unknown_parts"] == ["J9729A"]
+
+    def test_a_vendor_without_a_detector_says_so(self, client: TestClient) -> None:
+        resp = client.post(self.URL, json={
+            "source": "cisco_iosxe_cli", "raw_text": "hostname sw\n",
+        })
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["stated"] is False and proposal["deployment"] is None
+        assert "No detector" in proposal["notes"][0]
+
+    def test_a_stored_config_can_be_read_too(self, client: TestClient) -> None:
+        """``source_filename`` names a config in the backup store, as on
+        a plan request.  The stored text here is the fake collector's
+        Cisco snippet, which states no AOS-S device: a 200 that says so
+        proves the file was found and read."""
+        client.post("/api/v1/backups", json={"devices": [{
+            "type_key": "Cisco", "host": "10.77.77.77",
+            "credentials": {"username": "admin", "password": "x"},
+        }]})
+        filename = client.get("/api/v1/configs/").json()[0]["filename"]
+        resp = client.post(self.URL, json={
+            "source": "aruba_aoss", "source_filename": filename,
+        })
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["stated"] is False
+        assert "does not say which device" in proposal["notes"][0]
+
+    @pytest.mark.parametrize(
+        ("body", "status", "needle"),
+        [
+            ({"source": "aruba_aoss"}, 422, "Exactly one of"),
+            ({"source": "aruba_aoss", "raw_text": "x", "source_filename": "y"}, 422,
+             "Exactly one of"),
+            ({"source": "no-such-codec", "raw_text": "x"}, 422, "unknown source adapter"),
+            ({"source": "aruba_aoss", "source_filename": "missing.cfg"}, 404, "not found"),
+        ],
+    )
+    def test_request_errors(
+        self, client: TestClient, body: dict, status: int, needle: str,
+    ) -> None:
+        resp = client.post(self.URL, json=body)
+        assert resp.status_code == status
+        assert needle in resp.json()["detail"]
+
+
+def resp_text(payload: object) -> str:
+    import json
+
+    return json.dumps(payload)

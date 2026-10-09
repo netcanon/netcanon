@@ -1158,7 +1158,8 @@ definition loader does not try to read them.
 
 **API.**  `GET /api/v1/migration/model-families` lists families;
 `POST /api/v1/migration/inventory` compiles one declaration to its
-ports; a plan request that declares both devices
+ports; `POST /api/v1/migration/detect-deployment` proposes the source
+declaration from the config; a plan request that declares both devices
 (`source_deployment` or `source_profile`, with `target_deployment` or
 `target_profile`) is paired by position on every plan endpoint and
 returns the pairing on `MigrationJob.port_mapping_plan`; the body's
@@ -1174,9 +1175,26 @@ ports that belong to a stack rather than a member, literal
 non-systematic names, a sub-interface following its parent port
 across codecs, and whether a model has an out-of-band management
 port at all (a kept management port therefore always needs the
-operator's decision).  Reading the source model out of the config,
-and a picker in the rename modal, do not exist yet; today the
-feature is reachable through the API.
+operator's decision).  A picker in the rename modal does not exist
+yet; today the feature is reachable through the API.
+
+**Reading the source device from the config**
+(`netcanon/migration/deployment_detect.py`).  A `show running-config`
+usually states its own hardware.  Detection is split the way naming
+is: a small *detector* beside the vendor's codec reads the lines that
+state the device and returns them as printed — it has no table of
+models — and `propose_deployment` resolves what was read against the
+model registry, picks the family mode from whether the config is in a
+stacking mode, compiles the result, and **checks it against the
+config**: every port name the config uses should be a port of the
+device the config says it is.  The result is a *proposal* with the
+config lines it was read from; it is never applied by itself, because
+a member or module line states what a device is provisioned for, not
+what is fitted.  A detector reads what a config states and must not
+infer a model from the shape or number of its port names — that is
+the guess this whole section exists to replace.  Guard: the detector
+must agree with every proven capture claim, since both describe the
+same committed capture.
 
 Authoring guide:
 [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md).

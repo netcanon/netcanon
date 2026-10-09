@@ -49,7 +49,7 @@ without spinning up a TestClient.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
@@ -88,8 +88,15 @@ def resolve_adapter_or_422(name: str, side: str):
         ) from exc
 
 
+class HasInputText(Protocol):
+    """A request body that names its config one of the two ways."""
+
+    raw_text: str | None
+    source_filename: str | None
+
+
 def resolve_input_text(
-    body: MigrationPlanRequest, storage: BaseConfigStore
+    body: HasInputText, storage: BaseConfigStore
 ) -> str:
     """Return the raw config text referenced by *body*.
 

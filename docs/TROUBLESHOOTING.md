@@ -241,6 +241,26 @@ Through the API there is now a way to tell it: declare the source
 device as well as the target, and the ports are paired by position
 between the two.  See [`CAPABILITIES.md`](CAPABILITIES.md) § G.
 
+### Detection proposes a device, and says ports are missing
+
+`POST /api/v1/migration/detect-deployment` returned a `deployment` with
+`consistent: false`.  The config says it is that device, and uses port
+names that device does not have (`missing_ports`).  In order of
+likelihood:
+
+* **A module the config does not state.**  The config uses `A1`-`A4`
+  and has no `flexible-module` line, so the proposal has an empty bay.
+  Add the module to the deployment's `modules` before you send it.
+* **Only part of the config was pasted**, or two were pasted together:
+  a standalone banner over stacked port names (`1/24`).
+* **The model data is wrong.**  If neither of the above fits, the
+  family file may list the wrong ports for that part number — that is
+  worth a bug report with the config's banner and VLAN lines.
+
+A `deployment` of `null` is not an error.  `notes` says why: the config
+does not state its device, or no model family describes the part
+number in `unknown_parts`.
+
 ### "Port mapping is incomplete" — the job is `partial`
 
 You declared both devices (`source_deployment` / `target_deployment`)

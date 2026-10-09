@@ -209,6 +209,30 @@ are uplinks, and what speed each is, is not something a config shows.
 6. **Run** `pytest tests/unit/migration/test_device_models.py
    tests/unit/migration/test_device_models_shipped.py`.
 
+### Reading the device from its config
+
+Where a vendor's `show running-config` states its own hardware, a
+**detector** lets an operator confirm the source device instead of
+typing it.  It is a pure function over the config text, beside the
+vendor's codec (`deployment_detect.py`), registered in `_detectors()` in
+[`netcanon/migration/deployment_detect.py`](../netcanon/migration/deployment_detect.py).
+Three rules:
+
+* **Read what the config states; infer nothing.**  A detector returns
+  part numbers, member ids and modules as printed.  It has no table of
+  models — resolving a part number is the registry's job — and it must
+  not guess a model from the shape or number of the port names.
+* **Say what the lines do not prove**, in the detection's notes.  A
+  member or module line is provisioning; the device may differ.
+* **Keep device identifiers out of the evidence lines.**  They are
+  shown to an operator and may be logged; a MAC address or a serial
+  number says nothing about what the device is.
+
+Test it on every stanza form the vendor's documents and real captures
+show, and on the committed captures.  One guard comes for free: the
+detector must propose, for every capture a capture claim cites, the
+deployment the claim states.
+
 ### A new naming grammar
 
 A family for a vendor whose grammar no rule covers needs a rule first:

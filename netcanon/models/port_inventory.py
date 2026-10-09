@@ -13,6 +13,8 @@ so both the engine (:mod:`netcanon.migration.device_models`,
   declared member resolved to.
 * What pairing two inventories produces: :class:`MappingPlan`, made of
   :class:`PortPairing` and :class:`UnplacedPort`.
+* What a config says about its own device: :class:`DetectedDeployment`
+  (as read) and :class:`DeploymentProposal` (resolved and checked).
 
 The behaviour lives beside the codecs; see those two modules.
 """
@@ -336,6 +338,101 @@ class Deployment(DeploymentSpec):
     which is also ``TargetProfile.vendor``.  NOT a codec name: the two
     differ (``fortigate`` is the vendor of codec ``fortigate_cli``;
     ``cisco_iosxe`` is the vendor of two codecs)."""
+
+
+# ---------------------------------------------------------------------------
+# Detection — what a config says about its own device
+# ---------------------------------------------------------------------------
+
+
+class DetectedMember(BaseModel):
+    """One device a config says it came from, as the config prints it."""
+
+    part: str
+    """The part number the config states (``JL323A``), upper-cased."""
+
+    id: int | None = None
+    """The member id the config gives it; ``None`` when the config is
+    not in a stacking mode."""
+
+    modules: dict[str, str] = Field(default_factory=dict)
+    """Bay name to module part number, as the config states them."""
+
+    model: str = ""
+    """The registry model key :attr:`part` resolved to.  ``""`` when no
+    model family describes that part number — and always, before the
+    detection has been resolved."""
+
+
+class DetectedDeployment(BaseModel):
+    """What a vendor's detector read from a config.
+
+    Nothing here has been checked against the model registry: these
+    are the lines that state the hardware, as printed.
+    """
+
+    fabric: str = ""
+    """The config's own word for the stacking stanza the members were
+    read from (``stacking``, ``vsf``); ``""`` when there is none."""
+
+    members: list[DetectedMember] = Field(default_factory=list)
+    """In member-id order.  Empty when the config shows that it is
+    stacked but not what the stack is made of."""
+
+    evidence: list[str] = Field(default_factory=list)
+    """The config lines this was read from, for whoever confirms it.
+    A member's MAC address is left out: it identifies one physical
+    device and says nothing about what the device is."""
+
+    notes: list[str] = Field(default_factory=list)
+    """What the reader must know about how far the lines can be
+    trusted (a member line states provisioning, not presence)."""
+
+
+class DeploymentProposal(BaseModel):
+    """A source deployment proposed from the config, for an operator to
+    confirm.  Never applied by itself."""
+
+    vendor: str
+
+    stated: bool = False
+    """The config names at least one device it came from."""
+
+    fabric: str = ""
+    members: list[DetectedMember] = Field(default_factory=list)
+    """What the config states, each with the model it resolved to."""
+
+    unknown_parts: list[str] = Field(default_factory=list)
+    """Part numbers the config states that no model family describes."""
+
+    family: str = ""
+    """Family key of the members, when they all resolved to one."""
+
+    mode: str = ""
+    """The family mode the config is in, when that is not in doubt."""
+
+    deployment: DeploymentSpec | None = None
+    """Ready to send as a plan request's ``source_deployment``.
+    ``None`` unless every member resolved, to one family, in a mode
+    that is not in doubt, and the result compiles."""
+
+    inventory: InventorySummary | None = None
+    """What :attr:`deployment` compiles to."""
+
+    used_port_count: int = 0
+    """How many hardware port names the config uses."""
+
+    missing_ports: list[str] = Field(default_factory=list)
+    """Port names the config uses that the proposed device does not
+    have, in the order the config first uses them."""
+
+    consistent: bool | None = None
+    """Every port name the config uses is a port of the proposed
+    device.  ``None`` when nothing was proposed, or the config could
+    not be parsed to check."""
+
+    evidence: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

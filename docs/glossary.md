@@ -165,6 +165,10 @@ by concern and listed alphabetically within each section.
   (`GigabitEthernet1/0/1` becomes `1/1`), without knowing either
   device model. What positional port mapping replaces for the ports
   it can pair, and what still handles every other name.
+- **Deployment proposal** — a deployment read out of a config's own
+  statement of its hardware (part number, modules, stacking), resolved
+  against the model families and checked against the port names the
+  config uses. For an operator to confirm; never applied by itself.
 - **Positional port mapping** — pairing the ports of two inventories
   by member rank, role and order, instead of translating names by their
   shape. Produces an ordinary `port_rename_map`. A member's rank is its

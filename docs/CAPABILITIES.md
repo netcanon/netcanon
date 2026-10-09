@@ -842,9 +842,11 @@ later.
 
 1. `GET /api/v1/migration/model-families` lists the device families
    netcanon models, with each one's models, modes and modules.
-2. `POST /api/v1/migration/inventory` shows the ports a declared
+2. `POST /api/v1/migration/detect-deployment` reads the source device
+   out of the config itself, where the config states it (below).
+3. `POST /api/v1/migration/inventory` shows the ports a declared
    device has, by their real names, before you translate anything.
-3. `POST /api/v1/migration/plan` with `source_deployment` and
+4. `POST /api/v1/migration/plan` with `source_deployment` and
    `target_deployment` does the translation.
 
 ```json
@@ -928,6 +930,28 @@ ports that land on the links elsewhere, or drop them, in
 `port_rename_map`.  And what makes the switches a stack is not
 translated: see *The stack's own configuration* under Known
 limitations.
+
+**The source device can usually be read from the config.**  A `show
+running-config` states its own hardware: the chassis part number, the
+modules it is provisioned for, and whether it is stacked.
+`POST /api/v1/migration/detect-deployment` with `{"source": "<codec>",
+"raw_text": "..."}` reads those lines and returns a `deployment` you
+can send straight back as `source_deployment`.  It is a proposal to
+confirm, never applied by itself, and it tells you how far to trust it:
+
+* `evidence` — the config lines it was read from;
+* `notes` — what those lines cannot show.  A stack member or a module
+  line states what the switch is *provisioned* for; a member can be
+  configured before it is connected, and a bay can be provisioned for a
+  module that is not fitted;
+* `missing_ports` / `consistent` — the check against the config itself:
+  port names the config uses that the proposed device does not have.
+  The usual cause is a module the config does not state.
+
+`deployment` is `null` when the config does not state its device (only
+part of it was pasted, say), when no model family describes the part
+number it states (`unknown_parts`), or when the vendor has no detector
+yet.  Detection reads Aruba AOS-S configs today.
 
 **Both devices must be declared.**  A source without a target, or a
 `target_deployment` without a source, is a 422.  The response carries

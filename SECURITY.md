@@ -438,6 +438,13 @@ the definitions directory.
   holds wherever a file is loaded from: a claim that cites a proven fixture
   for another model is a different claim, is logged, and grants nothing.
 
+`POST /api/v1/migration/detect-deployment` reads a pasted or stored config
+and proposes the device it came from.  It only reads: nothing is translated
+or stored, the text is capped like a plan request's, and it runs the same
+parser a translation would.  The response quotes the config lines the
+proposal was read from, with a stack member's MAC address removed — a MAC
+identifies one physical device and is no part of what the device is.
+
 Covered by `tests/unit/migration/test_device_models.py` (each bound is tested
 at its boundary, against the named constant),
 `tests/unit/migration/test_device_models_shipped.py` and
