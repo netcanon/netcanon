@@ -126,6 +126,21 @@ class TestPairing:
         assert (plan.source.port_count, plan.target.port_count) == (52, 52)
 
 
+class TestOrder:
+    def test_pairings_are_in_the_source_devices_port_order(self):
+        """A FortiGate 100E lists WAN, DMZ, management and HA ports
+        before its numbered ports: roles interleave.  The plan lists
+        its pairings as the device lists its ports, not role by role."""
+        source = _inventory(
+            (0, "uplink", ["wan1"]), (0, "access", ["dmz"]),
+            (0, "uplink", ["wan2"]), (0, "access", ["port1"]),
+        )
+        target = _inventory((0, "access", ["a1", "a2"]), (0, "uplink", ["u1", "u2"]))
+        plan = plan_port_mapping(source, target)
+        assert [p.source for p in plan.pairings] == ["wan1", "dmz", "wan2", "port1"]
+        assert [p.target for p in plan.pairings] == ["u1", "a1", "u2", "a2"]
+
+
 class TestUnplaced:
     def test_overflow_is_reported_per_port_and_never_spilled(self):
         """A 48-port source onto a 24-port target: ports 25-48 have
@@ -492,6 +507,31 @@ class TestFusedTargets:
     def test_a_name_given_twice_is_one_name(self):
         assert fused_targets(["7", "7"], {}, []) == {}
 
+    def test_where_case_is_part_of_a_name_two_spellings_are_two_names(self):
+        """FortiOS: ``dmz`` is a port and ``DMZ`` a VLAN interface.
+        An entry that sends ``DMZ`` to ``dmz`` puts two interfaces on
+        one name.  Folded together as one source, the pair had one
+        member and the fusion went unreported."""
+        names, renames = ["dmz", "DMZ"], {"DMZ": "dmz"}
+        assert fused_targets(names, renames, []) == {}
+        assert fused_targets(
+            names, renames, [], fold_source=False, fold_target=False,
+        ) == {"dmz": ["dmz", "DMZ"]}
+        # ...and left alone, they are two names on two targets.
+        assert fused_targets(names, {}, [], fold_source=False, fold_target=False) == {}
+
+    def test_the_two_sides_fold_separately(self):
+        """A case-sensitive source onto a target that is not: ``A``
+        and ``a`` are two source interfaces, and ``X`` and ``x`` one
+        target."""
+        assert fused_targets(
+            ["A", "a"], {"A": "X", "a": "x"}, [], fold_source=False,
+        ) == {"X": ["A", "a"]}
+
+    def test_the_key_keeps_case_only_when_told_to(self):
+        assert name_key(" 1/A1 ") == "1/a1"
+        assert name_key(" 1/A1 ", fold=False) == "1/A1"
+
     def test_only_a_clash_that_involves_a_hardware_port_when_asked(self):
         """Every name the config references goes in, logical ones
         included -- an aggregate the translator calls physical lands on
@@ -615,9 +655,25 @@ class TestSettlePlan:
         target = _inventory((0, "access", ["1/1"]))
         used = ["Gi1/0/1", "Gi0/0"]
         plan = plan_port_mapping(source, target, used)
-        _settled(plan, used, operator={"Gi0/0": "oobm"}, target=target)
+        _settled(plan, used, operator={"Gi0/0": "oobm"}, target=target,
+                 management_forms={"Gi0/0": "oobm"})
         assert plan.unresolved_ports == [] and plan.is_clean
         assert plan.off_target == [] and plan.warnings == []
+
+    def test_any_other_name_for_it_is_as_off_target_as_for_any_port(self):
+        """The exemption is for the one name the target vendor gives
+        a management port, not for whatever is typed."""
+        source = _inventory((0, "access", ["Gi1/0/1"]), (0, "mgmt", ["Gi0/0"]))
+        target = _inventory((0, "access", ["1/1"]))
+        used = ["Gi1/0/1", "Gi0/0"]
+        for typed in ("Gi0/0", "OOBM2"):
+            plan = plan_port_mapping(source, target, used)
+            _settled(plan, used, operator={"Gi0/0": typed}, target=target,
+                     management_forms={"Gi0/0": "oobm"})
+            assert plan.off_target == [typed]
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, operator={"Gi0/0": "oobm"}, target=target)
+        assert plan.off_target == ["oobm"]
 
     def test_a_displaced_name_is_unresolved_whoever_asks(self):
         plan = plan_port_mapping(STANDALONE_24, STANDALONE_48, [*_bare(28), "49"])
@@ -662,7 +718,10 @@ class TestSettlePlan:
         _settled(same, self.USED, operator={"5": "77", "6": None}, target=STANDALONE_48)
         assert same.off_target == ["77"]
         assert same.is_clean and same.unresolved_ports == []
-        assert any("not ports of the declared target device: 77" in w for w in same.warnings)
+        (line,) = [w for w in same.warnings if "override target(s)" in w]
+        assert "are not names the declared target device lists for its ports: 77;" in line
+        # It does not say the name is no port -- an abbreviation would be one.
+        assert "another spelling of a port" in line
 
     def test_an_override_for_a_port_the_config_does_not_have_is_not_listed(self):
         """The translator ignores such an entry; reporting its target
@@ -706,10 +765,59 @@ class TestSettlePlan:
         ) in text
 
     def test_a_blank_override_is_said_to_have_been_ignored(self):
-        plan = _settled(self._plan(), self.USED, ignored_overrides=["25"])
+        plan = _settled(self._plan(), self.USED, ignored_overrides=["25", "zz"])
+        # ``zz`` is not a name the config has: nothing stands for it.
         assert plan.ignored_overrides == ["25"]
         assert "25" in plan.unresolved_ports
-        assert any("had a blank target and were ignored" in w for w in plan.warnings)
+        (line,) = [w for w in plan.warnings if "were ignored" in w]
+        assert "1 override(s) had no usable target" in line and line.endswith("stands for: 25")
+
+    def test_a_displaced_management_port_is_reported_once(self):
+        """Dropped because it clashed, not because the target has no
+        form for it: one line, the displaced one."""
+        source = _inventory((0, "access", ["p1"]), (0, "mgmt", ["m0"]))
+        target = _inventory((0, "access", ["x1"]))
+        plan = plan_port_mapping(source, target, ["p1", "m0"])
+        _settled(plan, ["p1", "m0"], drops=["m0"], displaced=["m0"], target=target)
+        text = " | ".join(plan.warnings)
+        assert "nobody decided" in text
+        assert "source management port(s)" not in text
+
+    def test_a_unit_that_simply_moved_with_its_port_is_not_news(self):
+        source = _inventory((0, "access", ["ge-0/0/0"]))
+        target = _inventory((0, "access", ["ge-0/0/5"]))
+        used = ["ge-0/0/0", "ge-0/0/0.54"]
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, sub_interfaces={"ge-0/0/0.54": "ge-0/0/5.54"})
+        assert plan.warnings == [] and plan.is_clean
+
+    def test_an_off_inventory_name_the_operator_named_is_not_reported(self):
+        plan = plan_port_mapping(STANDALONE_48, STACKED_48_MODULE, ["1", "A1"])
+        _settled(plan, ["1", "A1"], operator={"A1": "1/A1"}, target=STACKED_48_MODULE)
+        assert plan.unresolved_ports == []
+        assert not [w for w in plan.warnings if "declared source device" in w]
+
+    def test_tracking_and_a_vtep_source_lost_with_a_port_are_said(self):
+        plan = _settled(
+            self._plan(), self.USED,
+            lost_tracking=["Vlan20", "Vlan10"], lost_vtep_sources=["Loopback0"],
+        )
+        assert plan.lost_tracking == ["Vlan10", "Vlan20"]
+        assert plan.lost_vtep_sources == ["Loopback0"]
+        text = " | ".join(plan.warnings)
+        assert "2 interface(s) lost a VRRP track entry that named a dropped port" in text
+        assert "the VXLAN source interface was dropped (Loopback0)" in text
+
+    def test_a_name_with_a_dot_is_not_a_unit_of_a_port(self):
+        """``ether1.backup`` is a name with a dot in it.  A unit
+        suffix is a number."""
+        source = _inventory((0, "access", ["ether1"]))
+        used = ["ether1", "ether1.backup", "ether1.5"]
+        plan = plan_port_mapping(source, _inventory((0, "access", ["x1"])), used)
+        unit = [w for w in plan.warnings if "sub-interface name(s)" in w]
+        other = [w for w in plan.warnings if "declared source device (" in w]
+        assert len(unit) == 1 and "(ether1.5)" in unit[0]
+        assert len(other) == 1 and "(ether1.backup)" in other[0]
 
     def test_a_sub_interface_that_followed_its_port_is_accounted_for(self):
         source = _inventory((0, "access", ["ge-0/0/0", "ge-0/0/1"]))
@@ -802,6 +910,7 @@ class TestNoWarningCanBeReadAsATableRow:
             emptied_lags=["Trk1"], shrunk_lags=["Trk2"], lost_routes=["0.0.0.0/0"],
             lost_dhcp_pools=["10.0.0.0/24"], ignored_overrides=["2/1"],
             sub_interfaces={"49.7": None},
+            lost_tracking=["Vlan10"], lost_vtep_sources=["Loopback0"],
         )
         kinds = (
             "belong to a member the target does not have",
@@ -809,8 +918,10 @@ class TestNoWarningCanBeReadAsATableRow:
             "nobody decided",
             "could not be given a name of their own",
             "were DROPPED with the port they belong to",
-            "override target(s) are not ports",
-            "had a blank target",
+            "override target(s) are not names",
+            "had no usable target",
+            "lost a VRRP track entry",
+            "VXLAN source interface was dropped",
             "every member port of",
             "lost a member port",
             "static route(s)",

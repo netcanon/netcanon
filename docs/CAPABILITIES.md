@@ -920,23 +920,44 @@ What you get back, on the job's `port_mapping_plan`:
   on a port of the target: a name from either group above, or a
   logical interface such as an aggregate.  Rather than merge two
   interfaces into one, netcanon **drops** such a name and says so.
-  Where every name in a clash was undecided, the first keeps the name
-  and only the others are dropped.
+  Where every name in a clash was undecided, one keeps the name — a
+  port of the declared source if there is one, otherwise a hardware
+  port, otherwise the first — and only the others are dropped.
 * **`fused`** — target ports that received more than one source name.
   The pairing never does this and an undecided name is displaced
   before it can, so an entry here means your own `port_rename_map`
-  points two ports at one name.  Names are compared without regard to
-  case: `1/a1` is the port `1/A1`.
+  points two ports at one name.  Names are compared as the platform
+  compares them: on AOS-S or IOS `1/a1` is the port `1/A1`; on
+  FortiOS, RouterOS, Junos, VyOS and OPNsense `DMZ` and `dmz` are two
+  interfaces.
 * **`off_target`** — targets in your `port_rename_map` that are not
-  ports of the declared target device.  Allowed, and reported.
+  names the declared target device lists for its ports.  Allowed,
+  and reported.  **Only case and surrounding space are understood.**
+  An abbreviation the device accepts (`Gi1/0/1` for
+  `GigabitEthernet1/0/1`) is not recognised as that port: it is
+  listed here, the job can still be `completed`, and the port it
+  names can end up with two source ports on it without appearing in
+  `fused`.  Use the names `POST /inventory` prints.
 * **`ignored_overrides`** — entries in your `port_rename_map` whose
-  target was blank.  A blank target is ignored: it decides nothing.
+  target was blank, for a name the config uses.  A blank target is
+  ignored: it decides nothing.
 * **`emptied_lags`**, **`shrunk_lags`**, **`lost_routes`**,
-  **`lost_dhcp_pools`** — what a dropped port took with it.  A LAG
-  loses a dropped member; a static route or a DHCP pool that names a
-  dropped port is removed whole, even if the route also has a next
-  hop.
-* **`unused_target`** — target ports still free after the run.
+  **`lost_dhcp_pools`**, **`lost_tracking`**, **`lost_vtep_sources`**
+  — what a dropped port took with it.  A LAG loses a dropped member;
+  a static route or a DHCP pool that names a dropped port is removed
+  whole, even if the route also has a next-hop address; an interface
+  that stays loses a VRRP track entry that named the port
+  (`lost_tracking` lists the interface); and a VXLAN source
+  interface that was dropped leaves the VTEP without the source it
+  was bound to.
+* **`unused_target`** — target ports nothing ended on.
+* **`rename_map`** — the pairing as a rename map, before your own
+  entries: what the server handed to the translator for the ports it
+  decided.
+* **`evidence`**, **`caveats`** — the weaker of the two devices'
+  grades for their port names, and what is unverified about either.
+* **`warnings`** — the same outcome in sentences.  They are also
+  among the job's `warnings`.
 * **`unresolved_ports`** — the used source names that still need a
   decision from you.
 * **`source` / `target`** — what each declaration resolved to: the
@@ -951,8 +972,9 @@ that was off-inventory or was displaced — and that you have not
 decided yourself.  An entry for that port in `port_rename_map` — a
 target name, or `null` to drop it — is you deciding it.  It always
 wins over the pairing, on `/plan` and on every per-pane endpoint.  A
-target is read as the target device spells it (`1/a1` is `1/A1`), and
-a blank target is ignored.  The job is also `partial` while `fused`
+target is read as the target device spells it (`1/a1` is `1/A1`)
+where the platform has no case, and a blank target is ignored.  The
+job is also `partial` while `fused`
 is not empty, whatever you acknowledged, and when no pairing could be
 made at all.
 
@@ -993,13 +1015,28 @@ nothing, as before.
   SVIs and LAGs are left out, and so is a name only a route or a DHCP
   pool mentions unless the codec recognises it as a port (`Null0` is
   not one).  Some firewall pseudo-interfaces the codec does not
-  classify are still reported as off-inventory.
+  classify are still reported as off-inventory.  So is an
+  `interface Null0` stanza (a common hardening stanza on IOS), and a
+  VRRP `track <object number>` is read as a port name and can be
+  reported as displaced.  Neither means the source model is wrong.
+* A source config that spells a port another way than the device
+  prints it (`gigabitethernet1/0/1`, `Gi1/0/1`) is not matched to the
+  model: every such name is off-inventory.  A real `show
+  running-config` prints the full name; a config built from a
+  template may not.
+* On RouterOS a port you renamed is paired by its factory name and
+  keeps your name.  A port named so that it reads as another port
+  (a bridge called `SFP-SFPPLUS1`) is translated by that reading, as
+  it is without devices declared, and is displaced if that puts it
+  on a port of the target.
 * A **sub-interface** follows its parent port only between two
   configs of the same codec.  Across vendors
   (`GigabitEthernet1/0/1.100` onto Junos, a Junos unit onto AOS-S) it
   does **not** move with its port: it is reported, and where the
   name-shape translator cannot give it a name of its own it is
-  dropped.
+  dropped.  A unit of a LAG or a loopback (`ae0.100`, `lo0.5`) is not
+  a unit of a port and goes by name shape as before — on Junos that
+  folds several loopback units onto `lo0`.
 * netcanon does not know whether a model has an out-of-band
   management port.  A source management port with no management port
   in the target model is therefore always left for you to decide,

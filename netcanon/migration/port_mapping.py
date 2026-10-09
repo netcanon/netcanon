@@ -93,14 +93,27 @@ __all__ = [
 ]
 
 
-def name_key(name: str) -> str:
+def name_key(name: str, fold: bool = True) -> str:
     """The form in which two port names are compared.
 
-    Surrounding space and letter case are not part of a port's
-    identity: ``1/a1`` and `` 1/A1`` are the port ``1/A1``, and a job
-    that puts one source port on each has put two on one port.
+    Surrounding space is never part of a port's identity.  Letter
+    case is a fact about the platform.  On AOS-S or IOS ``1/a1`` is
+    the port ``1/A1``, and a job that puts one source port on each
+    has put two on one port.  On FortiOS or RouterOS ``DMZ`` and
+    ``dmz`` are two interfaces, and treating them as one would turn
+    an operator's own name for a VLAN interface into the physical
+    port beside it.
+
+    Args:
+        name: The name.
+        fold: Compare without regard to case — ``not
+            codec.port_names_case_sensitive`` for the platform the
+            name belongs to.  The default folds: where nothing says
+            otherwise, two spellings are taken for one port, which
+            errs on the side of reporting.
     """
-    return name.strip().casefold()
+    text = name.strip()
+    return text.casefold() if fold else text
 
 
 def _is_downshift(source_speed: str, target_speed: str) -> bool:
@@ -249,6 +262,9 @@ def fused_targets(
     port_renames: Mapping[str, str],
     port_drops: Iterable[str],
     involving: Iterable[str] | None = None,
+    *,
+    fold_source: bool = True,
+    fold_target: bool = True,
 ) -> dict[str, list[str]]:
     """Target names that more than one source name ended on.
 
@@ -272,25 +288,31 @@ def fused_targets(
             Two LAG names that clash with each other are the
             translator's own business and are reported by it.
 
+        fold_source: Source names are compared without regard to
+            case (the source platform's rule; see :func:`name_key`).
+        fold_target: Target names are.
+
     Returns:
         Target name to its source names (two or more), in the order
         the sources were given.  Names are compared by
-        :func:`name_key`: a target that differs from another only in
-        case or surrounding space is the same target, and two
-        spellings of ONE source name are one source.  Empty when
-        every surviving source name has a target of its own.
+        :func:`name_key`: where the platform folds case, a target
+        that differs from another only in case is the same target,
+        and two spellings of ONE source name are one source.  Empty
+        when every surviving source name has a target of its own.
     """
     dropped = set(port_drops)
-    wanted = None if involving is None else {name_key(name) for name in involving}
+    wanted = None if involving is None else {
+        name_key(name, fold_source) for name in involving
+    }
     spelling: dict[str, str] = {}
     groups: dict[str, dict[str, str]] = {}
     for name in names:
         if name in dropped:
             continue
         final = port_renames.get(name, name)
-        key = name_key(final)
+        key = name_key(final, fold_target)
         spelling.setdefault(key, final.strip())
-        groups.setdefault(key, {}).setdefault(name_key(name), name)
+        groups.setdefault(key, {}).setdefault(name_key(name, fold_source), name)
     return {
         spelling[key]: list(sources.values())
         for key, sources in groups.items()
@@ -314,6 +336,11 @@ def settle_plan(
     shrunk_lags: Iterable[str] = (),
     lost_routes: Iterable[str] = (),
     lost_dhcp_pools: Iterable[str] = (),
+    lost_tracking: Iterable[str] = (),
+    lost_vtep_sources: Iterable[str] = (),
+    management_forms: Mapping[str, str] | None = None,
+    fold_source: bool = True,
+    fold_target: bool = True,
 ) -> None:
     """Reconcile *plan* with what the translation run actually did.
 
@@ -330,12 +357,14 @@ def settle_plan(
       target, or to land on a port of the target, and was dropped by
       the caller;
     * a sub-interface followed its parent port;
-    * a dropped port took a route, a DHCP pool or a LAG member with it.
+    * a dropped port took a route, a DHCP pool, a LAG member, a VRRP
+      track entry or a VTEP source with it.
 
     Fills the outcome fields (``overridden``, ``sub_interfaces``,
     ``displaced``, ``fused``, ``off_target``, ``ignored_overrides``,
     ``emptied_lags``, ``shrunk_lags``, ``lost_routes``,
-    ``lost_dhcp_pools``, ``unused_target``, ``unresolved_ports``),
+    ``lost_dhcp_pools``, ``lost_tracking``, ``lost_vtep_sources``,
+    ``unused_target``, ``unresolved_ports``),
     sets every used unplaced port's ``dropped`` and ``landed`` to what
     happened to it, takes a followed sub-interface out of
     ``off_inventory``, and rebuilds ``warnings``.  ``pairings`` and
@@ -359,6 +388,14 @@ def settle_plan(
         shrunk_lags: LAGs that lost some of their member ports.
         lost_routes: Destinations of routes removed with a port.
         lost_dhcp_pools: DHCP pools removed with a port.
+        lost_tracking: Interfaces that lost a VRRP track entry.
+        lost_vtep_sources: VTEP source interfaces that were dropped.
+        management_forms: For each source management port the target
+            model has no place for, the name the ordinary translation
+            gives one on the target (``oobm`` on AOS-S).  An override
+            that sends the port to that name is not off-target.
+        fold_source: Source names compare without regard to case.
+        fold_target: Target names do (see :func:`name_key`).
     """
     dropped = set(port_drops)
     decided = set(operator_map)
@@ -374,32 +411,50 @@ def settle_plan(
     plan.overridden = sorted(k for k in operator_map if k in plan.rename_map)
     plan.sub_interfaces = followed
     plan.off_inventory = [n for n in plan.off_inventory if n not in followed]
+    present = set(every)
     plan.displaced = sorted(displaced)
-    plan.ignored_overrides = sorted(ignored_overrides)
+    # An entry for a name the config does not have decided nothing and
+    # was ignored by the translator already; listing it here would say
+    # a pairing "stands" for a port that is not there.
+    plan.ignored_overrides = sorted(k for k in ignored_overrides if k in present)
     plan.emptied_lags = sorted(emptied_lags)
     plan.shrunk_lags = sorted(shrunk_lags)
     plan.lost_routes = list(lost_routes)
     plan.lost_dhcp_pools = list(lost_dhcp_pools)
+    plan.lost_tracking = sorted(lost_tracking)
+    plan.lost_vtep_sources = sorted(lost_vtep_sources)
     if plan.applied:
-        plan.fused = fused_targets(every, port_renames, dropped, involving=used)
-        on_target = {name_key(name) for name in targets}
-        present = set(every)
-        # A management port the target model lists no place for has, by
-        # definition, no inventory name to go to: whatever the operator
-        # sends it to (``oobm``) is their answer, not a mistake.
-        management = {p.source for p in plan.unplaced if p.role == "mgmt"}
+        plan.fused = fused_targets(
+            every, port_renames, dropped, involving=used,
+            fold_source=fold_source, fold_target=fold_target,
+        )
+        on_target = {name_key(name, fold_target) for name in targets}
+        # A management port the target model lists no place for has no
+        # inventory name to go to.  The one name that is not a mistake
+        # for it is the form the ordinary translation gives a
+        # management port on this target (``oobm``); any other name the
+        # device does not list is as off-target as it is for any port.
+        forms = {
+            source: name_key(form, fold_target)
+            for source, form in (management_forms or {}).items() if form
+        }
         plan.off_target = sorted({
             value for key, value in operator_map.items()
             if isinstance(value, str)
             and key in present
-            and key not in management
-            and name_key(value) not in on_target
+            and name_key(value, fold_target) not in on_target
+            and forms.get(key) != name_key(value, fold_target)
         })
+        # Every name that ended somewhere occupies that name -- a
+        # logical interface an operator put on a port as much as a
+        # hardware port the pairing put there.
         taken = {
-            name_key(port_renames.get(name, name))
-            for name in used if name not in dropped
+            name_key(port_renames.get(name, name), fold_target)
+            for name in every if name not in dropped
         }
-        plan.unused_target = [name for name in targets if name_key(name) not in taken]
+        plan.unused_target = [
+            name for name in targets if name_key(name, fold_target) not in taken
+        ]
     plan.unresolved_ports = plan.unresolved(decided)
     if plan.applied:
         plan.warnings = describe_plan(plan, decided=decided, dropped=dropped)
@@ -433,8 +488,10 @@ def describe_plan(
     lines: list[str] = []
 
     def is_child(name: str) -> bool:
+        # A unit suffix is a number.  ``ether1.backup`` is a name with
+        # a dot in it, not a sub-interface of ``ether1``.
         parent, dot, unit = name.rpartition(".")
-        return bool(dot and unit and parent in ports)
+        return bool(dot and unit.isdigit() and parent in ports)
 
     removed = [
         p for p in plan.used_unplaced
@@ -545,16 +602,22 @@ def describe_plan(
             f"{_summary(shown, limit=6, sep='; ')}"
         )
     if plan.off_target:
+        # What is known is that the name is not one the device model
+        # lists.  It may still be a port: an abbreviation the device
+        # accepts (Gi1/0/1) is not recognised as the port it names.
         lines.append(
             f"port mapping: {len(plan.off_target)} override target(s) are "
-            f"not ports of the declared target device: "
-            f"{_summary(plan.off_target)}"
+            f"not names the declared target device lists for its ports: "
+            f"{_summary(plan.off_target)}; if one is another spelling of "
+            f"a port (an abbreviation, say) it may share that port with "
+            f"the source port already paired to it — use the names the "
+            f"device model lists"
         )
     if plan.ignored_overrides:
         lines.append(
             f"port mapping: {len(plan.ignored_overrides)} override(s) had "
-            f"a blank target and were ignored, so the pairing stands for: "
-            f"{_summary(plan.ignored_overrides)}"
+            f"no usable target and were ignored; what the mapping decided "
+            f"stands for: {_summary(plan.ignored_overrides)}"
         )
     if plan.emptied_lags:
         lines.append(
@@ -580,6 +643,18 @@ def describe_plan(
             f"port mapping: {len(plan.lost_dhcp_pools)} DHCP pool(s) bound "
             f"to a dropped port were removed with it: "
             f"{_summary(plan.lost_dhcp_pools)}"
+        )
+    if plan.lost_tracking:
+        lines.append(
+            f"port mapping: {len(plan.lost_tracking)} interface(s) lost a "
+            f"VRRP track entry that named a dropped port, so failover no "
+            f"longer follows that port: {_summary(plan.lost_tracking)}"
+        )
+    if plan.lost_vtep_sources:
+        lines.append(
+            f"port mapping: the VXLAN source interface was dropped "
+            f"({_summary(plan.lost_vtep_sources)}), so the VTEP is left "
+            f"without the source it was bound to — give it one"
         )
 
     # A pairing the operator replaced is no longer the plan's: its

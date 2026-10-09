@@ -13,7 +13,7 @@ by concern and listed alphabetically within each section.
 - **Capture-first transform** — load-bearing pattern in
   `run_plan_with_overrides` that populates `source_vlans`,
   `source_local_users`, `source_snmp_community`, `source_snmpv3_users`,
-  and `source_hostname` BEFORE any rename engages, so UI panes can
+  `source_ports` and `source_hostname` BEFORE any rename engages, so UI panes can
   enumerate source entities even when the user has not yet supplied a
   rename map.
 - **Frozen pipeline signatures** — Hard Rule. The parameter shapes of

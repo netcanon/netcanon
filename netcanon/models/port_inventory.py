@@ -453,28 +453,38 @@ class MappingPlan(BaseModel):
     the name-shape translator would have put on a name another
     source name ends on, or on a port of the declared target.  They
     were dropped from the output instead, sorted.  Where every name
-    in such a clash was undecided, the first keeps the name and only
-    the others are displaced.  Filled in when the plan is settled
-    against a run."""
+    in such a clash was undecided, one keeps the name — a port of the
+    declared source if there is one, else a hardware port, else the
+    first — and only the others are displaced.  Filled in when the
+    plan is settled against a run."""
 
     fused: dict[str, list[str]] = Field(default_factory=dict)
     """Target names that more than one source name ended on, each
     with those names, where at least one of them is a hardware port
-    the config uses.  Read from the finished run over EVERY name
-    the config references, compared without regard to case.  The
-    pairing never produces one and an undecided name is displaced
-    before it can, so what is left here is an operator override
-    that points two ports at one name.  The job is ``partial``
-    while this is not empty."""
+    the config uses.  Read from the finished run over every name
+    the config references, compared as the two platforms compare
+    names (without regard to case where the platform has none).
+    The pairing never produces one and an undecided name is
+    displaced before it can, so an entry here comes from an
+    operator override that points two names at one.  The converse
+    does not hold for a target the device model does not list:
+    see :attr:`off_target`.  The job is ``partial`` while this is
+    not empty."""
 
     off_target: list[str] = Field(default_factory=list)
-    """Operator override targets that are not ports of the declared
-    target device, sorted.  Reported; an operator may mean it."""
+    """Operator override targets that are not names the declared
+    target device lists for its ports, sorted.  Reported; an
+    operator may mean it.  Names are compared by case and
+    surrounding space only: an abbreviation the device would
+    accept (``Gi1/0/1``) is not recognised as the port it names,
+    is listed here, and can share that port with the source port
+    paired to it without appearing in :attr:`fused`."""
 
     ignored_overrides: list[str] = Field(default_factory=list)
-    """Source ports whose operator override had a blank target.  A
-    blank target decides nothing — it would render a port with no
-    name — so the entry was set aside and the pairing stands."""
+    """Source names the config uses whose operator override had no
+    usable target — blank, or not text.  Such an entry decides
+    nothing (a blank would render a port with no name), so it was
+    set aside and what the mapping decided stands."""
 
     emptied_lags: list[str] = Field(default_factory=list)
     """LAGs of the source config every member port of which was
@@ -484,13 +494,25 @@ class MappingPlan(BaseModel):
     """LAGs that lost some, not all, of their member ports to drops."""
 
     lost_routes: list[str] = Field(default_factory=list)
-    """Destinations of static routes that named a dropped port as
-    their interface.  The translator removes such a route with the
-    port — whole, even when it also has a next hop."""
+    """Destinations of static routes that named a dropped port — as
+    their interface, or as a next hop that is an interface name.
+    The translator removes such a route with the port — whole, even
+    when it also has a next-hop address."""
 
     lost_dhcp_pools: list[str] = Field(default_factory=list)
     """DHCP pools (by network, else by interface) bound to a dropped
     port, and removed with it."""
+
+    lost_tracking: list[str] = Field(default_factory=list)
+    """Interfaces that survive but whose VRRP group tracked a dropped
+    port, sorted.  The track entry was removed with the port, so
+    failover on that interface no longer follows it."""
+
+    lost_vtep_sources: list[str] = Field(default_factory=list)
+    """VXLAN source interfaces that were dropped, sorted.  The
+    VTEP's binding to that interface went with it; depending on the
+    target the output then has no source for the VTEP, or names a
+    default one that the output does not define."""
 
     unresolved_ports: list[str] = Field(default_factory=list)
     """Used source names that still need a decision, sorted: a port

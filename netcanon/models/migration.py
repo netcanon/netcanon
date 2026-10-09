@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .port_inventory import DeploymentSpec, MappingPlan
 
@@ -926,6 +926,31 @@ class MigrationPlanRequest(BaseModel):
     legacy behaviour (v3 users pass through unchanged).  Callers
     that set it to ``{}`` opt into the SNMPv3-rename pipeline
     with no explicit overrides."""
+
+    @field_validator(
+        "port_rename_map", "local_user_rename_map",
+        "snmp_community_rename_map", "snmpv3_user_rename_map",
+    )
+    @classmethod
+    def _names_are_text(cls, value: Any) -> Any:
+        """A name in a rename map has to be text that can be written
+        back.  A lone UTF-16 surrogate (sent as the JSON escape
+        ``"\\ud800"``) is valid JSON and a valid ``str`` and cannot be
+        encoded as UTF-8: a job that echoes it -- in ``port_renames``,
+        or on the mapping plan -- could not be serialised, and the
+        request was a 500.  A field validator echoes this map only,
+        never the pasted config."""
+        for key, name in (value or {}).items():
+            for text in (key, name):
+                if not isinstance(text, str):
+                    continue
+                try:
+                    text.encode("utf-8")
+                except UnicodeEncodeError:
+                    raise ValueError(
+                        "a name in a rename map must be valid Unicode text"
+                    ) from None
+        return value
 
     # Which declarations may be combined is checked where they are
     # read (``resolve_port_inventories`` in the routes' helpers), not

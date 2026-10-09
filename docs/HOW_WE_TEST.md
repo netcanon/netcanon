@@ -127,11 +127,25 @@ names and roles of every shipped model, in every deployment mode and
 with every module, are pinned from hand-typed tables in the test
 rather than regenerated from the code under test; and which part
 number is which model is a table, not a comment.  A model-to-model
-translation is additionally checked, on every job in
-`test_run_plan_with_models.py`, for two names ending on one target
-name — recomputed in the test over every name the config references.
-The cross-mesh audit below does not exercise model-to-model mapping:
-it runs without declared devices.
+translation is additionally checked, on the jobs of
+`test_run_plan_with_models.py`, in two ways: for a hardware port
+sharing a target name with another name (the grouping recomputed in
+the test), and — reading the rendered output back with the target
+codec — for a name that moved and is still there, or an interface
+carrying the addresses of two.  The cross-mesh audit below does not
+exercise model-to-model mapping: it runs without declared devices.
+
+**A renamed port must take everything with it.**  The port
+translator rewrites port names in a list of places.  A list cannot
+show that it is complete, and a test that walks the same list agrees
+with it — a place nobody listed stays invisible to both.  So
+`test_port_name_universe.py` uses no list.  On every committed
+capture of every codec it exchanges two port names through the real
+translator and renderer, and compares the output, parsed again, with
+the unswapped output in which the two names are exchanged.  Whatever
+did not follow is a place the translator does not reach, in whatever
+field it lives — including one added later.  It found RouterOS's
+factory port name at the first run.
 
 ### Layer 2: Integration tests
 

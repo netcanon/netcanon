@@ -16,6 +16,7 @@ is a 422, and what a request that predates the feature still gets.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -337,7 +338,7 @@ class TestPlanWithDeclaredDevices:
             job["port_drops"]
         )
         assert job["port_mapping_plan"]["unresolved_ports"] == sorted(job["port_drops"])
-        assert "Port mapping is incomplete: 24 port(s)" in job["error"]
+        assert "Port mapping is incomplete: 24 name(s)" in job["error"]
 
     def test_an_operator_override_wins(self, client: TestClient) -> None:
         job = client.post(
@@ -625,6 +626,74 @@ class TestRequestErrors:
         resp = client.post(url, content=raw, headers={"Content-Type": "application/json"})
         assert resp.status_code == 422
         assert resp.json()["detail"][0]["type"] == "string_unicode"
+
+    @pytest.mark.parametrize("declared", [False, True], ids=["no-devices", "devices"])
+    @pytest.mark.parametrize(
+        "port_map",
+        [b'{"\\ud800":""}', b'{"\\ud800":"1/1"}', b'{"1":"\\ud800"}', b'{"zz":"\\ud800"}'],
+        ids=["key-blank-target", "key", "value", "value-for-an-absent-port"],
+    )
+    @pytest.mark.parametrize(
+        "path", ["/api/v1/migration/plan", "/api/v1/migration/plan/vlans"],
+    )
+    def test_a_name_in_a_rename_map_that_cannot_be_written_back_is_a_422(
+        self, client: TestClient, path: str, port_map: bytes, declared: bool,
+    ) -> None:
+        """The job echoes the names of a rename map -- in
+        ``port_renames``, and on the mapping plan when an entry is set
+        aside.  A lone surrogate there could not be serialised: a 500,
+        and with devices declared on every endpoint, since the port
+        map then applies on all of them."""
+        devices = (
+            b',"source_deployment":{"mode":"standalone","members":[{"model":"JL260A"}]},'
+            b'"target_deployment":{"mode":"stacked","members":[{"model":"JL322A"}]}'
+        ) if declared else b""
+        raw = (
+            b'{"source":"aruba_aoss","target":"aruba_aoss","raw_text":"vlan 1\\n",'
+            b'"port_rename_map":' + port_map + devices + b"}"
+        )
+        resp = client.post(path, content=raw, headers={"Content-Type": "application/json"})
+        assert resp.status_code == 422
+        (error,) = resp.json()["detail"]
+        assert error["loc"] == ["body", "port_rename_map"]
+        assert "valid Unicode text" in error["msg"]
+
+    @pytest.mark.parametrize(
+        ("path", "field"),
+        [
+            ("/api/v1/migration/plan", "source"),
+            ("/api/v1/migration/detect", "raw_text"),
+            ("/api/v1/migration/inventory", "codec"),
+            ("/api/v1/backups", "devices"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        ("value", "echoed"),
+        [("NaN", "nan"), ("Infinity", "inf"), ('{"x": "caf' + chr(233) + '"}', {"x": "caf" + chr(233)})],
+        ids=["nan", "infinity", "non-ascii"],
+    )
+    def test_a_rejected_request_is_answered_in_strict_json(
+        self, client: TestClient, path: str, field: str, value: str, echoed: object,
+    ) -> None:
+        """The validation handler is the application's, on every
+        endpoint.  Its body is what FastAPI's own would be -- status,
+        content type, a list of errors each with the input that was
+        refused -- and it is always JSON a browser can parse: ASCII
+        only, and no bare ``NaN``, which the request parser accepts
+        and ``JSON.parse`` does not."""
+        raw = ('{"' + field + '": ' + value + "}").encode("utf-8")
+        resp = client.post(path, content=raw, headers={"Content-Type": "application/json"})
+        assert resp.status_code == 422
+        assert resp.headers["content-type"] == "application/json"
+        assert resp.text.isascii()
+
+        def refuse(token: str) -> None:
+            raise AssertionError(f"not JSON: bare {token} in the body")
+
+        detail = json.loads(resp.text, parse_constant=refuse)["detail"]
+        assert detail and all({"type", "loc", "msg", "input"} <= set(e) for e in detail)
+        refused = [e["input"] for e in detail if e["loc"][:2] == ["body", field]]
+        assert echoed in refused
 
     def test_an_unknown_target_profile_alone_is_still_accepted(
         self, client: TestClient,

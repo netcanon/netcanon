@@ -114,6 +114,10 @@ class JunosCodec(CodecBase):
     )
     output_extension: ClassVar[str] = "conf"
 
+    #: Junos interface names are case-sensitive (and lower-case).
+    #: See ``CodecBase.port_names_case_sensitive``.
+    port_names_case_sensitive: ClassVar[bool] = True
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="juniper_junos",
         vendor_id="juniper_junos",

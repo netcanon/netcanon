@@ -852,7 +852,9 @@ def _sub_interface_followers(
     followers: dict[str, str | None] = {}
     for name in plan.off_inventory:
         parent, dot, unit = name.rpartition(".")
-        if not (dot and unit):
+        # A unit suffix is a number.  A RouterOS port an operator named
+        # ``ether1.backup`` is not a sub-interface of ``ether1``.
+        if not (dot and unit.isdigit()):
             continue
         if parent in operator_map:
             target = operator_map[parent]
@@ -870,6 +872,9 @@ def _undecided_clashes(
     merged: dict[str, str | None],
     job: MigrationJob,
     target_names: list[str],
+    source_names: list[str] | None = None,
+    fold_source: bool = True,
+    fold_target: bool = True,
 ) -> list[str]:
     """Names nobody decided that the finished run put somewhere they
     must not be.
@@ -879,10 +884,11 @@ def _undecided_clashes(
     * a name ended on a target that another name also ended on, and at
       least one of them is a hardware port the config uses.  Every
       member the pairing or the operator decided stays; the undecided
-      ones lose.  Where NONE was decided, one keeps the name — a
-      hardware port if there is one, else the first — because the
-      clash is among names the translator alone placed, and deleting
-      all of them would lose a port whose place was good.
+      ones lose.  Where NONE was decided, one keeps the name — a port
+      of the declared source if there is one, else a hardware port,
+      else the first — because the clash is among names the
+      translator alone placed, and deleting all of them would lose a
+      port whose place was good.
     * a LOGICAL name (an aggregate, say) ended on a port of the
       declared target.  Nothing may share that name with it yet, but a
       physical port of the target is not where an aggregate belongs.
@@ -890,22 +896,157 @@ def _undecided_clashes(
     from ..migration.port_mapping import fused_targets, name_key
 
     hardware = set(used)
+    own = set(source_names or ())
     losers: set[str] = set()
-    clashes = fused_targets(every, job.port_renames, job.port_drops, involving=used)
+    clashes = fused_targets(
+        every, job.port_renames, job.port_drops, involving=used,
+        fold_source=fold_source, fold_target=fold_target,
+    )
     for names in clashes.values():
         undecided = [name for name in names if name not in merged]
         if len(undecided) == len(names):
-            keeper = next((n for n in undecided if n in hardware), undecided[0])
+            # The declared device's own port before a name the device
+            # does not list, whichever the config wrote first.
+            keeper = next(
+                (n for n in undecided if n in own),
+                next((n for n in undecided if n in hardware), undecided[0]),
+            )
             undecided = [name for name in undecided if name != keeper]
         losers.update(undecided)
     gone = set(job.port_drops)
-    on_target = {name_key(name) for name in target_names}
+    on_target = {name_key(name, fold_target) for name in target_names}
     for name in every:
         if name in hardware or name in merged or name in gone:
             continue
-        if name_key(job.port_renames.get(name, name)) in on_target:
+        if name_key(job.port_renames.get(name, name), fold_target) in on_target:
             losers.add(name)
     return sorted(losers)
+
+
+def _management_form(source: CodecBase, target: CodecBase, name: str) -> str:
+    """The name the ordinary translation gives a management port
+    called *name* on the target (``oobm`` on AOS-S), or ``""`` when
+    the target has no form for one or the name cannot be read."""
+    try:
+        identity = source.classify_port_name(name)
+        if identity is None or identity.kind == "unknown":
+            return ""
+        identity = identity.model_copy(update={"kind": "mgmt"})
+        return target.format_port_identity(identity) or ""
+    except Exception:
+        # Naming a form is a courtesy to the report; it must not be
+        # able to fail the job.
+        return ""
+
+
+def _read_operator_map(
+    port_rename_map: dict[str, str | None] | None,
+    target_names: list[str],
+    fold_target: bool,
+) -> tuple[dict[str, str | None], list[str]]:
+    """The operator's port map as it will be applied, and the keys of
+    the entries that were set aside.
+
+    A target is stripped, and -- where the target platform reads two
+    spellings as one port -- re-spelt the way the declared target
+    spells that port, so ``1/a1`` cannot be passed off as a second
+    port beside ``1/A1``.  On a platform with case-sensitive names a
+    name is taken as typed: ``DMZ`` beside a port ``dmz`` is the
+    operator's own interface, not a misspelling of the port.
+
+    An entry whose target is blank, or is neither text nor ``None``,
+    decides nothing and is set aside: passed on, a blank would render a
+    port with no name and a non-text value would replace the pairing's
+    entry with nothing.  (The API's model refuses the second; a direct
+    caller can send it.)
+    """
+    from ..migration.port_mapping import name_key
+
+    spelt: dict[str, list[str]] = {}
+    if fold_target:
+        for name in target_names:
+            spelt.setdefault(name_key(name), []).append(name)
+    operator_map: dict[str, str | None] = {}
+    ignored: list[str] = []
+    for key, value in (port_rename_map or {}).items():
+        if value is None:
+            operator_map[key] = None
+            continue
+        text = value.strip() if isinstance(value, str) else ""
+        if not text:
+            ignored.append(key)
+            continue
+        same = spelt.get(name_key(text), [])
+        operator_map[key] = same[0] if len(same) == 1 else text
+    return operator_map, ignored
+
+
+def _taken_with_dropped_ports(
+    tree: Any, port_drops: list[str],
+) -> tuple[set[str], dict[str, list[str]]]:
+    """What the ports a run dropped took with them.
+
+    The translator removes a route or a DHCP pool that names a dropped
+    port, a dropped member from its LAG, a VRRP track entry and a VTEP
+    source; the job reports only the port.  Read here from the parsed
+    SOURCE tree and the job's drop list, so the plan can say it.
+
+    Returns:
+        The dropped interface names (a port dropped by its factory
+        name counts under the name an operator had given it), and the
+        outcome lists keyed as :func:`settle_plan` takes them.
+    """
+    from ..migration.canonical.port_names import (
+        dropped_interface_names,
+        route_port_reference,
+    )
+
+    dropped = dropped_interface_names(tree, port_drops)
+    named = {iface.name for iface in tree.interfaces}
+    emptied_lags: list[str] = []
+    shrunk_lags: list[str] = []
+    for lag in tree.lags:
+        members = {member for member in lag.members if member}
+        members.update(
+            iface.name for iface in tree.interfaces
+            if lag.name and iface.lag_member_of == lag.name
+        )
+        lost = members & dropped
+        if members and lost == members:
+            emptied_lags.append(lag.name)
+        elif lost:
+            shrunk_lags.append(lag.name)
+
+    def route_lost(route: Any) -> bool:
+        if route.interface and route.interface in dropped:
+            return True
+        # A next hop that is an interface name, not an address.
+        reference = route_port_reference(route, named)
+        return reference is not None and reference[0] in dropped
+
+    return dropped, {
+        "emptied_lags": emptied_lags,
+        "shrunk_lags": shrunk_lags,
+        "lost_routes": [
+            route.destination for route in tree.static_routes if route_lost(route)
+        ],
+        "lost_dhcp_pools": [
+            pool.network or pool.interface for pool in tree.dhcp_servers
+            if pool.interface and pool.interface in dropped
+        ],
+        "lost_tracking": sorted({
+            iface.name for iface in tree.interfaces
+            if iface.name not in dropped and any(
+                tracked in dropped
+                for group in iface.vrrp_groups
+                for tracked in group.track_interfaces
+            )
+        }),
+        "lost_vtep_sources": sorted({
+            vx.source_interface for vx in tree.vxlan_vnis
+            if vx.source_interface and vx.source_interface in dropped
+        }),
+    }
 
 
 def run_plan_with_models(
@@ -986,8 +1127,9 @@ def run_plan_with_models(
     detail is on the plan as fields — ``unresolved_ports``,
     ``displaced``, ``fused``, ``off_target``, ``sub_interfaces``, and
     what a dropped port took with it (``emptied_lags``,
-    ``shrunk_lags``, ``lost_routes``, ``lost_dhcp_pools``) — so no
-    client has to read it out of prose.
+    ``shrunk_lags``, ``lost_routes``, ``lost_dhcp_pools``,
+    ``lost_tracking``, ``lost_vtep_sources``) — so no client has to
+    read it out of prose.
 
     The source is parsed here first, to learn which ports it uses, and
     again inside :func:`run_plan_with_overrides` — a third time when a
@@ -1027,25 +1169,17 @@ def run_plan_with_models(
         collect_hardware_port_names,
         collect_port_names,
     )
-    from ..migration.port_mapping import name_key, plan_port_mapping, settle_plan
+    from ..migration.port_mapping import plan_port_mapping, settle_plan
 
     target_names = target_inventory.names()
+    # Whether letter case is part of a name is a fact about each
+    # platform, and each codec states it.
+    fold_source = not getattr(source, "port_names_case_sensitive", False)
+    fold_target = not getattr(target, "port_names_case_sensitive", False)
 
-    # The operator's map, read as the declared target spells its ports.
-    spelt: dict[str, list[str]] = {}
-    for name in target_names:
-        spelt.setdefault(name_key(name), []).append(name)
-    operator_map: dict[str, str | None] = {}
-    ignored: list[str] = []
-    for key, value in (port_rename_map or {}).items():
-        if isinstance(value, str):
-            text = value.strip()
-            if not text:
-                ignored.append(key)
-                continue
-            same = spelt.get(name_key(text), [])
-            value = same[0] if len(same) == 1 else text
-        operator_map[key] = value
+    operator_map, ignored = _read_operator_map(
+        port_rename_map, target_names, fold_target,
+    )
 
     plan = None
     used: list[str] = []
@@ -1100,38 +1234,18 @@ def run_plan_with_models(
     # checked against the targets the plan assigned.  Ask the run.
     displaced: list[str] = []
     if plan.applied:
-        displaced = _undecided_clashes(every, used, merged, job, target_names)
+        displaced = _undecided_clashes(
+            every, used, merged, job, target_names,
+            source_names=source_inventory.names(),
+            fold_source=fold_source, fold_target=fold_target,
+        )
         if displaced:
             merged.update(dict.fromkeys(displaced))
             job = translate(merged)
             if job.rendered is None:
                 return job
 
-    # What a dropped port took with it.  The translator removes a
-    # route or a DHCP pool that names a dropped port, and a dropped
-    # member from its LAG; the job reports only the port.
-    dropped = set(job.port_drops)
-    emptied_lags: list[str] = []
-    shrunk_lags: list[str] = []
-    for lag in tree.lags:
-        members = {member for member in lag.members if member}
-        members.update(
-            iface.name for iface in tree.interfaces
-            if lag.name and iface.lag_member_of == lag.name
-        )
-        lost = members & dropped
-        if members and lost == members:
-            emptied_lags.append(lag.name)
-        elif lost:
-            shrunk_lags.append(lag.name)
-    lost_routes = [
-        route.destination for route in tree.static_routes
-        if route.interface and route.interface in dropped
-    ]
-    lost_dhcp_pools = [
-        pool.network or pool.interface for pool in tree.dhcp_servers
-        if pool.interface and pool.interface in dropped
-    ]
+    dropped, taken = _taken_with_dropped_ports(tree, job.port_drops)
 
     settle_plan(
         plan,
@@ -1147,10 +1261,13 @@ def run_plan_with_models(
             if name not in operator_map
         },
         ignored_overrides=ignored,
-        emptied_lags=emptied_lags,
-        shrunk_lags=shrunk_lags,
-        lost_routes=lost_routes,
-        lost_dhcp_pools=lost_dhcp_pools,
+        **taken,
+        management_forms={
+            port.source: _management_form(source, target, port.source)
+            for port in plan.unplaced if port.used and port.role == "mgmt"
+        },
+        fold_source=fold_source,
+        fold_target=fold_target,
     )
     job.port_mapping_plan = plan
     job.warnings.extend(plan.warnings)
@@ -1165,9 +1282,10 @@ def run_plan_with_models(
         sentences: list[str] = []
         if plan.unresolved_ports:
             sentence = (
-                f"{len(plan.unresolved_ports)} port(s) the source config "
-                f"uses have no place on the target device, or are not "
-                f"ports of the declared source device."
+                f"{len(plan.unresolved_ports)} name(s) in the source "
+                f"config need a decision: a port with no place on the "
+                f"target device, a name that is not a port of the "
+                f"declared source device, or one that was set aside."
             )
             if dropped.intersection(plan.unresolved_ports):
                 sentence += " Unplaced ports were dropped from the output."

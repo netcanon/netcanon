@@ -190,6 +190,10 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
 
 ## Common gotchas
 
+- **A static route whose next hop is an interface**
+  (`next-hop et-0/0/24.0`) follows that interface when a translation
+  between two Junos configs renames it, and is removed with it when
+  it is dropped.  Across vendors the unit form is left as written.
 - **`apply-groups` content** is preserved byte-for-byte but is
   **opaque to translation** — group content stays in source-vendor
   syntax; the renaming operation (port / VLAN / user-name etc.)

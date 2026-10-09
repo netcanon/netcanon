@@ -13,6 +13,7 @@ itself is pinned on synthetic inventories in ``test_port_mapping.py``.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -27,8 +28,9 @@ from netcanon.migration.canonical.port_names import (
     PortIdentity,
     collect_hardware_port_names,
     collect_port_names,
+    route_port_reference,
 )
-from netcanon.migration.codecs.registry import get_codec
+from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.migration.device_models import (
     Deployment,
     Inventory,
@@ -94,23 +96,110 @@ def _hardware_names(rendered: str) -> set[str]:
     return set(collect_hardware_port_names(AOSS.parse(rendered)))
 
 
-def _shared_final_names(source, raw_text: str, job: MigrationJob) -> dict[str, list[str]]:
-    """Final names that more than one source name ended on.
+def _same(codec, name: str) -> str:
+    """*name* as *codec*'s platform compares names: with its case
+    where the platform has case-sensitive names."""
+    text = name.strip()
+    return text if getattr(codec, "port_names_case_sensitive", False) else text.casefold()
 
-    Written out here, on purpose, rather than imported from the engine:
-    the engine's own check once looked only at the names its plan was
-    made for, and a test that called the same function over the same
-    list had the same blind spot.  This reads EVERY name the parsed
-    config references and groups by where the job says each ended.
+
+def _shared_final_names(source, target, raw_text: str, job: MigrationJob) -> dict[str, list[str]]:
+    """Final names that more than one source name ended on, where one
+    of those names is a hardware port.
+
+    The grouping is written out here rather than imported from the
+    engine: the engine's own check once looked only at the names its
+    plan was made for, and a test that called the same function over
+    the same list had the same blind spot.
+
+    Two logical names the ordinary translation puts on one name (two
+    loopbacks, on a target with one loopback form) are left out, as
+    the engine leaves them out: that is the translator's own, older
+    behaviour, and it warns about it itself.
+
+    The LIST OF NAMES is still the engine's (``collect_port_names``).
+    What does not depend on that list is the pair of checks below,
+    which read the rendered output.
     """
     dropped = set(job.port_drops)
+    hardware = {_same(source, name) for name in job.source_ports}
     ended: dict[str, set[str]] = {}
     for name in collect_port_names(source.parse(raw_text)):
         if name in dropped:
             continue
         final = job.port_renames.get(name, name)
-        ended.setdefault(final.strip().casefold(), set()).add(name.casefold())
-    return {final: sorted(names) for final, names in ended.items() if len(names) > 1}
+        ended.setdefault(_same(target, final), set()).add(_same(source, name))
+    return {
+        final: sorted(names) for final, names in ended.items()
+        if len(names) > 1 and hardware.intersection(names)
+    }
+
+
+def _text_values(node) -> Iterator[str]:
+    """Every text value anywhere in a dumped tree."""
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _text_values(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _text_values(value)
+
+
+def _names_left_behind(source, target, raw_text: str, job: MigrationJob) -> list[str]:
+    """Source names that were renamed away or dropped and are STILL in
+    the output.
+
+    The output is parsed again with the target codec and every text
+    value in it is looked at -- no list of fields, the engine's or
+    this file's.  A field the rename pass does not reach, read by a
+    renderer, shows up here whatever it is called: RouterOS's factory
+    port name did, which the engine's own check could not see because
+    its list of places did not have it.
+
+    A moved name may legitimately appear when it is also where some
+    surviving name ENDED (``49`` moves to ``25`` while ``25`` is
+    dropped), so those are not counted.
+    """
+    before = set(_text_values(source.parse(raw_text).model_dump()))
+    dropped = set(job.port_drops)
+    moved = {
+        _same(target, name) for name in dropped | {
+            name for name, final in job.port_renames.items() if final != name
+        }
+    }
+    # Compared as the target platform compares names: AOS-S writes a
+    # LAG ``trk1`` where it is defined and ``Trk1`` where a VLAN
+    # lists it, and that is one name.
+    finals = {
+        _same(target, job.port_renames.get(text, text))
+        for text in before if text not in dropped
+    }
+    after = set(_text_values(target.parse(job.rendered).model_dump()))
+    return sorted(
+        text for text in after
+        if _same(target, text) in moved and _same(target, text) not in finals
+    )
+
+
+def _merged_addresses(source, target, raw_text: str, job: MigrationJob) -> dict[str, list[str]]:
+    """Output interfaces that carry the addresses of MORE THAN ONE
+    source interface -- two interfaces made one, read from the
+    rendered output and not from the job's lists."""
+    owner: dict[tuple, str] = {}
+    for iface in source.parse(raw_text).interfaces:
+        for address in (*iface.ipv4_addresses, *iface.ipv6_addresses):
+            owner.setdefault((address.ip, address.prefix_length), iface.name)
+    merged: dict[str, list[str]] = {}
+    for iface in target.parse(job.rendered).interfaces:
+        sources = sorted({
+            owner[key] for address in (*iface.ipv4_addresses, *iface.ipv6_addresses)
+            if (key := (address.ip, address.prefix_length)) in owner
+        })
+        if len(sources) > 1:
+            merged[iface.name] = sources
+    return merged
 
 
 def run_plan_with_models(*args, expect_fused: bool = False, **kwargs) -> MigrationJob:
@@ -119,28 +208,37 @@ def run_plan_with_models(*args, expect_fused: bool = False, **kwargs) -> Migrati
     Every test in this module calls the pipeline through here, so the
     central promise is checked on each run rather than in one test:
 
-    * no two names the config references end on one target name --
-      recomputed independently (:func:`_shared_final_names`), over
-      logical names as well as ports -- unless the test says the
+    * no hardware port shares a target name with another name the
+      config references -- the grouping recomputed here
+      (:func:`_shared_final_names`) -- unless the test says the
       operator asked for it;
     * when the operator did, the plan's record names the same targets;
     * a job with a fused target, or with a port nobody decided, is
       not ``completed``;
     * what the plan says happened to an unplaced port is what the
-      job's drop list says happened to it.
+      job's drop list says happened to it;
+    * read from the RENDERED OUTPUT, parsed again: no name that moved
+      or was dropped is still in it (:func:`_names_left_behind`), and
+      no interface in it carries the addresses of two source
+      interfaces (:func:`_merged_addresses`).  These two assume
+      nothing about which fields hold a port name.
     """
     job = migration_pipeline.run_plan_with_models(*args, **kwargs)
     plan = job.port_mapping_plan
-    if plan is None or not plan.applied:
+    if plan is None or not plan.applied or job.rendered is None:
         return job
-    source, raw_text = args[0], args[2]
-    shared = _shared_final_names(source, raw_text, job)
+    source, target, raw_text = args[0], args[1], args[2]
+    shared = _shared_final_names(source, target, raw_text, job)
     if expect_fused:
         assert shared and plan.fused
-        assert {t.strip().casefold() for t in plan.fused} == set(shared)
+        assert {_same(target, t) for t in plan.fused} == set(shared)
     else:
         assert shared == {}, f"two names on one target name: {shared}"
         assert plan.fused == {}
+        merged = _merged_addresses(source, target, raw_text, job)
+        assert merged == {}, f"two source interfaces in one output interface: {merged}"
+    left = _names_left_behind(source, target, raw_text, job)
+    assert left == [], f"names that moved are still in the output: {left}"
     if plan.fused or plan.unresolved_ports:
         assert job.status != MigrationJobStatus.completed
     for port in plan.used_unplaced:
@@ -257,7 +355,7 @@ class TestOntoASmallerSwitch:
 
     def test_it_is_not_reported_as_a_clean_success(self, job) -> None:
         assert job.status == MigrationJobStatus.partial
-        assert "Port mapping is incomplete: 24 port(s)" in job.error
+        assert "Port mapping is incomplete: 24 name(s) in the source config need a decision" in job.error
         (warning,) = [w for w in job.warnings if w.startswith("port mapping:")]
         assert "24 source access port(s)" in warning and "DROPPED" in warning
 
@@ -280,7 +378,7 @@ class TestOntoASmallerSwitch:
             port_rename_map={"25": None},
         )
         assert job.status == MigrationJobStatus.partial
-        assert "23 port(s)" in job.error
+        assert "23 name(s)" in job.error
 
 
 class TestNoUplinksOnTheTarget:
@@ -716,6 +814,11 @@ def _profile(key: str, module: str | None = None) -> Inventory:
     return inventory_from_profile(PROFILES[key], module)
 
 
+def _find_lines(job: MigrationJob) -> list[str]:
+    """The RouterOS lines that look a port up on the device."""
+    return [line for line in job.rendered.splitlines() if "find default-name=" in line]
+
+
 class TestNamesThePlanDoesNotDecide:
     """The pairing decides paired and unplaced data ports.  An unplaced
     management port and an off-inventory name go to the name-shape
@@ -742,6 +845,9 @@ class TestNamesThePlanDoesNotDecide:
         assert job.rendered.count("interface=ether1") == 1
         assert job.status == MigrationJobStatus.partial
         assert plan.unresolved_ports == ["ether1"]
+        # The line that finds the port on the TARGET names the target's
+        # port, not the source's.
+        assert _find_lines(job) == ['set [ find default-name=ether1 ] comment="to-core" disabled=no']
 
     def test_the_operator_can_place_it_instead(self) -> None:
         """Naming the port in the override map is the operator deciding
@@ -758,6 +864,12 @@ class TestNamesThePlanDoesNotDecide:
         assert job.port_drops == []
         assert job.port_mapping_plan.unresolved_ports == []
         assert job.status == MigrationJobStatus.completed
+        # This test once pinned everything above while the output said
+        # "find the port called ether1 and name it ether8".
+        assert sorted(_find_lines(job)) == [
+            'set [ find default-name=ether1 ] comment="to-core" disabled=no',
+            'set [ find default-name=ether8 ] comment="oob management" disabled=no',
+        ]
 
     def test_a_management_port_the_classifier_does_not_know_is_one(self) -> None:
         """A Catalyst ``GigabitEthernet0/0`` with no ``vrf forwarding
@@ -875,7 +987,10 @@ class TestOverridesThatDoNotFit:
         )
         assert job.port_mapping_plan.off_target == ["77"]
         assert job.status == MigrationJobStatus.completed
-        assert any("override target(s) are not ports" in w and "77" in w for w in job.warnings)
+        assert any(
+            "override target(s) are not names the declared target device lists" in w
+            and ": 77;" in w for w in job.warnings
+        )
 
     def test_keeping_unplaced_ports_under_their_old_names(self) -> None:
         """The rename modal's "keep verbatim" sends ``{port: port}``.
@@ -940,7 +1055,7 @@ class TestWhichNamesAreHardware:
         assert names == ["1", "2"]
 
     def test_a_classifier_that_raises_cannot_fail_the_read(self) -> None:
-        """Fourteen per-vendor classifiers, an arbitrary string from a
+        """A per-vendor classifier, an arbitrary string from a
         pasted config.  A name one of them chokes on is kept, which is
         what ``unknown`` already means."""
         tree = AOSS.parse(_CONFIG_WITH_A_TRUNK)
@@ -973,9 +1088,11 @@ def _tree(**parts) -> CanonicalIntent:
 
 
 class TestWhereATreeHoldsPortNames:
-    """``collect_port_names`` is the single statement of where a
-    canonical tree holds port names.  Each place is pinned, because a
-    place missing from it is a name the fusion check never looks at."""
+    """``collect_port_names`` lists the port names a canonical tree
+    holds.  Each place it reads is pinned here, because a place missing
+    from it is a name the fusion check never looks at.  That pins the
+    list against itself; whether the list is COMPLETE is what
+    ``test_port_name_universe.py`` checks, with no list at all."""
 
     @pytest.mark.parametrize(
         ("parts", "name"),
@@ -1627,3 +1744,537 @@ class TestTheRunIsRepeatedOnlyWhenItMustBe:
         assert len(runs) == 2
         assert job.status == MigrationJobStatus.failed
         assert job.port_mapping_plan is None
+
+
+# ---------------------------------------------------------------------------
+# A port with two names (RouterOS)
+# ---------------------------------------------------------------------------
+
+_CRS310_CAPTURE = (
+    REPO_ROOT / "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc"
+).read_text(encoding="utf-8")
+
+_ROUTEROS_NAMED = """/interface ethernet
+set [ find default-name=sfp-sfpplus1 ] name=core-a comment="core A"
+set [ find default-name=ether1 ] comment="oob"
+/ip address
+add address=10.0.0.1/30 interface=core-a
+add address=192.0.2.10/24 interface=ether1
+"""
+
+_CCR2004 = "mikrotik_routeros/CCR2004-1G-12S+2XS"
+_CRS310 = "mikrotik_routeros/CRS310-8G+2S+"
+
+
+class TestAPortsFactoryName:
+    """RouterOS keeps a port's factory name (``ether1``) beside the
+    name an operator may have given it, and its renderer finds the
+    port on the device by the factory name:
+    ``set [ find default-name=ether1 ] ...``.  The factory name is the
+    hardware.  It has to move with the port -- left behind, every line
+    told the TARGET device to find the port with the SOURCE's name."""
+
+    def test_a_real_capture_between_the_two_shipped_models(self) -> None:
+        """A committed CRS310 capture, declared as a CRS310, onto the
+        CCR2004.  Ten ports move; each line must look up the port the
+        pairing chose, and rename nothing."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _CRS310_CAPTURE, _profile(_CRS310), _profile(_CCR2004),
+        )
+        assert job.status == MigrationJobStatus.completed
+        lines = _find_lines(job)
+        assert [line.split("default-name=")[1].split(" ")[0] for line in lines] == [
+            *(f"sfp-sfpplus{n}" for n in range(1, 9)), "sfp28-1", "sfp28-2",
+        ]
+        assert not [line for line in lines if " name=" in line]
+
+    def test_a_port_the_operator_named_is_still_a_port_of_the_model(self) -> None:
+        """``core-a`` is the first SFP+ cage under another name.  With
+        the same model on both sides nothing moves, nothing is "not a
+        port of the declared source", and the job is complete."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_NAMED, _profile(_CCR2004), _profile(_CCR2004),
+        )
+        plan = job.port_mapping_plan
+        assert job.status == MigrationJobStatus.completed
+        assert plan.off_inventory == [] and plan.unresolved_ports == []
+        assert sorted(job.source_ports) == ["ether1", "sfp-sfpplus1"]
+        assert (
+            'set [ find default-name=sfp-sfpplus1 ] name=core-a comment="core A" disabled=no'
+            in job.rendered
+        )
+
+    def test_its_hardware_moves_and_its_name_stays(self) -> None:
+        """Onto the CRS310 the cage is paired with ``ether1``.  The
+        port is found there by its new factory name and keeps the name
+        the operator gave it, which is what the address refers to."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_NAMED, _profile(_CCR2004), _profile(_CRS310),
+        )
+        assert job.port_renames == {"sfp-sfpplus1": "ether1"}
+        assert _find_lines(job) == [
+            'set [ find default-name=ether1 ] name=core-a comment="core A" disabled=no',
+        ]
+        assert "add address=10.0.0.1/30 interface=core-a" in job.rendered
+        # The CCR2004's own management ether1 has no place: displaced, as before.
+        assert job.port_mapping_plan.displaced == ["ether1"]
+
+    def test_the_two_names_of_one_port_in_a_tree(self) -> None:
+        tree = _tree(interfaces=[
+            {"name": "core-a", "default_name": "ether2"},
+            {"name": "ether1", "default_name": "ether1"},
+        ])
+        assert collect_port_names(tree) == ["core-a", "ether2", "ether1"]
+        # The factory name is the evidence; the alias is not a second port.
+        assert collect_hardware_port_names(tree) == ["ether2", "ether1"]
+
+
+# ---------------------------------------------------------------------------
+# A name the translator drops on its own
+# ---------------------------------------------------------------------------
+
+_IOS_AUTODROP = """hostname sw
+!
+interface GigabitEthernet1/0/5
+ description KEEPME
+ switchport mode access
+ switchport access vlan 10
+!
+interface TenGigabitEthernet1/0/5
+ vrf forwarding Mgmt-vrf
+ ip address 192.0.2.5 255.255.255.0
+!
+end
+"""
+
+
+class TestANameTheTranslatorDropsOnItsOwn:
+    def test_it_does_not_take_a_paired_port_with_it(self) -> None:
+        """``TenGigabitEthernet1/0/5`` is not a port of the declared
+        C9300-48P and is in the management VRF; IOS-XE has no form for
+        a management port, so the translator drops it.  The pairing put
+        ``GigabitEthernet1/0/5`` ON that name.  The drop used to be
+        applied by name after the renames, and took both."""
+        ios = get_codec("cisco_iosxe_cli")
+        job = run_plan_with_models(
+            ios, ios, _IOS_AUTODROP,
+            _profile("cisco_iosxe/C9300-48P"), _profile("cisco_iosxe/C9300-24UX"),
+        )
+        assert job.port_renames == {"GigabitEthernet1/0/5": "TenGigabitEthernet1/0/5"}
+        assert job.port_drops == ["TenGigabitEthernet1/0/5"]
+        assert job.rendered.count("interface TenGigabitEthernet1/0/5") == 1
+        assert "description KEEPME" in job.rendered
+        assert "192.0.2.5" not in job.rendered
+        assert job.port_mapping_plan.off_inventory == ["TenGigabitEthernet1/0/5"]
+        assert job.status == MigrationJobStatus.partial
+        # One port was dropped and one kept: nothing was merged, and the
+        # translator must not say that something was.
+        assert not [w for w in job.warnings if "multiple source ports map to" in w]
+
+
+# ---------------------------------------------------------------------------
+# Letter case
+# ---------------------------------------------------------------------------
+
+_FORTIGATE_CASE = """config system interface
+    edit "dmz"
+        set ip 10.10.10.1 255.255.255.0
+        set type physical
+    next
+    edit "port1"
+        set ip 10.1.1.1 255.255.255.0
+        set type physical
+    next
+    edit "DMZ"
+        set ip 10.20.20.1 255.255.255.0
+        set interface "port1"
+        set vlanid 20
+    next
+end
+"""
+
+
+class TestCaseIsAFactAboutThePlatform:
+    """On AOS-S ``1/a1`` is the port ``1/A1``.  On FortiOS ``DMZ`` and
+    ``dmz`` are two interfaces.  Each codec says which its platform is."""
+
+    def test_the_codecs_say_which_they_are(self) -> None:
+        sensitive = {
+            name for name in list_public_codecs()
+            if get_codec(name).port_names_case_sensitive
+        }
+        assert sensitive == {
+            "fortigate_cli", "juniper_junos", "mikrotik_routeros", "opnsense", "vyos",
+        }
+
+    def test_an_interface_kept_under_its_own_name_is_not_turned_into_a_port(self) -> None:
+        """A VLAN interface ``DMZ`` beside the physical ``dmz``, and the
+        operator keeps it as it is.  Read without case that entry named
+        the PORT: one interface came out, and the other's address was
+        gone, in a job that said ``completed``."""
+        fortigate = get_codec("fortigate_cli")
+        same = _profile("fortigate/100E")
+        job = run_plan_with_models(
+            fortigate, fortigate, _FORTIGATE_CASE, same, same,
+            port_rename_map={"DMZ": "DMZ"},
+        )
+        assert 'edit "dmz"' in job.rendered and 'edit "DMZ"' in job.rendered
+        assert "10.10.10.1" in job.rendered and "10.20.20.1" in job.rendered
+        assert job.port_renames == {}
+        assert job.port_mapping_plan.fused == {}
+        assert job.status == MigrationJobStatus.completed
+
+    def test_sending_one_onto_the_other_is_two_interfaces_on_one_name(self) -> None:
+        """The same two interfaces, and this time the operator does
+        point ``DMZ`` at ``dmz``.  They are two source interfaces, not
+        two spellings of one, so this is a fused target and the job is
+        not a clean success -- the contract for every override."""
+        fortigate = get_codec("fortigate_cli")
+        same = _profile("fortigate/100E")
+        job = run_plan_with_models(
+            fortigate, fortigate, _FORTIGATE_CASE, same, same,
+            port_rename_map={"DMZ": "dmz"}, expect_fused=True,
+        )
+        assert job.port_mapping_plan.fused == {"dmz": ["dmz", "DMZ"]}
+        assert job.status == MigrationJobStatus.partial
+
+    def test_where_case_is_not_part_of_a_name_two_spellings_are_still_one_port(self) -> None:
+        job = run_plan_with_models(
+            AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, TARGET_2930M_48G,
+            port_rename_map={"52": "1/a1"}, expect_fused=True,
+        )
+        assert job.port_mapping_plan.fused == {"1/A1": ["49", "52"]}
+        assert job.status == MigrationJobStatus.partial
+
+    def test_the_rule_with_and_without_case(self) -> None:
+        """An aggregate that ends on ``SFP1`` beside a target port
+        ``sfp1``: the same port where case does not count, another
+        name where it does."""
+        job = SimpleNamespace(port_renames={"agg": "SFP1"}, port_drops=[])
+        arguments = (["agg", "p1"], ["p1"], {"p1": "sfp2"}, job, ["sfp1", "sfp2"])
+        assert migration_pipeline._undecided_clashes(*arguments) == ["agg"]
+        assert migration_pipeline._undecided_clashes(*arguments, fold_target=False) == []
+
+
+# ---------------------------------------------------------------------------
+# A next hop that is an interface
+# ---------------------------------------------------------------------------
+
+_JUNOS_NEXT_HOP = """set system host-name sw
+set interfaces et-0/0/24 unit 0 family inet address 10.0.0.1/30
+set interfaces xe-0/0/1 unit 0 family inet address 10.1.0.1/24
+set routing-options static route 0.0.0.0/0 next-hop et-0/0/24.0
+"""
+
+_JUNOS_NEXT_HOP_DROPPED = """set system host-name sw
+set interfaces xe-0/0/30 unit 0 family inet address 10.30.0.1/24
+set interfaces xe-0/0/1 unit 0 family inet address 10.1.0.1/24
+set routing-options static route 10.30.0.0/16 next-hop xe-0/0/30.0
+set routing-options static route 0.0.0.0/0 next-hop 10.1.0.254
+"""
+
+_ROUTEROS_NEXT_HOPS = """/interface ethernet
+set [ find default-name=sfp28-1 ] comment="wan"
+set [ find default-name=sfp-sfpplus1 ] comment="lan"
+/ip address
+add address=192.0.2.2/30 interface=sfp28-1
+add address=10.9.0.1/24 interface=sfp-sfpplus1
+/ip route
+add dst-address=0.0.0.0/0 gateway=sfp28-1
+add dst-address=10.9.0.0/16 gateway=sfp-sfpplus1
+"""
+
+
+class TestANextHopThatIsAnInterface:
+    """Junos ``next-hop et-0/0/24.0`` and RouterOS ``gateway=ether1``
+    put an interface name where an address usually is.  The route
+    follows its interface, and goes with it when it is dropped."""
+
+    def test_a_junos_route_follows_the_port(self) -> None:
+        junos = get_codec("juniper_junos")
+        job = run_plan_with_models(
+            junos, junos, _JUNOS_NEXT_HOP,
+            _profile("juniper_junos/EX4600-40F"), _profile("juniper_junos/QFX5120-48Y"),
+        )
+        assert job.port_renames == {"et-0/0/24": "et-0/0/48"}
+        assert "static route 0.0.0.0/0 next-hop et-0/0/48.0" in job.rendered
+        assert "et-0/0/24" not in job.rendered
+
+    def test_a_junos_route_goes_with_a_dropped_port_and_is_listed(self) -> None:
+        junos = get_codec("juniper_junos")
+        job = run_plan_with_models(
+            junos, junos, _JUNOS_NEXT_HOP_DROPPED,
+            _profile("juniper_junos/QFX5120-48Y"), _profile("juniper_junos/EX4600-40F"),
+        )
+        plan = job.port_mapping_plan
+        assert job.port_drops == ["xe-0/0/30"]
+        assert plan.lost_routes == ["10.30.0.0/16"]
+        assert "10.30.0.0/16" not in job.rendered
+        assert "static route 0.0.0.0/0 next-hop 10.1.0.254" in job.rendered
+
+    def test_routeros_gateways_follow_their_ports(self) -> None:
+        """The two ports change places, more or less: before the fix
+        ``gateway=sfp-sfpplus1`` was left naming the port the UPLINK had
+        been paired onto -- a real port, and the wrong one."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(
+            mikrotik, mikrotik, _ROUTEROS_NEXT_HOPS, _profile(_CCR2004), _profile(_CRS310),
+        )
+        assert job.port_renames == {"sfp-sfpplus1": "ether1", "sfp28-1": "sfp-sfpplus1"}
+        assert "add dst-address=0.0.0.0/0 gateway=sfp-sfpplus1" in job.rendered
+        assert "add dst-address=10.9.0.0/16 gateway=ether1" in job.rendered
+
+    def test_an_address_is_never_taken_for_an_interface(self) -> None:
+        def reference(gateway: str, names: set[str], units: bool = True):
+            return route_port_reference(SimpleNamespace(gateway=gateway), names, units=units)
+
+        assert reference("10.0.0.1", {"ether1", "10.0.0.2"}) is None
+        assert reference("", {"ether1"}) is None
+        assert reference("ether1", {"ether1"}) == ("ether1", "")
+        assert reference("et-0/0/24.0", {"et-0/0/24"}) == ("et-0/0/24", ".0")
+        assert reference("et-0/0/24.0", {"et-0/0/24"}, units=False) is None
+        assert reference("et-0/0/24.x", {"et-0/0/24"}) is None
+
+
+# ---------------------------------------------------------------------------
+# What else a dropped port takes
+# ---------------------------------------------------------------------------
+
+_IOS_TRACK = """hostname sw
+!
+interface GigabitEthernet1/0/30
+ description uplink
+!
+interface Vlan10
+ ip address 10.10.0.2 255.255.255.0
+ vrrp 20 ip 10.10.0.1
+ vrrp 20 track GigabitEthernet1/0/30 decrement 20
+!
+end
+"""
+
+_EOS_VTEP = """hostname leaf
+!
+interface Ethernet1
+   description up
+!
+interface Loopback0
+   ip address 10.255.0.1/32
+!
+interface Vxlan1
+   vxlan source-interface Loopback0
+   vxlan udp-port 4789
+   vxlan vlan 10 vni 10010
+!
+vlan 10
+!
+end
+"""
+
+
+class TestWhatElseADroppedPortTakes:
+    def test_a_vrrp_track_entry_on_an_interface_that_stays(self) -> None:
+        """Port 30 has no place on a 24-port switch.  ``Vlan10`` stays,
+        and its VRRP group no longer tracks anything -- which the job
+        used to leave for the operator to find."""
+        ios = get_codec("cisco_iosxe_cli")
+        job = run_plan_with_models(
+            ios, ios, _IOS_TRACK,
+            _profile("cisco_iosxe/C9300-48P"), _profile("cisco_iosxe/C9300-24P"),
+        )
+        plan = job.port_mapping_plan
+        assert job.port_drops == ["GigabitEthernet1/0/30"]
+        assert "interface Vlan10" in job.rendered and "track" not in job.rendered
+        assert plan.lost_tracking == ["Vlan10"]
+        assert any(
+            "1 interface(s) lost a VRRP track entry that named a dropped port" in w
+            and "Vlan10" in w for w in job.warnings
+        )
+
+    def test_nothing_is_listed_when_the_tracked_port_has_a_place(self) -> None:
+        ios = get_codec("cisco_iosxe_cli")
+        same = _profile("cisco_iosxe/C9300-48P")
+        job = run_plan_with_models(ios, ios, _IOS_TRACK, same, same)
+        assert job.port_mapping_plan.lost_tracking == []
+        assert "vrrp 20 track GigabitEthernet1/0/30" in job.rendered
+
+    def test_a_vtep_source(self) -> None:
+        """The operator drops the loopback the VTEP is bound to.
+
+        Called without the wrapper on purpose: the Arista renderer
+        writes its default source name, ``Loopback0``, when the binding
+        is empty, so the dropped name IS still in the output -- which
+        is exactly why the plan has to say the source is gone."""
+        eos = get_codec("arista_eos")
+        same = _profile("arista_eos/DCS-7050SX-64")
+        job = migration_pipeline.run_plan_with_models(
+            eos, eos, _EOS_VTEP, same, same, port_rename_map={"Loopback0": None},
+        )
+        assert job.port_mapping_plan.lost_vtep_sources == ["Loopback0"]
+        assert "interface Loopback0" not in [
+            line.strip() for line in job.rendered.splitlines()
+        ]
+        assert any("the VXLAN source interface was dropped (Loopback0)" in w for w in job.warnings)
+
+    def test_a_lag_no_member_of_which_was_parsed_is_not_emptied(self) -> None:
+        """A LAG with no members cannot have lost them all."""
+        tree = _tree(lags=[{"name": "fortilink", "members": []}])
+        _dropped, taken = migration_pipeline._taken_with_dropped_ports(tree, ["port1"])
+        assert taken["emptied_lags"] == [] and taken["shrunk_lags"] == []
+
+    def test_members_are_counted_from_what_the_run_dropped(self) -> None:
+        """...not from what a map asked for: a member the translator
+        dropped on its own shrinks the LAG just the same."""
+        tree = _tree(lags=[{"name": "Trk1", "members": ["51", "52"]}])
+        _dropped, taken = migration_pipeline._taken_with_dropped_ports(tree, ["52"])
+        assert taken["shrunk_lags"] == ["Trk1"] and taken["emptied_lags"] == []
+        _dropped, taken = migration_pipeline._taken_with_dropped_ports(tree, ["51", "52"])
+        assert taken["emptied_lags"] == ["Trk1"]
+
+    def test_a_port_dropped_by_its_factory_name_takes_what_names_its_alias(self) -> None:
+        tree = _tree(
+            interfaces=[{"name": "core-a", "default_name": "ether2"}],
+            static_routes=[{"destination": "10.0.0.0/8", "gateway": "core-a"}],
+            dhcp_servers=[{"interface": "core-a", "network": "10.1.0.0/24"}],
+        )
+        dropped, taken = migration_pipeline._taken_with_dropped_ports(tree, ["ether2"])
+        assert dropped == {"ether2", "core-a"}
+        assert taken["lost_routes"] == ["10.0.0.0/8"]
+        assert taken["lost_dhcp_pools"] == ["10.1.0.0/24"]
+
+
+# ---------------------------------------------------------------------------
+# Smaller rules
+# ---------------------------------------------------------------------------
+
+_IOS_TWO_MGMT = """hostname sw
+!
+interface GigabitEthernet0/1
+ vrf forwarding Mgmt-vrf
+ ip address 192.0.2.11 255.255.255.0
+!
+interface GigabitEthernet0/0
+ vrf forwarding Mgmt-vrf
+ ip address 192.0.2.10 255.255.255.0
+!
+interface GigabitEthernet1/0/1
+ description user
+!
+end
+"""
+
+_IOS_ONE_MGMT = """hostname sw
+!
+interface GigabitEthernet0/0
+ vrf forwarding Mgmt-vrf
+ ip address 192.0.2.10 255.255.255.0
+!
+interface GigabitEthernet1/0/1
+ description user
+!
+end
+"""
+
+_IOS_TWO_PORTS = """hostname sw
+!
+interface GigabitEthernet1/0/1
+ description one
+!
+interface GigabitEthernet1/0/2
+ description two
+!
+end
+"""
+
+
+class TestSmallerRules:
+    def test_the_declared_devices_own_port_keeps_a_name_nobody_decided(self) -> None:
+        """Two management ports, both ``oobm`` by name shape.  The one
+        the config writes first is not a port of the declared C9300;
+        the device's own port keeps the name all the same."""
+        job = run_plan_with_models(
+            get_codec("cisco_iosxe_cli"), AOSS, _IOS_TWO_MGMT,
+            _profile("cisco_iosxe/C9300-48P"), TARGET_2930M_48G,
+        )
+        assert job.port_renames["GigabitEthernet0/0"] == "oobm"
+        assert job.port_mapping_plan.displaced == ["GigabitEthernet0/1"]
+        assert "192.0.2.10" in job.rendered and "192.0.2.11" not in job.rendered
+
+    def test_only_the_targets_own_form_for_a_management_port_is_exempt(self) -> None:
+        """``oobm`` is where AOS-S keeps a management port, and naming
+        it is not "a target the device does not list".  Keeping the
+        port under its Cisco name is."""
+        ios = get_codec("cisco_iosxe_cli")
+        source = _profile("cisco_iosxe/C9300-48P")
+        named = run_plan_with_models(
+            ios, AOSS, _IOS_ONE_MGMT, source, TARGET_2930M_48G,
+            port_rename_map={"GigabitEthernet0/0": "oobm"},
+        )
+        assert named.port_mapping_plan.off_target == []
+        assert named.status == MigrationJobStatus.completed
+        kept = run_plan_with_models(
+            ios, AOSS, _IOS_ONE_MGMT, source, TARGET_2930M_48G,
+            port_rename_map={"GigabitEthernet0/0": "GigabitEthernet0/0"},
+        )
+        assert kept.port_mapping_plan.off_target == ["GigabitEthernet0/0"]
+
+    def test_a_target_that_is_not_text_is_set_aside(self) -> None:
+        """Neither a name nor a drop.  Passed on, it replaced the
+        pairing's entry with nothing and the port kept its old name."""
+        ios = get_codec("cisco_iosxe_cli")
+        job = run_plan_with_models(
+            ios, AOSS, _IOS_TWO_PORTS,
+            _profile("cisco_iosxe/C9300-48P"), TARGET_2930M_48G,
+            port_rename_map={"GigabitEthernet1/0/2": 7},
+        )
+        plan = job.port_mapping_plan
+        assert plan.ignored_overrides == ["GigabitEthernet1/0/2"] and plan.overridden == []
+        assert job.port_renames["GigabitEthernet1/0/2"] == "1/2"
+
+    def test_an_abbreviated_target_is_reported_but_not_recognised(self) -> None:
+        """A limit, pinned so it is not mistaken for a guarantee:
+        ``Gi1/0/1`` is the port ``GigabitEthernet1/0/1`` to the device
+        and a different name to netcanon.  The job is ``completed``;
+        what it says is that the name is not one the model lists, and
+        that it may be another spelling of a port."""
+        ios = get_codec("cisco_iosxe_cli")
+        same = _profile("cisco_iosxe/C9300-48P")
+        job = run_plan_with_models(
+            ios, ios, _IOS_TWO_PORTS, same, same,
+            port_rename_map={"GigabitEthernet1/0/2": "Gi1/0/1"},
+        )
+        plan = job.port_mapping_plan
+        assert plan.off_target == ["Gi1/0/1"] and plan.fused == {}
+        assert job.status == MigrationJobStatus.completed
+        (line,) = [w for w in job.warnings if "override target(s)" in w]
+        assert "it may share that port with the source port already paired to it" in line
+
+    def test_a_unit_suffix_is_a_number(self) -> None:
+        plan = SimpleNamespace(
+            off_inventory=["ether1.backup", "ge-0/0/0.54", "ge-0/0/0."],
+            rename_map={"ether1": "sfp1", "ge-0/0/0": "ge-0/0/5"},
+        )
+        assert migration_pipeline._sub_interface_followers(plan, {}) == {
+            "ge-0/0/0.54": "ge-0/0/5.54",
+        }
+
+    def test_an_ignored_entry_for_a_name_the_config_lacks_is_not_listed(self) -> None:
+        job = run_plan_with_models(
+            AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, TARGET_2930M_48G,
+            port_rename_map={"999": "", "7": " "},
+        )
+        assert job.port_mapping_plan.ignored_overrides == ["7"]
+
+    def test_a_logical_name_an_operator_put_on_a_port_occupies_it(self) -> None:
+        """``unused_target`` is the ports still free.  A port the
+        operator gave to an aggregate is not one of them."""
+        job = run_plan_with_models(
+            get_codec("fortigate_cli"), get_codec("arista_eos"), _FORTIGATE,
+            _profile("fortigate/100E"), _profile("arista_eos/DCS-7050SX-64"),
+            port_rename_map={"fortilink": "Ethernet9"},
+        )
+        unused = job.port_mapping_plan.unused_target
+        assert "Ethernet9" not in unused and "Ethernet10" in unused

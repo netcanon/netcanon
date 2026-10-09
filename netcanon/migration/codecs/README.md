@@ -170,6 +170,17 @@ class MyVendorCodec(CodecBase):
     # entries as the codec gains each category's round-trip coverage.
     unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset()
 
+    # Is letter case part of an interface name on this platform?
+    # True where `DMZ` and `dmz` are two interfaces (FortiOS, RouterOS,
+    # Junos, the Linux- and BSD-based platforms).  Leave the default,
+    # False, where the device reads the two as one (IOS, EOS, AOS-S).
+    # Model-to-model port mapping compares final names by this rule;
+    # the wrong value either merges two interfaces or lets an override
+    # hide behind its spelling.  When unsure, leave it False: the
+    # mapping then reports two spellings as one port rather than
+    # passing them in silence.
+    port_names_case_sensitive: ClassVar[bool] = False
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         vendor_id="myvendor",
         device_classes=[DeviceClass.switch, DeviceClass.router],

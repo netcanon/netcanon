@@ -81,6 +81,24 @@ timestamp if your timezone matters for an audit.
 
   Over a dozen test assertions pinned the wrong values and moved in the
   same change, so they now guard the corrections instead of the errors.
+- **A request the server could not echo was a 500.**  A validation
+  error echoes the rejected value.  A value that cannot be written as
+  UTF-8 (a lone surrogate, sent as the JSON escape `"\ud800"`) made
+  that echo fail, on every endpoint; so did a rename-map name holding
+  one, when the job that echoes it was serialised.  The 422 body is
+  now written ASCII-escaped — same status, same `Content-Type`, and it
+  parses to the same JSON — with a `NaN` or `Infinity` echoed as text
+  so the body is always strict JSON, and such a rename-map name is
+  refused with a 422.
+- **One unreadable target-profile file stopped the application.**  A
+  file under `target_profiles/` that is not UTF-8, is a directory, or
+  has a key that is not a string is now logged and skipped, like one
+  that fails validation.
+- **A port could be deleted because another name was dropped.**  The
+  port translator removed a name the target cannot express by
+  matching it AFTER renaming, which also removed a different port that
+  had just been renamed onto that name.  Such names are now removed
+  before anything is renamed.  No committed capture was affected.
 - **The ports fit-check banner reappeared on the VLAN and user panes.**
   Editing an override on another pane refreshed the summary, which
   re-rendered the ports banner there.  It is ports-pane only again.
@@ -121,27 +139,42 @@ timestamp if your timezone matters for an audit.
     management (the `oobm` block on AOS-S).  It still needs the
     operator's decision — netcanon does not know whether the target
     device has a management interface at all.
-  - **No two interfaces are put on one target name unless the operator
-    asks for it.**  A name the pairing does not decide — that
-    management port, a name that is not a port of the declared source,
-    or a logical interface such as an aggregate — can come back from
-    the ordinary translation as a port the pairing already assigned.
-    The finished run is checked for that over every name the config
-    references, and such a name is dropped and reported (`displaced`)
-    instead of being merged into another port.
+  - **No hardware port shares a target name with another interface
+    unless the operator asks for it.**  A name the pairing does not
+    decide — that management port, a name that is not a port of the
+    declared source, or a logical interface such as an aggregate —
+    can come back from the ordinary translation as a port the pairing
+    already assigned.  The finished run is checked for that over
+    every name the config references, and such a name is dropped and
+    reported (`displaced`) instead of being merged into another port.
+    Two logical interfaces the ordinary translation puts on one name
+    (two loopbacks, on a target with one loopback form) are still
+    only warned about, as before.
+  - Names are compared as each platform compares them.  On AOS-S or
+    IOS `1/a1` is the port `1/A1`; on FortiOS, RouterOS, Junos, VyOS
+    and OPNsense `DMZ` and `dmz` are two interfaces.  Each codec
+    states which its platform is.
   - Between two configs of the same codec a sub-interface
     (`ge-0/0/0.54`) follows its parent port.
+  - On RouterOS a port is found on the device by its factory name,
+    and that name moves with the port.  A port the operator renamed
+    is paired by its factory name and keeps the operator's name.
+  - A static route whose next hop is an interface (RouterOS
+    `gateway=ether1`, Junos `next-hop et-0/0/24.0`) follows that
+    interface.
   - What a dropped port takes with it is listed: a LAG that lost
-    members, and a static route or DHCP pool that named the port.
+    members, a static route or DHCP pool that named the port, a VRRP
+    track entry on an interface that stays, and a VXLAN source
+    interface.
   - A run that leaves a name dropped, off-inventory or displaced, or a
     management port kept, which the operator has not decided is
     `partial` rather than `completed`; so is one where the operator's
     own map points two ports at one name, and one where no pairing
     could be made at all.
   - An entry in `port_rename_map` always wins over the pairing, on
-    `/plan` and on every per-pane endpoint.  Its target is read as the
-    target device spells it (`1/a1` is `1/A1`); a blank target is
-    ignored.
+    `/plan` and on every per-pane endpoint.  Where the target platform
+    has no letter case its target is read as the target device spells
+    it (`1/a1` is `1/A1`); a blank target is ignored.
   - A declaration is checked: an unknown model, mode, bay, module or
     member id is a 422 that says what was wrong, a member id is an
     integer and nothing else, a profile's module must be one the
@@ -288,9 +321,19 @@ timestamp if your timezone matters for an audit.
 - **Across vendors a sub-interface does not follow its parent port.**
   With devices declared, `GigabitEthernet1/0/1` moves by position and
   `GigabitEthernet1/0/1.100` is reported and left to the ordinary
-  translation — which drops it where it cannot give it a name of its
-  own.  Some firewall pseudo-interfaces the source codec does not
+  translation — which leaves a name it does not recognise under its
+  old name (IOS-XE) and drops one it would fold into its port
+  (Junos).  Some firewall pseudo-interfaces the source codec does not
   classify are reported as off-inventory in the same way.
+- **An override target is understood by case and spacing only.**  An
+  abbreviation the device would accept (`Gi1/0/1`) is not recognised
+  as the port it names: it is reported as a target the model does not
+  list, the job can be `completed`, and that port can end up with two
+  source ports on it.  Use the names `POST /inventory` prints.
+- **Two things in a correct IOS config are reported as if the model
+  were wrong.**  An `interface Null0` stanza is off-inventory, and a
+  VRRP `track <object number>` is read as a port name and can be
+  displaced.
 - **netcanon does not know whether a model has a management port.**
   A source management port with no management port in the target
   model is always left for the operator to decide.

@@ -308,11 +308,22 @@ If the new field references a port or interface by name (as
 has two more places to go in the same change, both in
 `netcanon/migration/canonical/port_names.py`: the rename pass in
 `translate_port_names`, so the name is translated with the rest, and
-`collect_port_names`, the single statement of where a tree holds port
-names.  Model-to-model port mapping checks a finished translation for
-two names on one target over exactly that list — a place missing from
-it is a name the check never looks at.
-`tests/unit/migration/test_run_plan_with_models.py` pins each place.
+`collect_port_names`, the list of port names a tree holds.
+Model-to-model port mapping checks a finished translation over that
+list — a place missing from it is a name the check never looks at,
+and a place missing from the rename pass is a name that stays behind
+when its port moves.
+
+Two tests hold you to it.  `test_port_name_universe.py` asserts that
+the rename pass moves every name the collector lists; and, because
+two lists that agree can both be incomplete, it exchanges two port
+names on every codec's committed captures and fails for any value
+of the rendered output that did not follow.  If your field is one a
+renderer writes out and no capture exercises it, add a small config
+to that module's `TestShapesNoCaptureHas`.  (A name that follows a
+port without being resolved itself — RouterOS's factory name,
+`interfaces[].default_name` — is the worked example of a field that
+was missed.)
 
 ### Per-vendor quirks go in codec code, not canonical
 

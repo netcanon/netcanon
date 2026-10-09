@@ -370,7 +370,7 @@ once version-targeted rendering grows an operator-facing surface).
 
 **Source-shape capture:** `run_plan_with_overrides` injects a
 capture-first transform that populates `MigrationJob.source_vlans`,
-`source_local_users`, `source_snmp_community`, and
+`source_local_users`, `source_snmp_community`, `source_ports` and
 `source_hostname` from the post-parse, pre-transform tree.  This
 is load-bearing for the VLAN / local-users / SNMP panes (they
 have no "auto-rewritten" rows to fall back on if the operator
@@ -868,24 +868,39 @@ out-of-band management is the `oobm` context, not a numbered port).
   first port of every target.  The mapper cannot know that in advance
   without re-deriving the translator, so the pipeline asks the
   finished run instead (`fused_targets`), over every name the config
-  references and not only the hardware ports the plan was made for,
-  compared without regard to case.  Where two names ended on one
-  target, or a logical name ended on a port of the target, every
-  name that neither the pairing nor the operator decided is dropped —
+  references and not only the hardware ports the plan was made for.
+  Where a hardware port and another name ended on one target, or a
+  logical name ended on a port of the target, every name that
+  neither the pairing nor the operator decided is dropped —
   **displaced** — and the translation is run once more.  Where no
-  name in a clash was decided, one keeps the name: its place was
-  good.  A fusion that is left is the operator's own override; it is
-  recorded (`fused`) and the job is not a clean success, whatever
-  was acknowledged.
+  name in a clash was decided, one keeps the name — a port of the
+  declared source if there is one, else a hardware port, else the
+  first: its place was good.  A fusion that is left is the
+  operator's own override; it is recorded (`fused`) and the job is
+  not a clean success, whatever was acknowledged.  (Two *logical*
+  names the ordinary translation puts on one name — two loopbacks on
+  a target with one loopback form — are outside this check and are
+  warned about by the translator, as they always were.)
+* **Whether case is part of a name is a fact about the platform**,
+  and each codec states it (`CodecBase.port_names_case_sensitive`).
+  On AOS-S or IOS `1/a1` is the port `1/A1`, and an override that
+  hides behind its spelling would put two ports on one.  On FortiOS,
+  RouterOS, Junos and the Linux- and BSD-based platforms `DMZ` and
+  `dmz` are two interfaces, and folding them together turned an
+  operator's own name for a VLAN interface into the physical port
+  beside it.  Source names are compared by the source platform's
+  rule and target names by the target's; where nothing is declared,
+  case is folded, which errs toward reporting.
 * **The plan's flags and warnings describe the outcome, not the
   intention.**  `settle_plan` reconciles the plan with the run: an
   unplaced port the operator gave a target was kept; a management
   port the target cannot express was dropped by the translator and
-  is reported as dropped; a route or a DHCP pool that named a dropped
-  port went with it and is listed.  `unresolved_ports`, `displaced`,
-  `fused`, `off_target`, `sub_interfaces`, `emptied_lags`,
-  `shrunk_lags`, `lost_routes` and `lost_dhcp_pools` are stored
-  fields, so a client reads the outcome as data.  `pairings` and
+  is reported as dropped; a route, a DHCP pool, a VRRP track entry or
+  a VTEP source that named a dropped port went with it and is
+  listed.  `unresolved_ports`, `displaced`, `fused`, `off_target`,
+  `sub_interfaces`, `emptied_lags`, `shrunk_lags`, `lost_routes`,
+  `lost_dhcp_pools`, `lost_tracking` and `lost_vtep_sources` are
+  stored fields, so a client reads the outcome as data.  `pairings` and
   `rename_map` stay the pairing as it was made, before the
   operator's map: `overridden` names the pairings a client must not
   read as final.
@@ -895,14 +910,41 @@ out-of-band management is the `oobm` context, not a numbered port).
   map — or with a fused target, or for which no pairing could be
   made at all, is `partial`, not `completed`.
 * An operator's target is read as the declared target spells its
-  ports (`1/a1` is `1/A1`), and an entry with a blank target is set
-  aside: it decides nothing.
+  ports (`1/a1` is `1/A1`) where the target platform has no case,
+  and an entry with a blank target is set aside: it decides
+  nothing.  Only case and surrounding space are understood: an
+  abbreviation the device accepts (`Gi1/0/1`) is not recognised as
+  the port it names, and is reported as a target the model does not
+  list.
 
 **Which names a mapping is made for.**  `collect_port_names` is the
-single statement of where a canonical tree holds port names: every
-place the translator's rename pass rewrites.  Those places are of
-two kinds.  An interface stanza, a VLAN's membership list and a LAG's
-member list are *evidence* that the device has a port of that name.
+list of the port names a canonical tree holds: every place the
+translator's rename pass rewrites, and a port's *factory name* where
+the vendor keeps one.  RouterOS does: `ether2` is the hardware, a
+port an operator renamed is `core-a` to the rest of the config, and
+the renderer finds the port on the device by the factory name
+(`set [ find default-name=ether2 ]`).  The factory name moves with
+the port and is what a device model lists; the operator's name is
+an alias for the same port, not a second one.  A route's next hop
+can name an interface too (RouterOS `gateway=ether1`, Junos
+`next-hop et-0/0/24.0`); such a route follows its interface and goes
+with a dropped one.
+
+That list was written by reading the tree, and a list written that
+way cannot show that it is complete: the factory name was missing
+from it through two reviews, while every moved RouterOS port was
+rendered as "find the port with the old name".  What checks it is
+an experiment that uses no list
+([`tests/unit/migration/test_port_name_universe.py`](tests/unit/migration/test_port_name_universe.py)):
+exchange two port names through the translator on every codec's
+committed captures, and compare the rendered output, parsed again,
+with the unswapped output in which the two names are exchanged.  A
+value that did not follow is a place the translator does not reach,
+whatever field it lives in.
+
+The places are of two kinds.  An interface stanza (and its factory
+name), a VLAN's membership list and a LAG's member list are
+*evidence* that the device has a port of that name.
 A static route's or DHCP pool's interface, a VRRP track entry and a
 VTEP source are *references*: a real port named only there must be
 part of the mapping, but what those fields hold is not always an
@@ -959,9 +1001,14 @@ classifier yet and is pinned as a known gap, which the mapping does
 not depend on because an explicit rename entry is applied before
 classification; and where a flat target profile describes the same
 device, the two must list the same ports with the same roles.
-The pipeline's central promise — no two names on one target name
-unless the operator asked for it — is asserted on every job in
-[`tests/unit/migration/test_run_plan_with_models.py`](tests/unit/migration/test_run_plan_with_models.py).
+The pipeline's central promise — no hardware port on a target name
+another name ends on, unless the operator asked for it — is asserted
+on the jobs of
+[`tests/unit/migration/test_run_plan_with_models.py`](tests/unit/migration/test_run_plan_with_models.py),
+whose wrapper also reads each job's RENDERED OUTPUT back: no name
+that moved may still be in it, and no interface in it may carry the
+addresses of two source interfaces.  Those two checks take nothing
+from the engine's list of places.
 
 **Relationship to target profiles.**  A target profile is one model in
 one stated state, as a flat list.  `inventory_from_profile` reads one

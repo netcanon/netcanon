@@ -516,19 +516,38 @@ tests use these exclusively — never CSS classes or element structure.  See
   set the plan was made for**: the first version of it looked only at
   the hardware ports, and a FortiGate aggregate whose codec classifies
   its name as a physical port still landed on a paired port, unseen —
-  the same defect one level down, found by the second review.  Names
-  are compared without regard to case or surrounding space, so an
-  override typed `1/a1` cannot hide behind its spelling.  The same goes
+  the same defect one level down (#498).  **And that universe is a
+  set of FIELDS, not of names**: the next version read every name the
+  rename pass rewrites, and RouterOS keeps a port's hardware identity
+  in a field the pass did not rewrite (`default_name`), which its
+  renderer uses to find the port — every moved port came out as
+  "find the port with the OLD name", in a job that reported success,
+  on a committed capture.  A list of places written by reading the
+  tree cannot show that it is complete, and a test that walks the
+  same list agrees with it.  Completeness is checked by experiment,
+  with no list: `tests/unit/migration/test_port_name_universe.py`
+  exchanges two port names through the translator on every codec's
+  captures and fails for any rendered value that did not follow.  A
+  canonical field that holds a port name goes in `collect_port_names`
+  and in the rename pass; that test is what finds the one that did
+  not.  Whether letter case is part of a name is a fact about the
+  platform, stated by each codec (`port_names_case_sensitive`): an
+  override typed `1/a1` cannot hide behind its spelling on AOS-S, and
+  `DMZ` is not folded into the port `dmz` on FortiOS.  The same goes
   for what a plan SAYS: build its warnings and its dropped/kept flags
   from the run, not from the intention — a port the operator kept must
   not be reported as dropped, nor a port the translator dropped as
   kept, nor a route that went with a dropped port left unmentioned.
-  Guarded on every job in
+  Guarded on the jobs of
   `tests/unit/migration/test_run_plan_with_models.py`, whose wrapper
-  recomputes the check for itself over every name the parsed config
-  references — written out in the test, not imported from the engine,
-  because a guard that calls the function it guards shares its blind
-  spot.
+  does two things.  It recomputes the grouping for itself — written
+  out in the test, because a guard that calls the function it guards
+  shares its blind spot (the list of names it groups is still the
+  engine's).  And it reads each job's RENDERED OUTPUT back with the
+  target codec: no name that moved may still be in it, and no
+  interface may carry the addresses of two source interfaces.  Those
+  two take nothing from the engine, and are what a missing field
+  cannot get past.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

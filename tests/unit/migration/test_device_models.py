@@ -1308,6 +1308,41 @@ class TestUnprovenClaims:
         assert "tests/fixtures/real/x.cfg" in caplog.text
 
 
+class TestAClaimIsTheWholeClaim:
+    """What is trusted is one claim in full: this fixture, this
+    mode, these members with these modules."""
+
+    def test_the_same_members_cited_from_another_fixture_grant_nothing(self):
+        data = _data()
+        data["captures"][0]["fixture"] = "tests/fixtures/real/another.cfg"
+        registry = DeviceModelRegistry([_family(data)])
+        inv = _compile(registry, "stacked", {"model": "TB-4M", "id": 1, "modules": {"A": "MOD4"}})
+        assert inv.evidence == "vendor-doc"
+        assert "tests/fixtures/real/another.cfg" not in inv.evidence_refs
+
+    def test_a_bay_the_capture_shows_empty_proves_nothing_about_a_module(self, monkeypatch):
+        """A claim for the chassis with the bay empty.  The panel is
+        proven; a module fitted to the bay is not, although the
+        model and member match."""
+        data = _data()
+        data["captures"][0]["members"] = [{"model": "TB-4M", "id": 1, "modules": {"A": None}}]
+        claim = ("aruba_aoss/Testbox", "tests/fixtures/real/x.cfg", "stacked", (("TB-4M", 1, ()),))
+        monkeypatch.setattr(dm, "PROVEN_CAPTURE_CLAIMS", dm.PROVEN_CAPTURE_CLAIMS | {claim})
+        registry = DeviceModelRegistry([_family(data)])
+        inv = _compile(registry, "stacked", {"model": "TB-4M", "id": 1, "modules": {"A": "MOD4"}})
+        grades = {port.name: port.evidence for port in inv.ports}
+        assert grades["1/1"] == "capture" and grades["1/A1"] == "vendor-doc"
+
+    def test_a_claim_that_does_not_compile_fails_the_family(self):
+        """A claim is compiled when its family loads, so one that
+        names a member number outside the mode is found then, not
+        when somebody declares that deployment."""
+        data = _data()
+        data["captures"][0]["members"] = [{"model": "TB-4M", "id": 9, "modules": {"A": "MOD4"}}]
+        with pytest.raises(Exception, match="9"):
+            check_family(_family(data))
+
+
 class TestWhatACaptureProves:
     """Names, and nothing else: it retires the caveat of the naming fact
     and keeps the caveat of the panel or module fact."""

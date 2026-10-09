@@ -160,7 +160,14 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   parser captures both `name` and `default-name`, and the renderer
   emits `set [ find default-name=X ] ...` lookup syntax so the
   config remains valid even if port enumeration changes between
-  device replacements.
+  device replacements.  When a port is renamed or moved by a
+  translation — by an entry of `port_rename_map`, or by pairing two
+  declared device models — the factory name moves with it: the
+  output looks the port up on the TARGET by the target's own factory
+  name.  A port you had named keeps your name; give the factory name
+  as the key of a `port_rename_map` entry to move or drop it.
+- **`gateway=<interface>` routes** follow the interface when it is
+  renamed, and are removed with it when it is dropped.
 - **6.x vs 7.x grammar drift** — RouterOS 7 reorganises some
   sections (`/snmp` vs `/snmp community`, `/routing/bgp/instance`
   vs `/routing bgp instance`); the parser handles both.

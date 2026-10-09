@@ -277,7 +277,12 @@ below say why each is there:
   whose ports are `1/24`), or a module you did not declare (`A1` with
   an empty bay).  `POST /api/v1/migration/inventory` with your
   declaration shows the names it produces — compare them with the
-  config.
+  config.  A few causes leave the declaration right: the config
+  spells a port another way than the device prints it
+  (`gigabitethernet1/0/1`, `Gi1/0/1`); it has an `interface Null0`
+  stanza; or it is a Catalyst or a FortiGate, whose configs list
+  interfaces their profile does not.  Map or drop such a name by
+  hand in `port_rename_map`.
 * **`displaced`** — a name nobody decided that the name-shape
   translator would have put on a name another interface ends on, or
   on a port of the target: a name from either list above, or a
@@ -286,9 +291,18 @@ below say why each is there:
   was **dropped** instead.  Give it a target of its own in
   `port_rename_map`, or map it to `null`.
 
-If the plan lists `lost_routes`, `lost_dhcp_pools` or `shrunk_lags`,
-a dropped port took something with it: a static route or a DHCP pool
-that names a dropped port is removed whole.
+If the plan lists `lost_routes`, `lost_dhcp_pools`, `shrunk_lags`,
+`lost_tracking` or `lost_vtep_sources`, a dropped port took something
+with it: a static route or a DHCP pool that names a dropped port is
+removed whole, an interface that stays loses the VRRP track entry
+that named it, and a VTEP loses the source interface it was bound to.
+
+If the plan lists `off_target`, one of your targets is not a name the
+target model lists.  That is allowed — but check it is not another
+spelling of a port that is already taken.  Only letter case and
+surrounding space are understood; `Gi1/0/1` is not recognised as
+`GigabitEthernet1/0/1`, and the device would put both source ports on
+that one interface.
 
 The message can also say **"N target port(s) received more than one
 source port"**.  `port_mapping_plan.fused` names them.  Only your own
@@ -296,8 +310,8 @@ source port"**.  `port_mapping_plan.fused` names them.  Only your own
 or an entry pointing at a name the pairing already used (on a
 same-vendor pair, keeping an unplaced port under its old name can do
 exactly that).  A target is read as the target device spells it, so
-`1/a1` is the port `1/A1`.  Naming the ports again does not clear it;
-give each a target of its own.
+on a platform without case `1/a1` is the port `1/A1`.  Naming the
+ports again does not clear it; give each a target of its own.
 
 **"Port mapping was not made"** means no pairing was possible at all —
 one side is a profile that lists no ports, or lists a port name twice.

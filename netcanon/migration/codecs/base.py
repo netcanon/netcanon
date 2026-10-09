@@ -256,6 +256,20 @@ class CodecBase(ABC):
     #: from the affected codec classes when shipped.
     unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset()
 
+    #: Letter case is part of an interface name on this platform:
+    #: ``DMZ`` and ``dmz`` are two interfaces (FortiOS, RouterOS, the
+    #: Linux- and BSD-based platforms, Junos).  ``False`` — the default —
+    #: means the device reads the two as one (IOS, EOS, AOS-S: ``1/a1``
+    #: is the port ``1/A1``).
+    #:
+    #: Read by model-to-model port mapping, which compares the name
+    #: every interface ended on.  Folding case on a platform that has
+    #: it merges two interfaces; not folding on one that lacks it lets
+    #: an override hide behind its spelling.  Where nothing is known the
+    #: default folds: two spellings are then reported as one port, which
+    #: an operator can see and overrule, rather than passed in silence.
+    port_names_case_sensitive: ClassVar[bool] = False
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Wrap each subclass's ``parse`` at the class boundary so a pydantic
         ``ValidationError`` raised while building a canonical model surfaces
