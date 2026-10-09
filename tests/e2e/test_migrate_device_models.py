@@ -676,6 +676,8 @@ class TestAStackOnBothSides:
         expect(page.locator(_tid("migrate-rename-plan-members"))).to_have_text(
             "member 3 → member 2"
         )
+        # A renumbering: neither number is declared on the other side.
+        expect(page.locator(_tid("migrate-rename-plan-crossed"))).to_have_count(0)
         row = page.locator(_tid("migrate-rename-row-3/49"))
         expect(row.locator("td").nth(1)).to_have_text("2/A1")
         expect(page.locator(_tid("migrate-rename-why-3/49"))).to_have_text(
@@ -689,6 +691,43 @@ class TestAStackOnBothSides:
         )
         expect(mp.output).to_contain_text("trunk 1/A1,2/A1 trk1 lacp")
         expect(mp.output).not_to_contain_text("3/")
+
+    def test_two_stacks_listed_in_opposite_orders_are_said_to_cross(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """The fabric is members 1 and 2; the stack's rows are numbered
+        2 then 1.  Rows pair in order, so every port of each member is
+        on the other switch.  That is allowed -- the plan is still
+        clean -- and it is said in amber, apart from a renumbering."""
+        mp = _open_fabric(page, live_server_url)
+        _pick_a_two_member_stack(page)
+        first = page.locator(_tid("migrate-device-target-member-0-id"))
+        second = page.locator(_tid("migrate-device-target-member-1-id"))
+        # By way of 3, so that no two rows share a number on the way.
+        for control, number in ((first, "3"), (second, "1"), (first, "2")):
+            control.fill(number)
+            control.dispatch_event("change")
+        expect(page.locator(_tid("migrate-device-target-note-ports"))).to_have_text(
+            re.compile(r"^104 ports: 2/1 . 1/A4$")
+        )
+        body = _apply(page)
+        assert [m["id"] for m in body["target_deployment"]["members"]] == [2, 1]
+        expect(_plan(page)).to_have_attribute("data-state", "ok")
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("100 paired")
+        crossed = page.locator(_tid("migrate-rename-plan-crossed"))
+        expect(crossed).to_have_text("crossed: member 1 → member 2; member 2 → member 1")
+        expect(crossed).to_have_class(re.compile(r"\bchip-warn\b"))
+        expect(page.locator(_tid("migrate-rename-plan-members"))).to_have_count(0)
+        # The plan's own line for it, in the server's words.
+        expect(page.locator(_tid("migrate-rename-plan-report"))).to_contain_text(
+            "2 stack member(s) are paired with a member of ANOTHER number while one of the "
+            "two numbers is declared on both sides"
+        )
+        expect(page.locator(_tid("migrate-rename-row-1/1")).locator("td").nth(1)).to_have_text("2/1")
+        expect(page.locator(_tid("migrate-rename-why-2/49"))).to_have_text(
+            "uplink 1 · member 2 → member 1"
+        )
+        expect(mp.output).to_contain_text("trunk 2/A1,1/A1 trk1 lacp")
 
     def test_a_member_the_target_has_no_member_for(
         self, page: Page, live_server_url: str,

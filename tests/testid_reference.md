@@ -657,7 +657,8 @@ position, counted from 0:
 | `migrate-rename-plan-hint`            | `<span>`   | What to do next, while there is no current plan |
 | `migrate-rename-plan-unapplied`       | `<span>`   | Why no pairing was made |
 | `migrate-rename-plan-paired`          | `<span>`   | "N paired" |
-| `migrate-rename-plan-members`         | `<span>`   | "member 3 → member 2" -- a stack member the pairing put on a member of another number (members pair in the order they are listed); absent when every number agrees |
+| `migrate-rename-plan-members`         | `<span>`   | "member 3 → member 2" -- a stack member the pairing put on a member of another number where neither number is declared on the other side (members pair in the order they are listed); absent when there is none |
+| `migrate-rename-plan-crossed`         | `<span>`   | "crossed: member 2 → member 1; member 1 → member 2" -- members put beside a member of their own number instead of on it (the same members listed in another order); amber, holds nothing; absent when there is none |
 | `migrate-rename-plan-unplaced`        | `<span>`   | "N with no place on the target"; absent at zero |
 | `migrate-rename-plan-off-inventory`   | `<span>`   | "N not on the source device"; absent at zero |
 | `migrate-rename-plan-displaced`       | `<span>`   | "N displaced"; absent at zero |

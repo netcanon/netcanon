@@ -1101,23 +1101,43 @@
     }
   }
 
-  /** Members the pairing put on a member of another NUMBER.  Only a
-   *  member the config uses is named, as in the plan's own line. */
+  /** Members the pairing put on a member of another NUMBER, in two
+   *  lists, as the plan's own two lines have them: a RENUMBERING,
+   *  where neither number is declared on the other side (1, 3 onto
+   *  1, 2), and a CROSSING, where one is -- the same members listed
+   *  in another order, every port of each on another switch.  Only a
+   *  member the config uses is named: a used port of it was paired,
+   *  or lost its place on the member it was paired with. */
   function renumberedMembers(plan) {
+    var ours = (plan.source && plan.source.members) || [];
     var theirs = (plan.target && plan.target.members) || [];
+    function numbers(members) {
+      var seen = {};
+      members.forEach(function(m) {
+        if (m.member_id !== null && m.member_id !== undefined) seen[m.member_id] = true;
+      });
+      return seen;
+    }
+    var onSource = numbers(ours);
+    var onTarget = numbers(theirs);
     var used = {};
-    (plan.pairings || []).forEach(function(p) {
+    (plan.pairings || []).concat(plan.unplaced || []).forEach(function(p) {
       if (p.used) used[p.member_rank] = true;
     });
-    return ((plan.source && plan.source.members) || []).filter(function(m) {
+    var out = { renumbered: [], crossed: [] };
+    ours.forEach(function(m) {
       var to = theirs[m.rank];
-      return used[m.rank] && to
-        && m.member_id !== null && m.member_id !== undefined
-        && to.member_id !== null && to.member_id !== undefined
-        && to.member_id !== m.member_id;
-    }).map(function(m) {
-      return 'member ' + m.member_id + ' → member ' + theirs[m.rank].member_id;
+      if (!used[m.rank] || !to
+          || m.member_id === null || m.member_id === undefined
+          || to.member_id === null || to.member_id === undefined
+          || to.member_id === m.member_id) {
+        return;
+      }
+      var pair = 'member ' + m.member_id + ' → member ' + to.member_id;
+      var both = onTarget[m.member_id] || onSource[to.member_id];
+      (both ? out.crossed : out.renumbered).push(pair);
     });
+    return out;
   }
 
   function _planChip(el, testid, text, extraClass) {
@@ -1212,11 +1232,20 @@
     title.textContent = 'Ports paired by position';
     el.appendChild(title);
     _planChip(el, 'migrate-rename-plan-paired', paired + ' paired');
-    var renumbered = renumberedMembers(plan);
-    if (renumbered.length) {
+    var moved = renumberedMembers(plan);
+    if (moved.renumbered.length) {
       // Not a problem: stack members pair in the order they are
       // listed, and this is where that changed a member's number.
-      _planChip(el, 'migrate-rename-plan-members', renumbered.join('; '), 'chip-info');
+      _planChip(el, 'migrate-rename-plan-members',
+        moved.renumbered.join('; '), 'chip-info');
+    }
+    if (moved.crossed.length) {
+      // The same members listed in another order: every port of each
+      // is on another switch.  The operator may mean it, so it holds
+      // nothing -- but it is what a list typed out of order looks
+      // like, and it is said in amber.
+      _planChip(el, 'migrate-rename-plan-crossed',
+        'crossed: ' + moved.crossed.join('; '), 'chip-warn');
     }
     if (unplaced) {
       _planChip(el, 'migrate-rename-plan-unplaced',
