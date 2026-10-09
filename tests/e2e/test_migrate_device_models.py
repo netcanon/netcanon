@@ -57,6 +57,16 @@ interface GigabitEthernet1/0/2
 end
 """
 
+#: Nothing here for any pane but one hardware port: no VLAN, no user,
+#: no SNMP, no rename (same vendor) and no warning.
+_AOSS_ONE_PORT = (
+    "; JL260A Configuration Editor; Created on release #WC.16.07.0002\n"
+    'hostname "sw"\n'
+    "interface 7\n"
+    '   name "printer"\n'
+    "   exit\n"
+)
+
 SOURCE_2930F_48G = "fam:2930F:2930F-48G-4SFP"
 TARGET_2930M_48G = "fam:2930M:2930M-48G-PoEP"
 TARGET_2930M_24G = "fam:2930M:2930M-24G"
@@ -132,6 +142,23 @@ class TestSameVendorTranslationHasRows:
         expect(row).to_be_visible()
         expect(row).to_contain_text("(unchanged)")
         expect(page.locator(_tid("migrate-rename-row-1"))).to_be_visible()
+
+
+    def test_a_config_with_nothing_but_a_port_still_opens_the_modal(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """The button used to need a rename, a warning, a VLAN, a
+        user or a community.  A port the config uses is enough: it
+        is exactly the config whose devices are worth declaring."""
+        _translate(page, live_server_url, "aruba_aoss", "aruba_aoss", _AOSS_ONE_PORT)
+        button = page.locator(_tid("migrate-rename-open-btn"))
+        expect(button).to_be_visible()
+        button.click()
+        expect(page.locator(_tid("migrate-rename-row-7"))).to_contain_text("(unchanged)")
+        expect(page.locator(_tid("migrate-rename-rail-ports-count"))).to_have_text("1")
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value(
+            SOURCE_2930F_48G
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +396,29 @@ class TestPortsWithNoPlace:
         )
         expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_disabled()
 
+    def test_a_dropped_port_does_not_hold_its_old_name(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """48 ports onto a 24-port switch of the same series, both
+        standalone, so both number their ports alike: the uplinks
+        ``49``-``52`` land on ``25``-``28``, the names of four access
+        ports that were dropped.  A dropped port reaches no target,
+        so that is no collision and Apply stays available."""
+        expect(_source_note(page)).to_be_visible()
+        _pick_target(page, "fam:2930F:2930F-24G-4SFP")
+        expect(page.locator(_tid("migrate-device-target-note-ports"))).to_have_text(
+            re.compile(r"^28 ports: 1 . 28$")
+        )
+        _apply(page)
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("28 paired")
+        row = page.locator(_tid("migrate-rename-row-49"))
+        expect(row.locator("td").nth(1)).to_have_text("25")
+        expect(row).not_to_have_class(re.compile(r"\bhas-collision\b"))
+        expect(page.locator(_tid("migrate-rename-row-25"))).to_have_class(
+            re.compile(r"\bhas-drop\b")
+        )
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
+
     def test_a_smaller_switch_leaves_access_ports_behind_too(
         self, aoss_2930f: MigratePage, page: Page,
     ) -> None:
@@ -531,6 +581,19 @@ class TestWhatApplySends:
         assert _apply(page)["target_profile"] == "aruba_aoss/2930F-48G"
         model.select_option(value="")
         assert "target_profile" not in _apply(page)
+
+    def test_reset_all_reaches_the_server(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """A VLAN override that was applied and then reset must not
+        be applied again: the next request carries no VLAN map."""
+        page.locator(_tid("migrate-rename-rail-vlans")).click()
+        page.locator(_tid("migrate-rename-vlan-override-2")).fill("200")
+        assert _apply(page)["vlan_rename_map"] == {"2": 200}
+        expect(aoss_2930f.output).to_contain_text("vlan 200")
+        page.locator(_tid("migrate-rename-modal-reset")).click()
+        assert "vlan_rename_map" not in _apply(page)
+        expect(aoss_2930f.output).not_to_contain_text("vlan 200")
 
     def test_the_target_pick_survives_closing_the_modal(
         self, aoss_2930f: MigratePage, page: Page,
