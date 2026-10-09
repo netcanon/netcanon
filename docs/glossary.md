@@ -137,9 +137,13 @@ by concern and listed alphabetically within each section.
 - **get_collector** — the single mock-point for backup tests. Hard
   Rule: never patch `ConnectHandler` or `paramiko.SSHClient` directly;
   patch this factory instead.
-- **Target profile** — hardware-shape definition under
-  `netcanon/definitions/library/target_profiles/<vendor>/<model>.yaml`. Drives port
-  rename and VLAN/user fit-checks in the UI.
+- **Target profile** — hardware-shape definition, one YAML per model
+  under `netcanon/definitions/library/target_profiles/`. Drives port
+  rename and VLAN/user fit-checks in the UI. A profile can state the
+  one **deployment state** its port names describe and carry an
+  **evidence grade** (`capture` / `vendor-doc` / `inferred`) for them;
+  one that carries no grade has not been checked yet. See
+  ARCHITECTURE.md, "Provenance".
 - **MODULE_VARIANT_PROFILES** — allowlist (`tests/fixtures/module_variants.py`)
   of `{vendor}/{model}` keys whose target profiles ship `modules:`
   declarations. Both unit + integration test tiers import from this

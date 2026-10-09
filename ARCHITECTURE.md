@@ -577,10 +577,13 @@ cases.
 ```yaml
 vendor: aruba_aoss
 model: 2930F-48G
+deployment_state: "standalone (VSF disabled)"
+evidence: capture
+evidence_ref: "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg"
 ports:
-  - {range: "1/1-1/48", kind: physical, speed: gig}
-  - {range: "1/A1-1/A4", kind: uplink, speed: 10gig, sfp: true}
-lags: {max: 24, prefix: Trk}
+  - {range: "1-48", kind: physical, speed: gig}
+  - {range: "49-52", kind: uplink, speed: gig, sfp: true}
+lags: {max: 60, prefix: Trk}
 ```
 
 **Module-variant** (chassis + swappable uplink module — Cat 9300
@@ -613,6 +616,53 @@ and [`tests/integration/test_migration_target_profiles_api.py`](tests/integratio
 guard against silent drift — a profile listed there must actually
 declare `modules:`, and a legacy profile must keep `modules: {}`.
 
+### Provenance: a profile describes hardware, in one stated state
+
+A port id an operator picks from a profile is written **verbatim**
+into the generated config, so a wrong id is a config naming a port
+the device does not have.  A registry audit found exactly that in a
+third of the shipped profiles.  Most had one written cause — the
+authoring guide told contributors to derive ids from
+`format_port_identity`, so profiles described the formatter rather
+than the device; the remainder were vendor documents misread or a
+sibling model's facts transplanted.  Optional provenance fields now
+carry what is actually known:
+
+* `deployment_state` — a port's name is a function of the model
+  **and** how it is deployed (an Aruba 2930F port is `24` standalone
+  and `1/24` as a VSF member).  A flat port list describes one state;
+  every stack-capable profile must say which.
+* `evidence` — `capture` | `vendor-doc` | `inferred`, grading the
+  port names and counts.  `capture` is a checked claim, not a label:
+  `evidence_ref` names a committed real fixture and
+  [`tests/unit/migration/test_target_profile_evidence.py`](tests/unit/migration/test_target_profile_evidence.py)
+  parses it on every run, failing if the fixture does not identify
+  itself as that model or any profile port id is not a hardware port
+  in it.  The graded sets are pinned, so a grade cannot appear or
+  vanish unreviewed.  Unset means *not yet graded* — not a clean bill
+  of health, and the UI says "not yet graded" rather than nothing.
+* `caveat` — operator-visible text, mandatory when the grade is
+  `inferred`.
+
+The rename modal shows all three under the fit-check banner
+(`migrate-rename-profile-notice`, amber when the grade is
+`inferred`), and `/definitions` lists them per profile.  A profile
+that is known wrong but whose correct names are not established for
+the exact model is **flagged, not renamed** — replacing one
+plausible name with another is how the registry got here.  A profile
+for hardware its target OS does not run on is neither: it is deleted,
+since no device exists for the names to be right on.
+
+Selecting a profile still has **no effect on auto-translated names**:
+the codec formatter derives a target name from the shape of the
+source name (Cisco `GigabitEthernet1/0/1` becomes AOS-S `1/1`)
+whatever model is selected, so the auto column can disagree with a
+profile that describes a standalone switch.  The rename table marks
+each row whose auto name is not a port the selected profile lists
+(`has-offprofile`, "N not on profile" on the section header), so the
+disagreement is visible per port.  Closing it needs the translator
+to be told the source and target models, which it is not yet.
+
 ### Per-category capacity limits
 
 Profiles may declare `max_vlans` and/or `max_local_users` to
@@ -629,17 +679,25 @@ conservatively — silently-wrong limits are worse than missing
 ones because they let bad migrations look safe.  Every shipped
 profile currently declares `max_vlans`; per-vendor rationale:
 
-* Aruba 2930F family — 2048 (AOS-S 16.11 datasheet).
+* Aruba 2930F family — 2048 (the `max-vlans` ceiling, AOS-S 16.11
+  Advanced Traffic Management Guide; the factory default is 256).
 * Aruba 3810M / 6300M + Cisco C9300 / C9500 — 4094 (enforced
   protocol ceiling).
 * MikroTik RouterOS + OPNsense — 4094 (protocol ceiling;
   software-VLAN stacks have no hardware cap).
+* Juniper — the figure each model's datasheet prints (4093 / 4091 /
+  4093), which is one or three short of the VLAN-id range.
+* Arista — 4094, the usable VLAN-id range (the datasheets print
+  "4096 VLANs").
 * FortiGate 40F / 60F — 512; 100E — 1024 (FortiOS 7.x
   "Maximum Values Table").
 
 `max_local_users` is declared only where the datasheet number is
 small enough to matter and the codec actually round-trips users
-(Aruba 2930F family = 16; 6300M = 64).  OPNsense leaves it unset
+(Aruba CX 6300M = 64, vendor-documented).  The Aruba AOS-S profiles
+leave it unset: the 16 they once carried was not a vendor figure, and
+an unsourced cap drives a banner that is confidently wrong.  OPNsense
+leaves it unset
 because its user count is software-unbounded in practice and so
 carries no useful fit-check signal; FortiGate leaves it unset
 because the admin-account cap varies materially by FortiOS version
@@ -683,8 +741,9 @@ Netcanon knows about — four sections in one page:
    Explains "loaded N but showed N-M" on the startup log.
 3. **Migration target profiles** (`section-target-profiles`):
    dozens of hardware models with per-model port layouts, module
-   variants (NM-8X, NM-2Q, JL084A, …), stacking caps, VLAN/user
-   limits.  Previously only reachable through the Tier-3
+   variants (NM-8X, NM-2Q, JL083A, …), stacking caps, VLAN/user
+   limits, and each profile's provenance (deployment state,
+   evidence grade, caveat).  Previously only reachable through the Tier-3
    rename-modal dropdown — now browsable with vendor grouping +
    live filter.
 4. **Migration vendors + codec capabilities** (`section-vendors`):
@@ -736,6 +795,7 @@ the source of truth):
   search, mounted globally from base.html.
 * **fit-check.js** — hardware-capacity banner on the rename modal
   (access/uplink/mgmt per-kind overage indicators).
+  — and the target-profile provenance notice (`renderProfileNotice`).
 * **job-progress.js** — floating job-status widget, mounted
   globally from base.html; survives page navigation via
   localStorage.

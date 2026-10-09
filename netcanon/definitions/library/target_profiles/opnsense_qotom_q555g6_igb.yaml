@@ -18,7 +18,7 @@ ports:
   - {range: "igb0-5", kind: physical, speed: gig, notes: "Intel I211-AT 1GbE"}
 lags: {max: 6, prefix: lagg}
 
-# OPNsense runs FreeBSD's netgraph VLAN stack; the only hard limit
+# OPNsense uses FreeBSD's vlan(4) interfaces; the only hard limit
 # on VLAN IDs is the 802.1Q protocol ceiling (1-4094).
 # max_local_users intentionally unset — OPNsense user config is
 # software-unbounded in practice and not a useful fit-check

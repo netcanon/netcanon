@@ -88,7 +88,7 @@ _SNMP_LOCATION_RE = re.compile(
 _SNMP_CONTACT_RE = re.compile(
     r'^snmp-server\s+contact\s+(.+)$', re.IGNORECASE,
 )
-# SNMPv3 user grammar on Aruba AOS-S (observed on 2930F/3810M/6300):
+# SNMPv3 user grammar on Aruba AOS-S (observed on 2930F/3810M):
 #
 #   snmpv3 user "<name>" auth {md5|sha} "<pass>" priv {des|aes} "<pass>"
 #   snmpv3 group "<group>" user "<name>" sec-model ver3

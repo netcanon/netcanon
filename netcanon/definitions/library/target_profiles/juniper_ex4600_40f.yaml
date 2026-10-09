@@ -1,21 +1,36 @@
 # Juniper EX4600-40F
-# 24 x 10G SFP+ fixed + 4 x 40G QSFP+ fixed + 2 x expansion module
-# slots.  Campus-aggregation / small-DC leaf class.  The two
-# expansion slots (labelled em0 / em1 — NOT the management em0
-# confusingly) can host 8x10G SFP+ or 4x40G QSFP+ modules.
-# v1 ships the base chassis ports; expansion-slot modules deferred
-# (future commit can migrate this profile to the `modules:` schema
-# in the same shape as Cisco C9300 / Aruba 3810M).
+# 24 × 10G SFP+ fixed + 4 × 40G QSFP+ fixed + 2 × expansion-module
+# bays.  Campus-aggregation / small-DC leaf class.
+#
+# Port naming.  All 28 fixed ports are on PIC 0: SFP+ ports 0-23 are
+# `xe-0/0/0`..`xe-0/0/23`, and the four QSFP+ ports 24-27 are
+# `et-0/0/24`..`et-0/0/27`.  PIC 1 and PIC 2 are the two expansion
+# bays (EX4600-EM-8F: 8 × SFP+; QFX-EM-4Q: 4 × QSFP+) -- not modelled.
+# `et-0/1/0-3` are NOT the fixed uplinks: those are the ports of a
+# QFX-EM-4Q fitted in bay 1, and do not exist on a base chassis.
+#
+# Management is `em0` (RJ-45, jack C0) and `em1` (SFP, jack C1) -- not
+# `me0`.  The EX4600 follows the QFX convention here, not the EX one.
+# (The expansion-module part numbers contain "EM" -- QFX-EM-4Q,
+# EX4600-EM-8F -- which has nothing to do with the `em` interfaces.)
+#
+# Validation: Juniper's EX4600 hardware guide.  No capture of this
+# model is committed here.
 vendor: juniper_junos
 model: EX4600-40F
-display_name: "Juniper EX4600-40F (24x 10G + 4x 40G + 2 expansion slots)"
+display_name: "Juniper EX4600-40F (24x 10G + 4x 40G + 2 expansion bays)"
 device_class: switch
 stacking: virtual-chassis
+deployment_state: "standalone (FPC 0), base chassis with both expansion bays empty"
+evidence: vendor-doc
+evidence_ref: "Juniper EX4600 Hardware Guide, Chassis (SFP+ ports 0-23, QSFP+ ports 24-27, em0 = C0, em1 = C1); Understanding Interface Naming Conventions, QFX Series and EX4600 (PIC 0 holds all 28 fixed ports; PIC 1 and PIC 2 are the expansion bays)"
+caveat: "Expansion-module ports (PIC 1 and PIC 2) are not listed. A Virtual Chassis member N uses N as the first number."
 ports:
   - {range: "xe-0/0/0-23", kind: physical, speed: 10gig, sfp: true, notes: "10G SFP+ fixed"}
-  - {range: "et-0/1/0-3", kind: uplink, speed: 40gig, sfp: true, notes: "40G QSFP+ fixed (4x10G breakout capable)"}
-  - {id: "me0", kind: mgmt, speed: gig, notes: "OOBM (confusingly distinct from the EX4600's em0/em1 expansion slots)"}
+  - {range: "et-0/0/24-27", kind: uplink, speed: 40gig, sfp: true, notes: "40G QSFP+ fixed (4x10G breakout capable)"}
+  - {id: "em0", kind: mgmt, speed: gig, notes: "OOBM RJ-45, jack C0"}
+  - {id: "em1", kind: mgmt, speed: gig, sfp: true, notes: "OOBM SFP, jack C1"}
 lags: {max: 128, prefix: ae}
 
-max_vlans: 4094
-max_vlans_source: "Junos 18.x+ VLAN capacity (EX platform datasheet)"
+max_vlans: 4091
+max_vlans_source: "Juniper EX4600 datasheet 1000511: VLAN IDs 4,091"

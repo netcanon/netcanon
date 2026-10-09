@@ -323,7 +323,7 @@ class TestDefinitionsPageEnriched:
     backup device definitions, version/model overlays, migration
     target profiles (with module variants), and vendor codec
     capabilities.  Before this enrichment only the first section
-    rendered — the 54 target profiles + 8 vendors + module variants
+    rendered — the target profiles, vendors and module variants
     were invisible.
     """
 
@@ -355,7 +355,7 @@ class TestDefinitionsPageEnriched:
     def test_target_profiles_section_rendered_when_loaded(
         self, client: TestClient,
     ) -> None:
-        """54 target profiles ship with Netcanon by default.
+        """Dozens of target profiles ship with Netcanon by default.
         The vendor-group + row testids must appear in the rendered
         HTML (a regression would drop the whole section)."""
         resp = client.get("/definitions")
@@ -393,6 +393,46 @@ class TestDefinitionsPageEnriched:
             "broken"
         )
         assert 'data-testid="profile-module-sku"' in resp.text
+
+    def test_profile_provenance_rows_emitted(
+        self, client: TestClient,
+    ) -> None:
+        """A profile's deployment state, evidence grade and caveat are
+        listed on its detail card, so an operator browsing the
+        registry can see which port names are checked against a real
+        capture, which rest on documentation, and which are flagged
+        as unverified."""
+        resp = client.get("/definitions")
+        assert 'data-testid="profile-deployment-state"' in resp.text
+        assert 'data-testid="profile-caveat"' in resp.text
+        # `ungraded` is a state the page must show too: an unchecked
+        # profile says so rather than saying nothing.
+        for grade in ("capture", "vendor-doc", "ungraded"):
+            assert (
+                f'data-testid="profile-evidence" data-evidence="{grade}"'
+                in resp.text
+            ), grade
+        # No shipped profile is flagged as unverified (the set is pinned
+        # empty in tests/unit/migration/test_target_profile_evidence.py).
+        assert 'data-evidence="inferred"' not in resp.text
+        # The CX 6300M is grouped under its real OS.
+        assert 'data-vendor="aruba_aoscx"' in resp.text
+
+    @pytest.mark.usefixtures("unverified_profile_installed")
+    def test_unverified_profile_is_listed_with_its_caveat(
+        self, client: TestClient,
+    ) -> None:
+        """A profile graded ``inferred`` is listed as such, with the
+        caveat that says what is unverified.  Exercised on a synthetic
+        profile, since none ships with that grade."""
+        from tests.fixtures.target_profiles import UNVERIFIED_PROFILE_CAVEAT
+
+        resp = client.get("/definitions")
+        assert (
+            'data-testid="profile-evidence" data-evidence="inferred"'
+            in resp.text
+        )
+        assert UNVERIFIED_PROFILE_CAVEAT in resp.text
 
     def test_profile_base_ports_emitted(
         self, client: TestClient,

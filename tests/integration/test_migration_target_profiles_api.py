@@ -41,10 +41,46 @@ class TestTargetProfilesList:
         body = resp.json()
         assert body["vendor"] == "aruba_aoss"
         assert body["model"] == "2930F-48G-PoEP"
-        # 48 + 2 uplinks.
-        assert len(body["ports"]) == 50
-        assert body["lags"]["max"] == 24
+        # 48 access + 4 SFP+ uplinks.  (Pinned at 50 until 2026-10: the
+        # profile declared 2 uplinks on a switch that has 4.)
+        assert len(body["ports"]) == 52
+        # Provenance fields serialise for the rename modal's notice.
+        assert body["deployment_state"]
+        assert body["evidence"] in ("capture", "vendor-doc", "inferred")
+        assert "caveat" in body and "evidence_ref" in body
+        # 60 trunk groups per HPE's 2930F data sheet (pinned at 24 until
+        # 2026-10, a figure that appears in none of the vendor's guides).
+        assert body["lags"]["max"] == 60
         assert body["lags"]["prefix"] == "Trk"
+
+    @pytest.mark.usefixtures("unverified_profile_installed")
+    def test_unverified_profile_serialises_its_grade_and_caveat(
+        self, client: TestClient,
+    ):
+        """The rename modal turns its notice amber on ``inferred`` and
+        prints the caveat, so both have to reach the wire.  Exercised on
+        a synthetic profile: no shipped profile carries that grade."""
+        from tests.fixtures.target_profiles import (
+            UNVERIFIED_PROFILE_CAVEAT,
+            UNVERIFIED_PROFILE_KEY,
+        )
+
+        resp = client.get(
+            "/api/v1/migration/target-profiles/" + UNVERIFIED_PROFILE_KEY
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["evidence"] == "inferred"
+        assert body["caveat"] == UNVERIFIED_PROFILE_CAVEAT
+
+    def test_no_shipped_profile_is_flagged_unverified(self, client: TestClient):
+        data = client.get("/api/v1/migration/target-profiles").json()
+        assert data, "no profiles loaded"
+        flagged = [
+            f"{p['vendor']}/{p['model']}" for p in data
+            if p["evidence"] == "inferred"
+        ]
+        assert flagged == []
 
     def test_missing_profile_returns_404(self, client: TestClient):
         resp = client.get(
@@ -123,7 +159,13 @@ class TestPlanWithRenameMap:
         )
         assert resp.status_code == 200
         body = resp.json()
-        # Auto-heuristic rewrote Cisco names to Aruba.
+        # Auto-heuristic rewrote Cisco names to Aruba.  NOTE: `1/1` is
+        # the formatter's stacked-member form, while this profile
+        # describes a STANDALONE 2930F whose port is bare `1`.  The
+        # profile has no server-side effect today, so the auto name
+        # does not follow it -- that gap is what model-to-model
+        # positional mapping closes.  Pinned as-is so the day it
+        # closes is a deliberate edit here.
         assert "GigabitEthernet1/0/1" in body["port_renames"]
         assert body["port_renames"]["GigabitEthernet1/0/1"] == "1/1"
         assert body["port_renames"]["Port-channel1"] == "Trk1"
@@ -301,7 +343,7 @@ class TestMaxVlansSourceSerialization:
         hides itself on empty-string, and the wire contract stays
         stable for clients that don't branch on null."""
         resp = client.get(
-            "/api/v1/migration/target-profiles/aruba_aoss/2930F-48G-PoEP"
+            "/api/v1/migration/target-profiles/aruba_aoss/3810M-48G-PoEP"
         )
         assert resp.status_code == 200
         body = resp.json()

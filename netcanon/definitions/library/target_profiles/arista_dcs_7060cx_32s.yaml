@@ -1,15 +1,70 @@
 # Arista DCS-7060CX-32S
-# 32 x 100GbE QSFP28 with integrated Broadcom Tomahawk chipset —
+# 32 x 100GbE QSFP100 + 2 x 10GbE SFP+, Broadcom Tomahawk —
 # first-generation 100G TOR.  Typical 100G-spine pairing for
-# 7050SX / 7260CX leaves.  Each QSFP28 supports 4x25G breakout.
+# 7050SX / 7260CX leaves.  Every QSFP port breaks out.
+#
+# Port naming.  EOS names a single-lane port `Ethernet<port>` and a
+# multi-lane (breakout-capable) port `Ethernet<port>/<lane>`.  Every
+# QSFP cage on this model is multi-lane, so a cage running as one
+# port is `EthernetN/1` -- there is no bare `EthernetN` for it.  Broken
+# out, the same cage also has `/2`..`/4`.  This profile lists lane 1 of
+# each cage.
+# The two SFP+ ports are single-lane: `Ethernet33`, `Ethernet34`.
+#
+# Validation: Arista's 7060X datasheet ("32x QSFP100 and 2x SFP+") and
+# EOS manual; the exact id set below is what public running-configs
+# of a DCS-7060CX-32S show:
+#   lwa-project/ng_digital_processor  config/switch/config
+#                                     (commit 471d0c40c8)
+#   saparikh/arista-demo              snapshot0/unused/up414.cfg
+#                                     (commit 776baefb79)
+# None is committed here.
 vendor: arista_eos
 model: DCS-7060CX-32S
-display_name: "Arista DCS-7060CX-32S (32x 100G Tomahawk)"
+display_name: "Arista DCS-7060CX-32S (32x 100G + 2x 10G, Tomahawk)"
 device_class: switch
 stacking: ""
+deployment_state: "every QSFP cage running as one port (lane /1)"
+evidence: vendor-doc
+evidence_ref: "Arista 7060X / 7260X datasheet (7060CX-32S: 32x QSFP100 and 2x SFP+); EOS User Manual, Ethernet Ports (multi-lane ports are Ethernet<port>/<lane>); id set seen on public running-configs of DCS-7060CX-32S (EOS 4.20, 4.23), none committed here"
+caveat: "A QSFP cage broken out into lanes also has EthernetN/2-/4; only lane /1 of each cage is listed."
 ports:
-  - {range: "Ethernet1-32", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28 (4x25G breakout capable)"}
+  - {id: "Ethernet1/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet2/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet3/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet4/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet5/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet6/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet7/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet8/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet9/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet10/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet11/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet12/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet13/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet14/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet15/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet16/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet17/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet18/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet19/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet20/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet21/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet22/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet23/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet24/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet25/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet26/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet27/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet28/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet29/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet30/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet31/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {id: "Ethernet32/1", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28, lane 1 (4x25G breakout capable)"}
+  - {range: "Ethernet33-34", kind: physical, speed: 10gig, sfp: true, notes: "10G SFP+"}
   - {id: "Management1", kind: mgmt, speed: gig, notes: "OOBM"}
+# lags.max is NOT a vendor figure: Arista's datasheets give ports per
+# LAG, not a LAG count (EOS itself allows 2000 port channels).
 lags: {max: 64, prefix: Port-Channel}
 max_vlans: 4094
-max_vlans_source: "Arista EOS 4.x VLAN capacity per platform datasheet"
+max_vlans_source: "802.1Q VLAN-id range (1-4094); the Arista datasheet prints 4096 VLANs"

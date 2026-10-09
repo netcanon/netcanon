@@ -161,6 +161,20 @@
       return null;
     }
 
+    /** True when *name* is a name the selected profile has, for a row
+     *  of *kind*.  LAG rows are judged against the LAG option list;
+     *  every other kind against ALL the profile's port ids, not just
+     *  the kind-filtered dropdown -- an access-looking source that
+     *  auto-maps onto a real uplink id is on the profile, and calling
+     *  it "not a port" would be false. */
+    function profileKnowsName(kind, name, opts) {
+      if (!selectedProfile) return true;
+      if (kind === 'lag') return opts.indexOf(name) !== -1;
+      return effectivePortsFor(selectedProfile).some(function(p) {
+        return p.id === name;
+      });
+    }
+
     // Auto-expand the first non-empty section so the user sees
     // content immediately on modal open; remaining sections default
     // collapsed per operator preference ("Default Collapsed is good
@@ -259,6 +273,18 @@
         // Drop sentinel used in the dropdown's special "don't render" option.
         var DROP_VALUE = '__DROP__';
         var opts = profileOptionsFor(row.kind, row.source);
+        // Off-profile auto target.  Selecting a profile does NOT change
+        // auto-translation: the translator derives a name from the shape
+        // of the source name (Cisco Gi1/0/1 -> AOS-S 1/1) whatever model
+        // is chosen.  When the profile lists ports of this kind and the
+        // auto name is not one of the profile's names at all, say so on
+        // the row -- otherwise the default the operator leaves in place
+        // is a port the selected device does not have, with no signal.
+        var offProfile = !isDropped && !hasOverride
+          && !!opts && opts.length > 0
+          && !!row.auto && row.auto !== row.source
+          && !profileKnowsName(row.kind, row.auto, opts);
+        if (offProfile) tr.classList.add('has-offprofile');
         if (opts && opts.length) {
           var sel = document.createElement('select');
           sel.setAttribute('data-testid',
@@ -395,12 +421,34 @@
         } else if (row.warning) {
           warnCell.innerHTML = '<span class="mig-rename-warn-icon" '
             + 'title="' + escapeHtml(row.warning) + '">⚠</span>';
+        } else if (offProfile) {
+          warnCell.innerHTML = '<span class="mig-rename-warn-icon" '
+            + 'data-testid="migrate-rename-offprofile-'
+            + escapeHtml(row.source) + '" '
+            + 'title="' + escapeHtml(
+              'Auto name ' + row.auto + ' is not a port on '
+              + (selectedProfile.display_name || selectedProfile.model)
+              + ' \u2014 pick one from the list'
+            ) + '">⚠</span>';
         }
         tr.appendChild(warnCell);
 
         tbody.appendChild(tr);
       });
       table.appendChild(tbody);
+      // Off-profile auto targets: count them on the section header and
+      // open the section, so a profile whose names the translator did
+      // not produce cannot sit unnoticed in a collapsed list.
+      var offCount = tbody.querySelectorAll('tr.has-offprofile').length;
+      if (offCount) {
+        var offChip = document.createElement('span');
+        offChip.className = 'count warn-count';
+        offChip.setAttribute('data-testid',
+          'migrate-rename-offprofile-count-' + kind);
+        offChip.textContent = offCount + ' not on profile';
+        summary.appendChild(offChip);
+        section.open = true;
+      }
       section.appendChild(table);
       sectionsEl.appendChild(section);
     });

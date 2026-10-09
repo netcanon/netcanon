@@ -247,6 +247,29 @@ def sample_definitions_dir(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def unverified_profile_installed(sample_definitions_dir: Path) -> Path:
+    """Add the synthetic ``evidence: inferred`` profile to this test's registry.
+
+    No shipped target profile is graded ``inferred``, so the path that
+    shows an operator "these port names are not verified" would
+    otherwise have nothing to exercise it.  Apply with
+    ``@pytest.mark.usefixtures("unverified_profile_installed")`` rather
+    than as an argument: marker fixtures are set up before argument
+    fixtures, and the file has to be in place before the ``client``
+    fixture runs the app lifespan that loads the directory.
+
+    Returns the installed path.
+    """
+    import shutil
+
+    from tests.fixtures.target_profiles import UNVERIFIED_PROFILE_YAML
+
+    dest = sample_definitions_dir / "target_profiles" / UNVERIFIED_PROFILE_YAML.name
+    shutil.copyfile(UNVERIFIED_PROFILE_YAML, dest)
+    return dest
+
+
+@pytest.fixture()
 def test_settings(sample_definitions_dir: Path, tmp_path: Path) -> Settings:
     """``Settings`` instance wired to test-only tmp directories.
 

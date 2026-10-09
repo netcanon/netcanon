@@ -29,7 +29,7 @@ Hardware-platform-distinctive features:
   underlays with L2VNI + L3VNI symmetric-IRB.  Stanza shape:
   `vxlan / vni N / vlan N / exit` plus `evpn / vlan N / rd auto / route-target export / route-target import` plus `router bgp X / address-family l2vpn evpn`.
 * **VSF** (Virtual Switching Framework) — separate stacking
-  technology for the 6300 (which does NOT support VSX); analogous
+  technology for the 6300 (which had no VSX until AOS-CX 10.16); analogous
   to Cisco's StackWise.
 * **Active-gateway** — anycast-gateway equivalent at the SVI
   (`interface vlan N / active-gateway ip X / active-gateway mac Y`).

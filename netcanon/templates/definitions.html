@@ -455,7 +455,8 @@
                  data-testid="target-profile-row"
                  data-vendor="{{ p.vendor }}"
                  data-model="{{ p.model }}"
-                 data-haystack="{{ (p.vendor ~ ' ' ~ p.model ~ ' ' ~ p.display_name) | lower }}">
+                 data-evidence="{{ p.evidence or 'ungraded' }}"
+                 data-haystack="{{ (p.vendor ~ ' ' ~ p.model ~ ' ' ~ p.display_name ~ ' ' ~ (p.evidence or 'ungraded')) | lower }}">
           <summary>
             <span data-testid="profile-display-name">
               {{ p.display_name or (p.vendor ~ ' ' ~ p.model) }}
@@ -478,6 +479,33 @@
               {% if p.stacking %}
               <dt>Stacking</dt>
               <dd>{{ p.stacking }}</dd>
+              {% endif %}
+              {% if p.deployment_state %}
+              <dt>Port names describe</dt>
+              <dd data-testid="profile-deployment-state">{{ p.deployment_state }}</dd>
+              {% endif %}
+              {% if p.evidence %}
+              <dt>Evidence</dt>
+              <dd data-testid="profile-evidence" data-evidence="{{ p.evidence }}">
+                <code>{{ p.evidence }}</code>
+                {% if p.evidence_ref %}
+                <small style="color:var(--text-muted);font-style:italic">
+                  ({{ p.evidence_ref }})
+                </small>
+                {% endif %}
+              </dd>
+              {% elif p.ports or p.modules %}
+              {# Unset is "nobody has checked", not "fine" -- say so. #}
+              <dt>Evidence</dt>
+              <dd data-testid="profile-evidence" data-evidence="ungraded">
+                <small style="color:var(--text-muted);font-style:italic">
+                  port names not yet graded
+                </small>
+              </dd>
+              {% endif %}
+              {% if p.caveat %}
+              <dt>Caveat</dt>
+              <dd data-testid="profile-caveat">{{ p.caveat }}</dd>
               {% endif %}
               <dt>Device class</dt>
               <dd>{{ p.device_class.value if p.device_class.value is defined else p.device_class }}</dd>

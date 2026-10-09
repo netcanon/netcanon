@@ -9,6 +9,10 @@
    * (speed-downshift warnings, LAG headroom, PoE budget) are
    * deferred — this is the "one-glance" check, not an audit.
    *
+   * Also home to renderProfileNotice(), the target-profile provenance
+   * notice (deployment state / evidence grade / caveat), which shares
+   * this banner's lifecycle and is driven from renderFitCheck().
+   *
    * Depends on module-scope state:
    *   _lastJob, _renameProfiles
    *
@@ -30,8 +34,23 @@
    *      happen in practice — the UI pre-selects a default — but
    *      guards against the edge case). */
   function renderFitCheck() {
+    // The provenance notice shares this banner's lifecycle (every
+    // caller that refreshes the fit-check has just changed, or may
+    // have changed, the selected profile), so it is driven from here
+    // rather than from a second set of call sites.
+    // Guarded: the notice is advisory, and a fault in it must never
+    // take the capacity banner down with it.
+    try { renderProfileNotice(); } catch (_) { /* notice is cosmetic */ }
     var el = document.getElementById('mig-rename-fitcheck');
     if (!el) return;
+    // Ports pane only.  This function runs on every summary refresh,
+    // including ones fired from the VLAN / user panes; without this
+    // guard an override edit there brought the ports banner back.
+    var portsPaneEl = document.getElementById('mig-rename-ports-pane');
+    if (portsPaneEl && !portsPaneEl.classList.contains('active')) {
+      el.style.display = 'none';
+      return;
+    }
     var profileKey = currentRenameProfileKey();
     var profile = profileKey && _renameProfiles.find(function(p) {
       return (p.vendor + '/' + p.model) === profileKey;
@@ -111,9 +130,11 @@
     // against.  Omitted for legacy profiles.
     var sku = currentRenameModuleSku();
     if (sku) {
+      // Escaped: the SKU is a profile-YAML dict key, and profile YAML
+      // is operator-authorable.
       parts.push('<span class="mig-fitcheck-note" '
         + 'data-testid="migrate-fitcheck-module-note">'
-        + '(module: ' + sku + ')</span>');
+        + '(module: ' + escapeHtml(sku) + ')</span>');
     }
     if (parts.length === 0) {
       el.style.display = 'none';
@@ -122,5 +143,91 @@
     }
     el.className = 'fit-' + worstState;
     el.innerHTML = parts.join(' ');
+    el.style.display = '';
+  }
+
+  /** Human wording for each ``TargetProfile.evidence`` grade.  The
+   *  grade describes the profile's PORT NAMES AND COUNTS — the ids an
+   *  operator picks here are written verbatim into the target config. */
+  var _PROFILE_EVIDENCE_LABEL = {
+    'capture': 'Port names checked against a real capture of this model',
+    'vendor-doc': 'Port names from published sources (no capture of this model here)',
+    'inferred': 'Port names NOT verified for this target',
+  };
+  /** Shown when the profile declares no grade.  Unset is "nobody has
+   *  checked", not "fine" — so it is said, not left blank. */
+  var _PROFILE_UNGRADED_LABEL = 'Port names not yet graded';
+
+  /** Target-profile provenance notice.  Shows, for the selected
+   *  profile: which deployment state its port names describe
+   *  (``deployment_state`` — an Aruba 2930F port is ``24`` standalone
+   *  and ``1/24`` as a VSF member), how well those names are
+   *  established (``evidence``), and any ``caveat``.
+   *
+   *  Hidden only when no profile is selected (or the profile lists no
+   *  ports and declares nothing).  A profile with no grade is shown
+   *  as "not yet graded" rather than left blank, so silence can never
+   *  be read as a clean bill of health.  Amber only when the grade is
+   *  ``inferred`` — a
+   *  caveat on a verified profile is guidance, and colouring every
+   *  profile that has one would leave no signal for the ones whose
+   *  names are actually in doubt.  Built with textContent throughout —
+   *  the strings come from profile YAML, which an operator can author. */
+  function renderProfileNotice() {
+    var el = document.getElementById('mig-rename-profile-notice');
+    if (!el) return;
+    var profileKey = currentRenameProfileKey();
+    var profile = profileKey && _renameProfiles.find(function(p) {
+      return (p.vendor + '/' + p.model) === profileKey;
+    });
+    var state = (profile && profile.deployment_state) || '';
+    var grade = (profile && profile.evidence) || '';
+    var caveat = (profile && profile.caveat) || '';
+    // Ports-pane only: the notice is about port names, and this
+    // function runs on every summary refresh, including ones fired
+    // from the VLAN / user panes.
+    var portsPane = document.getElementById('mig-rename-ports-pane');
+    var portsActive = !portsPane || portsPane.classList.contains('active');
+    // A profile that lists ports but declares no grade is UNGRADED,
+    // and says so.  One with no ports at all (the bring-your-own-
+    // hardware `opnsense/Generic`) has no port names to grade.
+    var ungraded = !!profile && !grade
+      && effectivePortsFor(profile).length > 0;
+    el.textContent = '';
+    if (!portsActive || !profile
+        || (!state && !grade && !caveat && !ungraded)) {
+      el.style.display = 'none';
+      el.className = '';
+      el.removeAttribute('data-evidence');
+      return;
+    }
+    function addPart(testid, text, extraClass) {
+      var span = document.createElement('span');
+      span.className = 'mig-profile-notice-part'
+        + (extraClass ? ' ' + extraClass : '');
+      span.setAttribute('data-testid', testid);
+      span.textContent = text;
+      el.appendChild(span);
+    }
+    if (state) {
+      addPart('migrate-rename-profile-notice-state',
+        'Port names describe: ' + state);
+    }
+    if (grade) {
+      addPart('migrate-rename-profile-notice-evidence',
+        _PROFILE_EVIDENCE_LABEL[grade] || ('Evidence: ' + grade),
+        'mig-profile-notice-grade');
+      el.setAttribute('data-evidence', grade);
+    } else if (ungraded) {
+      addPart('migrate-rename-profile-notice-evidence',
+        _PROFILE_UNGRADED_LABEL, 'mig-profile-notice-grade');
+      el.setAttribute('data-evidence', 'ungraded');
+    } else {
+      el.removeAttribute('data-evidence');
+    }
+    if (caveat) {
+      addPart('migrate-rename-profile-notice-caveat', caveat);
+    }
+    el.className = (grade === 'inferred') ? 'notice-warn' : '';
     el.style.display = '';
   }

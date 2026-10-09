@@ -1,0 +1,23 @@
+# TEST FIXTURE -- not a real device, and never shipped.
+#
+# No profile under netcanon/definitions/library/target_profiles/ is
+# graded `evidence: inferred`, so nothing in the shipped registry
+# exercises the path that tells an operator a profile's port names are
+# not verified: the amber notice in the rename modal, the caveat row
+# on /definitions, and the two fields on the wire.  This file is that
+# profile.  Tests copy it into their own definitions directory; see
+# tests/fixtures/target_profiles/__init__.py for the names to import.
+vendor: opnsense
+model: Fixture-Unverified
+display_name: "Test fixture (unverified port names)"
+device_class: firewall
+stacking: ""
+deployment_state: "test fixture, no real deployment"
+evidence: inferred
+evidence_ref: "none (synthetic test profile)"
+caveat: "Synthetic test profile. These port names describe no real device."
+ports:
+  - {id: "fx0", kind: uplink, speed: gig}
+  - {id: "fx1", kind: physical, speed: gig}
+lags: {max: 1, prefix: lagg}
+max_vlans: 4094

@@ -27,6 +27,7 @@ import pytest
 
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration.target_profiles import (
+    load_profile_file,
     load_profiles_dir,
 )
 from tests.fixtures.module_variants import MODULE_VARIANT_PROFILES
@@ -42,22 +43,96 @@ class TestRealProfilesShipped:
     REPO_PROFILES_DIR = LIBRARY_DIR / "target_profiles"
 
     def test_all_profiles_load(self):
+        """Every YAML in the directory loads, and none shadows another.
+
+        ``load_profiles_dir`` is deliberately permissive: a file that
+        fails validation is logged and SKIPPED, so the app still
+        starts.  That means a typo in a constrained field (an
+        ``evidence:`` value that is not one of the three grades, say)
+        removes the profile from the product with every other test
+        green.  Load each file strictly here so the failure names the
+        file and the field."""
+        files = sorted(self.REPO_PROFILES_DIR.glob("*.yaml"))
+        assert files, "no target-profile YAMLs found"
+        keys = [load_profile_file(path).key for path in files]
+        assert len(set(keys)) == len(keys), (
+            "two profile files declare the same vendor/model key: "
+            f"{sorted(k for k in set(keys) if keys.count(k) > 1)}"
+        )
+        assert set(load_profiles_dir(self.REPO_PROFILES_DIR)) == set(keys)
+
+    def test_no_profile_repeats_a_port_id(self):
+        """Within the chassis ports plus any ONE module, every id is
+        unique.  (Two alternative modules may reuse an id -- a 3810M's
+        JL083A and JL078A both start at ``1/A1`` -- because only one
+        is fitted at a time.)  The loader does not check this."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
-        # At least two ship with this commit.
-        assert len(profiles) >= 2
+        for key, p in profiles.items():
+            for sku in [None, *p.module_skus()]:
+                ids = p.port_ids(module_sku=sku)
+                dupes = sorted({i for i in ids if ids.count(i) > 1})
+                assert not dupes, f"{key} (module {sku}): {dupes}"
+
+    def test_max_vlans_is_a_possible_vlan_count(self):
+        """A VLAN ceiling above the 802.1Q id range cannot be right, and
+        the loader accepts any integer."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        for key, p in profiles.items():
+            assert p.max_vlans is not None and 1 <= p.max_vlans <= 4094, key
 
     def test_aruba_2930f_48g_poep(self):
+        """2930F-48G-PoE+-4SFP+ (JL256A), standalone.  Until 2026-10
+        this test pinned ``port_count == 50`` and two uplinks -- the
+        profile declared ``1/A1`` and ``1/A2`` on a switch that has
+        four SFP+ ports and no module slot."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         p = profiles["aruba_aoss/2930F-48G-PoEP"]
-        assert p.port_count == 50  # 48 RJ45 + 2 SFP+ uplinks
-        assert len(p.port_ids(kind="physical")) == 48
-        assert len(p.port_ids(kind="uplink")) == 2
-        assert p.lags.max == 24
+        assert p.port_ids(kind="physical") == [str(n) for n in range(1, 49)]
+        assert p.port_ids(kind="uplink") == ["49", "50", "51", "52"]
+        assert p.port_count == 52
+        assert p.lags.max == 60
         assert p.lags.prefix == "Trk"
         # Every physical port has PoE.
         for port in p.ports:
             if port.kind == "physical":
                 assert port.poe is True
+
+    @pytest.mark.parametrize(
+        ("model", "access", "poe", "uplink_speed", "jnum"),
+        [
+            ("2930F-24G", 24, False, "10gig", "JL253A"),
+            ("2930F-24G-PoEP", 24, True, "10gig", "JL255A"),
+            ("2930F-48G", 48, False, "gig", "JL260A"),
+            ("2930F-48G-PoEP", 48, True, "10gig", "JL256A"),
+        ],
+    )
+    def test_aruba_2930f_family_port_lists(
+        self, model, access, poe, uplink_speed, jnum,
+    ):
+        """All four 2930F profiles describe the STANDALONE switch: bare
+        port numbers, with the four uplinks continuing the access
+        numbering.  A 2930F has no module slot, so no id carries a
+        letter, and with VSF disabled none carries a member prefix.
+
+        Also pins the J-number in the display name: ``2930F-24G`` was
+        labelled JL258A (the 8-port model) and ``2930F-48G`` gave the
+        1G-SFP JL260A 10G uplinks."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles[f"aruba_aoss/{model}"]
+        assert p.port_ids() == [str(n) for n in range(1, access + 5)]
+        assert p.port_ids(kind="uplink") == [
+            str(n) for n in range(access + 1, access + 5)
+        ]
+        assert jnum in p.display_name
+        assert "standalone" in p.deployment_state
+        assert p.lags.max == 60
+        for port in p.ports:
+            if port.kind == "physical":
+                assert port.speed == "gig"
+                assert port.poe is poe
+            else:
+                assert port.speed == uplink_speed
+                assert port.sfp is True
 
     def test_cisco_c9300_24ux(self):
         """C9300-24UX is a module-variant profile (NM-8X + NM-2Q).
@@ -89,13 +164,87 @@ class TestRealProfilesShipped:
         )
         assert len(p.port_ids(kind="physical", module_sku="NM-8X")) == 24
         assert len(p.port_ids(kind="mgmt", module_sku="NM-8X")) == 1
-        assert p.lags.max == 48
+        assert p.lags.max == 128
         assert p.lags.prefix == "Port-channel"
-        # First port is a mGig multigig interface.
-        first = p.lookup_port("GigabitEthernet1/0/1")
+        # The 24 mGig downlinks are TenGigabitEthernet — IOS-XE names a
+        # port after its top speed.  Until 2026-10 this test pinned
+        # ``GigabitEthernet1/0/1``, guarding a name that none of the 24
+        # ports on a real C9300-24UX carries (see the capture cited in
+        # the profile, and test_target_profile_evidence.py).
+        assert p.port_ids(kind="physical", module_sku="NM-8X") == [
+            f"TenGigabitEthernet1/0/{n}" for n in range(1, 25)
+        ]
+        assert p.lookup_port("GigabitEthernet1/0/1") is None
+        first = p.lookup_port("TenGigabitEthernet1/0/1")
         assert first is not None
         assert first.speed == "10gig"  # max negotiated speed
         assert first.poe is True
+
+    def test_cisco_c9300_etherchannel_limit(self):
+        """A C9300 switch or stack supports 128 EtherChannels (IOS XE
+        17.x Layer 2 configuration guide).  All six profiles said 48,
+        which capped the LAG override dropdown at ``Port-channel48``."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        c9300 = {k: p for k, p in profiles.items()
+                 if k.startswith("cisco_iosxe/C9300-")}
+        assert len(c9300) == 6
+        for key, p in c9300.items():
+            assert p.lags.max == 128, key
+
+    def test_cisco_c9300_48uxm(self):
+        """C9300-48UXM: ports 1-36 are 2.5G multigigabit and 37-48 are
+        10G multigigabit, and IOS-XE names a port after its top speed --
+        so the downlinks are ``TwoGigabitEthernet1/0/1-36`` plus
+        ``TenGigabitEthernet1/0/37-48``.
+
+        The profile listed all 48 as ``GigabitEthernet1/0/N`` at 5G
+        until 2026-10, and no test pinned its downlinks at all, so
+        nothing noticed that none of the 48 names exists."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["cisco_iosxe/C9300-48UXM"]
+        assert p.port_ids(kind="physical", module_sku="NM-8X") == (
+            [f"TwoGigabitEthernet1/0/{n}" for n in range(1, 37)]
+            + [f"TenGigabitEthernet1/0/{n}" for n in range(37, 49)]
+        )
+        assert p.lookup_port("GigabitEthernet1/0/1") is None
+        assert p.lookup_port("TwoGigabitEthernet1/0/36").speed == "2.5gig"
+        assert p.lookup_port("TenGigabitEthernet1/0/37").speed == "10gig"
+        assert p.port_ids(kind="mgmt") == ["GigabitEthernet0/0"]
+        assert p.port_count == 49
+        assert set(p.module_skus()) == {"NM-8X", "NM-2Q"}
+
+    def test_aruba_cx_6300m_48g(self):
+        """Aruba CX 6300M 48G (JL661A) is an AOS-CX switch: ports are
+        member/slot/port, ``1/1/1``..``1/1/48`` with SFP56 uplinks
+        ``1/1/49``..``1/1/52``, and stacking is VSF.
+
+        Until 2026-10 it was filed under ``aruba_aoss`` with AOS-S ids
+        (``1/1-1/48``, ``1/A1-1/A4``) and ``vsx-stacking``.  The LAG
+        prefix carries a trailing space because AOS-CX writes
+        ``interface lag 1``; the rename modal builds options as
+        prefix + number, and ``lag1`` is not a LAG name the aruba_aoscx
+        codec recognises."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        assert "aruba_aoss/6300M-48G-PoE4-SFP56" not in profiles
+        p = profiles["aruba_aoscx/6300M-48G-PoE4-SFP56"]
+        assert p.port_ids(kind="physical") == [
+            f"1/1/{n}" for n in range(1, 49)
+        ]
+        assert p.port_ids(kind="uplink") == [
+            f"1/1/{n}" for n in range(49, 53)
+        ]
+        assert p.stacking == "vsf"
+        assert "JL661A" in p.display_name
+        assert p.lags.prefix == "lag "
+        assert p.lags.max == 256
+        assert p.max_local_users == 64
+        # Every LAG name the modal can offer is one the codec accepts.
+        from netcanon.migration.codecs.registry import get_codec
+
+        codec = get_codec("aruba_aoscx")
+        for n in (1, 256):
+            name = f"{p.lags.prefix}{n}"
+            assert codec.classify_port_name(name).kind == "lag", name
 
     #: Canonical allowlist imported from
     #: :mod:`tests.fixtures.module_variants` — single source of
@@ -188,10 +337,13 @@ class TestRealProfilesShipped:
         """Lock in the per-vendor distribution so accidental drift
         (e.g. bulk-set everyone to 4094 when they shouldn't be) shows
         up at review.  Values rationale:
-          * Aruba 2930F family: 2048 (AOS-S 16.11 datasheet)
+          * Aruba 2930F family: 2048 (the ``max-vlans`` ceiling, AOS-S
+            16.11 Advanced Traffic Management Guide)
           * Aruba 3810M / 6300M / Cisco C9x00: 4094 (protocol ceiling,
             device enforces at full range)
-          * MikroTik / OPNsense (all): 4094 (protocol ceiling)
+          * MikroTik / OPNsense: 4094 (protocol ceiling)
+          * Juniper: the figure each model's datasheet prints (4093 /
+            4091 / 4093), not the VLAN-id range
           * FortiGate 40F / 60F: 512 (FortiOS 7.2 Max Values Table,
             per-VDOM `system.interface type=vlan`; conservative floor
             for the 7.x line, may drift ±1 on 7.4/7.6)
@@ -217,7 +369,7 @@ class TestRealProfilesShipped:
         for key in (
             "aruba_aoss/3810M-24G-PoEP",
             "aruba_aoss/3810M-48G-PoEP",
-            "aruba_aoss/6300M-48G-PoE4-SFP56",
+            "aruba_aoscx/6300M-48G-PoE4-SFP56",
         ):
             assert profiles[key].max_vlans == 4094, key
         # FortiGate model-specific.
@@ -231,26 +383,34 @@ class TestRealProfilesShipped:
         for key, p in profiles.items():
             if key.startswith("cisco_iosxe/C9300-"):
                 assert p.max_vlans == 4094, key
-        # Every OPNsense profile ships 4094.
+        # OPNsense profiles uniformly ship 4094.
         opnsense_profiles = {k: p for k, p in profiles.items()
                              if k.startswith("opnsense/")}
         assert len(opnsense_profiles) >= 16  # at least what we shipped
         for key, p in opnsense_profiles.items():
             assert p.max_vlans == 4094, key
-        # Arista EOS family uniformly 4094 (modern EOS releases
-        # support the full VLAN space).
+        # Arista EOS family uniformly 4094: the usable VLAN-id range.
+        # (Arista's datasheets print "4096 VLANs"; the source string
+        # in each profile says so rather than citing them for 4094.)
         arista_profiles = {k: p for k, p in profiles.items()
                            if k.startswith("arista_eos/")}
         assert len(arista_profiles) >= 4   # 7050SX, 7050CX3, 7280CR3, 7060CX
         for key, p in arista_profiles.items():
             assert p.max_vlans == 4094, key
-        # Juniper Junos family uniformly 4094 (Junos EX/QFX
-        # platforms support the full VLAN space).
+        # Juniper: per-model datasheet figures.  All three profiles
+        # said 4094 -- the VLAN-id RANGE -- and named a datasheet that
+        # prints a different number.
+        junos_expected = {
+            "juniper_junos/EX4300-48T": 4093,
+            "juniper_junos/EX4600-40F": 4091,
+            "juniper_junos/QFX5120-48Y": 4093,
+        }
         junos_profiles = {k: p for k, p in profiles.items()
                           if k.startswith("juniper_junos/")}
-        assert len(junos_profiles) >= 3   # EX4300, EX4600, QFX5120
-        for key, p in junos_profiles.items():
-            assert p.max_vlans == 4094, key
+        assert set(junos_profiles) == set(junos_expected)
+        for key, expected in junos_expected.items():
+            assert profiles[key].max_vlans == expected, key
+            assert "datasheet" in profiles[key].max_vlans_source, key
 
     def test_fortigate_profiles_declare_max_vlans_source(self):
         """Version-tuning provenance lock-in: every shipped FortiGate
@@ -290,63 +450,39 @@ class TestRealProfilesShipped:
                 f"'FortiOS 7.x'); got: {p.max_vlans_source!r}"
             )
 
-    def test_netgate_sg1100_shape(self):
-        """Netgate SG-1100 ARM profile — 3 switch ports exposed as
-        VLAN-tagged children of mvneta0.  Interface naming follows
-        pfSense's DSA + uplink-VLAN convention (OPNsense on ARM is
-        community-grade; lower-confidence than x86 peers).  Locks
-        in the expected port-id list so accidental copy-paste drift
-        (e.g. swapping mvneta0 for mvneta1, or inverting VLAN IDs)
-        is caught at review."""
+    def test_no_profile_for_hardware_opnsense_does_not_run_on(self):
+        """The Netgate SG-1100 and SG-3100 are ARM boards that ship
+        with pfSense Plus.  OPNsense publishes amd64 images only and
+        has no build for either, so a profile filed under ``opnsense``
+        described a target that cannot exist; both were deleted in
+        2026-10.  (Their port names had also been wrong: the SG-3100
+        profile had every role reversed.)  This keeps them from coming
+        back, and keeps any other ``mvneta`` -- the Marvell ARM
+        Ethernet driver -- port from being offered for OPNsense.  The
+        x86 SG-5100 stays: OPNsense installs on it."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
-        p = profiles["opnsense/Netgate-SG1100"]
-        assert p.port_count == 3
-        assert p.port_ids() == [
-            "mvneta0.4090", "mvneta0.4091", "mvneta0.4092",
-        ]
-        # WAN default is the first port (uplink kind).
-        assert p.lookup_port("mvneta0.4090").kind == "uplink"
-        assert p.lookup_port("mvneta0.4091").kind == "physical"
-        assert p.lookup_port("mvneta0.4092").kind == "physical"
-        assert p.max_vlans == 4094
-        assert p.max_local_users is None
+        assert "opnsense/Netgate-SG1100" not in profiles
+        assert "opnsense/Netgate-SG3100" not in profiles
+        assert "opnsense/Netgate-SG5100" in profiles
+        for key, p in profiles.items():
+            if not key.startswith("opnsense/"):
+                continue
+            arm = [pid for pid in p.port_ids() if pid.startswith("mvneta")]
+            assert not arm, f"{key}: {arm}"
 
-    def test_netgate_sg3100_shape(self):
-        """Netgate SG-3100 — 1 dedicated WAN (direct SoC MAC) + 4
-        LAN switch ports (VLAN-tagged children of mvneta2).  Same
-        ARM-hardware caveat as SG-1100."""
+    def test_deciso_dec600_is_the_netboard_a8_profile(self):
+        """There is no 5-port Celeron Deciso DEC600.  The DEC600 series
+        (DEC677 / DEC697, and the rack DEC2687) is the Netboard A8 with
+        four 2.5GbE ports, which ships as ``Netboard-A8-I225``.  The
+        ``DEC600-IGC`` profile described a product that does not exist
+        and was deleted in 2026-10; this keeps it from coming back and
+        keeps the real one findable by the model numbers."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
-        p = profiles["opnsense/Netgate-SG3100"]
-        assert p.port_count == 5
-        assert p.port_ids() == [
-            "mvneta0",
-            "mvneta2.4091", "mvneta2.4092",
-            "mvneta2.4093", "mvneta2.4094",
-        ]
-        # WAN is the standalone SoC MAC.
-        assert p.lookup_port("mvneta0").kind == "uplink"
-        # The four LAN ports are all physical-kind.
-        for i in range(1, 5):
-            port = p.lookup_port(f"mvneta2.409{i}")
-            assert port is not None, f"mvneta2.409{i} missing"
-            assert port.kind == "physical"
-        assert p.max_vlans == 4094
-        assert p.max_local_users is None
-
-    def test_deciso_dec600_shape(self):
-        """Deciso DEC600 — 5x 2.5GbE desktop appliance.  Intel i226-V
-        via igc(4).  Distinct from the Netboard A-series (embedded
-        PCBs); DEC600 is the desktop-chassis follow-on."""
-        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
-        p = profiles["opnsense/DEC600-IGC"]
-        assert p.port_count == 5
-        assert p.port_ids() == ["igc0", "igc1", "igc2", "igc3", "igc4"]
-        # Every port is 2.5GbE (i226-V).
-        for port in p.ports:
-            assert port.speed == "2.5gig", port.id
-            assert port.kind == "physical", port.id
-        assert p.max_vlans == 4094
-        assert p.max_local_users is None
+        assert "opnsense/DEC600-IGC" not in profiles
+        a8 = profiles["opnsense/Netboard-A8-I225"]
+        assert a8.port_ids() == ["igc0", "igc1", "igc2", "igc3"]
+        for sku in ("DEC677", "DEC697", "DEC2687"):
+            assert sku in a8.display_name
 
     def test_max_local_users_unset_on_soft_limit_vendors(self):
         """Contract lock-in: MikroTik / OPNsense / FortiGate profiles
@@ -359,16 +495,22 @@ class TestRealProfilesShipped:
             unbounded; FortiGate's admin-account cap varies by
             FortiOS version and isn't worth a fit-check).  Leaving
             unset hides the banner on those panes.
-        Aruba AOS-S / Cisco IOS-XE profiles DO declare
-        ``max_local_users`` where the datasheet numbers are reliable
-        (AOS-S 16.11 = 16-64; Cisco intentionally unset because the
-        IOS-XE limit is functionally unbounded)."""
+          * Aruba AOS-S: the six profiles carried 16 until 2026-10,
+            which is not a vendor figure (HPE documents one manager
+            and one operator credential plus up to 100 authorization
+            accounts).  Unset until someone decides which of those
+            the fit-check should count -- an unsourced cap drives a
+            banner that is confidently wrong.
+        The Aruba CX 6300M declares a vendor-documented 64; Cisco is
+        unset because the IOS-XE limit is functionally unbounded."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        assert profiles["aruba_aoscx/6300M-48G-PoE4-SFP56"].max_local_users == 64
         for key, p in profiles.items():
             if key.startswith((
                 "mikrotik_routeros/",
                 "opnsense/",
                 "fortigate/",
+                "aruba_aoss/",
             )):
                 assert p.max_local_users is None, (
                     f"{key} unexpectedly declares max_local_users="
@@ -440,45 +582,41 @@ class TestRealProfilesShipped:
         )
         assert len(p.port_ids(kind="physical", module_sku="NM-8X")) == chassis_access
 
-    def test_aruba_3810m_48g_poep_module_variants(self):
-        """Aruba 3810M chassis with JL083A/JL084A/JL085A expansion
-        modules.  Exercises the real-world shape where multiple
-        modules reuse the same port-name space (``1/A1-1/A4``) at
-        different speeds — picking JL084A gives 4x 40G on the same
-        port ids JL083A used for 4x 10G.  The rename modal filters
-        target dropdowns by the selected module, so this parallels
-        Cat 9300 NM-8X vs NM-2Q at different port-name spaces."""
+    @pytest.mark.parametrize(
+        ("model", "access", "jnum"),
+        [("3810M-24G-PoEP", 24, "JL073A"), ("3810M-48G-PoEP", 48, "JL074A")],
+    )
+    def test_aruba_3810m_module_variants(self, model, access, jnum):
+        """Aruba 3810M with its real flexible modules: JL083A (4x SFP+)
+        and JL078A (1x QSFP+), both in slot A, so the two reuse the
+        ``1/A1`` id at different speeds.
+
+        Until 2026-10 this test pinned ``{JL083A, JL084A, JL085A}``.
+        JL084A is the 3810M *stacking* module and JL085A a 250 W power
+        supply; the profile offered them as "4x 40G" and "1x 40G"
+        uplink modules.  The 48G chassis was also labelled JL076A."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
-        p = profiles["aruba_aoss/3810M-48G-PoEP"]
-        assert set(p.module_skus()) == {"JL083A", "JL084A", "JL085A"}
-        # Chassis: 48 RJ45 (no mgmt — AOS-S stackable has no OOB port).
-        assert p.port_count == 48
-        # JL083A: +4 × 10G SFP+ → 52 total.
-        assert p.effective_port_count("JL083A") == 52
-        jl083a_uplinks = [
-            pt for pt in p.modules["JL083A"].ports if pt.kind == "uplink"
+        p = profiles[f"aruba_aoss/{model}"]
+        assert p.module_skus() == ["JL083A", "JL078A"]
+        assert jnum in p.display_name
+        # Chassis: stack-member-1 access ports only.  (The 3810M does
+        # have an OOBM port; it is not modelled.)
+        assert p.port_ids() == [f"1/{n}" for n in range(1, access + 1)] + [
+            "1/A1", "1/A2", "1/A3", "1/A4",
         ]
-        assert all(pt.speed == "10gig" for pt in jl083a_uplinks)
-        # JL084A: +4 × 40G QSFP+ on the SAME port id range.
-        assert p.effective_port_count("JL084A") == 52
-        jl084a_uplinks = [
-            pt for pt in p.modules["JL084A"].ports if pt.kind == "uplink"
+        assert p.port_count == access
+        # JL083A: +4 x 10G SFP+.
+        assert p.port_ids(kind="uplink", module_sku="JL083A") == [
+            "1/A1", "1/A2", "1/A3", "1/A4",
         ]
-        assert all(pt.speed == "40gig" for pt in jl084a_uplinks)
-        # Same ids, different speeds — this is the key property the
-        # rename modal relies on when swapping modules.
-        assert (
-            [pt.id for pt in jl083a_uplinks]
-            == [pt.id for pt in jl084a_uplinks]
-        )
-        # JL085A: 1 × 40G QSFP+ only (single port).
-        assert p.effective_port_count("JL085A") == 49
-        jl085a_uplinks = [
-            pt for pt in p.modules["JL085A"].ports if pt.kind == "uplink"
-        ]
-        assert len(jl085a_uplinks) == 1
-        assert jl085a_uplinks[0].id == "1/A1"
-        assert jl085a_uplinks[0].speed == "40gig"
+        assert all(pt.speed == "10gig" for pt in p.modules["JL083A"].ports)
+        # JL078A: a single 40G QSFP+ on the same slot.
+        assert p.port_ids(kind="uplink", module_sku="JL078A") == ["1/A1"]
+        assert p.modules["JL078A"].ports[0].speed == "40gig"
+        assert p.effective_port_count("JL078A") == access + 1
+        # The ids are the stacked form, and the profile says so.
+        assert "stack member 1" in p.deployment_state
+        assert p.lags.max == 144
 
     # ------------------------------------------------------------------
     # MikroTik / FortiGate / OPNsense target profiles
@@ -493,19 +631,21 @@ class TestRealProfilesShipped:
 
     def test_mikrotik_crs310(self):
         """CRS310-8G+2S+: grounded in real user-contributed capture
-        (user_contrib_crs310_ros7.rsc).  ether1-8 are 2.5G PoE+ RJ45,
-        sfp-sfpplus1-2 are 10G SFP+."""
+        (user_contrib_crs310_ros7.rsc).  ether1-8 are 2.5G RJ45,
+        sfp-sfpplus1-2 are 10G SFP+.  The switch has no PoE-out — this
+        test pinned ``poe is True`` until 2026-10, guarding a claim the
+        vendor's own product page contradicts."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         p = profiles["mikrotik_routeros/CRS310-8G+2S+"]
         assert p.vendor == "mikrotik_routeros"
         assert p.device_class == "switch"
         assert p.port_count == 10
-        # ether1..8 — every one PoE+ capable
+        # ether1..8 — 2.5G, none of them PoE
         ether_ids = [pt.id for pt in p.ports if pt.id.startswith("ether")]
         assert ether_ids == [f"ether{n}" for n in range(1, 9)]
         for pt in p.ports:
+            assert pt.poe is False, pt.id
             if pt.id.startswith("ether"):
-                assert pt.poe is True
                 assert pt.speed == "2.5gig"
         # sfp-sfpplus1..2 — uplinks, 10gig
         sfp_ids = [pt.id for pt in p.ports if pt.kind == "uplink"]
@@ -885,26 +1025,23 @@ class TestRealProfilesShipped:
     # ------------------------------------------------------------------
 
     def test_arista_dcs_7050sx_64(self):
-        """Arista DCS-7050SX-64 — 48x 10G SFP+ + 4x 40G QSFP+ TOR.
-        Flat Ethernet<N> naming, no stacking, Port-Channel prefix
-        for LAGs (capital C, distinct from Cisco's Port-channel)."""
+        """Arista DCS-7050SX-64 -- 48x 10G SFP+ + 4x 40G QSFP+ TOR.
+        SFP+ ports are single-lane ``Ethernet<N>``; the QSFP+ cages are
+        multi-lane, so each is ``Ethernet<N>/1``.  Until 2026-10 this
+        test pinned bare ``Ethernet49``..``52``, which a 7050SX-64 does
+        not have."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         p = profiles["arista_eos/DCS-7050SX-64"]
         assert p.device_class == "switch"
         assert p.stacking == ""   # no traditional stacking on Arista
-        # 48 x 10G + 4 x 40G + 1 mgmt = 53 ports.
-        assert p.port_count == 53
-        # First physical port is Ethernet1, last is Ethernet52;
-        # Management1 is the mgmt port.
-        ids = p.port_ids()
-        assert "Ethernet1" in ids
-        assert "Ethernet48" in ids
-        assert "Ethernet49" in ids   # first QSFP+
-        assert "Ethernet52" in ids
-        assert "Management1" in ids
-        # Ethernet49-52 are uplink kind (40G).
+        assert p.port_ids() == (
+            [f"Ethernet{n}" for n in range(1, 49)]
+            + [f"Ethernet{n}/1" for n in range(49, 53)]
+            + ["Management1"]
+        )
         for n in (49, 50, 51, 52):
-            pt = p.lookup_port(f"Ethernet{n}")
+            assert p.lookup_port(f"Ethernet{n}") is None
+            pt = p.lookup_port(f"Ethernet{n}/1")
             assert pt is not None and pt.kind == "uplink"
             assert pt.speed == "40gig"
         # Ethernet1-48 are physical 10G.
@@ -916,100 +1053,139 @@ class TestRealProfilesShipped:
         assert p.lags.prefix == "Port-Channel"
 
     def test_arista_dcs_7050cx3_32s(self):
-        """DCS-7050CX3-32S — 32x 100G QSFP28 leaf/spine + 2x 10G
-        admin cages.  100G-fabric shape distinct from the 7050SX's
-        10G access role."""
+        """DCS-7050CX3-32S -- 32x 100G QSFP + 2x 10G SFP+.  The QSFP
+        cages are ``Ethernet<N>/1``; the two SFP+ are single-lane
+        ``Ethernet33`` / ``Ethernet34``."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         p = profiles["arista_eos/DCS-7050CX3-32S"]
-        # 32 x 100G + 2 x 10G + 1 mgmt = 35.
-        assert p.port_count == 35
+        assert p.port_ids() == (
+            [f"Ethernet{n}/1" for n in range(1, 33)]
+            + ["Ethernet33", "Ethernet34", "Management1"]
+        )
         for n in range(1, 33):
-            pt = p.lookup_port(f"Ethernet{n}")
+            assert p.lookup_port(f"Ethernet{n}") is None
+            pt = p.lookup_port(f"Ethernet{n}/1")
             assert pt is not None and pt.speed == "100gig"
             assert pt.kind == "uplink"
 
     def test_arista_dcs_7280cr3_32p4(self):
-        """7280CR3-32P4 — spine-class with 32x 100G + 4x 400G.
-        Deep-buffer platform; 400G QSFP-DD is the distinguishing
-        feature vs the 7050 / 7060 TOR line."""
+        """7280CR3-32P4 -- 32x 100G QSFP + 4x 400G OSFP (the ``P4``;
+        QSFP-DD is the sibling ``-32D4``).  Every cage is multi-lane."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         p = profiles["arista_eos/DCS-7280CR3-32P4"]
-        # 32 x 100G + 4 x 400G + 1 mgmt = 37.
-        assert p.port_count == 37
+        assert p.port_ids() == (
+            [f"Ethernet{n}/1" for n in range(1, 37)] + ["Management1"]
+        )
         for n in range(33, 37):
-            pt = p.lookup_port(f"Ethernet{n}")
+            pt = p.lookup_port(f"Ethernet{n}/1")
             assert pt is not None and pt.speed == "400gig"
+            assert "OSFP" in pt.notes
+        assert "QSFP-DD" not in p.display_name
 
     def test_arista_dcs_7060cx_32s(self):
-        """DCS-7060CX-32S — Tomahawk-era 100G TOR (predecessor of
-        the 7050CX3 with different silicon).  32 ports uniform."""
+        """DCS-7060CX-32S -- 32x 100G QSFP + 2x 10G SFP+.  Until
+        2026-10 this test pinned 33 ports: the profile omitted the two
+        SFP+ ports the switch has, and named the QSFP cages bare."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         p = profiles["arista_eos/DCS-7060CX-32S"]
-        assert p.port_count == 33   # 32 x 100G + 1 mgmt
+        assert p.port_ids() == (
+            [f"Ethernet{n}/1" for n in range(1, 33)]
+            + ["Ethernet33", "Ethernet34", "Management1"]
+        )
         for n in range(1, 33):
-            pt = p.lookup_port(f"Ethernet{n}")
+            pt = p.lookup_port(f"Ethernet{n}/1")
             assert pt is not None and pt.speed == "100gig"
+        for n in (33, 34):
+            pt = p.lookup_port(f"Ethernet{n}")
+            assert pt is not None and pt.speed == "10gig"
 
     # ------------------------------------------------------------------
     # Juniper Junos target profiles (Phase 13)
     # ------------------------------------------------------------------
 
     def test_juniper_ex4300_48t(self):
-        """Juniper EX4300-48T — 48 x 1GbE + 4 x 10G SFP+.  Campus-
-        access workhorse with Virtual Chassis stacking capability.
-        Junos port naming: ge-0/0/N for access (1G), xe-0/2/N for
-        uplinks (10G), me0 for management."""
+        """Juniper EX4300-48T -- 48 x 1GbE, plus 4 x SFP+ on the
+        optional uplink module.  Junos port naming: ge-0/0/N for access
+        (1G), xe-0/2/N for the uplink module (PIC 2), me0 for
+        management.  The rear QSFP+ ports are Virtual Chassis ports by
+        default and are deliberately not listed."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         p = profiles["juniper_junos/EX4300-48T"]
         assert p.device_class == "switch"
         assert p.stacking == "virtual-chassis"
-        # 48 x ge + 4 x xe + 1 mgmt = 53.
-        assert p.port_count == 53
-        # Access ports are ge-0/0/0..47 (not ge-0/0/1..48; Junos is
-        # 0-indexed).
+        assert p.port_ids() == (
+            [f"ge-0/0/{n}" for n in range(48)]      # Junos is 0-indexed
+            + [f"xe-0/2/{n}" for n in range(4)]
+            + ["me0"]
+        )
         for n in (0, 24, 47):
             pt = p.lookup_port(f"ge-0/0/{n}")
             assert pt is not None and pt.speed == "gig"
             assert pt.kind == "physical"
-        # Uplinks are xe-0/2/0..3 (uplink PIC = 2 on EX4300).
         for n in range(4):
             pt = p.lookup_port(f"xe-0/2/{n}")
             assert pt is not None and pt.speed == "10gig"
             assert pt.kind == "uplink"
-        assert p.lookup_port("me0") is not None
+        assert p.lookup_port("et-0/1/0") is None
+        assert "uplink module" in p.caveat
         # Junos LAG prefix is `ae`.
         assert p.lags.prefix == "ae"
 
     def test_juniper_ex4600_40f(self):
-        """EX4600-40F — campus-aggregation / small-DC leaf: 24x 10G
-        + 4x 40G uplinks.  Grammar note: me0 is the OOBM port,
-        distinct from the em0/em1 expansion slots (which carry
-        optional 8x10G or 4x40G modules — deferred from v1)."""
+        """EX4600-40F -- 24x 10G + 4x 40G, all 28 fixed ports on PIC 0.
+        Management is ``em0`` / ``em1`` (the EX4600 follows the QFX
+        convention, not the EX one).
+
+        Until 2026-10 this test pinned the fixed uplinks as
+        ``et-0/1/0``..``3`` -- the ports of an expansion module in bay 1,
+        absent on a base chassis -- and management as ``me0``."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         p = profiles["juniper_junos/EX4600-40F"]
-        assert p.port_count == 29   # 24 xe + 4 et + 1 mgmt
-        # 10G fixed at xe-0/0/0..23.
+        assert p.port_ids() == (
+            [f"xe-0/0/{n}" for n in range(24)]
+            + [f"et-0/0/{n}" for n in range(24, 28)]
+            + ["em0", "em1"]
+        )
         for n in (0, 12, 23):
             pt = p.lookup_port(f"xe-0/0/{n}")
             assert pt is not None and pt.speed == "10gig"
-        # 40G uplinks at et-0/1/0..3 (PIC 1 for the uplink bank).
-        for n in range(4):
-            pt = p.lookup_port(f"et-0/1/{n}")
+        for n in range(24, 28):
+            pt = p.lookup_port(f"et-0/0/{n}")
             assert pt is not None and pt.speed == "40gig"
+        for gone in ("et-0/1/0", "me0"):
+            assert p.lookup_port(gone) is None
+        assert p.port_ids(kind="mgmt") == ["em0", "em1"]
 
     def test_juniper_qfx5120_48y(self):
-        """QFX5120-48Y — DC leaf: 48x 25G SFP28 + 8x 100G QSFP28.
-        25G access grammar is distinct (``xle-`` prefix for
-        25GBASE-CR1)."""
+        """QFX5120-48Y -- DC leaf: 48x SFP28 + 8x 100G QSFP28.  Junos
+        names a port after the speed it runs at, and the SFP28 ports
+        run at 10G by default, so the factory-default names are
+        ``xe-0/0/0``..``47`` (25G would be ``et-``, 1G ``ge-``).
+
+        Until 2026-10 this test pinned ``xle-0/0/N``.  ``xle`` is the
+        40G type on QFabric-package QFX3500 / 3600 / 5100, and no
+        QFX5120 port has ever carried it."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         p = profiles["juniper_junos/QFX5120-48Y"]
-        assert p.port_count == 57   # 48 xle + 8 et + 1 mgmt
-        for n in (0, 24, 47):
-            pt = p.lookup_port(f"xle-0/0/{n}")
-            assert pt is not None and pt.speed == "25gig"
+        assert p.port_ids() == (
+            [f"xe-0/0/{n}" for n in range(48)]
+            + [f"et-0/0/{n}" for n in range(48, 56)]
+            + ["em0", "em1"]
+        )
+        assert not [pid for pid in p.port_ids() if pid.startswith("xle-")]
+        assert p.lookup_port("me0") is None
+        # ``speed`` is the cage's MAXIMUM (25G SFP28), not the 10G the
+        # default ``xe-`` name reflects.
+        assert all(
+            p.lookup_port(f"xe-0/0/{n}").speed == "25gig" for n in range(48)
+        )
+        assert p.lags.max == 80
         for n in range(48, 56):
             pt = p.lookup_port(f"et-0/0/{n}")
             assert pt is not None and pt.speed == "100gig"
+        # The profile describes ONE speed state and says which.
+        assert "10G" in p.deployment_state
+        assert "et-0/0/N" in p.caveat
 
 # ---------------------------------------------------------------------------
 # Module-variant support (schema-first Option B, milestone-1)

@@ -1,23 +1,40 @@
-# Aruba 6300M 48-port 1GbE + 4x SFP56 (JL665A-equivalent / CX platform)
-# 48 × 10/100/1000 BASE-T RJ45 + PoE+ (Class 4 30W/port)
-# 4 × 10/25/50 SFP56 uplinks — the 40G/100G target slot we were
-# missing for Cat 9300 uplink translations
+# Aruba CX 6300M 48-port 1GbE Class 4 PoE + 4-port SFP56 (JL661A)
+# 48 × 10/100/1000 BASE-T RJ45, Class 4 PoE (30 W/port)
+# 4 × SFP56 uplink (1/10/25/50G) — ports 49-52
 #
-# NOTE: The 6300M runs AOS-CX (not AOS-S).  This profile covers the
-# port inventory only; the aruba_aoss codec renders AOS-S syntax
-# which the 6300M won't ingest as-is.  Use for port-name planning
-# when the deployment will be hand-finalised into AOS-CX by the
-# operator.  A proper aruba_aoscx codec is a separate deliverable.
-vendor: aruba_aoss
+# This is an AOS-CX switch, not AOS-S: it is filed under `aruba_aoscx`
+# and its port names have three parts.  (JL665A is the 6300F sibling.)
+#
+# Port naming.  AOS-CX names every port member/slot/port.  On a 6300
+# the slot is always 1, and a switch that is not stacked is member 1,
+# so the names are the same standalone and as VSF member 1.  AOS-CX
+# has no letter slots.  Other VSF members are N/1/port.
+#
+# Stacking is VSF, up to 10 members.  (VSX is a separate two-switch
+# high-availability feature, not stacking; it does not change port
+# names.)
+#
+# Validation: vendor documentation -- no 6300 capture is committed (the
+# AOS-CX fixtures in this repo are all 8xxx-class).
+vendor: aruba_aoscx
 model: 6300M-48G-PoE4-SFP56
-display_name: "Aruba 6300M 48G PoE+ 4xSFP56 (CX / port planning only)"
+display_name: "Aruba CX 6300M 48G Class 4 PoE 4SFP56 (JL661A)"
 device_class: switch
-stacking: vsx-stacking
+stacking: vsf
+deployment_state: "standalone or VSF member 1 (the names are identical on AOS-CX)"
+evidence: vendor-doc
+evidence_ref: "AOS-CX 10.14 Fundamentals Guide 6300/6400 (member/slot/port); AOS-CX 10.14 VSF Guide (JL661A ports 49 and 50 reserved for auto-stacking); HPE Japan CX 6300 system configuration guide (JL661A ports 49-52 are SFP56); CX 6300 QuickSpecs a00073540enw v46"
+caveat: "In a VSF stack the ports assigned to VSF links (1/1/49 and 1/1/50 under auto-stacking) cannot carry port configuration. Other stack members are N/1/port."
 ports:
-  - {range: "1/1-1/48", kind: physical, speed: gig, poe: true}
-  - {range: "1/A1-1/A4", kind: uplink, speed: 50gig, sfp: true, notes: "SFP56 10/25/50G uplink"}
-lags: {max: 256, prefix: lag}
+  - {range: "1/1/1-1/1/48", kind: physical, speed: gig, poe: true}
+  - {range: "1/1/49-1/1/52", kind: uplink, speed: 50gig, sfp: true, notes: "SFP56 1/10/25/50G uplink"}
+# AOS-CX writes a LAG as `interface lag N` -- with a space.  The rename
+# modal builds LAG options as prefix + number, so the prefix carries
+# the trailing space: `lag1` is not a name the aruba_aoscx codec, or
+# the switch, recognises.
+lags: {max: 256, prefix: "lag "}
 
-# Datasheet capacity limits (AOS-CX 10.x 6300M).
+# Capacity limits (AOS-CX 10.x 6300M; 256 LAGs and 64 local users --
+# 63 plus admin -- confirmed against HPE's guides).
 max_vlans: 4094
 max_local_users: 64

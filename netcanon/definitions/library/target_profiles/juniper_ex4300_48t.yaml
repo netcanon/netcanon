@@ -1,22 +1,36 @@
 # Juniper EX4300-48T
-# 48 x 10/100/1000BASE-T + 4 x 10G SFP+ uplinks.  Campus-access
-# workhorse — the dominant Junos fixed-form factor deployed in
-# enterprise wiring closets.  Supports Virtual Chassis (stacking
-# via dedicated VC ports on the rear of the unit, not modelled
-# here as renamable ports).
+# 48 x 10/100/1000BASE-T, plus 4 x SFP/SFP+ uplinks when the optional
+# uplink module (EX-UM-4X4SFP) is fitted.  Campus-access workhorse —
+# the dominant Junos fixed-form factor in enterprise wiring closets.
+#
+# Port naming.  Access ports are `ge-0/0/0`..`ge-0/0/47`.  The uplink
+# module is PIC 2: `xe-0/2/0`..`xe-0/2/3` with 10G optics, `ge-0/2/N`
+# with 1G optics.  With no module fitted there is no PIC 2.  The four
+# rear QSFP+ ports are PIC 1 (`et-0/1/0`..`et-0/1/3`), but they are
+# dedicated Virtual Chassis ports by default and do not appear as
+# interfaces until converted, so they are not listed.  Management is
+# `me0` on a standalone switch (`vme` in a Virtual Chassis).
+#
+# Validation: Juniper prints the EX4300-48T factory-default
+# configuration in its hardware guide; every id below is in it.  No
+# capture of this model is committed here.
 vendor: juniper_junos
 model: EX4300-48T
 display_name: "Juniper EX4300-48T (48x 1G + 4x 10G SFP+)"
 device_class: switch
 stacking: virtual-chassis
+deployment_state: "standalone (FPC 0) with the 4-port SFP+ uplink module fitted"
+evidence: vendor-doc
+evidence_ref: "Juniper EX4300 Hardware Guide, Configuring Junos OS on the EX4300 (prints the EX4300-48T factory-default configuration); EX4300 System Overview (rear QSFP+ ports are VCPs by default)"
+caveat: "xe-0/2/0-3 exist only with the optional uplink module fitted (ge-0/2/N with 1G optics). The rear QSFP+ ports are Virtual Chassis ports by default and are not listed. A Virtual Chassis member N uses N as the first number."
 ports:
   - {range: "ge-0/0/0-47", kind: physical, speed: gig, notes: "10/100/1000BASE-T"}
-  - {range: "xe-0/2/0-3", kind: uplink, speed: 10gig, sfp: true, notes: "10G SFP+ uplink cage"}
+  - {range: "xe-0/2/0-3", kind: uplink, speed: 10gig, sfp: true, notes: "10G SFP+ uplink cage (optional EX-UM-4X4SFP module)"}
   - {id: "me0", kind: mgmt, speed: gig, notes: "OOBM"}
 lags: {max: 128, prefix: ae}
 
-# Junos supports up to 4094 VLANs on EX platforms.
+# 4093 VLANs supported (the VLAN-id range is 1-4094); 128 LAGs.
 # max_local_users unset — Junos's ``system login user`` table is
 # effectively unbounded.
-max_vlans: 4094
-max_vlans_source: "Junos 18.x+ VLAN capacity (EX platform datasheet)"
+max_vlans: 4093
+max_vlans_source: "Juniper EX4300 datasheet 1000467: Number of VLANs supported 4093"

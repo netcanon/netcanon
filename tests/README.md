@@ -11,6 +11,7 @@ tests/
 │   ├── definitions.py       Pre-built DeviceDefinition factory functions
 │   ├── ssh_responses.py     Canned SSH output strings per vendor
 │   ├── module_variants.py   Canonical module-variant allowlist shared with integration tier
+│   ├── target_profiles/     Synthetic target profiles (never shipped) for grades no shipped profile carries
 │   ├── synthetic/<vendor>/  Hand-crafted minimal configs per vendor (parser-feature focus)
 │   ├── real/<vendor>/       Real-capture corpus + RESULTS.md + NOTICE.md + CROSS_MESH_RESULTS.md
 │   └── cross_vendor_expectations/  Phase 3 mechanical-drift expectation tables
@@ -49,7 +50,8 @@ tests/
     ├── test_tray.py         TrayIcon construction, callbacks, stop()
     ├── test_window.py       WebViewWindow lifecycle and _handle_close()
     ├── test_settings.py     Path resolution in frozen vs. dev mode
-    └── test_backups_<vendor>_desktop.py  Per-vendor embedded-server smoke tests
+    ├── test_backups_<vendor>_desktop.py  Per-vendor embedded-server smoke tests
+    └── …                    (etc. — see tests/desktop/ for the full set)
 ```
 
 ## Running Tests

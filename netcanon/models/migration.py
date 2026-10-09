@@ -729,7 +729,7 @@ class MigrationPlanRequest(BaseModel):
 
     target_module: str | None = None
     """Optional module SKU within :attr:`target_profile` (e.g.
-    ``NM-8X``, ``NM-2Q``, ``JL084A``).  Used when the selected profile
+    ``NM-8X``, ``NM-2Q``, ``JL083A``).  Used when the selected profile
     declares module variants (chassis + swappable uplink module) —
     tells the rename modal which of the module's uplink port-ids to
     offer in the target-name dropdown.  Advisory only (mirrors
