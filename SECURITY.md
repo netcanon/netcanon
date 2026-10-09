@@ -349,7 +349,8 @@ Covered by `tests/unit/test_models.py` → `TestDeviceTarget` host validation ca
 ## Input Validation — Device Declarations
 
 **Files:** `netcanon/models/port_inventory.py`, `netcanon/migration/device_models.py`,
-`netcanon/api/routes/_migration_helpers.py`
+`netcanon/api/routes/_migration_helpers.py`, `netcanon/migration/deployment_detect.py`,
+`netcanon/migration/codecs/aruba_aoss/deployment_detect.py`
 
 A plan or inventory request may declare a device: a model family, a mode,
 members and modules.  The declaration only ever selects among entries the
@@ -440,14 +441,30 @@ the definitions directory.
 
 `POST /api/v1/migration/detect-deployment` reads a pasted or stored config
 and proposes the device it came from.  It only reads: nothing is translated
-or stored, the text is capped like a plan request's, and it runs the same
-parser a translation would.  The response quotes the config lines the
-proposal was read from, with a stack member's MAC address removed — a MAC
-identifies one physical device and is no part of what the device is.
+or stored, the pasted text is capped like a plan request's, and it runs the
+same parser a translation would — after a detector of its own, a set of
+line-anchored patterns over the whole text.  The text is not vouched for, so
+those patterns are bounded in what they take and none is applied to what
+another matched: the detector's work grows with the length of the text and no
+faster.  (The parser's own cost on that text is the same as on a plan
+request.)  The answer quotes the hardware lines only as far as the part
+number — a member line's MAC address comes after it and is never read — and
+lists, in `missing_ports`, port names the config uses that the proposed device
+lacks; those are whatever text the config has where a port name goes, so a
+client escapes them before showing them.  What the config states is held to
+the bounds of a declaration (`MAX_DEPLOYMENT_MEMBERS`) and to the detector's
+own bound on the length of a part number and of a member number: past them
+there is no proposal and a note, not an error, and the evidence and the list
+of missing ports are capped
+(`MAX_EVIDENCE_LINES`, `MAX_MISSING_PORTS`).  A detector that raises is
+answered the same way, and the log line carries the exception's type only.
 
 Covered by `tests/unit/migration/test_device_models.py` (each bound is tested
 at its boundary, against the named constant),
-`tests/unit/migration/test_device_models_shipped.py` and
+`tests/unit/migration/test_device_models_shipped.py`,
+`tests/unit/migration/test_deployment_detect.py` (text made to be slow,
+against every registered detector and against each pattern of the AOS-S one;
+the caps; no MAC-shaped string anywhere in a proposal) and
 `tests/integration/test_migration_models_api.py`.
 
 ---

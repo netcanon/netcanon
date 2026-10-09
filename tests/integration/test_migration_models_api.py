@@ -18,6 +18,7 @@ is a 422, and what a request that predates the feature still gets.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -1182,6 +1183,58 @@ class TestDetectDeployment:
         ]
         assert (proposal["consistent"], proposal["missing_ports"]) == (True, [])
         assert proposal["inventory"]["port_count"] == 52
+
+    def test_text_nobody_vouches_for_is_answered_not_refused(self, client: TestClient) -> None:
+        """More members than a declaration may list, a part no device
+        prints, a member number of thousands of digits: each was a 500.
+        Each is a 200 that says no deployment could be proposed."""
+        banner = "; hpStack_WC Configuration Editor; Created on release #WC.16.07.0003\n"
+        # Each with the note that says what stood in the way: a body
+        # that is answered, but by a layer further down than the one
+        # meant to answer it, gets a different note.
+        bodies = [
+            (
+                banner + "stacking\n" + "".join(
+                    f'   member {n} type "JL322A"\n' for n in range(1, 66)
+                ) + "   exit\n",
+                "a deployment lists at most 64",
+            ),
+            (
+                banner + 'stacking\n   member 1 type "' + "J" * 200 + '"\n   exit\n',
+                "no line in it names a member",
+            ),
+            (
+                banner + "stacking\n   member " + "9" * 5000 + ' type "JL322A"\n   exit\n',
+                "no line in it names a member",
+            ),
+            (
+                banner + "stacking\n   member" + " " * 400_000 + '1 type "JL322A"\n   exit\n',
+                "names no port",
+            ),
+        ]
+        for raw, said in bodies:
+            started = time.perf_counter()
+            resp = client.post(
+                "/api/v1/migration/detect-deployment", json={"source": "aruba_aoss", "raw_text": raw},
+            )
+            # Well under a second each; the pattern this replaced took
+            # over a minute on the last of them.
+            assert time.perf_counter() - started < 15.0, said
+            assert resp.status_code == 200, said
+            proposal = resp.json()
+            assert proposal["consistent"] is None
+            assert [n for n in proposal["notes"] if said in n], (said, proposal["notes"])
+            assert len(resp.content) < 20_000
+
+    def test_a_paste_that_names_no_port_is_not_called_consistent(self, client: TestClient) -> None:
+        proposal = client.post("/api/v1/migration/detect-deployment", json={
+            "source": "aruba_aoss",
+            "raw_text": "; JL322A Configuration Editor; Created on release #WC.16.07.0003\n"
+                        'hostname "sw"\nmodule 1 type jl322a\n',
+        }).json()
+        assert proposal["deployment"] is not None
+        assert proposal["consistent"] is None and proposal["used_port_count"] == 0
+        assert proposal["missing_port_count"] == 0
 
     def test_a_stack_is_read_from_its_stanza(self, client: TestClient) -> None:
         proposal = client.post(

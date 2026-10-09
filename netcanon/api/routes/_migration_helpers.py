@@ -7,9 +7,10 @@ Public surface:
 * :func:`resolve_adapter_or_422` — translate adapter-name lookup
   errors into 422s with side-aware ``source`` / ``target`` framing.
 * :func:`resolve_input_text` — return the raw config text referenced
-  by a :class:`MigrationPlanRequest` body, enforcing the
-  ``raw_text`` XOR ``source_filename`` invariant and translating
-  storage misses into 404s.
+  by a request body that names its config one of the two ways
+  (:class:`HasInputText`: a plan request, a detect-deployment
+  request), enforcing the ``raw_text`` XOR ``source_filename``
+  invariant and translating storage misses into 404s.
 * :func:`get_target_profiles` — pull the target-profile registry
   from ``request.app.state``; returns an empty dict when the
   attribute is absent (some unit-test fixtures don't run the full

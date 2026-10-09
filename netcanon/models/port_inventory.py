@@ -380,9 +380,10 @@ class DetectedDeployment(BaseModel):
     stacked but not what the stack is made of."""
 
     evidence: list[str] = Field(default_factory=list)
-    """The config lines this was read from, for whoever confirms it.
-    A member's MAC address is left out: it identifies one physical
-    device and says nothing about what the device is."""
+    """The hardware lines this was read from, each as far as its part
+    number, for whoever confirms it.  A member line's MAC address
+    comes after the part number and is never read: it identifies one
+    physical device and says nothing about what the device is."""
 
     notes: list[str] = Field(default_factory=list)
     """What the reader must know about how far the lines can be
@@ -409,9 +410,18 @@ class DeploymentProposal(BaseModel):
     """Family key of the members, when they all resolved to one."""
 
     mode: str = ""
-    """The family mode the config is in, when that is not in doubt."""
+    """The family mode the config is in, when that is not in doubt --
+    also where what the config states then fails to compile."""
 
-    deployment: DeploymentSpec | None = None
+    deployment: DeploymentSpec | None = Field(
+        default=None,
+        description=(
+            "Ready to send as a plan request's source_deployment.  null "
+            "unless every device the config names is a model of one family, "
+            "in a mode that is not in doubt, and the result compiles; notes "
+            "says what stood in the way."
+        ),
+    )
     """Ready to send as a plan request's ``source_deployment``.
     ``None`` unless every member resolved, to one family, in a mode
     that is not in doubt, and the result compiles."""
@@ -420,19 +430,60 @@ class DeploymentProposal(BaseModel):
     """What :attr:`deployment` compiles to."""
 
     used_port_count: int = 0
-    """How many hardware port names the config uses."""
+    """How many hardware port names the config uses.  ``0`` when
+    nothing was proposed or the config could not be parsed."""
 
-    missing_ports: list[str] = Field(default_factory=list)
+    missing_ports: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Port names the config uses that the proposed device does not "
+            "have.  A port name is whatever text the config has where a port "
+            "name goes: escape it before showing it.  Capped; "
+            "missing_port_count is the whole number."
+        ),
+    )
     """Port names the config uses that the proposed device does not
-    have, in the order the config first uses them."""
+    have, in the order the parsed config lists them (interface
+    stanzas first, then VLAN membership -- not the order of the
+    text).  Capped; :attr:`missing_port_count` is the whole number."""
 
-    consistent: bool | None = None
+    missing_port_count: int = Field(
+        default=0,
+        description=(
+            "How many port names the config uses that the proposed device "
+            "does not have."
+        ),
+    )
+
+    consistent: bool | None = Field(
+        default=None,
+        description=(
+            "true: every port name the config uses is a port of the proposed "
+            "device.  false: missing_ports lists the ones that are not.  "
+            "null: there was nothing to check -- nothing was proposed, the "
+            "config could not be parsed, or it names no port at all."
+        ),
+    )
     """Every port name the config uses is a port of the proposed
-    device.  ``None`` when nothing was proposed, or the config could
-    not be parsed to check."""
+    device.  ``None`` when there was nothing to check: nothing was
+    proposed, the config could not be parsed, or it names no port at
+    all (only its top was pasted, say)."""
 
-    evidence: list[str] = Field(default_factory=list)
-    notes: list[str] = Field(default_factory=list)
+    evidence: list[str] = Field(
+        default_factory=list,
+        description=(
+            "The hardware lines the proposal was read from, each as far as "
+            "its part number, runs of space collapsed.  Fragments for "
+            "whoever confirms it, not whole config lines.  Capped."
+        ),
+    )
+    notes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "What to know before relying on the proposal, and, when "
+            "deployment is null, what stood in the way."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

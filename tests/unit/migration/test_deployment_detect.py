@@ -16,6 +16,8 @@ them is wrong about a real device.
 
 from __future__ import annotations
 
+import re
+import time
 from pathlib import Path
 
 import pytest
@@ -24,7 +26,12 @@ from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration import deployment_detect
 from netcanon.migration.codecs.aruba_aoss.deployment_detect import detect_deployment
 from netcanon.migration.codecs.registry import get_codec
-from netcanon.migration.deployment_detect import detection_vendors, propose_deployment
+from netcanon.migration.deployment_detect import (
+    MAX_EVIDENCE_LINES,
+    MAX_MISSING_PORTS,
+    detection_vendors,
+    propose_deployment,
+)
 from netcanon.migration.device_models import (
     Deployment,
     DeviceModelRegistry,
@@ -33,7 +40,13 @@ from netcanon.migration.device_models import (
     load_model_families_dir,
 )
 from netcanon.models.migration import MigrationJobStatus
-from netcanon.models.port_inventory import DeploymentProposal, DetectedDeployment, DetectedMember
+from netcanon.models.port_inventory import (
+    MAX_DECLARED_BAYS,
+    MAX_DEPLOYMENT_MEMBERS,
+    DeploymentProposal,
+    DetectedDeployment,
+    DetectedMember,
+)
 from netcanon.services.migration_pipeline import run_plan_with_models
 
 pytestmark = pytest.mark.unit
@@ -102,6 +115,12 @@ vlan 1
 """
 
 
+#: Which codec reads a vendor's configs.  A vendor that gains a
+#: detector has to be named here: the tests that walk every detector
+#: fail until it is.
+_CODEC_OF = {"aruba_aoss": "aruba_aoss"}
+
+
 def _members(detected: DetectedDeployment) -> list[tuple[int | None, str, dict[str, str]]]:
     return [(m.id, m.part, m.modules) for m in detected.members]
 
@@ -142,10 +161,14 @@ class TestAossDetector:
         assert _members(detected) == [(1, "JL557A", {}), (3, "JL262A", {})]
 
     def test_a_part_number_need_not_start_with_j(self) -> None:
-        """R0M67A and R0M68A are 2930M chassis.  A detector keyed to a
-        leading ``J`` would miss a quarter of the family."""
-        text = STANDALONE.replace("JL322A", "R0M68A").replace("jl322a", "r0m68a")
-        assert _members(detect_deployment(text))[0][1] == "R0M68A"
+        """R0M67A and R0M68A are 2930M chassis.  Each way a part is
+        read has to take one: the banner alone, the ``module 1`` line,
+        and a member line of a stanza."""
+        banner_only = '; R0M68A Configuration Editor; Created on release #WC.16.07.0003\nhostname "sw"\n'
+        assert _members(detect_deployment(banner_only)) == [(None, "R0M68A", {})]
+        module_line = STANDALONE.replace("JL322A", "R0M68A").replace("jl322a", "r0m68a")
+        assert _members(detect_deployment(module_line))[0][1] == "R0M68A"
+        assert _members(detect_deployment(STACKED))[1][:2] == (2, "R0M67A")
 
     def test_the_banner_alone_is_enough_for_a_standalone_switch(self) -> None:
         text = STANDALONE.replace("module 1 type jl322a\n", "")
@@ -192,6 +215,7 @@ class TestAossDetector:
             assert detected.evidence
             assert not [line for line in detected.evidence if "mac-address" in line]
             assert not [line for line in detected.evidence if "aabbcc" in line]
+            assert not [line for line in detected.evidence if _MAC_SHAPE.search(line)]
 
     def test_the_notes_say_what_the_lines_do_not_prove(self) -> None:
         stacked = detect_deployment(STACKED).notes
@@ -275,11 +299,16 @@ class TestProposal:
         """A capture claim is written by hand; the detector reads the
         same capture.  They are two statements about one real device
         and must compile to the same ports."""
+        # A family of a vendor with no detector has no second
+        # statement to compare, and is passed over.
+        assert set(_CODEC_OF) == set(detection_vendors())
         checked = 0
         for family in REGISTRY.families.values():
+            if family.vendor not in _CODEC_OF:
+                continue
             for claim in family.captures:
                 raw = (REPO_ROOT / claim.fixture).read_text(encoding="utf-8")
-                proposal = propose_deployment(AOSS, raw, REGISTRY)
+                proposal = propose_deployment(get_codec(_CODEC_OF[family.vendor]), raw, REGISTRY)
                 claimed = compile_deployment(
                     Deployment(vendor=family.vendor, mode=claim.mode, members=claim.members),
                     REGISTRY,
@@ -318,7 +347,10 @@ class TestProposalsThatStopShort:
     def test_a_vendor_with_no_detector(self) -> None:
         proposal = propose_deployment(get_codec("cisco_iosxe_cli"), "hostname x\n", REGISTRY)
         assert not proposal.stated and proposal.deployment is None
-        assert "No detector reads the hardware lines of a cisco_iosxe" in proposal.notes[0]
+        assert proposal.notes == [
+            "No detector reads the hardware lines of cisco_iosxe configurations yet; "
+            "declare the device yourself."
+        ]
 
     def test_members_of_two_families(self) -> None:
         text = STACKED.replace('member 2 type "R0M67A"', 'member 2 type "JL260A"')
@@ -334,7 +366,7 @@ class TestProposalsThatStopShort:
         assert proposal.deployment is None
         assert any("does not compile" in n and "JL079A" in n for n in proposal.notes)
 
-    def test_a_fabric_the_family_has_no_mode_for(self) -> None:
+    def test_a_stacking_stanza_that_names_a_2930f_is_its_one_stacking_mode(self) -> None:
         """A 2930F stacks by VSF only.  A ``stacking`` stanza naming one
         is taken as stated — it maps to the one mode with member ids."""
         text = STACKED.replace("JL322A", "JL260A").replace("R0M67A", "JL260A").replace(
@@ -379,7 +411,7 @@ class TestTheCheckAgainstTheConfig:
         assert proposal.deployment.members[0].modules == {}
         assert proposal.consistent is False
         assert proposal.missing_ports == ["A1", "A2", "A3", "A4"]
-        assert any("A module may be fitted" in n for n in proposal.notes)
+        assert any("a module is fitted that the config does not state" in n for n in proposal.notes)
         assert any("bay A was not stated" in c for c in proposal.inventory.caveats)
 
     def test_port_names_from_the_other_mode(self) -> None:
@@ -397,6 +429,507 @@ class TestTheCheckAgainstTheConfig:
         ).replace("untagged 1-48,A1-A4", "untagged 1-46,A1-A4\n   tagged Trk1")
         proposal = propose_deployment(AOSS, text, REGISTRY)
         assert proposal.consistent, proposal.missing_ports
+
+
+# ---------------------------------------------------------------------------
+# Text nobody vouches for
+# ---------------------------------------------------------------------------
+
+_STACK_BANNER = "; hpStack_WC Configuration Editor; Created on release #WC.16.07.0003\n"
+_JL322A_TOP = (
+    "; JL322A Configuration Editor; Created on release #WC.16.07.0003\n"
+    'hostname "sw"\nmodule 1 type jl322a\n'
+)
+_MAC_SHAPE = re.compile(r"[0-9a-f]{6}-[0-9a-f]{6}", re.IGNORECASE)
+
+
+def _stanza(*lines: str) -> str:
+    return _STACK_BANNER + "stacking\n" + "".join(f"   {line}\n" for line in lines) + "   exit\n"
+
+
+class TestWhatHostileTextCannotDo:
+    """The route hands this code whatever was pasted.  It answers in
+    time that grows with the text and no faster, never raises, and
+    does not hand back more than a declaration could hold."""
+
+    def test_a_run_of_spaces_inside_a_hardware_line_costs_nothing(self) -> None:
+        """A pattern applied to each matched fragment once took time
+        that grew with the SQUARE of a run of spaces in it: a quarter
+        of a megabyte held the server for a minute.  The fragment is
+        now collapsed, not searched."""
+        text = _STACK_BANNER + "stacking\n   member" + " " * 400_000 + '1 type "JL322A"\n   exit\n'
+        started = time.perf_counter()
+        detected = detect_deployment(text)
+        # Linear work on this text is a few milliseconds; the old
+        # pattern needed minutes.  The margin is for a loaded machine.
+        assert time.perf_counter() - started < 5.0
+        assert _members(detected) == [(1, "JL322A", {})]
+        assert detected.evidence[-1] == 'member 1 type "JL322A"'
+
+    def test_evidence_is_the_line_as_far_as_the_part_number(self) -> None:
+        """Runs of space collapsed, and nothing after the part: the MAC
+        address of a member line comes after it and is never read."""
+        detected = detect_deployment(_stanza('member  1\ttype   "JL322A"   mac-address aabbcc-000001'))
+        assert detected.evidence == [
+            "; hpStack_WC Configuration Editor", "stacking", 'member 1 type "JL322A"',
+        ]
+
+    @pytest.mark.parametrize("text", [STACKED, VSF, CAPTURE_2930M], ids=["stacked", "vsf", "capture"])
+    def test_nothing_shaped_like_a_mac_address_is_in_a_proposal(self, text: str) -> None:
+        """Not the word ``mac-address``: the SHAPE, anywhere in what a
+        client is sent."""
+        assert _MAC_SHAPE.search(text)
+        proposal = propose_deployment(AOSS, text, REGISTRY)
+        assert not _MAC_SHAPE.search(proposal.model_dump_json())
+
+    def test_more_devices_than_a_declaration_may_list(self) -> None:
+        text = _stanza(*(f'member {n} type "JL322A"' for n in range(1, MAX_DEPLOYMENT_MEMBERS + 2)))
+        proposal = propose_deployment(AOSS, text, REGISTRY)
+        assert proposal.stated and proposal.deployment is None and proposal.members == []
+        assert any("states 65 devices" in n and "at most 64" in n for n in proposal.notes)
+        assert len(proposal.evidence) <= MAX_EVIDENCE_LINES
+
+    def test_the_evidence_is_capped(self) -> None:
+        text = _stanza(*(f'member {n} type "JL322A"' for n in range(1, 201)))
+        proposal = propose_deployment(AOSS, text, REGISTRY)
+        assert len(detect_deployment(text).evidence) == 202
+        assert len(proposal.evidence) == MAX_EVIDENCE_LINES
+        assert proposal.evidence[:3] == [
+            "; hpStack_WC Configuration Editor", "stacking", 'member 1 type "JL322A"',
+        ]
+
+    def test_a_detection_no_declaration_could_hold_is_an_answer(self, monkeypatch) -> None:
+        """No AOS-S text reaches this: its detector's patterns are
+        tighter than a declaration's bounds.  The next detector's may
+        not be, and the proposer is what answers for it."""
+        bays = {f"B{n}": "JL083A" for n in range(MAX_DECLARED_BAYS + 1)}
+        detected = DetectedDeployment(members=[DetectedMember(part="JL322A", modules=bays)])
+        monkeypatch.setattr(deployment_detect, "_detectors", lambda: {"aruba_aoss": lambda _raw: detected})
+        proposal = propose_deployment(AOSS, STANDALONE, REGISTRY)
+        assert proposal.deployment is None and proposal.consistent is None
+        assert (proposal.family, proposal.mode) == ("aruba_aoss/2930M", "standalone")
+        (note,) = proposal.notes
+        assert note.startswith("What the config states cannot be a deployment of Aruba 2930M: 1 member(s) stated;")
+        assert "JL083A" not in note
+
+    def test_the_most_a_declaration_may_list_is_still_answered_in_words(self) -> None:
+        """Sixty-four members is a declaration; ten is the most this
+        mode allows, and that is the registry's to say."""
+        text = _stanza(*(f'member {n} type "JL322A"' for n in range(1, MAX_DEPLOYMENT_MEMBERS + 1)))
+        proposal = propose_deployment(AOSS, text, REGISTRY)
+        assert proposal.deployment is None and len(proposal.members) == MAX_DEPLOYMENT_MEMBERS
+        assert proposal.mode == "stacked" and proposal.family == "aruba_aoss/2930M"
+        assert any("does not compile as a deployment of" in n for n in proposal.notes)
+
+    @pytest.mark.parametrize(
+        "line",
+        ['member 1 type "' + "J" * 200 + '"', "member " + "9" * 5000 + ' type "JL322A"'],
+        ids=["a part of 200 characters", "a member number of 5,000 digits"],
+    )
+    def test_a_line_no_device_prints_is_not_a_member(self, line: str) -> None:
+        proposal = propose_deployment(AOSS, _stanza(line), REGISTRY)
+        assert not proposal.stated and proposal.deployment is None
+        assert any("no line in it names a member" in n for n in proposal.notes)
+        assert any(n.startswith("1 line(s) of the stanza begin") for n in proposal.notes)
+        assert max(len(entry) for entry in proposal.evidence) < 64
+        assert max(len(note) for note in proposal.notes) < 400
+
+    def test_a_detector_that_raises_is_an_answer(self, monkeypatch) -> None:
+        def broken(_text: str) -> None:
+            raise RuntimeError("hostname core-sw-01 was in the text")
+
+        monkeypatch.setattr(deployment_detect, "_detectors", lambda: {"aruba_aoss": broken})
+        proposal = propose_deployment(AOSS, STANDALONE, REGISTRY)
+        assert proposal.deployment is None and not proposal.stated
+        (note,) = proposal.notes
+        assert "could not be read" in note and "core-sw-01" not in note
+
+    def test_a_part_stated_for_many_members_is_listed_once(self) -> None:
+        proposal = propose_deployment(
+            AOSS, _stanza(*(f'member {n} type "ZZ999A"' for n in (1, 2, 3))), REGISTRY,
+        )
+        assert proposal.unknown_parts == ["ZZ999A"]
+        assert len(proposal.members) == 3
+
+    def test_the_list_of_missing_ports_is_capped_and_counted(self) -> None:
+        """Eleven short ranges are 480 names the device does not have."""
+        ranges = ",".join(f"{member}/1-{member}/48" for member in range(1, 11))
+        text = _JL322A_TOP + f"vlan 1\n   untagged 1-48,{ranges}\n   exit\n"
+        proposal = propose_deployment(AOSS, text, REGISTRY)
+        assert (proposal.used_port_count, proposal.missing_port_count) == (528, 480)
+        assert len(proposal.missing_ports) == MAX_MISSING_PORTS
+        assert proposal.consistent is False
+        assert any("uses 480 port name(s)" in n and "and 472 more" in n for n in proposal.notes)
+
+
+class TestWhatWasNotChecked:
+    def test_a_config_that_names_no_port_is_not_a_check_that_passed(self) -> None:
+        """Only the top of a config was pasted.  The device is stated;
+        whether the config's ports are that device's is not known."""
+        proposal = propose_deployment(AOSS, _JL322A_TOP, REGISTRY)
+        assert proposal.deployment is not None and proposal.used_port_count == 0
+        assert proposal.consistent is None
+        assert any("names no port" in n for n in proposal.notes)
+
+    def test_used_port_count_is_what_the_config_uses_not_what_the_device_has(self) -> None:
+        text = _JL322A_TOP + "vlan 1\n   untagged 1-4\n   exit\n"
+        proposal = propose_deployment(AOSS, text, REGISTRY)
+        assert (proposal.used_port_count, proposal.inventory.port_count) == (4, 48)
+        assert proposal.consistent is True and proposal.missing_port_count == 0
+
+    def test_a_stack_banner_with_no_stanza_goes_no_further(self) -> None:
+        proposal = propose_deployment(AOSS, _STACK_BANNER + 'hostname "x"\n', REGISTRY)
+        assert not proposal.stated and proposal.deployment is None and proposal.members == []
+        assert proposal.evidence == ["; hpStack_WC Configuration Editor"]
+
+
+class TestMembersAsTheStanzaStatesThem:
+    def test_members_come_back_in_number_order_whatever_the_stanza_lists_first(self) -> None:
+        """Two stacks are paired in LIST order, so the order a proposal
+        lists members in decides the pairing: ascending member number."""
+        proposal = propose_deployment(
+            AOSS, _stanza('member 2 type "JL322A"', 'member 1 type "JL320A"'), REGISTRY,
+        )
+        assert [(m.id, m.model) for m in proposal.deployment.members] == [
+            (1, "2930M-24G-PoEP"), (2, "2930M-48G-PoEP"),
+        ]
+
+    def test_a_member_stated_twice_is_what_its_last_line_says(self) -> None:
+        detected = detect_deployment(_stanza('member 1 type "JL322A"', 'member 1 type "JL320A"'))
+        assert _members(detected) == [(1, "JL320A", {})]
+        assert propose_deployment(
+            AOSS, _stanza('member 1 type "JL322A"', 'member 1 type "JL322A"'), REGISTRY,
+        ).evidence == ["; hpStack_WC Configuration Editor", "stacking", 'member 1 type "JL322A"']
+
+    def test_a_member_block_under_oobm_is_not_a_stack_member(self) -> None:
+        """Written for it: a stanza of one member, and an ``oobm``
+        block with a ``member 2`` of its own."""
+        text = _stanza('member 1 type "JL322A"') + (
+            "oobm\n   ip address dhcp-bootp\n   member 2\n"
+            '      type "JL999A"\n      ip address 198.51.100.12 255.255.255.0\n      exit\n   exit\n'
+        )
+        assert _members(detect_deployment(text)) == [(1, "JL322A", {})]
+
+    def test_nor_does_it_make_a_switch_that_stands_alone_a_stack(self) -> None:
+        text = _JL322A_TOP + 'oobm\n   member 1\n      type "JL999A"\n      exit\n   exit\n'
+        detected = detect_deployment(text)
+        assert detected.fabric == "" and _members(detected) == [(None, "JL322A", {})]
+
+    def test_the_eight_port_capture(self) -> None:
+        proposal = propose_deployment(AOSS, CAPTURE_2930F_8, REGISTRY)
+        assert [(m.id, m.model) for m in proposal.deployment.members] == [
+            (None, "2930F-8G-PoEP-2SFPP"),
+        ]
+        assert proposal.mode == "standalone" and proposal.consistent is True
+        assert (proposal.used_port_count, proposal.missing_port_count) == (10, 0)
+
+
+class TestWhatTheDetectorSaysItDidNotRead:
+    """A stack that comes back a member short, or a fact stated two
+    ways, is said in the notes -- not left for the port check to show."""
+
+    def test_two_lines_that_state_one_member_differently(self) -> None:
+        detected = detect_deployment(_stanza('member 1 type "JL322A"', 'member 1 type "JL320A"'))
+        assert any("More than one line states member 1" in n and "the last was used" in n for n in detected.notes)
+
+    def test_one_member_stated_twice_the_same_is_not_a_contradiction(self) -> None:
+        detected = detect_deployment(_stanza('member 1 type "JL322A"', 'member 1 type "JL322A"'))
+        assert _members(detected) == [(1, "JL322A", {})]
+        assert not [n for n in detected.notes if "More than one line" in n]
+
+    def test_a_vsf_member_stated_twice(self) -> None:
+        text = _STACK_BANNER + (
+            'vsf\n   member 1\n      type "JL557A"\n      exit\n'
+            '   member 1\n      type "JL262A"\n      exit\n   exit\n'
+        )
+        detected = detect_deployment(text)
+        assert _members(detected) == [(1, "JL262A", {})]
+        assert any("More than one line states member 1" in n for n in detected.notes)
+
+    def test_a_member_line_that_could_not_be_read_is_counted(self) -> None:
+        """An order suffix on the part, an option code, a member number
+        no device prints.  Each line is left out, and the stack is said
+        to be three lines short of what the text set out to state."""
+        detected = detect_deployment(_stanza(
+            'member 1 type "JL322A"',
+            'member 2 type "JL322A-B21"',
+            'member 3 type "JL322A#ABB"',
+            "member -1 type JL322A",
+        ))
+        assert _members(detected) == [(1, "JL322A", {})]
+        assert detected.evidence[-1] == 'member 1 type "JL322A"'
+        (note,) = [n for n in detected.notes if "could not be read as a member" in n]
+        assert note.startswith("3 line(s) of the stanza begin `member <number> type`")
+
+    def test_the_other_member_lines_of_a_stanza_are_not_counted(self) -> None:
+        """``member 1 priority 200`` states no model and is not a line
+        that failed to."""
+        assert not [n for n in detect_deployment(STACKED).notes if "could not be read" in n]
+        assert not [n for n in detect_deployment(VSF).notes if "could not be read" in n]
+        assert not [n for n in detect_deployment(CAPTURE_2930M).notes if "could not be read" in n]
+
+    def test_a_vsf_member_block_with_no_type_line(self) -> None:
+        text = _STACK_BANNER + (
+            'vsf\n   enable domain 1\n   member 1\n      type "JL557A"\n      exit\n'
+            "   member 2\n      priority 100\n      exit\n   exit\n"
+        )
+        detected = detect_deployment(text)
+        assert _members(detected) == [(1, "JL557A", {})]
+        assert any("`member` block with no `type` line for member 2" in n for n in detected.notes)
+        assert not [n for n in detect_deployment(VSF).notes if "no `type` line" in n]
+
+    def test_a_module_line_for_a_member_nothing_states(self) -> None:
+        detected = detect_deployment(_stanza(
+            'member 1 type "JL322A"', "member 2 flexible-module A type JL083A",
+        ))
+        assert _members(detected) == [(1, "JL322A", {})]
+        assert any("names member 2" in n and "the module was left out" in n for n in detected.notes)
+        assert not [n for n in detect_deployment(STACKED).notes if "was left out" in n]
+
+    def test_a_second_stanza(self) -> None:
+        text = _stanza('member 1 type "JL322A"') + (
+            'vsf\n   member 1\n      type "JL557A"\n      exit\n   exit\n'
+        )
+        detected = detect_deployment(text)
+        assert detected.fabric == "stacking" and _members(detected) == [(1, "JL322A", {})]
+        assert any("more than one `stacking` or `vsf` stanza" in n for n in detected.notes)
+        assert not [n for n in detect_deployment(STACKED).notes if "more than one" in n]
+
+    def test_line_cards_are_said_of_a_stack_too(self) -> None:
+        detected = detect_deployment(_stanza('member 1 type "JL322A"') + "module A type j9534a\n")
+        assert any("modular chassis" in n for n in detected.notes)
+        assert not [n for n in detect_deployment(STACKED).notes if "modular chassis" in n]
+
+
+class TestWhereALineEnds:
+    def test_a_form_feed_is_a_line_break_as_it_is_to_the_parser(self) -> None:
+        """The AOS-S parser cuts lines with ``str.splitlines``; a
+        detector that cut them at ``\\n`` only would read this banner
+        and stanza header as one line and see no stanza."""
+        text = _STACK_BANNER.rstrip("\n") + "\x0c" + 'stacking\n   member 1 type "JL322A"\n   exit\n'
+        assert _members(detect_deployment(text)) == [(1, "JL322A", {})]
+
+    def test_bare_carriage_returns(self) -> None:
+        text = _stanza('member 1 type "JL322A"').replace("\n", "\r")
+        assert _members(detect_deployment(text)) == [(1, "JL322A", {})]
+
+    def test_a_blank_line_does_not_end_the_stanza(self) -> None:
+        text = _STACK_BANNER + 'stacking\n   member 1 type "JL322A"\n\n   member 2 type "JL320A"\n   exit\n'
+        assert [m.id for m in detect_deployment(text).members] == [1, 2]
+
+    def test_the_next_line_at_the_margin_does(self) -> None:
+        """A ``member`` line under another stanza is not a stack member."""
+        text = _stanza('member 1 type "JL322A"') + 'vlan 1\n   member 2 type "JL320A"\n   exit\n'
+        assert [m.id for m in detect_deployment(text).members] == [1]
+
+
+class TestThePartAsPrinted:
+    def test_a_banner_part_and_a_module_are_upper_cased(self) -> None:
+        banner_only = '; jl322a Configuration Editor; Created on release #WC.16.07.0003\nhostname "sw"\n'
+        assert _members(detect_deployment(banner_only)) == [(None, "JL322A", {})]
+        detected = detect_deployment(_JL322A_TOP + "flexible-module a type jl083a\n")
+        assert _members(detected) == [(None, "JL322A", {"A": "JL083A"})]
+
+    def test_a_module_1_line_with_more_on_it_is_not_the_chassis_line(self) -> None:
+        text = "; JL320A Configuration Editor; Created on release #WC.16.07.0003\nmodule 1 type jl322a spare\n"
+        assert _members(detect_deployment(text)) == [(None, "JL320A", {})]
+
+    def test_a_banner_and_a_module_1_line_that_disagree(self) -> None:
+        text = "; JL320A Configuration Editor; Created on release #WC.16.07.0003\nmodule 1 type jl322a\n"
+        detected = detect_deployment(text)
+        assert _members(detected) == [(None, "JL322A", {})]
+        assert detected.notes == [
+            "The banner says JL320A and the `module 1` line says JL322A; the `module 1` line was used."
+        ]
+
+    @pytest.mark.parametrize(
+        ("ident", "is_a_part"),
+        [("AB12", False), ("AB123", True), ("AB123456", True), ("AB1234567", False)],
+    )
+    def test_how_long_a_banner_part_may_be(self, ident: str, is_a_part: bool) -> None:
+        detected = detect_deployment(f"; {ident} Configuration Editor; Created on release #WC.16.07.0003\n")
+        assert (detected is not None) == is_a_part
+
+    def test_a_part_is_looked_up_whole(self) -> None:
+        """``JL322AB`` is not a JL322A with something after it."""
+        proposal = propose_deployment(AOSS, _stanza('member 1 type "JL322AB"'), REGISTRY)
+        assert proposal.unknown_parts == ["JL322AB"] and proposal.deployment is None
+
+
+class TestTheModeAConfigIsIn:
+    """``_mode_for`` on families made for it: the two shipped ones each
+    have one mode of each kind, so they reach only its first branch."""
+
+    FAMILY = REGISTRY.families["aruba_aoss/2930F"]
+
+    def _with(self, **modes: str) -> object:
+        return self.FAMILY.model_copy(
+            update={"modes": {name: self.FAMILY.modes[like] for name, like in modes.items()}},
+        )
+
+    def test_the_stanzas_the_shipped_families_print_need_no_note(self) -> None:
+        for text in (STACKED, VSF, CAPTURE_2930M):
+            proposal = propose_deployment(AOSS, text, REGISTRY)
+            assert proposal.deployment is not None
+            assert not [n for n in proposal.notes if "stanza" in n]
+
+    @pytest.mark.parametrize(
+        ("member", "kind", "mode"),
+        [('member 1 type "JL322A"', "vsf", "stacked"), ('member 1 type "JL557A"', "stacking", "vsf")],
+        ids=["a vsf stanza that names a 2930M", "a stacking stanza that names a 2930F"],
+    )
+    def test_a_stanza_the_family_does_not_print_is_said(self, member: str, kind: str, mode: str) -> None:
+        """No device prints it: the text is hand-made or from two
+        devices.  It is still a config in a stacking mode of a family
+        with one such mode, so that mode is proposed -- and said."""
+        text = _STACK_BANNER + f"{kind}\n   {member}\n   exit\n"
+        proposal = propose_deployment(AOSS, text, REGISTRY)
+        assert proposal.mode == mode and proposal.deployment is not None
+        (note,) = [n for n in proposal.notes if "stanza" in n]
+        assert f"has a `{kind}` stanza" in note and f"is `{mode}`" in note
+
+    def test_a_family_with_no_mode_of_the_kind(self) -> None:
+        mode, said = deployment_detect._mode_for(self._with(standalone="standalone"), "vsf")
+        assert mode is None
+        assert "is in `vsf` mode" in said and "has no deployment mode of that kind (modes: standalone)" in said
+        mode, said = deployment_detect._mode_for(self._with(vsf="vsf"), "")
+        assert mode is None and "is not in a stacking mode" in said
+
+    def test_a_family_with_two_modes_of_the_kind(self) -> None:
+        two = self._with(standalone="standalone", vsf="vsf", ring="vsf")
+        assert deployment_detect._mode_for(two, "vsf") == ("vsf", "")
+        assert deployment_detect._mode_for(two, "ring") == ("ring", "")
+        mode, said = deployment_detect._mode_for(two, "stacking")
+        assert mode is None and "more than one such mode (vsf, ring)" in said
+
+
+class TestTheCheckIsTheOneATranslationMakes:
+    """``missing_ports`` and a translation's ``off_inventory`` are two
+    callers of one collection.  If they could differ, a proposal would
+    call a config consistent that the translation then drops ports of."""
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            _JL322A_TOP + "flexible-module A type JL083A\nvlan 1\n   untagged 1-48,a1\n   exit\n",
+            _JL322A_TOP + "vlan 1\n   untagged 1-48,A1-A4\n   exit\n",
+            _JL322A_TOP + "flexible-module A type JL083A\nvlan 1\n   untagged 1-48,A1-A4,Trk1\n   exit\n"
+            "trunk 47-48 trk1 lacp\n",
+            STACKED,
+            VSF,
+        ],
+        ids=["a module port in lower case", "no module stated", "a LAG", "a stack", "a fabric"],
+    )
+    def test_missing_ports_are_the_plans_off_inventory(self, body: str) -> None:
+        proposal = propose_deployment(AOSS, body, REGISTRY)
+        declared = compile_deployment(
+            Deployment(vendor="aruba_aoss", **proposal.deployment.model_dump()), REGISTRY,
+        )
+        job = run_plan_with_models(AOSS, AOSS, body, declared, declared)
+        assert proposal.missing_ports == job.port_mapping_plan.off_inventory
+        assert proposal.consistent is (not proposal.missing_ports)
+
+    def test_no_detector_yet_for_a_vendor_whose_ports_keep_a_factory_name(self) -> None:
+        """A translation does more for such a vendor than the check in
+        a proposal does.  The first one to get a detector fails here
+        until that check is taught the same."""
+        for vendor in detection_vendors():
+            assert not getattr(get_codec(_CODEC_OF[vendor]), "ports_keep_a_factory_name", False), vendor
+
+
+class TestEveryDetector:
+    """Whatever a vendor's detector reads, the text is not vouched for.
+    These bodies state no device; reading them must cost what their
+    length costs."""
+
+    BODIES = {
+        "spaces": " " * 400_000,
+        "blank lines": "\n" * 200_000,
+        "lines of spaces": "   \n" * 100_000,
+        "one token": "x" * 500_000,
+        "comment marks": "; " * 200_000,
+        "member lines": '   member 1 type "X"\n' * 50_000,
+        "a word again and again": "module " * 60_000,
+        "a line of bays": "flexible-module " + "A " * 100_000,
+        "tabs then a word": ("\t" * 2_000 + "member\n") * 100,
+        "control characters": "\x00\x0b\x0c\x1c\x85\u2028" * 50_000,
+    }
+
+    @pytest.mark.parametrize("vendor", detection_vendors())
+    @pytest.mark.parametrize("title", sorted(BODIES))
+    def test_text_that_states_no_device_is_read_in_time_that_fits_its_length(
+        self, vendor: str, title: str,
+    ) -> None:
+        codec = get_codec(_CODEC_OF[vendor])
+        started = time.perf_counter()
+        proposal = propose_deployment(codec, self.BODIES[title], REGISTRY)
+        # A few milliseconds when the work is linear; minutes when a
+        # pattern backtracks over a run.  The margin is for a loaded
+        # machine.
+        assert time.perf_counter() - started < 5.0
+        assert proposal.deployment is None and proposal.notes
+        assert len(proposal.model_dump_json()) < 20_000
+
+
+class TestTheAossDetectorOnTextMadeToBeSlow:
+    """Each tail is built to make one pattern of the detector go back
+    over a run it has already crossed.  ``TestEveryDetector`` cannot
+    reach most of them: its bodies state no device, and the detector
+    returns before the patterns for modules and members run.  Here the
+    text states one -- a chassis line, a ``stacking`` header, a ``vsf``
+    header -- and the tail follows it.  The detector is called by
+    itself: with a device stated, a proposal goes on to parse the text,
+    and the parser's cost is not what this pins."""
+
+    PREFIXES = {
+        "nothing stated": "",
+        "a chassis": _JL322A_TOP,
+        "a stacking header": _STACK_BANNER + "stacking\n",
+        "a vsf header": _STACK_BANNER + "vsf\n",
+    }
+    TAILS = {
+        "a module word and spaces": "flexible-module" + " " * 300_000,
+        "a bay and spaces": "flexible-module A" + " " * 300_000 + "type",
+        "module lines that trail off": ("flexible-module A type" + " " * 3000 + "\n") * 100,
+        "a line card word and spaces": "module" + " " * 300_000 + "x",
+        "line card lines that trail off": ("module a" + " " * 3000 + "\n") * 100,
+        "blank lines": "\n" * 300_000,
+        "lines of spaces": "   \n" * 100_000,
+        "member and spaces": ("   member" + " " * 3000 + "\n") * 100,
+        "a member, spaces, type": "   member 1" + " " * 300_000 + "type",
+        "member module lines that trail off": ("   member 1 flexible-module A" + " " * 3000 + "\n") * 100,
+        "type and spaces": "   type" + " " * 300_000,
+        "member blocks with nothing in them": "".join(f"   member {n}\n" for n in range(50_000)),
+        "one line of member types": "   " + "member 1 type " * 50_000,
+        "more members than any stack": "".join(f'   member {n} type "JL322A"\n' for n in range(100_000)),
+        "an open quote, again and again": '   member 1 type "\n' * 100_000,
+        "tabs then a word": ("\t" * 3000 + "member\n") * 100,
+        "stanza headers": "stacking\n" * 100_000,
+        "headers that trail off": ("vsf" + " " * 3000 + "\n") * 100,
+        "banners": "; X Configuration Editor\n" * 100_000,
+        "a comment mark, an id and spaces": ("; JL322A" + " " * 3000 + "\n") * 100,
+    }
+
+    @pytest.mark.parametrize("prefix", sorted(PREFIXES))
+    @pytest.mark.parametrize("tail", sorted(TAILS))
+    def test_the_work_fits_the_length_of_the_text(self, prefix: str, tail: str) -> None:
+        text = self.PREFIXES[prefix] + self.TAILS[tail]
+        started = time.perf_counter()
+        detect_deployment(text)
+        # Under a third of a second each when measured; a pattern that
+        # goes back over a run of 300,000 needs minutes.
+        assert time.perf_counter() - started < 5.0
+
+
+class TestTheRequest:
+    def test_the_text_is_capped_like_a_plan_requests(self) -> None:
+        """This endpoint parses the text too."""
+        from netcanon.api.routes.migration import DeploymentDetectRequest, MigrationPlanRequest
+
+        (cap,) = [m.max_length for m in MigrationPlanRequest.model_fields["raw_text"].metadata]
+        assert DeploymentDetectRequest(source="aruba_aoss", raw_text="x" * cap).raw_text is not None
+        with pytest.raises(ValueError, match="at most"):
+            DeploymentDetectRequest(source="aruba_aoss", raw_text="x" * (cap + 1))
 
 
 class TestTheWholeCorridorWithoutTypingTheSource:

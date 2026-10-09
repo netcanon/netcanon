@@ -212,6 +212,9 @@ pipeline — they just aren't pinned by a fixture yet").
   The source switch can be read from the config: an AOS-S config
   states its part number, the modules it is provisioned for and
   whether it is stacked (`POST /api/v1/migration/detect-deployment`).
+  A stack's banner names no model, so a stack config pasted without
+  its `stacking` or `vsf` stanza states no device; and a proposal
+  lists a stack's members lowest number first.
   The 2930F and 2930M series are modelled; a 3810M can be declared
   through its target profile; a switch with neither cannot be declared
   yet.  Only the port names are translated: a config that removes

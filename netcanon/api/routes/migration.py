@@ -977,7 +977,8 @@ def detect_source_deployment(
     """Read which device a config says it came from.
 
     A ``show running-config`` often states its own hardware — the
-    chassis part number, the fitted modules, whether it is stacked.
+    chassis part number, the modules it is provisioned for, whether it
+    is stacked.
     This reads those lines, resolves them against the model families,
     and returns a ``deployment`` ready to send back as a plan
     request's ``source_deployment``, so an operator confirms the
@@ -985,18 +986,28 @@ def detect_source_deployment(
 
     It is a proposal, and says how far to trust it:
 
-    * ``evidence`` — the config lines it was read from;
+    * ``evidence`` — the hardware lines it was read from, each as far
+      as its part number (a member line's MAC address comes after
+      that and is not read);
     * ``notes`` — what those lines can and cannot show (a member or
       module line states what the device is PROVISIONED for, not what
       is fitted), and why no deployment was proposed when none was;
     * ``missing_ports`` / ``consistent`` — the check against the
       config: port names it uses that the proposed device does not
-      have.  A module the config does not state is the usual cause.
+      have (``missing_ports`` is capped; ``missing_port_count`` is
+      the whole number).  A module the config does not state is one
+      cause.  ``consistent`` is ``null`` when there was nothing to
+      check — the config names no port.
 
-    ``deployment`` is ``null`` when the config does not state its
-    device, when no model family describes the part number it states
-    (``unknown_parts``), or when no detector exists for the vendor
-    yet.  That is a 200, not an error: "the config does not say" is an
+    ``deployment`` is ``null`` unless every device the config names is
+    a model of one family, in a mode that is not in doubt, and the
+    result compiles: so also when the config does not state its
+    device, when no model family describes a part number it states
+    (``unknown_parts``), when its members belong to different
+    families, when what it states does not compile (a module the bay
+    does not take, a member number out of range, too many members),
+    and when no detector exists for the vendor yet.  ``notes`` says
+    which.  That is a 200, not an error: "the config does not say" is an
     answer.  Nothing is translated and nothing is stored.
     """
     codec = resolve_adapter_or_422(body.source, side="source")

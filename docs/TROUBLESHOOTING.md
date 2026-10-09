@@ -245,21 +245,34 @@ between the two.  See [`CAPABILITIES.md`](CAPABILITIES.md) § G.
 
 `POST /api/v1/migration/detect-deployment` returned a `deployment` with
 `consistent: false`.  The config says it is that device, and uses port
-names that device does not have (`missing_ports`).  In order of
-likelihood:
+names that device does not have (`missing_ports`; `missing_port_count`
+is how many).  Possible causes:
 
 * **A module the config does not state.**  The config uses `A1`-`A4`
   and has no `flexible-module` line, so the proposal has an empty bay.
   Add the module to the deployment's `modules` before you send it.
 * **Only part of the config was pasted**, or two were pasted together:
   a standalone banner over stacked port names (`1/24`).
-* **The model data is wrong.**  If neither of the above fits, the
-  family file may list the wrong ports for that part number — that is
-  worth a bug report with the config's banner and VLAN lines.
+* **A name that is not a hardware port.**  The check counts whatever
+  the config has where a port name goes.
+* **The model data is wrong.**  If none of the above fits, the family
+  file may list the wrong ports for that part number — that is worth a
+  bug report: sanitise the config first (`netcanon sanitize`; see
+  [`../BUG_REPORTING.md`](../BUG_REPORTING.md)) and include its banner,
+  its `module` or `stacking` lines and its VLAN port lists.
+
+`consistent: null` is not a pass: nothing was checked, because nothing
+was proposed or the text names no port.
 
 A `deployment` of `null` is not an error.  `notes` says why: the config
-does not state its device, or no model family describes the part
-number in `unknown_parts`.
+does not state its device (a stack's banner names no model, so a stack
+config with its `stacking` or `vsf` stanza cut off states none); no
+model family describes a part number in `unknown_parts`; the members
+belong to different families; what the config states does not compile
+(a module the bay does not take, a member number outside the mode's
+range, more members than the mode allows); or the vendor has no
+detector yet.  A stack that comes back short of a member has a note
+that counts the member lines that could not be read.
 
 ### "Port mapping is incomplete" — the job is `partial`
 

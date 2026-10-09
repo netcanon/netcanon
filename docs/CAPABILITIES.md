@@ -931,7 +931,7 @@ ports that land on the links elsewhere, or drop them, in
 translated: see *The stack's own configuration* under Known
 limitations.
 
-**The source device can usually be read from the config.**  A `show
+**An AOS-S config usually states its source device.**  An AOS-S `show
 running-config` states its own hardware: the chassis part number, the
 modules it is provisioned for, and whether it is stacked.
 `POST /api/v1/migration/detect-deployment` with `{"source": "<codec>",
@@ -939,19 +939,42 @@ modules it is provisioned for, and whether it is stacked.
 can send straight back as `source_deployment`.  It is a proposal to
 confirm, never applied by itself, and it tells you how far to trust it:
 
-* `evidence` — the config lines it was read from;
-* `notes` — what those lines cannot show.  A stack member or a module
-  line states what the switch is *provisioned* for; a member can be
-  configured before it is connected, and a bay can be provisioned for a
-  module that is not fitted;
+* `evidence` — the hardware lines it was read from, each as far as its
+  part number (a member line's MAC address comes after that and is not
+  read).  They are fragments to confirm against, not whole config
+  lines;
+* `notes` — what those lines cannot show, and what the reading left
+  out or had to choose.  A stack member or a module line states what
+  the switch is *provisioned* for; a member can be configured before it
+  is connected, and a bay can be provisioned for a module that is not
+  fitted.  A member line that could not be read, a member stated two
+  ways, a banner and a `module 1` line that disagree are each said
+  here;
 * `missing_ports` / `consistent` — the check against the config itself:
   port names the config uses that the proposed device does not have.
-  The usual cause is a module the config does not state.
+  One cause is a module the config does not state; another is a partial
+  paste.  `missing_ports` holds the first few hundred and
+  `missing_port_count` the whole number.  `consistent` is `true` when
+  none is missing, `false` when some are, and `null` when there was
+  nothing to check — nothing was proposed, or the text names no port
+  (only its top was pasted).  `null` is not a pass.
 
-`deployment` is `null` when the config does not state its device (only
-part of it was pasted, say), when no model family describes the part
-number it states (`unknown_parts`), or when the vendor has no detector
-yet.  Detection reads Aruba AOS-S configs today.
+`deployment` is `null` unless every device the config names is a model
+of one family, in a mode that is not in doubt, and the result compiles.
+So it is `null` when the config does not state its device (only part of
+it was pasted, say); when no model family describes a part number it
+states (`unknown_parts`); when the members it names belong to different
+families; when what it states does not compile — a module the bay does
+not take, a member number outside the mode's range, more members than
+the mode allows; and when the vendor has no detector yet.  `notes` says
+which.  None of these is an error: the answer is a 200 either way.
+Detection reads Aruba AOS-S configs today; no other vendor has a
+detector yet.
+
+A proposal lists a stack's members by member number, lowest first,
+whatever order the config states them in.  Two stacks are paired in the
+order their declarations list the members, so that is the order to
+check before sending it back.
 
 **Both devices must be declared.**  A source without a target, or a
 `target_deployment` without a source, is a 422.  The response carries
