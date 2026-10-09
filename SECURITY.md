@@ -388,7 +388,9 @@ server has already loaded; it never supplies a port name, a count or a path.
   and one holding a lone surrogate could not be serialised: it is refused
   with a 422 that echoes the map, never the pasted config.
 - An operator's `port_rename_map` target is read as the declared target
-  device spells its ports where the target platform has no letter case, and
+  device spells its ports where another letter case cannot be another
+  interface on the target platform (it has no case, or it names every
+  interface itself), and
   a blank target is ignored.  So a target that differs from a port only in
   case or surrounding space cannot be passed off as another port, and a
   blank cannot be passed off as a decision.  An abbreviation the device

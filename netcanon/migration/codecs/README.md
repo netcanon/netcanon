@@ -170,15 +170,20 @@ class MyVendorCodec(CodecBase):
     # entries as the codec gains each category's round-trip coverage.
     unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset()
 
-    # Is letter case part of an interface name on this platform?
-    # True where `DMZ` and `dmz` are two interfaces (FortiOS, RouterOS,
-    # Junos, the Linux- and BSD-based platforms).  Leave the default,
-    # False, where the device reads the two as one (IOS, EOS, AOS-S).
-    # Model-to-model port mapping compares final names by this rule;
-    # the wrong value either merges two interfaces or lets an override
-    # hide behind its spelling.  When unsure, leave it False: the
-    # mapping then reports two spellings as one port rather than
-    # passing them in silence.
+    # Can a name that differs from an interface's only in letter case
+    # be ANOTHER interface on this platform?  True where an operator
+    # chooses interface names as free text and case keeps them apart
+    # (FortiOS, RouterOS).  False where the device reads two spellings
+    # as one (IOS, EOS, AOS-S) -- and also where every interface name
+    # is the system's and is lower-case (Junos, VyOS, OPNsense), since
+    # another case is then a misspelling of the same port.
+    # Model-to-model port mapping compares final names by this rule.
+    # There is no safe default: False where case tells two interfaces
+    # apart merges an operator's interface into a port in a job that
+    # reports success; True where it does not lets a misspelling pass
+    # beside the port.  State it in every codec's class body --
+    # `test_the_codecs_say_which_they_are` fails for a public codec
+    # that inherits it.
     port_names_case_sensitive: ClassVar[bool] = False
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(

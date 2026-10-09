@@ -102,6 +102,11 @@ class ArubaAOSSCodec(CodecBase):
     )
     output_extension: ClassVar[str] = "cfg"
 
+    #: AOS-S prints one port in either case (``trk1`` beside ``Trk1``,
+    #: ``1/a1`` for ``1/A1``).
+    #: See ``CodecBase.port_names_case_sensitive``.
+    port_names_case_sensitive: ClassVar[bool] = False
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="aruba_aoss",
         vendor_id="aruba_aoss",

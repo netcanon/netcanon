@@ -409,8 +409,11 @@ class MappingPlan(BaseModel):
     the pairing AS MADE, before the operator's own map.  A port named
     in :attr:`overridden` went where the operator sent it, and its
     ``slower`` / ``poe_lost`` flags describe a target it did not go
-    to.  ``MigrationJob.port_renames`` and ``port_drops`` say where
-    every port ended."""
+    to.  ``MigrationJob.port_renames`` and ``port_drops`` say what
+    every name ended as; on RouterOS, where a port can be on one
+    piece of hardware under another name, :attr:`target_hardware`
+    says where such a port's hardware is.  A source port is named
+    here as the CONFIG names it (:attr:`labelled_ports`)."""
 
     unplaced: list[UnplacedPort] = Field(default_factory=list)
     """Every source port that has none, in source order."""
@@ -418,6 +421,16 @@ class MappingPlan(BaseModel):
     off_inventory: list[str] = Field(default_factory=list)
     """Names the source config uses that are not ports of the declared
     source inventory, sorted.  Left to the name-shape translator."""
+
+    labelled_ports: dict[str, str] = Field(default_factory=dict)
+    """Source ports the config knows by a name of its own: the
+    config's name to the port's name in the device model.  RouterOS
+    keeps a port's factory name (``ether2``) beside the name an
+    operator gave it (``core-a``), and every other line of the config
+    uses the second.  Such a port is PAIRED by its factory name and
+    appears under the config's name everywhere else: in
+    :attr:`pairings`, in :attr:`rename_map`, in the job's lists, and
+    as the key of an operator's ``port_rename_map`` entry."""
 
     unused_target: list[str] = Field(default_factory=list)
     """Target ports no used source port ended on, in target order.
@@ -466,19 +479,55 @@ class MappingPlan(BaseModel):
     names (without regard to case where the platform has none).
     The pairing never produces one and an undecided name is
     displaced before it can, so an entry here comes from an
-    operator override that points two names at one.  The converse
+    operator override that points two names at one.  A port is
+    counted where its hardware is (:attr:`target_hardware`), so two
+    ports on one piece of hardware under two names are here as
+    well.  The converse
     does not hold for a target the device model does not list:
     see :attr:`off_target`.  The job is ``partial`` while this is
     not empty."""
 
     off_target: list[str] = Field(default_factory=list)
-    """Operator override targets that are not names the declared
-    target device lists for its ports, sorted.  Reported; an
+    """Names an operator override put a port on that the declared
+    target device does not list for its ports, sorted.  Reported; an
     operator may mean it.  Names are compared by case and
     surrounding space only: an abbreviation the device would
     accept (``Gi1/0/1``) is not recognised as the port it names,
     is listed here, and can share that port with the source port
-    paired to it without appearing in :attr:`fused`."""
+    paired to it without appearing in :attr:`fused`.  Between two
+    configs of one codec a unit of a listed port
+    (``ge-0/0/7.54``) is not off-target.  On a RouterOS target a
+    NAME an operator gives a port is not off-target either while
+    the port's hardware has a place (:attr:`target_hardware`)."""
+
+    target_hardware: dict[str, str] = Field(default_factory=dict)
+    """Source names whose port is on a target port that is not the
+    name they have in the output: source name to that target port.
+    RouterOS only.  A port an operator named keeps the name, and an
+    operator's entry whose target is not a port of the declared
+    target NAMES the port; in both cases the hardware goes where the
+    pairing put it (``set [ find default-name=sfp-sfpplus2 ]
+    name=core-a``).  ``MigrationJob.port_renames`` records names, so
+    it has no entry for such a move; this field does.  :attr:`fused`
+    and :attr:`unused_target` count a port where its hardware is."""
+
+    landed_off_target: dict[str, str] = Field(default_factory=dict)
+    """Logical names nobody decided — a VLAN interface, say — that
+    the name-shape translator gave a port-shaped name the declared
+    target device does not list: source name to that name.  Its
+    config is then on a port the device does not have.  Nothing
+    shares the name, so it is not dropped; it needs a decision
+    (:attr:`unresolved_ports`)."""
+
+    stale_next_hops: list[str] = Field(default_factory=list)
+    """Destinations of static routes whose next hop still names a
+    source interface that was renamed or dropped.  A next hop that is
+    exactly an interface name follows that interface; a list of them
+    (RouterOS ``gateway=ether1,ether2``), a routing-table suffix
+    (``ether3@main``), and — across vendors — a unit of an interface
+    (Junos ``next-hop et-0/0/24.0``) are left as written.  The job is
+    ``partial`` while this is not empty: the route has to be
+    corrected by hand."""
 
     ignored_overrides: list[str] = Field(default_factory=list)
     """Source names the config uses whose operator override had no
@@ -518,8 +567,9 @@ class MappingPlan(BaseModel):
     """Used source names that still need a decision, sorted: a port
     dropped because it had no place, a management port kept by the
     name-shape translator although the target lists none, an
-    off-inventory name, a displaced name — minus those the
-    operator's own map names.  The
+    off-inventory name, a displaced name, a name in
+    :attr:`landed_off_target` — minus those the operator's own map
+    names.  The
     job is ``partial`` while this is not empty.  Stored, so a client
     does not have to re-derive the rule (see :meth:`unresolved`)."""
 
@@ -561,10 +611,14 @@ class MappingPlan(BaseModel):
     @property
     def is_clean(self) -> bool:
         """A mapping was made and nothing about it needs a decision:
-        :attr:`unresolved_ports` is empty and no target port received
-        two source ports.  This is the condition under which the
-        port mapping leaves a job ``completed``."""
-        return self.applied and not self.unresolved_ports and not self.fused
+        :attr:`unresolved_ports` is empty, no target port received
+        two source ports, and no route still names a port that moved
+        (:attr:`stale_next_hops`).  This is the condition under which
+        the port mapping leaves a job ``completed``."""
+        return (
+            self.applied and not self.unresolved_ports and not self.fused
+            and not self.stale_next_hops
+        )
 
     def unresolved(self, acknowledged: set[str] | None = None) -> list[str]:
         """Used source names the plan could not place or account for,
@@ -575,11 +629,15 @@ class MappingPlan(BaseModel):
         name-shape translator.  Each is a loss or a doubt the
         operator has not yet looked at — unless their own override
         map names the port, which is them looking at it.  A displaced
-        name is always unresolved: it is displaced only because no
-        map named it.
+        name is always unresolved, and so is one in
+        :attr:`landed_off_target`: each is there only because no map
+        named it.
 
         The pipeline stores the result on :attr:`unresolved_ports`.
         """
         seen = acknowledged or set()
         names = {p.source for p in self.used_unplaced} | set(self.off_inventory)
-        return sorted({n for n in names if n not in seen} | set(self.displaced))
+        return sorted(
+            {n for n in names if n not in seen}
+            | set(self.displaced) | set(self.landed_off_target)
+        )

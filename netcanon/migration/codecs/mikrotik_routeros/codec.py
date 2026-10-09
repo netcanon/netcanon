@@ -120,7 +120,8 @@ class MikroTikRouterOSCodec(CodecBase):
     )
     output_extension: ClassVar[str] = "rsc"
 
-    #: RouterOS interface names are case-sensitive.
+    #: RouterOS interface names are an operator's free text, kept apart
+    #: by case.
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = True
 

@@ -201,6 +201,12 @@ class CiscoIOSXECodec(CodecBase):
         '</interfaces>\n'
     )
     output_extension: ClassVar[str] = "xml"
+
+    #: An interface is keyed by its type and number; another letter case
+    #: is never another interface.
+    #: See ``CodecBase.port_names_case_sensitive``.
+    port_names_case_sensitive: ClassVar[bool] = False
+
     direction: ClassVar[str] = "bidirectional"
     certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"

@@ -158,7 +158,7 @@ mapping below is concrete; audit every applicable row before you run
 | A new interactive HTML element (button, input, link, row, `<select>`, `<option>` inside a form) | `tests/testid_reference.md` — document the new `data-testid` in the appropriate page section.  **Self-check:** run `grep -r 'data-testid="<new-id>"' tests/testid_reference.md` before committing; if it returns nothing, you haven't done the update. |
 | A new Jinja partial (`templates/_partials/<name>.js`) | The file-level comment block in the parent template (e.g. `migrate.html`'s "Contents map" comment) **and** the "Template organisation" section of `ARCHITECTURE.md` if the partial introduces a new pattern |
 | A new file under `netcanon/templates/` with a non-`.html` extension OR in a new subdirectory not covered by the existing globs | `pyproject.toml` `[tool.setuptools.package-data]` — extend the `netcanon = [...]` list with a glob covering the new pattern (e.g. `templates/_partials/*.js`, `templates/_components/*.svg`).  Editable installs (`pip install -e`) hide this because they import from the source tree directly; production wheels do not.  Missing template files in the wheel result in `jinja2.exceptions.TemplateNotFound` 500-on-render at runtime — the bug that broke v0.1.0-rc1 / rc2.  The CI `docker-build-smoke` job catches dashboard-rendering regressions of this class but only for the dashboard page; if your new pattern only affects a different page, also add a smoke-test step that visits that page. |
-| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class |
+| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class |
 | A new module inside an existing codec (e.g. `port_names.py`, `vlan_heuristics.py`, `_svi_absorption.py`) | `netcanon/migration/codecs/README.md` "Module layout" section if the pattern is worth propagating to other codecs |
 | A new target-profile YAML under `netcanon/definitions/library/target_profiles/` | (1) Per-profile unit test in `tests/unit/migration/test_target_profile_shipped.py` asserting exact port-name list + count (regression guard against copy-paste mistakes).  (2) Provenance per [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) §4: `deployment_state` whenever `stacking` is set, `evidence` + `evidence_ref`, and the key added to the pinned set for its grade in `tests/unit/migration/test_target_profile_evidence.py` — `CAPTURE_MODEL_MARKER` (with a line only a capture of that model contains), `EXPECTED_VENDOR_DOC_GRADED`, or `KNOWN_DOUBTFUL`.  The sets are compared for equality with what the YAMLs declare, so a graded profile that skips this fails CI |
 | A new or changed model-family YAML under `netcanon/definitions/library/model_families/` (a family, a model, a mode, a module) | Per [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md): (1) the hand-typed `(access names, uplink names)` entry for every model × mode × module combination in `EXPECTED_INVENTORIES` in `tests/unit/migration/test_device_models_shipped.py` — the test fails for any shipped combination that is not pinned; (2) each part number in `EXPECTED_PART_NUMBERS`, and a part graded `inferred` in `KNOWN_INFERRED_PARTS`, in the same file; (3) a `captures:` claim if a committed capture of that exact model exists AND names every port of it, mirrored whole in `EXPECTED_CLAIMS` and listed in `PROVEN_CAPTURE_CLAIMS` in `netcanon/migration/device_models.py` — a claim not in that list grants nothing (never grade a part `capture`; the schema refuses it); (4) the pair in `PROFILE_AGREES_WITH` if a flat target profile describes the same device.  Port groups go in port-NUMBER order, not left-to-right on the faceplate.  Write every `ref` so it stands on its own — it is served to API clients, who cannot read a legend in a YAML comment |
@@ -522,32 +522,61 @@ tests use these exclusively — never CSS classes or element structure.  See
   in a field the pass did not rewrite (`default_name`), which its
   renderer uses to find the port — every moved port came out as
   "find the port with the OLD name", in a job that reported success,
-  on a committed capture.  A list of places written by reading the
-  tree cannot show that it is complete, and a test that walks the
-  same list agrees with it.  Completeness is checked by experiment,
-  with no list: `tests/unit/migration/test_port_name_universe.py`
-  exchanges two port names through the translator on every codec's
-  captures and fails for any rendered value that did not follow.  A
-  canonical field that holds a port name goes in `collect_port_names`
-  and in the rename pass; that test is what finds the one that did
-  not.  Whether letter case is part of a name is a fact about the
-  platform, stated by each codec (`port_names_case_sensitive`): an
-  override typed `1/a1` cannot hide behind its spelling on AOS-S, and
-  `DMZ` is not folded into the port `dmz` on FortiOS.  The same goes
+  on a committed capture.  **And a fix made in shared code is a change
+  for every caller of it**: that field was then rewritten by the
+  translator itself, which is right for two declared devices and wrong
+  for the commonest entry of a rename map on RouterOS — one that gives
+  a port a NAME.  `{"ether1": "WAN"}` had always rendered
+  `find default-name=ether1 ] name=WAN`; it rendered
+  `find default-name=WAN`, a lookup no device matches, with no devices
+  declared and nothing reported — and "the ordinary path did not move"
+  had been measured with an empty port map only.  A port's factory
+  name says which hardware it IS; it is not a reference to the port.
+  The translator leaves it alone, and `run_plan_with_models` — the one
+  caller that knows the target device — sets it, and reads back from
+  the tree that is rendered where each port's hardware ended.  Nothing
+  else can tell a name from a move: `sfp1` is a port of one RouterOS
+  model and a short name for a port of another.  When a change touches
+  `translate_port_names`, replay requests that CARRY a port map against
+  the base branch, not only requests without one.
+  A list of places written by reading the tree cannot show that it is
+  complete, and a test that walks the same list agrees with it.  So
+  completeness is also checked by experiment:
+  `tests/unit/migration/test_port_name_universe.py` sends port names to
+  one another through the translator on the committed captures and
+  compares the two outputs, parsed again.  It needs no list of fields —
+  and it reaches a field only where a capture puts a moved name in it
+  and the codec's own parser reads that field back, and only for names
+  the device already has.  The same module breaks the translator at
+  each place in turn and pins which places a capture catches; each of
+  the others has a small config there that does.  A canonical field
+  that holds a port name goes in `collect_port_names` and in the rename
+  pass, and — unless a committed capture fills it — gets a small config
+  in that module.  Whether a name in another letter case can be another
+  interface is a fact about the platform, and there is no safe default
+  for it: every codec states `port_names_case_sensitive` in its own
+  class body (`True` only where an operator chooses interface names as
+  free text, as on FortiOS and RouterOS — an override typed `1/a1`
+  cannot hide behind its spelling on AOS-S, and `DMZ` is not folded
+  into the port `dmz` on FortiOS), and
+  `test_the_codecs_say_which_they_are` fails for one that leaves it to
+  the base class.  The same goes
   for what a plan SAYS: build its warnings and its dropped/kept flags
   from the run, not from the intention — a port the operator kept must
   not be reported as dropped, nor a port the translator dropped as
   kept, nor a route that went with a dropped port left unmentioned.
   Guarded on the jobs of
   `tests/unit/migration/test_run_plan_with_models.py`, whose wrapper
-  does two things.  It recomputes the grouping for itself — written
-  out in the test, because a guard that calls the function it guards
-  shares its blind spot (the list of names it groups is still the
-  engine's).  And it reads each job's RENDERED OUTPUT back with the
-  target codec: no name that moved may still be in it, and no
-  interface may carry the addresses of two source interfaces.  Those
-  two take nothing from the engine, and are what a missing field
-  cannot get past.
+  recomputes the grouping for itself — written out in the test,
+  because a guard that calls the function it guards shares its blind
+  spot (the list of names it groups is still the engine's) — and reads
+  each job's RENDERED OUTPUT back with the target codec: an interface
+  that can be recognised by its address must be on the port the job
+  reports, the output must name no port the job does not report, no
+  name that moved may still be in it, and no interface may carry the
+  addresses of two source interfaces.  A check nobody has seen fail is
+  not known to check anything: each of those is handed a job with the
+  defect it is for, in the same module, and has to fail.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

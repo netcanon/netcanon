@@ -96,21 +96,23 @@ __all__ = [
 def name_key(name: str, fold: bool = True) -> str:
     """The form in which two port names are compared.
 
-    Surrounding space is never part of a port's identity.  Letter
-    case is a fact about the platform.  On AOS-S or IOS ``1/a1`` is
-    the port ``1/A1``, and a job that puts one source port on each
-    has put two on one port.  On FortiOS or RouterOS ``DMZ`` and
-    ``dmz`` are two interfaces, and treating them as one would turn
-    an operator's own name for a VLAN interface into the physical
-    port beside it.
+    Surrounding space is never part of a port's identity.  Whether
+    another letter case can be another interface is a fact about the
+    platform.  On AOS-S or IOS ``1/a1`` is the port ``1/A1``, and a
+    job that puts one source port on each has put two on one port.
+    On FortiOS or RouterOS ``DMZ`` and ``dmz`` are two interfaces,
+    and treating them as one would turn an operator's own name for a
+    VLAN interface into the physical port beside it.
 
     Args:
         name: The name.
         fold: Compare without regard to case — ``not
             codec.port_names_case_sensitive`` for the platform the
-            name belongs to.  The default folds: where nothing says
-            otherwise, two spellings are taken for one port, which
-            errs on the side of reporting.
+            name belongs to.  Neither value is a safe guess: folding
+            where case tells two interfaces apart counts them as one
+            and says nothing, and not folding where it does not lets
+            a misspelling pass beside the port.  A caller passes the
+            platform's own rule.
     """
     text = name.strip()
     return text.casefold() if fold else text
@@ -168,6 +170,7 @@ def plan_port_mapping(
     source: Inventory,
     target: Inventory,
     used_names: Iterable[str] | None = None,
+    known_as: Mapping[str, str] | None = None,
 ) -> MappingPlan:
     """Pair *source* with *target* by position.
 
@@ -180,6 +183,11 @@ def plan_port_mapping(
             reported as off-inventory.  ``None`` treats every source
             port as used, which is what a preview before any config
             is loaded wants.
+        known_as: For a source port the config knows by a name of its
+            own (RouterOS: ``ether2`` named ``core-a``), the
+            inventory's name for the port to the config's.  The port
+            is found in *source* by the first and appears in the plan
+            — and is matched against *used_names* — by the second.
 
     Returns:
         The plan.  ``rename_map`` holds entries only for used source
@@ -187,7 +195,8 @@ def plan_port_mapping(
         ports the config does not contain.  ``applied`` is ``False``,
         and the map empty, when no pairing can be made: one side lists
         no ports, or lists the same name twice (a position is then not
-        a port).
+        a port), or the config gives one port the name another port of
+        the source device has, so that a name no longer says which.
     """
     plan = MappingPlan(
         source=source.summary(),
@@ -210,6 +219,21 @@ def plan_port_mapping(
                 f"({_summary(repeated)})",
             )
 
+    shown = dict(known_as or {})
+
+    def config_name(port: PhysicalPort) -> str:
+        return shown.get(port.name, port.name)
+
+    counts = Counter(config_name(port) for port in source.ports)
+    ambiguous = sorted(name for name, count in counts.items() if count > 1)
+    if ambiguous:
+        return _not_applied(
+            plan,
+            f"the config gives a port the name another port of the source "
+            f"device has ({_summary(ambiguous)}), so its ports cannot be "
+            f"told apart by name",
+        )
+
     used: set[str] | None = None if used_names is None else set(used_names)
     target_groups = _by_position(target.ports)
     target_members = {p.member_rank for p in target.ports}
@@ -217,10 +241,10 @@ def plan_port_mapping(
     for (rank, role), ports in _by_position(source.ports).items():
         partners = target_groups.get((rank, role), [])
         for position, port in enumerate(ports):
-            is_used = used is None or port.name in used
+            is_used = used is None or config_name(port) in used
             if position >= len(partners):
                 plan.unplaced.append(UnplacedPort(
-                    source=port.name,
+                    source=config_name(port),
                     role=port.role,
                     member_rank=rank,
                     position=position,
@@ -232,7 +256,7 @@ def plan_port_mapping(
             match = partners[position]
             taken.add(match.name)
             plan.pairings.append(PortPairing(
-                source=port.name,
+                source=config_name(port),
                 target=match.name,
                 role=port.role,
                 member_rank=rank,
@@ -245,7 +269,11 @@ def plan_port_mapping(
                 evidence=weakest_grade([port.evidence, match.evidence]),
             ))
 
-    order = {port.name: at for at, port in enumerate(source.ports)}
+    order = {config_name(port): at for at, port in enumerate(source.ports)}
+    plan.labelled_ports = {
+        config_name(port): port.name for port in source.ports
+        if config_name(port) != port.name
+    }
     plan.pairings.sort(key=lambda p: order[p.source])
     plan.unplaced.sort(key=lambda p: order[p.source])
     plan.off_inventory = sorted(used - set(order)) if used is not None else []
@@ -341,6 +369,10 @@ def settle_plan(
     management_forms: Mapping[str, str] | None = None,
     fold_source: bool = True,
     fold_target: bool = True,
+    target_hardware: Mapping[str, str] | None = None,
+    landed_off_target: Mapping[str, str] | None = None,
+    stale_next_hops: Iterable[str] = (),
+    units: bool = False,
 ) -> None:
     """Reconcile *plan* with what the translation run actually did.
 
@@ -361,7 +393,8 @@ def settle_plan(
       track entry or a VTEP source with it.
 
     Fills the outcome fields (``overridden``, ``sub_interfaces``,
-    ``displaced``, ``fused``, ``off_target``, ``ignored_overrides``,
+    ``displaced``, ``fused``, ``off_target``, ``target_hardware``,
+    ``landed_off_target``, ``stale_next_hops``, ``ignored_overrides``,
     ``emptied_lags``, ``shrunk_lags``, ``lost_routes``,
     ``lost_dhcp_pools``, ``lost_tracking``, ``lost_vtep_sources``,
     ``unused_target``, ``unresolved_ports``),
@@ -396,6 +429,17 @@ def settle_plan(
             that sends the port to that name is not off-target.
         fold_source: Source names compare without regard to case.
         fold_target: Target names do (see :func:`name_key`).
+        target_hardware: Where a source name's port is on the target,
+            for each port the run put on hardware — read from the
+            tree that was rendered.  It differs from the name the
+            port has there only on a target that keeps a name beside
+            the hardware (RouterOS); the entries that differ are
+            kept, and :attr:`MappingPlan.fused`, ``off_target`` and
+            ``unused_target`` count the port where its hardware is.
+        landed_off_target: See :attr:`MappingPlan.landed_off_target`.
+        stale_next_hops: See :attr:`MappingPlan.stale_next_hops`.
+        units: A unit of a target port (``ge-0/0/7.54``) is a name of
+            the target — true between two configs of one codec.
     """
     dropped = set(port_drops)
     decided = set(operator_map)
@@ -423,12 +467,46 @@ def settle_plan(
     plan.lost_dhcp_pools = list(lost_dhcp_pools)
     plan.lost_tracking = sorted(lost_tracking)
     plan.lost_vtep_sources = sorted(lost_vtep_sources)
+    plan.stale_next_hops = list(stale_next_hops)
+    # A name the operator has since decided, or that went, is no longer
+    # a landing nobody looked at.
+    plan.landed_off_target = {
+        name: where for name, where in sorted((landed_off_target or {}).items())
+        if name not in decided and name not in dropped
+    }
+    # Where the hardware is, kept only where that is not simply the
+    # name the port has in the output.
+    hardware = {
+        name: where for name, where in sorted((target_hardware or {}).items())
+        if name not in dropped and where != port_renames.get(name, name)
+    }
+    plan.target_hardware = hardware
     if plan.applied:
         plan.fused = fused_targets(
             every, port_renames, dropped, involving=used,
             fold_source=fold_source, fold_target=fold_target,
         )
+        if hardware:
+            # Two ports on one piece of hardware under two names share
+            # no NAME, and are fused all the same.
+            by_hardware = fused_targets(
+                every, {**port_renames, **hardware}, dropped, involving=used,
+                fold_source=fold_source, fold_target=fold_target,
+            )
+            for where, sources in by_hardware.items():
+                listed = plan.fused.setdefault(where, [])
+                listed.extend(name for name in sources if name not in listed)
         on_target = {name_key(name, fold_target) for name in targets}
+
+        def listed_by_target(name: str) -> bool:
+            if name_key(name, fold_target) in on_target:
+                return True
+            port, dot, unit = name.strip().rpartition(".")
+            return bool(
+                units and dot and unit.isdigit()
+                and name_key(port, fold_target) in on_target
+            )
+
         # A management port the target model lists no place for has no
         # inventory name to go to.  The one name that is not a mistake
         # for it is the form the ordinary translation gives a
@@ -438,12 +516,15 @@ def settle_plan(
             source: name_key(form, fold_target)
             for source, form in (management_forms or {}).items() if form
         }
+        # Judged where the port's hardware is: on RouterOS an entry
+        # whose target is not a port NAMES the port, and the port is
+        # off-target only if its hardware has no place either.
         plan.off_target = sorted({
-            value for key, value in operator_map.items()
-            if isinstance(value, str)
-            and key in present
-            and name_key(value, fold_target) not in on_target
-            and forms.get(key) != name_key(value, fold_target)
+            where for key, value in operator_map.items()
+            if isinstance(value, str) and key in present
+            for where in (hardware.get(key, value),)
+            if not listed_by_target(where)
+            and forms.get(key) != name_key(where, fold_target)
         })
         # Every name that ended somewhere occupies that name -- a
         # logical interface an operator put on a port as much as a
@@ -452,12 +533,65 @@ def settle_plan(
             name_key(port_renames.get(name, name), fold_target)
             for name in every if name not in dropped
         }
+        taken.update(name_key(where, fold_target) for where in hardware.values())
         plan.unused_target = [
             name for name in targets if name_key(name, fold_target) not in taken
         ]
     plan.unresolved_ports = plan.unresolved(decided)
     if plan.applied:
         plan.warnings = describe_plan(plan, decided=decided, dropped=dropped)
+
+
+def _loss_lines(plan: MappingPlan) -> list[str]:
+    """Lines for what went with a dropped port, and for a route
+    left naming a port that moved."""
+    lines: list[str] = []
+    if plan.emptied_lags:
+        lines.append(
+            f"port mapping: every member port of {len(plan.emptied_lags)} "
+            f"LAG(s) was dropped, so the LAG has no port on the target "
+            f"({_summary(plan.emptied_lags)}); review it and the VLANs "
+            f"that reference it"
+        )
+    if plan.shrunk_lags:
+        lines.append(
+            f"port mapping: {len(plan.shrunk_lags)} LAG(s) lost a member "
+            f"port to a drop and have fewer members on the target: "
+            f"{_summary(plan.shrunk_lags)}"
+        )
+    if plan.lost_routes:
+        lines.append(
+            f"port mapping: {len(plan.lost_routes)} static route(s) that "
+            f"named a dropped port were removed with it: "
+            f"{_summary(plan.lost_routes)}"
+        )
+    if plan.lost_dhcp_pools:
+        lines.append(
+            f"port mapping: {len(plan.lost_dhcp_pools)} DHCP pool(s) bound "
+            f"to a dropped port were removed with it: "
+            f"{_summary(plan.lost_dhcp_pools)}"
+        )
+    if plan.lost_tracking:
+        lines.append(
+            f"port mapping: {len(plan.lost_tracking)} interface(s) lost a "
+            f"VRRP track entry with what it named (a dropped port, or a "
+            f"track object number read as one), so failover no longer "
+            f"follows it: {_summary(plan.lost_tracking)}"
+        )
+    if plan.lost_vtep_sources:
+        lines.append(
+            f"port mapping: the VXLAN source interface was dropped "
+            f"({_summary(plan.lost_vtep_sources)}), so the VTEP is left "
+            f"without the source it was bound to — give it one"
+        )
+    if plan.stale_next_hops:
+        lines.append(
+            f"port mapping: {len(plan.stale_next_hops)} static route(s) "
+            f"still name, as next hop, a source interface that was renamed "
+            f"or dropped ({_summary(plan.stale_next_hops)}); the next hop "
+            f"was left as written — correct the route by hand"
+        )
+    return lines
 
 
 def describe_plan(
@@ -613,53 +747,33 @@ def describe_plan(
             f"the source port already paired to it — use the names the "
             f"device model lists"
         )
+    if plan.landed_off_target:
+        shown = [
+            f"{name} -> {where}"
+            for name, where in plan.landed_off_target.items()
+        ]
+        lines.append(
+            f"port mapping: {len(shown)} logical name(s) nobody decided "
+            f"were given a port name the declared target device does not "
+            f"list ({_summary(shown, limit=6, sep='; ')}), so their config "
+            f"is on a port the device does not have — map or drop each one"
+        )
     if plan.ignored_overrides:
         lines.append(
             f"port mapping: {len(plan.ignored_overrides)} override(s) had "
             f"no usable target and were ignored; what the mapping decided "
             f"stands for: {_summary(plan.ignored_overrides)}"
         )
-    if plan.emptied_lags:
-        lines.append(
-            f"port mapping: every member port of {len(plan.emptied_lags)} "
-            f"LAG(s) was dropped, so the LAG has no port on the target "
-            f"({_summary(plan.emptied_lags)}); review it and the VLANs "
-            f"that reference it"
-        )
-    if plan.shrunk_lags:
-        lines.append(
-            f"port mapping: {len(plan.shrunk_lags)} LAG(s) lost a member "
-            f"port to a drop and have fewer members on the target: "
-            f"{_summary(plan.shrunk_lags)}"
-        )
-    if plan.lost_routes:
-        lines.append(
-            f"port mapping: {len(plan.lost_routes)} static route(s) that "
-            f"named a dropped port were removed with it: "
-            f"{_summary(plan.lost_routes)}"
-        )
-    if plan.lost_dhcp_pools:
-        lines.append(
-            f"port mapping: {len(plan.lost_dhcp_pools)} DHCP pool(s) bound "
-            f"to a dropped port were removed with it: "
-            f"{_summary(plan.lost_dhcp_pools)}"
-        )
-    if plan.lost_tracking:
-        lines.append(
-            f"port mapping: {len(plan.lost_tracking)} interface(s) lost a "
-            f"VRRP track entry that named a dropped port, so failover no "
-            f"longer follows that port: {_summary(plan.lost_tracking)}"
-        )
-    if plan.lost_vtep_sources:
-        lines.append(
-            f"port mapping: the VXLAN source interface was dropped "
-            f"({_summary(plan.lost_vtep_sources)}), so the VTEP is left "
-            f"without the source it was bound to — give it one"
-        )
+    lines.extend(_loss_lines(plan))
 
     # A pairing the operator replaced is no longer the plan's: its
-    # speed and PoE flags describe a target the port did not go to.
-    paired = [p for p in plan.used_pairings if p.source not in seen]
+    # speed and PoE flags describe a target the port did not go to --
+    # unless the operator only NAMED the port and its hardware went
+    # where the pairing put it.
+    paired = [
+        p for p in plan.used_pairings
+        if p.source not in seen or plan.target_hardware.get(p.source) == p.target
+    ]
     slower = [p for p in paired if p.slower]
     if slower:
         lines.append(

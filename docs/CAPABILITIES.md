@@ -910,6 +910,13 @@ What you get back, on the job's `port_mapping_plan`:
   translator, which may rename them or drop them.  Usually this means
   the source model, its mode or its modules were declared wrongly —
   check them.
+* **`labelled_ports`** — source ports the config knows by a name of
+  its own, each with the port's name in the device model.  RouterOS
+  only: it keeps a port's factory name (`ether2`) beside the name you
+  gave it (`core-a`), and every other line of the config uses yours.
+  Such a port is paired by its factory name and goes by YOUR name
+  everywhere else — in `pairings`, in the job's lists, and as the key
+  of a `port_rename_map` entry.
 * **`sub_interfaces`** — sub-interface names (`ge-0/0/0.54`) that
   followed their parent port, with the name each was given (`null`
   when the parent was dropped).  This is done between two configs of
@@ -927,17 +934,45 @@ What you get back, on the job's `port_mapping_plan`:
   The pairing never does this and an undecided name is displaced
   before it can, so an entry here means your own `port_rename_map`
   points two ports at one name.  Names are compared as the platform
-  compares them: on AOS-S or IOS `1/a1` is the port `1/A1`; on
-  FortiOS, RouterOS, Junos, VyOS and OPNsense `DMZ` and `dmz` are two
-  interfaces.
-* **`off_target`** — targets in your `port_rename_map` that are not
-  names the declared target device lists for its ports.  Allowed,
+  tells interfaces apart: on AOS-S or IOS `1/a1` is the port `1/A1`;
+  on FortiOS and RouterOS, where you choose interface names, `DMZ`
+  and `dmz` are two interfaces; and on a platform that names every
+  interface itself in lower case (Junos, VyOS, OPNsense) `GE-0/0/2`
+  is `ge-0/0/2` misspelt, and is that port.  On RouterOS two ports on
+  one piece of hardware under two names are fused as well.
+* **`off_target`** — names your `port_rename_map` put a port on that
+  the declared target device does not list for its ports.  Allowed,
   and reported.  **Only case and surrounding space are understood.**
   An abbreviation the device accepts (`Gi1/0/1` for
   `GigabitEthernet1/0/1`) is not recognised as that port: it is
   listed here, the job can still be `completed`, and the port it
   names can end up with two source ports on it without appearing in
-  `fused`.  Use the names `POST /inventory` prints.
+  `fused`.  Use the names `POST /inventory` prints.  Between two
+  configs of one codec a unit of a listed port (`ge-0/0/7.54`) is not
+  off-target.  On a RouterOS target a NAME you give a port is not
+  off-target while the port's hardware has a place.
+* **`target_hardware`** — RouterOS only: source names whose port is
+  on a target port that is not the name they have in the output, each
+  with that port.  A port you had named keeps the name, and an entry
+  whose target is not a port of the declared target NAMES the port;
+  in both cases the hardware goes where the pairing put it
+  (`set [ find default-name=sfp-sfpplus2 ] name=core-a`).
+  `port_renames` records names, so it has no entry for such a move;
+  this field does, and `fused` and `unused_target` count the port
+  where its hardware is.
+* **`landed_off_target`** — logical names nobody decided (a VLAN
+  interface, an aggregate) that the name-shape translator gave a
+  port-shaped name the declared target does not list, each with that
+  name.  Nothing shares the name, so it is not dropped — but its
+  config is on a port the device does not have, so it is in
+  `unresolved_ports` until you map or drop it.
+* **`stale_next_hops`** — destinations of static routes whose next
+  hop still names a source interface that was renamed or dropped: a
+  RouterOS list of gateways (`gateway=ether1,ether2`), a routing-table
+  suffix (`ether3@main`), or — across vendors — a Junos unit
+  (`next-hop et-0/0/24.0`).  A next hop that is exactly an
+  interface's name follows it and is not listed.  The job is
+  `partial` while this is not empty; correct the route by hand.
 * **`ignored_overrides`** — entries in your `port_rename_map` whose
   target was blank, for a name the config uses.  A blank target is
   ignored: it decides nothing.
@@ -974,9 +1009,10 @@ target name, or `null` to drop it — is you deciding it.  It always
 wins over the pairing, on `/plan` and on every per-pane endpoint.  A
 target is read as the target device spells it (`1/a1` is `1/A1`)
 where the platform has no case, and a blank target is ignored.  The
-job is also `partial` while `fused`
+job is also `partial` while `fused` or `stale_next_hops`
 is not empty, whatever you acknowledged, and when no pairing could be
-made at all.
+made at all.  `unresolved_ports` also holds every name in
+`landed_off_target`.
 
 **Devices no family describes yet** can be declared by the key of a
 target profile instead (`source_profile` / `source_module`,
@@ -1024,11 +1060,43 @@ nothing, as before.
   model: every such name is off-inventory.  A real `show
   running-config` prints the full name; a config built from a
   template may not.
-* On RouterOS a port you renamed is paired by its factory name and
-  keeps your name.  A port named so that it reads as another port
-  (a bridge called `SFP-SFPPLUS1`) is translated by that reading, as
-  it is without devices declared, and is displaced if that puts it
-  on a port of the target.
+* **RouterOS: a name and a move.**  A port you had named is paired
+  by its factory name and, between two RouterOS configs, keeps your
+  name while its hardware moves; onto any other vendor it takes the
+  name of the port it was paired with.  An entry of
+  `port_rename_map` is keyed by the name the CONFIG uses for the
+  port — yours, where you gave one; an entry keyed by the factory
+  name of such a port matches nothing and is ignored with a warning,
+  exactly as without devices.  Whether an entry's target is a move or
+  a name is decided from the declared target's port list and from
+  nothing else: `sfp1` names the port on a device that has no `sfp1`.
+  A name you gave a port that is itself a port of the target is not
+  kept — there it could only be that port — and the port takes its
+  paired port's name.  If the config calls one port by the name
+  another port of the source device still has, no pairing is made at
+  all.  **Without devices declared an entry never moves a port**: it
+  names it, and the output finds the port by the factory name it had.
+* A RouterOS port named so that it reads as another port (a bridge
+  called `SFP-SFPPLUS1`) is translated by that reading, as it is
+  without devices declared, and is displaced if that puts it on a
+  port of the target.  And a port you named so that it reads as a
+  LAG, a VLAN or a bridge (`bond1`) is paired as the port it is, but
+  the RouterOS renderer writes an interface of that name as that kind
+  of interface, with or without devices declared: check its line.
+* **A next hop that is not exactly an interface's name is not
+  followed** when the interface moves: a RouterOS route with several
+  gateways or a routing-table suffix, and — across vendors — a Junos
+  unit next hop.  The plan lists the route (`stale_next_hops`) and the
+  job is `partial`.
+* **A non-zero unit of a Junos management port** (`me0 unit 5`)
+  follows its port under a name Junos does not accept
+  (`set interfaces me0.5 unit 0 ...`).  Map it by hand.
+* A FortiGate VLAN interface the codec reads as a physical port
+  (`DMZ` beside a port `dmz`), and its stock `fortilink` aggregate,
+  are given port-shaped names by the name-shape translator.  They are
+  displaced where that name is a port of the target and listed in
+  `landed_off_target` where it is not; either way the job is
+  `partial` until you decide them.
 * A **sub-interface** follows its parent port only between two
   configs of the same codec.  Across vendors
   (`GigabitEthernet1/0/1.100` onto Junos, a Junos unit onto AOS-S) it

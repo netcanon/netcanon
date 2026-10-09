@@ -16,14 +16,24 @@ This module defines the **vendor-agnostic bridge**:
    convention, using ONLY each codec's own ``classify_port_name`` /
    ``format_port_identity`` methods.  Never conditionals vendor pair.
 3. :func:`collect_port_names` — the port names a canonical tree
-   holds: the places the sweep rewrites, and a port's factory name
-   where the vendor keeps one beside it.  And
+   holds, in the places the sweep rewrites.  And
    :func:`collect_hardware_port_names`, the subset that is evidence
    of a hardware port.  A new canonical field that holds a port
    name is added to the first and to the sweep in the same change;
-   ``tests/unit/migration/test_port_name_universe.py`` finds one
-   that was not, by exchanging two port names on every codec's
-   captures and reading the rendered text.
+   ``tests/unit/migration/test_port_name_universe.py`` looks for
+   one that was not, by sending port names to one another on the
+   committed captures and comparing the two outputs parsed again.
+4. :func:`route_port_reference` — a route's next hop that is the
+   name of an interface, which follows that interface.
+
+What the sweep does NOT rewrite is a port's FACTORY name
+(``interfaces[].default_name``, RouterOS).  That field is the port's
+hardware identity, not a reference to it: an entry of the rename map
+gives a port a name, and the renderer then writes "find the port
+with this factory name and call it that".  Whether an entry instead
+MOVES the config onto other hardware can only be told from a
+declared target device, so it is decided where one is declared
+(:func:`~netcanon.services.migration_pipeline.run_plan_with_models`).
 
 **Modular boundary:** each codec knows ONLY its own vendor's naming
 convention.  Cisco's codec classifies ``Gi1/0/24`` → ``PortIdentity``
@@ -308,14 +318,15 @@ def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
 
 
 def collect_port_names(intent: CanonicalIntent) -> list[str]:
-    """Every port name *intent* holds, in first-seen order.
+    """Every port name *intent* holds, in first-seen order: the
+    names in the places :func:`translate_port_names` rewrites
+    (:func:`_swept_names`).
 
-    Two kinds of place.  The ones :func:`translate_port_names`
-    rewrites by resolving the name (:func:`_swept_names`) — and a
-    port's FACTORY name (``interfaces[].default_name``), which
-    RouterOS keeps beside the name an operator may have given the
-    port and which its renderer looks the port up by.  The factory
-    name is not resolved; it moves with the port.
+    These are the names the CONFIG uses.  A port's factory name
+    (``interfaces[].default_name``) is not one of them where an
+    operator gave the port a name of their own: nothing in the config
+    refers to the port by it, and an entry of a rename map keyed by
+    it matches nothing.
 
     A route's ``gateway`` can hold an interface name too (RouterOS
     ``gateway=ether1``, Junos ``next-hop et-0/0/24.0``).  It adds no
@@ -327,9 +338,9 @@ def collect_port_names(intent: CanonicalIntent) -> list[str]:
     the sweep, in the same change.  Reading two functions side by
     side proves they agree with each other, not that they are
     complete: ``tests/unit/migration/test_port_name_universe.py``
-    exchanges two port names through the translator on every
-    codec's captures and fails for a rendered line that did not
-    follow, whatever field it came from.
+    sends port names to one another through the translator on the
+    committed captures and fails for a value of the re-parsed output
+    that did not follow, where a capture fills the field.
 
     Returns:
         Names without duplicates.  Includes LAG, SVI and loopback
@@ -337,18 +348,9 @@ def collect_port_names(intent: CanonicalIntent) -> list[str]:
         a device model can account for.
     """
     seen: dict[str, None] = {}
-    factory = {
-        iface.name: iface.default_name for iface in intent.interfaces
-        if iface.default_name
-    }
     for name in _swept_names(intent):
-        if not name:
-            continue
-        seen.setdefault(name, None)
-        if name in factory:
-            seen.setdefault(factory[name], None)
-    for name in factory.values():
-        seen.setdefault(name, None)
+        if name:
+            seen.setdefault(name, None)
     return list(seen)
 
 
@@ -389,24 +391,6 @@ def route_port_reference(
         if dot and unit.isdigit() and port in interface_names:
             return port, dot + unit
     return None
-
-
-def dropped_interface_names(
-    intent: CanonicalIntent, dropped: Iterable[str],
-) -> set[str]:
-    """*dropped*, with the name of every interface whose FACTORY name
-    is in it.
-
-    A port dropped by its factory name goes under whatever name an
-    operator gave it: on RouterOS the rest of the config — bridge
-    ports, addresses, VLAN membership — refers to the port by that
-    name, and all of it has to go with the port.
-    """
-    gone = set(dropped)
-    return gone | {
-        iface.name for iface in intent.interfaces
-        if iface.default_name and iface.default_name in gone
-    }
 
 
 def collect_hardware_port_names(
@@ -457,9 +441,12 @@ def collect_hardware_port_names(
 
     **A port with two names.**  RouterOS keeps a port's factory name
     (``ether2``) beside the name an operator gave it (``core-a``).
-    The factory name is the hardware, and is what a device model
-    lists, so it is the evidence; the operator's name is an alias
-    for the same port, not a second port, and is left out.
+    This function returns the name the CONFIG uses (``core-a``): it
+    is the one every other line refers to, and the key an entry of a
+    rename map has to carry.  A caller that pairs ports with a device
+    model looks such a port up in the model by its factory name
+    (``interfaces[].default_name``); see
+    :func:`~netcanon.services.migration_pipeline.run_plan_with_models`.
 
     This is the set a positional mapping is made FOR.  It is not the
     set a finished run is checked over: the sweep rewrites every name
@@ -485,13 +472,6 @@ def collect_hardware_port_names(
         if iface.lag_member_of
     )
     evidenced: set[str] = {iface.name for iface in intent.interfaces if iface.name}
-    evidenced.update(
-        iface.default_name for iface in intent.interfaces if iface.default_name
-    )
-    aliases: set[str] = {
-        iface.name for iface in intent.interfaces
-        if iface.default_name and iface.default_name != iface.name
-    }
     for vlan in intent.vlans:
         evidenced.update(vlan.tagged_ports)
         evidenced.update(vlan.untagged_ports)
@@ -513,7 +493,7 @@ def collect_hardware_port_names(
 
     names: list[str] = []
     for name in collect_port_names(intent):
-        if name in not_hardware or name.lower() in lag_names or name in aliases:
+        if name in not_hardware or name.lower() in lag_names:
             continue
         if name not in keep:
             kind = kind_of(name)
@@ -590,15 +570,22 @@ def translate_port_names(  # noqa: C901
         * ``intent.dhcp_servers[].interface``
         * ``intent.vxlan_vnis[].source_interface``
 
-    Two more fields follow a port without being resolved themselves:
+    One more field follows a port without being resolved itself:
+    ``intent.static_routes[].gateway``, when it is the name of an
+    interface of the tree (:func:`route_port_reference`).
 
-        * ``intent.interfaces[].default_name`` — a port's factory
-          name (RouterOS).  It takes the port's new name when the
-          port still carried it, or the target an entry of
-          *rename_map* gives it when an operator had renamed the
-          port.
-        * ``intent.static_routes[].gateway`` — when it is the name of
-          an interface of the tree (:func:`route_port_reference`).
+    One field is deliberately left alone:
+    ``intent.interfaces[].default_name``, a port's factory name
+    (RouterOS).  An entry of *rename_map* gives the port a NAME; the
+    factory name is which hardware it is, and stays.  Rendered, that
+    is ``set [ find default-name=ether1 ] name=WAN`` — what such an
+    entry has always produced.  Rewriting the field with the name
+    renders ``find default-name=WAN``, a lookup that matches no port,
+    and nothing here can tell a name from a move: ``sfp1`` is a port
+    of one RouterOS model and a short name for ``sfp-sfpplus1`` on
+    another.  Moving a port onto other hardware is done where the
+    target device is declared
+    (:func:`~netcanon.services.migration_pipeline.run_plan_with_models`).
 
     Mutates *intent* in place.
 
@@ -667,11 +654,10 @@ def translate_port_names(  # noqa: C901
     str_map: dict[str, str] = {
         name: tgt for name, tgt in user_map.items() if isinstance(tgt, str)
     }
-    # Auto-drops accumulate DURING resolve() when ``strip_unmappable`` removes a
-    # name the target codec can't format.  Unlike user drops, these names stay
-    # verbatim through the sweep (they were never renamed to something else), so
-    # their post-sweep name still equals their source name and stripping them
-    # AFTER the sweep is safe.
+    # Auto-drops accumulate in resolve() when ``strip_unmappable`` removes a
+    # name the target codec can't format.  Every name is resolved in a pass of
+    # its own before the sweep, and these are stripped then, while every name
+    # is still in source form (see below).
     auto_dropped: set[str] = set()
 
     # Per-interface kind overrides — populated by source codecs that
@@ -855,27 +841,8 @@ def translate_port_names(  # noqa: C901
     # Rewrite everywhere a port name might be referenced.  Order doesn't
     # matter — memoisation keeps us idempotent.
     for iface in intent.interfaces:
-        before = iface.name
-        iface.name = resolve(before)
-        if iface.default_name:
-            # RouterOS: the factory name is the port's hardware identity
-            # and the key the renderer looks the port up by
-            # (``set [ find default-name=X ]``).  It moves with the port.
-            # Left behind, the rendered line told the TARGET device to
-            # find the port with the SOURCE's factory name and give it
-            # the new name — every moved port wrong, three of ten on a
-            # real capture landing on another real port.
-            if iface.default_name == before:
-                iface.default_name = iface.name
-            elif iface.default_name in str_map:
-                # A port an operator had renamed: the alias is what the
-                # rest of the config refers to and it stays; the
-                # hardware goes where the map sends the factory name.
-                factory = iface.default_name
-                iface.default_name = str_map[factory]
-                memo[factory] = iface.default_name
-                if iface.default_name != factory:
-                    applied[factory] = iface.default_name
+        # ``default_name`` is not touched: see the docstring.
+        iface.name = resolve(iface.name)
         if iface.lag_member_of:
             iface.lag_member_of = resolve(iface.lag_member_of)
         # (#3) Rewrite each VRRP group's track-interface list so failover
@@ -1060,14 +1027,9 @@ def _strip_dropped_ports(
         * ``intent.vxlan_vnis[].source_interface`` — cleared if dropped
           (a dangling VTEP source breaks the whole overlay binding).
 
-    A port dropped by its factory name (RouterOS ``default_name``) is
-    dropped under the name an operator gave it, with everything that
-    refers to that name (:func:`dropped_interface_names`).
-
     Mutates *intent* in place.  Idempotent: subsequent calls with the
     same *dropped* set are no-ops.
     """
-    dropped = dropped_interface_names(intent, dropped)
     named = {iface.name for iface in intent.interfaces}
     intent.interfaces = [
         i for i in intent.interfaces if i.name not in dropped

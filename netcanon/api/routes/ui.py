@@ -179,7 +179,8 @@ def register_exception_handlers(app: FastAPI) -> None:
         # response as UTF-8; a lone surrogate in that input (which is
         # valid JSON: "\ud800") cannot be encoded, and the 422 became
         # a 500 with a traceback in the log.  Escaped, any input can be
-        # sent back, and the body parses to exactly the same JSON.
+        # sent back, and for every request that was a 422 before the
+        # body parses to exactly the same JSON.
         #
         # One more thing the JSON parser takes on the way in and JSON
         # does not have on the way out: NaN and Infinity.  They are

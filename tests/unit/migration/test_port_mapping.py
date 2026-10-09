@@ -805,7 +805,7 @@ class TestSettlePlan:
         assert plan.lost_tracking == ["Vlan10", "Vlan20"]
         assert plan.lost_vtep_sources == ["Loopback0"]
         text = " | ".join(plan.warnings)
-        assert "2 interface(s) lost a VRRP track entry that named a dropped port" in text
+        assert "2 interface(s) lost a VRRP track entry with what it named" in text
         assert "the VXLAN source interface was dropped (Loopback0)" in text
 
     def test_a_name_with_a_dot_is_not_a_unit_of_a_port(self):
@@ -911,8 +911,11 @@ class TestNoWarningCanBeReadAsATableRow:
             lost_dhcp_pools=["10.0.0.0/24"], ignored_overrides=["2/1"],
             sub_interfaces={"49.7": None},
             lost_tracking=["Vlan10"], lost_vtep_sources=["Loopback0"],
+            landed_off_target={"DMZ": "9/1"}, stale_next_hops=["10.9.0.0/16"],
         )
         kinds = (
+            "were given a port name the declared target device does not list",
+            "still name, as next hop",
             "belong to a member the target does not have",
             "source management port(s) have no management port",
             "nobody decided",
@@ -943,3 +946,254 @@ class TestNoWarningCanBeReadAsATableRow:
         (line,) = plan.warnings
         assert "'" not in line
         assert "bob\u2019s uplink" in line and "alice\u2019s port" in line
+
+
+# ---------------------------------------------------------------------------
+# A port the config knows by a name of its own
+# ---------------------------------------------------------------------------
+
+
+class TestAPortKnownByAnotherName:
+    """RouterOS keeps a port's factory name beside the name an
+    operator gave it.  The device model lists the first; the config --
+    and so the plan, the job and an operator's map -- uses the second."""
+
+    SOURCE = _inventory((0, "access", ["ether1", "ether2", "ether3"]))
+    TARGET = _inventory((0, "access", ["sfp1", "sfp2", "sfp3"]))
+
+    def test_it_is_paired_by_its_factory_name_and_listed_by_the_configs(self):
+        plan = plan_port_mapping(
+            self.SOURCE, self.TARGET, ["ether1", "core-a"], known_as={"ether2": "core-a"},
+        )
+        assert plan.labelled_ports == {"core-a": "ether2"}
+        assert [(p.source, p.target, p.used) for p in plan.pairings] == [
+            ("ether1", "sfp1", True), ("core-a", "sfp2", True), ("ether3", "sfp3", False),
+        ]
+        assert plan.rename_map == {"ether1": "sfp1", "core-a": "sfp2"}
+        assert plan.off_inventory == []
+
+    def test_its_factory_name_is_not_a_name_the_config_uses(self):
+        """Handed in as a used name it is a name the source device
+        does not have under that spelling: off-inventory."""
+        plan = plan_port_mapping(
+            self.SOURCE, self.TARGET, ["ether2"], known_as={"ether2": "core-a"},
+        )
+        assert plan.off_inventory == ["ether2"]
+        assert plan.rename_map == {}
+
+    def test_an_unplaced_one_is_dropped_by_the_configs_name(self):
+        plan = plan_port_mapping(
+            self.SOURCE, _inventory((0, "access", ["sfp1"])), ["core-a"],
+            known_as={"ether2": "core-a"},
+        )
+        assert plan.rename_map == {"core-a": None}
+        assert [p.source for p in plan.used_unplaced] == ["core-a"]
+
+    def test_two_ports_may_trade_names(self):
+        plan = plan_port_mapping(
+            self.SOURCE, self.TARGET, ["ether1", "ether2"],
+            known_as={"ether1": "ether2", "ether2": "ether1"},
+        )
+        assert plan.applied
+        assert plan.rename_map == {"ether2": "sfp1", "ether1": "sfp2"}
+
+    def test_a_port_named_like_another_that_keeps_its_name_is_not_paired(self):
+        """``ether1`` is called ``ether2`` and the real ``ether2`` is
+        still called ``ether2``: the name no longer says which port."""
+        plan = plan_port_mapping(
+            self.SOURCE, self.TARGET, ["ether2"], known_as={"ether1": "ether2"},
+        )
+        assert plan.applied is False and plan.rename_map == {}
+        assert "the name another port of the source device has (ether2)" in plan.warnings[0]
+
+    def test_nothing_changes_where_no_port_has_a_second_name(self):
+        plain = plan_port_mapping(STANDALONE_48, STACKED_48_MODULE, _bare(52))
+        given = plan_port_mapping(STANDALONE_48, STACKED_48_MODULE, _bare(52), known_as={})
+        assert plain.model_dump() == given.model_dump()
+        assert plain.labelled_ports == {}
+
+
+# ---------------------------------------------------------------------------
+# Where a port's hardware is
+# ---------------------------------------------------------------------------
+
+
+class TestWhereTheHardwareIs:
+    """On a target that keeps a name beside the hardware a port can be
+    on ``sfp2`` and be called ``core-a``.  What the plan counts as a
+    port's place is the hardware."""
+
+    SOURCE = _inventory((0, "access", ["ether1", "ether2", "ether3"]))
+    TARGET = _inventory((0, "access", ["sfp1", "sfp2", "sfp3"]))
+
+    def _plan(self) -> MappingPlan:
+        return plan_port_mapping(
+            self.SOURCE, self.TARGET, ["ether1", "core-a"], known_as={"ether2": "core-a"},
+        )
+
+    def test_it_is_recorded_only_where_it_is_not_the_ports_name(self):
+        plan = self._plan()
+        _settled(
+            plan, ["ether1", "core-a"], operator={"core-a": "core-a"}, target=self.TARGET,
+            target_hardware={"ether1": "sfp1", "core-a": "sfp2"},
+        )
+        assert plan.target_hardware == {"core-a": "sfp2"}
+
+    def test_a_port_takes_the_place_its_hardware_is_on(self):
+        plan = self._plan()
+        _settled(
+            plan, ["ether1", "core-a"], operator={"core-a": "core-a"}, target=self.TARGET,
+            target_hardware={"core-a": "sfp2"},
+        )
+        assert plan.unused_target == ["sfp3"]
+
+    def test_a_name_is_not_off_target_while_the_hardware_has_a_place(self):
+        plan = self._plan()
+        _settled(
+            plan, ["ether1", "core-a"], operator={"ether1": "WAN"}, target=self.TARGET,
+            target_hardware={"ether1": "sfp1"},
+        )
+        assert plan.off_target == [] and plan.target_hardware == {"ether1": "sfp1"}
+
+    def test_it_is_off_target_when_the_hardware_has_none(self):
+        """An off-inventory port the operator only named stays on the
+        hardware it was on, which the target does not list -- and that
+        hardware name is what is reported, not the name they typed."""
+        plan = plan_port_mapping(self.SOURCE, self.TARGET, ["ether1", "ether9"])
+        _settled(
+            plan, ["ether1", "ether9"], operator={"ether9": "WAN"}, target=self.TARGET,
+            target_hardware={"ether9": "ether9"},
+        )
+        assert plan.off_target == ["ether9"]
+
+    def test_two_ports_on_one_piece_of_hardware_are_fused(self):
+        """They share no NAME.  The operator sent ``ether1`` to the
+        hardware ``core-a`` was paired onto."""
+        plan = self._plan()
+        _settled(
+            plan, ["ether1", "core-a"],
+            operator={"core-a": "core-a", "ether1": "sfp2"}, target=self.TARGET,
+            target_hardware={"core-a": "sfp2"},
+        )
+        assert plan.fused == {"sfp2": ["ether1", "core-a"]}
+        assert not plan.is_clean
+
+    def test_a_dropped_ports_hardware_is_nowhere(self):
+        plan = self._plan()
+        _settled(
+            plan, ["ether1", "core-a"], operator={"core-a": None}, target=self.TARGET,
+            target_hardware={"core-a": "sfp2"},
+        )
+        assert plan.target_hardware == {} and plan.unused_target == ["sfp2", "sfp3"]
+
+    def test_a_port_the_operator_only_named_is_still_where_the_pairing_put_it(self):
+        """So the pairing's speed flag still describes it."""
+        source = _inventory((0, "uplink", ["49"]), speed={"49": "10gig"})
+        target = _inventory((0, "uplink", ["1/A1"]), speed={"1/A1": "gig"})
+        plan = plan_port_mapping(source, target, ["49"])
+        _settled(
+            plan, ["49"], operator={"49": "WAN"}, target=target,
+            target_hardware={"49": "1/A1"},
+        )
+        assert [w for w in plan.warnings if "slower target port" in w]
+
+
+# ---------------------------------------------------------------------------
+# The outcome fields added with it
+# ---------------------------------------------------------------------------
+
+
+class TestWhatElseARunCanLeave:
+    USED = _bare(52)
+
+    def _plan(self) -> MappingPlan:
+        return plan_port_mapping(STANDALONE_48, STACKED_48_MODULE, self.USED)
+
+    def test_a_logical_name_on_a_port_the_target_lacks_needs_a_decision(self):
+        plan = _settled(
+            self._plan(), self.USED, target=STACKED_48_MODULE,
+            every=[*self.USED, "DMZ"], renames={"DMZ": "9/9"},
+            landed_off_target={"DMZ": "9/9"},
+        )
+        assert plan.landed_off_target == {"DMZ": "9/9"}
+        assert plan.unresolved_ports == ["DMZ"] and not plan.is_clean
+        (line,) = [w for w in plan.warnings if "does not list" in w]
+        assert "1 logical name(s) nobody decided" in line and "(DMZ -> 9/9)" in line
+
+    def test_one_the_operator_decided_or_that_went_is_not_listed(self):
+        plan = _settled(
+            self._plan(), self.USED, target=STACKED_48_MODULE,
+            every=[*self.USED, "DMZ", "OLD"], operator={"DMZ": "9/9"}, drops=["OLD"],
+            landed_off_target={"DMZ": "9/9", "OLD": "8/8"},
+        )
+        assert plan.landed_off_target == {} and plan.unresolved_ports == []
+
+    def test_a_route_left_naming_a_port_that_moved(self):
+        plan = _settled(
+            self._plan(), self.USED, target=STACKED_48_MODULE,
+            stale_next_hops=["0.0.0.0/0", "10.0.0.0/8"],
+        )
+        assert plan.stale_next_hops == ["0.0.0.0/0", "10.0.0.0/8"]
+        assert plan.unresolved_ports == [] and not plan.is_clean
+        (line,) = [w for w in plan.warnings if "as next hop" in w]
+        assert "2 static route(s) still name" in line and "(0.0.0.0/0, 10.0.0.0/8)" in line
+
+    def test_a_unit_of_a_port_of_the_target_is_a_name_of_the_target(self):
+        """...between two configs of one codec, where a unit suffix
+        means the same thing on both sides."""
+        junos = _inventory((0, "access", ["ge-0/0/0", "ge-0/0/7"]))
+        used = ["ge-0/0/0", "ge-0/0/0.54"]
+        for units, expected in ((True, []), (False, ["ge-0/0/7.54"])):
+            plan = plan_port_mapping(junos, junos, used)
+            _settled(
+                plan, used, operator={"ge-0/0/0.54": "ge-0/0/7.54"}, target=junos, units=units,
+            )
+            assert plan.off_target == expected
+        plan = plan_port_mapping(junos, junos, used)
+        _settled(plan, used, operator={"ge-0/0/0.54": "ge-0/0/9.54"}, target=junos, units=True)
+        assert plan.off_target == ["ge-0/0/9.54"]
+
+
+# ---------------------------------------------------------------------------
+# Case, on each side
+# ---------------------------------------------------------------------------
+
+
+class TestCaseOnATargetThatHasIt:
+    """Where the target keeps two spellings apart, so does the plan:
+    in what it calls off-target, in what it calls free, and in which
+    names a clash must involve."""
+
+    PORTS = _inventory((0, "access", ["port1", "port2"]))
+
+    def test_another_case_is_not_a_port_of_the_target(self):
+        for fold, expected in ((True, []), (False, ["PORT2"])):
+            plan = plan_port_mapping(self.PORTS, self.PORTS, ["port1", "port2"])
+            _settled(
+                plan, ["port1", "port2"], operator={"port1": "PORT2", "port2": None},
+                target=self.PORTS, fold_target=fold,
+            )
+            assert plan.off_target == expected
+
+    def test_another_case_does_not_take_the_port(self):
+        for fold, expected in ((True, []), (False, ["port2"])):
+            plan = plan_port_mapping(self.PORTS, self.PORTS, ["port1", "port2"])
+            _settled(
+                plan, ["port1", "port2"], operator={"port1": "port1", "port2": "PORT2"},
+                target=self.PORTS, fold_target=fold,
+            )
+            assert plan.unused_target == expected
+
+    def test_a_clash_involves_a_port_by_the_sources_own_rule(self):
+        """A hardware port written with a capital on a platform where
+        that is another name: the clash is reported only when it
+        involves THAT name."""
+        names = ["HUB1", "hub1", "agg"]
+        renames = {"HUB1": "x1", "agg": "x1"}
+        assert fused_targets(names, renames, [], involving=["hub1"]) == {"x1": ["HUB1", "agg"]}
+        assert fused_targets(
+            names, renames, [], involving=["hub1"], fold_source=False,
+        ) == {}
+        assert fused_targets(
+            names, renames, [], involving=["HUB1"], fold_source=False,
+        ) == {"x1": ["HUB1", "agg"]}

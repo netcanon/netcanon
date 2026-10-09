@@ -204,3 +204,64 @@ class TestModelTranslationServedByEmbeddedServer:
 
         assert status == 422
         assert refused["detail"][0]["type"] == "string_unicode"
+
+    def test_a_ports_hardware_stays_or_moves_and_a_bad_map_name_is_a_422(
+        self, tmp_path: Path,
+    ) -> None:
+        """Server behaviour a client of the embedded server sees, on
+        RouterOS, where a port has a factory name beside its own:
+        without devices an entry NAMES the port (the output finds it
+        by the factory name it always had); with both devices declared
+        the hardware moves, a port the operator named keeps that name,
+        and the plan says where its hardware is.  And a name in a
+        rename map that cannot be written back is a 422."""
+        app = create_app(_settings(tmp_path))
+        port = _free_port()
+        routeros = (
+            "/interface ethernet\n"
+            'set [ find default-name=ether1 ] comment="wan"\n'
+            'set [ find default-name=ether2 ] name=core-a comment="core A"\n'
+            "/ip address\n"
+            "add address=192.0.2.2/30 interface=ether1\n"
+            "add address=10.0.0.1/24 interface=core-a\n"
+        )
+        base = {
+            "source": "mikrotik_routeros", "target": "mikrotik_routeros", "raw_text": routeros,
+        }
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=FakeCollector(output="! noop\n"),
+        ):
+            server = ServerThread(app, port=port, log_level="critical")
+            server.start()
+            try:
+                server.wait_ready(timeout=10.0)
+                named = _post(port, "/api/v1/migration/plan", {
+                    **base, "port_rename_map": {"ether1": "WAN"},
+                })
+                moved = _post(port, "/api/v1/migration/plan", {
+                    **base,
+                    "source_profile": "mikrotik_routeros/CRS310-8G+2S+",
+                    "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+                })
+                status, refused = _post_raw(
+                    port, "/api/v1/migration/plan",
+                    b'{"source":"aruba_aoss","target":"aruba_aoss","raw_text":"x",'
+                    b'"port_rename_map":{"1":"\\ud800"}}',
+                )
+            finally:
+                server.stop()
+                server.join(timeout=5.0)
+
+        assert 'set [ find default-name=ether1 ] name=WAN comment="wan"' in named["rendered"]
+        assert named["port_mapping_plan"] is None
+
+        plan = moved["port_mapping_plan"]
+        assert 'set [ find default-name=sfp-sfpplus1 ] comment="wan"' in moved["rendered"]
+        assert 'set [ find default-name=sfp-sfpplus2 ] name=core-a' in moved["rendered"]
+        assert plan["labelled_ports"] == {"core-a": "ether2"}
+        assert plan["target_hardware"] == {"core-a": "sfp-sfpplus2"}
+        assert moved["status"] == "completed"
+
+        assert status == 422
+        assert refused["detail"][0]["loc"] == ["body", "port_rename_map"]

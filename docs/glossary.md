@@ -179,6 +179,19 @@ by concern and listed alphabetically within each section.
   instead.
 - **Fused** — a target port that more than one source port ended on.
   Positional mapping never produces one; an operator override can.
+- **Factory name / labelled port** — RouterOS keeps a port's factory
+  name (`ether2`, its hardware identity) beside the name an operator
+  gave it (`core-a`). A *labelled port* is one with such a name. It is
+  paired by its factory name and goes by the operator's name
+  everywhere else. An entry of a rename map NAMES a port; only a
+  request that declares the target device can MOVE one onto other
+  hardware.
+- **Landed off-target** — a logical name nobody decided that the
+  name-shape translator gave a port-shaped name the declared target
+  does not list. Kept, reported, and in need of a decision.
+- **Stale next hop** — a static route left naming, as next hop, an
+  interface that was renamed or dropped, because the next hop was not
+  exactly that interface's name.
 - **Capture claim** — a committed real capture plus the exact
   deployment it is of. The only source of a `capture` evidence grade
   for a model family, granted only where a deployment matches exactly.

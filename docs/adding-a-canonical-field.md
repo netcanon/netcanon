@@ -314,16 +314,24 @@ list — a place missing from it is a name the check never looks at,
 and a place missing from the rename pass is a name that stays behind
 when its port moves.
 
-Two tests hold you to it.  `test_port_name_universe.py` asserts that
-the rename pass moves every name the collector lists; and, because
-two lists that agree can both be incomplete, it exchanges two port
-names on every codec's committed captures and fails for any value
-of the rendered output that did not follow.  If your field is one a
-renderer writes out and no capture exercises it, add a small config
-to that module's `TestShapesNoCaptureHas`.  (A name that follows a
-port without being resolved itself — RouterOS's factory name,
-`interfaces[].default_name` — is the worked example of a field that
-was missed.)
+Two tests hold you to it, both in `test_port_name_universe.py`.  One
+asserts that the rename pass moves every name the collector lists.
+The other, because two lists that agree can both be incomplete, sends
+port names to one another on the committed captures and fails for a
+value of the re-parsed output that did not follow.  That experiment
+reaches your field only if a committed capture puts a port name in it
+and the codec's parser reads it back — so add the field to that
+module's table of places (`_PLACES`), and, unless
+`TestWhatTheExperimentReaches` then shows a capture catching it, a
+small config to `_SMALL_CONFIGS`.  The table is checked against the
+sweep, so a place in one and not the other fails.
+
+A field that says *which hardware* a port is, rather than referring
+to a port by name, is a different thing and does not go in the sweep:
+RouterOS's factory name (`interfaces[].default_name`) is the worked
+example.  Rewritten with the port's name it broke every entry that
+merely names a port; see "A port's hardware identity is not a
+reference to it" in `ARCHITECTURE.md`.
 
 ### Per-vendor quirks go in codec code, not canonical
 

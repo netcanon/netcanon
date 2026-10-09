@@ -117,6 +117,11 @@ class ArubaAOSCXCodec(CodecBase):
     )
     output_extension: ClassVar[str] = "cfg"
 
+    #: AOS-CX names are numbers and fixed lower-case words (``lag1``,
+    #: ``vlan10``, ``mgmt``): another case is never another interface.
+    #: See ``CodecBase.port_names_case_sensitive``.
+    port_names_case_sensitive: ClassVar[bool] = False
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="aruba_aoscx",
         vendor_id="aruba_aoscx",

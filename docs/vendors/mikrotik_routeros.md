@@ -160,14 +160,29 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   parser captures both `name` and `default-name`, and the renderer
   emits `set [ find default-name=X ] ...` lookup syntax so the
   config remains valid even if port enumeration changes between
-  device replacements.  When a port is renamed or moved by a
-  translation — by an entry of `port_rename_map`, or by pairing two
-  declared device models — the factory name moves with it: the
-  output looks the port up on the TARGET by the target's own factory
-  name.  A port you had named keeps your name; give the factory name
-  as the key of a `port_rename_map` entry to move or drop it.
+  device replacements.  An entry of `port_rename_map` gives a port a
+  NAME: `{"ether1": "WAN"}` renders
+  `set [ find default-name=ether1 ] name=WAN`, and the port is still
+  found by the factory name it had.  The key of an entry is the name
+  the config uses for the port — yours, where you gave one; an entry
+  keyed by the factory name of a port you named matches nothing and is
+  ignored with a warning.
+- **Moving a port onto other hardware needs both device models
+  declared** (API: `source_profile` / `target_profile`).  Then a
+  port's hardware goes to the port it was paired with and a name you
+  gave it is kept; an entry whose target is a port of the declared
+  target moves the port there, and one whose target is not names it.
+  Nothing else can tell a move from a name: `sfp1` is a port of some
+  RouterOS models and not of others.  Onto another vendor a port you
+  named takes the name of the port it was paired with.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **`gateway=<interface>` routes** follow the interface when it is
-  renamed, and are removed with it when it is dropped.
+  renamed, and are removed with it when it is dropped.  A list of
+  gateways (`gateway=ether1,ether2`) and a routing-table suffix
+  (`ether3@main`) are left as written.
+- **A value wrapped onto the line after its key** (`name=\` and the
+  name on the next line, as a long `export` line can break) is not
+  read: such a port is known by its factory name.
 - **6.x vs 7.x grammar drift** — RouterOS 7 reorganises some
   sections (`/snmp` vs `/snmp community`, `/routing/bgp/instance`
   vs `/routing bgp instance`); the parser handles both.

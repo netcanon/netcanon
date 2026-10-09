@@ -283,6 +283,12 @@ below say why each is there:
   stanza; or it is a Catalyst or a FortiGate, whose configs list
   interfaces their profile does not.  Map or drop such a name by
   hand in `port_rename_map`.
+
+  On RouterOS the key of an entry is the name the CONFIG uses for a
+  port.  A port you named `core-a` is `core-a` in the plan and in
+  your map (`labelled_ports` says which port of the model it is); an
+  entry keyed by its factory name matches nothing and is ignored with
+  a warning.
 * **`displaced`** — a name nobody decided that the name-shape
   translator would have put on a name another interface ends on, or
   on a port of the target: a name from either list above, or a
@@ -290,19 +296,40 @@ below say why each is there:
   on one name is one's config merged into the other's, so the name
   was **dropped** instead.  Give it a target of its own in
   `port_rename_map`, or map it to `null`.
+* **`landed_off_target`** — a logical name nobody decided (a VLAN
+  interface or an aggregate, on a FortiGate usually) that the
+  name-shape translator gave a port-shaped name the target device
+  does not have.  Nothing shares that name, so it was **kept** — with
+  its config on a port that does not exist.  Give it a target in
+  `port_rename_map`, or map it to `null`.
 
-If the plan lists `lost_routes`, `lost_dhcp_pools`, `shrunk_lags`,
-`lost_tracking` or `lost_vtep_sources`, a dropped port took something
-with it: a static route or a DHCP pool that names a dropped port is
-removed whole, an interface that stays loses the VRRP track entry
-that named it, and a VTEP loses the source interface it was bound to.
+The message can also say **"N static route(s) still name, as next
+hop, an interface that was renamed or dropped"**.
+`port_mapping_plan.stale_next_hops` lists their destinations.  A next
+hop that is exactly an interface's name follows the interface; a
+RouterOS list of gateways (`gateway=ether1,ether2`), a routing-table
+suffix (`ether3@main`) and, across vendors, a Junos unit
+(`next-hop et-0/0/24.0`) are left as written.  Nothing in
+`port_rename_map` clears this: correct the route in the output.
+
+If the plan lists `emptied_lags`, `shrunk_lags`, `lost_routes`,
+`lost_dhcp_pools`, `lost_tracking` or `lost_vtep_sources`, a dropped
+port took something with it: a LAG loses a dropped member (and may be
+left with none), a static route or a DHCP pool that names a dropped
+port is removed whole, an interface that stays loses the VRRP track
+entry that named it, and a VTEP loses the source interface it was
+bound to.
 
 If the plan lists `off_target`, one of your targets is not a name the
 target model lists.  That is allowed — but check it is not another
 spelling of a port that is already taken.  Only letter case and
 surrounding space are understood; `Gi1/0/1` is not recognised as
 `GigabitEthernet1/0/1`, and the device would put both source ports on
-that one interface.
+that one interface.  On a RouterOS target a target that is not a port
+of the declared device is a NAME for the port, not a place: the
+port's hardware goes where the pairing put it
+(`port_mapping_plan.target_hardware`), and the name is not listed
+here.
 
 The message can also say **"N target port(s) received more than one
 source port"**.  `port_mapping_plan.fused` names them.  Only your own
@@ -310,8 +337,13 @@ source port"**.  `port_mapping_plan.fused` names them.  Only your own
 or an entry pointing at a name the pairing already used (on a
 same-vendor pair, keeping an unplaced port under its old name can do
 exactly that).  A target is read as the target device spells it, so
-on a platform without case `1/a1` is the port `1/A1`.  Naming the
-ports again does not clear it; give each a target of its own.
+on a platform without case `1/a1` is the port `1/A1` — and on Junos,
+VyOS or OPNsense, which name every interface themselves in lower
+case, `GE-0/0/2` is the port `ge-0/0/2`.  On RouterOS two ports can
+also be fused without sharing a name: a port that keeps a name of its
+own is on the hardware it was paired with, and another port sent to
+that hardware is on it too.  Naming the ports again does not clear
+it; give each a target of its own.
 
 **"Port mapping was not made"** means no pairing was possible at all —
 one side is a profile that lists no ports, or lists a port name twice.

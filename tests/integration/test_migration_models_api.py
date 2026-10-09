@@ -706,3 +706,123 @@ class TestRequestErrors:
             target_profile="aruba_aoss/NOPE",
         ))
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# A port's factory name (RouterOS), through the API
+# ---------------------------------------------------------------------------
+
+#: A real CRS310-8G+2S+ export.
+CAPTURE_CRS310 = (
+    REPO_ROOT / "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc"
+).read_text(encoding="utf-8")
+
+_ROUTEROS_NAMED = """/interface ethernet
+set [ find default-name=ether1 ] comment="wan"
+set [ find default-name=ether2 ] name=core-a comment="core A"
+/ip address
+add address=192.0.2.2/30 interface=ether1
+add address=10.0.0.1/24 interface=core-a
+"""
+
+
+def _find_lines(job: dict) -> list[str]:
+    return [line for line in job["rendered"].splitlines() if "find default-name=" in line]
+
+
+class TestAPortsFactoryName:
+    """An entry of ``port_rename_map`` on RouterOS gives a port a
+    name, and the output finds the port by the factory name it always
+    had.  Only a request that declares the target device can move a
+    port onto other hardware."""
+
+    @pytest.mark.parametrize("path", ["/plan", "/plan/ports", "/render"])
+    def test_without_devices_an_entry_names_a_port(self, client: TestClient, path: str) -> None:
+        """What this request rendered before the feature existed, on a
+        committed capture: pinned so that the shared translator cannot
+        move it again."""
+        job = client.post(f"/api/v1/migration{path}", json={
+            "source": "mikrotik_routeros", "target": "mikrotik_routeros",
+            "raw_text": CAPTURE_CRS310,
+            "port_rename_map": {"ether1": "uplink-to-core"},
+        }).json()
+        assert job["status"] == "completed", path
+        assert job["port_renames"] == {"ether1": "uplink-to-core"}
+        (line,) = [text for text in _find_lines(job) if "uplink-to-core" in text]
+        assert line.startswith("set [ find default-name=ether1 ] name=uplink-to-core ")
+        assert job["port_mapping_plan"] is None
+
+    def test_with_both_devices_declared_the_hardware_moves(self, client: TestClient) -> None:
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "mikrotik_routeros", "target": "mikrotik_routeros",
+            "raw_text": CAPTURE_CRS310,
+            "source_profile": "mikrotik_routeros/CRS310-8G+2S+",
+            "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+        }).json()
+        assert job["status"] == "completed"
+        assert [line.split("default-name=")[1].split(" ")[0] for line in _find_lines(job)] == [
+            *(f"sfp-sfpplus{n}" for n in range(1, 9)), "sfp28-1", "sfp28-2",
+        ]
+
+    def test_a_port_the_operator_named_goes_by_that_name_in_the_plan(
+        self, client: TestClient,
+    ) -> None:
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "mikrotik_routeros", "target": "mikrotik_routeros",
+            "raw_text": _ROUTEROS_NAMED,
+            "source_profile": "mikrotik_routeros/CRS310-8G+2S+",
+            "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+        }).json()
+        plan = job["port_mapping_plan"]
+        assert plan["labelled_ports"] == {"core-a": "ether2"}
+        assert plan["target_hardware"] == {"core-a": "sfp-sfpplus2"}
+        assert sorted(job["source_ports"]) == ["core-a", "ether1"]
+        assert job["port_renames"] == {"ether1": "sfp-sfpplus1"}
+        assert (
+            'set [ find default-name=sfp-sfpplus2 ] name=core-a comment="core A" disabled=no'
+            in job["rendered"]
+        )
+        # The fields this adds are data on every plan.
+        assert (plan["landed_off_target"], plan["stale_next_hops"]) == ({}, [])
+
+    def test_onto_another_vendor_it_takes_the_name_of_its_paired_port(
+        self, client: TestClient,
+    ) -> None:
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "mikrotik_routeros", "target": "arista_eos",
+            "raw_text": _ROUTEROS_NAMED,
+            "source_profile": "mikrotik_routeros/CRS310-8G+2S+",
+            "target_profile": "arista_eos/DCS-7050SX-64",
+        }).json()
+        assert job["port_renames"] == {"ether1": "Ethernet1", "core-a": "Ethernet2"}
+        assert "interface Ethernet2" in job["rendered"] and "core-a" not in job["rendered"]
+        assert job["status"] == "completed"
+
+
+class TestEachNameKeyedMap:
+    @pytest.mark.parametrize(
+        "field",
+        ["port_rename_map", "local_user_rename_map",
+         "snmp_community_rename_map", "snmpv3_user_rename_map"],
+    )
+    @pytest.mark.parametrize(
+        "entry", [b'{"\\ud800":"x"}', b'{"x":"\\ud800"}'], ids=["key", "value"],
+    )
+    def test_a_name_that_cannot_be_written_back_is_refused_in_every_one(
+        self, client: TestClient, field: str, entry: bytes,
+    ) -> None:
+        """All four maps are echoed on the job.  The check is one
+        validator over four fields, and each field is one argument of
+        its decorator."""
+        raw = (
+            b'{"source":"aruba_aoss","target":"aruba_aoss","raw_text":"vlan 1\\n","'
+            + field.encode() + b'":' + entry + b"}"
+        )
+        resp = client.post(
+            "/api/v1/migration/plan", content=raw,
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 422
+        (error,) = resp.json()["detail"]
+        assert error["loc"] == ["body", field]
+        assert "valid Unicode text" in error["msg"]

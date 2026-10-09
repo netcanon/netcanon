@@ -125,9 +125,10 @@ class OPNsenseCodec(CodecBase):
     # Coverage locked in by ``tests/unit/migration/
     # test_local_users_wire_through.py``.
 
-    #: BSD device names and OPNsense's assigned names are case-sensitive.
+    #: BSD device names and OPNsense's assigned names are given by the
+    #: system, in lower case: ``IGB0`` is never a second interface.
     #: See ``CodecBase.port_names_case_sensitive``.
-    port_names_case_sensitive: ClassVar[bool] = True
+    port_names_case_sensitive: ClassVar[bool] = False
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="opnsense",

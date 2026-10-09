@@ -120,6 +120,11 @@ class DellOS10Codec(CodecBase):
     )
     output_extension: ClassVar[str] = "cfg"
 
+    #: OS10 names are fixed lower-case words and numbers: another case is
+    #: never another interface.
+    #: See ``CodecBase.port_names_case_sensitive``.
+    port_names_case_sensitive: ClassVar[bool] = False
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="dell_os10",
         vendor_id="dell_os10",

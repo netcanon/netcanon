@@ -111,6 +111,10 @@ class CiscoNXOSCodec(CodecBase):
     )
     output_extension: ClassVar[str] = "cfg"
 
+    #: NX-OS reads an interface name in any letter case as the one interface.
+    #: See ``CodecBase.port_names_case_sensitive``.
+    port_names_case_sensitive: ClassVar[bool] = False
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="cisco_nxos",
         vendor_id="cisco_nxos",

@@ -131,21 +131,37 @@ translation is additionally checked, on the jobs of
 `test_run_plan_with_models.py`, in two ways: for a hardware port
 sharing a target name with another name (the grouping recomputed in
 the test), and — reading the rendered output back with the target
-codec — for a name that moved and is still there, or an interface
-carrying the addresses of two.  The cross-mesh audit below does not
-exercise model-to-model mapping: it runs without declared devices.
+codec — for an interface that is not on the port the job reports, a
+port in the output the job does not report, a name that moved and is
+still there, or an interface carrying the addresses of two.  Each of
+those checks is also handed a defective job and required to fail: a
+check nobody has seen fail is not known to check anything.  The
+cross-mesh audit below does not exercise model-to-model mapping: it
+runs without declared devices.
 
 **A renamed port must take everything with it.**  The port
 translator rewrites port names in a list of places.  A list cannot
 show that it is complete, and a test that walks the same list agrees
 with it — a place nobody listed stays invisible to both.  So
-`test_port_name_universe.py` uses no list.  On every committed
-capture of every codec it exchanges two port names through the real
-translator and renderer, and compares the output, parsed again, with
-the unswapped output in which the two names are exchanged.  Whatever
-did not follow is a place the translator does not reach, in whatever
-field it lives — including one added later.  It found RouterOS's
-factory port name at the first run.
+`test_port_name_universe.py` also runs an experiment that needs no
+list.  On the committed captures it sends port names to one another
+through the real translator and renderer, and compares the output,
+parsed again, with the unmoved output in which the same names are
+sent to one another.
+
+What that reaches is narrower than "no list" suggests, and the
+module tests it rather than asserting it.  It reaches a field only
+where a committed capture puts a moved name in it *and* the codec's
+own parser reads the field back from its own rendering; the captures
+that have no two ports to exchange are pinned by name, so the
+experiment cannot shrink unnoticed.  The translator is then broken at
+each place in turn: which places a capture catches is pinned, and
+each of the others has a small config in the module that does.  It
+moves names the device already has, so what happens to a name that
+is *new* — a RouterOS port an operator calls `WAN` — is pinned by
+hand beside it.  And it runs twice: without devices declared, where
+a port's hardware identity must stand still, and with the device
+declared on both sides, where it must follow.
 
 ### Layer 2: Integration tests
 

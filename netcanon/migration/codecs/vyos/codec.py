@@ -117,9 +117,10 @@ class VyOSCodec(CodecBase):
     )
     output_extension: ClassVar[str] = "conf"
 
-    #: Linux interface names are case-sensitive.
+    #: VyOS interface names follow fixed lower-case patterns (``eth0``,
+    #: ``bond0``): ``ETH1`` is never a second interface.
     #: See ``CodecBase.port_names_case_sensitive``.
-    port_names_case_sensitive: ClassVar[bool] = True
+    port_names_case_sensitive: ClassVar[bool] = False
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="vyos",

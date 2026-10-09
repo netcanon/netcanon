@@ -256,18 +256,29 @@ class CodecBase(ABC):
     #: from the affected codec classes when shipped.
     unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset()
 
-    #: Letter case is part of an interface name on this platform:
-    #: ``DMZ`` and ``dmz`` are two interfaces (FortiOS, RouterOS, the
-    #: Linux- and BSD-based platforms, Junos).  ``False`` — the default —
-    #: means the device reads the two as one (IOS, EOS, AOS-S: ``1/a1``
-    #: is the port ``1/A1``).
+    #: Whether a name that differs from an interface's only in letter
+    #: case can be ANOTHER interface on this platform.
+    #:
+    #: ``True`` where an operator chooses interface names as free text
+    #: and the platform keeps them apart by case: FortiOS (``DMZ``
+    #: beside a port ``dmz``), RouterOS.
+    #:
+    #: ``False`` where the device reads two spellings as one interface
+    #: (IOS, EOS, AOS-S: ``1/a1`` is the port ``1/A1``) — and also
+    #: where every interface name is chosen by the system and is
+    #: lower-case (Junos, VyOS, OPNsense).  Names there are
+    #: case-sensitive, and that is the wrong question: ``GE-0/0/2`` is
+    #: never a second interface, it is ``ge-0/0/2`` misspelt, and has
+    #: to be seen as the same port.
     #:
     #: Read by model-to-model port mapping, which compares the name
-    #: every interface ended on.  Folding case on a platform that has
-    #: it merges two interfaces; not folding on one that lacks it lets
-    #: an override hide behind its spelling.  Where nothing is known the
-    #: default folds: two spellings are then reported as one port, which
-    #: an operator can see and overrule, rather than passed in silence.
+    #: every interface ended on.  There is no safe default.  ``False``
+    #: on a platform where case tells two interfaces apart merges an
+    #: operator's own interface into a port, in a job that reports
+    #: success; ``True`` on one where it does not lets an override pass
+    #: beside the port it misspells.  So every codec states its own
+    #: (``test_the_codecs_say_which_they_are`` fails for one that
+    #: leaves it to the value below).
     port_names_case_sensitive: ClassVar[bool] = False
 
     def __init_subclass__(cls, **kwargs: Any) -> None:

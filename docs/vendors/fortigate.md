@@ -203,12 +203,14 @@ and 100E physical hardware.
 - **Declaring a FortiGate as the source device** — with both devices
   declared on the API, a correctly declared FortiGate is still
   `partial`: pseudo-interfaces the codec does not classify come back
-  as off-inventory, and onto another vendor's device the stock
-  `fortilink` aggregate — which the ordinary translation would turn
-  into the first port of the target — is dropped and reported
-  (`displaced`) instead.  Name it in `port_rename_map` to keep it.
-  FortiOS names are case-sensitive, and are compared that way: `DMZ`
-  beside a port `dmz` is its own interface.  See
+  as off-inventory, and the stock `fortilink` aggregate — which the
+  ordinary translation gives a port-shaped name — is dropped and
+  reported (`displaced`) where that name is a port of the target, and
+  listed (`landed_off_target`) where it is not.  A VLAN interface the
+  codec reads as a physical port is treated the same way.  Name such
+  an interface in `port_rename_map` to decide it.
+  FortiOS interface names are an operator's free text and are kept
+  apart by case: `DMZ` beside a port `dmz` is its own interface.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **`set vdom`** scoping — Netcanon parses single-VDOM configs
   cleanly; multi-VDOM scoping is a known gap (deferred follow-up).

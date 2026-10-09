@@ -89,7 +89,9 @@ timestamp if your timezone matters for an audit.
   now written ASCII-escaped — same status, same `Content-Type`, and it
   parses to the same JSON — with a `NaN` or `Infinity` echoed as text
   so the body is always strict JSON, and such a rename-map name is
-  refused with a 422.
+  refused with a 422 — in any of the four name-keyed rename maps, and
+  whether or not the name would have been echoed: a request whose
+  entry matched nothing in the config used to be answered.
 - **One unreadable target-profile file stopped the application.**  A
   file under `target_profiles/` that is not UTF-8, is a directory, or
   has a key that is not a string is now logged and skipped, like one
@@ -98,7 +100,11 @@ timestamp if your timezone matters for an audit.
   port translator removed a name the target cannot express by
   matching it AFTER renaming, which also removed a different port that
   had just been renamed onto that name.  Such names are now removed
-  before anything is renamed.  No committed capture was affected.
+  before anything is renamed, and the warning that called the two
+  ports "merged" is no longer raised for a name that was dropped.  No
+  committed capture is affected unless the request's own
+  `port_rename_map` renames a port onto a name the target cannot
+  express.
 - **The ports fit-check banner reappeared on the VLAN and user panes.**
   Editing an override on another pane refreshed the summary, which
   re-rendered the ports banner there.  It is ports-pane only again.
@@ -128,7 +134,7 @@ timestamp if your timezone matters for an audit.
     name in the config that is not a port of the declared source, what
     each declaration resolved to, and how the run came out
     (`unresolved_ports`, `displaced`, `fused`, `off_target`,
-    `emptied_lags`).
+    `landed_off_target`, `stale_next_hops`, `emptied_lags`).
   - A source access or uplink port with no place on the target is
     **dropped and reported** — never moved onto a spare port of another
     kind, and never left in the output under its old name, where on a
@@ -147,30 +153,50 @@ timestamp if your timezone matters for an audit.
     already assigned.  The finished run is checked for that over
     every name the config references, and such a name is dropped and
     reported (`displaced`) instead of being merged into another port.
+    A logical interface that is given a port-shaped name the target
+    does NOT list collides with nothing and is not dropped; it is
+    listed (`landed_off_target`) and asks for a decision, since its
+    config is on a port the device does not have.
     Two logical interfaces the ordinary translation puts on one name
     (two loopbacks, on a target with one loopback form) are still
     only warned about, as before.
-  - Names are compared as each platform compares them.  On AOS-S or
-    IOS `1/a1` is the port `1/A1`; on FortiOS, RouterOS, Junos, VyOS
-    and OPNsense `DMZ` and `dmz` are two interfaces.  Each codec
-    states which its platform is.
+  - Names are compared as each platform tells interfaces apart.  On
+    AOS-S or IOS `1/a1` is the port `1/A1`.  On FortiOS and RouterOS,
+    where an operator chooses interface names as free text, `DMZ` and
+    `dmz` are two interfaces.  On a platform that names every
+    interface itself in lower case (Junos, VyOS, OPNsense) another
+    case is the same port misspelt, and is treated as that port.
+    Each codec states which its platform is.
   - Between two configs of the same codec a sub-interface
     (`ge-0/0/0.54`) follows its parent port.
-  - On RouterOS a port is found on the device by its factory name,
-    and that name moves with the port.  A port the operator renamed
-    is paired by its factory name and keeps the operator's name.
-  - A static route whose next hop is an interface (RouterOS
-    `gateway=ether1`, Junos `next-hop et-0/0/24.0`) follows that
-    interface.
+  - RouterOS keeps a port's factory name beside the name an operator
+    gives it, and finds a port on the device by the first.  With both
+    devices declared a port's HARDWARE goes to the port it was paired
+    with, and a name the operator gave it is kept.  An entry of
+    `port_rename_map` whose target is a port of the declared target
+    moves the port there; one whose target is not gives the port that
+    name, and the hardware still follows the pairing.  Onto another
+    vendor, where a port has one name, a port the operator named
+    takes the name of the port it was paired with.  Such a port goes
+    by the name the config uses everywhere — in the plan, in the
+    job's lists, as the key of a map entry — and the plan says which
+    port of the model it is (`labelled_ports`) and where its hardware
+    ended (`target_hardware`).  Without devices declared nothing
+    about a factory name changes: an entry names the port, as it
+    always has.
+  - A static route left naming, as next hop, an interface that moved
+    or was dropped is listed (`stale_next_hops`), and the job is
+    `partial` until the route is corrected by hand.
   - What a dropped port takes with it is listed: a LAG that lost
     members, a static route or DHCP pool that named the port, a VRRP
     track entry on an interface that stays, and a VXLAN source
     interface.
-  - A run that leaves a name dropped, off-inventory or displaced, or a
-    management port kept, which the operator has not decided is
-    `partial` rather than `completed`; so is one where the operator's
-    own map points two ports at one name, and one where no pairing
-    could be made at all.
+  - A run that leaves a name dropped, off-inventory or displaced, a
+    management port kept, or a logical name on a port the target
+    does not list, which the operator has not decided is `partial`
+    rather than `completed`; so is one where the operator's own map
+    points two ports at one name, one that leaves a route naming a
+    port that moved, and one where no pairing could be made at all.
   - An entry in `port_rename_map` always wins over the pairing, on
     `/plan` and on every per-pane endpoint.  Where the target platform
     has no letter case its target is read as the target device spells
@@ -217,7 +243,9 @@ timestamp if your timezone matters for an audit.
   SVI, loopback, tunnel or other logical interface, and a name only a
   route or a DHCP pool mentions unless the codec recognises it as a
   port; a sub-interface, and a pseudo-interface the codec does not
-  classify, is still listed.
+  classify, is still listed.  A RouterOS port the operator named is
+  listed by that name — the one the config uses, and the key an entry
+  of `port_rename_map` has to carry.
   `port_renames` records only names that changed, so for a same-vendor
   translation a client had no way to list the ports at all.
 - **Provenance on target profiles.**  Optional fields record what is
@@ -260,6 +288,20 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **A static route whose next hop is the name of an interface follows
+  that interface — in every translation, not only one that declares
+  devices.**  Some parsers keep such a next hop in the route's
+  gateway: RouterOS `gateway=ether1`, Junos `next-hop et-0/0/24.0`.
+  When the interface is renamed — by an entry of `port_rename_map`,
+  or by the shape of its name, so with no port map at all — the next
+  hop is rewritten with it, and when the interface is dropped the
+  route is removed.  It used to be left naming an interface the
+  output no longer had.  A next hop that is exactly an interface's
+  name follows onto any target.  A Junos unit (`et-0/0/24.0`) follows
+  only between two Junos configs, since the suffix means nothing
+  elsewhere; a RouterOS list of gateways (`gateway=ether1,ether2`) and
+  a routing-table suffix (`ether3@main`) are not followed.  No
+  committed capture has such a route.
 - **A reserved definitions sub-directory is now reserved only at the
   root.**  The device-definition loader skips `target_profiles/` (and
   now `model_families/`) because their YAML belongs to another schema.
@@ -324,7 +366,24 @@ timestamp if your timezone matters for an audit.
   translation — which leaves a name it does not recognise under its
   old name (IOS-XE) and drops one it would fold into its port
   (Junos).  Some firewall pseudo-interfaces the source codec does not
-  classify are reported as off-inventory in the same way.
+  classify are reported as off-inventory in the same way, and a
+  FortiGate's stock `fortilink` aggregate is reported as displaced or
+  as a logical name on a port the target does not list.
+- **A next hop that is not exactly an interface's name is not
+  followed.**  A RouterOS route with several gateways
+  (`gateway=ether1,ether2`) or a routing-table suffix, and — across
+  vendors — a Junos unit next hop, keep the name they had.  With
+  devices declared the plan lists such a route (`stale_next_hops`) and
+  the job is `partial`; without, nothing is reported.
+- **A non-zero unit of a Junos management port follows its port under
+  a name Junos does not accept.**  `me0 unit 5` comes out as
+  `set interfaces me0.5 unit 0 ...`.  Map it by hand.
+- **On RouterOS only a declared target device can move a port onto
+  other hardware.**  Without one, an entry of `port_rename_map` names
+  the port and the output still finds it by the factory name it had.
+  The RouterOS codec also does not read a value an export wraps onto
+  the line after its key (`name=\` and the name on the next line), so
+  a port named that way is known by its factory name.
 - **An override target is understood by case and spacing only.**  An
   abbreviation the device would accept (`Gi1/0/1`) is not recognised
   as the port it names: it is reported as a target the model does not

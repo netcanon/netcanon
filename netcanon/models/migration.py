@@ -644,6 +644,11 @@ class MigrationJob(BaseModel):
     #: pseudo-interface the codec's classifier does not know, is
     #: still listed.
     #:
+    #: These are the names the CONFIG uses.  On RouterOS a port an
+    #: operator named is listed by that name and not by its factory
+    #: name: it is the one every other line refers to, and the key an
+    #: entry of ``port_rename_map`` has to carry.
+    #:
     #: :attr:`port_renames` holds only names that CHANGED, so on a
     #: same-vendor translation it is empty and the rename modal's
     #: ports pane shows nothing.  This field is the data that fix
@@ -656,7 +661,8 @@ class MigrationJob(BaseModel):
     #: source port that had no place on the target, every name that is
     #: not a port of the declared source, what each declaration
     #: resolved to, and how the run came out (``unresolved_ports``,
-    #: ``displaced``, ``fused``).  ``None`` when no models were
+    #: ``displaced``, ``fused``, ``landed_off_target``,
+    #: ``stale_next_hops``).  ``None`` when no models were
     #: declared, and also when they were but the job did not render —
     #: a parse failure or a refused device-class pair.  Structured so
     #: a client never has to parse :attr:`warnings` for it.

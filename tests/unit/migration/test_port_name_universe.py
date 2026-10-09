@@ -3,42 +3,57 @@
 The port translator rewrites port names in a list of places, and the
 check that model-to-model mapping makes on a finished run reads names
 from a list of places.  Both lists were written by reading the
-canonical tree.  Three times in one change a place was missing from
-them, and each time a port moved while something that named it stayed
-behind -- the last being RouterOS's factory name, which the renderer
-uses to find the port on the device: every moved port came out as
-"find the port with the OLD name and call it the new one", in a job
-that reported success.
+canonical tree, and a place was missing from them more than once while
+this feature was built: a port moved while something that named it
+stayed behind, in a job that reported success.
 
-A test that lists the places cannot find a place nobody listed.  This
-one lists none.  It exchanges two port names through the real
-translator and the real renderer and compares what comes out:
+A test that walks such a list cannot find a place nobody listed.  The
+experiment here walks none.  It sends port names to one another
+through the real translator and the real renderer, and compares what
+comes out:
 
-    the output of the swapped run, parsed again
+    the output of the moved run, parsed again
         must equal
-    the output of the unswapped run, parsed again, with the two names
-    exchanged in every text value it holds.
+    the output of the unmoved run, parsed again, with the same names
+    sent to one another in every text value it holds.
 
-A value that did not follow is a place the translator does not reach
--- whatever field it lives in, on whichever codec, including a field
-added after this was written.  Both sides go through the same render
-and the same parse, so anything a codec loses or normalises on a round
-trip cancels out.
+**What it reaches, and what it does not.**  Said here once, and held
+by tests below rather than by this paragraph:
 
-It runs over every committed real capture of every codec, and over a
-few small configs for shapes no capture has (a next hop that is an
-interface; a port an operator renamed).
+* It reaches a field only where a committed capture puts one of the
+  moved names in it AND the codec's own parser reads the field back
+  from the codec's own rendering.  Both sides go through the same
+  render and the same parse, so what a codec loses on a round trip
+  cancels out -- and so does a name on a line its parser does not
+  read.  ``TestWhatTheExperimentReaches`` breaks the translator at
+  each place in turn and records which places the captures catch; the
+  others are caught by a small config written for the purpose.
+* It moves names the device already has, among ports of one name
+  shape.  It cannot see what happens to a name that is NEW -- a port
+  an operator calls ``WAN`` -- which is pinned by hand below.
+* It runs between two configs of one codec.
+
+**The one field that must NOT follow.**  RouterOS keeps a port's
+factory name (``default_name``) beside the name an operator gives it.
+Without devices declared, an entry of the rename map gives a port a
+NAME: the factory name is which hardware it is, and stays
+(``set [ find default-name=ether1 ] name=WAN``).  So the experiment
+without devices requires that field to stand still, and the one with
+devices declared -- where an entry whose target is a port of the
+declared target MOVES the port -- requires it to follow.
 """
 
 from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from netcanon.migration.canonical import port_names
 from netcanon.migration.canonical.intent import CanonicalIntent
 from netcanon.migration.canonical.port_names import (
     collect_hardware_port_names,
@@ -47,7 +62,11 @@ from netcanon.migration.canonical.port_names import (
 )
 from netcanon.migration.codecs.registry import get_codec
 from netcanon.migration.fixture_dirs import DIR_TO_CODEC_NAME
-from netcanon.services.migration_pipeline import run_plan_with_overrides
+from netcanon.models.port_inventory import Inventory, PhysicalPort
+from netcanon.services.migration_pipeline import (
+    run_plan_with_models,
+    run_plan_with_overrides,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -67,6 +86,10 @@ _CAPTURE_SUFFIXES = {".txt", ".cfg", ".xml", ".conf", ".rsc", ".set"}
 #: with whichever one sits at the same index.
 _RECORD_KEYS = ("name", "id", "destination", "network", "username")
 
+#: The field that says which HARDWARE a port is, as opposed to what
+#: the port is called.  See the module docstring.
+_HARDWARE_IDENTITY = ("default_name",)
+
 
 def _capture_files() -> list[tuple[str, Path]]:
     found: list[tuple[str, Path]] = []
@@ -84,34 +107,42 @@ def _capture_files() -> list[tuple[str, Path]]:
 CAPTURES = _capture_files()
 
 
+def _capture_id(path: Path) -> str:
+    return f"{path.parent.name}/{path.name}"
+
+
 # ---------------------------------------------------------------------------
-# The oracle: exchange two names in a parsed tree, with no list of fields
+# The oracle: send names to one another in a parsed tree, with no list of fields
 # ---------------------------------------------------------------------------
 
 
-def _swap_text(value: str, a: str, b: str) -> str:
-    """*value* with the port names *a* and *b* exchanged, when it IS
-    one of them -- or one of them with a numeric unit (``ge-0/0/1.0``).
-    Free text that merely mentions a port is left alone, as the
-    translator must leave it."""
-    for old, new in ((a, b), (b, a)):
-        if value == old:
-            return new
-        if value.startswith(old + ".") and value[len(old) + 1:].isdigit():
-            return new + value[len(old):]
+def _move_text(value: str, moves: dict[str, str]) -> str:
+    """*value* as *moves* sends it, when it IS one of the moved names
+    -- or one of them with a numeric unit (``ge-0/0/1.0``).  Free text
+    that merely mentions a port is left alone, as the translator must
+    leave it."""
+    if value in moves:
+        return moves[value]
+    port, dot, unit = value.rpartition(".")
+    if dot and unit.isdigit() and port in moves:
+        return moves[port] + dot + unit
     return value
 
 
-def _swap_tree(node: Any, a: str, b: str) -> Any:
+def _move_tree(node: Any, moves: dict[str, str], keep: tuple[str, ...] = ()) -> Any:
+    """*node* with every text value sent where *moves* sends it,
+    except under a key in *keep*."""
     if isinstance(node, str):
-        return _swap_text(node, a, b)
+        return _move_text(node, moves)
     if isinstance(node, dict):
         return {
-            (_swap_text(key, a, b) if isinstance(key, str) else key): _swap_tree(value, a, b)
+            (_move_text(key, moves) if isinstance(key, str) else key): (
+                value if key in keep else _move_tree(value, moves, keep)
+            )
             for key, value in node.items()
         }
     if isinstance(node, list):
-        return [_swap_tree(value, a, b) for value in node]
+        return [_move_tree(value, moves, keep) for value in node]
     return node
 
 
@@ -159,104 +190,293 @@ def _kind(codec: Any, name: str) -> str:
     return identity.kind if identity is not None else "unknown"
 
 
-def _pairs_to_swap(codec: Any, tree: CanonicalIntent) -> list[tuple[str, str]]:
-    """Up to three pairs of physical ports of one name shape.
+def _rotation(groups: dict[str, list[str]]) -> dict[str, str]:
+    """Each name of a group sent to the next name of its group."""
+    return {
+        name: names[(index + 1) % len(names)]
+        for names in groups.values() if len(names) >= 2
+        for index, name in enumerate(names)
+    }
+
+
+def _ports_to_move(codec: Any, tree: CanonicalIntent) -> dict[str, str]:
+    """Every physical port of each name shape, sent to the next port
+    of its shape.
 
     A port that has sub-interfaces in the tree is left out: without
     declared devices a unit is translated by the shape of its own
     name, apart from its port (a documented limit of that path; with
     devices declared it follows its port, which
-    ``test_run_plan_with_models.py`` pins).
+    ``test_run_plan_with_models.py`` pins).  So is a port an operator
+    named (RouterOS), which the config does not call by its hardware
+    name.
     """
     every = collect_port_names(tree)
     with_units = {
         name.rpartition(".")[0] for name in every
         if name.rpartition(".")[2].isdigit() and name.rpartition(".")[0]
     }
-    shapes: dict[str, list[str]] = defaultdict(list)
+    named = {
+        iface.name for iface in tree.interfaces
+        if iface.default_name and iface.default_name != iface.name
+    }
+    groups: dict[str, list[str]] = defaultdict(list)
     for name in collect_hardware_port_names(tree, classify=codec.classify_port_name):
-        if name not in with_units and _kind(codec, name) in ("physical", "breakout"):
-            shapes[re.sub(r"\d+", "#", name)].append(name)
-    return [(names[0], names[-1]) for names in shapes.values() if len(names) >= 2][:3]
+        if name in with_units or name in named:
+            continue
+        if _kind(codec, name) in ("physical", "breakout"):
+            groups[re.sub(r"\d+", "#", name)].append(name)
+    return _rotation(groups)
 
 
-def _what_did_not_follow(codec: Any, text: str, a: str, b: str) -> list[str]:
-    """Run *text* through the translator twice -- every hardware port
-    pinned to its own name, then with *a* and *b* exchanged -- and
-    return the values of the second output that are not the first
-    output's with the two names exchanged."""
+def _names_to_move(codec: Any, tree: CanonicalIntent) -> dict[str, str]:
+    """:func:`_ports_to_move`, and every LAG name of each shape sent to
+    the next LAG of its shape -- so the places that hold only a LAG's
+    name are moved too."""
+    groups: dict[str, list[str]] = defaultdict(list)
+    for lag in tree.lags:
+        if lag.name and _kind(codec, lag.name) == "lag":
+            groups[re.sub(r"\d+", "#", lag.name)].append(lag.name)
+    return {**_ports_to_move(codec, tree), **_rotation(groups)}
+
+
+def _what_did_not_follow(codec: Any, text: str, moves: dict[str, str]) -> list[str]:
+    """Run *text* through the translator twice, with no devices
+    declared -- every hardware port pinned to its own name, then with
+    *moves* -- and return the values of the second output that are not
+    the first output's with the names moved.  A port's hardware
+    identity must stand still (see the module docstring)."""
     tree = codec.parse(text)
     pin = {
         name: name
         for name in collect_hardware_port_names(tree, classify=codec.classify_port_name)
     }
     base = run_plan_with_overrides(codec, codec, text, port_rename_map=pin)
-    swapped = run_plan_with_overrides(
-        codec, codec, text, port_rename_map={**pin, a: b, b: a},
+    moved = run_plan_with_overrides(codec, codec, text, port_rename_map={**pin, **moves})
+    assert base.rendered and moved.rendered, (base.error, moved.error)
+    expected = _move_tree(codec.parse(base.rendered).model_dump(), moves, keep=_HARDWARE_IDENTITY)
+    return _differences(expected, codec.parse(moved.rendered).model_dump())
+
+
+def _the_device_this_config_is_from(codec: Any, tree: CanonicalIntent) -> Inventory:
+    """An inventory that lists exactly the hardware ports *tree* uses,
+    each by its hardware name: enough to declare "this device, on both
+    sides" for a config no device model describes."""
+    factory = {
+        iface.name: iface.default_name for iface in tree.interfaces if iface.default_name
+    }
+    names = dict.fromkeys(
+        factory.get(name, name)
+        for name in collect_hardware_port_names(tree, classify=codec.classify_port_name)
     )
-    assert base.rendered and swapped.rendered, (base.error, swapped.error)
-    expected = _swap_tree(codec.parse(base.rendered).model_dump(), a, b)
-    return _differences(expected, codec.parse(swapped.rendered).model_dump())
+    return Inventory(
+        vendor=codec.name,
+        ports=[
+            PhysicalPort(name=name, role="access", ordinal=at)
+            for at, name in enumerate(names, start=1)
+        ],
+    )
+
+
+def _what_did_not_follow_with_devices(
+    codec: Any, text: str, moves: dict[str, str],
+) -> list[str] | None:
+    """The same experiment with the device declared on both sides and
+    *moves* as the operator's entries.  Every target is a port of the
+    declared device, so each entry MOVES a port, and the hardware
+    identity has to follow with everything else.  ``None`` when no
+    pairing can be made for this config."""
+    device = _the_device_this_config_is_from(codec, codec.parse(text))
+    base = run_plan_with_models(codec, codec, text, device, device)
+    plan = base.port_mapping_plan
+    if base.rendered is None or plan is None or not plan.applied:
+        return None
+    moved = run_plan_with_models(codec, codec, text, device, device, port_rename_map=moves)
+    assert moved.rendered, moved.error
+    expected = _move_tree(codec.parse(base.rendered).model_dump(), moves)
+    return _differences(expected, codec.parse(moved.rendered).model_dump())
+
+
+_PARSED: dict[Path, tuple[Any, str, CanonicalIntent | None]] = {}
 
 
 def _parse(codec_name: str, path: Path) -> tuple[Any, str, CanonicalIntent | None]:
-    codec = get_codec(codec_name)
-    text = path.read_text(encoding="utf-8")
-    try:
-        tree = codec.parse(text)
-    except Exception:
-        return codec, text, None
-    return codec, text, tree if isinstance(tree, CanonicalIntent) else None
+    if path not in _PARSED:
+        codec = get_codec(codec_name)
+        text = path.read_text(encoding="utf-8")
+        try:
+            tree = codec.parse(text)
+        except Exception:
+            tree = None
+        _PARSED[path] = (codec, text, tree if isinstance(tree, CanonicalIntent) else None)
+    return _PARSED[path]
 
 
-def _comparable(codec_name: str, path: Path) -> tuple[Any, str, list[tuple[str, str]]]:
+def _comparable(codec_name: str, path: Path) -> tuple[Any, str, CanonicalIntent | None]:
+    """The capture, with its tree -- or ``None`` where the experiment
+    cannot be run on it."""
     codec, text, tree = _parse(codec_name, path)
-    if tree is None:
-        return codec, text, []
     # A rename clears verbatim Junos apply-group bodies, by design: the
-    # swapped run would differ from the unswapped one for that reason.
-    if tree.group_content or tree.apply_groups:
-        return codec, text, []
-    return codec, text, _pairs_to_swap(codec, tree)
+    # moved run would differ from the unmoved one for that reason.
+    if tree is not None and (tree.group_content or tree.apply_groups):
+        return codec, text, None
+    return codec, text, tree
+
+
+#: Captures the experiment cannot be run on, each for the reason given.
+#: Pinned, so that a capture cannot leave the experiment quietly: a new
+#: capture that belongs here fails the test until it is added, and one
+#: listed here that has become comparable fails it until it is removed.
+_NO_TWO = "no two physical ports (or two LAGs) of one name shape, without sub-interfaces"
+_APPLY_GROUPS = "carries Junos apply-groups, whose verbatim bodies a rename clears by design"
+_NOT_EXERCISED: dict[str, str] = {
+    "aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": _NO_TWO,
+    "cisco_iosxe/batfish_cisco_aaa.txt": _NO_TWO,
+    "cisco_iosxe/batfish_cisco_interface.txt": _NO_TWO,
+    "cisco_iosxe/batfish_cisco_ip_route.txt": _NO_TWO,
+    "cisco_iosxe/batfish_cisco_logging.txt": _NO_TWO,
+    "cisco_iosxe/batfish_cisco_snmp.txt": _NO_TWO,
+    "cisco_iosxe/ntc_carrier_interfaces.txt": _NO_TWO,
+    "cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": _NO_TWO,
+    "cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": _NO_TWO,
+    "cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": _NO_TWO,
+    "dell_os10/dellgeos_S5212F-TOR1-Advanced.cfg": _NO_TWO,
+    "dell_os10/dellgeos_S5212F-TOR1-Universal.cfg": _NO_TWO,
+    "dell_os10/dellgeos_S5212F-TOR2-Advanced.cfg": _NO_TWO,
+    "dell_os10/dellgeos_S5212F-TOR2-Universal.cfg": _NO_TWO,
+    "junos/buraglio_netlab_junos184.set": _NO_TWO,
+    "junos/jnprautomate_mnha_vsrx_a_junos.set": _APPLY_GROUPS,
+    "junos/ksator_labmgmt_ex4550_junos151.set": _APPLY_GROUPS,
+    "junos/ksator_labmgmt_qfx10k2_junos173.set": _APPLY_GROUPS,
+    "junos/ksator_labmgmt_qfx5100_junos173.set": _APPLY_GROUPS,
+    "junos/ksator_labmgmt_qfx5110_junos173.set": _APPLY_GROUPS,
+    "mikrotik/ntc_ip_address_export.rsc": _NO_TWO,
+    "opnsense/opnsense_acl_test_config.xml": _NO_TWO,
+    "opnsense/opnsense_core_default.xml": _NO_TWO,
+    "opnsense/opnsense_paramiko_shell_capture.xml": _NO_TWO,
+    "opnsense/user_contrib_supergate_opn25.xml": _NO_TWO,
+    "vyos/vyos_forum_snmpv3_user_eq13.conf": _NO_TWO,
+}
 
 
 # ---------------------------------------------------------------------------
-# Every codec, every capture
+# Every codec's captures
 # ---------------------------------------------------------------------------
 
 
 class TestEveryCapture:
-    def test_every_codec_with_captures_is_actually_exercised(self) -> None:
-        """A capture with fewer than two ports of one shape is skipped
-        below.  No codec may be skipped altogether: that would be the
-        test passing by not running."""
+    def test_the_captures_left_out_are_exactly_these(self) -> None:
+        """A capture with fewer than two ports of one shape cannot be
+        exchanged, and one that carries Junos apply-groups is left
+        out by design.  The list is pinned so that neither the
+        selection nor a new capture can shrink the experiment without
+        this test changing."""
+        left_out = set()
+        for codec_name, path in CAPTURES:
+            codec, _text, tree = _comparable(codec_name, path)
+            if tree is None or not _names_to_move(codec, tree):
+                left_out.add(_capture_id(path))
+        assert left_out == set(_NOT_EXERCISED)
+
+    def test_every_codec_with_captures_is_exercised(self) -> None:
         exercised = {
-            codec_name for codec_name, path in CAPTURES if _comparable(codec_name, path)[2]
+            codec_name for codec_name, path in CAPTURES
+            if _capture_id(path) not in _NOT_EXERCISED
         }
         assert exercised == set(FIXTURE_DIR_CODEC.values())
 
     @pytest.mark.parametrize(
-        ("codec_name", "path"), CAPTURES,
-        ids=[f"{path.parent.name}/{path.name}" for _, path in CAPTURES],
+        ("codec_name", "path"), CAPTURES, ids=[_capture_id(path) for _, path in CAPTURES],
     )
     def test_a_renamed_port_takes_every_reference_with_it(
         self, codec_name: str, path: Path,
     ) -> None:
-        codec, text, pairs = _comparable(codec_name, path)
-        if not pairs:
-            pytest.skip("no two physical ports of one name shape to exchange")
-        for a, b in pairs:
-            stayed = _what_did_not_follow(codec, text, a, b)
-            assert not stayed, (
-                f"exchanging {a} and {b}: {len(stayed)} value(s) of the output did "
-                f"not follow the rename -- a place the translator does not reach:\n  "
-                + "\n  ".join(stayed[:8])
-            )
+        if _capture_id(path) in _NOT_EXERCISED:
+            pytest.skip(_NOT_EXERCISED[_capture_id(path)])
+        codec, text, tree = _comparable(codec_name, path)
+        moves = _names_to_move(codec, tree)
+        stayed = _what_did_not_follow(codec, text, moves)
+        assert not stayed, (
+            f"moving {len(moves)} name(s): {len(stayed)} value(s) of the output did "
+            f"not follow -- a place the translator does not reach:\n  "
+            + "\n  ".join(stayed[:8])
+        )
+
+    @pytest.mark.parametrize(
+        ("codec_name", "path"), CAPTURES, ids=[_capture_id(path) for _, path in CAPTURES],
+    )
+    def test_with_the_device_declared_its_hardware_follows_as_well(
+        self, codec_name: str, path: Path,
+    ) -> None:
+        """The same captures through ``run_plan_with_models``, the
+        device declared on both sides and the moves given as the
+        operator's entries.  This is where a factory name has to move:
+        left behind, the output told the device to find each port by
+        the name of the hardware it had LEFT."""
+        if _capture_id(path) in _NOT_EXERCISED:
+            pytest.skip(_NOT_EXERCISED[_capture_id(path)])
+        codec, text, tree = _comparable(codec_name, path)
+        moves = _ports_to_move(codec, tree)
+        if not moves:
+            pytest.skip("only LAG names to exchange, which are not ports of a device")
+        stayed = _what_did_not_follow_with_devices(codec, text, moves)
+        if stayed is None:
+            pytest.skip("no pairing can be made for this config")
+        assert not stayed, (
+            f"moving {len(moves)} port(s): {len(stayed)} value(s) of the output did "
+            f"not follow:\n  " + "\n  ".join(stayed[:8])
+        )
+
+    def test_the_declared_experiment_runs_where_a_factory_name_exists(self) -> None:
+        """The run above skips a capture it can make no pairing for.
+        It must not skip its way past the one platform it is there
+        for."""
+        ran = 0
+        for codec_name, path in CAPTURES:
+            if codec_name != "mikrotik_routeros" or _capture_id(path) in _NOT_EXERCISED:
+                continue
+            codec, text, tree = _comparable(codec_name, path)
+            assert any(iface.default_name for iface in tree.interfaces)
+            assert _what_did_not_follow_with_devices(
+                codec, text, _ports_to_move(codec, tree),
+            ) == []
+            ran += 1
+        assert ran
 
 
 # ---------------------------------------------------------------------------
-# Shapes no committed capture has
+# What the experiment reaches
 # ---------------------------------------------------------------------------
+
+#: Every place the rename sweep rewrites: its name, and the objects of
+#: a tree that hold it with the attribute that does.
+_PLACES: dict[str, Callable[[CanonicalIntent], list[tuple[Any, str]]]] = {
+    "interfaces[].name": lambda t: [(i, "name") for i in t.interfaces],
+    "interfaces[].lag_member_of": lambda t: [(i, "lag_member_of") for i in t.interfaces],
+    "interfaces[].vrrp_groups[].track_interfaces": lambda t: [
+        (g, "track_interfaces") for i in t.interfaces for g in i.vrrp_groups
+    ],
+    "vlans[].tagged_ports": lambda t: [(v, "tagged_ports") for v in t.vlans],
+    "vlans[].untagged_ports": lambda t: [(v, "untagged_ports") for v in t.vlans],
+    "lags[].name": lambda t: [(lag, "name") for lag in t.lags],
+    "lags[].members": lambda t: [(lag, "members") for lag in t.lags],
+    "static_routes[].interface": lambda t: [(r, "interface") for r in t.static_routes],
+    "static_routes[].gateway": lambda t: [(r, "gateway") for r in t.static_routes],
+    "dhcp_servers[].interface": lambda t: [(p, "interface") for p in t.dhcp_servers],
+    "vxlan_vnis[].source_interface": lambda t: [(v, "source_interface") for v in t.vxlan_vnis],
+}
+
+#: The places at which a broken translator is caught by the experiment
+#: on a committed capture.
+_CAUGHT_ON_A_CAPTURE: frozenset[str] = frozenset({
+    "interfaces[].name",
+    "interfaces[].lag_member_of",
+    "vlans[].tagged_ports",
+    "vlans[].untagged_ports",
+    "lags[].name",
+    "lags[].members",
+    "static_routes[].interface",
+})
 
 _ROUTEROS_NEXT_HOPS = """/interface ethernet
 set [ find default-name=ether1 ] comment="wan"
@@ -283,20 +503,186 @@ set interfaces xe-0/0/2 unit 0 family inet address 10.1.0.1/24
 set routing-options static route 0.0.0.0/0 next-hop xe-0/0/1.0
 """
 
+_IOS_TRACK = """hostname sw
+!
+interface GigabitEthernet1/0/1
+ description a
+!
+interface GigabitEthernet1/0/2
+ description b
+!
+interface Vlan10
+ ip address 10.0.10.2 255.255.255.0
+ vrrp 20 ip 10.0.10.1
+ vrrp 20 track GigabitEthernet1/0/1
+!
+end
+"""
+
+_FORTIGATE_DHCP = """config system interface
+    edit "port1"
+        set ip 10.1.1.1 255.255.255.0
+        set type physical
+    next
+    edit "port2"
+        set ip 10.2.2.1 255.255.255.0
+        set type physical
+    next
+end
+config system dhcp server
+    edit 1
+        set default-gateway 10.1.1.1
+        set netmask 255.255.255.0
+        set interface "port1"
+        config ip-range
+            edit 1
+                set start-ip 10.1.1.10
+                set end-ip 10.1.1.20
+            next
+        end
+    next
+end
+"""
+
+_EOS_VTEP = """hostname leaf
+!
+interface Loopback0
+   ip address 10.255.0.1/32
+!
+interface Loopback1
+   ip address 10.255.1.1/32
+!
+interface Vxlan1
+   vxlan source-interface Loopback1
+   vxlan vlan 10 vni 10010
+!
+vlan 10
+!
+end
+"""
+
+#: For each place no committed capture catches: a small config that
+#: fills it, and the names to exchange in it.
+_SMALL_CONFIGS: dict[str, tuple[str, str, dict[str, str]]] = {
+    "static_routes[].gateway": (
+        "mikrotik_routeros", _ROUTEROS_NEXT_HOPS, {"ether1": "ether2", "ether2": "ether1"},
+    ),
+    "interfaces[].vrrp_groups[].track_interfaces": (
+        "cisco_iosxe_cli", _IOS_TRACK,
+        {
+            "GigabitEthernet1/0/1": "GigabitEthernet1/0/2",
+            "GigabitEthernet1/0/2": "GigabitEthernet1/0/1",
+        },
+    ),
+    "dhcp_servers[].interface": (
+        "fortigate_cli", _FORTIGATE_DHCP, {"port1": "port2", "port2": "port1"},
+    ),
+    "vxlan_vnis[].source_interface": (
+        "arista_eos", _EOS_VTEP, {"Loopback0": "Loopback1", "Loopback1": "Loopback0"},
+    ),
+}
+
+
+def _holds(value: Any, moves: dict[str, str]) -> bool:
+    if isinstance(value, str):
+        return _move_text(value, moves) != value
+    return any(_holds(item, moves) for item in value or [])
+
+
+def _a_translator_that_skips(place: str) -> Callable[..., Any]:
+    """The real translator, with *place* put back as it was: what the
+    sweep would do if that place were missing from it."""
+    real = port_names.translate_port_names
+
+    def broken(intent: Any, *args: Any, **kwargs: Any) -> Any:
+        if not isinstance(intent, CanonicalIntent):
+            return real(intent, *args, **kwargs)
+        saved = [
+            (holder, attribute, getattr(holder, attribute))
+            for holder, attribute in _PLACES[place](intent)
+        ]
+        saved = [
+            (holder, attribute, list(value) if isinstance(value, list) else value)
+            for holder, attribute, value in saved
+        ]
+        result = real(intent, *args, **kwargs)
+        for holder, attribute, value in saved:
+            setattr(holder, attribute, value)
+        return result
+
+    return broken
+
+
+def _captures_that_fill(place: str) -> list[tuple[Any, str, dict[str, str]]]:
+    found = []
+    for codec_name, path in CAPTURES:
+        if _capture_id(path) in _NOT_EXERCISED:
+            continue
+        codec, text, tree = _comparable(codec_name, path)
+        moves = _names_to_move(codec, tree)
+        if any(_holds(getattr(holder, attribute), moves) for holder, attribute in _PLACES[place](tree)):
+            found.append((codec, text, moves))
+    return found
+
+
+class TestWhatTheExperimentReaches:
+    """"No list of fields" is a claim about the oracle, not a promise
+    that every field is reached.  Here the translator is broken at
+    each place in turn -- that place put back as it was after the
+    sweep -- and something has to notice.  Which places a committed
+    capture notices is pinned; each of the others has a small config
+    that does."""
+
+    def test_the_places_are_the_ones_the_sweep_visits(self) -> None:
+        """The table above against the sweep's own list of places."""
+        tree = _a_name_in_every_place()
+        visited = set(port_names._swept_names(tree))
+        named = set()
+        for place in _PLACES.values():
+            for holder, attribute in place(tree):
+                value = getattr(holder, attribute)
+                named.update([value] if isinstance(value, str) else value or [])
+        # ``gateway`` adds no name of its own (it counts only when it
+        # is an interface's name), and the fixture gives it none.
+        assert {name for name in named if name} == visited
+
+    @pytest.mark.parametrize("place", sorted(_PLACES))
+    def test_a_translator_broken_at_one_place_is_caught(
+        self, place: str, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        captures = _captures_that_fill(place)
+        monkeypatch.setattr(port_names, "translate_port_names", _a_translator_that_skips(place))
+        on_a_capture = any(
+            _what_did_not_follow(codec, text, moves) for codec, text, moves in captures
+        )
+        assert on_a_capture == (place in _CAUGHT_ON_A_CAPTURE), (
+            f"{place}: caught on a committed capture is {on_a_capture}; "
+            f"the pinned list says {place in _CAUGHT_ON_A_CAPTURE}"
+        )
+        if not on_a_capture:
+            codec_name, text, moves = _SMALL_CONFIGS[place]
+            assert _what_did_not_follow(get_codec(codec_name), text, moves), (
+                f"{place}: nothing notices a translator that skips it"
+            )
+
+    def test_every_place_no_capture_catches_has_a_small_config(self) -> None:
+        assert set(_SMALL_CONFIGS) == set(_PLACES) - _CAUGHT_ON_A_CAPTURE
+
+    @pytest.mark.parametrize("place", sorted(_SMALL_CONFIGS))
+    def test_the_small_configs_pass_on_the_real_translator(self, place: str) -> None:
+        codec_name, text, moves = _SMALL_CONFIGS[place]
+        assert _what_did_not_follow(get_codec(codec_name), text, moves) == []
+
+
+# ---------------------------------------------------------------------------
+# Shapes no committed capture has
+# ---------------------------------------------------------------------------
+
 
 class TestShapesNoCaptureHas:
-    @pytest.mark.parametrize(
-        ("codec_name", "text", "a", "b"),
-        [
-            ("mikrotik_routeros", _ROUTEROS_NEXT_HOPS, "ether1", "ether2"),
-            ("juniper_junos", _JUNOS_NEXT_HOP, "xe-0/0/1", "xe-0/0/2"),
-        ],
-        ids=["routeros-gateway-is-an-interface", "junos-next-hop-is-a-unit"],
-    )
-    def test_a_next_hop_that_is_an_interface_follows_it(
-        self, codec_name: str, text: str, a: str, b: str,
-    ) -> None:
-        assert _what_did_not_follow(get_codec(codec_name), text, a, b) == []
+    def test_a_unit_next_hop_follows_between_two_configs_of_one_codec(self) -> None:
+        moves = {"xe-0/0/1": "xe-0/0/2", "xe-0/0/2": "xe-0/0/1"}
+        assert _what_did_not_follow(get_codec("juniper_junos"), _JUNOS_NEXT_HOP, moves) == []
 
     def test_across_vendors_a_unit_next_hop_is_left_as_written(self) -> None:
         """``xe-0/0/1.0`` names unit 0 of a Junos port.  The suffix
@@ -313,57 +699,146 @@ class TestShapesNoCaptureHas:
         translate_port_names(tree, junos, eos, rename_map={"xe-0/0/1": "Ethernet7"})
         assert [route.gateway for route in tree.static_routes] == ["Ethernet7"]
 
-    def test_the_oracle_can_fail(self) -> None:
-        """The comparison itself, on a tree in which one value did not
-        follow: it must say which."""
+
+# ---------------------------------------------------------------------------
+# A name that is new, and the factory name
+# ---------------------------------------------------------------------------
+
+
+class TestAnEntryNamesAPort:
+    """What the experiment cannot see: it exchanges names the device
+    already has.  The commonest entry of a rename map on RouterOS
+    gives a port a name it never had.  Without devices declared that
+    is ALL an entry does there -- the port's hardware stays -- and it
+    is what such an entry has always rendered."""
+
+    @pytest.mark.parametrize(
+        "name", ["WAN", "ether1-WAN", "uplink to core", "sfp1", "ETHER5", "ether5"],
+    )
+    def test_the_port_is_found_by_its_factory_name_and_given_the_name(self, name: str) -> None:
+        """``sfp1`` and ``ETHER5`` read as port names to the RouterOS
+        codec, and ``ether5`` is one.  None of that makes the entry a
+        move: nothing here knows which ports the TARGET has."""
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_overrides(
+            mikrotik, mikrotik, _ROUTEROS_NEXT_HOPS, port_rename_map={"ether1": name},
+        )
+        shown = f'"{name}"' if " " in name else name
+        assert f'set [ find default-name=ether1 ] name={shown} comment="wan"' in job.rendered
+        assert f"default-name={name}" not in job.rendered
+        assert f"add address=192.0.2.2/30 interface={shown}" in job.rendered
+        # The route's next hop follows the name.  (The RouterOS
+        # renderer writes a next hop unquoted, as it does a route's
+        # interface, so a name with a space in it is written bare
+        # there: the renderer's own, older, limit.)
+        assert f"add dst-address=0.0.0.0/0 gateway={name}" in job.rendered
+        assert job.port_renames == {"ether1": name}
+
+    def test_on_a_committed_capture(self) -> None:
+        mikrotik = get_codec("mikrotik_routeros")
+        text = (REAL / "mikrotik" / "user_contrib_crs310_ros7.rsc").read_text(encoding="utf-8")
+        job = run_plan_with_overrides(
+            mikrotik, mikrotik, text, port_rename_map={"ether1": "uplink-to-core"},
+        )
+        lines = [line for line in job.rendered.splitlines() if "uplink-to-core" in line]
+        assert lines[0].startswith("set [ find default-name=ether1 ] name=uplink-to-core ")
+        assert "default-name=uplink-to-core" not in job.rendered
+
+    def test_the_translator_never_touches_a_factory_name(self) -> None:
+        """Renamed by an entry, renamed by the shape of its name onto
+        another vendor, or left alone: the field says which hardware
+        the port WAS, and only a caller that knows the target device
+        may change it."""
+        mikrotik, eos = get_codec("mikrotik_routeros"), get_codec("arista_eos")
+        for target, entries in ((mikrotik, {"ether1": "ether2"}), (eos, {}), (eos, {"ether1": "Ethernet9"})):
+            tree = mikrotik.parse(_ROUTEROS_NEXT_HOPS)
+            before = sorted(iface.default_name for iface in tree.interfaces)
+            translate_port_names(tree, mikrotik, target, rename_map=entries)
+            assert sorted(iface.default_name for iface in tree.interfaces) == before
+
+    def test_the_key_of_an_entry_is_the_name_the_config_uses(self) -> None:
+        """``core-a`` is the operator's name for the port whose
+        factory name is ``ether1``, and every line of the config calls
+        it ``core-a``.  An entry keyed by ``ether1`` names nothing in
+        the config, does nothing, and is said."""
+        mikrotik = get_codec("mikrotik_routeros")
+        tree = mikrotik.parse(_ROUTEROS_RENAMED_PORTS)
+        assert collect_port_names(tree) == ["core-a", "core-b"]
+        assert collect_hardware_port_names(
+            tree, classify=mikrotik.classify_port_name,
+        ) == ["core-a", "core-b"]
+        for entries in ({"ether1": "ether2"}, {"ether1": None}):
+            job = run_plan_with_overrides(
+                mikrotik, mikrotik, _ROUTEROS_RENAMED_PORTS, port_rename_map=entries,
+            )
+            assert "set [ find default-name=ether1 ] name=core-a" in job.rendered
+            assert "add address=10.0.0.1/30 interface=core-a" in job.rendered
+            assert job.port_renames == {} and job.port_drops == []
+            assert any(
+                "source port 'ether1' does not exist in the parsed config" in w
+                for w in job.warnings
+            )
+
+    def test_a_port_the_operator_named_is_renamed_and_dropped_by_that_name(self) -> None:
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_overrides(
+            mikrotik, mikrotik, _ROUTEROS_RENAMED_PORTS,
+            port_rename_map={"core-a": "wan", "core-b": None},
+        )
+        assert "set [ find default-name=ether1 ] name=wan" in job.rendered
+        assert "add address=10.0.0.1/30 interface=wan" in job.rendered
+        assert "core-b" not in job.rendered and "10.0.0.5/30" not in job.rendered
+        assert job.port_drops == ["core-b"]
+
+
+# ---------------------------------------------------------------------------
+# The oracle can fail
+# ---------------------------------------------------------------------------
+
+
+class TestTheOracleCanFail:
+    def test_a_value_that_did_not_follow(self) -> None:
         before = {"interfaces": [{"name": "p1", "lookup": "p1"}, {"name": "p2", "lookup": "p2"}]}
         stale = {"interfaces": [{"name": "p2", "lookup": "p1"}, {"name": "p1", "lookup": "p2"}]}
         moved = {"interfaces": [{"name": "p2", "lookup": "p2"}, {"name": "p1", "lookup": "p1"}]}
-        assert _differences(_swap_tree(before, "p1", "p2"), moved) == []
-        stayed = _differences(_swap_tree(before, "p1", "p2"), stale)
+        moves = {"p1": "p2", "p2": "p1"}
+        assert _differences(_move_tree(before, moves), moved) == []
+        stayed = _differences(_move_tree(before, moves), stale)
         assert [line.split(":")[0] for line in stayed] == [
             "interfaces.[p1].lookup", "interfaces.[p2].lookup",
         ]
 
-    def test_a_port_an_operator_renamed_moves_by_its_factory_name(self) -> None:
-        """RouterOS: ``core-a`` is the operator's name for the port
-        whose factory name is ``ether1``.  Exchanging the two FACTORY
-        names moves the hardware under each alias; the aliases, and
-        everything that refers to them, stay."""
-        mikrotik = get_codec("mikrotik_routeros")
-        tree = mikrotik.parse(_ROUTEROS_RENAMED_PORTS)
-        assert collect_hardware_port_names(
-            tree, classify=mikrotik.classify_port_name,
-        ) == ["ether1", "ether2"]
-        job = run_plan_with_overrides(
-            mikrotik, mikrotik, _ROUTEROS_RENAMED_PORTS,
-            port_rename_map={"ether1": "ether2", "ether2": "ether1"},
-        )
-        assert "set [ find default-name=ether2 ] name=core-a" in job.rendered
-        assert "set [ find default-name=ether1 ] name=core-b" in job.rendered
-        assert "add address=10.0.0.1/30 interface=core-a" in job.rendered
-        assert job.port_renames == {"ether1": "ether2", "ether2": "ether1"}
+    def test_a_record_that_vanished(self) -> None:
+        """A value absent on one side is a difference, not a blank."""
+        whole = {"interfaces": [{"name": "p1", "mtu": 9000}, {"name": "p2", "mtu": 1500}]}
+        short = {"interfaces": [{"name": "p1", "mtu": 9000}]}
+        assert [line.split(":")[0] for line in _differences(whole, short)] == [
+            "interfaces.[p2].mtu", "interfaces.[p2].name",
+        ]
+        assert _differences(short, whole)
 
-    def test_a_port_that_still_has_its_factory_name_leaves_none_behind(self) -> None:
-        """Renamed by the shape of its name, with no map entry at all
-        (RouterOS onto another vendor): the tree must not go on holding
-        the old name in the factory-name field, for whatever reads the
-        tree next."""
-        mikrotik, eos = get_codec("mikrotik_routeros"), get_codec("arista_eos")
-        tree = mikrotik.parse(_ROUTEROS_NEXT_HOPS)
-        translate_port_names(tree, mikrotik, eos, rename_map={})
-        ports = [iface for iface in tree.interfaces if iface.default_name]
-        assert ports and all(iface.default_name == iface.name for iface in ports)
-        assert not [iface for iface in ports if iface.name.startswith("ether")]
+    def test_a_list_of_names_is_compared_by_what_is_in_it(self) -> None:
+        """...and not by how long it is: one member exchanged for
+        another is a difference, and the same members in another order
+        are not."""
+        one = {"vlans": [{"id": 10, "tagged_ports": ["p1", "p2"]}]}
+        assert _differences(one, {"vlans": [{"id": 10, "tagged_ports": ["p2", "p1"]}]}) == []
+        assert _differences(one, {"vlans": [{"id": 10, "tagged_ports": ["p1", "p3"]}]})
 
-    def test_a_port_dropped_by_its_factory_name_goes_under_its_alias(self) -> None:
-        mikrotik = get_codec("mikrotik_routeros")
-        job = run_plan_with_overrides(
-            mikrotik, mikrotik, _ROUTEROS_RENAMED_PORTS, port_rename_map={"ether1": None},
-        )
-        assert job.port_drops == ["ether1"]
-        assert "core-a" not in job.rendered and "10.0.0.1/30" not in job.rendered
-        assert "set [ find default-name=ether2 ] name=core-b" in job.rendered
+    def test_a_name_with_a_unit_moves_with_its_port(self) -> None:
+        assert _move_text("ge-0/0/1.54", {"ge-0/0/1": "ge-0/0/9"}) == "ge-0/0/9.54"
+        assert _move_text("ge-0/0/1.backup", {"ge-0/0/1": "ge-0/0/9"}) == "ge-0/0/1.backup"
+        assert _move_text("uplink to ge-0/0/1", {"ge-0/0/1": "ge-0/0/9"}) == "uplink to ge-0/0/1"
+
+    def test_the_field_that_must_stand_still_is_not_moved(self) -> None:
+        tree = {"interfaces": [{"name": "ether1", "default_name": "ether1"}]}
+        moves = {"ether1": "ether2"}
+        assert _move_tree(tree, moves, keep=_HARDWARE_IDENTITY) == {
+            "interfaces": [{"name": "ether2", "default_name": "ether1"}],
+        }
+        assert _move_tree(tree, moves) == {
+            "interfaces": [{"name": "ether2", "default_name": "ether2"}],
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -395,11 +870,14 @@ class TestTheTwoListsAgree:
         codec = get_codec("aruba_aoss")
         tree = _a_name_in_every_place()
         before = collect_port_names(tree)
-        assert len(before) == len(set(before)) == 12
+        assert len(before) == len(set(before))
+        assert "factory-b" not in before
         translate_port_names(
             tree, codec, codec, rename_map={name: f"x-{name}" for name in before},
         )
         assert sorted(collect_port_names(tree)) == sorted(f"x-{name}" for name in before)
+        # A factory name is not a name the config uses, and stays.
+        assert [iface.default_name for iface in tree.interfaces] == ["if-a", "factory-b"]
 
     def test_a_dropped_name_is_gone_from_every_place(self) -> None:
         codec = get_codec("aruba_aoss")
@@ -407,3 +885,33 @@ class TestTheTwoListsAgree:
         before = collect_port_names(tree)
         translate_port_names(tree, codec, codec, rename_map=dict.fromkeys(before))
         assert collect_port_names(tree) == []
+
+
+# ---------------------------------------------------------------------------
+# What the translator says when an operator drops a port
+# ---------------------------------------------------------------------------
+
+
+class TestWarningsUnderADrop:
+    def test_a_dropped_port_is_not_named_among_the_sources_of_a_clash(self) -> None:
+        """Two ports are sent onto the name of a third, which the
+        operator drops.  The dropped port is stripped before any name
+        is resolved, so it shares that name with nobody and the warning
+        names the two that do."""
+        ios = get_codec("cisco_iosxe_cli")
+        text = (
+            "hostname sw\n!\ninterface GigabitEthernet1/0/1\n description a\n!\n"
+            "interface GigabitEthernet1/0/2\n description b\n!\n"
+            "interface GigabitEthernet1/0/3\n description c\n!\nend\n"
+        )
+        job = run_plan_with_overrides(
+            ios, ios, text, port_rename_map={
+                "GigabitEthernet1/0/1": "GigabitEthernet1/0/3",
+                "GigabitEthernet1/0/2": "GigabitEthernet1/0/3",
+                "GigabitEthernet1/0/3": None,
+            },
+        )
+        clashes = [w for w in job.warnings if "multiple source ports map to" in w]
+        assert len(clashes) == 1
+        assert "(sources: GigabitEthernet1/0/1, GigabitEthernet1/0/2)" in clashes[0]
+        assert job.port_drops == ["GigabitEthernet1/0/3"]
