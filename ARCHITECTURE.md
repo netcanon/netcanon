@@ -667,11 +667,11 @@ profile that describes a standalone switch.  The rename table marks
 each row whose auto name is not a port the selected profile lists
 (`has-offprofile`, "N not on profile" on the section header), so the
 disagreement is visible per port.  Closing it needs the pipeline to
-be told the source and target models.  Through the API it now can
-be: a request that declares both devices is paired by position (see
-"Device models and inventories" below).  The rename modal has no
-source-device picker yet, so in the modal the paragraph above still
-holds.
+be told the source and target models: a request that declares both
+devices is paired by position (see "Device models and inventories"
+below), and the modal's source-device and target-device pickers
+send exactly that.  With a target chosen and no source device, the
+paragraph above still holds.
 
 ### Per-category capacity limits
 
@@ -1177,8 +1177,28 @@ ports that belong to a stack rather than a member, literal
 non-systematic names, a sub-interface following its parent port
 across codecs, and whether a model has an out-of-band management
 port at all (a kept management port therefore always needs the
-operator's decision).  A picker in the rename modal does not exist
-yet; today the feature is reachable through the API.
+operator's decision).
+
+**In the rename modal** (`_partials/device-models.js`).  The ports
+pane has a source-device row and a target-device row.  A device is a
+model from a model family — with its mode, the module in each bay
+and, in a stacking mode, its members — or a flat profile where no
+family describes it.  The source row is pre-filled from the config
+(`/detect-deployment`) and shows the lines it was read from; each
+declaration is compiled by the server (`/inventory`) as it is
+edited, and the note under it says what it resolved to, how well
+its port names are established, and every caveat.  The browser
+holds no naming rule and no port list of its own for a family
+model: it shows what the server compiled.  Apply sends the two
+declarations with the operator's overrides; the table then draws
+the plan — each pairing with the position that decided it, and
+each name the plan could not place, with what happened to it and a
+marker while it still needs a decision.  Two rules keep the request
+honest: every device field is removed from the cloned request body
+before the current declarations are added, so a device that was
+cleared cannot ride along from the last Apply; and a source device,
+or a target family model, is sent only as one of a pair — a target
+alone stays advice for the choices in the table, as it always was.
 
 **Reading the source device from the config**
 (`netcanon/migration/deployment_detect.py`).  An AOS-S `show
@@ -1253,6 +1273,10 @@ the source of truth):
   from base.html; opens on `?` keypress (or via the nav button).
   Lists the application-wide shortcuts in a single overlay; no
   per-page wiring needed.
+* **device-models.js** — rename-modal source-device and
+  target-device pickers (model family or profile, mode, modules,
+  stack members), source detection, the per-device notes, and the
+  port-plan strip and row data.
 * **rename-apply.js** — rename-modal Apply-button flow + drag
   handlers + vendor/model/module selector wiring.
 * **rename-panel.js** — rename-modal preview + summary renderer.

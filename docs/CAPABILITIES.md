@@ -837,8 +837,31 @@ correctly on a 2930M-48G with an SFP+ module in a one-member stack —
 `1`..`48` become `1/1`..`1/48`, and the built-in uplinks `49`..`52`
 become the module's `1/A1`..`1/A4`.
 
-**Today this is an API feature**; the pickers in the rename modal come
-later.
+**In the browser:** translate, open **Interface rename**, and on the
+Ports pane choose the *Source device* and the *Target device*.
+
+* A device is a model from a model family — then you also choose its
+  deployment mode, the module in each bay and, for a stack, its
+  members — or a profile, where no family describes the device yet.
+* The source device is filled in from the config where the config
+  states it; open "Read from the config" under it to see the lines.
+  It is a proposal: a `member` or `flexible-module` line shows what a
+  device is provisioned for, not what is fitted.  Change it if it is
+  wrong.
+* The line under each device says what you declared, how many ports
+  that is and the first and last name, and how well the names are
+  established.  A bay you did not state is counted as empty, and the
+  line says so in amber.
+* **Apply** pairs the ports.  The table then shows, per source port,
+  the target port and the position that decided it ("uplink 1"), and
+  a row for every name with no place on the target.  The strip above
+  the table counts what was paired and what needs your decision;
+  **Accept as shown** records the outcome on screen as your decision
+  for each (a dropped port stays dropped), and Apply confirms it.
+* A target chosen with no source device works as before: its port
+  list fills the choices in the table, and nothing is paired.
+
+**Through the API** the same four steps are:
 
 1. `GET /api/v1/migration/model-families` lists the device families
    netcanon models, with each one's models, modes and modules.

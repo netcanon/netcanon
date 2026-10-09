@@ -237,9 +237,10 @@ to the API.  See [`CAPABILITIES.md`](CAPABILITIES.md) § F for what
 the line under the fit-check banner tells you about the profile's
 names.
 
-Through the API there is now a way to tell it: declare the source
-device as well as the target, and the ports are paired by position
-between the two.  See [`CAPABILITIES.md`](CAPABILITIES.md) § G.
+There is now a way to tell it: choose the *Source device* as well as
+the target in the modal (or declare both through the API), and the
+ports are paired by position between the two.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § G.
 
 ### Detection proposes a device, and says ports are missing
 

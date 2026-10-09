@@ -149,6 +149,18 @@ def test_capability_prefixes_are_allowed_but_not_open_ended():
     assert C.route_allowed("GET", "/api/v1/migration/adapters-secret") is False
 
 
+def test_the_device_pickers_can_reach_their_three_endpoints():
+    """The rename modal lists model families, compiles a declared
+    device and reads the source device from the config.  Without
+    these the pickers would be empty on the demo and say nothing."""
+    assert C.route_allowed("GET", "/api/v1/migration/model-families")
+    assert C.route_allowed("POST", "/api/v1/migration/inventory")
+    assert C.route_allowed("POST", "/api/v1/migration/detect-deployment")
+    # Listing is a GET and compiling a POST; neither works the other way.
+    assert C.route_allowed("POST", "/api/v1/migration/model-families") is False
+    assert C.route_allowed("GET", "/api/v1/migration/inventory") is False
+
+
 def test_render_is_deliberately_not_allowlisted():
     """POST /api/v1/migration/render is excluded on purpose (module 04)."""
     assert C.route_allowed("POST", "/api/v1/migration/render") is False

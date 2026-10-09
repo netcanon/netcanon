@@ -107,6 +107,13 @@ timestamp if your timezone matters for an audit.
   committed capture is affected unless the request's own
   `port_rename_map` renames a port onto a name the target cannot
   express.
+- **Reset all did not reach the server.**  Apply re-sends the previous
+  request with the current overrides added, and a VLAN, local-user or
+  SNMP map — or a target profile — that had been sent once and was
+  then cleared stayed in the request and was applied again.  Cleared
+  values are now removed from the request.
+- **The SNMPv3 pane was not redrawn after Apply**, so it showed the
+  previous job's rows until the modal was reopened.
 - **The ports fit-check banner reappeared on the VLAN and user panes.**
   Editing an override on another pane refreshed the summary, which
   re-rendered the ports banner there.  It is ports-pane only again.
@@ -116,6 +123,28 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+- **Source and target device pickers in the rename modal.**  The
+  ports pane of the Interface rename modal now has a *Source device*
+  row and a *Target device* row.  Choose a model — from a model
+  family, with its deployment mode, the module in each bay and its
+  stack members, or a flat profile where no family describes the
+  device — and **Apply** pairs the two port lists by position.
+  - The source device is read from the config where the config
+    states it, and the modal shows the lines it was read from.
+  - Under each device a note says what was declared, how many ports
+    it has and their first and last name, how well those names are
+    established, and every caveat.  A bay nobody stated is counted
+    as empty, and said.
+  - The table becomes the pairing: each source port, the target port
+    it was paired with and the position that decided it, a flag where
+    the target port is slower or has no PoE, and a row for every
+    name that has no place on the target or is not a port of the
+    source device.  Names that need a decision are marked, counted
+    on the strip above the table, and can be accepted as shown in
+    one click.
+  - A same-vendor translation (Aruba to Aruba, say) renames nothing
+    by itself and used to open on "No port names recognised"; the
+    table now lists every port the config uses.
 - **Model-to-model port mapping (API).**  Declare the device a config
   came from and the device it is going to, and ports are paired by
   *position* instead of being guessed from the shape of their names.  A
@@ -415,8 +444,11 @@ timestamp if your timezone matters for an audit.
   auto-translated names.**  The translator derives a target name from the
   shape of the source name (Cisco `GigabitEthernet1/0/1` becomes AOS-S
   `1/1`) whatever model is selected.  The row marker shows where the two
-  disagree.  Model-to-model port mapping fixes this, but only through the
-  API so far: the modal has no source-device picker yet.
+  disagree.  Declaring the source device as well fixes this: the ports
+  are then paired by position.
+- **Device declarations are not remembered across a page reload.**  The
+  source device is read from the config again; the target device has to
+  be chosen again.  Overrides are remembered, as before.
 - **Model families cover two Aruba AOS-S series.**  Every other device is
   declared through its target profile, as one device in the one state the
   profile documents, with its ports in the profile's list order — which

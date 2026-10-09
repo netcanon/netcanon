@@ -154,9 +154,13 @@ allow — all CSS/JS is inlined into the pages — and there is **no
 - `GET  /api/v1/migration/adapters`
 - `GET  /api/v1/migration/adapters/{name}/capabilities`
 - `GET  /api/v1/migration/target-profiles` (+ `/{vendor}/{model}`)
+- `GET  /api/v1/migration/model-families`
 - `POST /api/v1/migration/plan` (+ `/plan/ports`, `/plan/vlans`,
   `/plan/local_users`, `/plan/snmp`, `/plan/snmpv3`)
 - `POST /api/v1/migration/detect`
+- `POST /api/v1/migration/inventory` and `POST
+  /api/v1/migration/detect-deployment` (the rename modal's device
+  pickers; both only compute)
 - `POST /api/v1/sanitize`
 
 **BLOCK** (default-deny; called out because a visitor might probe them):

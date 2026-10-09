@@ -12,8 +12,8 @@
    *
    * And module-scope helpers:
    *
-   *   renderFitCheck()       — inline fit-check banner (still in
-   *                            migrate.html; called at the end of
+   *   renderFitCheck()       — inline fit-check banner (in
+   *                            _partials/fit-check.js; called at the end of
    *                            renderRenameSummary so the banner
    *                            refreshes on every state change)
    * ────────────────────────────────────────────────────────────────── */
@@ -178,6 +178,13 @@
         }
       });
     }
+    // A port the config uses that was neither renamed nor dropped
+    // keeps its own name -- which an override may not also take.
+    (_lastJob.source_ports || []).forEach(function(src) {
+      if (_renameUserMap[src] === undefined && !autoDroppedSet.has(src)) {
+        tally(src, src);
+      }
+    });
     var collisions = 0;
     Object.keys(targetCounts).forEach(function(t) {
       if (targetCounts[t] > 1) collisions += targetCounts[t];

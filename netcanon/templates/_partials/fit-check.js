@@ -41,6 +41,11 @@
     // Guarded: the notice is advisory, and a fault in it must never
     // take the capacity banner down with it.
     try { renderProfileNotice(); } catch (_) { /* notice is cosmetic */ }
+    // The port-plan strip shares the lifecycle too: it depends on the
+    // devices, the job and the operator's overrides.
+    try {
+      if (typeof renderPortPlan === 'function') renderPortPlan();
+    } catch (_) { /* the strip is advisory */ }
     var el = document.getElementById('mig-rename-fitcheck');
     if (!el) return;
     // Ports pane only.  This function runs on every summary refresh,
@@ -51,11 +56,16 @@
       el.style.display = 'none';
       return;
     }
-    var profileKey = currentRenameProfileKey();
-    var profile = profileKey && _renameProfiles.find(function(p) {
-      return (p.vendor + '/' + p.model) === profileKey;
-    });
-    if (!profile || !_lastJob) {
+    // The target device: a profile, or a model from a model family.
+    var profile = (typeof currentTargetDevice === 'function')
+      ? currentTargetDevice() : null;
+    // A port plan answers the capacity question by name -- which
+    // ports were paired, which have no place -- so the per-kind
+    // counts, which are guessed from the shape of the names, give
+    // way to the plan strip.
+    var activePlan = (typeof currentPortPlan === 'function')
+      ? currentPortPlan() : null;
+    if (!profile || !_lastJob || (activePlan && activePlan.applied)) {
       el.style.display = 'none';
       el.className = '';
       return;
@@ -92,7 +102,7 @@
 
     // Count target capacity by kind using the effective port list
     // (chassis + selected module, mirrors backend effective_ports()).
-    var effectivePorts = effectivePortsFor(profile);
+    var effectivePorts = profile.ports;
     var targetByKind = {};
     effectivePorts.forEach(function(p) {
       targetByKind[p.kind] = (targetByKind[p.kind] || 0) + 1;

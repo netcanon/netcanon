@@ -67,6 +67,12 @@ def _get(port: int, path: str) -> object:
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _get_text(port: int, path: str) -> str:
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=5) as resp:
+        assert resp.status == 200, path
+        return resp.read().decode("utf-8")
+
+
 def _post(port: int, path: str, body: dict) -> object:
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}",
@@ -125,6 +131,7 @@ class TestModelTranslationServedByEmbeddedServer:
             try:
                 server.wait_ready(timeout=10.0)
                 families = _get(port, "/api/v1/migration/model-families")
+                migrate_page = _get_text(port, "/migrate")
                 inventory = _post(port, "/api/v1/migration/inventory", {
                     "codec": "aruba_aoss", "deployment": target,
                 })
@@ -182,6 +189,23 @@ class TestModelTranslationServedByEmbeddedServer:
         assert job["port_renames"]["49"] == "1/A1"
         assert len(job["port_mapping_plan"]["pairings"]) == 52
         assert "untagged 1/48,1/A1,1/A2,1/A3,1/A4" in job["rendered"]
+
+        # The desktop window shows the same page as the browser: the
+        # device pickers and the port-plan strip are in it, with the
+        # script that drives them (a partial missing from the build
+        # would be a template error here, not a blank row).
+        for testid in (
+            "migrate-device-source-model-select",
+            "migrate-device-target-mode-select",
+            "migrate-device-source-note",
+            "migrate-rename-plan",
+        ):
+            assert f'data-testid="{testid}"' in migrate_page, testid
+        for function in (
+            "function renderPortPlan", "function applyDeviceDeclarations",
+            "function detectSourceDevice",
+        ):
+            assert function in migrate_page, function
 
     def test_a_stack_on_both_sides(self, tmp_path: Path) -> None:
         """Two members declared for the source AND for the target,

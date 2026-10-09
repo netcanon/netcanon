@@ -1,9 +1,13 @@
   /* ── Rename-modal mapping table renderer ─────────────────────────────
    * Builds the per-kind expandable sections from _lastJob.port_renames
-   * + _lastJob.warnings, with user overrides layered on top (via
-   * _renameUserMap).  Renders dropdowns or free-text inputs depending
-   * on whether a target profile is selected.  Depends on module-scope
-   * state declared in migrate.html:
+   * + _lastJob.warnings + _lastJob.source_ports, with user overrides
+   * layered on top (via _renameUserMap).  When the job carries a port
+   * plan (both devices were declared), the plan's rows come first:
+   * every pairing with the position that decided it, and every name
+   * the plan could not place, with what happened to it.  Renders
+   * dropdowns or free-text inputs depending on whether a target
+   * device is selected.  Depends on module-scope state declared in
+   * migrate.html:
    *
    *   _lastJob               — most recent server job response
    *   _renameUserMap         — {source_name: target_name | null}
@@ -16,8 +20,9 @@
    *
    *   _guessKind(name)       — classify.js
    *   _looksLikeUplink(name) — classify.js
-   *   currentRenameProfileKey()
-   *   effectivePortsFor(profile)
+   *   currentTargetDevice()  — device-models.js: the target's ports,
+   *                            from a profile or a family model
+   *   currentPortPlan(), portPlanRowMeta(plan) — device-models.js
    *   escapeHtml(s)
    *   renderRenamePreview()
    *   renderRenameSummary()
@@ -39,24 +44,53 @@
     // need to merge: every name mentioned in applied + every name
     // mentioned in warnings gets a row.
     var rowsByKind = {};
+    // A port plan, when both devices were declared for this job.
+    var plan = (typeof currentPortPlan === 'function')
+      ? currentPortPlan() : null;
+    var planActive = !!plan && !!plan.applied;
+    var planMeta = (planActive && typeof portPlanRowMeta === 'function')
+      ? portPlanRowMeta(plan) : {};
+    var rowOf = {};
     function addRow(sourceName, kind, autoTarget, warning) {
-      if (!rowsByKind[kind]) rowsByKind[kind] = [];
-      // Deduplicate by source name within a kind.
-      var existing = rowsByKind[kind].find(function(r) {
-        return r.source === sourceName;
-      });
+      // Deduplicate by source name within a kind -- or, under a port
+      // plan, across kinds: the plan knows what a port IS (its role),
+      // so its row is the row for that name wherever a later source
+      // would have filed it.
+      var existing = planActive ? rowOf[sourceName] : null;
+      if (!existing) {
+        if (!rowsByKind[kind]) rowsByKind[kind] = [];
+        existing = rowsByKind[kind].find(function(r) {
+          return r.source === sourceName;
+        });
+      }
       if (existing) {
         if (warning && !existing.warning) existing.warning = warning;
-        if (autoTarget && !existing.auto) existing.auto = autoTarget;
-        return;
+        if (autoTarget
+            && (!existing.auto || existing.auto === existing.source)) {
+          existing.auto = autoTarget;
+        }
+        return existing;
       }
-      rowsByKind[kind].push({
+      var row = {
         source: sourceName,
         kind: kind,
         auto: autoTarget || sourceName,
         warning: warning || '',
-      });
+        meta: null,
+        plain: false,
+      };
+      rowsByKind[kind].push(row);
+      if (!rowOf[sourceName]) rowOf[sourceName] = row;
+      return row;
     }
+
+    // Plan rows first, in the order of the source device's ports.
+    Object.keys(planMeta).sort(function(a, b) {
+      return planMeta[a].order - planMeta[b].order;
+    }).forEach(function(src) {
+      var meta = planMeta[src];
+      addRow(src, meta.kind || _guessKind(src), meta.auto, '').meta = meta;
+    });
 
     var applied = (_lastJob && _lastJob.port_renames) || {};
     Object.keys(applied).forEach(function(src) {
@@ -93,6 +127,14 @@
       addRow(src, kind, '', w);
     });
 
+    // Every hardware port the config uses that nothing above gave a
+    // row: its name goes through unchanged.  A same-vendor
+    // translation renames nothing, and used to show an empty table.
+    ((_lastJob && _lastJob.source_ports) || []).forEach(function(src) {
+      if (rowOf[src]) return;
+      addRow(src, _guessKind(src), '', '').plain = true;
+    });
+
     var totalRows = 0;
     _RENAME_KIND_ORDER.forEach(function(kind) { totalRows += (rowsByKind[kind] || []).length; });
     if (totalRows === 0) {
@@ -105,10 +147,15 @@
     // Dropped sources don't count — they won't reach the target so
     // they can't collide with anything.
     var targetHits = {};
+    var serverDropped = new Set((_lastJob && _lastJob.port_drops) || []);
     _RENAME_KIND_ORDER.forEach(function(kind) {
       (rowsByKind[kind] || []).forEach(function(row) {
         // Drop is encoded as null in the user map.
         if (_renameUserMap[row.source] === null) return;
+        // A port the server dropped and the operator has not
+        // touched reaches no target either.
+        if (_renameUserMap[row.source] === undefined
+            && serverDropped.has(row.source)) return;
         var effective = _renameUserMap[row.source] || row.auto;
         if (!effective) return;
         if (!targetHits[effective]) targetHits[effective] = [];
@@ -118,17 +165,28 @@
 
     // Profile-driven dropdown options.  If a profile is selected,
     // dropdown lists the profile's known port ids, filtered by kind.
-    var profileKey = currentRenameProfileKey();
-    var selectedProfile = _renameProfiles.find(function(p) {
-      return (p.vendor + '/' + p.model) === profileKey;
-    });
-    function profileOptionsFor(kind, sourceName) {
+    var selectedProfile = (typeof currentTargetDevice === 'function')
+      ? currentTargetDevice() : null;
+    var freeTargets = new Set(planActive ? (plan.unused_target || []) : []);
+    function profileOptionsFor(kind, sourceName, meta) {
       if (!selectedProfile) return null;
-      // Effective port set = chassis-fixed + selected-module ports.
-      // For legacy profiles (no modules) this is identical to
-      // ``selectedProfile.ports``; for module-variant profiles it
-      // adds the currently-selected module's uplinks.
-      var effectivePorts = effectivePortsFor(selectedProfile);
+      // The target device's ports: a profile's chassis-fixed ports
+      // plus the selected module's, or a family model's compiled
+      // inventory.
+      var effectivePorts = selectedProfile.ports;
+      if (meta && meta.role) {
+        // A port of the declared source device: its role is known,
+        // not guessed from its name.  Ports of the same role first;
+        // a port with no place among them may take any other.
+        var wanted = meta.role === 'access' ? 'physical' : meta.role;
+        var same = effectivePorts
+          .filter(function(p) { return p.kind === wanted; })
+          .map(function(p) { return p.id; });
+        if (meta.state === 'paired') return same;
+        return same.concat(effectivePorts
+          .filter(function(p) { return p.kind !== wanted; })
+          .map(function(p) { return p.id; }));
+      }
       if (kind === 'physical') {
         // Split physical rows by uplink heuristic: source names that
         // look like uplinks get uplink-port options, access-looking
@@ -170,7 +228,7 @@
     function profileKnowsName(kind, name, opts) {
       if (!selectedProfile) return true;
       if (kind === 'lag') return opts.indexOf(name) !== -1;
-      return effectivePortsFor(selectedProfile).some(function(p) {
+      return selectedProfile.ports.some(function(p) {
         return p.id === name;
       });
     }
@@ -197,12 +255,20 @@
         return effective && targetHits[effective] && targetHits[effective].length > 1;
       }).length;
 
+      // Names the port plan left for the operator to decide.
+      var undecided = planActive ? (plan.unresolved_ports || []) : [];
+      var decisionCount = rows.filter(function(r) {
+        return undecided.indexOf(r.source) !== -1
+          && _renameUserMap[r.source] === undefined;
+      }).length;
+
       var section = document.createElement('details');
       section.className = 'mig-rename-kind-section';
       section.setAttribute('data-testid', 'migrate-rename-section-' + kind);
       // Auto-open: first non-empty section, OR any section with
-      // warnings/collisions (needs attention).
-      if (kind === firstNonEmptyKind || warnCount || collisionCount) {
+      // warnings/collisions/undecided names (needs attention).
+      if (kind === firstNonEmptyKind || warnCount || collisionCount
+          || decisionCount) {
         section.open = true;
       }
 
@@ -213,6 +279,15 @@
              + warnCount + ' ⚠</span>' : '')
         + (collisionCount ? '<span class="count" style="color:var(--badge-failed-fg)">'
              + collisionCount + ' collisions</span>' : '');
+      if (decisionCount) {
+        var decisionChip = document.createElement('span');
+        decisionChip.className = 'count warn-count';
+        decisionChip.setAttribute('data-testid',
+          'migrate-rename-decision-count-' + kind);
+        decisionChip.textContent = decisionCount + ' need'
+          + (decisionCount === 1 ? 's' : '') + ' a decision';
+        summary.appendChild(decisionChip);
+      }
       section.appendChild(summary);
 
       var table = document.createElement('table');
@@ -222,6 +297,7 @@
         + '<th scope="col">Source</th>'
         + '<th scope="col">Auto target</th>'
         + '<th scope="col">Override</th>'
+        + (planActive ? '<th scope="col">Position</th>' : '')
         + '<th scope="col" style="width:1.5rem">⚠</th>'
         + '</tr>';
       table.appendChild(thead);
@@ -248,6 +324,11 @@
         if (hasOverride) tr.classList.add('has-override');
         if (isDropped) tr.classList.add('has-drop');
         if (isAutoDropped) tr.classList.add('has-auto-drop');
+        var meta = row.meta;
+        var needsDecision = undecided.indexOf(row.source) !== -1
+          && userVal === undefined;
+        if (needsDecision) tr.classList.add('needs-decision');
+        if (meta) tr.setAttribute('data-plan-state', meta.state);
 
         // Auto-target column:
         //   * Auto-dropped by the backend (unmappable by default) →
@@ -259,7 +340,14 @@
         //     flow but handle defensively) → "(no mapping — needs
         //     override)".
         var autoCell;
-        if (isAutoDropped) {
+        if (meta && meta.text) {
+          // What the port plan did with a name it could not pair.
+          autoCell = '<td class="mig-rename-no-auto" data-testid="'
+            + 'migrate-rename-plan-state-' + escapeHtml(row.source) + '">'
+            + escapeHtml(meta.text) + '</td>';
+        } else if (row.plain && row.auto === row.source && !isAutoDropped) {
+          autoCell = '<td class="mig-rename-no-auto">(unchanged)</td>';
+        } else if (isAutoDropped) {
           autoCell = '<td class="mig-rename-no-auto">(auto-dropped — won\'t render)</td>';
         } else if (row.auto === row.source) {
           autoCell = '<td class="mig-rename-no-auto">(no mapping — needs override)</td>';
@@ -272,7 +360,7 @@
         overrideCell.className = 'mig-rename-target';
         // Drop sentinel used in the dropdown's special "don't render" option.
         var DROP_VALUE = '__DROP__';
-        var opts = profileOptionsFor(row.kind, row.source);
+        var opts = profileOptionsFor(row.kind, row.source, meta);
         // Off-profile auto target.  Selecting a profile does NOT change
         // auto-translation: the translator derives a name from the shape
         // of the source name (Cisco Gi1/0/1 -> AOS-S 1/1) whatever model
@@ -333,7 +421,9 @@
           sel.appendChild(dropOpt);
           opts.forEach(function(opt) {
             var o = document.createElement('option');
-            o.value = opt; o.textContent = opt;
+            o.value = opt;
+            // Under a port plan, say which target ports nothing holds.
+            o.textContent = freeTargets.has(opt) ? opt + '  (free)' : opt;
             if (_renameUserMap[row.source] === opt) o.selected = true;
             sel.appendChild(o);
           });
@@ -360,7 +450,8 @@
           // the user could keep by leaving the field blank) or whether
           // an override is effectively required (no auto was produced).
           inp.placeholder = row.auto === row.source
-            ? 'Type target name (required)'
+            ? ((row.plain || meta) ? 'Type a target name'
+                                   : 'Type target name (required)')
             : 'auto: ' + row.auto;
           inp.value = isDropped ? '' : (_renameUserMap[row.source] || '');
           inp.disabled = isDropped;
@@ -409,8 +500,33 @@
         }
         tr.appendChild(overrideCell);
 
+        if (planActive) {
+          // The position that decided the pairing, and what the
+          // target port lacks.  textContent: the strings are built
+          // from device data an operator can author.
+          var whyCell = document.createElement('td');
+          whyCell.className = 'mig-rename-why';
+          if (meta) {
+            whyCell.setAttribute('data-testid',
+              'migrate-rename-why-' + row.source);
+            whyCell.appendChild(document.createTextNode(meta.why || ''));
+            (meta.flags || []).forEach(function(flag) {
+              var flagEl = document.createElement('span');
+              flagEl.className = 'flag';
+              flagEl.textContent = flag;
+              whyCell.appendChild(flagEl);
+            });
+          }
+          tr.appendChild(whyCell);
+        }
+
         var warnCell = document.createElement('td');
-        if (hasCollision) {
+        if (needsDecision && !hasCollision) {
+          warnCell.innerHTML = '<span class="mig-rename-decision-icon" '
+            + 'data-testid="migrate-rename-decision-'
+            + escapeHtml(row.source) + '" '
+            + 'title="Needs your decision: give it a target port, or drop it">?</span>';
+        } else if (hasCollision) {
           warnCell.innerHTML = '<span class="mig-rename-collision-icon" '
             + 'title="' + escapeHtml(
               'Collides with: '
@@ -427,7 +543,7 @@
             + escapeHtml(row.source) + '" '
             + 'title="' + escapeHtml(
               'Auto name ' + row.auto + ' is not a port on '
-              + (selectedProfile.display_name || selectedProfile.model)
+              + selectedProfile.label
               + ' \u2014 pick one from the list'
             ) + '">⚠</span>';
         }

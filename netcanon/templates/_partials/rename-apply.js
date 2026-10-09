@@ -11,6 +11,8 @@
    * And module-scope helpers (some in other partials):
    *   renderResult, renderRenameTable, renderRenamePreview,
    *   renderRenameSummary                     (migrate.html / partials)
+   *   applyDeviceDeclarations, devicesSettled, _devicesKey,
+   *   currentPortPlan, deviceTargetPicked      (device-models.js)
    *   currentRenameProfileKey, currentRenameModuleSku,
    *   populateRenameModelDropdown,
    *   populateRenameModuleDropdown            (migrate.html inline)
@@ -29,6 +31,14 @@
     if (status) status.textContent = '';
     var body = JSON.parse(JSON.stringify(_lastJobBody));
     body.port_rename_map = Object.assign({}, _renameUserMap);
+    // The body is a clone of the last request.  A per-pane map is
+    // added below only when the operator touched that pane, so one
+    // that was sent before and has since been cleared (Reset all)
+    // must be taken out, or it would be applied again.
+    delete body.vlan_rename_map;
+    delete body.local_user_rename_map;
+    delete body.snmp_community_rename_map;
+    delete body.snmpv3_user_rename_map;
     // VLAN category — send the map ONLY when the operator has
     // actually touched a VLAN row.  Empty-map sends are harmless
     // (server normalises to no-op) but surface as "VLAN pane
@@ -68,12 +78,13 @@
         {}, _renameSnmpV3UserMap,
       );
     }
-    var profileKey = currentRenameProfileKey();
-    if (profileKey) body.target_profile = profileKey;
-    // Only send target_module when the profile actually has
-    // modules — prevents noise in the request for legacy profiles.
-    var moduleSku = currentRenameModuleSku();
-    if (moduleSku) body.target_module = moduleSku;
+    // The devices: a target profile whenever one is chosen (with its
+    // module only when the profile has modules), and the source and
+    // target declarations when both are made.  Fields a previous
+    // Apply sent are removed first -- see applyDeviceDeclarations.
+    await devicesSettled();
+    applyDeviceDeclarations(body);
+    var devicesKey = _devicesKey();
     try {
       var resp = await fetch('/api/v1/migration/plan', {
         method: 'POST',
@@ -88,16 +99,27 @@
       var newJob = await resp.json();
       _lastJob = newJob;
       _lastJobBody = body;
+      _devicePlanKey = devicesKey;
       renderResult(newJob);
       // Re-render the modal from the refreshed job.
       renderRenameTable();
       if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
       if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
       if (typeof renderSnmpRenameTable === 'function') renderSnmpRenameTable();
+      if (typeof renderSnmpV3UserRenameTable === 'function') renderSnmpV3UserRenameTable();
       if (typeof renderRenameRailCounts === 'function') renderRenameRailCounts();
       renderRenamePreview();
       renderRenameSummary();
-      if (status) status.textContent = 'Applied. Rendered output refreshed.';
+      var applyPlan = currentPortPlan();
+      var undecided = (applyPlan && applyPlan.applied)
+        ? (applyPlan.unresolved_ports || []).length : 0;
+      if (status) {
+        status.textContent = undecided
+          ? 'Applied. ' + undecided + ' port name'
+            + (undecided === 1 ? '' : 's') + ' still need'
+            + (undecided === 1 ? 's' : '') + ' your decision.'
+          : 'Applied. Rendered output refreshed.';
+      }
       showToast('Rename applied; output regenerated.', 'success');
     } catch (e) {
       showToast('Network error: ' + e.message, 'error');
@@ -156,6 +178,7 @@
         renderRenameTable();
         renderRenamePreview();
         renderRenameSummary();
+        deviceTargetPicked();
       });
     }
     if (msel) {
@@ -172,6 +195,9 @@
         renderRenameTable();
         renderRenamePreview();
         renderRenameSummary();
+        // A model from a model family brings its own controls (mode,
+        // modules, stack members) and is compiled by the server.
+        deviceTargetPicked();
       });
     }
     if (modsel) {
@@ -186,6 +212,7 @@
         renderRenameTable();
         renderRenamePreview();
         renderRenameSummary();
+        deviceTargetPicked();
       });
     }
   });
