@@ -959,8 +959,16 @@ def translate_port_names(  # noqa: C901
         # A dropped name reached no target, so it shares none.
         if final is not None and source not in gone:
             fused.setdefault(final, set()).add(source)
+    # Two spellings of one name are one source.  AOS-S writes a LAG
+    # ``trk1`` where it is defined and ``Trk1`` where a VLAN lists it;
+    # on a platform whose names have no letter case that is one LAG,
+    # not two ports sharing a target.
+    one_case = not getattr(source_codec, "port_names_case_sensitive", False)
     for final in sorted(fused):
-        sources = sorted(fused[final])
+        distinct: dict[str, str] = {}
+        for source in sorted(fused[final]):
+            distinct.setdefault(source.casefold() if one_case else source, source)
+        sources = sorted(distinct.values())
         if len(sources) < 2 or final in warned_finals:
             continue
         warnings.append(

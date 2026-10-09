@@ -28,6 +28,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **One LAG written in two letter cases is no longer reported as two
+  ports merged.**  AOS-S writes a LAG `trk1` where it is defined and
+  `Trk1` where a VLAN lists it.  Whenever a port map was in play — the
+  browser's empty one is enough, and a request that declares both
+  devices always has one — the job carried `multiple source ports map
+  to 'Trk1' (sources: Trk1, trk1); these are distinct ports ... their
+  VLAN membership will be merged`, and the rename modal drew the LAG
+  as a collision.  Nothing was merged.  Names that differ only in
+  letter case now count as one source where the source platform's
+  names have no case; on FortiOS and RouterOS, where an operator
+  chooses interface names, `DMZ` and `dmz` are still two.
+
 - **Target profiles that named ports the device does not have.**  A port
   id picked from a target profile in the rename modal is written verbatim
   into the generated config, so a wrong id is a config that names a

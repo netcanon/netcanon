@@ -1284,13 +1284,10 @@ nothing, as before.
   is not translated.  Only the port names are made right.  The job
   has no warning for it; with a 2930F fabric or a 2930M stack
   declared from a model family, the plan's `caveats` say so.
-* An AOS-S config that defines a LAG as `trk1` and lists it in a VLAN
-  as `Trk1` is reported, whenever a port map is in play (always, with
-  devices declared), as `multiple source ports map to 'Trk1'
-  (sources: Trk1, trk1)`.  For a LAG written in two letter cases that
-  line is false: it is one LAG, and nothing is merged.  The two
-  spellings are also two names to a rename map: an entry for one of
-  them (a drop, a new name) leaves the other as it was — give both.
+* An AOS-S config defines a LAG as `trk1` and lists it in a VLAN as
+  `Trk1`.  Those are one LAG, but two names to a rename map: an entry
+  for one of them (a drop, a new name) leaves the other as it was —
+  give both.
 
 ---
 

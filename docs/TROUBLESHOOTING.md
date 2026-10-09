@@ -204,8 +204,7 @@ correct mapping.
 Check the job warnings for `port_rename: multiple source ports map
 to ...`.  This is a **real loss**, not cosmetic: two physically
 distinct source ports resolved to a single name on the target, and
-their VLAN memberships merged.  (One exception: an AOS-S LAG named in
-two letter cases, `sources: Trk1, trk1`, is one LAG and not a loss.)
+their VLAN memberships merged.
 
 The common case is Aruba AOS-S uplink-module ports.  `1/A1` (module
 **A**, port 1) and `1/1` (access port 1) are different ports, but no
