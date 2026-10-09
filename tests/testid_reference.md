@@ -660,7 +660,9 @@ position, counted from 0:
 | `migrate-rename-plan-unplaced`        | `<span>`   | "N with no place on the target"; absent at zero |
 | `migrate-rename-plan-off-inventory`   | `<span>`   | "N not on the source device"; absent at zero |
 | `migrate-rename-plan-displaced`       | `<span>`   | "N displaced"; absent at zero |
+| `migrate-rename-plan-landed`          | `<span>`   | "N on a port the target does not have" -- logical names given a port-shaped name the target lacks; absent at zero |
 | `migrate-rename-plan-fused`           | `<span>`   | Target ports given more than one source; absent at zero |
+| `migrate-rename-plan-stale-routes`    | `<span>`   | "N route(s) still name a port that moved" -- nothing in the port map clears it; absent at zero |
 | `migrate-rename-plan-pending`         | `<span>`   | "N need your decision", or "decisions recorded -- Apply to confirm" once the operator has decided them in the modal |
 | `migrate-rename-plan-accept`          | `<button>` | "Accept as shown" -- records the outcome on screen as the operator's decision for every undecided name (a dropped port stays dropped, a kept one stays where it landed).  Apply confirms it |
 | `migrate-rename-plan-report`          | `<details>`| The plan's own warning lines, in the server's words |

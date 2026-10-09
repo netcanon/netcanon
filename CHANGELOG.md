@@ -141,7 +141,10 @@ timestamp if your timezone matters for an audit.
     name that has no place on the target or is not a port of the
     source device.  Names that need a decision are marked, counted
     on the strip above the table, and can be accepted as shown in
-    one click.
+    one click.  The strip also says when a logical name was given a
+    port name the target does not have, and when a route was left
+    naming a port that moved; and a RouterOS port you had named says
+    which port of the model it is and where its hardware went.
   - A same-vendor translation (Aruba to Aruba, say) renames nothing
     by itself and used to open on "No port names recognised"; the
     table now lists every port the config uses.

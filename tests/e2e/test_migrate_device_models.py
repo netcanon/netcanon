@@ -637,3 +637,119 @@ class TestDevicePickersBelongToThePortsPane:
             "migrate-device-target-note", "migrate-rename-plan",
         ):
             expect(page.locator(_tid(name))).to_be_visible()
+
+
+# ---------------------------------------------------------------------------
+# What the plan says beyond pairs: two names for one port, a stray landing,
+# a route left behind
+# ---------------------------------------------------------------------------
+
+_ROUTEROS_NAMED = """/interface ethernet
+set [ find default-name=ether1 ] comment="wan"
+set [ find default-name=ether2 ] name=core-a comment="core A"
+/ip address
+add address=192.0.2.2/30 interface=ether1
+add address=10.0.0.1/24 interface=core-a
+"""
+
+_ROUTEROS_GATEWAY_LIST = """/interface ethernet
+set [ find default-name=ether1 ] comment="a"
+set [ find default-name=ether2 ] comment="b"
+/ip address
+add address=192.0.2.2/30 interface=ether1
+add address=192.0.2.6/30 interface=ether2
+/ip route
+add dst-address=0.0.0.0/0 gateway=ether1,ether2
+"""
+
+_FORTIGATE_WITH_AN_AGGREGATE = """config system interface
+    edit "port1"
+        set ip 10.1.1.1 255.255.255.0
+        set type physical
+    next
+    edit "port2"
+        set ip 10.2.2.1 255.255.255.0
+        set type physical
+    next
+    edit "fortilink"
+        set ip 10.255.1.1 255.255.255.0
+        set type aggregate
+    next
+end
+"""
+
+
+def _declare(page: Page, source_model: str, target_model: str) -> None:
+    page.locator(_tid("migrate-rename-open-btn")).click()
+    expect(page.locator(_tid("migrate-rename-modal"))).to_be_visible()
+    page.locator(_tid("migrate-device-source-model-select")).select_option(
+        value="profile:" + source_model
+    )
+    # A profile, not a family model: it has no deployment to resolve,
+    # so there is no target note to wait for.
+    page.locator(_tid("migrate-rename-target-model-select")).select_option(value=target_model)
+
+
+class TestWhatThePlanSaysBeyondPairs:
+    def test_a_port_the_operator_named_keeps_the_name_and_says_where_it_is(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """RouterOS keeps a port's factory name beside the name an
+        operator gave it.  The row goes by the operator's name, says
+        which port of the model it is, and says where its hardware
+        went -- the output keeps the name."""
+        mp = _translate(
+            page, live_server_url, "mikrotik_routeros", "mikrotik_routeros", _ROUTEROS_NAMED,
+        )
+        _declare(page, "CRS310-8G+2S+", "CCR2004-1G-12S+2XS")
+        body = _apply(page)
+        assert body["source_profile"] == "mikrotik_routeros/CRS310-8G+2S+"
+        expect(_plan(page)).to_have_attribute("data-state", "ok")
+        row = page.locator(_tid("migrate-rename-row-core-a"))
+        expect(row).to_contain_text("ether2 in the device model")
+        expect(row).to_contain_text("keeps its name")
+        expect(row).to_contain_text("sfp-sfpplus2")
+        expect(mp.status_summary).to_contain_text("completed")
+
+    def test_a_route_left_naming_a_port_that_moved_is_said(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """A list of gateways is not followed when its ports move.
+        Nothing in the port map clears that, so the strip says it and
+        the job is not a clean success."""
+        mp = _translate(
+            page, live_server_url, "mikrotik_routeros", "mikrotik_routeros",
+            _ROUTEROS_GATEWAY_LIST,
+        )
+        _declare(page, "CRS310-8G+2S+", "CCR2004-1G-12S+2XS")
+        _apply(page)
+        expect(_plan(page)).to_have_attribute("data-state", "warn")
+        expect(page.locator(_tid("migrate-rename-plan-stale-routes"))).to_contain_text(
+            "1 route still names a port that moved"
+        )
+        expect(page.locator(_tid("migrate-rename-plan-report"))).to_contain_text("0.0.0.0/0")
+        expect(mp.status_summary).to_contain_text("partial")
+
+    def test_a_logical_name_on_a_port_the_target_lacks_needs_a_decision(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """A FortiGate's stock aggregate is given a port-shaped name
+        (``fortilink1``) the declared FortiGate does not have.  It is
+        kept, said, and asks for a decision."""
+        mp = _translate(
+            page, live_server_url, "fortigate_cli", "fortigate_cli",
+            _FORTIGATE_WITH_AN_AGGREGATE,
+        )
+        _declare(page, "100E", "100E")
+        _apply(page)
+        expect(_plan(page)).to_have_attribute("data-state", "warn")
+        expect(page.locator(_tid("migrate-rename-plan-landed"))).to_contain_text(
+            "1 on a port the target does not have"
+        )
+        expect(page.locator(_tid("migrate-rename-plan-state-fortilink"))).to_contain_text(
+            "given the port name fortilink1, which the target device does not have"
+        )
+        expect(page.locator(_tid("migrate-rename-row-fortilink"))).to_have_class(
+            re.compile(r"\bneeds-decision\b")
+        )
+        expect(mp.status_summary).to_contain_text("partial")

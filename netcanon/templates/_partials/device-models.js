@@ -889,6 +889,7 @@
   /** Per source name: what the plan did with it, for the rename table.
    *
    *    state   paired | unplaced | off-inventory | displaced | follows
+   *            | landed-off-target
    *    role    access | uplink | mgmt (a port of the declared source)
    *    kind    the table section the row belongs in, when known
    *    auto    the target the plan chose ('' when it chose none)
@@ -902,6 +903,9 @@
     var dropped = new Set((_lastJob && _lastJob.port_drops) || []);
     var stacked = ((plan.source && plan.source.members) || []).length > 1;
     var undecided = new Set(plan.unresolved_ports || []);
+    var labelled = plan.labelled_ports || {};
+    var hardware = plan.target_hardware || {};
+    var landed = plan.landed_off_target || {};
     var order = 0;
     function where(rank, role, position) {
       return role + ' ' + (position + 1)
@@ -917,6 +921,12 @@
           + (p.target_speed || '?'));
       }
       if (p.poe_lost) flags.push('no PoE on the target port');
+      // RouterOS: a port you named is found in the model by its
+      // factory name, and may keep your name while its hardware moves.
+      if (labelled[p.source]) flags.push(labelled[p.source] + ' in the device model');
+      if (hardware[p.source]) {
+        flags.push('keeps its name — its hardware is ' + hardware[p.source]);
+      }
       meta[p.source] = {
         state: 'paired', role: p.role, kind: _PLAN_ROLE_KIND[p.role],
         auto: p.target, text: '',
@@ -946,7 +956,8 @@
       meta[p.source] = {
         state: 'unplaced', role: p.role, kind: _PLAN_ROLE_KIND[p.role],
         auto: auto, text: text,
-        why: where(p.member_rank, p.role, p.position), flags: [],
+        why: where(p.member_rank, p.role, p.position),
+        flags: labelled[p.source] ? [labelled[p.source] + ' in the device model'] : [],
         order: order,
       };
     });
@@ -978,6 +989,18 @@
         text: 'dropped — by name it would have taken a name another '
           + 'interface holds',
         why: (meta[name] || {}).why || '', flags: [], order: order,
+      };
+    });
+    // A logical name the ordinary translation gave a port-shaped name
+    // the target device does not have.  Nothing shares the name, so it
+    // was kept -- on a port that is not there.
+    Object.keys(landed).forEach(function(name) {
+      order += 1;
+      meta[name] = {
+        state: 'landed-off-target', role: '', kind: '', auto: '',
+        text: 'given the port name ' + landed[name]
+          + ', which the target device does not have',
+        why: '', flags: [], order: order,
       };
     });
     return meta;
@@ -1046,8 +1069,9 @@
 
   /** The strip that says where the port mapping stands: what to do
    *  next while there is no plan, and what the plan did once there is
-   *  one -- paired, unplaced, not on the source device, displaced,
-   *  fused, and how many names still need the operator's decision. */
+   *  one -- paired, unplaced, not on the source device, displaced, on
+   *  a port the target lacks, fused, a route left naming a port that
+   *  moved, and how many names still need the operator's decision. */
   function renderPortPlan() {
     var el = document.getElementById('mig-rename-plan');
     if (!el) return;
@@ -1118,6 +1142,8 @@
     var offInv = (plan.off_inventory || []).length;
     var displaced = (plan.displaced || []).length;
     var fused = Object.keys(plan.fused || {}).length;
+    var landed = Object.keys(plan.landed_off_target || {}).length;
+    var stale = (plan.stale_next_hops || []).length;
     var pending = pendingPlanDecisions(plan);
 
     var title = document.createElement('strong');
@@ -1136,10 +1162,22 @@
       _planChip(el, 'migrate-rename-plan-displaced',
         displaced + ' displaced', 'chip-warn');
     }
+    if (landed) {
+      _planChip(el, 'migrate-rename-plan-landed',
+        landed + ' on a port the target does not have', 'chip-warn');
+    }
     if (fused) {
       _planChip(el, 'migrate-rename-plan-fused',
         fused + ' target port' + (fused === 1 ? '' : 's')
         + ' given more than one source', 'chip-block');
+    }
+    if (stale) {
+      // Nothing in the port map clears this one: the route has to be
+      // corrected in the output.
+      _planChip(el, 'migrate-rename-plan-stale-routes',
+        stale + ' route' + (stale === 1 ? '' : 's')
+        + ' still name' + (stale === 1 ? 's' : '') + ' a port that moved',
+        'chip-warn');
     }
     if (pending.length) {
       _planChip(el, 'migrate-rename-plan-pending',
@@ -1175,10 +1213,10 @@
         list.appendChild(item);
       });
       details.appendChild(list);
-      if (fused || pending.length) details.open = true;
+      if (fused || pending.length || stale) details.open = true;
       el.appendChild(details);
     }
-    var state = fused ? 'block' : (pending.length ? 'warn' : 'ok');
+    var state = fused ? 'block' : ((pending.length || stale) ? 'warn' : 'ok');
     el.className = 'plan-' + state;
     el.setAttribute('data-state', state);
     el.style.display = '';
