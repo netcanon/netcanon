@@ -171,6 +171,7 @@ def plan_port_mapping(
     target: Inventory,
     used_names: Iterable[str] | None = None,
     known_as: Mapping[str, str] | None = None,
+    one_hardware: Iterable[str] = (),
 ) -> MappingPlan:
     """Pair *source* with *target* by position.
 
@@ -188,6 +189,10 @@ def plan_port_mapping(
             inventory's name for the port to the config's.  The port
             is found in *source* by the first and appears in the plan
             — and is matched against *used_names* — by the second.
+        one_hardware: Factory names the config looks MORE THAN ONE
+            interface up by (a port that was renamed, beside a line
+            that still uses its old name).  Which of them is the port
+            cannot be told, so no pairing is made.
 
     Returns:
         The plan.  ``rename_map`` holds entries only for used source
@@ -196,7 +201,8 @@ def plan_port_mapping(
         and the map empty, when no pairing can be made: one side lists
         no ports, or lists the same name twice (a position is then not
         a port), or the config gives one port the name another port of
-        the source device has, so that a name no longer says which.
+        the source device has, so that a name no longer says which, or
+        looks two interfaces up by one factory name.
     """
     plan = MappingPlan(
         source=source.summary(),
@@ -219,6 +225,14 @@ def plan_port_mapping(
                 f"({_summary(repeated)})",
             )
 
+    twice = sorted(set(one_hardware))
+    if twice:
+        return _not_applied(
+            plan,
+            f"the config looks more than one interface up by one factory "
+            f"name ({_summary(twice)}), so which of them is the port cannot "
+            f"be told",
+        )
     shown = dict(known_as or {})
 
     def config_name(port: PhysicalPort) -> str:
@@ -373,6 +387,7 @@ def settle_plan(
     landed_off_target: Mapping[str, str] | None = None,
     stale_next_hops: Iterable[str] = (),
     units: bool = False,
+    unbound: Iterable[str] = (),
 ) -> None:
     """Reconcile *plan* with what the translation run actually did.
 
@@ -394,7 +409,8 @@ def settle_plan(
 
     Fills the outcome fields (``overridden``, ``sub_interfaces``,
     ``displaced``, ``fused``, ``off_target``, ``target_hardware``,
-    ``landed_off_target``, ``stale_next_hops``, ``ignored_overrides``,
+    ``source_hardware``, ``unbound_ports``, ``landed_off_target``,
+    ``stale_next_hops``, ``ignored_overrides``,
     ``emptied_lags``, ``shrunk_lags``, ``lost_routes``,
     ``lost_dhcp_pools``, ``lost_tracking``, ``lost_vtep_sources``,
     ``unused_target``, ``unresolved_ports``),
@@ -429,17 +445,23 @@ def settle_plan(
             that sends the port to that name is not off-target.
         fold_source: Source names compare without regard to case.
         fold_target: Target names do (see :func:`name_key`).
-        target_hardware: Where a source name's port is on the target,
-            for each port the run put on hardware — read from the
-            tree that was rendered.  It differs from the name the
-            port has there only on a target that keeps a name beside
-            the hardware (RouterOS); the entries that differ are
-            kept, and :attr:`MappingPlan.fused`, ``off_target`` and
-            ``unused_target`` count the port where its hardware is.
+        target_hardware: Which hardware each source name's port is
+            looked up by in the output — read from the tree that was
+            rendered, on a target that keeps a factory name beside a
+            port's own (RouterOS).  Entries equal to the name the
+            port has there say nothing and are left out.  The rest
+            decide :attr:`MappingPlan.fused` and ``unused_target``;
+            those that are ports of the target are kept as
+            :attr:`MappingPlan.target_hardware`, and an operator's
+            entry for such a port NAMED it and is not off-target.
         landed_off_target: See :attr:`MappingPlan.landed_off_target`.
         stale_next_hops: See :attr:`MappingPlan.stale_next_hops`.
         units: A unit of a target port (``ge-0/0/7.54``) is a name of
             the target — true between two configs of one codec.
+        unbound: Keys of *target_hardware* whose hardware no line of
+            the rendered output looks up; see
+            :attr:`MappingPlan.unbound_ports`.  Such a port is on no
+            hardware in the output, and counts for none.
     """
     dropped = set(port_drops)
     decided = set(operator_map)
@@ -474,13 +496,32 @@ def settle_plan(
         name: where for name, where in sorted((landed_off_target or {}).items())
         if name not in decided and name not in dropped
     }
-    # Where the hardware is, kept only where that is not simply the
-    # name the port has in the output.
+    # A port the output does not look up by its hardware at all is
+    # said as that, and is on no hardware below.
+    nowhere = set(unbound)
+    plan.unbound_ports = {
+        name: where for name, where in sorted((target_hardware or {}).items())
+        if name in nowhere and name not in dropped
+    }
+    # Which hardware a port is looked up by, where that is not simply
+    # the name the port has in the output.
     hardware = {
         name: where for name, where in sorted((target_hardware or {}).items())
-        if name not in dropped and where != port_renames.get(name, name)
+        if name not in dropped and name not in nowhere
+        and where != port_renames.get(name, name)
     }
-    plan.target_hardware = hardware
+    on_target = {name_key(name, fold_target) for name in targets}
+    # The field is the PLACE a port has: a port of the target.  A port
+    # nobody placed is still looked up by the hardware it had on the
+    # source; that counts for a clash, and is no place.
+    plan.target_hardware = {
+        name: where for name, where in hardware.items()
+        if name_key(where, fold_target) in on_target
+    }
+    plan.source_hardware = {
+        name: where for name, where in hardware.items()
+        if name not in plan.target_hardware
+    }
     if plan.applied:
         plan.fused = fused_targets(
             every, port_renames, dropped, involving=used,
@@ -496,7 +537,6 @@ def settle_plan(
             for where, sources in by_hardware.items():
                 listed = plan.fused.setdefault(where, [])
                 listed.extend(name for name in sources if name not in listed)
-        on_target = {name_key(name, fold_target) for name in targets}
 
         def listed_by_target(name: str) -> bool:
             if name_key(name, fold_target) in on_target:
@@ -516,15 +556,15 @@ def settle_plan(
             source: name_key(form, fold_target)
             for source, form in (management_forms or {}).items() if form
         }
-        # Judged where the port's hardware is: on RouterOS an entry
-        # whose target is not a port NAMES the port, and the port is
-        # off-target only if its hardware has no place either.
+        # An entry whose target is not a port of the device is
+        # off-target -- unless it only NAMED a port whose hardware has
+        # a place (RouterOS), which is said in a line of its own.
         plan.off_target = sorted({
-            where for key, value in operator_map.items()
+            value for key, value in operator_map.items()
             if isinstance(value, str) and key in present
-            for where in (hardware.get(key, value),)
-            if not listed_by_target(where)
-            and forms.get(key) != name_key(where, fold_target)
+            and key not in plan.target_hardware
+            and not listed_by_target(value)
+            and forms.get(key) != name_key(value, fold_target)
         })
         # Every name that ended somewhere occupies that name -- a
         # logical interface an operator put on a port as much as a
@@ -746,6 +786,39 @@ def describe_plan(
             f"a port (an abbreviation, say) it may share that port with "
             f"the source port already paired to it — use the names the "
             f"device model lists"
+        )
+    named = [
+        f"{name} is on {where}"
+        for name, where in plan.target_hardware.items() if name in seen
+    ]
+    if named:
+        # Not a problem: a decision the engine took for the operator,
+        # between two readings of what they typed.  So it is said.
+        lines.append(
+            f"port mapping: {len(named)} override target(s) are not ports "
+            f"of the declared target device and were taken as NAMES for "
+            f"the port, whose hardware that does not change "
+            f"({_summary(named, limit=6, sep='; ')}); if a port was meant, "
+            f"use a name the device model lists"
+        )
+    if plan.source_hardware:
+        still = [f"{name} by {where}" for name, where in plan.source_hardware.items()]
+        lines.append(
+            f"port mapping: {len(still)} port(s) the mapping did not place "
+            f"are still looked up by the factory name they had on the "
+            f"SOURCE device, which the declared target does not have "
+            f"({_summary(still, limit=6, sep='; ')}); give each a port of "
+            f"the target, or drop it"
+        )
+    if plan.unbound_ports:
+        lost = [f"{name} on {where}" for name, where in plan.unbound_ports.items()]
+        lines.append(
+            f"port mapping: {len(lost)} port(s) are not "
+            f"looked up by their hardware anywhere in the output "
+            f"({_summary(lost, limit=6, sep='; ')}) — the target writes an "
+            f"interface with such a name as another kind of interface (a "
+            f"VLAN, a bridge, a LAG) or not at all; give each port another "
+            f"name"
         )
     if plan.landed_off_target:
         shown = [

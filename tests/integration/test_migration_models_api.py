@@ -826,3 +826,101 @@ class TestEachNameKeyedMap:
         (error,) = resp.json()["detail"]
         assert error["loc"] == ["body", field]
         assert "valid Unicode text" in error["msg"]
+
+
+_EOS_TWO_ROUTED_PORTS = """hostname sw
+!
+interface Ethernet1
+   description wan
+   no switchport
+   ip address 192.0.2.1/24
+!
+interface Ethernet2
+   description lan
+   no switchport
+   ip address 10.0.0.1/24
+!
+end
+"""
+
+
+class TestEveryPlacedPortIsFoundByItsHardware:
+    """A RouterOS target finds a port by its factory name.  With both
+    devices declared, every port the mapping placed is looked up by
+    the port of the target it is on -- from any source vendor."""
+
+    def test_a_port_from_another_vendor_that_the_operator_names(
+        self, client: TestClient,
+    ) -> None:
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "arista_eos", "target": "mikrotik_routeros",
+            "raw_text": _EOS_TWO_ROUTED_PORTS,
+            "source_profile": "arista_eos/DCS-7050SX-64",
+            "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+            "port_rename_map": {"Ethernet1": "WAN"},
+        }).json()
+        plan = job["port_mapping_plan"]
+        assert job["status"] == "completed"
+        assert _find_lines(job) == [
+            'set [ find default-name=sfp-sfpplus1 ] name=WAN comment="wan" disabled=no',
+            'set [ find default-name=sfp-sfpplus2 ] comment="lan" disabled=no',
+        ]
+        assert "find name=" not in job["rendered"]
+        assert plan["target_hardware"] == {"Ethernet1": "sfp-sfpplus1"}
+        assert (plan["off_target"], plan["source_hardware"]) == ([], {})
+        assert any("taken as NAMES" in line for line in plan["warnings"])
+
+    def test_an_entry_keyed_by_a_factory_name_is_taken_for_the_port(
+        self, client: TestClient,
+    ) -> None:
+        """A requested drop used to be ignored, in a job that said
+        ``completed``."""
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "mikrotik_routeros", "target": "arista_eos",
+            "raw_text": _ROUTEROS_NAMED,
+            "source_profile": "mikrotik_routeros/CRS310-8G+2S+",
+            "target_profile": "arista_eos/DCS-7050SX-64",
+            "port_rename_map": {"ether2": None},
+        }).json()
+        assert job["port_drops"] == ["core-a"]
+        assert "10.0.0.1" not in job["rendered"]
+        assert job["port_mapping_plan"]["overridden"] == ["core-a"]
+
+    def test_a_port_no_line_of_the_output_finds_is_reported(
+        self, client: TestClient,
+    ) -> None:
+        """RouterOS output has no Ethernet line for a port whose name
+        reads as a bridge.  The plan says so, and the job is not
+        ``completed``."""
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "arista_eos", "target": "mikrotik_routeros",
+            "raw_text": _EOS_TWO_ROUTED_PORTS,
+            "source_profile": "arista_eos/DCS-7050SX-64",
+            "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+            "port_rename_map": {"Ethernet1": "bridge-uplink"},
+        }).json()
+        plan = job["port_mapping_plan"]
+        assert "sfp-sfpplus1" not in job["rendered"]
+        assert plan["unbound_ports"] == {"Ethernet1": "sfp-sfpplus1"}
+        assert plan["target_hardware"] == {}
+        assert job["status"] == "partial"
+        assert "not looked up by their hardware in the output" in job["error"]
+
+    def test_a_management_vlan_on_a_port_the_target_lacks_asks_for_a_decision(
+        self, client: TestClient,
+    ) -> None:
+        text = (
+            'config system interface\n    edit "port1"\n        set ip 10.1.1.1 255.255.255.0\n'
+            '        set type physical\n    next\n    edit "MGMT"\n'
+            '        set ip 10.90.0.1 255.255.255.0\n        set interface "port1"\n'
+            "        set vlanid 90\n    next\nend\n"
+        )
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "fortigate_cli", "target": "juniper_junos", "raw_text": text,
+            "source_profile": "fortigate/100E", "target_profile": "juniper_junos/EX4300-48T",
+            "force": True,
+        }).json()
+        plan = job["port_mapping_plan"]
+        assert plan["landed_off_target"] == {"MGMT": "em1"}
+        assert plan["unresolved_ports"] == ["MGMT"]
+        assert job["status"] == "partial"

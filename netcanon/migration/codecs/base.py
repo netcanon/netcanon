@@ -281,6 +281,19 @@ class CodecBase(ABC):
     #: leaves it to the value below).
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: This platform finds a port by a FACTORY name that is not the
+    #: name an operator may give it, and its renderer writes that
+    #: lookup from ``CanonicalInterface.default_name`` (RouterOS:
+    #: ``set [ find default-name=ether1 ] name=WAN``).
+    #:
+    #: Read by model-to-model port mapping.  For such a target every
+    #: port the mapping placed has its factory name set to the port of
+    #: the declared target it is on, whatever vendor the config came
+    #: from — otherwise a port an operator names is looked up by that
+    #: name, which no device has.  ``False`` where a port has one
+    #: name, which is every other platform that ships.
+    ports_keep_a_factory_name: ClassVar[bool] = False
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Wrap each subclass's ``parse`` at the class boundary so a pydantic
         ``ValidationError`` raised while building a canonical model surfaces

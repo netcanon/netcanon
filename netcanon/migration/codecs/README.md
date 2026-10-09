@@ -186,6 +186,16 @@ class MyVendorCodec(CodecBase):
     # that inherits it.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    # Does the platform find a port by a factory name kept beside the
+    # name an operator gave it (RouterOS `set [ find
+    # default-name=ether1 ] name=WAN`)?  Leave it out unless your
+    # parser fills `CanonicalInterface.default_name`: then set it to
+    # True, and model-to-model port mapping will set that field to
+    # the port of the declared target each placed port is on.
+    # `test_the_flag_is_what_the_captures_show` reads it off your
+    # committed captures.
+    # ports_keep_a_factory_name: ClassVar[bool] = True
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         vendor_id="myvendor",
         device_classes=[DeviceClass.switch, DeviceClass.router],

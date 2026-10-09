@@ -315,16 +315,18 @@ and a place missing from the rename pass is a name that stays behind
 when its port moves.
 
 Two tests hold you to it, both in `test_port_name_universe.py`.  One
-asserts that the rename pass moves every name the collector lists.
-The other, because two lists that agree can both be incomplete, sends
+builds a canonical tree from the schema, with a name of its own in
+every text field, and requires the rename pass, the collector and
+the module's table of places (`_PLACES`) to name the same fields: a
+field you add to one and not the others fails, and there is no
+fixture to remember.
+The other, because lists that agree can all be incomplete, sends
 port names to one another on the committed captures and fails for a
 value of the re-parsed output that did not follow.  That experiment
 reaches your field only if a committed capture puts a port name in it
-and the codec's parser reads it back — so add the field to that
-module's table of places (`_PLACES`), and, unless
-`TestWhatTheExperimentReaches` then shows a capture catching it, a
-small config to `_SMALL_CONFIGS`.  The table is checked against the
-sweep, so a place in one and not the other fails.
+and the codec's parser reads it back — so, unless
+`TestWhatTheExperimentReaches` shows a capture catching it, add a
+small config to `_SMALL_CONFIGS`.
 
 A field that says *which hardware* a port is, rather than referring
 to a port by name, is a different thing and does not go in the sweep:

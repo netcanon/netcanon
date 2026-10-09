@@ -397,6 +397,7 @@ def collect_hardware_port_names(
     intent: CanonicalIntent,
     classify: Callable[[str], PortIdentity] | None = None,
     always: Iterable[str] = (),
+    fold: bool = True,
 ) -> list[str]:
     """The hardware ports *intent* references, in first-seen order.
 
@@ -422,7 +423,10 @@ def collect_hardware_port_names(
     * a LAG's own name, and the name an interface gives as its
       ``lag_member_of``.  LAG names also arrive through VLAN
       membership, in either case (AOS-S prints both ``Trk1`` and
-      ``trk1``), so they are subtracted after the union;
+      ``trk1``), so they are subtracted after the union — compared
+      as the platform compares names (*fold*): where an operator's
+      names are kept apart by case, a port called ``BOND1`` is not
+      the LAG ``bond1``;
     * when *classify* is given, a name it POSITIVELY calls one of
       :data:`NON_HARDWARE_PORT_KINDS`.  Several codecs never set
       ``interface_type`` (OPNsense, VyOS) or type everything that is
@@ -461,14 +465,19 @@ def collect_hardware_port_names(
             a real port must not be able to take it out of the set a
             mapping is made for.  (The type and LAG-name tests above
             still apply to it.)
+        fold: Names of the source platform compare without regard to
+            case (``not codec.port_names_case_sensitive``).
     """
+    def key(name: str) -> str:
+        return name.lower() if fold else name
+
     not_hardware: set[str] = {
         iface.name for iface in intent.interfaces
         if iface.interface_type in NON_HARDWARE_INTERFACE_TYPES
     }
-    lag_names = {lag.name.lower() for lag in intent.lags if lag.name}
+    lag_names = {key(lag.name) for lag in intent.lags if lag.name}
     lag_names.update(
-        iface.lag_member_of.lower() for iface in intent.interfaces
+        key(iface.lag_member_of) for iface in intent.interfaces
         if iface.lag_member_of
     )
     evidenced: set[str] = {iface.name for iface in intent.interfaces if iface.name}
@@ -493,7 +502,7 @@ def collect_hardware_port_names(
 
     names: list[str] = []
     for name in collect_port_names(intent):
-        if name in not_hardware or name.lower() in lag_names:
+        if name in not_hardware or key(name) in lag_names:
             continue
         if name not in keep:
             kind = kind_of(name)
@@ -890,7 +899,14 @@ def translate_port_names(  # noqa: C901
             counts[obj.name] = counts.get(obj.name, 0) + 1
         for final in sorted(n for n, c in counts.items() if c > 1):
             warned_finals.add(final)
-            sources = sorted(s for s, f in memo.items() if f == final) or [final]
+            # A name the translator dropped reached no target, so it
+            # shares none -- the same rule the membership sweep below
+            # applies.  (An operator's drop is stripped before any name
+            # is resolved, and is never among these.)
+            sources = sorted(
+                s for s, f in memo.items()
+                if f == final and s not in auto_dropped
+            ) or [final]
             warnings.append(
                 f"port_rename: multiple source ports map to {final!r} "
                 f"(sources: {', '.join(sources)}); the target will render "

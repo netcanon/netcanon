@@ -207,7 +207,8 @@ and 100E physical hardware.
   ordinary translation gives a port-shaped name — is dropped and
   reported (`displaced`) where that name is a port of the target, and
   listed (`landed_off_target`) where it is not.  A VLAN interface the
-  codec reads as a physical port is treated the same way.  Name such
+  codec reads as a physical port, or as a management port (`MGMT`),
+  is treated the same way.  Name such
   an interface in `port_rename_map` to decide it.
   FortiOS interface names are an operator's free text and are kept
   apart by case: `DMZ` beside a port `dmz` is its own interface.  See

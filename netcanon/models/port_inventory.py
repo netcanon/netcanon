@@ -476,7 +476,8 @@ class MappingPlan(BaseModel):
     with those names, where at least one of them is a hardware port
     the config uses.  Read from the finished run over every name
     the config references, compared as the two platforms compare
-    names (without regard to case where the platform has none).
+    names (without regard to case where another case cannot be
+    another interface).
     The pairing never produces one and an undecided name is
     displaced before it can, so an entry here comes from an
     operator override that points two names at one.  A port is
@@ -496,20 +497,50 @@ class MappingPlan(BaseModel):
     is listed here, and can share that port with the source port
     paired to it without appearing in :attr:`fused`.  Between two
     configs of one codec a unit of a listed port
-    (``ge-0/0/7.54``) is not off-target.  On a RouterOS target a
-    NAME an operator gives a port is not off-target either while
-    the port's hardware has a place (:attr:`target_hardware`)."""
+    (``ge-0/0/7.54``) is not off-target.  On a RouterOS target an
+    entry whose target is not a port NAMES the port; while the
+    port's hardware has a place (:attr:`target_hardware`) the name
+    is not listed here, and the plan says in a line of its own that
+    it was taken as a name."""
 
     target_hardware: dict[str, str] = Field(default_factory=dict)
     """Source names whose port is on a target port that is not the
     name they have in the output: source name to that target port.
-    RouterOS only.  A port an operator named keeps the name, and an
-    operator's entry whose target is not a port of the declared
-    target NAMES the port; in both cases the hardware goes where the
-    pairing put it (``set [ find default-name=sfp-sfpplus2 ]
-    name=core-a``).  ``MigrationJob.port_renames`` records names, so
-    it has no entry for such a move; this field does.  :attr:`fused`
-    and :attr:`unused_target` count a port where its hardware is."""
+    Only on a target that finds a port by a factory name beside its
+    own (RouterOS).  A port an operator named in a RouterOS config
+    keeps the name, and an operator's entry whose target is not a
+    port of the declared target NAMES the port — from any source
+    vendor; in both cases the hardware goes where the pairing put it
+    (``set [ find default-name=sfp-sfpplus2 ] name=core-a``).
+    ``MigrationJob.port_renames`` records names, so it has no entry
+    for such a move; this field does.  :attr:`fused` and
+    :attr:`unused_target` count a port where its hardware is.  A port
+    nobody placed keeps the factory name it had: it is here if the
+    target has a port of that name, and in :attr:`source_hardware` if
+    it has not."""
+
+    source_hardware: dict[str, str] = Field(default_factory=dict)
+    """Source names whose port nobody placed and which the output
+    still looks up by the factory name the port had on the SOURCE
+    device, under another name: source name to that factory name.
+    The declared target has no such port.  It happens when an
+    operator's entry NAMES a port the mapping could not place (it is
+    also in :attr:`off_target`, by the name they typed).  Only on a
+    target that finds a port by a factory name (RouterOS)."""
+
+    unbound_ports: dict[str, str] = Field(default_factory=dict)
+    """Source names of ports whose hardware NO line of the output
+    looks up: source name to that hardware.  Read back from the
+    rendered output with the target's
+    own parser, on a target that finds a port by a factory name
+    (RouterOS).  It happens when the port's name reads to the target
+    as another kind of interface — the RouterOS renderer writes no
+    Ethernet line for a name shaped like a VLAN, a bridge or a LAG
+    (``bond1``, ``bridge-uplink``, ``vlan-trunk``, ``uplink.10``),
+    whoever chose the name.  Such a port is in neither
+    :attr:`target_hardware` nor :attr:`source_hardware`, and the job
+    is ``partial`` while this is not empty: give the port another
+    name."""
 
     landed_off_target: dict[str, str] = Field(default_factory=dict)
     """Logical names nobody decided — a VLAN interface, say — that
@@ -612,12 +643,14 @@ class MappingPlan(BaseModel):
     def is_clean(self) -> bool:
         """A mapping was made and nothing about it needs a decision:
         :attr:`unresolved_ports` is empty, no target port received
-        two source ports, and no route still names a port that moved
-        (:attr:`stale_next_hops`).  This is the condition under which
+        two source ports, no route still names a port that moved
+        (:attr:`stale_next_hops`), and every port the mapping put on
+        a piece of hardware is looked up by it in the output
+        (:attr:`unbound_ports`).  This is the condition under which
         the port mapping leaves a job ``completed``."""
         return (
             self.applied and not self.unresolved_ports and not self.fused
-            and not self.stale_next_hops
+            and not self.stale_next_hops and not self.unbound_ports
         )
 
     def unresolved(self, acknowledged: set[str] | None = None) -> list[str]:

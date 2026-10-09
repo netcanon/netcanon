@@ -135,7 +135,9 @@ codec — for an interface that is not on the port the job reports, a
 port in the output the job does not report, a name that moved and is
 still there, or an interface carrying the addresses of two.  Each of
 those checks is also handed a defective job and required to fail: a
-check nobody has seen fail is not known to check anything.  The
+check nobody has seen fail is not known to check anything — and the
+wrapper is handed one for each check, since a check that is never
+called passes every test as well.  The
 cross-mesh audit below does not exercise model-to-model mapping: it
 runs without declared devices.
 
@@ -156,7 +158,10 @@ own parser reads the field back from its own rendering; the captures
 that have no two ports to exchange are pinned by name, so the
 experiment cannot shrink unnoticed.  The translator is then broken at
 each place in turn: which places a capture catches is pinned, and
-each of the others has a small config in the module that does.  It
+each of the others has a small config in the module that does.  The
+module's table of places, the rename pass and the collector are
+compared on a tree built from the canonical schema, so a new field
+cannot be in one and not the others.  It
 moves names the device already has, so what happens to a name that
 is *new* — a RouterOS port an operator calls `WAN` — is pinned by
 hand beside it.  And it runs twice: without devices declared, where

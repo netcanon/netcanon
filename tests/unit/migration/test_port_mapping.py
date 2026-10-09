@@ -905,15 +905,20 @@ class TestNoWarningCanBeReadAsATableRow:
         used = ["1/1", "2/1", "mgmt0", "A1", "1/1.5", "49.7"]
         plan = plan_port_mapping(two, one, used)
         _settled(
-            plan, used, target=one, operator={"1/1": "9/9", "nope": "8/8"},
+            plan, used, target=one,
+            operator={"1/1": "9/9", "nope": "8/8", "49.7": "6/6"},
             drops=["A1", "mgmt0"], displaced=["A1", "1/1.5"],
             emptied_lags=["Trk1"], shrunk_lags=["Trk2"], lost_routes=["0.0.0.0/0"],
             lost_dhcp_pools=["10.0.0.0/24"], ignored_overrides=["2/1"],
             sub_interfaces={"49.7": None},
             lost_tracking=["Vlan10"], lost_vtep_sources=["Loopback0"],
             landed_off_target={"DMZ": "9/1"}, stale_next_hops=["10.9.0.0/16"],
+            target_hardware={"1/1": "x1", "49.7": "zz", "nope": "x1"}, unbound=["nope"],
         )
         kinds = (
+            "were taken as NAMES",
+            "not looked up by their hardware anywhere in the output",
+            "the mapping did not place",
             "were given a port name the declared target device does not list",
             "still name, as next hop",
             "belong to a member the target does not have",
@@ -935,7 +940,7 @@ class TestNoWarningCanBeReadAsATableRow:
             assert kind in text, kind
         assert "'" not in text
         assert plan.warnings == describe_plan(
-            plan, decided={"1/1", "nope"}, dropped={"A1", "mgmt0", "2/1"},
+            plan, decided={"1/1", "nope", "49.7"}, dropped={"A1", "mgmt0", "2/1"},
         )
 
     def test_an_apostrophe_in_a_port_name_does_not_make_one(self):
@@ -971,6 +976,17 @@ class TestAPortKnownByAnotherName:
         ]
         assert plan.rename_map == {"ether1": "sfp1", "core-a": "sfp2"}
         assert plan.off_inventory == []
+
+    def test_one_factory_name_on_two_interfaces_is_not_paired(self):
+        """Told that the config looks two interfaces up by one
+        factory name, the planner pairs nothing: which of the two is
+        the port cannot be told."""
+        plan = plan_port_mapping(
+            self.SOURCE, self.TARGET, ["ether1", "lan2"], one_hardware=["ether2", "ether2"],
+        )
+        assert not plan.applied and plan.rename_map == {}
+        (line,) = plan.warnings
+        assert "looks more than one interface up by one factory name (ether2)" in line
 
     def test_its_factory_name_is_not_a_name_the_config_uses(self):
         """Handed in as a used name it is a name the source device
@@ -1055,16 +1071,114 @@ class TestWhereTheHardwareIs:
         )
         assert plan.off_target == [] and plan.target_hardware == {"ether1": "sfp1"}
 
-    def test_it_is_off_target_when_the_hardware_has_none(self):
-        """An off-inventory port the operator only named stays on the
-        hardware it was on, which the target does not list -- and that
-        hardware name is what is reported, not the name they typed."""
+    def test_a_port_nobody_placed_has_no_place_whatever_it_is_called(self):
+        """An off-inventory port the operator only named is still
+        looked up by the hardware it had on the SOURCE, which the
+        target does not list.  That is no place: the field is empty,
+        the target the operator TYPED is what is reported as off-target
+        (not a factory name they never wrote), and nothing claims the
+        entry named a placed port."""
         plan = plan_port_mapping(self.SOURCE, self.TARGET, ["ether1", "ether9"])
         _settled(
             plan, ["ether1", "ether9"], operator={"ether9": "WAN"}, target=self.TARGET,
-            target_hardware={"ether9": "ether9"},
+            target_hardware={"ether1": "sfp1", "ether9": "ether9"},
         )
-        assert plan.off_target == ["ether9"]
+        assert plan.target_hardware == {}
+        assert plan.source_hardware == {"ether9": "ether9"}
+        assert plan.off_target == ["WAN"]
+        assert not [w for w in plan.warnings if "taken as NAMES" in w]
+        (line,) = [w for w in plan.warnings if "the mapping did not place" in w]
+        assert "(ether9 by ether9)" in line
+
+    def test_a_port_on_hardware_another_port_was_sent_to_is_a_clash(self):
+        """The output looks ``stray`` up by a factory name, and
+        another port was sent to the port of the target that has that
+        name."""
+        source = _inventory((0, "access", ["ether1", "ether2"]), (0, "mgmt", ["mgmt9"]))
+        target = _inventory((0, "access", ["sfp1", "ether1"]))
+        used = ["ether1", "ether2"]
+        plan = plan_port_mapping(source, target, used)
+        assert plan.rename_map == {"ether1": "sfp1", "ether2": "ether1"}
+        _settled(
+            plan, [*used, "stray"], operator={"stray": "kept"}, target=target,
+            target_hardware={"stray": "ether1"},
+        )
+        assert plan.fused == {"ether1": ["ether2", "stray"]}
+
+    def test_a_port_still_on_source_hardware_counts_for_a_clash(self):
+        """...although that hardware is no port of the target, and so
+        no place: ``stray`` is still looked up by the factory name
+        ``ether9``, and another interface was given the NAME
+        ``ether9``, which the output looks up by the same words."""
+        plan = plan_port_mapping(self.SOURCE, self.TARGET, ["ether1"])
+        used = ["ether1", "stray", "other"]
+        _settled(
+            plan, used, operator={"stray": "kept", "other": "ether9"}, target=self.TARGET,
+            target_hardware={"stray": "ether9"},
+        )
+        assert plan.source_hardware == {"stray": "ether9"}
+        assert plan.fused == {"ether9": ["stray", "other"]}
+
+    def test_a_name_the_operator_gave_a_placed_port_is_said(self):
+        plan = self._plan()
+        _settled(
+            plan, ["ether1", "core-a"], operator={"ether1": "WAN"}, target=self.TARGET,
+            target_hardware={"ether1": "sfp1"},
+        )
+        (line,) = [w for w in plan.warnings if "taken as NAMES" in w]
+        assert "1 override target(s) are not ports of the declared target device" in line
+        assert "(ether1 is on sfp1)" in line
+        assert plan.is_clean
+
+    def test_a_port_no_line_of_the_output_finds_is_on_no_hardware(self):
+        """The run put ``core-a`` on ``sfp2`` and the output has no
+        line that looks ``sfp2`` up.  The port is then nowhere: not in
+        either hardware field, not counted for a clash or for a used
+        port of the target, and not a NAME the operator is told
+        landed."""
+        plan = self._plan()
+        _settled(
+            plan, ["ether1", "core-a"], operator={"core-a": "bridge9"}, target=self.TARGET,
+            target_hardware={"ether1": "sfp1", "core-a": "sfp2"}, unbound=["core-a"],
+        )
+        assert plan.unbound_ports == {"core-a": "sfp2"}
+        assert plan.target_hardware == {} and plan.source_hardware == {}
+        assert plan.off_target == ["bridge9"]
+        assert plan.unused_target == ["sfp2", "sfp3"]
+        assert plan.fused == {} and not plan.is_clean
+        assert not [w for w in plan.warnings if "taken as NAMES" in w]
+        (line,) = [w for w in plan.warnings if "not looked up by their hardware" in w]
+        assert "1 port(s) are not looked up" in line and "(core-a on sfp2)" in line
+
+    def test_a_dropped_port_is_not_one_the_output_fails_to_find(self):
+        plan = self._plan()
+        _settled(
+            plan, ["ether1", "core-a"], operator={"core-a": None}, target=self.TARGET,
+            target_hardware={"core-a": "sfp2"}, unbound=["core-a"],
+        )
+        assert plan.unbound_ports == {}
+
+    def test_a_port_that_kept_its_configs_name_is_not_news(self):
+        """Nobody typed anything for ``core-a``: no line."""
+        plan = self._plan()
+        _settled(
+            plan, ["ether1", "core-a"], target=self.TARGET,
+            target_hardware={"core-a": "sfp2"}, renames={"core-a": "core-a"},
+        )
+        assert plan.target_hardware == {"core-a": "sfp2"}
+        assert not [w for w in plan.warnings if "taken as NAMES" in w]
+
+    def test_a_named_port_elsewhere_than_its_pairing_has_no_speed_line(self):
+        source = _inventory((0, "uplink", ["49", "50"]), speed={"49": "10gig", "50": "10gig"})
+        target = _inventory(
+            (0, "uplink", ["1/A1", "1/A2"]), speed={"1/A1": "gig", "1/A2": "10gig"},
+        )
+        plan = plan_port_mapping(source, target, ["49"])
+        _settled(
+            plan, ["49"], operator={"49": "WAN"}, target=target,
+            target_hardware={"49": "1/A2"},
+        )
+        assert not [w for w in plan.warnings if "slower target port" in w]
 
     def test_two_ports_on_one_piece_of_hardware_are_fused(self):
         """They share no NAME.  The operator sent ``ether1`` to the

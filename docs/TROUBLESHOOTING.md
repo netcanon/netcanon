@@ -286,9 +286,10 @@ below say why each is there:
 
   On RouterOS the key of an entry is the name the CONFIG uses for a
   port.  A port you named `core-a` is `core-a` in the plan and in
-  your map (`labelled_ports` says which port of the model it is); an
-  entry keyed by its factory name matches nothing and is ignored with
-  a warning.
+  your map (`labelled_ports` says which port of the model it is).
+  With both devices declared an entry keyed by its factory name is
+  taken for that port; without, it matches nothing and is ignored
+  with a warning.
 * **`displaced`** — a name nobody decided that the name-shape
   translator would have put on a name another interface ends on, or
   on a port of the target: a name from either list above, or a
@@ -312,6 +313,16 @@ suffix (`ether3@main`) and, across vendors, a Junos unit
 (`next-hop et-0/0/24.0`) are left as written.  Nothing in
 `port_rename_map` clears this: correct the route in the output.
 
+The message can also say **"N port(s) are not looked up by their
+hardware in the output"** — on a RouterOS target only.
+`port_mapping_plan.unbound_ports` lists them, each with the factory
+name it should be looked up by.  RouterOS finds a port by its factory name, and its
+output has no Ethernet line for a port whose name reads as a VLAN, a
+bridge or a LAG (`bond1`, `bridge-uplink`, `vlan-trunk`,
+`uplink.10`) — so the address and every other reference are on a
+name nothing defines.  Give the port another name in
+`port_rename_map`.
+
 If the plan lists `emptied_lags`, `shrunk_lags`, `lost_routes`,
 `lost_dhcp_pools`, `lost_tracking` or `lost_vtep_sources`, a dropped
 port took something with it: a LAG loses a dropped member (and may be
@@ -327,9 +338,12 @@ surrounding space are understood; `Gi1/0/1` is not recognised as
 `GigabitEthernet1/0/1`, and the device would put both source ports on
 that one interface.  On a RouterOS target a target that is not a port
 of the declared device is a NAME for the port, not a place: the
-port's hardware goes where the pairing put it
-(`port_mapping_plan.target_hardware`), and the name is not listed
-here.
+port's hardware stays where the mapping put it
+(`port_mapping_plan.target_hardware`), the name is not listed here,
+and a line of the plan says the entry was taken as a name.  If the
+port had no place at all, the name IS listed here and
+`source_hardware` says which factory name the output still looks the
+port up by — one the target does not have.
 
 The message can also say **"N target port(s) received more than one
 source port"**.  `port_mapping_plan.fused` names them.  Only your own
@@ -337,8 +351,8 @@ source port"**.  `port_mapping_plan.fused` names them.  Only your own
 or an entry pointing at a name the pairing already used (on a
 same-vendor pair, keeping an unplaced port under its old name can do
 exactly that).  A target is read as the target device spells it, so
-on a platform without case `1/a1` is the port `1/A1` — and on Junos,
-VyOS or OPNsense, which name every interface themselves in lower
+on a platform without case `1/a1` is the port `1/A1` — and on Junos
+or OPNsense, which name every interface themselves in lower
 case, `GE-0/0/2` is the port `ge-0/0/2`.  On RouterOS two ports can
 also be fused without sharing a name: a port that keeps a name of its
 own is on the hardware it was paired with, and another port sent to
@@ -346,8 +360,12 @@ that hardware is on it too.  Naming the ports again does not clear
 it; give each a target of its own.
 
 **"Port mapping was not made"** means no pairing was possible at all —
-one side is a profile that lists no ports, or lists a port name twice.
-Every port name was then translated by name shape.
+one side is a profile that lists no ports, or lists a port name
+twice; or a RouterOS config gives a port the name another port of the
+source device still has, or looks two interfaces up by one factory
+name (a renamed port beside a line that still uses its old name), so
+its ports cannot be told apart.  Every port name was then translated
+by name shape.
 
 A job that is `partial` for another reason as well (the usual state
 of a cross-vendor run) carries both messages in `error`.
@@ -358,6 +376,19 @@ not declare show up as off-inventory even when the declaration is
 right.  A sub-interface (`GigabitEthernet1/0/1.100`) follows its
 parent port only between two configs of the same codec; across
 vendors it is reported separately and does not move with its port.
+
+### "On RouterOS my port was renamed, not moved"
+
+An entry of `port_rename_map` such as `{"ether1": "ether5"}` came out
+as `set [ find default-name=ether1 ] name=ether5`: the port is still
+`ether1`, now CALLED `ether5`.  That is what an entry means on
+RouterOS when no devices are declared — it names a port, and nothing
+in a name says whether hardware was meant (`sfp1` is a port of one
+model and a short name for a port of another).  To move a port's
+config onto other hardware, declare both device models (API:
+`source_profile` / `target_profile`); an entry whose target is a port
+of the declared target then moves the port there.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § G.
 
 ### "The migrate page reports 'paramiko-shell capture artifact'"
 

@@ -163,26 +163,45 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   device replacements.  An entry of `port_rename_map` gives a port a
   NAME: `{"ether1": "WAN"}` renders
   `set [ find default-name=ether1 ] name=WAN`, and the port is still
-  found by the factory name it had.  The key of an entry is the name
-  the config uses for the port — yours, where you gave one; an entry
-  keyed by the factory name of a port you named matches nothing and is
+  found by the factory name it had — where the config states one (a
+  `set [ find default-name= ]` line, or a name of the form `etherN`).
+  A port the export mentions only elsewhere, such as an SFP port with
+  nothing but an address, has no factory name recorded: naming it
+  renders `set [ find name=WAN ]`, a lookup by the new name that
+  matches no port, unless both device models are declared (below).
+  The key of an entry is the name the config uses for the port —
+  yours, where you gave one; without devices declared an entry keyed
+  by the factory name of a port you named matches nothing and is
   ignored with a warning.
 - **Moving a port onto other hardware needs both device models
-  declared** (API: `source_profile` / `target_profile`).  Then a
-  port's hardware goes to the port it was paired with and a name you
-  gave it is kept; an entry whose target is a port of the declared
-  target moves the port there, and one whose target is not names it.
-  Nothing else can tell a move from a name: `sfp1` is a port of some
-  RouterOS models and not of others.  Onto another vendor a port you
-  named takes the name of the port it was paired with.  See
+  declared** (API: `source_profile` / `target_profile`).  Then every
+  port the mapping places is looked up by the port of the target it
+  is on — also when the config came from another vendor, or stated
+  no factory name for the port — and a name you gave it is kept; an
+  entry whose target is a port of the declared target moves the port
+  there, and one whose target is not names it (the plan says so in a
+  line).  Nothing else can tell a move from a name: `sfp1` is a port
+  of some RouterOS models and not of others.  Onto another vendor a
+  port you named takes the name of the port it was paired with.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
+- **A port named like a VLAN, a bridge or a LAG** (`bond1`,
+  `bridge-uplink`, `vlan10`) gets no Ethernet line in the output: the
+  renderer goes by the shape of the name.  With both devices declared
+  the plan lists such a port (`unbound_ports`) and the job is
+  `partial`; without, nothing is reported.  Give the port another
+  name.
 - **`gateway=<interface>` routes** follow the interface when it is
   renamed, and are removed with it when it is dropped.  A list of
   gateways (`gateway=ether1,ether2`) and a routing-table suffix
   (`ether3@main`) are left as written.
 - **A value wrapped onto the line after its key** (`name=\` and the
   name on the next line, as a long `export` line can break) is not
-  read: such a port is known by its factory name.
+  read.  The port's own line is then known by its factory name, while
+  every other line of the config still uses your name — which comes
+  back as an interface nothing defines and, with devices declared, as
+  a name that is not a port of the declared source.  A verbose export
+  wraps this way for most ports; re-join such lines before
+  translating.
 - **6.x vs 7.x grammar drift** — RouterOS 7 reorganises some
   sections (`/snmp` vs `/snmp community`, `/routing/bgp/instance`
   vs `/routing bgp instance`); the parser handles both.

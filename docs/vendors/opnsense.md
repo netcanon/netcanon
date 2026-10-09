@@ -200,6 +200,11 @@ Provenance in
 
 ## Common gotchas
 
+- **Declaring an OPNsense device** — BSD device names are the
+  system's and are lower-case, so with both devices declared on the
+  API an override typed in another case (`IGB0`) is read as the port
+  `igb0`, not as a second interface.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **Backup capture artifact** — OPNsense backups via SSH +
   `cat /conf/config.xml` historically left a `cat /conf/config.xml\r\r\n`
   prefix and trailing shell prompt on disk.  The collector now

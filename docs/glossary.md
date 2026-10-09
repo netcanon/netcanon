@@ -186,6 +186,10 @@ by concern and listed alphabetically within each section.
   everywhere else. An entry of a rename map NAMES a port; only a
   request that declares the target device can MOVE one onto other
   hardware.
+- **Unbound port** — on a RouterOS target, a port
+  that no line of the output looks up by its hardware, because its
+  name reads as a VLAN, a bridge or a LAG. Found by reading the
+  output back; the job is `partial` until the port has another name.
 - **Landed off-target** — a logical name nobody decided that the
   name-shape translator gave a port-shaped name the declared target
   does not list. Kept, reported, and in need of a decision.

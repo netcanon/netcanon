@@ -154,7 +154,8 @@ timestamp if your timezone matters for an audit.
     every name the config references, and such a name is dropped and
     reported (`displaced`) instead of being merged into another port.
     A logical interface that is given a port-shaped name the target
-    does NOT list collides with nothing and is not dropped; it is
+    does NOT list — a data port's or a management port's (`em1`,
+    `oobm`) — collides with nothing and is not dropped; it is
     listed (`landed_off_target`) and asks for a decision, since its
     config is on a port the device does not have.
     Two logical interfaces the ordinary translation puts on one name
@@ -164,29 +165,47 @@ timestamp if your timezone matters for an audit.
     AOS-S or IOS `1/a1` is the port `1/A1`.  On FortiOS and RouterOS,
     where an operator chooses interface names as free text, `DMZ` and
     `dmz` are two interfaces.  On a platform that names every
-    interface itself in lower case (Junos, VyOS, OPNsense) another
-    case is the same port misspelt, and is treated as that port.
-    Each codec states which its platform is.
+    interface itself in lower case (Junos, OPNsense — and VyOS, which
+    cannot be declared yet) another case is the same port misspelt,
+    and is treated as that port.  Each codec states which its
+    platform is.
   - Between two configs of the same codec a sub-interface
     (`ge-0/0/0.54`) follows its parent port.
   - RouterOS keeps a port's factory name beside the name an operator
     gives it, and finds a port on the device by the first.  With both
-    devices declared a port's HARDWARE goes to the port it was paired
-    with, and a name the operator gave it is kept.  An entry of
-    `port_rename_map` whose target is a port of the declared target
-    moves the port there; one whose target is not gives the port that
-    name, and the hardware still follows the pairing.  Onto another
-    vendor, where a port has one name, a port the operator named
-    takes the name of the port it was paired with.  Such a port goes
-    by the name the config uses everywhere — in the plan, in the
-    job's lists, as the key of a map entry — and the plan says which
-    port of the model it is (`labelled_ports`) and where its hardware
-    ended (`target_hardware`).  Without devices declared nothing
-    about a factory name changes: an entry names the port, as it
-    always has.
+    devices declared, every port the mapping places on a RouterOS
+    target is looked up by the port of that device it is on
+    (`set [ find default-name=sfp-sfpplus2 ] name=core-a`) — from
+    any source vendor, and whether or not the source config stated a
+    factory name for the port.  A name the operator gave a port in a
+    RouterOS config is kept.  An entry of `port_rename_map` whose
+    target is a port of the declared target moves the port there; one
+    whose target is not gives the port that NAME, changes nothing
+    about its hardware, and is said in a line of the plan.  Onto
+    another vendor, where a port has one name, a port the operator
+    named takes the name of the port it was paired with.  Such a port
+    goes by the name the config uses everywhere — in the plan, in the
+    job's lists, as the key of a map entry (an entry keyed by its
+    factory name is taken for it) — and the plan says which port of
+    the model it is (`labelled_ports`) and where its hardware ended
+    (`target_hardware`; `source_hardware` for a port nobody placed
+    that the operator kept under a name).  A config that looks two
+    interfaces up by one factory name is not paired at all.  Without
+    devices declared nothing about a factory name changes: an entry
+    names the port, as it always has.
+  - On a RouterOS target the finished output is read back for the
+    line that looks each port up.  A port no line finds by its
+    hardware is listed (`unbound_ports`) and the job is `partial`:
+    RouterOS output has no Ethernet line for a port whose name reads
+    as a VLAN, a bridge or a LAG (`bond1`, `bridge-uplink`,
+    `vlan-trunk`), whoever chose the name.
   - A static route left naming, as next hop, an interface that moved
     or was dropped is listed (`stale_next_hops`), and the job is
-    `partial` until the route is corrected by hand.
+    `partial`.  No entry of `port_rename_map` clears it: the route
+    has to be corrected in the output.  A next hop naming a port of
+    the declared source that the config has no interface record for
+    is listed too; a list of gateways whose members only changed
+    places among themselves is not.
   - What a dropped port takes with it is listed: a LAG that lost
     members, a static route or DHCP pool that named the port, a VRRP
     track entry on an interface that stays, and a VXLAN source
@@ -196,11 +215,16 @@ timestamp if your timezone matters for an audit.
     does not list, which the operator has not decided is `partial`
     rather than `completed`; so is one where the operator's own map
     points two ports at one name, one that leaves a route naming a
-    port that moved, and one where no pairing could be made at all.
+    port that moved, one where a port is not looked up by its
+    hardware in the output, and one where no pairing could be made at
+    all.
   - An entry in `port_rename_map` always wins over the pairing, on
-    `/plan` and on every per-pane endpoint.  Where the target platform
-    has no letter case its target is read as the target device spells
-    it (`1/a1` is `1/A1`); a blank target is ignored.
+    `/plan` and on every per-pane endpoint.  Its target is read as
+    the target device spells it (`1/a1` is `1/A1`) where another
+    letter case cannot be another interface — the platform has no
+    case, or names every interface itself in lower case; on FortiOS
+    and RouterOS it is stripped and taken as typed.  A blank target
+    is ignored.
   - A declaration is checked: an unknown model, mode, bay, module or
     member id is a 422 that says what was wrong, a member id is an
     integer and nothing else, a profile's module must be one the
@@ -380,10 +404,26 @@ timestamp if your timezone matters for an audit.
   `set interfaces me0.5 unit 0 ...`.  Map it by hand.
 - **On RouterOS only a declared target device can move a port onto
   other hardware.**  Without one, an entry of `port_rename_map` names
-  the port and the output still finds it by the factory name it had.
-  The RouterOS codec also does not read a value an export wraps onto
-  the line after its key (`name=\` and the name on the next line), so
-  a port named that way is known by its factory name.
+  the port.  The output then finds it by the factory name it had
+  where the config states one — a `set [ find default-name= ]` line,
+  or a name of the form `etherN`.  A port the export mentions only
+  elsewhere (an SFP port with nothing but an address) has no factory
+  name recorded, and naming it renders a lookup by the NEW name
+  (`set [ find name=WAN ]`), which matches no port: declare both
+  devices, or add the port's `/interface ethernet` line.
+- **RouterOS output has no Ethernet line for a port whose name reads
+  as another kind of interface.**  For `bond1` or `bridge1` no line
+  is written for the port; for `vlan10` a VLAN interface on another
+  port is.  With devices declared the plan lists such a port
+  (`unbound_ports`) and the job is `partial`; without, nothing is
+  reported.  Give the port another name.
+- **The RouterOS codec does not read a value an export wraps onto
+  the line after its key** (`name=\` and the name on the next line).
+  The port's own line is then known by its factory name, while every
+  other line of the config still uses the operator's name — which
+  comes back as an interface nothing defines and, with devices
+  declared, as a name that is not a port of the declared source.  A
+  verbose export wraps this way for most ports.
 - **An override target is understood by case and spacing only.**  An
   abbreviation the device would accept (`Gi1/0/1`) is not recognised
   as the port it names: it is reported as a target the model does not

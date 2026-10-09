@@ -32,6 +32,8 @@ by tests below rather than by this paragraph:
   shape.  It cannot see what happens to a name that is NEW -- a port
   an operator calls ``WAN`` -- which is pinned by hand below.
 * It runs between two configs of one codec.
+* One public codec, ``cisco_iosxe`` (NETCONF / XML), has no committed
+  captures and is in neither run.
 
 **The one field that must NOT follow.**  RouterOS keeps a port's
 factory name (``default_name``) beside the name an operator gives it.
@@ -46,12 +48,14 @@ declared target MOVES the port -- requires it to follow.
 from __future__ import annotations
 
 import re
+import types
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Union, get_args, get_origin, get_type_hints
 
 import pytest
+from pydantic import BaseModel
 
 from netcanon.migration.canonical import port_names
 from netcanon.migration.canonical.intent import CanonicalIntent
@@ -378,6 +382,27 @@ class TestEveryCapture:
                 left_out.add(_capture_id(path))
         assert left_out == set(_NOT_EXERCISED)
 
+    def test_the_flag_is_what_the_captures_show(self) -> None:
+        """A codec whose parser records a factory name beside a
+        port's own finds ports by it, and has to say so
+        (``ports_keep_a_factory_name``): model-to-model mapping sets
+        the field only for a target that does, and a port an operator
+        names is otherwise looked up by a name no device has.  Read
+        off the committed captures rather than a list of codecs, so
+        a codec that starts recording one cannot leave the flag at
+        its default unnoticed."""
+        records: dict[str, bool] = {}
+        for codec_name, path in CAPTURES:
+            _codec, _text, tree = _parse(codec_name, path)
+            if tree is not None:
+                records[codec_name] = records.get(codec_name, False) or any(
+                    iface.default_name for iface in tree.interfaces
+                )
+        assert set(records) == set(FIXTURE_DIR_CODEC.values())
+        assert any(records.values())
+        for codec_name, records_one in sorted(records.items()):
+            assert get_codec(codec_name).ports_keep_a_factory_name is records_one, codec_name
+
     def test_every_codec_with_captures_is_exercised(self) -> None:
         exercised = {
             codec_name for codec_name, path in CAPTURES
@@ -420,8 +445,10 @@ class TestEveryCapture:
         if not moves:
             pytest.skip("only LAG names to exchange, which are not ports of a device")
         stayed = _what_did_not_follow_with_devices(codec, text, moves)
-        if stayed is None:
-            pytest.skip("no pairing can be made for this config")
+        # No capture is skipped here for want of a pairing.  If one
+        # ever is, it is named in ``_NOT_EXERCISED`` with its reason,
+        # not passed over.
+        assert stayed is not None, "no pairing could be made for this config"
         assert not stayed, (
             f"moving {len(moves)} port(s): {len(stayed)} value(s) of the output did "
             f"not follow:\n  " + "\n  ".join(stayed[:8])
@@ -633,18 +660,30 @@ class TestWhatTheExperimentReaches:
     capture notices is pinned; each of the others has a small config
     that does."""
 
-    def test_the_places_are_the_ones_the_sweep_visits(self) -> None:
-        """The table above against the sweep's own list of places."""
-        tree = _a_name_in_every_place()
-        visited = set(port_names._swept_names(tree))
-        named = set()
-        for place in _PLACES.values():
-            for holder, attribute in place(tree):
-                value = getattr(holder, attribute)
-                named.update([value] if isinstance(value, str) else value or [])
-        # ``gateway`` adds no name of its own (it counts only when it
-        # is an interface's name), and the fixture gives it none.
-        assert {name for name in named if name} == visited
+    def test_the_table_the_sweep_and_the_collector_name_the_same_places(self) -> None:
+        """Three lists of the places a port name lives in: the names
+        the collector yields, the fields the rename pass rewrites, and
+        the table above.  They are compared on a tree BUILT FROM THE
+        SCHEMA -- a name of its own in every text field the canonical
+        model has -- so that no fourth list, a fixture kept by hand,
+        stands between them: a field added to one and not to the
+        others fails here without anyone having to remember a tree.
+
+        ``gateway`` is the table's one entry the other two do not
+        have: it is rewritten only when it is the name of an
+        interface, which a field with a name of its own never is."""
+        codec = get_codec("aruba_aoss")
+        tree, where = _a_name_in_every_text_field()
+        collected = {where[name] for name in port_names._swept_names(tree)}
+        translate_port_names(
+            tree, codec, codec, rename_map={name: "x-" + name for name in where},
+        )
+        rewritten = {
+            path for path, value in _text_fields(tree)
+            if value.startswith("x-") and where.get(value[2:]) == path
+        }
+        assert collected == rewritten
+        assert collected == set(_PLACES) - {"static_routes[].gateway"}
 
     @pytest.mark.parametrize("place", sorted(_PLACES))
     def test_a_translator_broken_at_one_place_is_caught(
@@ -846,43 +885,95 @@ class TestTheOracleCanFail:
 # ---------------------------------------------------------------------------
 
 
-def _a_name_in_every_place() -> CanonicalIntent:
-    return CanonicalIntent.model_validate({
-        "interfaces": [
-            {"name": "if-a", "default_name": "if-a", "lag_member_of": "lag-a",
-             "vrrp_groups": [{"group_id": 1, "track_interfaces": ["track-a"]}]},
-            {"name": "alias-b", "default_name": "factory-b"},
-        ],
-        "vlans": [{"id": 2, "tagged_ports": ["tag-a"], "untagged_ports": ["untag-a"]}],
-        "lags": [{"name": "lag-b", "members": ["member-a"]}],
-        "static_routes": [{"destination": "0.0.0.0/0", "interface": "route-a"}],
-        "dhcp_servers": [{"interface": "pool-a"}],
-        "vxlan_vnis": [{"vni": 10, "vlan_id": 10, "source_interface": "vtep-a"}],
-    })
+def _unwrapped(annotation: Any) -> Any:
+    """``X`` out of ``X | None``."""
+    if get_origin(annotation) in (Union, types.UnionType):
+        kinds = [arg for arg in get_args(annotation) if arg is not type(None)]
+        return kinds[0] if len(kinds) == 1 else annotation
+    return annotation
+
+
+def _filled(model: type[BaseModel], path: str, where: dict[str, str]) -> BaseModel:
+    """An instance of *model* with a name of its own in every text
+    field, one element in every list of text or of models, and every
+    other field at its default.  Built without validation: the port
+    translator reads attributes, and a made-up name is not a valid
+    address or keyword."""
+    values: dict[str, Any] = {}
+    # The declared types, resolved here: pydantic leaves a forward
+    # reference unresolved on ``model_fields`` until the model is first
+    # used, so what this saw would depend on which test ran before it.
+    declared = get_type_hints(model)
+    for name in model.model_fields:
+        here = f"{path}.{name}" if path else name
+        kind = _unwrapped(declared[name])
+        item = _unwrapped(get_args(kind)[0]) if get_origin(kind) is list and get_args(kind) else None
+        if kind is str:
+            values[name] = _named(here, where)
+        elif isinstance(kind, type) and issubclass(kind, BaseModel):
+            values[name] = _filled(kind, here, where)
+        elif item is str:
+            values[name] = [_named(here + "[]", where)]
+        elif isinstance(item, type) and issubclass(item, BaseModel):
+            values[name] = [_filled(item, here + "[]", where)]
+    return model.model_construct(**values)
+
+
+def _named(path: str, where: dict[str, str]) -> str:
+    name = f"n{len(where)}"
+    where[name] = path
+    return name
+
+
+def _a_name_in_every_text_field() -> tuple[CanonicalIntent, dict[str, str]]:
+    """A canonical tree built from the schema, and each made-up
+    name's place in it (``interfaces[].vrrp_groups[].track_interfaces[]``
+    is written ``interfaces[].vrrp_groups[].track_interfaces``, as the
+    table of places writes it)."""
+    where: dict[str, str] = {}
+    tree = _filled(CanonicalIntent, "", where)
+    for name, path in where.items():
+        where[name] = path.removesuffix("[]")
+    assert isinstance(tree, CanonicalIntent)
+    return tree, where
+
+
+def _text_fields(node: Any, path: str = "") -> Iterator[tuple[str, str]]:
+    if isinstance(node, BaseModel):
+        for name in type(node).model_fields:
+            yield from _text_fields(getattr(node, name, None), f"{path}.{name}" if path else name)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _text_fields(item, path + "[]" if isinstance(item, BaseModel) else path)
+    elif isinstance(node, str):
+        yield path, node
 
 
 class TestTheTwoListsAgree:
-    def test_the_rename_pass_moves_every_name_the_collector_lists(self) -> None:
-        """Give every name the collector returns a new name, and
-        collect again: every one must have moved.  A place added to
-        the collector and not to the rename pass -- or the other way
-        round -- fails here."""
+    def test_the_schema_built_tree_reaches_every_place(self) -> None:
+        """The tree the comparisons are made on fills every place the
+        table names -- else a comparison on it compares nothing."""
+        _tree, where = _a_name_in_every_text_field()
+        assert set(_PLACES) <= set(where.values())
+        assert "interfaces[].default_name" in where.values()
+
+    def test_a_factory_name_is_not_a_place_the_sweep_rewrites(self) -> None:
+        """A port's hardware identity is not a reference to it, and
+        the translator leaves it alone."""
         codec = get_codec("aruba_aoss")
-        tree = _a_name_in_every_place()
-        before = collect_port_names(tree)
-        assert len(before) == len(set(before))
-        assert "factory-b" not in before
+        tree, where = _a_name_in_every_text_field()
+        before = [iface.default_name for iface in tree.interfaces]
+        assert before and all(before)
         translate_port_names(
-            tree, codec, codec, rename_map={name: f"x-{name}" for name in before},
+            tree, codec, codec, rename_map={name: "x-" + name for name in where},
         )
-        assert sorted(collect_port_names(tree)) == sorted(f"x-{name}" for name in before)
-        # A factory name is not a name the config uses, and stays.
-        assert [iface.default_name for iface in tree.interfaces] == ["if-a", "factory-b"]
+        assert [iface.default_name for iface in tree.interfaces] == before
 
     def test_a_dropped_name_is_gone_from_every_place(self) -> None:
         codec = get_codec("aruba_aoss")
-        tree = _a_name_in_every_place()
+        tree, _where = _a_name_in_every_text_field()
         before = collect_port_names(tree)
+        assert before
         translate_port_names(tree, codec, codec, rename_map=dict.fromkeys(before))
         assert collect_port_names(tree) == []
 
@@ -915,3 +1006,43 @@ class TestWarningsUnderADrop:
         assert len(clashes) == 1
         assert "(sources: GigabitEthernet1/0/1, GigabitEthernet1/0/2)" in clashes[0]
         assert job.port_drops == ["GigabitEthernet1/0/3"]
+
+    def test_nor_is_a_name_the_translator_dropped_on_its_own(self) -> None:
+        """IOS-XE has no form for a Junos ``me0``, so the translator
+        drops it.  Two ports renamed onto that name do share it; the
+        dropped one shares nothing, and is not named as a third."""
+        junos, ios = get_codec("juniper_junos"), get_codec("cisco_iosxe_cli")
+        text = (
+            "set interfaces me0 unit 0 family inet address 192.0.2.5/24\n"
+            "set interfaces xe-0/0/0 unit 0 family inet address 10.0.0.1/24\n"
+            "set interfaces xe-0/0/1 unit 0 family inet address 10.0.1.1/24\n"
+        )
+        job = run_plan_with_overrides(
+            junos, ios, text, port_rename_map={"xe-0/0/0": "me0", "xe-0/0/1": "me0"},
+        )
+        assert job.port_drops == ["me0"]
+        clashes = [w for w in job.warnings if "multiple source ports map to" in w]
+        assert len(clashes) == 1
+        assert "(sources: xe-0/0/0, xe-0/0/1)" in clashes[0]
+
+
+class TestANextHopNamingAnInterfaceTheTargetCannotExpress:
+    def test_the_route_goes_with_the_interface(self) -> None:
+        """IOS-XE has no form for a Junos ``me0``, so the translator
+        drops it on its own.  A route whose next hop is that interface
+        goes with it, as it would for an interface an operator dropped
+        -- it does not stay behind naming an interface the output no
+        longer has."""
+        junos, ios = get_codec("juniper_junos"), get_codec("cisco_iosxe_cli")
+        text = (
+            "set interfaces me0 unit 0 family inet address 192.0.2.5/24\n"
+            "set interfaces ge-0/0/1 unit 0 family inet address 10.0.1.1/24\n"
+            "set routing-options static route 10.99.0.0/16 next-hop me0.0\n"
+            "set routing-options static route 10.98.0.0/16 next-hop 10.0.1.254\n"
+        )
+        tree = junos.parse(text)
+        assert [route.gateway for route in tree.static_routes] == ["me0.0", "10.0.1.254"]
+        job = run_plan_with_overrides(junos, ios, text, port_rename_map={})
+        assert job.port_drops == ["me0"]
+        assert "10.99.0.0" not in job.rendered
+        assert "ip route 10.98.0.0 255.255.0.0 10.0.1.254" in job.rendered

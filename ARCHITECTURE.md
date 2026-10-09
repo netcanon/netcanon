@@ -909,7 +909,8 @@ out-of-band management is the `oobm` context, not a numbered port).
   is reported as dropped; a route, a DHCP pool, a VRRP track entry or
   a VTEP source that named a dropped port went with it and is
   listed.  `unresolved_ports`, `displaced`, `fused`, `off_target`,
-  `target_hardware`, `landed_off_target`, `stale_next_hops`,
+  `target_hardware`, `source_hardware`, `unbound_ports`,
+  `landed_off_target`, `stale_next_hops`,
   `sub_interfaces`, `emptied_lags`, `shrunk_lags`, `lost_routes`,
   `lost_dhcp_pools`, `lost_tracking` and `lost_vtep_sources` are
   stored fields, so a client reads the outcome as data.  `pairings` and
@@ -921,11 +922,15 @@ out-of-band management is the `oobm` context, not a numbered port).
   off-inventory, displaced, or a logical name given a port-shaped
   name the target does not list, and not named in the operator's own
   map — or with a fused target, or with a route left naming a port
-  that moved, or for which no pairing could be made at all, is
+  that moved, or with a port the output does not look up by
+  its hardware, or for which no pairing could be made at all, is
   `partial`, not `completed`.
 * An operator's target is read as the declared target spells its
-  ports (`1/a1` is `1/A1`) where the target platform has no case,
-  and an entry with a blank target is set aside: it decides
+  ports (`1/a1` is `1/A1`) where another letter case cannot be
+  another interface on the target platform — it has no case, or it
+  names every interface itself in lower case; on FortiOS and RouterOS
+  it is stripped and taken as typed.  An entry with a blank target is
+  set aside: it decides
   nothing.  Only case and surrounding space are understood: an
   abbreviation the device accepts (`Gi1/0/1`) is not recognised as
   the port it names, and is reported as a target the model does not
@@ -940,7 +945,10 @@ an interface's name — or, between two configs of one codec, such a
 name with a unit — the route follows its interface and goes with a
 dropped one.  Any other form (a list of gateways, a routing-table
 suffix, a unit across vendors) is left as written, and
-`run_plan_with_models` lists the route (`stale_next_hops`).
+`run_plan_with_models` lists the route (`stale_next_hops`) — as it
+does a next hop naming a port of the declared source that the config
+has no interface record for.  A list whose members only changed
+places among themselves still says what it said, and is not listed.
 
 **A port's hardware identity is not a reference to it.**  RouterOS
 keeps a port's *factory name* (`ether2`) beside the name an operator
@@ -961,14 +969,30 @@ A declared target device can.  So:
   job's lists, the key of an operator's entry — by the name the
   config uses (`labelled_ports` says which port of the model that
   is);
-* between two configs of one codec it sets the factory name itself,
-  after the translator has run: a port whose name in the output is a
-  port of the declared target IS that port; a port under any other
+* onto a target that finds a port by a factory name — the codec
+  says so (`ports_keep_a_factory_name`; RouterOS) — it sets the
+  factory name itself, after the translator has run, on every port
+  the mapping can account for, whatever vendor the config came from.
+  Which port of the SOURCE an interface of the translated tree is:
+  the one whose factory name it still carries, where the source
+  config recorded one; else the port of the declared source whose
+  name the rename map sent to this interface's name.  (A RouterOS
+  config states a factory name only on a port it has an
+  `/interface ethernet` line for, and another vendor's config states
+  none.)  Where that port then is: a port whose name in the output is
+  a port of the declared target IS that port; a port under any other
   name — one an operator gave it, in the source config or in their
   map — is on the hardware its pairing gave it.  Where each port's
   hardware ended is read back from the tree that is rendered
-  (`target_hardware`), and two ports on one piece of hardware are a
-  clash although they share no name;
+  (`target_hardware`; `source_hardware` for a port nobody placed),
+  and two ports on one piece of hardware are a clash although they
+  share no name;
+* the tree is not the output.  The RouterOS renderer writes no
+  Ethernet line for an interface whose name reads as a VLAN, a bridge
+  or a LAG, whatever factory name the interface carries.  None of
+  that rule is re-derived: the rendered output is parsed again with
+  the target's own parser, and a port no line looks up by its
+  hardware is listed (`unbound_ports`) and leaves the job `partial`;
 * onto any other vendor a port has one name, so a port an operator
   named takes the name of the port it was paired with.
 
@@ -976,8 +1000,12 @@ The field was first missing from the check altogether, while every
 moved RouterOS port was rendered as "find the port with the old
 name"; it was then rewritten in the translator, which was right for
 two declared devices and broke the commonest entry of a rename map
-for everyone else.  Both are the same mistake: a rule made total over
-the case in view, in code that serves a wider one.
+for everyone else; and the handling that replaced that acted only
+between two RouterOS configs, on a port whose factory name the config
+happened to state — so a port named from any other vendor, or an SFP
+port with no line of its own, was still rendered as "find the port
+with this name".  All three are the same mistake: a rule made total
+over the case in view, in code that serves a wider one.
 
 That list of places was written by reading the tree, and a list
 written that way cannot show that it is complete.  So it is also
@@ -991,7 +1019,10 @@ a capture puts a moved name in it and the codec's parser reads the
 field back; names the device already has; two configs of one codec.
 The module breaks the translator at each place in turn and pins
 which places a capture catches; each of the others has a small
-config there that does.
+config there that does.  Its table of places, the rename pass and
+the collector are compared on a tree built from the canonical schema
+— a name of its own in every text field — so a field added to one of
+the three and not the others fails without anyone keeping a fixture.
 
 The places are of two kinds.  An interface stanza, a VLAN's
 membership list and a LAG's member list are *evidence* that the
@@ -1060,9 +1091,13 @@ whose wrapper also reads each job's RENDERED OUTPUT back: an
 interface that can be recognised by its address must be on the port
 the job reports, the output must name no port the job does not
 report, no name that moved may still be in it, and no interface may
-carry the addresses of two source interfaces.  None of these takes
-anything from the engine's list of places, and each is handed a job
-with the defect it is for, in the same module, and has to fail.
+carry the addresses of two source interfaces.  The address checks
+and the old-name check take nothing from the engine's list of places;
+the port-list check reads both sides with the engine's collectors.
+Each is handed a job with the defect it is for, in the same module,
+and has to fail — and the wrapper is handed such a job for each
+check, and has to refuse it, so that a check cannot be taken out of
+the wrapper unnoticed.
 
 **Relationship to target profiles.**  A target profile is one model in
 one stated state, as a flat list.  `inventory_from_profile` reads one
