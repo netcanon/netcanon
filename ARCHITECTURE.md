@@ -818,10 +818,11 @@ changes.
                      run_plan_with_overrides   (unchanged)
                                    │
                                    ▼
-        check the finished run: did two source ports end on one
-        target name?  A name nobody decided that caused it is
-        dropped and the translation run once more; then
-        settle_plan records what happened on the plan.
+        check the finished run, over EVERY name the config
+        references: did two names end on one target name, or a
+        logical name on a port of the target?  A name nobody
+        decided that caused it is dropped and the translation run
+        once more; then settle_plan records what happened.
 ```
 
 **Families, models, modes.**  The registry does not list names; it
@@ -845,46 +846,77 @@ out-of-band management is the `oobm` context, not a numbered port).
   another role, and never left out of the map: left to the name-shape
   translator it would keep its old name on a same-vendor pair, which
   can be the very name another port was just mapped to.
-* Some names are left to the name-shape translator.  An
-  unplaced *management* port, because the translator knows what each
-  target does with out-of-band management (AOS-S has an `oobm` block,
-  not a management interface).  And a name the config uses that is
-  not a port of the declared source — **off-inventory**, the tripwire
-  for a source model declared wrongly.
-* **What the translator makes of those names is checked.**  Its
-  answer can be a port the pairing gave to something else: a
-  management port whose role comes from a profile rather than from
-  its name is, by shape, just port 1.  The mapper cannot know that in
-  advance without re-deriving the translator, so the pipeline asks
-  the finished run instead (`fused_targets`): where two used source
-  ports ended on one target name, every one of them that neither the
-  pairing nor the operator decided is dropped — **displaced** — and
-  the translation is run once more.  A fusion that is left can only
-  be the operator's own override; it is recorded (`fused`) and the
-  job is not a clean success, whatever was acknowledged.
-* **The plan describes the outcome, not the intention.**
-  `settle_plan` reconciles the plan with the run: an unplaced port
-  the operator gave a target was kept; a management port the target
-  cannot express was dropped by the translator and is reported as
-  dropped.  `unresolved_ports`, `displaced`, `fused`, `off_target`
-  and `emptied_lags` are stored fields, so a client reads the
-  outcome as data.
-* A run with an unresolved port — dropped, off-inventory or displaced,
-  and not named in the operator's own map — or with a fused target,
-  or for which no pairing could be made at all, is `partial`, not
-  `completed`.
+* Between two configs of the **same codec**, a sub-interface
+  (`ge-0/0/0.54`) follows its parent port: the unit suffix means the
+  same thing on both sides.  Across codecs it does not, and the name
+  is left to the name-shape translator like any other the inventory
+  does not list.
+* Some names are left to the name-shape translator — the ordinary
+  port translation, which derives a target name from the shape of
+  the source name without knowing either model.  An unplaced
+  *management* port, because the translator knows what each target
+  does with out-of-band management (AOS-S has an `oobm` block, not a
+  management interface).  A name the config uses that is not a port
+  of the declared source — **off-inventory**, the tripwire for a
+  source model declared wrongly.  And every *logical* name (a LAG, an
+  SVI, a loopback), which was never the mapper's to decide.
+* **What the translator makes of those names is checked — all of
+  them.**  Its answer can be a port the pairing gave to something
+  else: a management port whose role comes from a profile rather
+  than from its name is, by shape, just port 1; a FortiGate aggregate
+  whose codec classifies its name as a physical port becomes the
+  first port of every target.  The mapper cannot know that in advance
+  without re-deriving the translator, so the pipeline asks the
+  finished run instead (`fused_targets`), over every name the config
+  references and not only the hardware ports the plan was made for,
+  compared without regard to case.  Where two names ended on one
+  target, or a logical name ended on a port of the target, every
+  name that neither the pairing nor the operator decided is dropped —
+  **displaced** — and the translation is run once more.  Where no
+  name in a clash was decided, one keeps the name: its place was
+  good.  A fusion that is left is the operator's own override; it is
+  recorded (`fused`) and the job is not a clean success, whatever
+  was acknowledged.
+* **The plan's flags and warnings describe the outcome, not the
+  intention.**  `settle_plan` reconciles the plan with the run: an
+  unplaced port the operator gave a target was kept; a management
+  port the target cannot express was dropped by the translator and
+  is reported as dropped; a route or a DHCP pool that named a dropped
+  port went with it and is listed.  `unresolved_ports`, `displaced`,
+  `fused`, `off_target`, `sub_interfaces`, `emptied_lags`,
+  `shrunk_lags`, `lost_routes` and `lost_dhcp_pools` are stored
+  fields, so a client reads the outcome as data.  `pairings` and
+  `rename_map` stay the pairing as it was made, before the
+  operator's map: `overridden` names the pairings a client must not
+  read as final.
+* A run with an unresolved name — dropped for want of a place, a
+  management port kept although the target lists none,
+  off-inventory, or displaced, and not named in the operator's own
+  map — or with a fused target, or for which no pairing could be
+  made at all, is `partial`, not `completed`.
+* An operator's target is read as the declared target spells its
+  ports (`1/a1` is `1/A1`), and an entry with a blank target is set
+  aside: it decides nothing.
 
-**Which names a mapping is made for.**  The used set starts from
-every place the rename sweep rewrites a port name
-(`collect_port_names`: interface stanzas, VLAN membership, LAG
-members, a static route's or DHCP pool's interface, VRRP track
-lists) — fewer places would leave a port the sweep renames outside
-the plan — and takes away what is not hardware: an interface whose
-canonical type says SVI, LAG, loopback, bridge or tunnel; a LAG's
-name; and a name the source codec's classifier *positively* calls
-logical.  `unknown` is never grounds for leaving a name out (on
-AOS-S it is what a real uplink named `A1` classifies as), and a port
-of the declared source always counts, whatever the classifier says.
+**Which names a mapping is made for.**  `collect_port_names` is the
+single statement of where a canonical tree holds port names: every
+place the translator's rename pass rewrites.  Those places are of
+two kinds.  An interface stanza, a VLAN's membership list and a LAG's
+member list are *evidence* that the device has a port of that name.
+A static route's or DHCP pool's interface, a VRRP track entry and a
+VTEP source are *references*: a real port named only there must be
+part of the mapping, but what those fields hold is not always an
+interface — a route to `Null0`, a pool keyed by a zone name, a VTEP
+source address — so a reference counts only when the declared
+inventory lists it or the source codec's classifier positively calls
+it a hardware port.  From the evidence is taken what is not
+hardware: an interface whose canonical type says SVI, LAG, loopback,
+bridge or tunnel; a LAG's name; and a name the classifier
+*positively* calls logical.  `unknown` is never grounds for leaving
+evidence out (on AOS-S it is what a real uplink named `A1`
+classifies as), and a port of the declared source always counts,
+whatever the classifier says.  This set is what the mapping is made
+FOR; the check on the finished run reads every name.
 
 **Evidence is per port, and `capture` is granted.**  A name is the
 product of separately evidenced facts — the mode's naming, the
@@ -900,9 +932,11 @@ twin, another member id or another module does not inherit it.
 `capture` means a test re-proves the claim on every run, so only the
 claims that test re-proves grant it: the engine holds their list
 (`PROVEN_CAPTURE_CLAIMS`) and the shipped-data test requires that
-list to equal the claims it re-proves.  A claim in an operator's own
-family file names a fixture nothing reads; it is logged and grants
-nothing.  And a capture proves *names*: it retires the caveat of the
+list to equal the claims it re-proves.  An entry is the whole claim —
+fixture, mode, each member's model, id and modules — so a proven
+fixture cited for another model grants nothing either.  A claim in
+an operator's own family file names a fixture nothing reads; it is
+logged and grants nothing.  And a capture proves *names*: it retires the caveat of the
 naming fact and keeps the caveat of the panel or module fact, because
 which ports are uplinks is not something a config shows.  For the
 same reason the grade on a pairing or a plan says how well the two
@@ -914,8 +948,9 @@ every shipped file loads strictly; every capture claim is pinned
 whole and re-proven against its fixture, whose ports must equal the
 compiled inventory (a capture that names only some ports cannot be
 claimed); the `(name, role)` sequence of every shipped model in every
-mode with every module is pinned as hand-typed literals (a capture
-cannot prove which ports are uplinks), as are which part number is
+mode with every module is pinned from hand-typed tables in the test,
+not regenerated from the code under test (a capture cannot prove
+which ports are uplinks), as are which part number is
 which model and which facts are graded `inferred`; every compiled
 name the vendor's classifier recognises round-trips to the member,
 slot and port that produced it — the bare-letter module port of a
@@ -924,9 +959,8 @@ classifier yet and is pinned as a known gap, which the mapping does
 not depend on because an explicit rename entry is applied before
 classification; and where a flat target profile describes the same
 device, the two must list the same ports with the same roles.
-The pipeline's central promise — no two used source ports on one
-target name unless the operator asked for it — is asserted on every
-job in
+The pipeline's central promise — no two names on one target name
+unless the operator asked for it — is asserted on every job in
 [`tests/unit/migration/test_run_plan_with_models.py`](tests/unit/migration/test_run_plan_with_models.py).
 
 **Relationship to target profiles.**  A target profile is one model in
@@ -965,10 +999,12 @@ its own is refused.
 combination of a model is compiled when its family loads, and that
 product is capped), breakout lanes, ports a stack consumes as links,
 ports that belong to a stack rather than a member, literal
-non-systematic names, and a sub-interface following its parent port.
-Source-model detection and the
-picker in the rename modal are later phases; today the feature is
-reachable through the API.
+non-systematic names, a sub-interface following its parent port
+across codecs, and whether a model has an out-of-band management
+port at all (a kept management port therefore always needs the
+operator's decision).  Reading the source model out of the config,
+and a picker in the rename modal, do not exist yet; today the
+feature is reachable through the API.
 
 Authoring guide:
 [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md).

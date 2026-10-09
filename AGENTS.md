@@ -481,7 +481,7 @@ tests use these exclusively — never CSS classes or element structure.  See
   model.
   The same rule governs the model families under
   `definitions/library/model_families/`, whose names are computed and
-  then written into a config just the same.  Two more corollaries from
+  then written into a config just the same.  More corollaries from
   building those.  (3) `capture` is GRANTED to one exact deployment
   (model, mode, member id, module), never inherited: a sibling with
   identical port names, a TAA twin, or the same model as member 2 is a
@@ -493,7 +493,8 @@ tests use these exclusively — never CSS classes or element structure.  See
   "a test re-proves it on every run", so only the claims that test
   re-proves grant it (`PROVEN_CAPTURE_CLAIMS`): a claim in an
   operator's own family file names a fixture nothing reads, and
-  grants nothing.  Guarded by
+  grants nothing; and an entry is the WHOLE claim, so a proven fixture
+  cited for another model grants nothing either.  Guarded by
   `tests/unit/migration/test_device_models_shipped.py`.
 - **Never** leave a port name to the name-shape translator without
   checking what it made of it.  Positional mapping decides the ports it
@@ -510,13 +511,24 @@ tests use these exclusively — never CSS classes or element structure.  See
   output".  The mapper cannot predict the translator without
   re-deriving it, so `run_plan_with_models` asks the finished run
   (`fused_targets`), drops any name nobody decided that collides, runs
-  once more, and records the outcome on the plan (`settle_plan`).  The
-  same goes for what a plan SAYS: build its warnings and its
-  dropped/kept flags from the run, not from the intention — a port the
-  operator kept must not be reported as dropped, nor a port the
-  translator dropped as kept.  Guarded on every job in
+  once more, and records the outcome on the plan (`settle_plan`).
+  **The check must read the universe the translator rewrites, not the
+  set the plan was made for**: the first version of it looked only at
+  the hardware ports, and a FortiGate aggregate whose codec classifies
+  its name as a physical port still landed on a paired port, unseen —
+  the same defect one level down, found by the second review.  Names
+  are compared without regard to case or surrounding space, so an
+  override typed `1/a1` cannot hide behind its spelling.  The same goes
+  for what a plan SAYS: build its warnings and its dropped/kept flags
+  from the run, not from the intention — a port the operator kept must
+  not be reported as dropped, nor a port the translator dropped as
+  kept, nor a route that went with a dropped port left unmentioned.
+  Guarded on every job in
   `tests/unit/migration/test_run_plan_with_models.py`, whose wrapper
-  recomputes the fusion check from the job's own rename and drop lists.
+  recomputes the check for itself over every name the parsed config
+  references — written out in the test, not imported from the engine,
+  because a guard that calls the function it guards shares its blind
+  spot.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

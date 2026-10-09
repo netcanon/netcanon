@@ -200,6 +200,14 @@ and 100E physical hardware.
 - **`ENC <base64>` encrypted secrets** — round-trip through the
   canonical `hashed_password` field with format-preservation; never
   decoded to plaintext.
+- **Declaring a FortiGate as the source device** — with both devices
+  declared on the API, a correctly declared FortiGate is still
+  `partial`: pseudo-interfaces the codec does not classify come back
+  as off-inventory, and the stock `fortilink` aggregate — which the
+  ordinary translation would turn into the first port of the target —
+  is dropped and reported (`displaced`) instead.  Name it in
+  `port_rename_map` to keep it.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **`set vdom`** scoping — Netcanon parses single-VDOM configs
   cleanly; multi-VDOM scoping is a known gap (deferred follow-up).
 - **Most of a FortiGate config is Tier-3** (firewall, NAT, VPN,

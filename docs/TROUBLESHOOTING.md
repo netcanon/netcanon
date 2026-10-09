@@ -257,11 +257,16 @@ below say why each is there:
   port's account — on `/plan` and on every per-pane endpoint.
 
   A management port is treated differently.  With no management port
-  on the target it is handed to the name-shape translator and shows
-  `dropped: false`, which does not make the job `partial` (on AOS-S
-  it becomes the `oobm` block).  If the target has no form for a
-  management port at all, the translator drops it; the entry then
-  shows `dropped: true` and the port is in `unresolved_ports`.
+  in the target model it is handed to the ordinary port translation
+  (the name-shape translator) rather than dropped.  Where the target
+  has a form for out-of-band management it is kept — on AOS-S it
+  becomes the `oobm` block — and the entry shows `dropped: false`
+  and where it `landed`; where the target has no such form the
+  translator drops it and the entry shows `dropped: true`.  Either
+  way the port is in `unresolved_ports`: netcanon does not know
+  whether the target device has a management interface.  Name the
+  port in `port_rename_map` — the same target to confirm it, or
+  `null` to drop it.
 * **`off_inventory`** — the config names ports the source device you
   declared does not have.  Those names were handed to the name-shape
   translator, the old way — which may rename one, or drop it when
@@ -273,24 +278,30 @@ below say why each is there:
   an empty bay).  `POST /api/v1/migration/inventory` with your
   declaration shows the names it produces — compare them with the
   config.
-* **`displaced`** — a name from either list above that the name-shape
-  translator would have put on a target port another source port
-  already holds.  Two ports on one name is one port's config merged
-  into another's, so the name was **dropped** instead.  Give it a
-  target of its own in `port_rename_map`, or map it to `null`.
+* **`displaced`** — a name nobody decided that the name-shape
+  translator would have put on a name another interface ends on, or
+  on a port of the target: a name from either list above, or a
+  logical interface such as a firewall's aggregate.  Two interfaces
+  on one name is one's config merged into the other's, so the name
+  was **dropped** instead.  Give it a target of its own in
+  `port_rename_map`, or map it to `null`.
+
+If the plan lists `lost_routes`, `lost_dhcp_pools` or `shrunk_lags`,
+a dropped port took something with it: a static route or a DHCP pool
+that names a dropped port is removed whole.
 
 The message can also say **"N target port(s) received more than one
 source port"**.  `port_mapping_plan.fused` names them.  Only your own
 `port_rename_map` can cause this — two entries pointing at one name,
-or an entry pointing at a name the pairing already used (keeping an
-unplaced port under its old name does exactly that on a same-vendor
-pair).  Naming the ports again does not clear it; give each a target
-of its own.
+or an entry pointing at a name the pairing already used (on a
+same-vendor pair, keeping an unplaced port under its old name can do
+exactly that).  A target is read as the target device spells it, so
+`1/a1` is the port `1/A1`.  Naming the ports again does not clear it;
+give each a target of its own.
 
 **"Port mapping was not made"** means no pairing was possible at all —
 one side is a profile that lists no ports, or lists a port name twice.
-Every port name was then translated by name shape, as if no device
-had been declared.
+Every port name was then translated by name shape.
 
 A job that is `partial` for another reason as well (the usual state
 of a cross-vendor run) carries both messages in `error`.
@@ -298,8 +309,9 @@ of a cross-vendor run) carries both messages in `error`.
 A Catalyst source is a special case: IOS-XE prints the interfaces of
 every network module the chassis could take, so the modules you did
 not declare show up as off-inventory even when the declaration is
-right.  So do sub-interfaces (`GigabitEthernet1/0/1.100`), which are
-reported separately and do not move with their parent port.
+right.  A sub-interface (`GigabitEthernet1/0/1.100`) follows its
+parent port only between two configs of the same codec; across
+vendors it is reported separately and does not move with its port.
 
 ### "The migrate page reports 'paramiko-shell capture artifact'"
 

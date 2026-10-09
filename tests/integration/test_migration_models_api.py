@@ -189,9 +189,12 @@ class TestInventory:
         }).json()
         assert inventory["evidence"] == "capture"
         assert {p["evidence"] for p in inventory["ports"]} == {"capture"}
-        assert inventory["evidence_refs"] == [
-            "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg",
-        ]
+        fixture, panel = inventory["evidence_refs"]
+        assert fixture == (
+            "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg"
+        )
+        # ...and what establishes the panel: a capture proves the names.
+        assert panel.startswith("2930F Installation Guide 5200-1194d")
 
     def test_a_flat_target_profile_compiles_too(self, client: TestClient) -> None:
         inventory = client.post("/api/v1/migration/inventory", json={
@@ -242,7 +245,7 @@ class TestInventory:
              "no device model 'JL322A' is defined for cisco_iosxe"),
         ],
     )
-    def test_a_bad_declaration_is_a_422_that_says_what_is_allowed(
+    def test_a_bad_declaration_is_a_422_that_says_what_is_wrong(
         self, client: TestClient, body: dict, needle: str,
     ) -> None:
         resp = client.post("/api/v1/migration/inventory", json=body)
@@ -382,6 +385,41 @@ class TestPlanWithDeclaredDevices:
         assert job["port_drops"] == ["52"], path
         assert job["port_mapping_plan"]["overridden"] == ["49", "52"], path
         assert resp.headers["X-Netcanon-Job-Status"] == "completed", path
+
+    @pytest.mark.parametrize(
+        "path",
+        ["/plan", "/plan/ports", "/plan/vlans", "/plan/local_users",
+         "/plan/snmp", "/plan/snmpv3", "/render"],
+    )
+    @pytest.mark.parametrize("typed", ["1/a1", " 1/A1"])
+    def test_a_target_typed_in_another_case_is_still_that_port(
+        self, client: TestClient, path: str, typed: str,
+    ) -> None:
+        """``49`` is paired onto ``1/A1``.  An override that sends
+        ``50`` to ``1/a1`` puts two source ports on one physical port
+        -- the job must not be ``completed`` because the two were
+        spelt differently."""
+        resp = client.post(f"/api/v1/migration{path}", json=_models_body(
+            port_rename_map={"50": typed},
+        ))
+        plan = resp.json()["port_mapping_plan"]
+        assert plan["fused"] == {"1/A1": ["49", "50"]}, path
+        assert plan["off_target"] == [], path
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
+
+    def test_a_blank_target_is_ignored_not_taken_as_a_decision(
+        self, client: TestClient,
+    ) -> None:
+        """A form posts ``""`` for a field nobody touched."""
+        body = _models_body(port_rename_map={"25": ""})
+        body["target_deployment"] = {
+            "mode": "stacked",
+            "members": [{"model": "JL320A", "modules": {"A": "JL083A"}}],
+        }
+        job = client.post("/api/v1/migration/plan", json=body).json()
+        plan = job["port_mapping_plan"]
+        assert plan["ignored_overrides"] == ["25"]
+        assert "25" in plan["unresolved_ports"] and "25" in job["port_drops"]
 
     @pytest.mark.parametrize(
         "path",
@@ -564,6 +602,29 @@ class TestRequestErrors:
         assert "DEFAULT_VLAN" in CAPTURE_2930F
         assert "DEFAULT_VLAN" not in resp.text
         assert len(resp.text) < 400
+
+    @pytest.mark.parametrize(
+        ("url", "raw"),
+        [
+            ("/api/v1/migration/inventory",
+             b'{"codec":"aruba_aoss","deployment":{"members":[{"model":"JL\\ud800"}]}}'),
+            ("/api/v1/migration/inventory",
+             b'{"codec":"aruba_aoss","deployment":{"mode":"x\\ud800",'
+             b'"members":[{"model":"JL322A"}]}}'),
+            ("/api/v1/migration/plan",
+             b'{"source":"aruba_aoss","target":"aruba_aoss","raw_text":"x",'
+             b'"source_deployment":{"members":[{"model":"JL\\ud800"}]}}'),
+        ],
+    )
+    def test_a_lone_surrogate_in_a_declared_name_is_a_422_not_a_500(
+        self, client: TestClient, url: str, raw: bytes,
+    ) -> None:
+        """``"\\ud800"`` is valid JSON and not valid text.  The
+        validation error echoes the input; written out as UTF-8 that
+        echo cannot be encoded, and the 422 used to become a 500."""
+        resp = client.post(url, content=raw, headers={"Content-Type": "application/json"})
+        assert resp.status_code == 422
+        assert resp.json()["detail"][0]["type"] == "string_unicode"
 
     def test_an_unknown_target_profile_alone_is_still_accepted(
         self, client: TestClient,

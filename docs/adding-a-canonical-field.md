@@ -301,6 +301,19 @@ structural shift, create `netcanon/migration/canonical/transforms.py`
 helpers and wire them in each codec's `parse()` after the per-line
 extraction.
 
+### A field that holds a port name
+
+If the new field references a port or interface by name (as
+`static_routes[].interface` and `vxlan_vnis[].source_interface` do), it
+has two more places to go in the same change, both in
+`netcanon/migration/canonical/port_names.py`: the rename pass in
+`translate_port_names`, so the name is translated with the rest, and
+`collect_port_names`, the single statement of where a tree holds port
+names.  Model-to-model port mapping checks a finished translation for
+two names on one target over exactly that list — a place missing from
+it is a name the check never looks at.
+`tests/unit/migration/test_run_plan_with_models.py` pins each place.
+
 ### Per-vendor quirks go in codec code, not canonical
 
 The canonical model should stay cross-vendor-clean.  Vendor-specific

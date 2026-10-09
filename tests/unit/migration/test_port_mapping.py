@@ -15,6 +15,7 @@ from netcanon.migration.port_mapping import (
     MappingPlan,
     describe_plan,
     fused_targets,
+    name_key,
     plan_port_mapping,
     settle_plan,
 )
@@ -204,12 +205,13 @@ class TestUnplaced:
 
 
 class TestManagementPorts:
-    """An unplaced management port is not dropped.  The name-shape
-    translator already turns a source management port into what the
-    target uses for out-of-band management (the ``oobm`` block on
-    AOS-S, which has no management interface for a model to list);
-    deleting it would be a regression against a run with no models
-    declared."""
+    """An unplaced management port is not dropped by the plan.  The
+    name-shape translator turns a source management port into what
+    the target uses for out-of-band management (the ``oobm`` block
+    on AOS-S); deleting it would be a regression against a run with
+    no models declared.  But whether the target HAS a management
+    interface is not something the plan knows, so the port needs
+    the operator's eye like any other the plan could not place."""
 
     SOURCE = _inventory((0, "access", ["Gi1/0/1"]), (0, "mgmt", ["Gi0/0"]))
 
@@ -220,14 +222,19 @@ class TestManagementPorts:
         assert (port.source, port.role, port.dropped) == ("Gi0/0", "mgmt", False)
         assert plan.used_dropped == []
 
-    def test_it_is_reported_but_does_not_make_the_plan_unclean(self):
+    def test_it_needs_a_decision_like_any_port_without_a_place(self):
+        """A 2930F has no out-of-band port at all; rendering an
+        ``oobm`` block for one and calling the job complete would be
+        a quiet wrong answer."""
         plan = plan_port_mapping(self.SOURCE, _inventory((0, "access", ["1/1"])))
-        assert plan.is_clean
-        assert plan.unresolved() == []
+        assert not plan.is_clean
+        assert plan.unresolved() == ["Gi0/0"]
+        assert plan.unresolved({"Gi0/0"}) == []
         assert plan.warnings == [
             "port mapping: 1 source management port(s) have no management "
-            "port in the target model and were translated by name shape "
-            "instead: Gi0/0",
+            "port in the target model and are left to name-shape "
+            "translation (Gi0/0); confirm the target has a management "
+            "interface, or drop them",
         ]
 
     def test_it_pairs_when_the_target_has_one(self):
@@ -445,6 +452,10 @@ class TestRepeatedNames:
                 plan.warnings[0]
             )
 
+    def test_two_spellings_of_one_name_are_a_repeat(self):
+        plan = plan_port_mapping(STANDALONE_48, _inventory((0, "access", ["1/A1", "1/a1"])))
+        assert not plan.applied
+
 
 class TestFusedTargets:
     """Read from what a run reports -- whoever decided each name."""
@@ -464,9 +475,40 @@ class TestFusedTargets:
     def test_distinct_targets_are_not_fused(self):
         assert fused_targets(["a", "b"], {"a": "x", "b": "y"}, []) == {}
 
+    @pytest.mark.parametrize("spelling", ["1/a1", " 1/A1", "1/A1 ", "1/A1"])
+    def test_a_target_is_the_same_port_in_any_case_and_spacing(self, spelling):
+        """An override typed ``1/a1`` lands on the port ``1/A1``.  Compared
+        as exact strings the two would be different targets, and two
+        source ports on one physical port would go unseen."""
+        fused = fused_targets(["49", "50"], {"49": "1/A1", "50": spelling}, [])
+        assert list(fused.values()) == [["49", "50"]]
+        assert [name_key(target) for target in fused] == ["1/a1"]
+
+    def test_two_spellings_of_one_source_are_not_two_ports(self):
+        """AOS-S prints a trunk as ``trk1`` where it is defined and
+        ``Trk1`` in a VLAN list.  One LAG, not a fusion of two."""
+        assert fused_targets(["trk1", "Trk1"], {}, []) == {}
+
+    def test_a_name_given_twice_is_one_name(self):
+        assert fused_targets(["7", "7"], {}, []) == {}
+
+    def test_only_a_clash_that_involves_a_hardware_port_when_asked(self):
+        """Every name the config references goes in, logical ones
+        included -- an aggregate the translator calls physical lands on
+        a physical port's name.  Two LAGs that clash with each other
+        are the translator's own business."""
+        names = ["dmz", "fortilink", "Po1", "Po2"]
+        renames = {"dmz": "Ethernet1", "fortilink": "Ethernet1", "Po1": "Trk1", "Po2": "Trk1"}
+        assert fused_targets(names, renames, []) == {
+            "Ethernet1": ["dmz", "fortilink"], "Trk1": ["Po1", "Po2"],
+        }
+        assert fused_targets(names, renames, [], involving=["dmz"]) == {
+            "Ethernet1": ["dmz", "fortilink"],
+        }
+
 
 def _settled(plan: MappingPlan, used, *, renames=None, drops=(), operator=None,
-             target=STACKED_24_MODULE, displaced=(), emptied=()) -> MappingPlan:
+             target=STACKED_24_MODULE, every=None, **outcome) -> MappingPlan:
     """Settle *plan* against a run that did what the merged map says,
     plus whatever *renames* and *drops* add on top."""
     operator = operator or {}
@@ -478,18 +520,18 @@ def _settled(plan: MappingPlan, used, *, renames=None, drops=(), operator=None,
         plan,
         operator_map=operator,
         used_names=list(used),
+        every_name=list(every if every is not None else used),
         port_renames=port_renames,
         port_drops=port_drops,
         target_names=target.names(),
-        displaced=displaced,
-        emptied_lags=emptied,
+        **outcome,
     )
     return plan
 
 
 class TestSettlePlan:
-    """A plan states an intention; ``settle_plan`` makes it describe
-    what the run did."""
+    """A plan states an intention; ``settle_plan`` makes its flags and
+    warnings describe what the run did."""
 
     USED = _bare(52)
 
@@ -507,10 +549,11 @@ class TestSettlePlan:
         assert (after.overridden, after.displaced, after.fused, after.off_target) == (
             [], [], {}, [],
         )
+        assert after.unused_target == before.unused_target == []
 
     def test_an_acknowledged_drop_is_resolved_and_not_warned_about(self):
         plan = _settled(self._plan(), self.USED, operator=dict.fromkeys(_bare(24, 25)))
-        assert plan.unresolved_ports == []
+        assert plan.unresolved_ports == [] and plan.is_clean
         assert plan.overridden == sorted(_bare(24, 25))
         assert plan.warnings == []
         assert {p.dropped for p in plan.unplaced} == {True}
@@ -520,31 +563,61 @@ class TestSettlePlan:
         target.  The plan must not go on saying it was dropped."""
         plan = _settled(self._plan(), self.USED, operator={"25": "1/A4", "52": None})
         kept = next(p for p in plan.unplaced if p.source == "25")
-        assert not kept.dropped
+        assert (kept.dropped, kept.landed) == (False, "1/A4")
         assert "25" not in plan.unresolved_ports
         (line,) = [w for w in plan.warnings if "were DROPPED" in w]
         assert "23 source access port(s)" in line and "26, 27" in line
+
+    def test_the_pairing_is_kept_as_made_and_overridden_says_which_moved(self):
+        """``pairings`` and ``rename_map`` are the pairing before the
+        operator's map.  A client that draws the final mapping from
+        them shows a port where it did not go -- ``overridden`` is what
+        tells it which rows are stale."""
+        plan = _settled(self._plan(), self.USED, operator={"49": "1/A4", "52": None})
+        assert plan.rename_map["49"] == "1/A1"
+        assert next(p for p in plan.pairings if p.source == "49").target == "1/A1"
+        assert plan.overridden == ["49", "52"]
+
+    def test_unused_target_is_what_is_free_after_the_run(self):
+        """Port 49 was moved off ``1/A1`` onto ``1/A4`` and 52 dropped:
+        ``1/A1`` is free now, and ``1/A4`` is not."""
+        plan = _settled(self._plan(), self.USED, operator={"49": "1/A4", "52": None})
+        assert plan.unused_target == ["1/A1"]
 
     def test_a_management_port_the_translator_dropped_is_reported_as_dropped(self):
         source = _inventory((0, "access", ["Eth1"]), (0, "mgmt", ["Management1"]))
         target = _inventory((0, "access", ["ether1"]))
         plan = plan_port_mapping(source, target, ["Eth1", "Management1"])
-        assert plan.unresolved_ports == [] and not plan.unplaced[0].dropped
+        assert not plan.unplaced[0].dropped
         _settled(plan, ["Eth1", "Management1"], drops=["Management1"], target=target)
-        assert plan.unplaced[0].dropped
+        assert plan.unplaced[0].dropped and plan.unplaced[0].landed == ""
         assert plan.unresolved_ports == ["Management1"]
         assert not plan.is_clean
         (line,) = plan.warnings
         assert "1 source management port(s)" in line and "DROPPED" in line
-        assert "translated by name shape" not in line
+        assert "name-shape translation" not in line
 
-    def test_a_management_port_the_translator_kept_is_not_a_problem(self):
+    def test_a_management_port_the_translator_kept_says_where_it_went(self):
         source = _inventory((0, "access", ["Gi1/0/1"]), (0, "mgmt", ["Gi0/0"]))
         target = _inventory((0, "access", ["1/1"]))
-        plan = plan_port_mapping(source, target, ["Gi1/0/1", "Gi0/0"])
-        _settled(plan, ["Gi1/0/1", "Gi0/0"], renames={"Gi0/0": "oobm"}, target=target)
+        used = ["Gi1/0/1", "Gi0/0"]
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, renames={"Gi0/0": "oobm"}, target=target)
+        assert (plan.unplaced[0].dropped, plan.unplaced[0].landed) == (False, "oobm")
+        assert plan.unresolved_ports == ["Gi0/0"] and not plan.is_clean
+        assert "were kept by name-shape translation (Gi0/0 -> oobm)" in plan.warnings[0]
+
+    def test_naming_a_kept_management_port_is_the_decision(self):
+        """...and sending it to ``oobm`` is not "a target the device
+        lacks": the target model lists no management port, so there is
+        no inventory name the operator could have chosen instead."""
+        source = _inventory((0, "access", ["Gi1/0/1"]), (0, "mgmt", ["Gi0/0"]))
+        target = _inventory((0, "access", ["1/1"]))
+        used = ["Gi1/0/1", "Gi0/0"]
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, operator={"Gi0/0": "oobm"}, target=target)
         assert plan.unresolved_ports == [] and plan.is_clean
-        assert "translated by name shape instead: Gi0/0" in plan.warnings[0]
+        assert plan.off_target == [] and plan.warnings == []
 
     def test_a_displaced_name_is_unresolved_whoever_asks(self):
         plan = plan_port_mapping(STANDALONE_24, STANDALONE_48, [*_bare(28), "49"])
@@ -556,7 +629,7 @@ class TestSettlePlan:
         assert plan.unresolved({"49"}) == ["49"]
         assert not plan.is_clean
         (line,) = plan.warnings
-        assert "1 name(s) the pairing does not decide" in line and "DROPPED" in line
+        assert "1 name(s) nobody decided" in line and "DROPPED" in line
         # ...and it is not reported a second time as merely off-inventory.
         assert "check the source model" not in line
 
@@ -567,12 +640,42 @@ class TestSettlePlan:
         assert not same.is_clean
         assert any("1 <- 1, 5" in w for w in same.warnings)
 
+    def test_a_logical_name_on_a_hardware_ports_target_is_a_fusion(self):
+        """The run is read over every name, not only the hardware
+        ones the plan was made for."""
+        source = _inventory((0, "access", ["dmz"]))
+        target = _inventory((0, "access", ["Ethernet1"]))
+        plan = plan_port_mapping(source, target, ["dmz"])
+        _settled(plan, ["dmz"], every=["dmz", "fortilink"],
+                 renames={"fortilink": "Ethernet1"}, target=target)
+        assert plan.fused == {"Ethernet1": ["dmz", "fortilink"]}
+
+    def test_more_fused_targets_than_fit_on_a_line_are_counted(self):
+        same = plan_port_mapping(STANDALONE_48, STANDALONE_48, self.USED)
+        _settled(same, self.USED, operator={str(n): str(n + 20) for n in range(1, 9)},
+                 target=STANDALONE_48)
+        (line,) = [w for w in same.warnings if "receive more than one" in w]
+        assert "8 target port(s)" in line and "and 2 more" in line
+
     def test_an_override_target_the_device_lacks_is_listed(self):
         same = plan_port_mapping(STANDALONE_48, STANDALONE_48, self.USED)
         _settled(same, self.USED, operator={"5": "77", "6": None}, target=STANDALONE_48)
         assert same.off_target == ["77"]
         assert same.is_clean and same.unresolved_ports == []
         assert any("not ports of the declared target device: 77" in w for w in same.warnings)
+
+    def test_an_override_for_a_port_the_config_does_not_have_is_not_listed(self):
+        """The translator ignores such an entry; reporting its target
+        would describe something that did not happen."""
+        same = plan_port_mapping(STANDALONE_48, STANDALONE_48, self.USED)
+        _settled(same, self.USED, operator={"999": "77"}, target=STANDALONE_48)
+        assert same.off_target == []
+
+    def test_a_target_in_another_case_is_a_port_of_the_device(self):
+        plan = plan_port_mapping(STANDALONE_48, STACKED_48_MODULE, self.USED)
+        _settled(plan, self.USED, operator={"52": None, "5": "1/a4"},
+                 target=STACKED_48_MODULE)
+        assert plan.off_target == []
 
     def test_an_overridden_pairing_raises_no_speed_warning(self):
         """The flag describes the target the PLAN chose.  Once the
@@ -584,25 +687,86 @@ class TestSettlePlan:
         _settled(plan, ["49"], operator={"49": "1/A1"}, target=target)
         assert not [w for w in plan.warnings if "slower target port" in w]
 
-    def test_an_emptied_lag_is_named(self):
-        plan = _settled(self._plan(), self.USED, emptied=["Trk1"])
-        assert plan.emptied_lags == ["Trk1"]
-        assert any("every member port of 1 LAG(s) was dropped" in w and "Trk1" in w
-                   for w in plan.warnings)
+    def test_what_a_dropped_port_took_with_it_is_named(self):
+        plan = _settled(
+            self._plan(), self.USED, emptied_lags=["Trk1"], shrunk_lags=["Trk2"],
+            lost_routes=["0.0.0.0/0", "10.50.0.0/16"], lost_dhcp_pools=["10.1.0.0/24"],
+        )
+        assert (plan.emptied_lags, plan.shrunk_lags) == (["Trk1"], ["Trk2"])
+        text = " | ".join(plan.warnings)
+        assert "every member port of 1 LAG(s) was dropped" in text and "Trk1" in text
+        assert "1 LAG(s) lost a member port" in text and "Trk2" in text
+        assert (
+            "2 static route(s) that named a dropped port were removed with it: "
+            "0.0.0.0/0, 10.50.0.0/16"
+        ) in text
+        assert (
+            "1 DHCP pool(s) bound to a dropped port were removed with it: "
+            "10.1.0.0/24"
+        ) in text
+
+    def test_a_blank_override_is_said_to_have_been_ignored(self):
+        plan = _settled(self._plan(), self.USED, ignored_overrides=["25"])
+        assert plan.ignored_overrides == ["25"]
+        assert "25" in plan.unresolved_ports
+        assert any("had a blank target and were ignored" in w for w in plan.warnings)
+
+    def test_a_sub_interface_that_followed_its_port_is_accounted_for(self):
+        source = _inventory((0, "access", ["ge-0/0/0", "ge-0/0/1"]))
+        target = _inventory((0, "access", ["ge-0/0/5", "ge-0/0/6"]))
+        used = ["ge-0/0/0", "ge-0/0/0.54", "ge-0/0/1.7"]
+        plan = plan_port_mapping(source, target, used)
+        assert plan.off_inventory == ["ge-0/0/0.54", "ge-0/0/1.7"]
+        _settled(plan, used, target=target, renames={"ge-0/0/0.54": "ge-0/0/5.54"},
+                 sub_interfaces={"ge-0/0/0.54": "ge-0/0/5.54"})
+        assert plan.sub_interfaces == {"ge-0/0/0.54": "ge-0/0/5.54"}
+        assert plan.off_inventory == ["ge-0/0/1.7"]
+        assert plan.unresolved_ports == ["ge-0/0/1.7"]
+
+    def test_a_sub_interface_dropped_with_its_port_is_said_so(self):
+        source = _inventory((0, "access", ["ge-0/0/0", "ge-0/0/1"]))
+        target = _inventory((0, "access", ["ge-0/0/5"]))
+        used = ["ge-0/0/0", "ge-0/0/1", "ge-0/0/1.7"]
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, drops=["ge-0/0/1.7"],
+                 sub_interfaces={"ge-0/0/1.7": None})
+        assert plan.unresolved_ports == ["ge-0/0/1"]
+        assert any(
+            "1 sub-interface name(s) were DROPPED with the port they belong to: "
+            "ge-0/0/1.7" in w for w in plan.warnings
+        )
 
     def test_a_sub_interface_is_told_apart_from_a_wrong_model(self):
         """``Gi1/0/1.100`` is not a port of the device, and that says
-        nothing against the declared model: its parent is one."""
+        nothing against the declared model: its parent is one.  An
+        address is not a sub-interface because it contains a dot."""
         source = _inventory((0, "access", ["Gi1/0/1", "Gi1/0/2"]))
         target = _inventory((0, "access", ["ge-0/0/0", "ge-0/0/1"]))
-        used = ["Gi1/0/1", "Gi1/0/1.100", "Te9/9/9"]
+        used = ["Gi1/0/1", "Gi1/0/1.100", "Te9/9/9", "192.168.100.1", "ssl.root"]
         plan = plan_port_mapping(source, target, used)
         _settled(plan, used, target=target)
-        assert plan.off_inventory == ["Gi1/0/1.100", "Te9/9/9"]
         sub = next(w for w in plan.warnings if "sub-interface" in w)
         wrong = next(w for w in plan.warnings if "check the source model" in w)
-        assert "Gi1/0/1.100" in sub and "did NOT move with their port" in sub
-        assert "Te9/9/9" in wrong and "Gi1/0/1.100" not in wrong
+        assert "1 sub-interface name(s)" in sub and "Gi1/0/1.100" in sub
+        assert "did NOT move with their port" in sub
+        for name in ("Te9/9/9", "192.168.100.1", "ssl.root"):
+            assert name in wrong and name not in sub
+
+    def test_a_displaced_sub_interface_has_a_line_of_its_own(self):
+        """Across codecs a sub-interface is left to the name-shape
+        translator.  A classifier that folds the unit into the port
+        (Junos) sends it onto its own parent, or onto its sibling
+        units, so it is dropped -- and the line says it is a
+        sub-interface, not "a name nobody decided"."""
+        source = _inventory((0, "access", ["ge-0/0/0"]))
+        target = _inventory((0, "access", ["1/1"]))
+        used = ["ge-0/0/0", "ge-0/0/0.54"]
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, drops=["ge-0/0/0.54"],
+                 displaced=["ge-0/0/0.54"])
+        (line,) = plan.warnings
+        assert "1 sub-interface name(s) could not be given a name of their own" in line
+        assert "nobody decided" not in line
 
     def test_off_inventory_names_the_translator_dropped_are_counted(self):
         """"Nothing was dropped" is not true of an off-inventory name:
@@ -616,21 +780,55 @@ class TestSettlePlan:
         plan = plan_port_mapping(STANDALONE_48, _inventory(), ["1"])
         reason = list(plan.warnings)
         settle_plan(
-            plan, operator_map={"1": "x"}, used_names=["1"], port_renames={"1": "x"},
-            port_drops=[], target_names=[],
+            plan, operator_map={"1": "x"}, used_names=["1"], every_name=["1"],
+            port_renames={"1": "x"}, port_drops=[], target_names=[],
         )
         assert plan.warnings == reason and not plan.applied
-        assert plan.off_target == []
+        assert plan.off_target == [] and plan.fused == {}
 
-    def test_no_settled_warning_quotes_a_port_name(self):
-        used = [*_bare(52), "A1", "49.7"]
-        plan = plan_port_mapping(STANDALONE_48, STACKED_24_MODULE, used)
+
+class TestNoWarningCanBeReadAsATableRow:
+    """The migrate page reads single-quoted tokens out of job warnings
+    as extra rows of its rename table."""
+
+    def test_every_kind_of_line_and_none_has_a_quote(self):
+        two = _inventory((0, "access", ["1/1"]), (1, "access", ["2/1"]), (0, "mgmt", ["mgmt0"]))
+        one = _inventory((0, "access", ["x1"]))
+        used = ["1/1", "2/1", "mgmt0", "A1", "1/1.5", "49.7"]
+        plan = plan_port_mapping(two, one, used)
         _settled(
-            plan, used, operator={"1": "9/9", "2": "1/3"}, drops=["A1"],
-            displaced=["A1"], emptied=["Trk1"],
+            plan, used, target=one, operator={"1/1": "9/9", "nope": "8/8"},
+            drops=["A1", "mgmt0"], displaced=["A1", "1/1.5"],
+            emptied_lags=["Trk1"], shrunk_lags=["Trk2"], lost_routes=["0.0.0.0/0"],
+            lost_dhcp_pools=["10.0.0.0/24"], ignored_overrides=["2/1"],
+            sub_interfaces={"49.7": None},
         )
-        assert len(plan.warnings) >= 6
-        assert not [w for w in plan.warnings if "'" in w]
+        kinds = (
+            "belong to a member the target does not have",
+            "source management port(s) have no management port",
+            "nobody decided",
+            "could not be given a name of their own",
+            "were DROPPED with the port they belong to",
+            "override target(s) are not ports",
+            "had a blank target",
+            "every member port of",
+            "lost a member port",
+            "static route(s)",
+            "DHCP pool(s)",
+        )
+        text = " | ".join(plan.warnings)
+        for kind in kinds:
+            assert kind in text, kind
+        assert "'" not in text
         assert plan.warnings == describe_plan(
-            plan, decided={"1", "2"}, dropped={*_bare(24, 25), "A1"},
+            plan, decided={"1/1", "nope"}, dropped={"A1", "mgmt0", "2/1"},
         )
+
+    def test_an_apostrophe_in_a_port_name_does_not_make_one(self):
+        """RouterOS and FortiGate interface names are free text."""
+        source = _inventory((0, "access", ["ether1"]))
+        used = ["ether1", "bob's uplink", "alice's port"]
+        plan = plan_port_mapping(source, _inventory((0, "access", ["x1"])), used)
+        (line,) = plan.warnings
+        assert "'" not in line
+        assert "bob\u2019s uplink" in line and "alice\u2019s port" in line

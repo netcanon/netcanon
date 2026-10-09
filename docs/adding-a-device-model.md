@@ -158,9 +158,10 @@ shows.
 
 `capture` means exactly that re-proof, so a claim grants the grade
 only when it is one the test re-proves: it is listed in
-`PROVEN_CAPTURE_CLAIMS` in `device_models.py`, and the test requires
-that list to equal the claims it checks.  A claim in an operator's own
-family file is read, logged and grants nothing.
+`PROVEN_CAPTURE_CLAIMS` in `device_models.py` — the whole claim:
+family, fixture, mode, and each member's model, id and modules — and
+the test requires that list to equal the claims it checks.  A claim
+in an operator's own family file is read, logged and grants nothing.
 
 A capture proves **names**.  It retires the caveat of the naming fact
 and keeps the caveat of the panel or module fact, because which ports
@@ -180,7 +181,7 @@ are uplinks, and what speed each is, is not something a config shows.
    number(s) under `skus:`; put the first part number in
    `display_name`.  A family name, model key and module SKU is a plain
    token — letters, digits, `.`, `_`, `+`, `-` — and YAML aliases
-   (`&name` / `*name`) are not allowed in a family file.
+   (`*name`) are not allowed in a family file.
 3. **Pin the inventory by hand** in
    [`tests/unit/migration/test_device_models_shipped.py`](../tests/unit/migration/test_device_models_shipped.py):
    the access names and the uplink names, in order, for every mode and

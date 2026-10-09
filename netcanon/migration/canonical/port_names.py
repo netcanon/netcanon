@@ -15,6 +15,12 @@ This module defines the **vendor-agnostic bridge**:
    and rewrites every port-name field from source convention to target
    convention, using ONLY each codec's own ``classify_port_name`` /
    ``format_port_identity`` methods.  Never conditionals vendor pair.
+3. :func:`collect_port_names` — the single statement of WHERE a
+   canonical tree holds port names (the places the sweep rewrites),
+   and :func:`collect_hardware_port_names`, the subset that is
+   evidence of a hardware port.  A new canonical field that
+   references a port is added to the first and to the sweep in the
+   same change.
 
 **Modular boundary:** each codec knows ONLY its own vendor's naming
 convention.  Cisco's codec classifies ``Gi1/0/24`` → ``PortIdentity``
@@ -256,11 +262,17 @@ NON_HARDWARE_INTERFACE_TYPES: frozenset[str] = frozenset({
 #: Kinds a codec's classifier gives only to a name that is not a
 #: hardware port.  ``unknown`` is deliberately absent: it is what a
 #: classifier returns for a name it does not recognise, and on AOS-S
-#: that includes a real uplink named ``A1``.  ``mgmt``, ``physical``
-#: and ``breakout`` are hardware.
+#: that includes a real uplink named ``A1``.
 NON_HARDWARE_PORT_KINDS: frozenset[str] = frozenset({
     "lag", "svi", "loopback", "tunnel", "vtep", "virtual",
     "hw_aggregate",
+})
+
+#: Kinds a classifier gives to a name it recognises AS a hardware
+#: port.  With :data:`NON_HARDWARE_PORT_KINDS` and ``unknown`` this
+#: is every :data:`PortKind`.
+HARDWARE_PORT_KINDS: frozenset[str] = frozenset({
+    "physical", "breakout", "mgmt",
 })
 
 
@@ -314,18 +326,22 @@ def collect_hardware_port_names(
 ) -> list[str]:
     """The hardware ports *intent* references, in first-seen order.
 
-    A running-config names a port in an interface stanza only when the
-    port carries non-default config; an unconfigured access port
-    appears solely in a VLAN's membership list, a LAG member solely
-    under the LAG, and a port can be named by nothing but a static
-    route, a DHCP pool or a VRRP track list.  Each is evidence that
-    the device has a port of that name, so this starts from
-    :func:`collect_port_names` — every place the rename sweep rewrites
-    — and takes away what is not hardware.  Starting from fewer places
-    would leave a port the sweep renames outside the set a positional
-    mapping is made for.
+    **Evidence and reference.**  A running-config names a port in an
+    interface stanza only when the port carries non-default config; an
+    unconfigured access port appears solely in a VLAN's membership
+    list, and a LAG member solely under the LAG.  Each of those three
+    is EVIDENCE that the device has a port of that name.
 
-    What is taken away:
+    A static route's or a DHCP pool's interface, a VRRP track entry and
+    a VTEP source are REFERENCES.  The rename sweep rewrites them, so a
+    real port named only there must be part of any mapping — but what
+    those fields hold is not always an interface: a route to ``Null0``
+    or to the keyword ``dhcp``, a pool keyed by a zone name, a track
+    OBJECT number, a VTEP source address.  A reference therefore counts
+    only when something says it is a port: the declared inventory lists
+    it (*always*), or *classify* positively calls it a hardware kind.
+
+    What is taken away from the evidence:
 
     * an interface whose canonical ``interface_type`` says SVI, LAG,
       loopback, bridge or tunnel;
@@ -335,16 +351,24 @@ def collect_hardware_port_names(
       ``trk1``), so they are subtracted after the union;
     * when *classify* is given, a name it POSITIVELY calls one of
       :data:`NON_HARDWARE_PORT_KINDS`.  Several codecs never set
-      ``interface_type`` (OPNsense, VyOS) or set one type for
-      everything (FortiGate), and for those the classifier is the only
-      thing that knows ``lo0`` or ``ssl.root`` is not a port.
+      ``interface_type`` (OPNsense, VyOS) or type everything that is
+      not a LAG or a VLAN interface as Ethernet (FortiGate), and for
+      those the classifier is the only thing that knows ``lo0`` or
+      ``ssl.root`` is not a port.
 
-    ``unknown`` is never grounds for leaving a name out: on AOS-S the
+    ``unknown`` is never grounds for leaving EVIDENCE out: on AOS-S the
     classifier returns it both for the synthesised SVI name ``Vlan2``
     and for a real uplink named ``A1``.  What a classifier does not
     recognise, and no type marks, is still returned — a sub-interface
     (``GigabitEthernet1/0/1.100``) and some firewall pseudo-interfaces
-    are.
+    are.  A classifier that raises on a name is treated as not
+    recognising it: reading a config's port names must not be able to
+    fail a job.
+
+    This is the set a positional mapping is made FOR.  It is not the
+    set a finished run is checked over: the sweep rewrites every name
+    in :func:`collect_port_names`, logical ones included, and the
+    check for two names on one target has to look at all of them.
 
     Args:
         intent: The parsed source tree.
@@ -352,7 +376,8 @@ def collect_hardware_port_names(
         always: Names that count whatever *classify* says — the ports
             of a declared source inventory.  A classifier that misread
             a real port must not be able to take it out of the set a
-            mapping is made for.
+            mapping is made for.  (The type and LAG-name tests above
+            still apply to it.)
     """
     not_hardware: set[str] = {
         iface.name for iface in intent.interfaces
@@ -363,14 +388,35 @@ def collect_hardware_port_names(
         iface.lag_member_of.lower() for iface in intent.interfaces
         if iface.lag_member_of
     )
+    evidenced: set[str] = {iface.name for iface in intent.interfaces if iface.name}
+    for vlan in intent.vlans:
+        evidenced.update(vlan.tagged_ports)
+        evidenced.update(vlan.untagged_ports)
+    for lag in intent.lags:
+        evidenced.update(lag.members)
     keep = set(always)
+
+    def kind_of(name: str) -> str:
+        if classify is None:
+            return "unknown"
+        try:
+            identity = classify(name)
+        except Exception:
+            # One of fourteen per-vendor classifiers, on an arbitrary
+            # string from a pasted config.  "Could not read it" is what
+            # ``unknown`` already means.
+            return "unknown"
+        return identity.kind if identity is not None else "unknown"
+
     names: list[str] = []
     for name in collect_port_names(intent):
         if name in not_hardware or name.lower() in lag_names:
             continue
-        if classify is not None and name not in keep:
-            identity = classify(name)
-            if identity is not None and identity.kind in NON_HARDWARE_PORT_KINDS:
+        if name not in keep:
+            kind = kind_of(name)
+            if kind in NON_HARDWARE_PORT_KINDS:
+                continue
+            if name not in evidenced and kind not in HARDWARE_PORT_KINDS:
                 continue
         names.append(name)
     return names

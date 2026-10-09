@@ -867,45 +867,76 @@ stated*.
 
 **Both devices must be declared.**  A source without a target, or a
 `target_deployment` without a source, is a 422.  The response carries
-`port_mapping_plan` when a pairing was made; if it is `null`, nothing
-was paired — check the spelling of the field names, because the plan
-request ignores top-level fields it does not know.
+`port_mapping_plan` when both devices were declared and the job
+rendered, and its `applied` says whether a pairing was made.  If the
+plan is `null`, nothing was paired — check the spelling of the field
+names, because the plan request ignores top-level fields it does not
+know (a misspelt `source_deployment` beside a `target_profile` is
+simply not seen).
 
 What you get back, on the job's `port_mapping_plan`:
 
-* **`pairings`** — every source port and the target port it landed on,
-  flagged (`slower`, `poe_lost`) where a faster port lands on a slower
-  one or a PoE port on a port without PoE.
+* **`applied`** — `false` when no pairing could be made at all (one
+  side is a profile that lists no ports).
+* **`pairings`** — every source port and the target port the pairing
+  chose for it, flagged (`slower`, `poe_lost`) where a faster port
+  lands on a slower one or a PoE port on a port without PoE.  This is
+  the pairing *before* your own `port_rename_map` was applied: a port
+  listed in **`overridden`** went where you sent it, and
+  `port_renames` / `port_drops` on the job say where every port ended
+  up.
+* **`overridden`** — source ports whose pairing your `port_rename_map`
+  replaced.
 * **`unplaced`** — source ports with no place on the target: a 48-port
   config on a 24-port switch, or uplinks with no uplink ports to go
   to.  An access or uplink port is **dropped from the output** and
   listed in `port_drops`: it is never moved onto a spare port of
   another kind, and never left in the output under its old name.  Each
-  entry's `dropped` says what happened to that port.
+  entry's `dropped` says what happened to that port, and `landed` the
+  name it ended under if it was kept.
 
-  The exception is a management port with no management port on the
-  target.  It is handed to the name-shape translator, which knows what
-  each target does with out-of-band management (on AOS-S it becomes
-  the `oobm` block), and it then has `dropped: false`.  Where the
-  target has no form for a management port at all, the translator
-  drops it; the entry then says `dropped: true` and the job is
-  `partial`.
+  A management port with no management port in the target model is
+  treated differently.  It is handed to the ordinary port translation
+  — the *name-shape translator*, which derives a target name from the
+  shape of the source name and knows what each target does with
+  out-of-band management (on AOS-S it becomes the `oobm` block).  If
+  that kept it, the entry says `dropped: false` and where it `landed`;
+  if the target has no form for a management port at all, the
+  translator drops it and the entry says `dropped: true`.  Either way
+  it needs your decision: netcanon does not know whether the target
+  device has a management interface (an Aruba 2930F has none).
 * **`off_inventory`** — names in the config that are not ports of the
   source device you declared.  They are handed to the name-shape
   translator, which may rename them or drop them.  Usually this means
   the source model, its mode or its modules were declared wrongly —
   check them.
-* **`displaced`** — names from either group above that the
-  name-shape translator would have put on a target port another
-  source port holds.  Rather than merge two ports into one, netcanon
-  **drops** such a name and says so.
-* **`fused`** — target ports that received more than one source port.
-  The pairing never does this and a displaced name is dropped before
-  it can, so an entry here means your own `port_rename_map` points
-  two ports at one name.
+* **`sub_interfaces`** — sub-interface names (`ge-0/0/0.54`) that
+  followed their parent port, with the name each was given (`null`
+  when the parent was dropped).  This is done between two configs of
+  the same codec only; across vendors a sub-interface stays in
+  `off_inventory`.
+* **`displaced`** — names nobody decided that the name-shape
+  translator would have put on a name another interface ends on, or
+  on a port of the target: a name from either group above, or a
+  logical interface such as an aggregate.  Rather than merge two
+  interfaces into one, netcanon **drops** such a name and says so.
+  Where every name in a clash was undecided, the first keeps the name
+  and only the others are dropped.
+* **`fused`** — target ports that received more than one source name.
+  The pairing never does this and an undecided name is displaced
+  before it can, so an entry here means your own `port_rename_map`
+  points two ports at one name.  Names are compared without regard to
+  case: `1/a1` is the port `1/A1`.
 * **`off_target`** — targets in your `port_rename_map` that are not
   ports of the declared target device.  Allowed, and reported.
-* **`emptied_lags`** — LAGs every member port of which was dropped.
+* **`ignored_overrides`** — entries in your `port_rename_map` whose
+  target was blank.  A blank target is ignored: it decides nothing.
+* **`emptied_lags`**, **`shrunk_lags`**, **`lost_routes`**,
+  **`lost_dhcp_pools`** — what a dropped port took with it.  A LAG
+  loses a dropped member; a static route or a DHCP pool that names a
+  dropped port is removed whole, even if the route also has a next
+  hop.
+* **`unused_target`** — target ports still free after the run.
 * **`unresolved_ports`** — the used source names that still need a
   decision from you.
 * **`source` / `target`** — what each declaration resolved to: the
@@ -914,14 +945,16 @@ What you get back, on the job's `port_mapping_plan`:
   it does not mean the pairing itself was observed.
 
 The job is `partial` rather than `completed` while `unresolved_ports`
-is not empty: a used port that was dropped for want of a place, was
-off-inventory or was displaced, and that you have not decided
-yourself.  An entry for that port in `port_rename_map` — a target
-name, or `null` to drop it — is you deciding it.  It always wins over
-the pairing, on `/plan` and on every per-pane endpoint.  The job is
-also `partial` while `fused` is not empty, whatever you acknowledged,
-and when no pairing could be made at all (a profile that lists no
-ports).
+is not empty: a used port that was dropped for want of a place, a
+management port with no management port in the target model, a name
+that was off-inventory or was displaced — and that you have not
+decided yourself.  An entry for that port in `port_rename_map` — a
+target name, or `null` to drop it — is you deciding it.  It always
+wins over the pairing, on `/plan` and on every per-pane endpoint.  A
+target is read as the target device spells it (`1/a1` is `1/A1`), and
+a blank target is ignored.  The job is also `partial` while `fused`
+is not empty, whatever you acknowledged, and when no pairing could be
+made at all.
 
 **Devices no family describes yet** can be declared by the key of a
 target profile instead (`source_profile` / `source_module`,
@@ -957,16 +990,29 @@ nothing, as before.
   names from a wrongly declared model.
 * What is "a port the config uses" depends on how well the source
   codec tells a port from a logical interface.  Loopbacks, tunnels,
-  SVIs and LAGs are left out.  A **sub-interface**
-  (`GigabitEthernet1/0/1.100`) is not: it is reported, and it does
-  **not** move with its parent port.  Some firewall pseudo-interfaces
-  the codec does not classify are reported as off-inventory too.
+  SVIs and LAGs are left out, and so is a name only a route or a DHCP
+  pool mentions unless the codec recognises it as a port (`Null0` is
+  not one).  Some firewall pseudo-interfaces the codec does not
+  classify are still reported as off-inventory.
+* A **sub-interface** follows its parent port only between two
+  configs of the same codec.  Across vendors
+  (`GigabitEthernet1/0/1.100` onto Junos, a Junos unit onto AOS-S) it
+  does **not** move with its port: it is reported, and where the
+  name-shape translator cannot give it a name of its own it is
+  dropped.
+* netcanon does not know whether a model has an out-of-band
+  management port.  A source management port with no management port
+  in the target model is therefore always left for you to decide,
+  even where the translation kept it.
 * On an AOS-S module with HPE Smart Rate ports (JL081A), whether a
   port supplies PoE depends on the chassis.  The inventory lists those
   ports without PoE and says so; a PoE warning about one of them is
   not reliable.
 * A dropped port can leave a LAG with no members.  The plan names the
   LAG (`emptied_lags`); the VLANs that refer to it are not cleaned up.
+  A static route that names a dropped port is removed whole rather
+  than kept with its next hop alone; the plan lists it
+  (`lost_routes`).
 * Not modelled: modular chassis, breakout lanes, and ports a stack
   uses as its links (which carry no configuration on the real device).
 * The pairing is a starting point.  Two switches of the same shape

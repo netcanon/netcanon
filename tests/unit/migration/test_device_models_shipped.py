@@ -285,8 +285,34 @@ class TestCaptureConformance:
         list must be exactly the claims this module re-proves: one
         missing is a proven capture that grants nothing, one extra is
         a grade nothing checks."""
-        proven = {(spec[0], fixture) for fixture, spec in EXPECTED_CLAIMS.items()}
+        proven = {
+            (
+                family, fixture, mode,
+                tuple(
+                    (model, member_id, tuple(sorted(modules.items())))
+                    for model, member_id, modules in members
+                ),
+            )
+            for fixture, (family, mode, _marker, members) in EXPECTED_CLAIMS.items()
+        }
         assert proven == dm.PROVEN_CAPTURE_CLAIMS
+
+    def test_a_proven_fixture_cited_for_another_deployment_grants_nothing(self) -> None:
+        """The grade is granted to a whole claim, not to a fixture.
+        The JL260A capture re-pointed at the JL254A -- the same port
+        names, a different switch -- is a claim nothing re-proves."""
+        family = REGISTRY.families["aruba_aoss/2930F"]
+        data = family.model_dump(by_alias=True)
+        (claim,) = [c for c in data["captures"] if "wc1607" in c["fixture"]]
+        claim["members"] = [{"model": "2930F-48G-4SFPP"}]
+        registry = DeviceModelRegistry([FamilyDef.model_validate(data)])
+        for sku in ("JL254A", "JL260A"):
+            inventory = compile_deployment(
+                Deployment(vendor="aruba_aoss", mode="standalone",
+                           members=[MemberSpec(model=sku)]),
+                registry,
+            )
+            assert inventory.evidence == "vendor-doc", sku
 
     @pytest.mark.parametrize(("family", "claim"), _claims(), ids=_claim_id)
     def test_the_capture_is_a_committed_fixture_of_that_model(

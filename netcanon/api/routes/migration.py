@@ -219,7 +219,11 @@ _JOB_STATUS_RESPONSES: dict[int | str, dict] = {
         },
     },
     404: {"description": "source_filename does not exist"},
-    422: {"description": "Invalid adapter name or input specification"},
+    422: {
+        "description": (
+            "Invalid adapter name, input specification or device declaration"
+        ),
+    },
 }
 
 
@@ -274,7 +278,8 @@ def plan_migration(
 
     Stages executed: class-guard → parse → (transforms) → validate →
     render.  Per-pane override transforms (port / VLAN / local_user /
-    SNMP community / SNMPv3 user) are dispatched via
+    SNMP community / SNMPv3 user) are dispatched through
+    :func:`._migration_helpers.run_translation` to
     :func:`run_plan_with_overrides`.  When the body carries any
     override map or a ``target_profile``, every supplied category is
     threaded; when it carries none the endpoint STILL engages the auto
@@ -291,13 +296,29 @@ def plan_migration(
     * ``completed`` — every stage ran, validation severity is ``ok``
       or ``warn``, rendered output is in ``job.rendered``.
     * ``partial``  — rendered output exists but it is not a clean
-      success: EITHER validation severity is ``block`` (target can't
-      faithfully consume the tree), OR the input was non-empty yet
-      parsed to an empty configuration (0 recognized paths, banner-only
-      render — the source vendor most likely doesn't match the input).
-      ``job.error`` explains which.  Review before deploying; an
-      automation gate should treat ``partial`` as a non-success.
+      success, for one or more of these reasons, which ``job.error``
+      states: validation severity is ``block`` (target can't
+      faithfully consume the tree); the input was non-empty yet
+      parsed to an empty configuration (0 recognized paths,
+      banner-only render — the source vendor most likely doesn't
+      match the input); or, when the body declares both devices, the
+      port mapping needs a decision (see below).  Review before
+      deploying; an automation gate should treat ``partial`` as a
+      non-success.
     * ``failed``   — a stage raised; ``job.error`` has the summary.
+
+    **Declared devices.**  When the body says which device the config
+    came from and which it is going to (``source_deployment`` or
+    ``source_profile``, with ``target_deployment`` or
+    ``target_profile``), ports are paired by position between the two
+    instead of being guessed from the shape of their names, and the
+    job carries ``port_mapping_plan``.  Such a job is ``partial``
+    while ``port_mapping_plan.unresolved_ports`` or ``.fused`` is not
+    empty, or when ``.applied`` is ``false``.  An entry in
+    ``port_rename_map`` is the operator deciding that port.  A source
+    declared without a target, or a ``target_deployment`` without a
+    source, is a 422.  ``POST /migration/inventory`` shows the port
+    names a declaration produces.
 
     Use ``force=true`` in the request body to override the stage-0
     device-class guard for deliberate cross-class experiments.
@@ -383,8 +404,9 @@ def plan_migration_ports(
     pattern that subsequent category endpoints (``/plan/vlans``,
     ``/plan/snmp``, ``/plan/local_users``, ``/plan/snmpv3``)
     will follow: each accepts the same :class:`MigrationPlanRequest`
-    body and dispatches to :func:`run_plan_with_overrides` with only
-    its category's override map populated.
+    body and dispatches (through :func:`._migration_helpers.run_translation`) to
+    :func:`run_plan_with_overrides` with only its category's override
+    map populated.
 
     Semantically equivalent to ``POST /plan`` when the request body
     carries a ``port_rename_map``.  The distinction is purely
@@ -441,7 +463,8 @@ def plan_migration_vlans(
 
     Second concrete per-pane override endpoint (ports was the first,
     see ``POST /plan/ports``).  Accepts the same
-    :class:`MigrationPlanRequest` body and dispatches to
+    :class:`MigrationPlanRequest` body and
+    dispatches (through :func:`._migration_helpers.run_translation`) to
     :func:`run_plan_with_overrides` with only ``vlan_rename_map``
     populated.
 
@@ -511,7 +534,8 @@ def plan_migration_local_users(
     Third concrete per-pane override endpoint (ports + vlans came
     first, see ``POST /plan/ports`` and ``POST /plan/vlans``).
     Accepts the same :class:`MigrationPlanRequest` body and
-    dispatches to :func:`run_plan_with_overrides` with only
+    dispatches (through :func:`._migration_helpers.run_translation`) to
+    :func:`run_plan_with_overrides` with only
     ``local_user_rename_map`` populated.
 
     Local-user rename is a string → string rewrite applied to
@@ -585,7 +609,8 @@ def plan_migration_snmp(
 
     Fourth concrete per-pane override endpoint (ports + vlans +
     local_users came first).  Accepts the same
-    :class:`MigrationPlanRequest` body and dispatches to
+    :class:`MigrationPlanRequest` body and
+    dispatches (through :func:`._migration_helpers.run_translation`) to
     :func:`run_plan_with_overrides` with only
     ``snmp_community_rename_map`` populated.
 
@@ -662,8 +687,9 @@ def plan_migration_snmpv3(
     Fifth concrete per-pane override endpoint after
     ``/plan/ports``, ``/plan/vlans``, ``/plan/local_users``, and
     ``/plan/snmp``.  Accepts the same :class:`MigrationPlanRequest`
-    body and dispatches to :func:`run_plan_with_overrides` with
-    only ``snmpv3_user_rename_map`` populated.
+    body and dispatches (through :func:`._migration_helpers.run_translation`) to
+    :func:`run_plan_with_overrides` with only
+    ``snmpv3_user_rename_map`` populated.
 
     SNMPv3 user rename is a string → string rewrite applied to
     :attr:`CanonicalSNMPv3User.name` (the USM securityName).  The

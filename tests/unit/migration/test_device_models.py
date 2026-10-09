@@ -110,7 +110,10 @@ captures:
 """
 
 #: The synthetic claim, as the trust table lists a shipped one.
-TESTBOX_CLAIM = ("aruba_aoss/Testbox", "tests/fixtures/real/x.cfg")
+TESTBOX_CLAIM = (
+    "aruba_aoss/Testbox", "tests/fixtures/real/x.cfg", "stacked",
+    (("TB-4M", 1, (("A", "MOD4"),)),),
+)
 
 OTHER_FAMILY_YAML = """
 schema: 1
@@ -534,7 +537,11 @@ class TestEvidence:
         inv = _compile(registry, "stacked", {"model": "TB-4M", "modules": {"A": "MOD4"}})
         assert inv.evidence == "capture"
         assert {p.evidence for p in inv.ports} == {"capture"}
-        assert inv.evidence_refs == ["tests/fixtures/real/x.cfg"]
+        # The fixture, and what establishes each part -- a capture
+        # proves the names, not what each port is.
+        assert inv.evidence_refs == [
+            "tests/fixtures/real/x.cfg", "TB-4M sheet", "MOD4 sheet",
+        ]
         assert inv.members[0].evidence == "capture"
 
     def test_a_sibling_model_does_not_inherit_the_capture(self, registry):
@@ -552,6 +559,19 @@ class TestEvidence:
         )
         assert inv.evidence == "vendor-doc"
         assert "capture" not in {p.evidence for p in inv.ports}
+
+    def test_another_mode_does_not_inherit_the_capture(self):
+        """The capture is of the stacked mode.  A second mode that
+        also carries member ids names these ports identically -- and
+        is still a deployment no capture shows."""
+        data = _data()
+        data["modes"]["ring"] = dict(data["modes"]["stacked"], label="ring")
+        registry = DeviceModelRegistry([_family(data)])
+        member = {"model": "TB-4M", "id": 1, "modules": {"A": "MOD4"}}
+        stacked = _compile(registry, "stacked", member)
+        ring = _compile(registry, "ring", member)
+        assert ring.names() == stacked.names()
+        assert (stacked.evidence, ring.evidence) == ("capture", "vendor-doc")
 
     def test_a_module_the_capture_does_not_show_is_graded_on_its_own(self, registry):
         """Fixed panel: captured.  A MOD1 in the bay: not in the
@@ -734,6 +754,20 @@ class TestFamilySchema:
         data["models"]["TB-8"]["ports"][0]["count"] = dm._MAX_GROUP_PORTS
         assert _family(data).models["TB-8"].ports[0].count == dm._MAX_GROUP_PORTS
 
+    @pytest.mark.parametrize("member_ids", [["1", "4"], [True, 4], [1.0, 4.0]])
+    def test_a_member_range_is_two_integers_and_nothing_else(self, member_ids):
+        data = _data()
+        data["modes"]["stacked"]["member_ids"] = member_ids
+        with pytest.raises(ValueError, match="member_ids"):
+            _family(data)
+
+    @pytest.mark.parametrize("sku", ["a/b", "TB 8", "", "-x"])
+    def test_a_part_number_is_a_plain_token(self, sku):
+        data = _data()
+        data["models"]["TB-8"]["skus"] = [sku]
+        with pytest.raises(ValueError, match="must be a plain name"):
+            _family(data)
+
     @pytest.mark.parametrize("count", ["4", 4.0, True])
     def test_a_count_is_an_integer_and_nothing_else(self, count):
         data = _data()
@@ -804,6 +838,17 @@ class TestCheckFamily:
         monkeypatch.setattr(dm, "_MAX_BAY_COMBINATIONS", 2)
         with pytest.raises(DeploymentError, match="3 bay-and-module combinations"):
             check_family(family)
+
+    def test_a_claim_in_a_mode_none_of_its_models_supports_fails_at_load(self):
+        """Claims are compiled at load in their own right.  One in a
+        mode no model of the family supports is never reached by
+        compiling the models, and would otherwise sit in the file
+        granting nothing and saying nothing."""
+        data = _data()
+        for model in data["models"].values():
+            model["modes"] = ["standalone"]
+        with pytest.raises(DeviceModelLoadError, match="does not support mode 'stacked'"):
+            DeviceModelRegistry([_family(data)])
 
     def test_a_capture_of_a_model_the_family_lacks_fails_at_load(self):
         data = _data()
@@ -993,6 +1038,18 @@ class TestLoader:
             "c_dup.yaml" in m and "already loaded and is not replaced" in m
             for m in skipped
         )
+
+    def test_a_family_saved_as_yml_is_said_to_be_ignored(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture,
+    ):
+        """The loader and the wheel both match ``*.yaml``.  Loading
+        nothing and logging "0 new family file(s)" would read as
+        "there is no such family"."""
+        (tmp_path / "testbox.yml").write_text(FAMILY_YAML, encoding="utf-8")
+        with caplog.at_level(logging.WARNING, logger=dm.logger.name):
+            registry = load_model_families_dir(tmp_path)
+        assert len(registry) == 0
+        assert "ignored testbox.yml" in caplog.text
 
     def test_a_missing_directory_is_an_empty_registry(self, tmp_path: Path):
         registry = load_model_families_dir(tmp_path / "absent")

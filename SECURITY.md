@@ -358,8 +358,10 @@ server has already loaded; it never supplies a port name, a count or a path.
 - Unknown fields **inside a declaration** are rejected (`extra="forbid"`), so
   a misspelt `modules` is a 422 rather than a silently empty bay.  The plan
   request itself still ignores unknown top-level keys, as it always has, so a
-  misspelt `source_deployment` is not an error: the response then carries no
-  `port_mapping_plan`.
+  misspelt `source_deployment` is not caught as a misspelling: beside a
+  `target_profile` the response simply carries no `port_mapping_plan`, and
+  beside a `target_deployment` the request is refused as a target declared
+  without a source.
 - A request is bounded.  A deployment holds a capped number of members
   (`MAX_DEPLOYMENT_MEMBERS`), each resolved against a family the server has
   already loaded, and every name in it has a capped length
@@ -375,6 +377,15 @@ server has already loaded; it never supplies a port name, a count or a path.
   refused with a short string.  It is deliberately not a validator on the
   request model: a pydantic error raised at the body level echoes the whole
   body — the pasted config included — in the 422.
+- A field-level validation error is a 422 whatever the input.  The error
+  body is written ASCII-escaped, because it echoes the offending value and a
+  lone UTF-16 surrogate (valid JSON, `"\ud800"`) cannot be encoded as
+  UTF-8: FastAPI's default handler turned such a request into a 500.  This
+  handler is application-wide.
+- An operator's `port_rename_map` target is read as the declared target
+  device spells its ports, and a blank target is ignored, so two spellings
+  of one port cannot be passed off as two ports and a blank cannot be passed
+  off as a decision.
 
 Model-family YAML is operator-authorable, and is trusted like a device
 definition: these checks stop a mistake, not an attacker with write access to
@@ -388,10 +399,13 @@ the definitions directory.
   model key and module SKU must be a plain token, so a key YAML would read as
   a number or a boolean is an error rather than a model called `True`.
 - Every bay-and-module combination of a model is compiled before the family is
-  registered.  The work that can cause is capped: the ports of one group
+  registered.  Each dimension of that work is capped: the ports of one group
   (`_MAX_GROUP_PORTS`), the groups of one panel or module
   (`_MAX_PORT_GROUPS`), the member ids of one mode, and the combinations of one
-  model (`_MAX_BAY_COMBINATIONS`).
+  model (`_MAX_BAY_COMBINATIONS`).  Each is bounded on its own; their product
+  is not, so a file that stays inside every cap can still take minutes to
+  compile.  That is a slow start caused by the operator's own file, not a
+  hang: the file is compiled or refused, and the application then starts.
 - A file that cannot be loaded for any reason — unreadable, not UTF-8, not
   YAML, the wrong schema — is logged and skipped.  It cannot stop the
   application starting.
@@ -401,8 +415,10 @@ the definitions directory.
 - It cannot award itself the strongest evidence grade.  `capture` means a
   test re-proves the claim against a committed fixture, so only the claims
   listed in `PROVEN_CAPTURE_CLAIMS` — which the shipped-data test requires to
-  equal the claims it re-proves — grant it.  A capture claim in an operator's
-  file is logged and grants nothing.
+  equal the claims it re-proves — grant it.  An entry is the whole claim
+  (family, fixture, mode, and each member's model, id and modules), so this
+  holds wherever a file is loaded from: a claim that cites a proven fixture
+  for another model is a different claim, is logged, and grants nothing.
 
 Covered by `tests/unit/migration/test_device_models.py` (each bound is tested
 at its boundary, against the named constant),

@@ -16,12 +16,15 @@ API surface).
 from __future__ import annotations
 
 import heapq
+import json
 import logging
 from collections import defaultdict
 from http import HTTPStatus
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -151,6 +154,22 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=exc.status_code,
             headers=getattr(exc, "headers", None),
         )
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error_handler(
+        request: Request, exc: RequestValidationError
+    ) -> Response:
+        # The same body FastAPI builds by default, ASCII-escaped.  Its
+        # own handler echoes the offending input and then encodes the
+        # response as UTF-8; a lone surrogate in that input (which is
+        # valid JSON: "\ud800") cannot be encoded, and the 422 became
+        # a 500 with a traceback in the log.  Escaped, any input can be
+        # sent back, and the body parses to exactly the same JSON.
+        body = json.dumps(
+            {"detail": jsonable_encoder(exc.errors())},
+            ensure_ascii=True, separators=(",", ":"),
+        )
+        return Response(body, status_code=422, media_type="application/json")
 
     @app.exception_handler(Exception)
     async def _unhandled_exception_handler(

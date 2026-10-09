@@ -124,7 +124,7 @@ from ..models.migration import (
     MigrationJobStatus,
     TransformSpec,
 )
-from ..models.port_inventory import Inventory
+from ..models.port_inventory import Inventory, MappingPlan
 from .migration_validate import (
     check_class_compat,
     check_scope_advisory,
@@ -832,6 +832,82 @@ def run_plan_with_rename(
     )
 
 
+def _sub_interface_followers(
+    plan: MappingPlan, operator_map: dict[str, str | None],
+) -> dict[str, str | None]:
+    """Explicit entries that make a sub-interface follow its parent port.
+
+    ``ge-0/0/0.54`` is not a port of any inventory; its parent is.
+    Between two configs of the same codec the unit suffix means the
+    same thing on both sides, so where the parent goes the
+    sub-interface goes too — and where the parent is dropped, so is
+    it.  Left to the name-shape translator instead, a classifier that
+    folds a unit into its port (Junos) would send it onto the port
+    itself, and one that does not recognise it (IOS-XE) would leave it
+    behind under the old name.
+
+    The parent's target is the operator's when they named the parent,
+    else the pairing's.
+    """
+    followers: dict[str, str | None] = {}
+    for name in plan.off_inventory:
+        parent, dot, unit = name.rpartition(".")
+        if not (dot and unit):
+            continue
+        if parent in operator_map:
+            target = operator_map[parent]
+        elif parent in plan.rename_map:
+            target = plan.rename_map[parent]
+        else:
+            continue
+        followers[name] = f"{target}.{unit}" if target else None
+    return followers
+
+
+def _undecided_clashes(
+    every: list[str],
+    used: list[str],
+    merged: dict[str, str | None],
+    job: MigrationJob,
+    target_names: list[str],
+) -> list[str]:
+    """Names nobody decided that the finished run put somewhere they
+    must not be.
+
+    Two cases, both read from the run rather than predicted:
+
+    * a name ended on a target that another name also ended on, and at
+      least one of them is a hardware port the config uses.  Every
+      member the pairing or the operator decided stays; the undecided
+      ones lose.  Where NONE was decided, one keeps the name — a
+      hardware port if there is one, else the first — because the
+      clash is among names the translator alone placed, and deleting
+      all of them would lose a port whose place was good.
+    * a LOGICAL name (an aggregate, say) ended on a port of the
+      declared target.  Nothing may share that name with it yet, but a
+      physical port of the target is not where an aggregate belongs.
+    """
+    from ..migration.port_mapping import fused_targets, name_key
+
+    hardware = set(used)
+    losers: set[str] = set()
+    clashes = fused_targets(every, job.port_renames, job.port_drops, involving=used)
+    for names in clashes.values():
+        undecided = [name for name in names if name not in merged]
+        if len(undecided) == len(names):
+            keeper = next((n for n in undecided if n in hardware), undecided[0])
+            undecided = [name for name in undecided if name != keeper]
+        losers.update(undecided)
+    gone = set(job.port_drops)
+    on_target = {name_key(name) for name in target_names}
+    for name in every:
+        if name in hardware or name in merged or name in gone:
+            continue
+        if name_key(job.port_renames.get(name, name)) in on_target:
+            losers.add(name)
+    return sorted(losers)
+
+
 def run_plan_with_models(
     source: CodecBase,
     target: CodecBase,
@@ -866,30 +942,39 @@ def run_plan_with_models(
     * a used access or uplink port with NO position on the target is
       dropped from the output and listed in ``job.port_drops`` — never
       left under its old name, which on a same-vendor pair could be
-      the name another port was just mapped to.
+      the name another port was just mapped to;
+    * between two configs of the same codec, a sub-interface
+      (``ge-0/0/0.54``) follows its parent port.
 
     What it leaves to the name-shape translator, and then checks:
 
-    * a name the config uses that is not a port of the declared
-      source (off-inventory), and an unplaced management port.  What
-      the translator makes of such a name can be a port the pairing
-      gave to something else — the same fusion, by another door.  So
-      the finished run is inspected: where two used source ports ended
-      on one target name, every one of them that neither the pairing
-      nor the operator decided is dropped (it is **displaced**) and
-      the translation is run once more.  The translator is its own
-      oracle here; none of its rules is re-derived.
+    * an unplaced management port, a name the config uses that is not
+      a port of the declared source (off-inventory), and every logical
+      name — a LAG, an SVI, a loopback.  What the translator makes of
+      such a name can be a port the pairing gave to something else —
+      the same fusion, by another door.  So the finished run is
+      inspected, over EVERY name the config references and not only
+      the hardware ones: where two names ended on one target, or a
+      logical name ended on a port of the target, every name that
+      neither the pairing nor the operator decided is dropped (it is
+      **displaced**) and the translation is run once more.  Where no
+      name in a clash was decided, one keeps the name.  The translator
+      is its own oracle here; none of its rules is re-derived.
 
     An entry in *port_rename_map* replaces the plan's entry for that
-    port, whatever the plan decided.  Where the operator's own entries
-    point two ports at one target name, that is done as they asked and
-    reported (``port_mapping_plan.fused``).
+    port, whatever the plan decided.  Its target is read as the
+    declared target device spells it — ``1/a1`` and `` 1/A1`` are the
+    port ``1/A1`` — and an entry with a blank target is set aside: it
+    would render a port with no name, and decides nothing.  Where the
+    operator's own entries point two ports at one target name, that is
+    done as they asked and reported (``port_mapping_plan.fused``).
 
     Status.  A job that would have been ``completed`` is ``partial``,
     with ``job.error`` saying why, when
 
-    * a used port was dropped, was off-inventory or was displaced, and
-      the operator's map does not name it — an entry for the port (a
+    * a used port was dropped, was off-inventory, was displaced, or is
+      a management port kept although the target lists none — and the
+      operator's map does not name it.  An entry for the port (a
       target, or an explicit ``None``) is them deciding it;
     * a target port received more than one source port, whoever
       decided it; or
@@ -899,7 +984,9 @@ def run_plan_with_models(
     A job that is already ``partial`` for another reason keeps its
     status and has the same sentence appended to ``job.error``.  The
     detail is on the plan as fields — ``unresolved_ports``,
-    ``displaced``, ``fused``, ``off_target``, ``emptied_lags`` — so no
+    ``displaced``, ``fused``, ``off_target``, ``sub_interfaces``, and
+    what a dropped port took with it (``emptied_lags``,
+    ``shrunk_lags``, ``lost_routes``, ``lost_dhcp_pools``) — so no
     client has to read it out of prose.
 
     The source is parsed here first, to learn which ports it uses, and
@@ -907,7 +994,8 @@ def run_plan_with_models(
     name is displaced.  If that first parse fails, or yields something
     that is not a canonical tree, no pairing is attempted and the
     canonical failure is produced by the code that already produces
-    it.
+    it.  Reading the port names out of the tree cannot fail the job: a
+    name a classifier cannot read is kept as it is.
 
     New function, per the frozen-signatures rule: the three older
     entries are unchanged.
@@ -935,16 +1023,34 @@ def run_plan_with_models(
         pair), whatever was declared.
     """
     from ..migration.canonical.intent import CanonicalIntent
-    from ..migration.canonical.port_names import collect_hardware_port_names
-    from ..migration.port_mapping import (
-        fused_targets,
-        plan_port_mapping,
-        settle_plan,
+    from ..migration.canonical.port_names import (
+        collect_hardware_port_names,
+        collect_port_names,
     )
+    from ..migration.port_mapping import name_key, plan_port_mapping, settle_plan
 
-    operator_map: dict[str, str | None] = dict(port_rename_map or {})
+    target_names = target_inventory.names()
+
+    # The operator's map, read as the declared target spells its ports.
+    spelt: dict[str, list[str]] = {}
+    for name in target_names:
+        spelt.setdefault(name_key(name), []).append(name)
+    operator_map: dict[str, str | None] = {}
+    ignored: list[str] = []
+    for key, value in (port_rename_map or {}).items():
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                ignored.append(key)
+                continue
+            same = spelt.get(name_key(text), [])
+            value = same[0] if len(same) == 1 else text
+        operator_map[key] = value
+
     plan = None
     used: list[str] = []
+    every: list[str] = []
+    followers: dict[str, str | None] = {}
     try:
         tree = source.parse(raw_text)
     except Exception:
@@ -952,9 +1058,10 @@ def run_plan_with_models(
         # same failure into the failed job it has always produced.
         tree = None
     if isinstance(tree, CanonicalIntent):
-        # A port of the declared source always counts as used when the
-        # config names it, whatever the codec's classifier makes of the
-        # name; only a name OUTSIDE the inventory can be set aside as
+        every = collect_port_names(tree)
+        # A port of the declared source counts as used when the config
+        # names it, whatever the codec's classifier makes of the name;
+        # only a name OUTSIDE the inventory can be set aside as
         # "positively not hardware" (a loopback, a tunnel, an SVI).
         used = collect_hardware_port_names(
             tree,
@@ -962,8 +1069,11 @@ def run_plan_with_models(
             always=source_inventory.names(),
         )
         plan = plan_port_mapping(source_inventory, target_inventory, used)
+        if plan.applied and source.name == target.name:
+            followers = _sub_interface_followers(plan, operator_map)
 
     merged: dict[str, str | None] = dict(plan.rename_map) if plan else {}
+    merged.update(followers)
     merged.update(operator_map)
 
     def translate(port_map: dict[str, str | None]) -> MigrationJob:
@@ -987,42 +1097,60 @@ def run_plan_with_models(
 
     # The plan decides paired and unplaced data ports.  Every other
     # name went to the name-shape translator, whose answer nobody has
-    # checked against the targets the plan assigned.  Ask the run: any
-    # name that shares a target and that neither the plan nor the
-    # operator decided is dropped, and the run repeated.
+    # checked against the targets the plan assigned.  Ask the run.
     displaced: list[str] = []
     if plan.applied:
-        collisions = fused_targets(used, job.port_renames, job.port_drops)
-        displaced = sorted({
-            name for names in collisions.values() for name in names
-            if name not in merged
-        })
+        displaced = _undecided_clashes(every, used, merged, job, target_names)
         if displaced:
             merged.update(dict.fromkeys(displaced))
             job = translate(merged)
             if job.rendered is None:
                 return job
 
+    # What a dropped port took with it.  The translator removes a
+    # route or a DHCP pool that names a dropped port, and a dropped
+    # member from its LAG; the job reports only the port.
     dropped = set(job.port_drops)
     emptied_lags: list[str] = []
+    shrunk_lags: list[str] = []
     for lag in tree.lags:
         members = {member for member in lag.members if member}
         members.update(
             iface.name for iface in tree.interfaces
             if lag.name and iface.lag_member_of == lag.name
         )
-        if members and members <= dropped:
+        lost = members & dropped
+        if members and lost == members:
             emptied_lags.append(lag.name)
+        elif lost:
+            shrunk_lags.append(lag.name)
+    lost_routes = [
+        route.destination for route in tree.static_routes
+        if route.interface and route.interface in dropped
+    ]
+    lost_dhcp_pools = [
+        pool.network or pool.interface for pool in tree.dhcp_servers
+        if pool.interface and pool.interface in dropped
+    ]
 
     settle_plan(
         plan,
         operator_map=operator_map,
         used_names=used,
+        every_name=every,
         port_renames=job.port_renames,
         port_drops=job.port_drops,
-        target_names=target_inventory.names(),
+        target_names=target_names,
         displaced=displaced,
+        sub_interfaces={
+            name: where for name, where in followers.items()
+            if name not in operator_map
+        },
+        ignored_overrides=ignored,
         emptied_lags=emptied_lags,
+        shrunk_lags=shrunk_lags,
+        lost_routes=lost_routes,
+        lost_dhcp_pools=lost_dhcp_pools,
     )
     job.port_mapping_plan = plan
     job.warnings.extend(plan.warnings)
@@ -1036,12 +1164,14 @@ def run_plan_with_models(
     else:
         sentences: list[str] = []
         if plan.unresolved_ports:
-            sentences.append(
+            sentence = (
                 f"{len(plan.unresolved_ports)} port(s) the source config "
                 f"uses have no place on the target device, or are not "
-                f"ports of the declared source device. Unplaced ports "
-                f"were dropped from the output."
+                f"ports of the declared source device."
             )
+            if dropped.intersection(plan.unresolved_ports):
+                sentence += " Unplaced ports were dropped from the output."
+            sentences.append(sentence)
         if plan.fused:
             sentences.append(
                 f"{len(plan.fused)} target port(s) received more than "

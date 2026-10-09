@@ -124,11 +124,14 @@ together.  So the model data has guards of its own
 every `capture` grade is re-proven against the committed real capture
 it cites, which must identify itself as that exact model; the port
 names and roles of every shipped model, in every deployment mode and
-with every module, are pinned as hand-typed literals rather than
-regenerated from the code under test; and which part number is which
-model is a table, not a comment.  A model-to-model translation is
-additionally checked, on every test run of it, for two source ports
-ending on one target name.
+with every module, are pinned from hand-typed tables in the test
+rather than regenerated from the code under test; and which part
+number is which model is a table, not a comment.  A model-to-model
+translation is additionally checked, on every job in
+`test_run_plan_with_models.py`, for two names ending on one target
+name — recomputed in the test over every name the config references.
+The cross-mesh audit below does not exercise model-to-model mapping:
+it runs without declared devices.
 
 ### Layer 2: Integration tests
 

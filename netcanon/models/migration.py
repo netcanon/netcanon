@@ -633,14 +633,16 @@ class MigrationJob(BaseModel):
     source_snmpv3_users: list[str] = Field(default_factory=list)
 
     #: Hardware port names the source config references, in first-seen
-    #: order, captured post-parse and pre-transform.  Every place a
-    #: config can name a port counts (interface stanzas, VLAN
-    #: membership, LAG members, a static route's or DHCP pool's
-    #: interface, a VRRP track list).  A LAG name is left out, and so
-    #: is a name the source codec marks or classifies as an SVI,
-    #: loopback, bridge, tunnel or other logical interface — as far
-    #: as that codec can tell: a sub-interface, and a pseudo-interface
-    #: the codec's classifier does not know, is still listed.
+    #: order, captured post-parse and pre-transform.  An interface
+    #: stanza, a VLAN's membership list and a LAG's member list count;
+    #: a name only a static route, a DHCP pool, a VRRP track list or a
+    #: VTEP source mentions counts when the source codec recognises it
+    #: as a port (a route to ``Null0`` names no port).  A LAG name is
+    #: left out, and so is a name the source codec marks or classifies
+    #: as an SVI, loopback, bridge, tunnel or other logical interface
+    #: — as far as that codec can tell: a sub-interface, and a
+    #: pseudo-interface the codec's classifier does not know, is
+    #: still listed.
     #:
     #: :attr:`port_renames` holds only names that CHANGED, so on a
     #: same-vendor translation it is empty and the rename modal's

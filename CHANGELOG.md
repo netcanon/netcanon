@@ -115,22 +115,33 @@ timestamp if your timezone matters for an audit.
     **dropped and reported** — never moved onto a spare port of another
     kind, and never left in the output under its old name, where on a
     same-vendor pair it could be the name another port was just mapped
-    to.  A management port with no management port on the target is
-    the exception: it is left to the name-shape translator, which turns
-    it into the target's own form of out-of-band management where there
-    is one.
-  - **No two source ports are put on one target name.**  A name the
-    pairing leaves to the name-shape translator — that management port,
-    or a name that is not a port of the declared source — can come back
-    as a port the pairing already assigned.  The finished run is
-    checked for that, and such a name is dropped and reported
-    (`displaced`) instead of being merged into another port.
-  - A run that leaves a port dropped, off-inventory or displaced which
-    the operator has not decided is `partial` rather than `completed`;
-    so is one where the operator's own map points two ports at one
-    name, and one where no pairing could be made at all.
+    to.  A management port with no management port in the target model
+    is the exception: it is left to the ordinary port translation,
+    which keeps it where the target has a form for out-of-band
+    management (the `oobm` block on AOS-S).  It still needs the
+    operator's decision — netcanon does not know whether the target
+    device has a management interface at all.
+  - **No two interfaces are put on one target name unless the operator
+    asks for it.**  A name the pairing does not decide — that
+    management port, a name that is not a port of the declared source,
+    or a logical interface such as an aggregate — can come back from
+    the ordinary translation as a port the pairing already assigned.
+    The finished run is checked for that over every name the config
+    references, and such a name is dropped and reported (`displaced`)
+    instead of being merged into another port.
+  - Between two configs of the same codec a sub-interface
+    (`ge-0/0/0.54`) follows its parent port.
+  - What a dropped port takes with it is listed: a LAG that lost
+    members, and a static route or DHCP pool that named the port.
+  - A run that leaves a name dropped, off-inventory or displaced, or a
+    management port kept, which the operator has not decided is
+    `partial` rather than `completed`; so is one where the operator's
+    own map points two ports at one name, and one where no pairing
+    could be made at all.
   - An entry in `port_rename_map` always wins over the pairing, on
-    `/plan` and on every per-pane endpoint.
+    `/plan` and on every per-pane endpoint.  Its target is read as the
+    target device spells it (`1/a1` is `1/A1`); a blank target is
+    ignored.
   - A declaration is checked: an unknown model, mode, bay, module or
     member id is a 422 that says what was wrong, a member id is an
     integer and nothing else, a profile's module must be one the
@@ -170,8 +181,10 @@ timestamp if your timezone matters for an audit.
 - **`MigrationJob.source_ports`.**  The port names a source config
   references, including ports no rename touches.  LAG names are left
   out, and so is anything the source codec marks or classifies as an
-  SVI, loopback, tunnel or other logical interface; a sub-interface,
-  and a pseudo-interface the codec does not classify, is still listed.
+  SVI, loopback, tunnel or other logical interface, and a name only a
+  route or a DHCP pool mentions unless the codec recognises it as a
+  port; a sub-interface, and a pseudo-interface the codec does not
+  classify, is still listed.
   `port_renames` records only names that changed, so for a same-vendor
   translation a client had no way to list the ports at all.
 - **Provenance on target profiles.**  Optional fields record what is
@@ -272,11 +285,15 @@ timestamp if your timezone matters for an audit.
   ports of the declared source", and the job is `partial` although the
   model is right.  Not yet distinguishable from a wrongly declared
   model.
-- **A sub-interface does not follow its parent port.**  With devices
-  declared, `GigabitEthernet1/0/1` moves by position and
-  `GigabitEthernet1/0/1.100` is reported and left to name-shape
-  translation.  Some firewall pseudo-interfaces the source codec does
-  not classify are reported as off-inventory in the same way.
+- **Across vendors a sub-interface does not follow its parent port.**
+  With devices declared, `GigabitEthernet1/0/1` moves by position and
+  `GigabitEthernet1/0/1.100` is reported and left to the ordinary
+  translation — which drops it where it cannot give it a name of its
+  own.  Some firewall pseudo-interfaces the source codec does not
+  classify are reported as off-inventory in the same way.
+- **netcanon does not know whether a model has a management port.**
+  A source management port with no management port in the target
+  model is always left for the operator to decide.
 - **Only port names are translated between models.**  An AOS-S config
   that removes ports from VLAN 1 with `no untagged` does not get that
   line back, so on a factory-default target those ports stay untagged

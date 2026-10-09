@@ -20,6 +20,7 @@ import json
 import logging
 import shutil
 import socket
+import urllib.error
 import urllib.request
 from pathlib import Path
 from unittest.mock import patch
@@ -75,6 +76,22 @@ def _post(port: int, path: str, body: dict) -> object:
     with urllib.request.urlopen(request, timeout=30) as resp:
         assert resp.status == 200, path
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _post_raw(port: int, path: str, body: bytes) -> tuple[int, object]:
+    """POST bytes as they are; return the status and the decoded body,
+    whatever the status."""
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as resp:
+            return resp.status, json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        return exc.code, json.loads(exc.read().decode("utf-8"))
 
 
 class TestModelTranslationServedByEmbeddedServer:
@@ -135,3 +152,55 @@ class TestModelTranslationServedByEmbeddedServer:
         assert job["port_renames"]["49"] == "1/A1"
         assert len(job["port_mapping_plan"]["pairings"]) == 52
         assert "untagged 1/48,1/A1,1/A2,1/A3,1/A4" in job["rendered"]
+
+    def test_the_finished_run_is_checked_and_a_bad_body_is_a_422(
+        self, tmp_path: Path,
+    ) -> None:
+        """Two things the server does after the pairing, through the
+        embedded server: an override typed in another case is read
+        as the port it names -- here a port the pairing already gave
+        away, so the job is ``partial`` and says which target
+        received two ports -- and a body that cannot be echoed as
+        UTF-8 is refused with a 422, not a 500."""
+        app = create_app(_settings(tmp_path))
+        port = _free_port()
+        declared = {
+            "source": "aruba_aoss",
+            "target": "aruba_aoss",
+            "raw_text": CAPTURE_2930F,
+            "source_deployment": {
+                "mode": "standalone", "members": [{"model": "JL260A"}],
+            },
+            "target_deployment": {
+                "mode": "stacked",
+                "members": [{"model": "JL322A", "modules": {"A": "JL083A"}}],
+            },
+            "port_rename_map": {"52": " 1/a1"},
+        }
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=FakeCollector(output="! noop\n"),
+        ):
+            server = ServerThread(app, port=port, log_level="critical")
+            server.start()
+            try:
+                server.wait_ready(timeout=10.0)
+                job = _post(port, "/api/v1/migration/plan", declared)
+                status, refused = _post_raw(
+                    port, "/api/v1/migration/plan",
+                    b'{"source":"aruba_aoss","target":"aruba_aoss","raw_text":"x",'
+                    b'"source_deployment":{"members":[{"model":"JL\\ud800"}]}}',
+                )
+            finally:
+                server.stop()
+                server.join(timeout=5.0)
+
+        plan = job["port_mapping_plan"]
+        assert job["port_renames"]["52"] == "1/A1"
+        assert plan["fused"] == {"1/A1": ["49", "52"]}
+        assert plan["overridden"] == ["52"] and plan["off_target"] == []
+        assert job["status"] == "partial"
+        assert "received more than one source port" in job["error"]
+
+        assert status == 422
+        assert refused["detail"][0]["type"] == "string_unicode"

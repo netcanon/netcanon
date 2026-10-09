@@ -646,6 +646,17 @@ def load_profiles_dir(directory: Path) -> dict[str, TargetProfile]:
         except ProfileLoadError as exc:
             logger.warning("target_profiles: skip %s: %s", path.name, exc)
             continue
+        except Exception as exc:
+            # "The API surfaces whatever succeeded rather than failing
+            # the whole app on a single bad profile" has to hold for a
+            # file that is not UTF-8, is a folder, or has a key that
+            # is not a string, as well as for one that is merely
+            # invalid.
+            logger.warning(
+                "target_profiles: skip %s: %s: %s",
+                path.name, type(exc).__name__, exc,
+            )
+            continue
         if profile.key in profiles:
             logger.warning(
                 "target_profiles: duplicate key %s "

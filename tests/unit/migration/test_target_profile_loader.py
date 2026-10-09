@@ -54,6 +54,28 @@ class TestLoader:
         assert set(profiles) == {"aruba_aoss/test-24G"}
         assert profiles["aruba_aoss/test-24G"].port_count == 1
 
+    @pytest.mark.parametrize("kind", ["utf-16", "latin-1", "folder", "int-key"])
+    def test_no_bad_file_can_stop_the_directory_loading(self, tmp_path, caplog, kind):
+        """"The API surfaces whatever succeeded rather than failing
+        the whole app on a single bad profile" has to hold for a file
+        that cannot be read at all, not only for one that is invalid:
+        this loader runs in the application's startup."""
+        good = "vendor: aruba_aoss\nmodel: ok\n"
+        (tmp_path / "ok.yaml").write_text(good, encoding="utf-8")
+        bad = tmp_path / "bad.yaml"
+        if kind == "utf-16":
+            bad.write_bytes(good.encode("utf-16"))
+        elif kind == "latin-1":
+            bad.write_bytes(good.encode() + b"# caf\xe9\n")
+        elif kind == "folder":
+            bad.mkdir()
+        else:
+            bad.write_bytes(b"1: x\n" + good.encode())
+        with caplog.at_level("WARNING"):
+            profiles = load_profiles_dir(tmp_path)
+        assert set(profiles) == {"aruba_aoss/ok"}
+        assert "skip bad.yaml" in caplog.text
+
     def test_malformed_yaml_skipped_not_fatal(self, tmp_path, caplog):
         (tmp_path / "broken.yaml").write_text(
             "vendor: aruba_aoss\n"

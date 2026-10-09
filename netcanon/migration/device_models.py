@@ -228,22 +228,34 @@ _MAX_BAY_COMBINATIONS = 4096
 #: joined into ``vendor/family`` keys, so it is a plain token.
 _KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]*")
 
-#: ``(family key, fixture)`` of every capture claim that
+#: One capture claim, whole: ``(family key, fixture, mode, members)``
+#: with each member as ``(model key, member id, ((bay, module), ...))``.
+ClaimKey = tuple[
+    str, str, str,
+    tuple[tuple[str, int | None, tuple[tuple[str, str], ...]], ...],
+]
+
+#: Every capture claim that
 #: ``tests/unit/migration/test_device_models_shipped.py`` re-proves
 #: against its fixture.  ``capture`` means exactly that, so a claim
-#: grants the grade only when it is listed here.  A claim in an
-#: operator's own family file names a fixture nothing checks; it is
+#: grants the grade only when it is listed here — the WHOLE claim,
+#: not just its fixture: the same fixture cited for another model,
+#: mode, member id or module is a different claim, and nothing
+#: re-proves that one.  A claim in an operator's own family file is
 #: read, logged and grants nothing.  Kept in code rather than keyed
 #: on which directory a file came from: a desktop install loads the
 #: shipped families from a copy beside the executable.  The shipped
 #: test asserts this set equals the claims the shipped files make.
-PROVEN_CAPTURE_CLAIMS: frozenset[tuple[str, str]] = frozenset({
+PROVEN_CAPTURE_CLAIMS: frozenset[ClaimKey] = frozenset({
     ("aruba_aoss/2930F",
-     "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg"),
+     "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg",
+     "standalone", (("2930F-48G-4SFP", None, ()),)),
     ("aruba_aoss/2930F",
-     "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg"),
+     "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg",
+     "standalone", (("2930F-8G-PoEP-2SFPP", None, ()),)),
     ("aruba_aoss/2930M",
-     "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg"),
+     "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg",
+     "stacked", (("2930M-40G-8SR-PoEP", 1, (("A", "JL083A"),)),)),
 })
 
 #: The family-file schema this module reads.
@@ -262,7 +274,8 @@ class DeploymentError(DeviceModelError):
     """A deployment cannot be compiled.
 
     The message is written for the operator who declared the
-    deployment: it names what was asked for and what is allowed.
+    deployment: it says what was wrong and, for a mode, bay, module
+    or member id, what is allowed.
     """
 
 
@@ -381,7 +394,7 @@ class ModeDef(BaseModel):
     label: str
     """Words an operator recognises: ``"standalone (VSF disabled)"``."""
 
-    member_ids: tuple[int, int] | None = None
+    member_ids: tuple[StrictInt, StrictInt] | None = None
     """Inclusive range of member ids.  ``None`` means names carry no
     member id and the deployment is exactly one device."""
 
@@ -434,7 +447,19 @@ class ModelDef(BaseModel):
     """Part numbers that are this exact hardware: the J-number a
     config prints, and ordering aliases of it (``JL256ACM``).  A TAA
     variant is a different J-number and gets its own model entry, so
-    that it cannot inherit a capture of its twin."""
+    that it cannot inherit a capture of its twin.  Each is a plain
+    token, like a model key."""
+
+    @field_validator("skus")
+    @classmethod
+    def _skus_are_plain_tokens(cls, value: list[str]) -> list[str]:
+        for sku in value:
+            if not _KEY_RE.fullmatch(sku):
+                raise ValueError(
+                    f"sku {sku!r} must be a plain name (letters, digits, "
+                    f"`.`, `_`, `+`, `-`)"
+                )
+        return value
 
     display_name: str = ""
 
@@ -956,11 +981,33 @@ def _claimed(
     for claim in family.captures:
         if claim.mode != mode_name:
             continue
-        if (family.key, claim.fixture) not in PROVEN_CAPTURE_CLAIMS:
-            continue
         _, members = _resolve_in_family(family, claim.mode, claim.members)
+        if _claim_key(family, claim, members) not in PROVEN_CAPTURE_CLAIMS:
+            continue
         out.extend((claim.fixture, member) for member in members)
     return out
+
+
+def _claim_key(
+    family: FamilyDef, claim: CaptureClaim, members: list[_ResolvedMember],
+) -> ClaimKey:
+    """*claim* in the form :data:`PROVEN_CAPTURE_CLAIMS` lists it:
+    resolved, so a part number and a model key are the same claim."""
+    return (
+        family.key,
+        claim.fixture,
+        claim.mode,
+        tuple(
+            (
+                member.model.model,
+                member.member_id,
+                tuple(sorted(
+                    (bay, module.sku) for bay, module in member.fitted.items()
+                )),
+            )
+            for member in members
+        ),
+    )
 
 
 def _captured(
@@ -1021,7 +1068,10 @@ def _member_ports(
     for group, slot, module_sku, facts in groups:
         fixture = _captured(member, slot if module_sku else "", claims)
         if fixture is not None:
-            refs.append(fixture)
+            # The fixture is a path in the netcanon source tree; the
+            # panel or module fact keeps its own reference, since a
+            # capture proves the names and not what each port is.
+            refs.extend((fixture, facts[1].ref))
             caveats.append(facts[1].caveat)
             evidence: ProfileEvidence = "capture"
         else:
@@ -1077,7 +1127,8 @@ def compile_deployment(
     Raises:
         DeploymentError: the deployment names a model, mode, bay,
             module or member id the registry does not allow, or mixes
-            families.  The message says what is allowed.
+            families.  The message says what was wrong and, for a
+            mode, bay, module or member id, what is allowed.
     """
     family, mode_name, members = _resolve(deployment, registry)
     return _compile(deployment.vendor, family, mode_name, members,
@@ -1373,8 +1424,9 @@ def load_family_file(path: Path) -> FamilyDef:
     try:
         # An alias makes one node reachable from two places.  No family
         # file needs one, and refusing them removes a self-referential
-        # document (unbounded recursion), an alias bomb (exponential
-        # work) and the merge key in a single rule.
+        # document (unbounded recursion) and an alias bomb (exponential
+        # work) in a single rule.  RecursionError below is for a file
+        # that is merely nested very deeply.
         if any(
             isinstance(event, yaml.AliasEvent)
             for event in yaml.parse(raw, Loader=yaml.SafeLoader)
@@ -1460,6 +1512,14 @@ def load_model_families_dir(
             directory,
         )
         return registry
+    strays = sorted(path.name for path in directory.glob("*.yml"))
+    if strays:
+        # The loader and the wheel's package-data glob both match
+        # ``*.yaml``.  Saying nothing would read as "no such family".
+        logger.warning(
+            "device_models: ignored %s in %s: a family file ends in .yaml",
+            ", ".join(strays), directory,
+        )
     for path in sorted(directory.glob("*.yaml")):
         try:
             family = load_family_file(path)
@@ -1486,7 +1546,10 @@ def load_model_families_dir(
             continue
         unproven = [
             claim.fixture for claim in family.captures
-            if (family.key, claim.fixture) not in PROVEN_CAPTURE_CLAIMS
+            if _claim_key(
+                family, claim,
+                _resolve_in_family(family, claim.mode, claim.members)[1],
+            ) not in PROVEN_CAPTURE_CLAIMS
         ]
         if unproven:
             logger.warning(

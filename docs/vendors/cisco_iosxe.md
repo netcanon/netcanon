@@ -220,6 +220,14 @@ Provenance + per-fixture detail in
   `vrf forwarding Mgmt-vrf`) gets `kind=mgmt` override automatically
   by the parser, so cross-vendor rename can cascade to Aruba `oobm`
   / Junos management VRF.
+- **Declaring a Catalyst as the source device** — IOS-XE lists the
+  interfaces of every network module the chassis could take, whichever
+  one is fitted, and an application-hosting port.  With both devices
+  declared on the API those names come back as off-inventory (one of
+  them displaced), so the job is `partial` although the model is
+  right.  A management port is kept as the target's out-of-band form
+  where there is one and still asks for your decision.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **Type-7 hashes** are Cisco-proprietary and **migration-blocked**
   when targeting non-Cisco vendors — Netcanon emits a review-comment
   in the rendered output rather than translating to plaintext.

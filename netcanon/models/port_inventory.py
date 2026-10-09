@@ -152,7 +152,9 @@ class InventoryMember(BaseModel):
 
     display_name: str = ""
     modules: dict[str, str] = Field(default_factory=dict)
-    """Bay name to fitted module SKU.  Empty bays are omitted."""
+    """Bay name to fitted module SKU.  Empty bays are omitted.  A
+    target profile has no bays, only a choice of module: read as an
+    inventory it reports that choice under the key ``module``."""
 
     unstated_bays: list[str] = Field(default_factory=list)
     """Bays the deployment did not mention.  They were compiled as
@@ -208,6 +210,11 @@ class InventorySummary(BaseModel):
     seen.  It does not say the device has no other port."""
 
     evidence_refs: list[str] = Field(default_factory=list)
+    """Where each fact came from.  A capture is cited by its path in
+    the netcanon source tree (``tests/fixtures/real/...``), which an
+    installed wheel or image does not contain; a document by its
+    title and number."""
+
     caveats: list[str] = Field(default_factory=list)
 
 
@@ -375,6 +382,12 @@ class UnplacedPort(BaseModel):
     ``True`` for a management port the translator could not express
     on the target and dropped, or that was displaced."""
 
+    landed: str = ""
+    """The name a used port that was NOT dropped ended under, once a
+    translation has run: the operator's target, or what the
+    name-shape translator made of a management port (``oobm`` on
+    AOS-S).  ``""`` for a dropped port and before any run."""
+
 
 class MappingPlan(BaseModel):
     """The outcome of pairing a source inventory with a target inventory."""
@@ -392,7 +405,12 @@ class MappingPlan(BaseModel):
     """What the declared target resolved to."""
 
     pairings: list[PortPairing] = Field(default_factory=list)
-    """Every source port that has a target position, in source order."""
+    """Every source port that has a target position, in source order —
+    the pairing AS MADE, before the operator's own map.  A port named
+    in :attr:`overridden` went where the operator sent it, and its
+    ``slower`` / ``poe_lost`` flags describe a target it did not go
+    to.  ``MigrationJob.port_renames`` and ``port_drops`` say where
+    every port ended."""
 
     unplaced: list[UnplacedPort] = Field(default_factory=list)
     """Every source port that has none, in source order."""
@@ -402,7 +420,10 @@ class MappingPlan(BaseModel):
     source inventory, sorted.  Left to the name-shape translator."""
 
     unused_target: list[str] = Field(default_factory=list)
-    """Target ports nothing was paired onto, in target order."""
+    """Target ports no used source port ended on, in target order.
+    Before a run: the ports nothing was paired onto.  After one: the
+    ports still free once the operator's map was applied — what a
+    client may offer as a place for an unplaced port."""
 
     rename_map: dict[str, str | None] = Field(default_factory=dict)
     """What to hand the translator, for every USED source port the plan
@@ -410,38 +431,73 @@ class MappingPlan(BaseModel):
     two names are equal — an explicit entry stops the name-shape
     translator re-deciding it); an unplaced port maps to ``None``, an
     explicit drop.  Off-inventory names are absent, and so is an
-    unplaced management port (see :attr:`UnplacedPort.dropped`)."""
+    unplaced management port (see :attr:`UnplacedPort.dropped`).
+    Like :attr:`pairings` this is the map as made, before the
+    operator's own entries and before :attr:`sub_interfaces`."""
 
     overridden: list[str] = Field(default_factory=list)
     """Source ports whose plan entry an operator override replaced,
     sorted.  Filled in when the plan is settled against a run."""
 
+    sub_interfaces: dict[str, str | None] = Field(default_factory=dict)
+    """Sub-interface names (``ge-0/0/0.54``) that followed their
+    parent port: source name to the name it was given, or ``None``
+    when the parent was dropped and the sub-interface with it.  Made
+    only between two configs of the SAME codec, where the unit
+    suffix means the same thing on both sides; across codecs a
+    sub-interface stays in :attr:`off_inventory`."""
+
     displaced: list[str] = Field(default_factory=list)
-    """Names the plan left to the name-shape translator — an
-    off-inventory name, an unplaced management port — that the
-    translator would have put on a target port another source port
-    holds.  They were dropped from the output instead, sorted.
-    Filled in when the plan is settled against a run."""
+    """Names nobody decided — an off-inventory name, an unplaced
+    management port, or a LOGICAL name such as an aggregate — that
+    the name-shape translator would have put on a name another
+    source name ends on, or on a port of the declared target.  They
+    were dropped from the output instead, sorted.  Where every name
+    in such a clash was undecided, the first keeps the name and only
+    the others are displaced.  Filled in when the plan is settled
+    against a run."""
 
     fused: dict[str, list[str]] = Field(default_factory=dict)
-    """Target names that more than one used source port ended on,
-    each with those source ports.  The pairing never produces one
-    and a displaced name is dropped before it can, so what is left
-    here is an operator override that points two ports at one name.
-    The job is ``partial`` while this is not empty."""
+    """Target names that more than one source name ended on, each
+    with those names, where at least one of them is a hardware port
+    the config uses.  Read from the finished run over EVERY name
+    the config references, compared without regard to case.  The
+    pairing never produces one and an undecided name is displaced
+    before it can, so what is left here is an operator override
+    that points two ports at one name.  The job is ``partial``
+    while this is not empty."""
 
     off_target: list[str] = Field(default_factory=list)
     """Operator override targets that are not ports of the declared
     target device, sorted.  Reported; an operator may mean it."""
 
+    ignored_overrides: list[str] = Field(default_factory=list)
+    """Source ports whose operator override had a blank target.  A
+    blank target decides nothing — it would render a port with no
+    name — so the entry was set aside and the pairing stands."""
+
     emptied_lags: list[str] = Field(default_factory=list)
     """LAGs of the source config every member port of which was
     dropped, sorted.  The LAG then has no port on the target."""
 
+    shrunk_lags: list[str] = Field(default_factory=list)
+    """LAGs that lost some, not all, of their member ports to drops."""
+
+    lost_routes: list[str] = Field(default_factory=list)
+    """Destinations of static routes that named a dropped port as
+    their interface.  The translator removes such a route with the
+    port — whole, even when it also has a next hop."""
+
+    lost_dhcp_pools: list[str] = Field(default_factory=list)
+    """DHCP pools (by network, else by interface) bound to a dropped
+    port, and removed with it."""
+
     unresolved_ports: list[str] = Field(default_factory=list)
     """Used source names that still need a decision, sorted: a port
-    dropped because it had no place, an off-inventory name, a
-    displaced name — minus those the operator's own map names.  The
+    dropped because it had no place, a management port kept by the
+    name-shape translator although the target lists none, an
+    off-inventory name, a displaced name — minus those the
+    operator's own map names.  The
     job is ``partial`` while this is not empty.  Stored, so a client
     does not have to re-derive the rule (see :meth:`unresolved`)."""
 
@@ -470,31 +526,38 @@ class MappingPlan(BaseModel):
         return [p for p in self.unplaced if p.used and p.dropped]
 
     @property
+    def used_kept_management(self) -> list[UnplacedPort]:
+        """Used management ports with no management port on the
+        target that were kept — handed to the name-shape translator.
+        Whether the target has a management interface at all is not
+        something the plan knows, so each needs the operator's eye."""
+        return [
+            p for p in self.unplaced
+            if p.used and p.role == "mgmt" and not p.dropped
+        ]
+
+    @property
     def is_clean(self) -> bool:
         """A mapping was made and nothing about it needs a decision:
-        no used source port is dropped, off-inventory or displaced,
-        and no target port received two source ports."""
-        return (
-            self.applied
-            and not self.used_dropped
-            and not self.off_inventory
-            and not self.displaced
-            and not self.fused
-        )
+        :attr:`unresolved_ports` is empty and no target port received
+        two source ports.  This is the condition under which the
+        port mapping leaves a job ``completed``."""
+        return self.applied and not self.unresolved_ports and not self.fused
 
     def unresolved(self, acknowledged: set[str] | None = None) -> list[str]:
         """Used source names the plan could not place or account for,
         minus those an operator has decided themselves.
 
-        An unplaced port is dropped from the output; an off-inventory
-        name was left to the name-shape translator.  Either is a loss
-        or a doubt the operator has not yet looked at — unless their
-        own override map names the port, which is them looking at it.
-        A displaced name is always unresolved: it is displaced only
-        because no map named it.
+        An unplaced data port is dropped from the output; an unplaced
+        management port and an off-inventory name were left to the
+        name-shape translator.  Each is a loss or a doubt the
+        operator has not yet looked at — unless their own override
+        map names the port, which is them looking at it.  A displaced
+        name is always unresolved: it is displaced only because no
+        map named it.
 
         The pipeline stores the result on :attr:`unresolved_ports`.
         """
         seen = acknowledged or set()
-        names = {p.source for p in self.used_dropped} | set(self.off_inventory)
+        names = {p.source for p in self.used_unplaced} | set(self.off_inventory)
         return sorted({n for n in names if n not in seen} | set(self.displaced))

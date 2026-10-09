@@ -46,8 +46,9 @@
 #         ArubaOS-Switch" (AOS-S 16.08).
 #
 # Public device output that agrees with the documents (HPE community
-# threads, by slug and post date; each paste carries the banner of
-# that exact model and names every port of it):
+# threads, by slug and post date; each standalone paste carries the
+# banner of that exact model and names every port of it, and the VSF
+# paste names its members by `type`):
 #
 #   JL253A  vlan-problems-with-aruba-2930f-24g, 3 Jun 2019
 #   JL254A  probleme-vlan-defaut-sur-2930f-48g-4sfp, 10 Oct 2019

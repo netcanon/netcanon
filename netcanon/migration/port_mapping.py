@@ -23,9 +23,10 @@ Two stages:
   config beyond the list of names the source uses.
 * :func:`settle_plan` reconciles that plan with what a translation
   run then actually did — which ports the operator overrode, which
-  were dropped, whether two source ports ended on one target name —
-  and rewrites the plan's warnings to match.  A plan that has not
-  been settled describes an intention.
+  were dropped, whether two names ended on one target — and rewrites
+  the plan's flags and warnings to match.  ``pairings`` and
+  ``rename_map`` stay the pairing as made; ``overridden`` says which
+  of them the operator replaced.
 
 Policy, in order:
 
@@ -43,20 +44,22 @@ Policy, in order:
    keep its old name, which may be the name another port was just
    mapped to — two physical ports fused into one, in a job that
    reports success.
-5. Two kinds of name get no entry, and are left to the name-shape
+5. Some names get no entry, and are left to the name-shape
    translator: an unplaced MANAGEMENT port (the translator knows what
    each target does with out-of-band management — on AOS-S that is
-   the ``oobm`` block, not an interface), and a name the config uses
-   that is not in the declared source inventory at all, which is
+   the ``oobm`` block, not an interface); a name the config uses that
+   is not in the declared source inventory at all, which is
    **off-inventory** and is the tripwire for a source model that was
-   declared wrongly.
+   declared wrongly; and every LOGICAL name — a LAG, an SVI, a
+   loopback — which was never the mapper's to decide.
 
-   The hazard of policy 4 applies to these names exactly as it does to
-   an unplaced data port: what the translator makes of one may be a
-   name the plan assigned to another port.  The mapper cannot know
-   that in advance without re-deriving the translator, so the caller
-   checks afterwards (:func:`fused_targets`) and drops any such name —
-   it is then **displaced**.  See
+   The hazard of policy 4 applies to every one of these exactly as it
+   does to an unplaced data port: what the translator makes of a name
+   may be a name the plan assigned to another port.  The mapper cannot
+   know that in advance without re-deriving the translator, so the
+   caller checks afterwards — over EVERY name the config references,
+   not only the hardware ones (:func:`fused_targets`) — and drops any
+   name nobody decided that clashes.  It is then **displaced**.  See
    :func:`~netcanon.services.migration_pipeline.run_plan_with_models`.
 6. Only ports the source config uses are reported as problems.
 
@@ -84,9 +87,20 @@ __all__ = [
     "UnplacedPort",
     "describe_plan",
     "fused_targets",
+    "name_key",
     "plan_port_mapping",
     "settle_plan",
 ]
+
+
+def name_key(name: str) -> str:
+    """The form in which two port names are compared.
+
+    Surrounding space and letter case are not part of a port's
+    identity: ``1/a1`` and `` 1/A1`` are the port ``1/A1``, and a job
+    that puts one source port on each has put two on one port.
+    """
+    return name.strip().casefold()
 
 
 def _is_downshift(source_speed: str, target_speed: str) -> bool:
@@ -95,9 +109,17 @@ def _is_downshift(source_speed: str, target_speed: str) -> bool:
     return SPEED_RANK[target_speed] < SPEED_RANK[source_speed]
 
 
-def _summary(names: list[str], limit: int = 8) -> str:
-    shown = ", ".join(names[:limit])
-    return shown if len(names) <= limit else f"{shown} and {len(names) - limit} more"
+def _plain(name: str) -> str:
+    # The migrate page reads single-quoted tokens out of job warnings
+    # as extra rows of its rename table.  A name is free text on some
+    # platforms (RouterOS, FortiGate) and may hold an apostrophe.
+    return name.replace("'", "\N{RIGHT SINGLE QUOTATION MARK}")
+
+
+def _summary(names: Iterable[str], limit: int = 8, sep: str = ", ") -> str:
+    items = [_plain(name) for name in names]
+    shown = sep.join(items[:limit])
+    return shown if len(items) <= limit else f"{shown} and {len(items) - limit} more"
 
 
 def _by_position(
@@ -114,8 +136,10 @@ def _by_position(
 
 
 def _repeated_names(inventory: Inventory) -> list[str]:
-    counts = Counter(port.name for port in inventory.ports)
-    return sorted(name for name, seen in counts.items() if seen > 1)
+    counts = Counter(name_key(port.name) for port in inventory.ports)
+    return sorted({
+        port.name for port in inventory.ports if counts[name_key(port.name)] > 1
+    })
 
 
 def _not_applied(plan: MappingPlan, reason: str) -> MappingPlan:
@@ -221,34 +245,57 @@ def plan_port_mapping(
 
 
 def fused_targets(
-    used_names: Iterable[str],
+    names: Iterable[str],
     port_renames: Mapping[str, str],
     port_drops: Iterable[str],
+    involving: Iterable[str] | None = None,
 ) -> dict[str, list[str]]:
-    """Target names that more than one used source port ended on.
+    """Target names that more than one source name ended on.
 
     Read from what a translation run reports, so it holds whatever
     decided each name: the pairing, an operator override, or the
     name-shape translator.
 
     Args:
-        used_names: The hardware port names the source config uses.
+        names: The source names to look at.  For the check to mean
+            "no two ports share a name in the output" this has to be
+            EVERY name the config references
+            (:func:`~netcanon.migration.canonical.port_names.collect_port_names`),
+            logical ones included: the translator rewrites them all,
+            and an aggregate it calls a physical port lands on a
+            physical port's name.
         port_renames: ``MigrationJob.port_renames`` — source name to
             the name it was given, for every name that changed.
         port_drops: ``MigrationJob.port_drops``.
+        involving: When given, only a clash that includes one of these
+            names is returned — the hardware ports the config uses.
+            Two LAG names that clash with each other are the
+            translator's own business and are reported by it.
 
     Returns:
         Target name to its source names (two or more), in the order
-        the sources were given.  Empty when every surviving source
-        port has a target name of its own.
+        the sources were given.  Names are compared by
+        :func:`name_key`: a target that differs from another only in
+        case or surrounding space is the same target, and two
+        spellings of ONE source name are one source.  Empty when
+        every surviving source name has a target of its own.
     """
     dropped = set(port_drops)
-    groups: dict[str, list[str]] = {}
-    for name in dict.fromkeys(used_names):
+    wanted = None if involving is None else {name_key(name) for name in involving}
+    spelling: dict[str, str] = {}
+    groups: dict[str, dict[str, str]] = {}
+    for name in names:
         if name in dropped:
             continue
-        groups.setdefault(port_renames.get(name, name), []).append(name)
-    return {target: names for target, names in groups.items() if len(names) > 1}
+        final = port_renames.get(name, name)
+        key = name_key(final)
+        spelling.setdefault(key, final.strip())
+        groups.setdefault(key, {}).setdefault(name_key(name), name)
+    return {
+        spelling[key]: list(sources.values())
+        for key, sources in groups.items()
+        if len(sources) > 1 and (wanted is None or wanted.intersection(sources))
+    }
 
 
 def settle_plan(
@@ -256,58 +303,103 @@ def settle_plan(
     *,
     operator_map: Mapping[str, str | None],
     used_names: Iterable[str],
+    every_name: Iterable[str],
     port_renames: Mapping[str, str],
     port_drops: Iterable[str],
     target_names: Iterable[str],
     displaced: Iterable[str] = (),
+    sub_interfaces: Mapping[str, str | None] | None = None,
+    ignored_overrides: Iterable[str] = (),
     emptied_lags: Iterable[str] = (),
+    shrunk_lags: Iterable[str] = (),
+    lost_routes: Iterable[str] = (),
+    lost_dhcp_pools: Iterable[str] = (),
 ) -> None:
     """Reconcile *plan* with what the translation run actually did.
 
-    :func:`plan_port_mapping` states an intention.  Three things can
-    make the outcome differ, and a plan a client reads must describe
-    the outcome:
+    :func:`plan_port_mapping` states an intention.  Several things can
+    make the outcome differ, and what a client reads must describe the
+    outcome:
 
     * the operator's own map replaced plan entries — an unplaced port
       they gave a target was kept, not dropped;
     * the name-shape translator, handed a name the plan left to it,
       dropped that name (a management port on a target that has no
       management interface) rather than renaming it;
-    * a name the plan left alone was found to collide with a target
-      the plan assigned, and was dropped by the caller.
+    * a name nobody decided was found to clash with another name's
+      target, or to land on a port of the target, and was dropped by
+      the caller;
+    * a sub-interface followed its parent port;
+    * a dropped port took a route, a DHCP pool or a LAG member with it.
 
-    Fills ``overridden``, ``displaced``, ``fused``, ``off_target``,
-    ``emptied_lags`` and ``unresolved_ports``, sets every used unplaced
-    port's ``dropped`` to what happened to it, and rebuilds
-    ``warnings``.
+    Fills the outcome fields (``overridden``, ``sub_interfaces``,
+    ``displaced``, ``fused``, ``off_target``, ``ignored_overrides``,
+    ``emptied_lags``, ``shrunk_lags``, ``lost_routes``,
+    ``lost_dhcp_pools``, ``unused_target``, ``unresolved_ports``),
+    sets every used unplaced port's ``dropped`` and ``landed`` to what
+    happened to it, takes a followed sub-interface out of
+    ``off_inventory``, and rebuilds ``warnings``.  ``pairings`` and
+    ``rename_map`` are left as the pairing was made.
 
     Args:
         plan: The plan to settle, in place.
-        operator_map: The operator's own ``port_rename_map``.  A key
-            here is the operator deciding that port.
-        used_names: The names the plan was made for.
+        operator_map: The operator's own ``port_rename_map``, as
+            applied.  A key here is the operator deciding that port.
+        used_names: The hardware names the plan was made for.
+        every_name: Every name the config references — the universe
+            the translator rewrites and the fusion check looks at.
         port_renames: ``MigrationJob.port_renames`` of the final run.
         port_drops: ``MigrationJob.port_drops`` of the final run.
         target_names: Every port name of the declared target.
-        displaced: Names dropped because the translator would have put
-            them on a target port the plan or the operator assigned.
+        displaced: Names dropped because of a clash; see
+            :attr:`MappingPlan.displaced`.
+        sub_interfaces: Sub-interface names that followed their parent.
+        ignored_overrides: Source names whose override was blank.
         emptied_lags: LAGs every member port of which was dropped.
+        shrunk_lags: LAGs that lost some of their member ports.
+        lost_routes: Destinations of routes removed with a port.
+        lost_dhcp_pools: DHCP pools removed with a port.
     """
     dropped = set(port_drops)
     decided = set(operator_map)
+    used = list(used_names)
+    every = list(every_name)
+    targets = list(target_names)
+    followed = dict(sub_interfaces or {})
+
     for port in plan.unplaced:
         if port.used:
             port.dropped = port.source in dropped
+            port.landed = "" if port.dropped else port_renames.get(port.source, port.source)
     plan.overridden = sorted(k for k in operator_map if k in plan.rename_map)
+    plan.sub_interfaces = followed
+    plan.off_inventory = [n for n in plan.off_inventory if n not in followed]
     plan.displaced = sorted(displaced)
-    plan.fused = fused_targets(used_names, port_renames, dropped)
-    if plan.applied:
-        on_target = set(target_names)
-        plan.off_target = sorted({
-            value for value in operator_map.values()
-            if isinstance(value, str) and value and value not in on_target
-        })
+    plan.ignored_overrides = sorted(ignored_overrides)
     plan.emptied_lags = sorted(emptied_lags)
+    plan.shrunk_lags = sorted(shrunk_lags)
+    plan.lost_routes = list(lost_routes)
+    plan.lost_dhcp_pools = list(lost_dhcp_pools)
+    if plan.applied:
+        plan.fused = fused_targets(every, port_renames, dropped, involving=used)
+        on_target = {name_key(name) for name in targets}
+        present = set(every)
+        # A management port the target model lists no place for has, by
+        # definition, no inventory name to go to: whatever the operator
+        # sends it to (``oobm``) is their answer, not a mistake.
+        management = {p.source for p in plan.unplaced if p.role == "mgmt"}
+        plan.off_target = sorted({
+            value for key, value in operator_map.items()
+            if isinstance(value, str)
+            and key in present
+            and key not in management
+            and name_key(value) not in on_target
+        })
+        taken = {
+            name_key(port_renames.get(name, name))
+            for name in used if name not in dropped
+        }
+        plan.unused_target = [name for name in targets if name_key(name) not in taken]
     plan.unresolved_ports = plan.unresolved(decided)
     if plan.applied:
         plan.warnings = describe_plan(plan, decided=decided, dropped=dropped)
@@ -321,8 +413,9 @@ def describe_plan(
 ) -> list[str]:
     """Operator-readable lines for *plan*, one per kind of problem.
 
-    Lines never put a port name in single quotes: the migrate page
-    reads quoted names out of job warnings as extra table rows.
+    Lines never contain a single quote: the migrate page reads
+    single-quoted tokens out of job warnings as extra table rows, so
+    an apostrophe inside a port name is written as a typographic one.
 
     Args:
         plan: The plan.
@@ -336,7 +429,12 @@ def describe_plan(
     ran = dropped is not None
     gone = set(dropped or ())
     displaced = set(plan.displaced)
+    ports = {p.source for p in plan.pairings} | {p.source for p in plan.unplaced}
     lines: list[str] = []
+
+    def is_child(name: str) -> bool:
+        parent, dot, unit = name.rpartition(".")
+        return bool(dot and unit and parent in ports)
 
     removed = [
         p for p in plan.used_unplaced
@@ -371,30 +469,53 @@ def describe_plan(
             f"target has no other form for one; they were DROPPED from "
             f"the output: {_summary(stripped)}"
         )
-    management = [
-        p.source for p in plan.used_unplaced
-        if p.role == "mgmt" and not p.dropped and p.source not in seen
-    ]
-    if management:
-        lines.append(
-            f"port mapping: {len(management)} source management port(s) "
-            f"have no management port in the target model and were "
-            f"translated by name shape instead: {_summary(management)}"
+    kept = [p for p in plan.used_kept_management if p.source not in seen]
+    if kept:
+        where = [
+            f"{p.source} -> {p.landed}" if p.landed and p.landed != p.source
+            else p.source
+            for p in kept
+        ]
+        outcome = (
+            "were kept by name-shape translation" if ran
+            else "are left to name-shape translation"
         )
-    if displaced:
-        names = sorted(displaced)
         lines.append(
-            f"port mapping: {len(names)} name(s) the pairing does not "
-            f"decide would have landed on a target port that another "
-            f"source port holds, and were DROPPED from the output "
-            f"instead: {_summary(names)}"
+            f"port mapping: {len(kept)} source management port(s) have no "
+            f"management port in the target model and {outcome} "
+            f"({_summary(where)}); confirm the target has a management "
+            f"interface, or drop them"
         )
 
-    ports = {p.source for p in plan.pairings} | {p.source for p in plan.unplaced}
+    folded = sorted(name for name in displaced if is_child(name))
+    clashed = sorted(displaced - set(folded))
+    if clashed:
+        lines.append(
+            f"port mapping: {len(clashed)} name(s) nobody decided would "
+            f"have shared a name with another port, or taken a port of "
+            f"the target, and were DROPPED from the output instead: "
+            f"{_summary(clashed)}"
+        )
+    if folded:
+        lines.append(
+            f"port mapping: {len(folded)} sub-interface name(s) could not "
+            f"be given a name of their own by name-shape translation and "
+            f"were DROPPED from the output instead: {_summary(folded)}"
+        )
+    # A sub-interface that followed its port to a new name simply
+    # moved, which is nothing to report; one that went with a dropped
+    # port is.
+    went = [name for name, target in plan.sub_interfaces.items() if not target]
+    if went:
+        lines.append(
+            f"port mapping: {len(went)} sub-interface name(s) were DROPPED "
+            f"with the port they belong to: {_summary(sorted(went))}"
+        )
+
     stray = [
         n for n in plan.off_inventory if n not in seen and n not in displaced
     ]
-    children = [n for n in stray if "." in n and n.rsplit(".", 1)[0] in ports]
+    children = [n for n in stray if is_child(n)]
     others = [n for n in stray if n not in children]
     if others:
         lost = sum(1 for n in others if n in gone)
@@ -418,17 +539,22 @@ def describe_plan(
             f"{target} <- {', '.join(sources)}"
             for target, sources in plan.fused.items()
         ]
-        more = f" and {len(shown) - 6} more" if len(shown) > 6 else ""
         lines.append(
             f"port mapping: {len(shown)} target port(s) receive more than "
             f"one source port, so their config is merged: "
-            f"{'; '.join(shown[:6])}{more}"
+            f"{_summary(shown, limit=6, sep='; ')}"
         )
     if plan.off_target:
         lines.append(
             f"port mapping: {len(plan.off_target)} override target(s) are "
             f"not ports of the declared target device: "
             f"{_summary(plan.off_target)}"
+        )
+    if plan.ignored_overrides:
+        lines.append(
+            f"port mapping: {len(plan.ignored_overrides)} override(s) had "
+            f"a blank target and were ignored, so the pairing stands for: "
+            f"{_summary(plan.ignored_overrides)}"
         )
     if plan.emptied_lags:
         lines.append(
@@ -437,17 +563,35 @@ def describe_plan(
             f"({_summary(plan.emptied_lags)}); review it and the VLANs "
             f"that reference it"
         )
+    if plan.shrunk_lags:
+        lines.append(
+            f"port mapping: {len(plan.shrunk_lags)} LAG(s) lost a member "
+            f"port to a drop and have fewer members on the target: "
+            f"{_summary(plan.shrunk_lags)}"
+        )
+    if plan.lost_routes:
+        lines.append(
+            f"port mapping: {len(plan.lost_routes)} static route(s) that "
+            f"named a dropped port were removed with it: "
+            f"{_summary(plan.lost_routes)}"
+        )
+    if plan.lost_dhcp_pools:
+        lines.append(
+            f"port mapping: {len(plan.lost_dhcp_pools)} DHCP pool(s) bound "
+            f"to a dropped port were removed with it: "
+            f"{_summary(plan.lost_dhcp_pools)}"
+        )
 
     # A pairing the operator replaced is no longer the plan's: its
     # speed and PoE flags describe a target the port did not go to.
-    kept = [p for p in plan.used_pairings if p.source not in seen]
-    slower = [p for p in kept if p.slower]
+    paired = [p for p in plan.used_pairings if p.source not in seen]
+    slower = [p for p in paired if p.slower]
     if slower:
         lines.append(
             f"port mapping: {len(slower)} port(s) land on a slower target "
             f"port: {_summary([f'{p.source} -> {p.target}' for p in slower])}"
         )
-    unpowered = [p for p in kept if p.poe_lost]
+    unpowered = [p for p in paired if p.poe_lost]
     if unpowered:
         lines.append(
             f"port mapping: {len(unpowered)} PoE port(s) land on a target "

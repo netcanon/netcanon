@@ -160,6 +160,11 @@ by concern and listed alphabetically within each section.
 - **Naming rule** — a small pure function beside a vendor's codec that
   renders one port's name from its coordinates. One per naming grammar,
   not per product line.
+- **Name-shape translator** — the ordinary port translation: a target
+  name derived from the shape of the source name
+  (`GigabitEthernet1/0/1` becomes `1/1`), without knowing either
+  device model. What positional port mapping replaces for the ports
+  it can pair, and what still handles every other name.
 - **Positional port mapping** — pairing the ports of two inventories
   by member rank, role and order, instead of translating names by their
   shape. Produces an ordinary `port_rename_map`.
@@ -168,8 +173,9 @@ by concern and listed alphabetically within each section.
   of the declared source with no position on the target (dropped,
   unless it is a management port). *Off-inventory*: a name the config
   uses that is not a port of the declared source at all. *Displaced*:
-  one of either kind that the name-shape translator would have put on
-  a target port another source port holds, and that was dropped
+  a name nobody decided — one of either kind, or a logical interface —
+  that the name-shape translator would have put on a name another
+  interface ends on, or on a port of the target, and that was dropped
   instead.
 - **Fused** — a target port that more than one source port ended on.
   Positional mapping never produces one; an operator override can.

@@ -261,6 +261,7 @@ def compile_declared_device(
     Raises:
         HTTPException 422: the deployment does not compile (unknown
             model, mode, bay, module or member id — the detail says
+            what was wrong and, for a mode, bay, module or member id,
             what is allowed); the profile key is unknown; the profile
             belongs to another vendor than the codec; or the profile
             has no module of that name.  On the advisory path an
