@@ -394,6 +394,37 @@ class TestPlanWithDeclaredDevices:
         ["/plan", "/plan/ports", "/plan/vlans", "/plan/local_users",
          "/plan/snmp", "/plan/snmpv3", "/render"],
     )
+    @pytest.mark.parametrize("declared", [True, False], ids=["devices declared", "no devices"])
+    def test_a_key_in_another_letter_case_is_that_port_on_every_plan_endpoint(
+        self, client: TestClient, path: str, declared: bool,
+    ) -> None:
+        """One body, one answer: ``1/a1`` is the port the config calls
+        ``1/A1``, whichever URL it goes to and whether or not devices
+        are declared.  With them it was "does not exist ... entry
+        ignored", the port stayed, and the job said ``completed``."""
+        stack = {"mode": "stacked", "members": [{"model": "JL323A", "id": 1, "modules": {"A": "JL083A"}}]}
+        capture = (
+            REPO_ROOT / "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg"
+        ).read_text(encoding="utf-8")
+        body = {
+            "source": "aruba_aoss", "target": "aruba_aoss", "raw_text": capture,
+            "port_rename_map": {"1/a1": None},
+        }
+        if declared:
+            body |= {"source_deployment": stack, "target_deployment": stack}
+        elif path not in ("/plan", "/plan/ports", "/render"):
+            pytest.skip("this pane sets a posted port map aside unless devices are declared")
+        job = client.post(f"/api/v1/migration{path}", json=body).json()
+        assert job["port_drops"] == ["1/A1"], path
+        assert not [w for w in job["warnings"] if "does not exist" in w], path
+        if declared:
+            assert job["port_mapping_plan"]["overridden"] == ["1/A1"], path
+
+    @pytest.mark.parametrize(
+        "path",
+        ["/plan", "/plan/ports", "/plan/vlans", "/plan/local_users",
+         "/plan/snmp", "/plan/snmpv3", "/render"],
+    )
     @pytest.mark.parametrize("typed", ["1/a1", " 1/A1"])
     def test_a_target_typed_in_another_case_is_still_that_port(
         self, client: TestClient, path: str, typed: str,

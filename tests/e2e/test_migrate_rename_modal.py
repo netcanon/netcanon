@@ -318,6 +318,51 @@ class TestRenameModalCollisionDetection:
         expect(apply_btn).to_be_disabled()
 
 
+#: An AOS-S LAG as the device writes it: ``trk1`` where it is defined,
+#: ``Trk1`` in its own interface stanza and in a VLAN's port list.
+_AOSS_ONE_LAG = """; JL260A Configuration Editor; Created on release #WC.16.07.0002
+hostname "sw"
+trunk 51-52 trk1 lacp
+interface Trk1
+   name "uplink"
+   exit
+vlan 1
+   name "DEFAULT_VLAN"
+   untagged 1-50
+   tagged Trk1
+   exit
+"""
+
+
+class TestRenameModalAosSLag:
+    """The two spellings of one LAG used to be two rows aimed at one
+    target: both drawn as a collision, and an Apply button that stayed
+    disabled until one of them was dropped -- for an AOS-S config that
+    names a LAG outside its ``trunk`` line (a VLAN that lists it, its
+    own ``interface`` stanza), onto any other vendor."""
+
+    @pytest.mark.parametrize("target", ["juniper_junos", "cisco_iosxe_cli", "arista_eos", "aruba_aoss"])
+    def test_a_lag_is_one_row_and_apply_works(
+        self, page: Page, live_server_url: str, target: str,
+    ):
+        mp = MigratePage(page)
+        page.goto(live_server_url + "/migrate")
+        mp.source_select.wait_for(state="visible", timeout=5_000)
+        mp.pick_source("aruba_aoss")
+        mp.pick_target(target)
+        mp.fill_raw(_AOSS_ONE_LAG)
+        mp.submit_and_wait()
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        # One row, under the name the config's ``trunk`` line gave it.  (A
+        # section with nothing to attend to starts folded, so the row is
+        # counted, not looked for on screen.)
+        expect(page.locator('[data-testid="migrate-rename-row-trk1"]')).to_have_count(1)
+        expect(page.locator('[data-testid="migrate-rename-row-Trk1"]')).to_have_count(0)
+        expect(page.locator(".has-collision")).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-rename-summary"]')).not_to_contain_text("collision")
+        expect(page.locator('[data-testid="migrate-rename-apply-btn"]')).to_be_enabled()
+
+
 class TestRenameModalModuleDropdown:
     """Third-stage module dropdown — chassis with swappable uplink
     modules (Cisco Cat 9300 NM-8X/NM-2Q, Aruba 3810M JL083A/JL078A).

@@ -272,11 +272,18 @@ class CodecBase(ABC):
     #: to be seen as the same port.
     #:
     #: Read by model-to-model port mapping, which compares the name
-    #: every interface ended on.  There is no safe default.  ``False``
-    #: on a platform where case tells two interfaces apart merges an
-    #: operator's own interface into a port, in a job that reports
-    #: success; ``True`` on one where it does not lets an override pass
-    #: beside the port it misspells.  So every codec states its own
+    #: every interface ended on, and by the port translator itself
+    #: (``translate_port_names``) on every translation: the source's
+    #: flag to tell two source ports on one target from one source
+    #: name written in two cases, and to take a rename-map key in
+    #: another letter case for the name the config uses; the target's
+    #: to decide whether two final names are one place.  There is no
+    #: safe default.  ``False`` on a platform where
+    #: case tells two interfaces apart merges an operator's own
+    #: interface into a port, in a job that reports success -- and takes
+    #: a true "multiple source ports" line off an ordinary translation;
+    #: ``True`` on one where it does not lets an override pass beside
+    #: the port it misspells.  So every codec states its own
     #: (``test_the_codecs_say_which_they_are`` fails for one that
     #: leaves it to the value below).
     port_names_case_sensitive: ClassVar[bool] = False

@@ -1039,9 +1039,9 @@ class TestAStackOnBothSides:
         assert set(vlans[10].untagged_ports) == (
             {f"1/{n}" for n in range(1, 11)} | {f"2/{n}" for n in range(1, 5)}
         )
-        assert set(vlans[10].tagged_ports) == {"Trk1", "2/A2"}
+        assert set(vlans[10].tagged_ports) == {"trk1", "2/A2"}
         assert set(vlans[20].untagged_ports) == {f"2/{n}" for n in range(5, 31)}
-        assert set(vlans[20].tagged_ports) == {"Trk1", "1/A2"}
+        assert set(vlans[20].tagged_ports) == {"trk1", "1/A2"}
 
     def test_the_fabrics_own_stanza_is_not_carried(self, job) -> None:
         """Which switches the fabric is made of, their addresses and
@@ -1125,7 +1125,7 @@ class TestAStackOnBothSides:
         assert _lists_not_where_the_job_says(_VSF_FABRIC, job) == []
         vlans = {vlan.id: vlan for vlan in AOSS.parse(job.rendered).vlans}
         assert set(vlans[20].untagged_ports) == {f"1/{n}" for n in range(5, 31)}
-        assert set(vlans[20].tagged_ports) == {"Trk1", "2/A2"}
+        assert set(vlans[20].tagged_ports) == {"trk1", "2/A2"}
         (line,) = [w for w in job.warnings if w.startswith("port mapping:")]
         assert line.startswith(
             "port mapping: 2 stack member(s) are paired with a member of ANOTHER number"
@@ -1165,7 +1165,7 @@ vlan 20
         vlans = {vlan.id: vlan for vlan in AOSS.parse(job.rendered).vlans}
         assert set(vlans[1].untagged_ports) == {"2/6", "1/5"}
         assert set(vlans[10].untagged_ports) == {"2/1", "2/2", "2/3", "2/4"}
-        assert set(vlans[10].tagged_ports) == {"1/7", "Trk1"}
+        assert set(vlans[10].tagged_ports) == {"1/7", "trk1"}
         assert set(vlans[20].tagged_ports) == {"2/7"}
         assert "trunk 2/5,1/6 trk1 lacp" in job.rendered
 
@@ -1208,9 +1208,9 @@ vlan 20
         assert "trunk 1/21,2/21 trk2 lacp" in job.rendered
         assert _lists_not_where_the_job_says(_VSF_FABRIC_OF_24S, job) == []
         vlans = {vlan.id: vlan for vlan in AOSS.parse(job.rendered).vlans}
-        assert set(vlans[10].tagged_ports) == {"Trk1", "Trk2"}
+        assert set(vlans[10].tagged_ports) == {"trk1", "trk2"}
         assert set(vlans[1].untagged_ports) == {
-            "Trk1", "Trk2", *(f"{member}/A{n}" for member in (1, 2) for n in (1, 2, 3, 4)),
+            "trk1", "trk2", *(f"{member}/A{n}" for member in (1, 2) for n in (1, 2, 3, 4)),
         }
         for text in ("vsf", "aabbcc", "JL259A", "1/23", "2/24"):
             assert text not in job.rendered, text

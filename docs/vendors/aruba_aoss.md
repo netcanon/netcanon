@@ -28,7 +28,12 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 - VLANs — ID, name, tagged/untagged port lists with comma-separated
   range expansion (`A2-A6,A8-A10,A12-A24`), `primary-vlan`
 - Static routes (incl. `ip default-gateway` form)
-- LAGs (`trk<N>` reconciled with cross-vendor `Port-channel<N>`)
+- LAGs (`trk<N>` reconciled with cross-vendor `Port-channel<N>`).  The
+  device writes a LAG `trk1` on its `trunk` line and `Trk1` everywhere
+  else; it is one name here, `trk1`, in the rename modal and as a key
+  of a rename map (`Trk1` reaches it too).  A second `trunk` line for
+  a LAG adds its ports to the first, and a second `interface` stanza
+  for an interface goes on with the first
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats):
 
