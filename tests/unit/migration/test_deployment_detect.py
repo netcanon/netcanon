@@ -503,13 +503,16 @@ class TestWhatHostileTextCannotDo:
         tighter than a declaration's bounds.  The next detector's may
         not be, and the proposer is what answers for it."""
         bays = {f"B{n}": "JL083A" for n in range(MAX_DECLARED_BAYS + 1)}
-        detected = DetectedDeployment(members=[DetectedMember(part="JL322A", modules=bays)])
+        detected = DetectedDeployment(
+            members=[DetectedMember(part="JL322A", modules=bays)], notes=["a remark of the detector's"],
+        )
         monkeypatch.setattr(deployment_detect, "_detectors", lambda: {"aruba_aoss": lambda _raw: detected})
         proposal = propose_deployment(AOSS, STANDALONE, REGISTRY)
         assert proposal.deployment is None and proposal.consistent is None
         assert (proposal.family, proposal.mode) == ("aruba_aoss/2930M", "standalone")
-        (note,) = proposal.notes
+        note, remark = proposal.notes
         assert note.startswith("What the config states cannot be a deployment of Aruba 2930M: 1 member(s) stated;")
+        assert remark == "a remark of the detector's"
         assert "JL083A" not in note
 
     def test_the_most_a_declaration_may_list_is_still_answered_in_words(self) -> None:
@@ -560,6 +563,52 @@ class TestWhatHostileTextCannotDo:
         assert len(proposal.missing_ports) == MAX_MISSING_PORTS
         assert proposal.consistent is False
         assert any("uses 480 port name(s)" in n and "and 472 more" in n for n in proposal.notes)
+
+
+class TestTheFirstNoteSaysWhyNothingWasProposed:
+    """A client should not have to search prose for the reason.  What
+    the detector says about the lines it read comes after it."""
+
+    @pytest.mark.parametrize(
+        ("text", "why"),
+        [
+            (_stanza(*(f'member {n} type "JL322A"' for n in range(1, 66))), "The config states 65 devices"),
+            (_stanza('member 1 type "ZZ999A"'), "No model family describes ZZ999A"),
+            (
+                _stanza('member 1 type "JL322A"', 'member 2 type "JL260A"'),
+                "The members belong to different model families",
+            ),
+            (
+                _stanza('member 1 type "JL322A"', "member 1 flexible-module A type JL079A"),
+                "does not compile as a deployment of",
+            ),
+            (_stanza('member 0 type "JL322A"'), "does not compile as a deployment of"),
+            (_stanza(*(f'member {n} type "JL322A"' for n in range(1, 12))), "does not compile as a deployment of"),
+            (_stanza('member 1 type "' + "J" * 200 + '"'), "no line in it names a member"),
+            (_STACK_BANNER + 'hostname "x"\n', "The banner is a stack's"),
+            ('hostname "x"\n', "The config does not say which device it came from"),
+        ],
+        ids=[
+            "more devices than a declaration", "a part no family describes", "two families",
+            "a module the bay does not take", "a member number out of range", "more members than the mode allows",
+            "a stanza that names no member", "a stack banner with no stanza", "nothing stated",
+        ],
+    )
+    def test_each_way_of_not_arriving(self, text: str, why: str) -> None:
+        proposal = propose_deployment(AOSS, text, REGISTRY)
+        assert proposal.deployment is None
+        assert why in proposal.notes[0], proposal.notes
+
+    def test_a_mode_that_is_in_doubt(self, monkeypatch) -> None:
+        monkeypatch.setattr(deployment_detect, "_mode_for", lambda _family, _fabric: (None, "which mode?"))
+        proposal = propose_deployment(AOSS, STACKED, REGISTRY)
+        assert proposal.deployment is None and proposal.notes[0] == "which mode?"
+        assert len(proposal.notes) > 1
+
+    def test_with_a_proposal_the_detectors_notes_keep_their_place(self) -> None:
+        proposal = propose_deployment(AOSS, STACKED, REGISTRY)
+        assert proposal.deployment is not None
+        assert proposal.notes[0].startswith("A member line shows what the stack is provisioned for")
 
 
 class TestWhatWasNotChecked:

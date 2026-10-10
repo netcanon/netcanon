@@ -1006,8 +1006,8 @@ def detect_source_deployment(
     (``unknown_parts``), when its members belong to different
     families, when what it states does not compile (a module the bay
     does not take, a member number out of range, too many members),
-    and when no detector exists for the vendor yet.  ``notes`` says
-    which.  That is a 200, not an error: "the config does not say" is an
+    and when no detector exists for the vendor yet.  The first of
+    ``notes`` says which.  That is a 200, not an error: "the config does not say" is an
     answer.  Nothing is translated and nothing is stored.
     """
     codec = resolve_adapter_or_422(body.source, side="source")

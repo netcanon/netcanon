@@ -966,8 +966,9 @@ it was pasted, say); when no model family describes a part number it
 states (`unknown_parts`); when the members it names belong to different
 families; when what it states does not compile — a module the bay does
 not take, a member number outside the mode's range, more members than
-the mode allows; and when the vendor has no detector yet.  `notes` says
-which.  None of these is an error: the answer is a 200 either way.
+the mode allows; and when the vendor has no detector yet.  The first
+of `notes` says which.  None of these is an error: the answer is a 200
+either way.
 Detection reads Aruba AOS-S configs today; no other vendor has a
 detector yet.
 

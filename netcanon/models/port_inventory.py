@@ -480,8 +480,8 @@ class DeploymentProposal(BaseModel):
     notes: list[str] = Field(
         default_factory=list,
         description=(
-            "What to know before relying on the proposal, and, when "
-            "deployment is null, what stood in the way."
+            "What to know before relying on the proposal.  When "
+            "deployment is null, the FIRST note says what stood in the way."
         ),
     )
 

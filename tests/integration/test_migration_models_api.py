@@ -1224,6 +1224,9 @@ class TestDetectDeployment:
             proposal = resp.json()
             assert proposal["consistent"] is None
             assert [n for n in proposal["notes"] if said in n], (said, proposal["notes"])
+            if proposal["deployment"] is None:
+                # The first note is the reason.
+                assert said in proposal["notes"][0], proposal["notes"]
             assert len(resp.content) < 20_000
 
     def test_a_paste_that_names_no_port_is_not_called_consistent(self, client: TestClient) -> None:

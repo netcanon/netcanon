@@ -168,8 +168,9 @@ def propose_deployment(
         request's ``source_deployment`` — only when every member the
         config names is a model some family describes, they share one
         family, the mode is not in doubt and the result compiles.
-        Otherwise it is ``None`` and ``notes`` says what stood in the
-        way.  ``missing_ports`` lists port names the config uses that
+        Otherwise it is ``None`` and the FIRST of ``notes`` says what
+        stood in the way; what the detector had to say about the lines
+        it read comes after.  ``missing_ports`` lists port names the config uses that
         the proposed device does not have (capped;
         ``missing_port_count`` is the whole number); ``consistent`` is
         ``True`` when there are none, and ``None`` when there was
@@ -210,14 +211,17 @@ def propose_deployment(
     proposal.notes = list(detected.notes)
     proposal.stated = bool(detected.members)
     if not detected.members:
+        # The detector's first note is why: a stanza that names no
+        # member, a stack banner with no stanza.
         return proposal
     if len(detected.members) > MAX_DEPLOYMENT_MEMBERS:
         # More devices than any declaration may list: not resolved one
         # by one, and not echoed back one by one.
-        proposal.notes.append(
+        proposal.notes.insert(
+            0,
             f"The config states {len(detected.members)} devices; a "
             f"deployment lists at most {MAX_DEPLOYMENT_MEMBERS}, so none can "
-            f"be proposed."
+            f"be proposed.",
         )
         return proposal
 
@@ -236,26 +240,29 @@ def propose_deployment(
     proposal.members = members
     if proposal.unknown_parts:
         unknown = ", ".join(proposal.unknown_parts)
-        proposal.notes.append(
+        proposal.notes.insert(
+            0,
             f"No model family describes {unknown}, so no deployment can be "
             f"proposed.  A target profile for that device can be declared "
-            f"instead, if one exists."
+            f"instead, if one exists.",
         )
         return proposal
     if len(families) > 1:
-        proposal.notes.append(
+        proposal.notes.insert(
+            0,
             f"The members belong to different model families "
-            f"({', '.join(families)}); no deployment can be proposed."
+            f"({', '.join(families)}); no deployment can be proposed.",
         )
         return proposal
 
     (family,) = families.values()
     proposal.family = family.key
     mode_name, said = _mode_for(family, detected.fabric)
+    if mode_name is None:
+        proposal.notes.insert(0, said)
+        return proposal
     if said:
         proposal.notes.append(said)
-    if mode_name is None:
-        return proposal
     proposal.mode = mode_name
     carries_ids = family.modes[mode_name].member_ids is not None
     try:
@@ -278,16 +285,18 @@ def propose_deployment(
         # carry.  Said in our own words: pydantic's message quotes its
         # input.
         reasons = sorted({error["msg"] for error in exc.errors()})
-        proposal.notes.append(
+        proposal.notes.insert(
+            0,
             f"What the config states cannot be a deployment of "
             f"{family.display()}: {len(members)} member(s) stated; "
-            f"{'; '.join(reasons)}."
+            f"{'; '.join(reasons)}.",
         )
         return proposal
     except DeploymentError as exc:
-        proposal.notes.append(
+        proposal.notes.insert(
+            0,
             f"What the config states does not compile as a deployment "
-            f"of {family.display()}: {exc}"
+            f"of {family.display()}: {exc}",
         )
         return proposal
     proposal.deployment = spec

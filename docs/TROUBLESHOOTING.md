@@ -264,7 +264,8 @@ is how many).  Possible causes:
 `consistent: null` is not a pass: nothing was checked, because nothing
 was proposed or the text names no port.
 
-A `deployment` of `null` is not an error.  `notes` says why: the config
+A `deployment` of `null` is not an error.  The first of `notes` says
+why: the config
 does not state its device (a stack's banner names no model, so a stack
 config with its `stacking` or `vsf` stanza cut off states none); no
 model family describes a part number in `unknown_parts`; the members
