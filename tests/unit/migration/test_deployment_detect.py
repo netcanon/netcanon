@@ -994,10 +994,11 @@ class TestTheCheckIsTheOneATranslationMakes:
         def missing(body: str) -> list[str]:
             return propose_deployment(AOSS, _JL322A_TOP + body, REGISTRY).missing_ports
 
-        # ``TRK1`` is the LAG the ``trunk`` line defines as ``trk1``: one
-        # name in another letter case.  The other two are defined nowhere.
+        # ``TRK1`` is the LAG the ``trunk`` line defines as ``trk1``, and
+        # ``TrK7`` is a LAG by its shape: a trunk's name has no letter
+        # case.  ``Dyn1`` is no name the codec knows.
         assert missing("vlan 1\n   untagged 1-46,TRK1,Dyn1,TrK7\n   exit\ntrunk 47-48 trk1 lacp\n") == [
-            "Dyn1", "TrK7",
+            "Dyn1",
         ]
         # ``Trk1`` is a LAG by its shape, whether or not its line was pasted.
         assert missing("flexible-module A type JL083A\nvlan 1\n   untagged 1-46,A1-A4,Trk1\n   exit\n") == []
