@@ -847,12 +847,19 @@
             + ((proposal.evidence || []).length === 1 ? '' : 's') + ')',
           proposal.evidence || [], true);
         if (proposal.consistent === false) {
+          // The list is capped by the server; the count is not.
           var missing = proposal.missing_ports || [];
+          var howMany = proposal.missing_port_count || missing.length;
           _notePart(el, base + '-inconsistent',
-            missing.length + ' port name' + (missing.length === 1 ? '' : 's')
-            + ' the config uses ' + (missing.length === 1 ? 'is' : 'are')
+            howMany + ' port name' + (howMany === 1 ? '' : 's')
+            + ' the config uses ' + (howMany === 1 ? 'is' : 'are')
             + ' not on this device: ' + missing.slice(0, 8).join(', ')
-            + (missing.length > 8 ? ' …' : ''));
+            + (howMany > 8 ? ' …' : ''));
+          warn = true;
+        } else if (proposal.consistent !== true) {
+          // null: nothing was checked (the text names no port, or
+          // could not be parsed).  The note below says which; it is
+          // not a pass, so it is not shown as one.
           warn = true;
         }
         (proposal.notes || []).forEach(function(note, i) {
@@ -875,7 +882,11 @@
           'The config states ' + proposal.unknown_parts.join(', ')
           + ', which no model family describes yet — choose the device yourself');
       } else if (!decl && (proposal.notes || []).length) {
-        _notePart(el, base + '-detect-note-0', proposal.notes[0]);
+        // Nothing was proposed.  The server puts the reason first;
+        // what its detector said about the lines it read follows.
+        proposal.notes.forEach(function(note, i) {
+          _notePart(el, base + '-detect-note-' + i, note);
+        });
       }
     }
 

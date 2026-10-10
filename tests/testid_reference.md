@@ -648,8 +648,8 @@ position, counted from 0:
 | `migrate-device-<side>-note-caveats`  | `<details>`| The device's caveats, collapsed |
 | `migrate-device-<side>-note-error`    | `<span>`   | Why the declaration did not compile (the server's words) |
 | `migrate-device-source-note-read-from` | `<details>` | The config lines the source device was read from.  Present while the declaration is the detected one |
-| `migrate-device-source-note-inconsistent` | `<span>` | Port names the config uses that the detected device does not have |
-| `migrate-device-source-note-detect-note-<i>` | `<span>` | A note from detection (what a provisioning line does not prove; that no detector exists for the vendor) |
+| `migrate-device-source-note-inconsistent` | `<span>` | Port names the config uses that the detected device does not have: how many (the server's `missing_port_count`) and the first eight |
+| `migrate-device-source-note-detect-note-<i>` | `<span>` | A note from detection, one per note the server sent: what a provisioning line does not prove, what the reading left out, that the proposal could not be checked against the config, or — when nothing was proposed — why |
 | `migrate-device-source-note-config-says` | `<span>` | Shown once the operator chose a different device: what the config states |
 | `migrate-device-source-use-detected`  | `<button>` | "use it" -- puts the detected device back |
 | `migrate-device-source-note-unknown-parts` | `<span>` | The config names a part no model family describes |

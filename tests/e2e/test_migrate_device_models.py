@@ -67,6 +67,52 @@ _AOSS_ONE_PORT = (
     "   exit\n"
 )
 
+_JL322A_TOP = (
+    "; JL322A Configuration Editor; Created on release #WC.16.07.0003\n"
+    'hostname "sw"\n'
+    "module 1 type jl322a\n"
+)
+_STACK_BANNER = "; hpStack_WC Configuration Editor; Created on release #WC.16.07.0003\n"
+
+#: Uses the module's ports and has no ``flexible-module`` line.
+_AOSS_2930M_NO_MODULE_LINE = _JL322A_TOP + "vlan 1\n   untagged 1-48,A1-A4\n   exit\n"
+
+#: Ten ranges of stack-style names a switch that stands alone does not have.
+_AOSS_2930M_MANY_MISSING = (
+    _JL322A_TOP
+    + "vlan 1\n   untagged 1-48,"
+    + ",".join(f"{member}/1-{member}/48" for member in range(1, 11))
+    + "\n   exit\n"
+)
+
+#: A VLAN, so the modal has something to open for, and no port anywhere.
+#: A 2930F: it has no module bay, so nothing else turns the note amber.
+_AOSS_NO_PORT_NAMED = (
+    "; JL260A Configuration Editor; Created on release #WC.16.07.0002\n"
+    'hostname "sw"\n'
+    "module 1 type jl260a\n"
+    'vlan 10\n   name "users"\n   exit\n'
+)
+
+_AOSS_STACK_ONE_LINE_UNREAD = (
+    _STACK_BANNER
+    + 'stacking\n   member 1 type "JL322A"\n   member 2 type "JL322A-B21"\n   exit\n'
+    + "vlan 1\n   untagged 1/1-1/48\n   exit\n"
+)
+
+_AOSS_TWO_FAMILIES = (
+    _STACK_BANNER
+    + 'stacking\n   member 1 type "JL322A"\n   member 2 type "JL260A"\n   exit\n'
+    + "vlan 1\n   untagged 1/1-1/48\n   exit\n"
+)
+
+_AOSS_UNKNOWN_PART = (
+    "; ZZ999A Configuration Editor; Created on release #WC.16.07.0003\n"
+    'hostname "sw"\n'
+    "module 1 type zz999a\n"
+    "vlan 1\n   untagged 1-24\n   exit\n"
+)
+
 SOURCE_2930F_48G = "fam:2930F:2930F-48G-4SFP"
 TARGET_2930M_48G = "fam:2930M:2930M-48G-PoEP"
 TARGET_2930M_24G = "fam:2930M:2930M-24G"
@@ -93,6 +139,15 @@ def aoss_2930f(page: Page, live_server_url: str) -> MigratePage:
     mp = _translate(page, live_server_url, "aruba_aoss", "aruba_aoss", CAPTURE_2930F)
     page.locator(_tid("migrate-rename-open-btn")).click()
     expect(page.locator(_tid("migrate-rename-modal"))).to_be_visible()
+    return mp
+
+
+def _open(page: Page, base: str, raw: str) -> MigratePage:
+    """*raw* translated AOS-S to AOS-S, modal open."""
+    mp = _translate(page, base, "aruba_aoss", "aruba_aoss", raw)
+    page.locator(_tid("migrate-rename-open-btn")).click()
+    expect(page.locator(_tid("migrate-rename-modal"))).to_be_visible()
+    expect(_source_note(page)).to_be_visible()
     return mp
 
 
@@ -185,6 +240,75 @@ class TestSourceDeviceIsReadFromTheConfig:
         expect(lines).to_contain_text("Read from the config")
         lines.locator("summary").click()
         expect(lines).to_contain_text("; JL260A Configuration Editor")
+
+    def test_a_module_the_config_does_not_state_is_said(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """A 2930M that uses ``A1``-``A4`` and has no ``flexible-module``
+        line: the device is read with an empty bay, and the modal says
+        four names do not fit it."""
+        _open(page, live_server_url, _AOSS_2930M_NO_MODULE_LINE)
+        said = page.locator(_tid("migrate-device-source-note-inconsistent"))
+        expect(said).to_have_text(
+            "4 port names the config uses are not on this device: A1, A2, A3, A4"
+        )
+        expect(_source_note(page)).to_have_class(re.compile(r"\bnotice-warn\b"))
+
+    def test_more_missing_names_than_the_server_lists_are_still_counted(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """The server caps the list it sends and counts them all; the
+        modal shows the count, not the length of the list."""
+        _open(page, live_server_url, _AOSS_2930M_MANY_MISSING)
+        said = page.locator(_tid("migrate-device-source-note-inconsistent"))
+        expect(said).to_contain_text("480 port names the config uses are not on this device: ")
+        expect(said).to_contain_text(" …")
+
+    def test_a_config_that_names_no_port_is_not_shown_as_checked(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """The device is stated and nothing could be checked against
+        it.  That is said, in amber: it is not a pass."""
+        _open(page, live_server_url, _AOSS_NO_PORT_NAMED)
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value(
+            SOURCE_2930F_48G
+        )
+        expect(page.locator(_tid("migrate-device-source-note-inconsistent"))).to_have_count(0)
+        expect(_source_note(page)).to_contain_text("The config names no port")
+        expect(_source_note(page)).to_have_class(re.compile(r"\bnotice-warn\b"))
+
+    def test_a_member_line_that_could_not_be_read_is_said(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """A stack of two whose second member carries an order suffix
+        the detector does not read comes back as a stack of one -- and
+        says a line was left out."""
+        _open(page, live_server_url, _AOSS_STACK_ONE_LINE_UNREAD)
+        expect(_source_note(page)).to_contain_text("1 line(s) of the stanza begin")
+        expect(_source_note(page)).to_contain_text("could not be read as a member")
+
+    def test_when_nothing_is_proposed_the_reason_is_shown(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """Two families in one stanza: no device is proposed, and the
+        line starts with the reason.  The detector's own remarks
+        follow it."""
+        _open(page, live_server_url, _AOSS_TWO_FAMILIES)
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value("")
+        expect(page.locator(_tid("migrate-device-source-note-detect-note-0"))).to_contain_text(
+            "The members belong to different model families"
+        )
+        expect(page.locator(_tid("migrate-device-source-note-detect-note-1"))).to_contain_text(
+            "A member line shows what the stack is provisioned for"
+        )
+
+    def test_a_part_no_family_describes_is_named(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        _open(page, live_server_url, _AOSS_UNKNOWN_PART)
+        expect(page.locator(_tid("migrate-device-source-note-unknown-parts"))).to_contain_text(
+            "The config states ZZ999A, which no model family describes yet"
+        )
 
     def test_a_standalone_device_has_no_member_number(
         self, aoss_2930f: MigratePage, page: Page,

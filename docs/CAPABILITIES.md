@@ -852,7 +852,11 @@ Ports pane choose the *Source device* and the *Target device*.
   states it; open "Read from the config" under it to see the lines.
   It is a proposal: a `member` or `flexible-module` line shows what a
   device is provisioned for, not what is fitted.  Change it if it is
-  wrong.
+  wrong.  The line turns amber where the proposal does not stand on
+  its own: the config uses port names the device does not have (it
+  says how many, and the first few), or the config names no port, so
+  nothing could be checked against it.  Where no device could be
+  read, the line says why.
 * The line under each device says what you declared, how many ports
   that is and the first and last name, and how well the names are
   established.  A bay you did not state is counted as empty, and the
