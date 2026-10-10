@@ -96,6 +96,15 @@ PACKAGE = REPO_ROOT / "netcanon"
 #: quadratic work sixteen.  Halfway, on a log scale.
 _TOO_STEEP = 8.0
 
+#: A ratio of two timings near zero means nothing: the larger text has
+#: to take this long before its ratio is believed.
+_FLOOR = 0.5
+
+#: Past this the larger text is not read at a third size before it is
+#: called slow: a reader that costs the square of its input would take
+#: sixteen times as long again.
+_PLAINLY_SLOW = 2.0
+
 
 def _best(read: Callable[[str], object], text: str, tries: int = 3) -> float:
     """The quickest of *tries* readings.  A loaded machine only ever
@@ -738,15 +747,32 @@ def _with_a_run_in_every_line(text: str, spaces: int, where: str) -> str:
     return "\n".join(out)
 
 
-def _grows_faster_than_its_input(read: Callable[[str], object], make: Callable[[int], str], small: int) -> str:
+def _grows_faster_than_its_input(
+    read: Callable[[str], object],
+    make: Callable[[int], str],
+    small: int,
+    *,
+    largest: int | None = None,
+    floor: float = _FLOOR,
+) -> str:
     """Empty when reading ``make(4 * small)`` costs about four times
     ``make(small)``; otherwise what was measured.
 
     Quadratic work costs sixteen times.  One reading of each; only if
     that looks steep are both read again, the quicker of three -- so a
     text that is read in time costs one reading, and one stalled
-    reading fails nothing.  The floor is there because a ratio of two
+    reading fails nothing.  *floor* is there because a ratio of two
     timings near zero means nothing.
+
+    A step that still looks steep is then asked a second question: is
+    the NEXT step steep too?  A reader that costs the square of its
+    input is; one whose smaller reading happened to be quick is not.
+    On a shared CI runner a parse that is linear here over a 64-fold
+    range (3.3, 4.3 and 4.2 times for each four times the text) was
+    read once as 8.7 times -- 0.099 s and 0.857 s -- and two readings
+    cannot tell that from a defect.  The third size is not read where
+    it would decide nothing: past *largest* units (a probe reads a
+    window and no further), or once the second size is plainly slow.
     """
 
     def quietly(text: str) -> None:
@@ -757,10 +783,17 @@ def _grows_faster_than_its_input(read: Callable[[str], object], make: Callable[[
 
     low_text, high_text = make(small), make(4 * small)
     low, high = _best(quietly, low_text, 1), _best(quietly, high_text, 1)
-    if high > _TOO_STEEP * low and high > 0.5:
-        low, high = min(low, _best(quietly, low_text, 2)), min(high, _best(quietly, high_text, 2))
-        if high > _TOO_STEEP * low and high > 0.5:
-            return f"{small} units: {low:.3f}s; {4 * small} units: {high:.3f}s"
+    if not (high > _TOO_STEEP * low and high > floor):
+        return ""
+    low, high = min(low, _best(quietly, low_text, 2)), min(high, _best(quietly, high_text, 2))
+    if not (high > _TOO_STEEP * low and high > floor):
+        return ""
+    measured = f"{small} units: {low:.3f}s; {4 * small} units: {high:.3f}s"
+    if high > _PLAINLY_SLOW or (largest is not None and 16 * small > largest):
+        return measured
+    higher = _best(quietly, make(16 * small), 1)
+    if higher > _TOO_STEEP * high:
+        return f"{measured}; {16 * small} units: {higher:.3f}s"
     return ""
 
 
@@ -813,6 +846,7 @@ class TestEveryPublicCodec:
                 lambda text: probe(text[:DEFAULT_PROBE_BYTES]),
                 lambda lines, lead=lead: lead + FILLERS[filler] * lines,
                 most,
+                largest=4 * most,  # the window: a third size would be the second again
             )
             assert not slow, f"{name}.probe on a window of {filler}: {slow}"
 
@@ -836,7 +870,7 @@ class TestEveryPublicCodec:
         def lines_of_spaces(lines: int) -> str:
             return _with_a_run(capture, "   \n" * lines)
 
-        assert _grows_faster_than_its_input(indented.findall, lines_of_spaces, 4_000)
+        assert _grows_faster_than_its_input(indented.findall, lines_of_spaces, 4_000, largest=16_000)
         assert not _grows_faster_than_its_input(mended.findall, lines_of_spaces, 4_000)
 
         def joined_by_adding(text: str) -> str:
@@ -852,7 +886,7 @@ class TestEveryPublicCodec:
         def continued(lines: int) -> str:
             return _with_a_run(capture, GOES_ON["continued lines"] * lines)
 
-        assert _grows_faster_than_its_input(joined_by_adding, continued, 16_000)
+        assert _grows_faster_than_its_input(joined_by_adding, continued, 16_000, largest=64_000)
 
     def test_netcanon_is_the_package_under_test(self) -> None:
         assert Path(netcanon.__file__).resolve().parent == PACKAGE
@@ -865,6 +899,21 @@ class TestEveryPublicCodec:
 
 def _config(*lines: str) -> str:
     return "\n".join(lines) + "\n"
+
+
+def _routes(count: int) -> str:
+    return _config(*(f"route {number}" for number in range(count)))
+
+
+def _takes(seconds: float) -> None:
+    """Take *seconds*, whatever the machine: the controls of the
+    timing check plant their cost with this.  Not ``time.sleep``,
+    whose shortest sleep is a scheduler tick -- fifteen milliseconds
+    on Windows -- so that a planted cost of four came out as fifteen
+    and the ratio the control is about was gone."""
+    until = time.perf_counter() + seconds
+    while time.perf_counter() < until:
+        pass
 
 
 _AOSS_TOP = ("; J9729A Configuration Editor; Created on release #WB.16.08.0001", 'hostname "sw"')
@@ -1100,26 +1149,53 @@ class TestParseFitsTheNumberOfItsStanzas:
 
         def costs_the_square_of_its_lines(text: str) -> None:
             lines = text.count("\n")
-            time.sleep(lines * lines * 2.5e-8)
+            _takes(lines * lines * 2e-9)
 
         # Asked up to three times: the first pair of readings decides
         # that a text is read in time, so one stalled reading of the
         # smaller text would pass a slow reader.  That is the safe way
         # round for the check, and the wrong way round for this test.
-        assert any(
-            _grows_faster_than_its_input(
-                costs_the_square_of_its_lines, lambda count: _config(*(f"route {n}" for n in range(count))), 1500,
+        said = ""
+        for _attempt in range(3):
+            said = said or _grows_faster_than_its_input(
+                costs_the_square_of_its_lines, _routes, 1500, floor=0.02,
             )
-            for _attempt in range(3)
-        )
+        # All three sizes were read: it is steep at each step.
+        assert said.count("units") == 3, said
 
     def test_and_passes_a_reader_whose_cost_is_its_length(self) -> None:
-        """As long at the larger size as the reader above, and four
+        """As long at the middle size as the reader above, and four
         times the smaller, not sixteen."""
 
         def costs_its_lines(text: str) -> None:
-            time.sleep(text.count("\n") * 1.5e-4)
+            _takes(text.count("\n") * 1.2e-5)
+
+        assert not _grows_faster_than_its_input(costs_its_lines, _routes, 1500, floor=0.02)
+
+    def test_and_passes_a_reader_that_was_only_steep_once(self) -> None:
+        """What a CI runner did to a linear parse: the smaller text
+        read quickly, the next one eight and a half times slower, and
+        nothing of the kind after that.  Two readings cannot tell this
+        from a defect; the third size can."""
+
+        def costs_its_lines_after_a_quick_start(text: str) -> None:
+            lines = text.count("\n")
+            _takes(lines * 1.2e-5 if lines > 1500 else lines * 5e-6)
 
         assert not _grows_faster_than_its_input(
-            costs_its_lines, lambda count: _config(*(f"route {n}" for n in range(count))), 1500,
+            costs_its_lines_after_a_quick_start, _routes, 1500, floor=0.02,
+        )
+
+    def test_a_third_size_is_not_read_past_the_largest_that_means_anything(self) -> None:
+        """A probe reads a window.  Past it nothing grows, so a third
+        size would clear a reader that is quadratic within the window:
+        with *largest* given, two steep readings are the verdict."""
+
+        def squares_within_a_window(text: str) -> None:
+            lines = min(text.count("\n"), 6000)
+            _takes(lines * lines * 2e-9)
+
+        assert not _grows_faster_than_its_input(squares_within_a_window, _routes, 1500, floor=0.02)
+        assert _grows_faster_than_its_input(
+            squares_within_a_window, _routes, 1500, floor=0.02, largest=6000,
         )
