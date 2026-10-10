@@ -7,9 +7,10 @@ Public surface:
 * :func:`resolve_adapter_or_422` — translate adapter-name lookup
   errors into 422s with side-aware ``source`` / ``target`` framing.
 * :func:`resolve_input_text` — return the raw config text referenced
-  by a :class:`MigrationPlanRequest` body, enforcing the
-  ``raw_text`` XOR ``source_filename`` invariant and translating
-  storage misses into 404s.
+  by a request body that names its config one of the two ways
+  (:class:`HasInputText`: a plan request, a detect-deployment
+  request), enforcing the ``raw_text`` XOR ``source_filename``
+  invariant and translating storage misses into 404s.
 * :func:`get_target_profiles` — pull the target-profile registry
   from ``request.app.state``; returns an empty dict when the
   attribute is absent (some unit-test fixtures don't run the full
@@ -49,7 +50,7 @@ without spinning up a TestClient.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import HTTPException, Request
 
@@ -88,8 +89,15 @@ def resolve_adapter_or_422(name: str, side: str):
         ) from exc
 
 
+class HasInputText(Protocol):
+    """A request body that names its config one of the two ways."""
+
+    raw_text: str | None
+    source_filename: str | None
+
+
 def resolve_input_text(
-    body: MigrationPlanRequest, storage: BaseConfigStore
+    body: HasInputText, storage: BaseConfigStore
 ) -> str:
     """Return the raw config text referenced by *body*.
 
