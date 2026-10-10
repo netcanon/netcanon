@@ -49,9 +49,9 @@ probe:
   # spaces; patterns anchor per-line via re.MULTILINE in the parser.
   command: "show system"
   patterns:
-    detected_os_version: '^\s*Software revision\s*:\s+(\S+)'
-    detected_model: '^\s*Hardware\s*:\s+(.+?)\s*$'
-    detected_serial: '^\s*Serial Number\s*:\s+(\S+)'
+    detected_os_version: '^[^\S\n]*Software revision\s*:\s+(\S+)'
+    detected_model: '^[^\S\n]*Hardware\s*:\s+(\S(?:.*\S)?)\s*$'
+    detected_serial: '^[^\S\n]*Serial Number\s*:\s+(\S+)'
 
 notes: >
   Aruba AOS-S 16.x (formerly HP ProCurve).  Netmiko `aruba_osswitch` driver

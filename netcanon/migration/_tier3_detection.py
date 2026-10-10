@@ -38,6 +38,13 @@ False positives are preferred to false negatives (the goal is
 "operator sees something" not "operator sees an exact list").  The
 output is OUTPUT-ONLY: it never feeds the renderer or any transform.
 This is a notification surface, not a translator.
+
+Every pattern here is applied to the whole source text, which is
+whatever was pasted.  A pattern for an indented line begins
+``^[^\\S\\n]`` — white space that is not a newline — never ``^\\s``:
+``\\s`` crosses newlines, so from every line start it would walk the
+whole run of blank lines it is in, and a run costs its square.
+``tests/unit/test_untrusted_text_cost.py`` times each of them.
 """
 
 from __future__ import annotations
@@ -62,7 +69,7 @@ _IOSXE_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     # off-box, NOTHING fired). Require `ip`/`ipv6` immediately before
     # `access-group` so `ip igmp access-group` (a multicast join-filter) is
     # excluded, plus a trailing `in`/`out` direction (blind audit 81d9740 T0-4).
-    re.compile(r"^\s+ip(?:v6)?\s+access-group\s+\S+\s+(?:in|out)\b", re.MULTILINE),
+    re.compile(r"^[^\S\n]+ip(?:v6)?\s+access-group\s+\S+\s+(?:in|out)\b", re.MULTILINE),
     re.compile(r"^ip nat\s+(?:inside|outside|pool)\b.*$", re.MULTILINE),
     re.compile(r"^class-map\b.*$", re.MULTILINE),
     re.compile(r"^policy-map\b.*$", re.MULTILINE),
@@ -86,7 +93,7 @@ _IOSXE_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     # operator told "MLAG existed" cannot act; one told WHICH
     # Port-Channels were dual-homed can.
     re.compile(r"^mlag configuration\b", re.MULTILINE),
-    re.compile(r"^\s+mlag\s+\d+\s*$", re.MULTILINE),
+    re.compile(r"^[^\S\n]+mlag\s+\d+\s*$", re.MULTILINE),
 )
 
 # FortiOS shape — `config <path>` headers for sections the FortiGate
@@ -223,15 +230,15 @@ _AOSCX_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
 # blocks nested under `protocols {`); `\b` keeps the label to the bare
 # keyword (the trailing ` {` is not captured).
 _VYOS_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"^\s*nat\b", re.MULTILINE),
-    re.compile(r"^\s*nat66\b", re.MULTILINE),
-    re.compile(r"^\s*firewall\b", re.MULTILINE),
-    re.compile(r"^\s*policy\b", re.MULTILINE),
-    re.compile(r"^\s*vpn\b", re.MULTILINE),
-    re.compile(r"^\s+bgp\b", re.MULTILINE),
-    re.compile(r"^\s+ospf(?:v3)?\b", re.MULTILINE),
-    re.compile(r"^\s+rip\b", re.MULTILINE),
-    re.compile(r"^\s+isis\b", re.MULTILINE),
+    re.compile(r"^[^\S\n]*nat\b", re.MULTILINE),
+    re.compile(r"^[^\S\n]*nat66\b", re.MULTILINE),
+    re.compile(r"^[^\S\n]*firewall\b", re.MULTILINE),
+    re.compile(r"^[^\S\n]*policy\b", re.MULTILINE),
+    re.compile(r"^[^\S\n]*vpn\b", re.MULTILINE),
+    re.compile(r"^[^\S\n]+bgp\b", re.MULTILINE),
+    re.compile(r"^[^\S\n]+ospf(?:v3)?\b", re.MULTILINE),
+    re.compile(r"^[^\S\n]+rip\b", re.MULTILINE),
+    re.compile(r"^[^\S\n]+isis\b", re.MULTILINE),
 )
 
 # OPNsense XML element shape (heuristic — substring presence check on
@@ -293,7 +300,7 @@ _DELLOS10_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     # WHICH port-channels were dual-homed can.  Cardinality is bounded by
     # the number of dual-homed bundles (1 per capture on the committed
     # corpus), not by port count, so this does not flood the banner.
-    re.compile(r"^\s*vlt-port-channel\s+\d+", re.MULTILINE),
+    re.compile(r"^[^\S\n]*vlt-port-channel\s+\d+", re.MULTILINE),
     re.compile(r"^interface breakout\b", re.MULTILINE),
     # `system-user linuxadmin` is the switch's underlying LINUX shell
     # account, not a NOS login, so the codec deliberately does not model it

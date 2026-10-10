@@ -558,7 +558,11 @@ class MikroTikRouterOSCodec(CodecBase):
         if detect_input_shape(raw_prefix) is not None:
             return None
         # Banner comment from /export is the single strongest signal.
-        if re.search(r"^#\s*.*by RouterOS", raw_prefix, re.MULTILINE):
+        # ``^#.*`` and not ``^#\s*.*``: the two overlap, so a ``#``
+        # followed by a run of spaces was split between them every
+        # way there is -- and ``\s`` let the banner begin on one line
+        # and end on another, which no export does.
+        if re.search(r"^#.*by RouterOS", raw_prefix, re.MULTILINE):
             return (98, "'# ... by RouterOS' banner header present")
 
         # Gather all weaker signals, pick the strongest.  Two+ section

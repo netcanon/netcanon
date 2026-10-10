@@ -68,6 +68,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
+from .._helpers import GrowingIndex
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -243,6 +244,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     top_level_lines: list[list[str]] = []
     group_lines: dict[str, list[list[str]]] = {}
     applied_groups: list[str] = []
+    # Beside the list, which keeps the order: asked of the list, "is
+    # this group already applied" was a scan per ``apply-groups`` line.
+    applied: set[str] = set()
+    found = _Found(intent)
 
     for raw_line in raw.splitlines():
         line = raw_line.strip()
@@ -267,7 +272,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             for gname in tokens[1:]:
                 if gname in ("[", "]"):
                     continue
-                if gname not in applied_groups:
+                if gname not in applied:
+                    applied.add(gname)
                     applied_groups.append(gname)
             continue
         top_level_lines.append(tokens)
@@ -286,7 +292,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             _dispatch_set(
                 tokens, intent, iface_state, range_state,
                 lag_state, irb_state, dhcp_pool_state, dhcp_group_iface,
-                vlan_by_id, vlan_by_name,
+                vlan_by_id, vlan_by_name, found,
             )
     # Pass 2b: apply top-level content.  Scalars set by group
     # content get overwritten; list-shaped fields accumulate
@@ -295,7 +301,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         _dispatch_set(
             tokens, intent, iface_state, range_state,
             lag_state, irb_state, dhcp_pool_state, dhcp_group_iface,
-            vlan_by_id, vlan_by_name,
+            vlan_by_id, vlan_by_name, found,
         )
 
     # GAP 9b: preserve both the apply-groups STATEMENT and the
@@ -1167,6 +1173,29 @@ def _blockform_to_setform(raw: str) -> str:
     return "\n".join(out_lines) + ("\n" if out_lines else "")
 
 
+class _Found:
+    """The records a set-line handler looks for among everything the
+    earlier lines made: a user by name, a routing instance by name, a
+    static route by destination, next hop and VRF, a VNI by VLAN and
+    number.
+
+    Each handler runs once per line.  Looking through the whole list
+    each time (``next(...)``, ``any(...)``) cost the square of the
+    lines: a few thousand static routes took seconds, and the text is
+    whatever was pasted.  One of these is made per parse and handed
+    down; a handler called by itself makes its own.
+    """
+
+    def __init__(self, intent: CanonicalIntent) -> None:
+        self.users = GrowingIndex(lambda: intent.local_users, lambda user: user.name)
+        self.instances = GrowingIndex(lambda: intent.routing_instances, lambda ri: ri.name)
+        self.routes = GrowingIndex(
+            lambda: intent.static_routes,
+            lambda route: (route.destination, route.gateway, route.vrf),
+        )
+        self.vnis = GrowingIndex(lambda: intent.vxlan_vnis, lambda vx: (vx.vlan_id, vx.vni))
+
+
 def _dispatch_set(
     tokens: list[str],
     intent: CanonicalIntent,
@@ -1178,6 +1207,7 @@ def _dispatch_set(
     dhcp_group_iface: dict[str, str] | None = None,
     vlan_by_id: dict[int, CanonicalVlan] | None = None,
     vlan_by_name: dict[str, CanonicalVlan] | None = None,
+    found: _Found | None = None,
 ) -> None:
     """Apply one set-line's token list to *intent*.
 
@@ -1197,12 +1227,15 @@ def _dispatch_set(
     ``dhcp_pool_state`` / ``dhcp_group_iface`` cover the Cluster
     E.1-B DHCP-server surfaces (modern + legacy grammars).  Both
     optional for legacy callers.
+
+    ``found`` is the per-parse lookup of records by key
+    (:class:`_Found`); optional for the same callers.
     """
     if not tokens:
         return
     head = tokens[0]
     if head == "system":
-        _apply_system(tokens[1:], intent, dhcp_pool_state, dhcp_group_iface)
+        _apply_system(tokens[1:], intent, dhcp_pool_state, dhcp_group_iface, found)
     elif head == "access":
         # Cluster E.1-B: ``set access address-assignment pool <P>
         # family inet ...`` (modern form DHCP server pool grammar).
@@ -1212,15 +1245,15 @@ def _dispatch_set(
             tokens[1:], iface_state, range_state, lag_state, irb_state,
         )
     elif head == "vlans":
-        _apply_vlans(tokens[1:], intent, irb_state, vlan_by_id, vlan_by_name)
+        _apply_vlans(tokens[1:], intent, irb_state, vlan_by_id, vlan_by_name, found)
     elif head == "routing-options":
-        _apply_routing_options(tokens[1:], intent)
+        _apply_routing_options(tokens[1:], intent, found)
     elif head == "snmp":
         _apply_snmp(tokens[1:], intent)
     elif head == "routing-instances":
         # GAP 6: ``set routing-instances <name> ...`` populates
         # CanonicalRoutingInstance + per-interface VRF membership.
-        _apply_routing_instances(tokens[1:], intent)
+        _apply_routing_instances(tokens[1:], intent, found)
     elif head == "switch-options":
         # GAP-EVPN-2: ``set switch-options vtep-source-interface <NAME>``
         # and ``set switch-options vxlan-port <N>`` are switch-level
@@ -1240,6 +1273,7 @@ def _apply_system(
     intent: CanonicalIntent,
     dhcp_pool_state: dict[str, dict[str, Any]] | None = None,
     dhcp_group_iface: dict[str, str] | None = None,
+    found: _Found | None = None,
 ) -> None:
     if not tokens:
         return
@@ -1294,10 +1328,7 @@ def _apply_system(
         # ``set system login user <name> authentication encrypted-password "<hash>"``
         user_name = tokens[2]
         # Find (or create) the user in intent.local_users.
-        existing = next(
-            (u for u in intent.local_users if u.name == user_name),
-            None,
-        )
+        existing = (found or _Found(intent)).users.get(user_name)
         if existing is None:
             existing = CanonicalLocalUser(name=user_name, privilege_level=1)
             intent.local_users.append(existing)
@@ -1859,6 +1890,7 @@ def _apply_vlans(
     irb_state: dict[int, dict[str, Any]] | None = None,
     vlan_by_id: dict[int, CanonicalVlan] | None = None,
     vlan_by_name: dict[str, CanonicalVlan] | None = None,
+    found: _Found | None = None,
 ) -> None:
     """``set vlans <NAME> vlan-id <N>``
     ``set vlans <NAME> vxlan vni <VNI>``  (GAP 6)
@@ -1925,10 +1957,7 @@ def _apply_vlans(
         existing_vlan = vlan_by_name.get(vlan_name)
         if existing_vlan is not None:
             # Don't duplicate if already recorded.
-            already = any(
-                x.vlan_id == existing_vlan.id and x.vni == vni
-                for x in intent.vxlan_vnis
-            )
+            already = (existing_vlan.id, vni) in (found or _Found(intent)).vnis
             if not already:
                 intent.vxlan_vnis.append(CanonicalVxlan(
                     vlan_id=existing_vlan.id, vni=vni,
@@ -2150,7 +2179,7 @@ def _apply_system_services_dhcp(
 
 
 def _apply_routing_instances(
-    tokens: list[str], intent: CanonicalIntent,
+    tokens: list[str], intent: CanonicalIntent, found: _Found | None = None,
 ) -> None:
     """GAP 6: ``set routing-instances <name> ...`` grammar.
 
@@ -2200,12 +2229,7 @@ def _apply_routing_instances(
     ):
         dest = rest[3]
         gateway = rest[5]
-        already = any(
-            r.destination == dest
-            and r.gateway == gateway
-            and r.vrf == ri_name
-            for r in intent.static_routes
-        )
+        already = (dest, gateway, ri_name) in (found or _Found(intent)).routes
         if not already:
             intent.static_routes.append(CanonicalStaticRoute(
                 destination=dest,
@@ -2220,9 +2244,7 @@ def _apply_routing_instances(
 
     # All other sub-paths describe the routing-instance itself —
     # materialise (or find) it.
-    ri = next(
-        (r for r in intent.routing_instances if r.name == ri_name), None,
-    )
+    ri = (found or _Found(intent)).instances.get(ri_name)
     if ri is None:
         ri = CanonicalRoutingInstance(name=ri_name)
         intent.routing_instances.append(ri)
@@ -2319,7 +2341,7 @@ def _apply_routing_instances(
 
 
 def _apply_routing_options(
-    tokens: list[str], intent: CanonicalIntent,
+    tokens: list[str], intent: CanonicalIntent, found: _Found | None = None,
 ) -> None:
     """``set routing-options static route <dest>/<prefix> next-hop <gw>``"""
     if len(tokens) < 5:
@@ -2333,13 +2355,7 @@ def _apply_routing_options(
             # De-dup: if GAP 8's two-pass parse or GAP 9b's group-
             # content render replays the same route at both levels,
             # we don't want to double up in the canonical list.
-            already = any(
-                r.destination == dest
-                and r.gateway == gateway
-                and r.vrf == ""
-                for r in intent.static_routes
-            )
-            if already:
+            if (dest, gateway, "") in (found or _Found(intent)).routes:
                 return
             intent.static_routes.append(CanonicalStaticRoute(
                 destination=dest,

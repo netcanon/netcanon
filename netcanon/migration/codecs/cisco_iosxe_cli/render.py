@@ -943,7 +943,8 @@ def _extract_lag_number(lag_name: str) -> int | None:
     LAG syntax is integer-keyed regardless of the source vendor's
     naming convention.  Returns None for names with no trailing
     digits."""
-    m = re.search(r"(\d+)\s*$", lag_name or "")
+    # ``(?<!\d)``: see the note in arista_eos/port_names.py.
+    m = re.search(r"(?<!\d)(\d+)\s*$", lag_name or "")
     if m is None:
         return None
     try:

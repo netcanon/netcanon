@@ -209,7 +209,7 @@ _ACTIVE_GW_MAC_RE = re.compile(
 )
 #: MULTILINE variant for the intent-level chassis-MAC scan.
 _ACTIVE_GW_MAC_TOP_RE = re.compile(
-    r"^\s+active-gateway\s+ip\s+mac\s+(\S+)\s*$",
+    r"^[^\S\n]+active-gateway\s+ip\s+mac\s+(\S+)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 #: ``active-gateway ip <vip>`` — the digit guard means it never matches

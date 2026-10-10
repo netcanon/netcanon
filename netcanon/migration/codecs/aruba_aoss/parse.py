@@ -57,7 +57,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
-from .._helpers import _mask_to_prefix
+from .._helpers import GrowingIndex, _mask_to_prefix
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -504,8 +504,11 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
     Aruba fixtures had near-empty port-membership lists on parse;
     the canonical coverage was materially under-reported.
     """
-    m_lo = re.match(r"^(.*?)(\d+)$", lo)
-    m_hi = re.match(r"^(.*?)(\d+)$", hi)
+    # ``(?<!\d)``: the number begins where the trailing digits begin,
+    # which is where the lazy prefix would stop anyway -- but without
+    # it a token of digits and then a letter is tried at every digit.
+    m_lo = re.match(r"^(.*?)(?<!\d)(\d+)$", lo)
+    m_hi = re.match(r"^(.*?)(?<!\d)(\d+)$", hi)
     if not m_lo or not m_hi:
         return [lo, hi]   # no trailing digits — pass through as-is
     prefix_lo, num_lo = m_lo.group(1), int(m_lo.group(2))
@@ -527,6 +530,10 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
         )
         return [lo, hi]
     return [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
+
+
+#: What the SNMPv3 user index reads while a config has no SNMP section.
+_NO_USERS: list[CanonicalSNMPv3User] = []
 
 
 def _build_lag_from_trunk_line(m: re.Match[str]) -> CanonicalLAG | None:
@@ -921,6 +928,28 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     intent.source_version = _extract_version(raw)
 
     lines = raw.splitlines()
+    # What a line looks for among everything the earlier lines made is
+    # found by key.  Looked for by reading the whole list -- per user
+    # line, per RADIUS line, per trunk line, per VLAN stanza -- a config
+    # of N such lines cost N squared.
+    v3_users = GrowingIndex(
+        lambda: intent.snmp.v3_users if intent.snmp is not None else _NO_USERS,
+        lambda user: user.name,
+    )
+    radius_by_host = GrowingIndex(lambda: intent.radius_servers, lambda server: server.host)
+    # The dict a trunk line used to build from every interface: of two
+    # stanzas of one name the later one answered.
+    iface_at_trunk = GrowingIndex(lambda: intent.interfaces, lambda iface: iface.name, last=True)
+    # RADIUS servers a global ``radius-server key`` line may still have
+    # to give its key to, and how many servers have been looked at.
+    keyless: list[CanonicalRADIUSServer] = []
+    servers_seen = 0
+    # Which VLAN record a port is untagged in, and the ports each
+    # record has since lost to a later stanza (taken out after the
+    # loop: until then the record still lists them, and nothing in the
+    # loop reads an earlier VLAN's list).
+    untagged_in: dict[str, CanonicalVlan] = {}
+    lost: dict[int, tuple[CanonicalVlan, set[str]]] = {}
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -989,10 +1018,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             if priv_p:
                 pl = priv_p.lower()
                 priv_norm = "aes128" if pl == "aes" else pl
-            existing = next(
-                (u for u in intent.snmp.v3_users if u.name == name),
-                None,
-            )
+            existing = v3_users.get(name)
             if existing is not None:
                 existing.auth_protocol = (auth_p or "").lower()
                 existing.auth_passphrase = auth_pw or ""
@@ -1017,12 +1043,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             if intent.snmp is None:
                 intent.snmp = CanonicalSNMP()
             group_name, user_name = v3g.groups()
-            found = False
-            for u in intent.snmp.v3_users:
-                if u.name == user_name:
-                    u.group = group_name
-                    found = True
-                    break
+            bound = v3_users.get(user_name)
+            found = bound is not None
+            if bound is not None:
+                bound.group = group_name
             if not found:
                 # Group declared for user we haven't seen yet —
                 # create a stub; later ``snmpv3 user`` merges.
@@ -1127,10 +1151,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             km = _RADIUS_INLINE_KEY_RE.search(rest)
             if km:
                 key = km.group(1).strip().strip('"')
-            existing = next(
-                (s for s in intent.radius_servers if s.host == host),
-                None,
-            )
+            existing = radius_by_host.get(host)
             if existing is None:
                 intent.radius_servers.append(CanonicalRADIUSServer(
                     host=host,
@@ -1153,9 +1174,20 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             # Global-scope key — apply to any RADIUS server that
             # didn't carry its own inline key.
             global_key = rk.group(1).strip().strip('"')
-            for server in intent.radius_servers:
-                if not server.key:
-                    server.key = global_key
+            # Only a server with no key can take it.  Those are kept
+            # apart, and every server is looked at once to find them.
+            # An empty key gives nothing to anyone: after it every
+            # server is as it was, and none is read.
+            if global_key:
+                while servers_seen < len(intent.radius_servers):
+                    server = intent.radius_servers[servers_seen]
+                    servers_seen += 1
+                    if not server.key:
+                        keyless.append(server)
+                for server in keyless:
+                    if not server.key:
+                        server.key = global_key
+                keyless = []
             i += 1
             continue
 
@@ -1224,9 +1256,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 intent.lags.append(lag)
                 # Reverse-link each member to this LAG so the
                 # canonical tree stays consistent.
-                iface_by_name = {i.name: i for i in intent.interfaces}
                 for member in lag.members:
-                    m_iface = iface_by_name.get(member)
+                    m_iface = iface_at_trunk.get(member)
                     if m_iface is not None and m_iface.lag_member_of is None:
                         m_iface.lag_member_of = lag.name
             i += 1
@@ -1252,15 +1283,16 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             # Aruba 2930F config guide ("Configuring VLANs / VLAN
             # port assignments") confirms move-on-reassign as the
             # canonical AOS-Switch behaviour.
-            if vlan.untagged_ports:
-                claimed = set(vlan.untagged_ports)
-                for prior_vlan in intent.vlans:
-                    if not prior_vlan.untagged_ports:
-                        continue
-                    prior_vlan.untagged_ports = [
-                        p for p in prior_vlan.untagged_ports
-                        if p not in claimed
-                    ]
+            #
+            # A port is untagged in one record at a time, so the record
+            # that loses it is found by the port -- not by reading
+            # every earlier VLAN for every stanza, which made a config
+            # of N stanzas cost N squared.
+            for port in dict.fromkeys(vlan.untagged_ports):
+                holder = untagged_in.get(port)
+                if holder is not None:
+                    lost.setdefault(id(holder), (holder, set()))[1].add(port)
+                untagged_in[port] = vlan
             intent.vlans.append(vlan)
             # SVI absorption — codepath 1 of 3.  See
             # ._svi_absorption for the full rule.  AOS-S packs
@@ -1301,6 +1333,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
         # Unrecognised top-level line — skip.
         i += 1
+
+    # The ports each VLAN lost to a later stanza leave it now.
+    for holder, ports in lost.values():
+        holder.untagged_ports = [p for p in holder.untagged_ports if p not in ports]
 
     # LAG-member linkage post-pass.  The inline linking at the
     # ``trunk`` line above only catches members whose

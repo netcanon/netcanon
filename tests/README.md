@@ -80,6 +80,23 @@ pytest --cov=netcanon --cov-report=term-missing
 pytest -m "not e2e" -n auto
 ```
 
+One unit module is slower than its neighbours on purpose:
+`tests/unit/test_untrusted_text_cost.py` reads the clock.  It builds a
+text for every regex the product holds and times every codec's `probe`
+and `parse` on a capture with a run put into it, to find code whose
+cost grows faster than its input.  It takes tens of seconds, and far
+longer when it fails, because what it has then found is slow.  It is
+built not to flake: each reading is the best of several, a text that
+looks slow is read again, and a step that still looks steep has to be
+steep at the next size too before anything is called slow (two
+readings once took a linear parse for a defect on a CI runner).  So a
+failure there is something to look at before it is retried.  The longer
+search for the same thing — every line and block of every capture
+written many times over — is not a test: `python
+tools/stanza_cost_search.py` takes minutes and is run by hand when a
+parser's handler changes (`tests/unit/tools/test_stanza_cost_search.py`
+pins that it can find what it is for).
+
 ## Test Isolation
 
 | Layer       | Isolation mechanism |

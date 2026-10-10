@@ -263,7 +263,8 @@ def _lag_name_to_aos_trunk(name: str) -> str:
     """
     if re.match(r"^[Tt]rk\d+$", name):
         return name.lower()
-    m = re.search(r"(\d+)$", name)
+    # ``(?<!\d)``: see the note in arista_eos/port_names.py.
+    m = re.search(r"(?<!\d)(\d+)$", name)
     if m:
         return f"trk{m.group(1)}"
     return "trk1"

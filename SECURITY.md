@@ -475,6 +475,107 @@ the caps; no MAC-shaped string anywhere in a proposal) and
 
 ---
 
+## Input Validation — Config Text (what it costs to read)
+
+**Files:** `netcanon/migration/_tier3_detection.py`, every codec's
+`codec.py` (`probe`), `parse.py` and `render.py` under
+`netcanon/migration/codecs/`, `netcanon/services/migration_detect.py`,
+the probe and prompt patterns under `netcanon/definitions/library/`
+
+A config is whatever was pasted.  `POST /api/v1/migration/detect`, `/plan`,
+the per-pane plan endpoints and `POST /api/v1/sanitize` hand it to code
+written for real configs.  The pasted text is capped in length (10,000,000
+characters on a plan request); the cap bounds memory, not time, because code
+can take time that grows with the square of the text.  The server is one
+process and a pattern at work does not let its other threads run, so one such
+request delays every other.  There is no time limit on a request.
+
+Five shapes did, and were mended:
+
+* **A line-anchored pattern that began with `\s`**, applied to the whole
+  text under `re.MULTILINE`.  `\s` matches a newline, so from every line
+  start the pattern walked to the end of the run of blank lines it was in.  A
+  probe window of lines of spaces held detection for about a minute; a parse
+  of a 32 KB run took up to two seconds and quadrupled with each doubling.
+  Such patterns now begin with `[^\S\n]` — white space that is not a newline.
+* **A lazy value in front of trailing white space**, or two runs either side
+  of a separator that each could take it: a run of spaces inside a Dell OS10
+  route line, or after an IOS-XR `ntp` line, cost its square.
+* **A search that started again inside the run it had just crossed**: a
+  trailing number in a port name made of digits and then a letter; the
+  RouterOS key=value pattern on a long word.
+* **Code that was no pattern**: RouterOS line continuations were joined by
+  adding to one string, which was copied for every line it grew by.  Parsing
+  3 MB of continued lines took two and a half minutes.
+* **A handler that looked through everything the earlier lines had made**,
+  once per line: the routing instance of a `vrf` line, the static routes so
+  far, every interface for each `trunk` line, every earlier VLAN for each
+  `vlan` stanza.  Nothing in such a config is odd; the cost was the square of
+  the number of its stanzas.  Measured before the change: 6,000 RouterOS DHCP
+  networks and their pools (0.5 MB), 37 seconds; a FortiGate `config system
+  interface` block written 10,000 times (1.8 MB), 14; 12,000 AOS-S RADIUS
+  hosts (0.6 MB), 15; an Arista `interface Vxlan1` stanza written 6,000 times
+  (0.8 MB), 9; 16,000 Junos static routes (1 MB), 7.  Each is now under a
+  second: the record is found by key, and a pass over the whole tree is made
+  once.  Mended in the Arista, AOS-S, FortiGate, Junos, OPNsense and RouterOS
+  parsers, and in the switchport-to-VLAN projection the switch codecs share
+  (where AOS-CX and Dell OS10 had it).
+
+The same shapes in the shipped device definitions — probe patterns, which
+the collectors apply to what a device printed, and prompt patterns — were
+mended with them.
+
+Results are unchanged on every config in the repository and the development
+corpora: detection, every codec's probe and every codec's parsed tree were
+compared before and after, and every committed capture was replayed through
+the plan endpoints.  What did change in meaning is in each case the defect,
+or a text no device prints: a pattern for an *indented* keyword no longer
+matches that keyword at the left margin when the line before it is blank; a
+device-definition probe for a value no longer takes a value that is only
+white space; the RouterOS export banner has to be on one line; and in a
+prompt pattern the user or host part can no longer contain the separator
+that follows it.
+
+The control is a search for work that grows faster than the text, rather
+than a list of patterns: `tests/unit/test_untrusted_text_cost.py` builds, for
+every regex the product holds, texts from that pattern's own structure, and
+times every public codec's `probe` and `parse` on a real capture with a run
+put into it.  The fifth shape has a search of its own,
+`tools/stanza_cost_search.py`, which writes every line and block of every
+committed capture many times over; it takes minutes and is run by hand, and
+each handler it found is pinned in that test module with a text of its own.
+On the tree before this change it reports 51 units in six codecs; after, none.
+
+**A search is not a proof.**  It does not reach a pattern assembled at call
+time from parts that are not literals and not kept, a handler no capture has
+a line for, work that needs two kinds of stanza to grow together, or code
+that is slow on a shape the search does not build; the second to fifth shapes
+above were each found after an earlier version of the search had passed.
+
+**Known, and not mended by this change:**
+
+* **A list of one record that a line adds to after reading it.**  The
+  addresses of one interface, the members of one LAG, the route targets of one
+  VRF are kept in a list, and a line that adds one first looks for it there.
+  Many lines for ONE record cost their square: 32,000 addresses on one Junos
+  IRB unit (2 MB) take 8 seconds.  The same idiom is in most of the parsers.
+* **What a config expands to.**  A range is a few bytes that parse to
+  thousands of entries, so the size of a request does not bound the memory it
+  takes.  One AOS-S line of 800 ranges of 1,001 ports (11 KB) is 800,000
+  names: about six seconds and 265 MB.  1,000 Arista trunks that each allow
+  VLANs 2-4000 (86 KB) are four million memberships: tens of seconds and over
+  3 GB.  That cost is linear in what was asked for; a real config of that
+  size costs the same.  (A range of unbounded span is refused where one was
+  found: AOS-S clamps a single port range at 1,024 names.)
+* **There is no time limit on a request**, and none on the memory one takes.
+
+A deployment that takes text from people it does not trust should put a
+request timeout and a memory limit in front of the application.  That advice
+is not only for texts built to be slow: the two items above are reachable
+with a config that is merely large.
+
+---
+
 ## Data Directory Isolation
 
 Runtime data directories (`devices/`, `schedules/`, `jobs/`, `configs/`)

@@ -1477,7 +1477,7 @@ _LOGICAL_SVI_NAME_RE = re.compile(
 # ``Port-Channel10`` -> ``10``; ``Trk1`` -> ``1``; ``bond5`` -> ``5``.
 # Digits anchored at the END of the name to handle shapes where the
 # vendor prefix is not separated by a delimiter.
-_LAG_DIGIT_SUFFIX_RE = re.compile(r"(\d+)\s*$")
+_LAG_DIGIT_SUFFIX_RE = re.compile(r"(?<!\d)(\d+)\s*$")
 
 
 def _lag_name_to_ae(
