@@ -297,6 +297,7 @@ def _group_by_section(raw: str) -> list[tuple[str, list[str]]]:
 
 _KV_RE = re.compile(
     r"""
+    (?<![\w\-])       # a key starts where one can: not inside a longer word
     ([\w\-]+)             # key
     =
     (                     # value:

@@ -477,7 +477,7 @@ class AristaEOSCodec(CodecBase):
         # through to cisco_iosxe_cli — surfaced by the dogfood detection
         # label-noise sweep (batfish eos_mlag / arista-originator detected as
         # cisco_iosxe_cli at margin 70-90).
-        if re.search(r"^!?\s*boot system\b.*\.swi\b", raw_prefix, re.MULTILINE):
+        if re.search(r"^!?[^\S\n]*boot system\b.*\.swi\b", raw_prefix, re.MULTILINE):
             return (95, "Arista EOS boot image (.swi)")
         # RANCID / oxidized collection header — an explicit, operator-tool
         # vendor declaration (real config repos carry it).  Zero false-positive

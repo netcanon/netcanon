@@ -26,6 +26,27 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Security
+
+- **Reading a pasted config could take time that grew with the square of
+  its blank lines.**  Patterns that began `^\s` and were applied to the
+  whole text walked, from every line start, to the end of the run of blank
+  lines they were in.  A 64 KB body of lines of spaces held `/detect` for
+  about a minute, and a parse slowed the same way; a pattern at work does
+  not let the server's other threads run, so that delayed every other
+  request.  The
+  patterns — in the `probe()` of nine codecs, in five parsers, in the
+  Tier-3 detection every `parse` runs, and in four probe patterns of the
+  shipped Arista and AOS-S device definitions — now use white space that
+  cannot cross a line.  A RouterOS key=value pattern that restarted inside
+  a long word is closed too.  Detection, every probe and every parsed tree
+  are unchanged on every config in the repository and the development
+  corpora.  One meaning changed, and was the defect: a pattern for an
+  indented keyword no longer matches it at the left margin after a blank
+  line.  A new test times every regex the product holds, and every codec's
+  `probe` and `parse`, so the next such pattern fails CI
+  (`tests/unit/test_untrusted_text_cost.py`).
+
 ### Fixed
 
 - **Target profiles that named ports the device does not have.**  A port

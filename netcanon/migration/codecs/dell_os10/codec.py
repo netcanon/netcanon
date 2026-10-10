@@ -766,7 +766,7 @@ class DellOS10Codec(CodecBase):
         ):
             return (98, "OS10 `system-user linuxadmin` Linux account")
         if re.search(
-            r"^vlt-domain\s+\d+|^\s*vlt-port-channel\s+\d+",
+            r"^vlt-domain\s+\d+|^[^\S\n]*vlt-port-channel\s+\d+",
             raw_prefix, re.IGNORECASE | re.MULTILINE,
         ):
             return (96, "Dell VLT domain / port-channel")

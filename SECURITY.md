@@ -445,6 +445,45 @@ at its boundary, against the named constant),
 
 ---
 
+## Input Validation — Config Text (what it costs to read)
+
+**Files:** `netcanon/migration/_tier3_detection.py`, every codec's
+`codec.py` (`probe`) and `parse.py` under `netcanon/migration/codecs/`,
+`netcanon/services/migration_detect.py`
+
+A config is whatever was pasted.  `POST /api/v1/migration/detect`, `/plan`,
+the per-pane plan endpoints and `POST /api/v1/sanitize` hand it to patterns
+written for real configs.  The pasted text is capped in length (10,000,000 characters on
+a plan request); the cap bounds memory, not time, because a pattern can take
+time that grows with the square of a run in the text.
+
+One class did: a line-anchored pattern that began with `\s`, applied to the
+whole text under `re.MULTILINE`.  `\s` matches a newline, so from every line
+start the pattern walked to the end of the run of blank lines it was in.  A
+probe window of lines of spaces held detection for about a minute; a parse
+of a 32 KB run took up to two seconds and quadrupled with each doubling.  The
+server is one process and a pattern at work does not let its other threads
+run, so one such request delayed every other.  Those patterns now use `[^\S\n]` — white space that is not a
+newline — and so does the same class in four patterns of the shipped device
+definitions, which the collectors apply to what a device printed.  A RouterOS
+key=value pattern that restarted inside a long word was closed the same way.
+
+Results are unchanged on every config in the repository and the development
+corpora: detection, every codec's probe and every codec's parsed tree were
+compared before and after.  One meaning did change, and was the defect: a
+pattern for an *indented* keyword no longer matches that keyword at the left
+margin when the line before it is blank.
+
+There is no time limit on a request.  The control is that reading the text
+costs what its length costs, and the test that holds it is an experiment
+rather than a list of patterns: `tests/unit/test_untrusted_text_cost.py`
+times every regex the product holds on repeated input, and every public
+codec's `probe` and `parse` on a real capture with a run of filler lines
+inserted.  It is a search over repeated short units, not a proof: a pattern
+that is slow only on some other shape of input would pass it.
+
+---
+
 ## Data Directory Isolation
 
 Runtime data directories (`devices/`, `schedules/`, `jobs/`, `configs/`)

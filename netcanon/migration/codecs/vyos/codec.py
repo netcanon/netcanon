@@ -659,7 +659,7 @@ class VyOSCodec(CodecBase):
             return (99, "VyOS config-version trailer present")
 
         # Set-form candidate — any `set ` line routes here.
-        if re.search(r"^\s*set\s+\S", raw_prefix, re.MULTILINE):
+        if re.search(r"^[^\S\n]*set\s+\S", raw_prefix, re.MULTILINE):
             return cls._probe_setform(raw_prefix)
 
         # ── Curly-brace structural fallback (no `set ` lines) ──
@@ -671,22 +671,22 @@ class VyOSCodec(CodecBase):
             return None
 
         markers = 0
-        if re.search(r"^\s*interfaces\s*\{", raw_prefix, re.MULTILINE):
+        if re.search(r"^[^\S\n]*interfaces\s*\{", raw_prefix, re.MULTILINE):
             markers += 1
         if re.search(
-            r"^\s+ethernet\s+eth\d+\s*\{", raw_prefix,
+            r"^[^\S\n]+ethernet\s+eth\d+\s*\{", raw_prefix,
             re.MULTILINE | re.IGNORECASE,
         ):
             markers += 1
         if re.search(
-            r"^\s+(?:loopback\s+lo|dummy\s+dum\d+|bonding\s+bond\d+)\s*\{",
+            r"^[^\S\n]+(?:loopback\s+lo|dummy\s+dum\d+|bonding\s+bond\d+)\s*\{",
             raw_prefix, re.MULTILINE | re.IGNORECASE,
         ):
             markers += 1
-        if re.search(r"^\s+disable\s*$", raw_prefix, re.MULTILINE):
+        if re.search(r"^[^\S\n]+disable\s*$", raw_prefix, re.MULTILINE):
             markers += 1
         if re.search(
-            r"^\s+host-name\s+\S", raw_prefix, re.MULTILINE | re.IGNORECASE,
+            r"^[^\S\n]+host-name\s+\S", raw_prefix, re.MULTILINE | re.IGNORECASE,
         ):
             markers += 1
 

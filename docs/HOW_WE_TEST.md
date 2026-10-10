@@ -176,6 +176,16 @@ hand beside it.  And it runs twice: without devices declared, where
 a port's hardware identity must stand still, and with the device
 declared on both sides, where it must follow.
 
+**What it costs to read a config is tested too.**  A config is
+whatever was pasted, and a pattern can take time that grows with the
+square of a run of blank lines in it.  `test_untrusted_text_cost.py`
+does not keep a list of patterns to avoid: it times every regex the
+product holds — literals in the source, compiled patterns a module
+keeps, patterns in the shipped device definitions — on repeated input
+at growing sizes, and every public codec's `probe` and `parse` on a
+real capture with a run of filler lines inserted.  Each of those
+checks is also handed something slow, and has to say so.
+
 ### Layer 2: Integration tests
 
 `pytest tests/integration` — HTTP API surface via FastAPI

@@ -130,7 +130,7 @@ _NTP_SERVER_LINE_RE = re.compile(
 #: ``logging monitor``, ``logging trap``).  Harvest the first IP-literal token
 #: per ``logging`` line, validated with :mod:`ipaddress` (mirrors the sibling
 #: Cisco codecs' ``_SYSLOG_LINE_RE``).
-_SYSLOG_LINE_RE = re.compile(r"^\s*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
+_SYSLOG_LINE_RE = re.compile(r"^[^\S\n]*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
 
 _IFACE_RE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)

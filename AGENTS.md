@@ -404,6 +404,35 @@ tests use these exclusively — never CSS classes or element structure.  See
   and PROVENANCE, so a plaintext secret that merely CONTAINS a colon
   (`my:secret`) stays migratable while an unregistered envelope from an
   unvouched source is refused.
+- **Never** begin a line-anchored pattern with `\s` when it is applied to
+  a whole text, and never hand text nobody vouches for to a pattern whose
+  cost you have not measured.  A config is whatever was pasted.  Under
+  `re.MULTILINE`, `^\s+X` does not mean "X, indented": `\s` matches a
+  newline, so from every line start the pattern walks to the end of the
+  run of blank lines it is in, fails, and walks back — a run of N blank
+  lines costs N squared.  A probe window of lines of spaces (64 KB) held
+  `/detect` for about a minute, and one parse of a 32 KB run took up to
+  two seconds and four times that for each doubling, on patterns in the
+  `probe()` of nine codecs, in five parsers, and in the Tier-3 detection
+  that every `parse` runs.  It is also not what the pattern meant:
+  `^\s+bgp\b` matched a top-level `bgp` line that followed a blank one.
+  Write `[^\S\n]` (white space that is not a newline — `arista_eos/parse.py`
+  already called it `_WS`).  The same defect has other shapes, and each has
+  been shipped once: an unanchored search that restarts inside a word it
+  has already crossed (`([\w-]+)=` over a long token — the RouterOS
+  key=value pattern), and a scrub pattern applied to a fragment another
+  pattern matched (the first deployment detector, #499).  A list of the
+  patterns that were wrong cannot show that none is left, so the guard is
+  an experiment: `tests/unit/test_untrusted_text_cost.py` times every regex
+  the product holds — source literals, compiled patterns kept by a module
+  or class, patterns in the shipped device definitions — on repeated input
+  at growing sizes, and every public codec's `probe` and `parse` on a real
+  capture with a run of filler lines inserted.  A pattern that is slow and
+  safe (it reads only data the server ships) goes in that module's
+  `KNOWN_SLOW` with the reason; an entry that stops being slow fails the
+  test.  What the scan cannot see is a pattern assembled inside a function
+  from parts that are not literals — only the codec experiment reaches
+  those, so keep such patterns out of the paths that read pasted text.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

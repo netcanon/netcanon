@@ -582,10 +582,10 @@ class FortiGateCLICodec(CodecBase):
         if re.search(r"^config\s+system\s+interface\s*$",
                      raw_prefix, re.MULTILINE):
             hits += 1
-        if re.search(r"^\s*edit\s+\"?\S+\"?\s*$",
+        if re.search(r"^[^\S\n]*edit\s+\"?\S+\"?\s*$",
                      raw_prefix, re.MULTILINE):
             hits += 1
-        if re.search(r"^\s*(next|end)\s*$", raw_prefix, re.MULTILINE):
+        if re.search(r"^[^\S\n]*(next|end)\s*$", raw_prefix, re.MULTILINE):
             hits += 1
         if hits >= 3:
             return (92, f"{hits} FortiOS grammar markers present")

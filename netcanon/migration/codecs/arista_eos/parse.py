@@ -92,7 +92,7 @@ _NTP_SERVER_RE = re.compile(
 # on any ``logging`` line and validate it with :mod:`ipaddress` — a numeric
 # sub-command argument is never a valid IPv4/IPv6 literal, so the guard rejects
 # the noise structurally (mirrors cisco_iosxe_cli ``_SYSLOG_LINE_RE``).
-_SYSLOG_LINE_RE = re.compile(r"^\s*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
+_SYSLOG_LINE_RE = re.compile(r"^[^\S\n]*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
 _IP_ROUTE_RE = re.compile(
     # ``ip route 0.0.0.0/0 10.0.0.1`` or ``ip route 10.0.0.0/8 Null0``,
     # plus the per-VRF form ``ip route vrf MGMT 0.0.0.0/0 192.168.2.1``.

@@ -747,17 +747,17 @@ class ArubaAOSCXCodec(CodecBase):
         ):
             markers += 1
         if re.search(
-            r"^\s+vlan\s+(?:access|trunk)\b", raw_prefix,
+            r"^[^\S\n]+vlan\s+(?:access|trunk)\b", raw_prefix,
             re.MULTILINE | re.IGNORECASE,
         ):
             markers += 1
         if re.search(
-            r"^\s+vrf\s+attach\s+\S+", raw_prefix,
+            r"^[^\S\n]+vrf\s+attach\s+\S+", raw_prefix,
             re.MULTILINE | re.IGNORECASE,
         ):
             markers += 1
         if re.search(
-            r"^\s+no\s+routing\s*$", raw_prefix,
+            r"^[^\S\n]+no\s+routing\s*$", raw_prefix,
             re.MULTILINE | re.IGNORECASE,
         ):
             markers += 1
