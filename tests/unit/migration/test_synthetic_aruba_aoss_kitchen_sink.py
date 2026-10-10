@@ -178,11 +178,14 @@ class TestPopulatesEveryExpectedCanonicalField:
         assert ll[0].prefix_length == 64
 
     def test_lag_iface_stanzas_present(self, tree) -> None:
-        # The Trk1/Trk2 interface stanzas surface as canonical
-        # interfaces (separate from the LAG record below).
+        # The ``interface Trk1`` / ``Trk2`` stanzas surface as canonical
+        # interfaces (separate from the LAG record below) -- under the
+        # name the ``trunk`` line gave the LAG, so that the LAG and its
+        # interface are one name and not two.
         names = {i.name for i in tree.interfaces}
-        assert "Trk1" in names
-        assert "Trk2" in names
+        assert {"trk1", "trk2"} <= names
+        assert not {"Trk1", "Trk2"} & names
+        assert {lag.name for lag in tree.lags} == {"trk1", "trk2"}
 
     def test_static_routes_default_gateway(self, tree) -> None:
         defaults = [

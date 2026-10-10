@@ -39,6 +39,9 @@ user identity. The campus L2 surface has nowhere to land.
 
 ## The structural finding — the interface list GROWS
 
+<!-- one-lag-one-name-500 -->
+> **Update 2026-10-10 (#500) — the counts in this section and in "The LAG surface" have changed.**  The AOS-S parser now gives every reference to a LAG the name its `trunk` line gave it, so an `interface Trk1` stanza and the LAG `trk1` are one record name, not two.  Measured after the change: 85 source interface records, **86** after the round-trip, the count differing on **1** of 7 cells.  `kitchen_sink.cfg` no longer gains records (13 → 13): the bare `ethernet trk1` / `ethernet trk2` stanzas its two trunks fall through to are records the source already has, and its rendered config has one `ethernet trk1 { description … }` stanza where the snippet below shows two.  The Central stack still gains one (`trk1`, 49 → 50).  The 3 LAG records still become 0 and the 4 `lag_member_of` pointers still come back null; with the kitchen sink's record count steady, its 2 pointers are now compared record by record, the loss is evidenced, and `interfaces[].lag_member_of` is recorded `lossy` rather than `good`.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoss__vyos.yaml`.
+
 Most pairs in this mesh lose interface records. This one gains them, and the
 distinction changes what the `interfaces[].*` keys mean.
 

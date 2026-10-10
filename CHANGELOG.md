@@ -28,17 +28,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
-- **One LAG written in two letter cases is no longer reported as two
-  ports merged.**  AOS-S writes a LAG `trk1` where it is defined and
-  `Trk1` where a VLAN lists it.  Whenever a port map was in play — the
-  browser's empty one is enough, and a request that declares both
-  devices always has one — the job carried `multiple source ports map
-  to 'Trk1' (sources: Trk1, trk1); these are distinct ports ... their
-  VLAN membership will be merged`, and the rename modal drew the LAG
-  as a collision.  Nothing was merged.  Names that differ only in
-  letter case now count as one source where the source platform's
-  names have no case; on FortiOS and RouterOS, where an operator
-  chooses interface names, `DMZ` and `dmz` are still two.
+- **An AOS-S LAG is one name, not two.**  The device writes a LAG
+  `trk1` where it is defined and `Trk1` where a VLAN lists it or an
+  `interface Trk1` stanza configures it, and both spellings were kept.
+  Every `/plan` request runs the port translator (an absent
+  `port_rename_map` is read as `{}`), so every job for such a config
+  carried `multiple source ports map to 'Trk1' (sources: Trk1, trk1)
+  ... their VLAN membership will be merged`, with nothing merged; onto
+  any other vendor `port_renames` had a key for each spelling, which
+  the rename modal drew as two rows aimed at one target, counted as a
+  collision, and would not apply until one was dropped; and an entry
+  of a rename map for one spelling left the other where it was — a
+  LAG no VLAN listed, or a VLAN listing a LAG nothing defined, in a
+  job that said nothing.  The AOS-S parser now gives every reference
+  to a LAG the spelling of its `trunk` line, so there is one name: one
+  key, one row, and a drop or a new name takes the whole LAG.  The
+  output is unchanged (`trunk 51-52 trk1 lacp`, `tagged Trk1`,
+  `interface Trk1`): the renderer writes each form where the device
+  does.
+- **A rename-map key in another letter case reaches its port** where
+  the source platform's names have no case: `Trk1`, `trk1` and `TRK1`
+  are all the LAG the config calls `trk1`.  It was "does not exist in
+  the parsed config; entry ignored".  On FortiOS and RouterOS, where
+  an operator chooses interface names, a key is still the name
+  exactly, and `DMZ` and `dmz` are still two interfaces.
+- **One port name written in two letter cases counts as one source**
+  where the source platform's names have no case (a hardware port
+  typed `a1` beside the device's `A1`), and if a rename map sends the
+  two spellings apart the job now says so: `... are one name on
+  aruba_aoss, written in more than one letter case, and do not end
+  together`.  Whether two final names are one place is the target's
+  rule.
 
 - **Target profiles that named ports the device does not have.**  A port
   id picked from a target profile in the rename modal is written verbatim

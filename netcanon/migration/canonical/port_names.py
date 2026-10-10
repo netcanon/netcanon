@@ -317,6 +317,66 @@ def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
             yield vx.source_interface
 
 
+def rewrite_port_names(
+    intent: CanonicalIntent, resolve: Callable[[str], str], *, units: bool,
+) -> None:
+    """Give every port name *intent* holds the name *resolve* returns
+    for it, in place.
+
+    This is the sweep: the places :func:`_swept_names` yields, and a
+    route's next hop where it names an interface
+    (:func:`route_port_reference`).  It is the one list of those
+    places that is written to, so that a caller that has to rename a
+    port everywhere -- the translator, and a parser that finds one
+    port written under two names -- cannot be a field short of the
+    other.
+
+    A port's factory name (``interfaces[].default_name``) is not
+    touched: it says which hardware the port is, not what the config
+    calls it.
+
+    Args:
+        intent: The tree, changed in place.
+        resolve: Old name to new name.  Called once per reference;
+            return the name itself to leave it.
+        units: A next hop with a unit suffix (``et-0/0/24.0``) follows
+            its interface too.  True only between two configs of one
+            codec, where a unit means the same thing on both sides.
+    """
+    # Interface names as the config wrote them: a route's next hop can
+    # name one (see route_port_reference).
+    named_before = {iface.name for iface in intent.interfaces}
+    for iface in intent.interfaces:
+        iface.name = resolve(iface.name)
+        if iface.lag_member_of:
+            iface.lag_member_of = resolve(iface.lag_member_of)
+        # (#3) Rewrite each VRRP group's track-interface list so failover
+        # tracking survives a rename (a stale name silently disables it).
+        for grp in iface.vrrp_groups:
+            grp.track_interfaces = [resolve(t) for t in grp.track_interfaces]
+    for vlan in intent.vlans:
+        vlan.tagged_ports = [resolve(p) for p in vlan.tagged_ports]
+        vlan.untagged_ports = [resolve(p) for p in vlan.untagged_ports]
+    for lag in intent.lags:
+        lag.name = resolve(lag.name)
+        lag.members = [resolve(m) for m in lag.members]
+    for route in intent.static_routes:
+        if route.interface:
+            route.interface = resolve(route.interface)
+        # A next hop that is an interface follows the interface.
+        reference = route_port_reference(route, named_before, units=units)
+        if reference is not None:
+            route.gateway = resolve(reference[0]) + reference[1]
+    for pool in intent.dhcp_servers:
+        if pool.interface:
+            pool.interface = resolve(pool.interface)
+    # (#3) Rewrite the VXLAN VTEP source-interface so the binding stays valid
+    # on the target (a stale source name breaks the whole VTEP).
+    for vx in intent.vxlan_vnis:
+        if vx.source_interface:
+            vx.source_interface = resolve(vx.source_interface)
+
+
 def collect_port_names(intent: CanonicalIntent) -> list[str]:
     """Every port name *intent* holds, in first-seen order: the
     names in the places :func:`translate_port_names` rewrites
@@ -647,6 +707,23 @@ def translate_port_names(  # noqa: C901
             )
             del user_map[key]
 
+    # A key in another letter case.  On a platform whose names have no
+    # case, an operator who writes ``Trk1`` means the port the config
+    # calls ``trk1`` (the device itself prints it both ways): the entry
+    # goes to the name the config uses.  Only where one name answers to
+    # the key and has no entry of its own -- an entry is never guessed
+    # between two names, nor laid over one the operator wrote exactly.
+    # The flag is read, not defaulted: there is no safe default for it.
+    one_case = not source_codec.port_names_case_sensitive
+    if one_case:
+        held: dict[str, list[str]] = {}
+        for name in collect_port_names(intent):
+            held.setdefault(name.casefold(), []).append(name)
+        for key in list(user_map):
+            spellings = held.get(key.casefold(), [])
+            if key not in spellings and len(spellings) == 1 and spellings[0] not in user_map:
+                user_map[spellings[0]] = user_map.pop(key)
+
     # Split user map into drops (value is None) and renames (value is str).
     # Drops never go through the target codec.
     #
@@ -841,44 +918,13 @@ def translate_port_names(  # noqa: C901
     if auto_dropped:
         _strip_dropped_ports(intent, auto_dropped)
 
-    # Interface names as the config wrote them: a route's next hop can
-    # name one (see route_port_reference).  A unit suffix means the same
-    # thing on both sides only between two configs of one codec.
-    named_before = {iface.name for iface in intent.interfaces}
-    same_codec = source_codec.name == target_codec.name
-
     # Rewrite everywhere a port name might be referenced.  Order doesn't
-    # matter — memoisation keeps us idempotent.
-    for iface in intent.interfaces:
-        # ``default_name`` is not touched: see the docstring.
-        iface.name = resolve(iface.name)
-        if iface.lag_member_of:
-            iface.lag_member_of = resolve(iface.lag_member_of)
-        # (#3) Rewrite each VRRP group's track-interface list so failover
-        # tracking survives a rename (a stale name silently disables it).
-        for grp in iface.vrrp_groups:
-            grp.track_interfaces = [resolve(t) for t in grp.track_interfaces]
-    for vlan in intent.vlans:
-        vlan.tagged_ports = [resolve(p) for p in vlan.tagged_ports]
-        vlan.untagged_ports = [resolve(p) for p in vlan.untagged_ports]
-    for lag in intent.lags:
-        lag.name = resolve(lag.name)
-        lag.members = [resolve(m) for m in lag.members]
-    for route in intent.static_routes:
-        if route.interface:
-            route.interface = resolve(route.interface)
-        # A next hop that is an interface follows the interface.
-        reference = route_port_reference(route, named_before, units=same_codec)
-        if reference is not None:
-            route.gateway = resolve(reference[0]) + reference[1]
-    for pool in intent.dhcp_servers:
-        if pool.interface:
-            pool.interface = resolve(pool.interface)
-    # (#3) Rewrite the VXLAN VTEP source-interface so the binding stays valid
-    # on the target (a stale source name breaks the whole VTEP).
-    for vx in intent.vxlan_vnis:
-        if vx.source_interface:
-            vx.source_interface = resolve(vx.source_interface)
+    # matter — memoisation keeps us idempotent.  ``default_name`` is not
+    # touched: see the docstring.  A unit suffix on a next hop means the
+    # same thing on both sides only between two configs of one codec.
+    rewrite_port_names(
+        intent, resolve, units=source_codec.name == target_codec.name,
+    )
 
     # (#17) Detect rename TARGET collisions: two+ source ports resolving to the
     # same final interface/LAG name render duplicate stanzas (same-vendor) or
@@ -959,11 +1005,11 @@ def translate_port_names(  # noqa: C901
         # A dropped name reached no target, so it shares none.
         if final is not None and source not in gone:
             fused.setdefault(final, set()).add(source)
-    # Two spellings of one name are one source.  AOS-S writes a LAG
-    # ``trk1`` where it is defined and ``Trk1`` where a VLAN lists it;
-    # on a platform whose names have no letter case that is one LAG,
-    # not two ports sharing a target.
-    one_case = not getattr(source_codec, "port_names_case_sensitive", False)
+    # Two spellings of one name are one source: on a platform whose
+    # names have no letter case, ``A1`` and ``a1`` are one port, not two
+    # ports sharing a target.  (An AOS-S LAG, which the device itself
+    # writes ``trk1`` and ``Trk1``, no longer reaches here as two names:
+    # its parser gives every reference the spelling of the definition.)
     for final in sorted(fused):
         distinct: dict[str, str] = {}
         for source in sorted(fused[final]):
@@ -977,6 +1023,42 @@ def translate_port_names(  # noqa: C901
             f"on the source device and their VLAN membership will be "
             f"merged — map each source to a distinct target"
         )
+
+    # One name in two letter cases that this run sends APART.  The
+    # rename map is keyed by the spelling, so an entry for ``A1`` leaves
+    # ``a1`` where it was: one port's config on two targets, or half of
+    # it dropped, in a job that would otherwise say nothing -- the
+    # sweep above has just been told to count the two as one.  Whether
+    # two final names are one place is the TARGET's rule: left as
+    # ``A1`` and ``a1`` they are one port on a target with no case, and
+    # two interfaces on one that has it.
+    if one_case:
+        spelt: dict[str, set[str]] = {}
+        for name in present_names:
+            spelt.setdefault(name.casefold(), set()).add(name)
+        for key in sorted(spelt):
+            names = sorted(spelt[key])
+            if len(names) < 2:
+                continue
+            ends = {
+                name: (None if name in gone else memo.get(name, name))
+                for name in names
+            }
+            places = {
+                end if end is None or target_codec.port_names_case_sensitive else end.casefold()
+                for end in ends.values()
+            }
+            if len(places) > 1:
+                said = ", ".join(
+                    f"{name} -> {'dropped' if end is None else end}"
+                    for name, end in ends.items()
+                )
+                warnings.append(
+                    f"port_rename: {' and '.join(names)} are one name on "
+                    f"{source_codec.name}, written in more than one letter "
+                    f"case, and do not end together ({said}) — give every "
+                    f"spelling the same entry"
+                )
 
     # (#49b) Operator drop/rename keys that named a port absent from the tree
     # did nothing — warn instead of silently over-reporting them as dropped.

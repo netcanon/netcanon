@@ -1285,9 +1285,14 @@ nothing, as before.
   has no warning for it; with a 2930F fabric or a 2930M stack
   declared from a model family, the plan's `caveats` say so.
 * An AOS-S config defines a LAG as `trk1` and lists it in a VLAN as
-  `Trk1`.  Those are one LAG, but two names to a rename map: an entry
-  for one of them (a drop, a new name) leaves the other as it was —
-  give both.
+  `Trk1`.  That is one LAG and one name, `trk1` — the spelling of its
+  `trunk` line — in `port_renames`, in the rename modal and as a key
+  of a rename map; a key in another letter case (`Trk1`) reaches it
+  too.  A HARDWARE port typed in two letter cases (`A1` in one VLAN,
+  `a1` in another, which no device prints) is still two names: an
+  entry for one leaves the other as it was, and the job says so (`...
+  are one name on aruba_aoss, written in more than one letter case,
+  and do not end together`).  Give both the same entry.
 
 ---
 

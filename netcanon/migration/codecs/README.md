@@ -178,6 +178,10 @@ class MyVendorCodec(CodecBase):
     # is the system's and is lower-case (Junos, VyOS, OPNsense), since
     # another case is then a misspelling of the same port.
     # Model-to-model port mapping compares final names by this rule.
+    # The port translator reads it on every translation as well: to
+    # count source names when it reports two of them on one target,
+    # and to let a rename-map key in another letter case reach its
+    # port.
     # There is no safe default: False where case tells two interfaces
     # apart merges an operator's interface into a port in a job that
     # reports success; True where it does not lets a misspelling pass

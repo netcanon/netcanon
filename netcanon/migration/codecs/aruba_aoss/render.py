@@ -269,6 +269,19 @@ def _lag_name_to_aos_trunk(name: str) -> str:
     return "trk1"
 
 
+def _as_the_device_writes(name: str) -> str:
+    """A port name in the form AOS-S prints it outside a ``trunk`` line.
+
+    The device writes a LAG ``trk1`` on its ``trunk`` line and ``Trk1``
+    everywhere else -- a VLAN's port list, the LAG's own ``interface``
+    stanza.  The parsed tree has one name for it (the definition's,
+    ``trk1``); this is the other form, for those other places.  Any
+    name that is not a trunk's is returned as it is.
+    """
+    trunk = re.match(r"^[Tt]rk(\d+)$", name)
+    return f"Trk{trunk.group(1)}" if trunk else name
+
+
 def _lag_mode_to_aos_type(mode: str) -> str:
     """Canonical LAG mode -> AOS-S ``trunk`` line's type field."""
     return _MODE_TO_AOS_TRUNK_TYPE.get(mode, "lacp")
@@ -325,6 +338,7 @@ def _format_port_list(ports: list[str]) -> str:
     """
     if not ports:
         return ""
+    ports = [_as_the_device_writes(p) for p in ports]
     # Group by alpha prefix preserving order.  Only ports that match
     # the simple ``<alpha>*<digits>$`` shape are eligible for range
     # collapse; anything else (containing ``-``, ``.``, ``/``-mid-
@@ -883,7 +897,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if lname.startswith("loopback"):
             lines.append(f"interface {iface.name}")
         else:
-            lines.append(f"interface {iface.name}")
+            lines.append(f"interface {_as_the_device_writes(iface.name)}")
         if iface.description:
             lines.append(f'   name "{_esc(iface.description)}"')
         # Skip enable/disable + routing markers on logical

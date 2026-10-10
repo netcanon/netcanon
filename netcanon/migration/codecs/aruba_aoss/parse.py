@@ -529,6 +529,37 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
     return [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
 
 
+def _one_name_per_lag(intent: CanonicalIntent) -> None:
+    """Give every reference to a LAG the name its ``trunk`` line gave it.
+
+    The device writes one LAG two ways: ``trunk 51-52 trk1 lacp`` where
+    it is defined, and ``Trk1`` where a VLAN lists it or an ``interface
+    Trk1`` stanza configures it.  AOS-S names have no letter case, so
+    that is one LAG -- but two names in the tree are two ports to
+    everything downstream: the rename map has a key for each, an entry
+    for one leaves the other where it was, and anything that counts
+    source names on a target counts two (the rename modal showed the
+    LAG as a collision and would not apply).
+
+    The spelling kept is the definition's, which is what the tree
+    already called the LAG.  The renderer writes each form where the
+    device does, whatever the tree holds.  Every place a port name is
+    referenced is rewritten, by the same sweep the port translator uses,
+    and a list that named the LAG twice names it once.
+    """
+    defined = {lag.name.casefold(): lag.name for lag in intent.lags if lag.name}
+    if not defined:
+        return
+    from ...canonical.port_names import rewrite_port_names
+
+    rewrite_port_names(
+        intent, lambda name: defined.get(name.casefold(), name), units=True,
+    )
+    for vlan in intent.vlans:
+        vlan.tagged_ports = list(dict.fromkeys(vlan.tagged_ports))
+        vlan.untagged_ports = list(dict.fromkeys(vlan.untagged_ports))
+
+
 def _build_lag_from_trunk_line(m: re.Match[str]) -> CanonicalLAG | None:
     """Convert a ``trunk <ports> <name> <type>`` regex match to a CanonicalLAG."""
     port_list_text, trunk_name, trunk_type = m.group(1), m.group(2), m.group(3)
@@ -1318,6 +1349,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             m_iface = iface_by_name.get(member)
             if m_iface is not None and m_iface.lag_member_of is None:
                 m_iface.lag_member_of = lag.name
+
+    _one_name_per_lag(intent)
 
     # Bug 3 transpose: mirror any per-port switchport state into the
     # VLAN-centric tagged_ports / untagged_ports lists.  AOS-S source
