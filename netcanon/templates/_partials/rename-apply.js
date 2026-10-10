@@ -18,6 +18,7 @@
    *   currentRenameProfileKey, currentRenameModuleSku,
    *   populateRenameModelDropdown,
    *   populateRenameModuleDropdown            (migrate.html inline)
+   *   setRenameStatus                          (migrate.html inline)
    *   showToast                                (base.html global)
    * ────────────────────────────────────────────────────────────────── */
 
@@ -32,7 +33,6 @@
   window.renameModalApply = async function() {
     if (!_lastJobBody || !_lastJob || _renameApplying) return;
     var applyBtn = document.getElementById('mig-rename-apply-btn');
-    var status = document.getElementById('mig-rename-status');
     var origText = applyBtn.textContent;
     var baseBody = _lastJobBody;
     // True once a translation submitted behind the modal has replaced
@@ -41,7 +41,7 @@
     _renameApplying = true;
     applyBtn.disabled = true;
     applyBtn.textContent = 'Applying…';
-    if (status) status.textContent = '';
+    setRenameStatus('');
     try {
       // The devices first: a member number typed just before the click
       // is still being compiled, and the request is built from what is
@@ -113,17 +113,29 @@
       // applyDeviceDeclarations.
       applyDeviceDeclarations(body);
       var devicesKey = _devicesKey();
-      var resp = await fetch('/api/v1/migration/plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      // Why an Apply did not happen is written in the footer, where it
+      // stays; the toast that also says it is gone in four seconds.
+      var resp;
+      try {
+        resp = await fetch('/api/v1/migration/plan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+      } catch (unsent) {
+        if (gone()) return;
+        showToast('Network error: ' + unsent.message, 'error');
+        setRenameStatus('Not applied — the server did not answer ('
+          + unsent.message + ').', 'failed');
+        return;
+      }
       if (gone()) return;
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
         var refusal = formatApiError(err, resp.statusText);
         showToast('Request rejected: ' + refusal, 'error');
-        if (status) status.textContent = 'Not applied — the server refused the request.';
+        setRenameStatus('Not applied — the server refused the request: '
+          + refusal, 'failed');
         return;
       }
       var newJob = await resp.json();
@@ -152,16 +164,14 @@
       var applyPlan = currentPortPlan();
       var undecided = (applyPlan && applyPlan.applied)
         ? (applyPlan.unresolved_ports || []).length : 0;
-      if (status) {
-        if (applyPlan && !applyPlan.applied) {
-          status.textContent = 'Applied. Ports were NOT paired by position — see above.';
-        } else if (undecided) {
-          status.textContent = 'Applied. ' + undecided + ' port name'
-            + (undecided === 1 ? '' : 's') + ' still need'
-            + (undecided === 1 ? 's' : '') + ' your decision.';
-        } else {
-          status.textContent = 'Applied. Rendered output refreshed.';
-        }
+      if (applyPlan && !applyPlan.applied) {
+        setRenameStatus('Applied. Ports were NOT paired by position — see above.');
+      } else if (undecided) {
+        setRenameStatus('Applied. ' + undecided + ' port name'
+          + (undecided === 1 ? '' : 's') + ' still need'
+          + (undecided === 1 ? 's' : '') + ' your decision.');
+      } else {
+        setRenameStatus('Applied. Rendered output refreshed.');
       }
       showToast('Rename applied; output regenerated.', 'success');
     } catch (e) {

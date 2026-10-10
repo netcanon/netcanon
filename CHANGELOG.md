@@ -123,6 +123,16 @@ timestamp if your timezone matters for an audit.
 - **Apply could be disabled without a word.**  Two rows that end on
   one target name have always held it; the button now says why, beside
   itself and in its title.
+- **Why an Apply was refused was gone in four seconds.**  The server's
+  words were in a toast and nowhere else.  They are now the status
+  line in the modal's footer, in red, until the next thing the footer
+  has to say; so is an Apply the server never answered.
+- **A toast could take a click meant for what was under it.**  On
+  every page a toast is drawn above everything, and its tint lets
+  what is under it show through.  A three-line error lay over the
+  rename modal's Cancel and Apply at a laptop's height and swallowed
+  both for as long as it showed.  A toast is a message and now takes
+  no click.
 - **A new translation left the open modal describing the last one.**
   The modal does not block the page.  Translating again behind it now
   redraws all of it from the new job.

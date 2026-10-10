@@ -868,7 +868,9 @@ Ports pane choose the *Source device* and the *Target device*.
 * A declaration the server refuses — a member number the mode does
   not have — turns the line red and says why, in the server's words.
   It is still sent with Apply, which the server then refuses: the
-  output is left as it was.  A line that says the device *could not
+  output is left as it was, and the footer of the modal says *Not
+  applied* with the server's reason until you act again.  A line that
+  says the device *could not
   be checked* is not a refusal: the preview did not arrive, and Apply
   sends the device for the server to compile itself.
 * **Apply** pairs the ports.  The table then shows, per source port,

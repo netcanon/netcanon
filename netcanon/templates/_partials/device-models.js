@@ -1674,11 +1674,8 @@
     renderRenameTable();
     renderRenamePreview();
     renderRenameSummary();
-    var status = document.getElementById('mig-rename-status');
-    if (status) {
-      status.textContent = names.length + ' decision'
-        + (names.length === 1 ? '' : 's') + ' recorded — Apply to confirm.';
-    }
+    setRenameStatus(names.length + ' decision'
+      + (names.length === 1 ? '' : 's') + ' recorded — Apply to confirm.');
     // The button is gone with the strip that was redrawn; what comes
     // next is Apply.
     var applyBtn = document.getElementById('mig-rename-apply-btn');

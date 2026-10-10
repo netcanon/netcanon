@@ -1208,7 +1208,9 @@ and the request honest:
   browser does not judge a declaration: one the server would refuse
   is refused by the server, in words, and nothing is applied.
   Leaving it out instead turned a mistyped member number into a
-  translation by name shape that reported success;
+  translation by name shape that reported success.  Those words are
+  the footer's status line (`setRenameStatus`, its one writer), not
+  only a toast: a toast is gone in four seconds;
 * the strip is drawn from what **happened** — `port_renames`,
   `port_drops` and the plan's outcome fields — not from `pairings`,
   which is the pairing as made, before the operator's entries; and

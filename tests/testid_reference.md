@@ -22,7 +22,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `nav-palette-summary` | `<summary>` | The 🎨 button that opens/closes the palette popover |
 | `nav-theme-picker` | `<nc-theme-picker>` | Vendored 10-swatch colour-palette control (`_vendor/theme-picker.js`); picking a swatch calls `NcTheme.set(theme, null)` → sets `<html data-nc-theme>` and persists `localStorage["nc-theme"]`, reapplied on load by the vendored boot |
 | `nav-theme-toggle` | `<button>` | Right-aligned sun/moon toggle; calls `NcTheme.set(null, mode)` (vendored `_vendor/theme-picker.js`) to flip `<html data-nc-mode>` between `light`/`dark`, persisted to `localStorage["nc-mode"]` and mirrored one-way into the legacy `localStorage["netcanon.theme.v1"]` for the self-contained `/docs` page.  `aria-label` and `aria-pressed` live-update to reflect the ACTION (next-state), not the current state |
-| `toast`            | `<div>` | Fixed-position toast notification; hidden by default |
+| `toast`            | `<div>` | Fixed-position toast notification; hidden by default.  A message only: `pointer-events:none`, so it never takes a click meant for what it lies over |
 
 ### Keyboard shortcut cheatsheet modal (`base.html`)
 
@@ -596,7 +596,7 @@ form behind it while it is open redraws all of it from the new job.
 | `migrate-rename-apply-btn`            | `<button>` | "Apply & regenerate" — re-POSTs to `/api/v1/migration/plan` with `port_rename_map` and the device declarations.  Disabled while an Apply is out, and while it is held: two rows end on one target name (in any pane).  One exception: while the next Apply would ask for a pairing by position that is not the one on screen, only a collision an entry of the operator's takes part in holds it — two of the server's own renames on one name are what the pairing mends.  Its `title` says why it is held |
 | `migrate-rename-apply-why`            | `<span>`   | Beside Apply, visible only while it is held: "Apply is held: <why>."  `role="status"` |
 | `migrate-rename-cancel-btn`           | `<button>` | "Cancel" — closes the modal |
-| `migrate-rename-status`               | `<div>`    | Inline status line: "Applied. Rendered output refreshed.", "Applied. N port names still need your decision.", "Applied. Ports were NOT paired by position — see above.", "Not applied — the server refused the request.", "N decisions recorded — Apply to confirm.", "Restored prior overrides (...)" |
+| `migrate-rename-status`               | `<span>`   | Inline status line, written only by `setRenameStatus`: "Applied. Rendered output refreshed.", "Applied. N port names still need your decision.", "Applied. Ports were NOT paired by position — see above.", "Not applied — the server refused the request: <the server's words>" and "Not applied — the server did not answer (<why>)." (both with `data-state="failed"`, drawn in the error ink, and left until the next line is written — the toast that also says it is gone in four seconds), "N decisions recorded — Apply to confirm.", "Restored prior overrides (...)" |
 | `migrate-rename-modal-top`            | `<div>`    | Everything above the table — the device rows, both notes, the plan strip, the fit-check banner, the profile notice.  It scrolls by itself (at most 45% of the viewport's height), so that a long stack cannot push the table or the footer out of the modal; the table below keeps a floor of a few rows |
 
 **Three-stage target-profile selector** (vendor → model → module).

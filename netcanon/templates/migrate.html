@@ -480,10 +480,25 @@
     border-top:1px solid var(--border);
     display:flex; gap:.5rem; align-items:center; flex:0 0 auto;
   }
+  /* The buttons keep their size; a long status line wraps beside
+     them. */
   #mig-rename-modal-footer button {
     padding:.35rem .9rem; font-size:.82rem;
+    flex:0 0 auto; white-space:nowrap;
   }
   #mig-rename-modal-footer .spacer { flex:1; }
+  #mig-rename-status {
+    font-size:.75rem; color:var(--text-faint);
+    min-width:0; overflow-wrap:anywhere;
+  }
+  /* Why an Apply did not happen.  It stays until the footer has
+     something else to say: the toast that also says it is gone in
+     four seconds.  A long answer scrolls in a few lines of its own
+     and leaves the table its height. */
+  #mig-rename-status[data-state="failed"] {
+    color:var(--badge-failed-fg); font-weight:700;
+    max-height:4.2em; overflow-y:auto;
+  }
   #mig-rename-apply-why {
     font-size:.75rem; font-weight:700; color:var(--badge-failed-fg);
     text-align:right;
@@ -1064,8 +1079,7 @@
   </div>
 
   <div id="mig-rename-modal-footer">
-    <span style="font-size:.75rem;color:var(--text-faint)"
-          id="mig-rename-status"
+    <span id="mig-rename-status"
           data-testid="migrate-rename-status"></span>
     <span class="spacer"></span>
     <!-- Why Apply is disabled, when it is.  A button that is greyed
@@ -2445,8 +2459,8 @@
       if (userCount) bits.push(userCount + ' user');
       if (snmpCount) bits.push(snmpCount + ' SNMP');
       if (v3Count) bits.push(v3Count + ' SNMPv3');
-      status.textContent = 'Restored prior overrides ('
-        + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.';
+      setRenameStatus('Restored prior overrides ('
+        + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.');
       status.setAttribute('data-testid-state', 'ack-restored');
     }
   }
@@ -2821,12 +2835,24 @@
     if (closeBtn) closeBtn.focus();
   };
 
+  /** Write the footer's status line -- the one place it is written.
+   *  *state* is ``'failed'`` for why an Apply did not happen (drawn
+   *  as an error, and left until the next line written here); every
+   *  other line is a plain report and clears it, so a report is
+   *  never drawn as the error before it. */
+  function setRenameStatus(text, state) {
+    var status = document.getElementById('mig-rename-status');
+    if (!status) return;
+    status.textContent = text;
+    if (state) status.setAttribute('data-state', state);
+    else status.removeAttribute('data-state');
+  }
+
   /** Draw the whole modal from the job on the page.  Called when the
    *  modal opens, and when a new translation replaces the job it was
    *  opened on. */
   function refreshRenameModal() {
-    var status = document.getElementById('mig-rename-status');
-    if (status) status.textContent = '';
+    setRenameStatus('');
     // Restore persisted overrides for this (source, target, hostname)
     // triple, if any.  Runs BEFORE the initial render so the
     // restored state is visible on first paint rather than flashing
@@ -2920,8 +2946,7 @@
     renderRenameRailCounts();
     renderRenamePreview();
     renderRenameSummary();
-    var status = document.getElementById('mig-rename-status');
-    if (status) status.textContent = 'All overrides cleared.';
+    setRenameStatus('All overrides cleared.');
   };
 
   /* ── Rename-modal table renderer (extracted to _partials/rename-table.js) ── */

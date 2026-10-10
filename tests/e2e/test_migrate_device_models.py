@@ -747,9 +747,10 @@ class TestStackMembers:
         expect(toast).to_have_class(re.compile(r"\btoast-error\b"))
         expect(toast).to_contain_text("Request rejected")
         expect(toast).to_contain_text("member id 11 is outside 1-10")
-        expect(page.locator(_tid("migrate-rename-status"))).to_have_text(
-            "Not applied — the server refused the request."
-        )
+        # And in the footer, where it stays when the toast is gone.
+        status = page.locator(_tid("migrate-rename-status"))
+        expect(status).to_contain_text("Not applied — the server refused the request: ")
+        expect(status).to_contain_text("member id 11 is outside 1-10")
         # Nothing was applied: the output is what it was.
         assert aoss_2930f.output.inner_text() == before
         # Put right, the error is gone and the device is as declared.

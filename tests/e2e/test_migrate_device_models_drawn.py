@@ -13,7 +13,9 @@ what the screen said:
   was shown for;
 * a count on the strip is of what happened, not of what was planned;
 * the request Apply sends is read off the wire, for every field Apply
-  owns.
+  owns;
+* why an Apply did not happen is still in the modal when the toast
+  that said it is gone, and that toast takes no click.
 
 The stack, Catalyst, Junos and detection cases run small configs
 written here or beside the flows; the corridor cases run the two
@@ -2142,3 +2144,204 @@ class TestStringsThatAreMarkupAreDrawnAsText:
         box = field.bounding_box()
         pane = page.locator(_tid("migrate-rename-table-pane")).bounding_box()
         assert pane["x"] <= box["x"] and box["x"] + box["width"] <= pane["x"] + pane["width"] + 1
+
+
+# ---------------------------------------------------------------------------
+# An Apply that did not happen: why stays in the modal
+# ---------------------------------------------------------------------------
+
+_LONG_ANSWER = "a long answer from the server " * 40
+
+#: Show a toast tall enough to lie over the modal's footer whatever the
+#: fonts, and say for each button whether the toast is over its middle
+#: and what a click there would land on.
+_UNDER_A_TOAST = """([words, ids]) => {
+    showToast(words, 'error');
+    const toast = document.getElementById('_toast').getBoundingClientRect();
+    return ids.map((id) => {
+        const box = document.querySelector('[data-testid="' + id + '"]').getBoundingClientRect();
+        const x = box.left + box.width / 2, y = box.top + box.height / 2;
+        const hit = document.elementFromPoint(x, y);
+        return {
+            covered: toast.left <= x && x <= toast.right && toast.top <= y && y <= toast.bottom,
+            hit: hit ? hit.getAttribute('data-testid') || hit.id || hit.tagName : null,
+        };
+    });
+}"""
+
+_REFUSED = "Not applied — the server refused the request: "
+
+
+def _refuse(page: Page) -> None:
+    """Send a pairing the server refuses: a member number the stack
+    does not have."""
+    _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+    member = page.locator(_tid("migrate-device-target-member-0-id"))
+    member.fill("11")
+    member.dispatch_event("change")
+    expect(page.locator(_tid("migrate-device-target-note-error"))).to_be_visible()
+    with page.expect_response("**/api/v1/migration/plan") as answer:
+        page.locator(_tid("migrate-rename-apply-btn")).click()
+    assert answer.value.status == 422
+
+
+class TestWhyAnApplyDidNotHappenStays:
+    """The server's reason for refusing an Apply was said in a toast
+    and nowhere else: gone in four seconds, and for those four seconds
+    lying over the modal's Cancel and Apply at a laptop's height, where
+    it took their clicks -- its tint lets the buttons show through, so
+    they looked pressable.  The reason is now the footer's status line,
+    and a toast takes no click."""
+
+    @pytest.mark.parametrize("width,height", [(1280, 720), (1024, 600)])
+    def test_a_toast_takes_no_click_meant_for_what_is_under_it(
+        self, page: Page, live_server_url: str, width: int, height: int,
+    ) -> None:
+        page.set_viewport_size({"width": width, "height": height})
+        _open(page, live_server_url, CAPTURE_2930F)
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        buttons = ["migrate-rename-apply-btn", "migrate-rename-cancel-btn"]
+        expect(page.locator(_tid(buttons[0]))).to_be_enabled()
+        under = page.evaluate(_UNDER_A_TOAST, [_LONG_ANSWER, buttons])
+        # The toast IS over both buttons, or what follows proves nothing.
+        assert [each["covered"] for each in under] == [True, True], under
+        assert [each["hit"] for each in under] == buttons, under
+        # And a click lands where it was aimed while the toast shows: a
+        # click that is intercepted is retried until the time allowed
+        # runs out, which is shorter than the toast lasts.
+        with (
+            page.expect_request("**/api/v1/migration/plan"),
+            page.expect_response("**/api/v1/migration/plan"),
+        ):
+            page.locator(_tid(buttons[0])).click(timeout=2_000)
+        expect(page.locator(_tid("migrate-rename-status"))).to_contain_text("Applied")
+        page.evaluate("(words) => showToast(words, 'error')", _LONG_ANSWER)
+        expect(page.locator(_tid("toast"))).to_be_visible()
+        page.locator(_tid(buttons[1])).click(timeout=2_000)
+        expect(page.locator(_tid("migrate-rename-modal"))).to_be_hidden()
+
+    def test_the_reason_for_a_refusal_stays_in_the_footer(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        status = page.locator(_tid("migrate-rename-status"))
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        width = _box(page, "#mig-rename-apply-btn")["width"]
+        before = aoss_2930f.output.inner_text()
+        _refuse(page)
+        expect(status).to_have_text(
+            re.compile("^" + re.escape(_REFUSED) + ".*member id 11 is outside 1-10")
+        )
+        expect(status).to_have_attribute("data-state", "failed")
+        assert alike(ink(status), token_ink(page, "--badge-failed-fg"))
+        # The toast goes.  The reason does not.
+        expect(page.locator(_tid("toast"))).to_be_hidden(timeout=8_000)
+        expect(status).to_contain_text("member id 11 is outside 1-10")
+        expect(status).to_be_visible()
+        assert aoss_2930f.output.inner_text() == before
+        # A long reason wraps beside the buttons: they keep their size
+        # and stay in the footer, the footer in the modal, and the table
+        # keeps its floor.
+        button = _box(page, "#mig-rename-apply-btn")
+        footer = _box(page, "#mig-rename-modal-footer")
+        modal = _box(page, "#mig-rename-modal")
+        assert button["width"] == pytest.approx(width, abs=0.5)
+        assert footer["top"] <= button["top"] and button["bottom"] <= footer["bottom"]
+        assert footer["bottom"] <= modal["bottom"] + 0.5
+        rem = page.evaluate("parseFloat(getComputedStyle(document.documentElement).fontSize)")
+        assert _box(page, "#mig-rename-modal-body")["height"] >= 13 * rem - 1
+        # Put right and applied, the footer reports -- and not in the
+        # ink of the error that was there.
+        member = page.locator(_tid("migrate-device-target-member-0-id"))
+        member.fill("2")
+        member.dispatch_event("change")
+        expect(page.locator(_tid("migrate-device-target-note-error"))).to_have_count(0)
+        _apply(page)
+        expect(status).to_have_text("Applied. Rendered output refreshed.")
+        assert status.get_attribute("data-state") is None
+        assert alike(ink(status), token_ink(page, "--text-faint"))
+
+    def test_a_report_after_a_refusal_is_not_drawn_as_the_error(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """The footer's line has more than one writer.  Each clears
+        what marked the line before it."""
+        status = page.locator(_tid("migrate-rename-status"))
+        _refuse(page)
+        expect(status).to_have_attribute("data-state", "failed")
+        page.locator(_tid("migrate-rename-modal-reset")).click()
+        expect(status).to_have_text("All overrides cleared.")
+        assert status.get_attribute("data-state") is None
+        assert alike(ink(status), token_ink(page, "--text-faint"))
+
+    def test_an_apply_the_server_never_answered_says_so_and_stays(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        status = page.locator(_tid("migrate-rename-status"))
+        apply_button = page.locator(_tid("migrate-rename-apply-btn"))
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        expect(apply_button).to_be_enabled()
+        before = aoss_2930f.output.inner_text()
+        page.route("**/api/v1/migration/plan", lambda route: route.abort())
+        apply_button.click()
+        expect(status).to_have_text(
+            re.compile(r"^Not applied — the server did not answer \(.+\)\.$")
+        )
+        expect(status).to_have_attribute("data-state", "failed")
+        assert alike(ink(status), token_ink(page, "--badge-failed-fg"))
+        expect(page.locator(_tid("toast"))).to_contain_text("Network error")
+        # Nothing was applied, and Apply can be pressed again.
+        assert aoss_2930f.output.inner_text() == before
+        expect(apply_button).to_be_enabled()
+        expect(apply_button).to_have_text("Apply & regenerate")
+        page.unroute("**/api/v1/migration/plan")
+        _apply(page)
+        expect(status).to_have_text("Applied. Rendered output refreshed.")
+        assert status.get_attribute("data-state") is None
+    @pytest.mark.parametrize(
+        "reason", ["x" * 3000, "a reason " * 600], ids=["one-word", "many-lines"],
+    )
+    def test_a_reason_of_any_length_leaves_the_buttons_and_the_table(
+        self, aoss_2930f: MigratePage, page: Page, reason: str,
+    ) -> None:
+        """A refusal can quote what it refuses, at any length.  The
+        line breaks anywhere and scrolls in a few lines of its own."""
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        width = _box(page, "#mig-rename-apply-btn")["width"]
+        # Written on the element: this is about how the line is drawn.
+        page.evaluate(
+            """(reason) => {
+                const line = document.getElementById('mig-rename-status');
+                line.textContent = reason;
+                line.setAttribute('data-state', 'failed');
+            }""",
+            reason,
+        )
+        rem = page.evaluate("parseFloat(getComputedStyle(document.documentElement).fontSize)")
+        button = _box(page, "#mig-rename-apply-btn")
+        cancel = _box(page, _tid("migrate-rename-cancel-btn"))
+        footer = _box(page, "#mig-rename-modal-footer")
+        modal = _box(page, "#mig-rename-modal")
+        assert button["width"] == pytest.approx(width, abs=0.5)
+        for each in (button, cancel):
+            assert modal["left"] <= each["left"] and each["right"] <= modal["right"], (each, modal)
+            assert footer["top"] <= each["top"] and each["bottom"] <= footer["bottom"]
+        assert footer["height"] <= 6 * rem, footer
+        # It breaks where it has to; it is not read by scrolling sideways.
+        wide = page.evaluate(
+            """() => {
+                const line = document.getElementById('mig-rename-status');
+                return [line.scrollWidth, line.clientWidth];
+            }"""
+        )
+        assert wide[0] <= wide[1] + 1, wide
+        assert footer["bottom"] <= modal["bottom"] + 0.5
+        assert _box(page, "#mig-rename-modal-body")["height"] >= 13 * rem - 1
+        # Apply is still under the mouse.
+        hit = page.evaluate(
+            """() => {
+                const box = document.getElementById('mig-rename-apply-btn').getBoundingClientRect();
+                const at = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+                return at && at.id;
+            }"""
+        )
+        assert hit == "mig-rename-apply-btn"
