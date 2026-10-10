@@ -196,11 +196,12 @@ pipeline — they just aren't pinned by a fixture yet").
 - **Moving between AOS-S models** — an AOS-S port's name depends on
   the model, its uplink module and whether stacking or VSF is on, and
   a same-vendor translation does not rename ports by itself.  Declare
-  both switches on the API and the ports are paired by position: a
-  standalone 2930F's `49`-`52` become a stacked 2930M's `1/A1`-`1/A4`.
-  A VSF fabric or a stack of several switches can be declared on
-  either side, or on both: its members pair in the order you list
-  them, not by member number (see
+  both switches — in the Interface rename modal (*Source device* and
+  *Target device* on the Ports pane) or on the API — and the ports
+  are paired by position: a standalone 2930F's `49`-`52` become a
+  stacked 2930M's `1/A1`-`1/A4`.  A VSF fabric or a stack of several
+  switches can be declared on either side, or on both: its members
+  pair in the order you list them, not by member number (see
   [`CAPABILITIES.md`](../CAPABILITIES.md) section G).  The `vsf` or
   `stacking` stanza itself — which switches the stack is made of,
   their priorities, the ports a fabric uses as its links — and the
@@ -208,10 +209,11 @@ pipeline — they just aren't pinned by a fixture yet").
   the output; set the target stack up as its own.  The job has no
   warning for this: it is said here, and in the plan's `caveats`
   where the 2930F fabric or 2930M stack is declared from a model
-  family.
-  The source switch can be read from the config: an AOS-S config
-  states its part number, the modules it is provisioned for and
-  whether it is stacked (`POST /api/v1/migration/detect-deployment`).
+  family.  The source switch is read from the config: an AOS-S
+  config states its part number, the modules it is provisioned for
+  and whether it is stacked.  The modal fills the source device in
+  from those lines and shows them
+  (`POST /api/v1/migration/detect-deployment` on the API).
   A stack's banner names no model, so a stack config pasted without
   its `stacking` or `vsf` stanza states no device; and a proposal
   lists a stack's members lowest number first.

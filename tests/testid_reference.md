@@ -22,7 +22,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `nav-palette-summary` | `<summary>` | The 🎨 button that opens/closes the palette popover |
 | `nav-theme-picker` | `<nc-theme-picker>` | Vendored 10-swatch colour-palette control (`_vendor/theme-picker.js`); picking a swatch calls `NcTheme.set(theme, null)` → sets `<html data-nc-theme>` and persists `localStorage["nc-theme"]`, reapplied on load by the vendored boot |
 | `nav-theme-toggle` | `<button>` | Right-aligned sun/moon toggle; calls `NcTheme.set(null, mode)` (vendored `_vendor/theme-picker.js`) to flip `<html data-nc-mode>` between `light`/`dark`, persisted to `localStorage["nc-mode"]` and mirrored one-way into the legacy `localStorage["netcanon.theme.v1"]` for the self-contained `/docs` page.  `aria-label` and `aria-pressed` live-update to reflect the ACTION (next-state), not the current state |
-| `toast`            | `<div>` | Fixed-position toast notification; hidden by default |
+| `toast`            | `<div>` | Fixed-position toast notification; hidden by default.  A message only: `pointer-events:none`, so it never takes a click meant for what it lies over |
 
 ### Keyboard shortcut cheatsheet modal (`base.html`)
 
@@ -564,21 +564,26 @@ Inside each `migrate-paths-<bucket>` container:
 ### Tier-3 rename modal
 
 Interactive port-name override surface opened from the migration
-result banner.  JS lives in two partials that migrate.html pulls in
-via Jinja `{% include %}`: `_partials/rename-table.js` (the
-per-kind expandable sections) and `_partials/rename-panel.js`
-(preview + summary), with `_partials/fit-check.js` rendering the
-hardware-capacity banner and `_partials/classify.js` housing the
-shared `_guessKind` / `_looksLikeUplink` classifiers both renderers
-reuse.  The modal is re-rendered whenever the user changes any
-override, drop, or selector.
+result banner.  Its JS lives in partials that migrate.html pulls in
+via Jinja `{% include %}`: `_partials/rename-table.js` (the per-kind
+expandable sections), `_partials/rename-panel.js` (preview + summary,
+and what holds the Apply button), `_partials/rename-apply.js` (Apply
+itself), `_partials/fit-check.js` (the hardware-capacity banner),
+`_partials/classify.js` (the shared `_guessKind` / `_looksLikeUplink`
+classifiers), and `_partials/device-models.js` (the device pickers and
+the port plan).  The table is rebuilt whenever the user changes an
+override, a drop, or a selector; the control that had the focus has
+it again afterwards.
+
+The modal does not block the page.  A translation submitted from the
+form behind it while it is open redraws all of it from the new job.
 
 **Open / trigger:**
 
 | `data-testid`                         | Element    | Notes |
 |---------------------------------------|------------|-------|
-| `migrate-rename-open-btn`             | `<button>` | "Rename port names" — opens the modal; only rendered when the result has at least one `port_renames` entry or a port-name warning |
-| `migrate-rename-badge-count`          | `<span>`   | Small badge on the open button showing the server's auto-renamed count |
+| `migrate-rename-open-btn`             | `<button>` | "Interface rename" — opens the modal; shown when the result has something for any pane: a port rename, a warning, a source VLAN, local user or SNMP community, or a hardware port the config uses (`source_ports`) |
+| `migrate-rename-badge-count`          | `<span>`   | Small badge on the open button showing the job's warning count; hidden at zero |
 
 **Modal chrome:**
 
@@ -587,10 +592,12 @@ override, drop, or selector.
 | `migrate-rename-modal`                | `<div>`    | Outer modal container; `role="dialog"`. Has `open` class when visible; CSS `transform: translateX(-50%)` flips to absolute positioning during drag |
 | `migrate-rename-modal-header`         | `<div>`    | Drag handle; `mousedown` on header starts the modal drag. Buttons inside the header are excluded from the drag hit region |
 | `migrate-rename-modal-close`          | `<button>` | × — closes without applying |
-| `migrate-rename-modal-reset`          | `<button>` | "Clear all" — wipes `_renameUserMap` and re-renders |
-| `migrate-rename-apply-btn`            | `<button>` | "Apply" — re-POSTs to `/api/v1/migration/plan` with `port_rename_map`; disabled when any collisions exist |
+| `migrate-rename-modal-reset`          | `<button>` | "Reset all" — wipes every override map and re-renders.  Declared devices stay |
+| `migrate-rename-apply-btn`            | `<button>` | "Apply & regenerate" — re-POSTs to `/api/v1/migration/plan` with `port_rename_map` and the device declarations.  Disabled while an Apply is out, and while it is held: two rows end on one target name (in any pane).  One exception: while the next Apply would ask for a pairing by position that is not the one on screen, only a collision an entry of the operator's takes part in holds it — two of the server's own renames on one name are what the pairing mends.  Its `title` says why it is held |
+| `migrate-rename-apply-why`            | `<span>`   | Beside Apply, visible only while it is held: "Apply is held: <why>."  `role="status"` |
 | `migrate-rename-cancel-btn`           | `<button>` | "Cancel" — closes the modal |
-| `migrate-rename-status`               | `<div>`    | Inline status line ("Applying…", "Applied. Rendered output refreshed.", etc.) |
+| `migrate-rename-status`               | `<span>`   | Inline status line, written only by `setRenameStatus`: "Applied. Rendered output refreshed.", "Applied. N port names still need your decision.", "Applied. Ports were NOT paired by position — see above.", "Not applied — the server refused the request: <the server's words>" and "Not applied — the server did not answer (<why>)." (both with `data-state="failed"`, drawn in the error ink, and left until the next line is written — the toast that also says it is gone in four seconds), "N decisions recorded — Apply to confirm.", "Restored prior overrides (...)" |
+| `migrate-rename-modal-top`            | `<div>`    | Everything above the table — the device rows, both notes, the plan strip, the fit-check banner, the profile notice.  It scrolls by itself (at most 45% of the viewport's height), so that a long stack cannot push the table or the footer out of the modal; the table below keeps a floor of a few rows |
 
 **Three-stage target-profile selector** (vendor → model → module).
 The module dropdown is hidden for legacy profiles and surfaces only
@@ -611,10 +618,98 @@ migrate.html):
 | `migrate-rename-table-pane`           | `<div>`    | Left pane holding the kind sections and the empty-state message |
 | `migrate-rename-sections`             | `<div>`    | Container the renderer clears and rebuilds on each call |
 | `migrate-rename-section-<kind>`       | `<details>`| One per non-empty kind; `<kind>` is one of `physical`, `breakout`, `lag`, `svi`, `loopback`, `tunnel`, `mgmt`, `hw_aggregate`, `virtual`, `unknown` |
-| `migrate-rename-row-<source>`         | `<tr>`     | One per port; `<source>` is the literal source-side port name (e.g. `GigabitEthernet1/0/1`).  **Forward slashes and dots are preserved verbatim** in the attribute value — do not URL-encode or escape.  CSS classes `has-warning` / `has-collision` / `has-override` / `has-drop` / `has-auto-drop` signal row state |
-| `migrate-rename-override-<source>`    | `<select>` or `<input>` | Target-name dropdown when a profile is selected; free-form input when not.  The dropdown's first option is "(auto: X)" / "(auto-dropped)" and lists the profile's valid port IDs filtered by kind |
+| `migrate-rename-section-summary-<kind>` | `<summary>` | The section's header: its label, row count, and warning / collision / decision counts.  A section the operator opened stays open across a redraw; one they closed stays closed unless a row in it collides or needs a decision |
+| `migrate-rename-row-<source>`         | `<tr>`     | One per port; `<source>` is the literal source-side port name (e.g. `GigabitEthernet1/0/1`).  **Forward slashes and dots are preserved verbatim** in the attribute value — do not URL-encode or escape.  CSS classes `has-warning` / `has-collision` / `has-override` / `has-drop` / `has-auto-drop` / `needs-decision` / `has-block` (a flag of the row holds the job) / `has-offtarget` (the operator's entry is a name the declared target does not list) signal row state.  Rows come from the job's port renames, its warnings, a port plan, and every hardware port the config uses — one whose name goes through unchanged reads "(unchanged)".  The rail's ports count is the number of these rows |
+| `migrate-rename-source-<source>`      | `<td>`     | The row's first cell: the source name.  A name of any length wraps |
+| `migrate-rename-auto-<source>`        | `<td>`     | The row's auto target: the name, "(unchanged)", "(auto-dropped — won't render)" or "(no mapping — needs override)".  Under a port plan a name the plan could not pair has `migrate-rename-plan-state-<source>` in this place instead |
+| `migrate-rename-override-<source>`    | `<select>` or `<input>` | Target-name dropdown when a target device is selected; free-form input when not.  The dropdown's first option is "(auto: X)" / "(auto-dropped)", then "(custom: X — ...)" for an entry that is not a port of the target, "Keep verbatim" and "Drop".  **Its target-port options are added when the list is first used** — on focus, or on the press that opens it — so a test focuses it before reading or choosing an option (`tests/e2e/drawn.py`: `override_options`, `choose_override`).  The free-form input changes the map, the preview and the summary on every key; the table is redrawn when the field is left |
 | `migrate-rename-drop-<source>`        | `<span>`   | Inline link beside free-form inputs.  Text cycles "drop" / "un-drop" / "keep verbatim" based on the row's drop state |
-| `migrate-rename-table-empty`          | `<div>`    | Empty-state message when no renames or warnings exist |
+| `migrate-rename-collision-<source>`   | `<span>`   | ⛔ marker on a row that shares its target with another; `title` names the others |
+| `migrate-rename-table-empty`          | `<div>`    | Empty-state message when the job has no port rename, no port warning and no hardware port |
+
+**Device pickers and the port plan** (ports pane only; rendered by
+`_partials/device-models.js`).  The operator declares the device the
+config came from and the device it is going to; Apply then sends both
+declarations and the job comes back with `port_mapping_plan`.
+`<side>` is `source` or `target`; `<rank>` is a stack member's
+position, counted from 0:
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `migrate-rename-devices`              | `<div>`    | Wrapper around the source-device row and the target group |
+| `migrate-device-source`               | `<div>`    | The source-device row (`role="group"`, named "Source device").  Hidden when the active rail category is not `ports` |
+| `migrate-device-source-model-select`  | `<select>` | The source device.  Values: `""` (not declared), `fam:<family>:<model>` for a model from a model family, `profile:<model>` for a flat profile.  Lists only the SOURCE codec's vendor; disabled when that vendor has neither.  Pre-filled from `POST /migration/detect-deployment` unless the operator has chosen in it for this text — "(not declared)" is a choice.  Choosing another model of the same family keeps the stack |
+| `migrate-device-source-module-select` | `<select>` | Module of a source PROFILE; hidden unless the profile declares `modules:` |
+| `migrate-device-source-mode-select`, `migrate-device-target-mode-select` | `<select>` | Deployment mode of a family model (`standalone`, `stacked`, `vsf`, ...).  Hidden for a profile and when nothing is declared.  A mode in which a device stands alone sets the other members aside; a stacking mode brings them back |
+| `migrate-device-source-members`, `migrate-device-target-members` | `<span>` | Container the per-member controls are rebuilt into |
+| `migrate-device-<side>-members-fold`  | `<details>`| Present for a stack of more than four members: the member lines, folded.  Open once the operator has opened it or added a member |
+| `migrate-device-<side>-members-fold-summary` | `<summary>` | "10 stack members (1–10)" |
+| `migrate-device-<side>-member-<rank>` | `<span>`   | One stack member's controls (`role="group"`, named by side and member number) |
+| `migrate-device-<side>-member-<rank>-model` | `<select>` | Model of a member.  Present for `<rank>` 1 and up only: the first member's model is the device select itself |
+| `migrate-device-<side>-member-<rank>-id` | `<input>` | Stack member number (`type="number"`, with the mode's `min` / `max`).  Present only in a mode that numbers its members.  What it holds is what is sent — the server says what is wrong with a number; left blank, the server picks one and it is written into the field |
+| `migrate-device-<side>-member-<rank>-bay-<bay>` | `<select>` | Module in bay `<bay>`.  Values: `__unstated__` (the default; the bay is counted as empty and the note says so), `__empty__` (stated: nothing fitted), or a module SKU |
+| `migrate-device-<side>-member-<rank>-remove` | `<button>` | Removes that member (`<rank>` 1 and up) |
+| `migrate-device-source-add-member`, `migrate-device-target-add-member` | `<button>` | "+ stack member" -- a copy of the first member with the lowest free member number.  Hidden in a mode with no members and when the stack is full |
+| `migrate-device-source-note`, `migrate-device-target-note` | `<div>` | What the declaration compiled to.  `data-evidence` is the grade of its port names (`capture` / `vendor-doc` / `inferred` / `ungraded`).  `data-state` is `checking` (a preview is in flight), `unchecked` (the preview could not be fetched), `invalid` (the server refused the declaration), or absent.  CSS class `notice-warn` when the names are unverified, a bay is unstated, the config disagrees with the device, a proposal could not be checked against the config, the device could not be previewed, or the config could not be asked; `notice-block` when the server refused the declaration.  The target note is absent for a flat profile, which keeps `migrate-rename-profile-notice` |
+| `migrate-device-<side>-note-device`   | `<span>`   | The device in words (model, modules, member, mode).  A stack is said by runs of like members: "6 × <model> as members 1–6" |
+| `migrate-device-<side>-note-ports`    | `<span>`   | "52 ports: 1/1 ... 1/A4" -- the count and the first and last port name |
+| `migrate-device-<side>-note-evidence` | `<span>`   | Human wording of the evidence grade |
+| `migrate-device-source-note-order`    | `<span>`   | Present for a source flat profile: its port order is the profile's list order |
+| `migrate-device-<side>-note-unstated` | `<span>`   | Present when a bay was left unstated; names each by its member's number |
+| `migrate-device-<side>-note-caveats`  | `<details>`| The device's caveats, collapsed; its header is `...-note-caveats-summary` |
+| `migrate-device-<side>-note-checking` | `<span>`   | "<Side> device: checking …" while the preview is in flight |
+| `migrate-device-<side>-note-unchecked` | `<span>`  | The preview could not be fetched (no answer in 20 seconds, a network failure, an answer that is no verdict).  Not a judgement of the device: Apply sends it as declared |
+| `migrate-device-<side>-note-error`    | `<span>`   | Why the server refused the declaration (its words) |
+| `migrate-device-source-note-read-from` | `<details>` | The config lines the source device was read from, each as far as its part number.  Present while the declaration is the detected one; its header is `...-note-read-from-summary` |
+| `migrate-device-source-note-inconsistent` | `<span>` | Port names the config uses that the detected device does not have: how many (the server's `missing_port_count`) and the first eight |
+| `migrate-device-source-note-not-checked` | `<span>` | Present for a source chosen or edited by hand: only a device read from the config was checked against the port names the config uses |
+| `migrate-device-source-note-detect-note-<i>` | `<span>` | A note from detection, one per note the server sent: what a provisioning line does not prove, what the reading left out, that the proposal could not be checked against the config, or — when nothing was proposed and nothing is declared — why (the reason first; a part no model family describes is named there) |
+| `migrate-device-source-note-config-says` | `<span>` | Shown when the declaration is not the detected one: what the config states |
+| `migrate-device-source-use-detected`  | `<button>` | "use it" -- declares the detected device.  Absent when the page cannot declare it |
+| `migrate-device-source-note-families-missing` | `<span>` | The config states a device and the page cannot declare it: the model families did not load (they are asked for again when the modal next opens), or hold no such model |
+| `migrate-device-source-note-detect-failed` | `<span>` | The config could not be asked what device it is; asked again when the modal next opens |
+| `migrate-device-source-note-no-models` | `<span>` | No family and no profile exists for the source codec's vendor |
+| `migrate-device-source-note-unknown-parts` | `<span>` | With a device declared by hand: the config names a part no model family describes |
+| `migrate-rename-plan`                 | `<div>`    | Where the mapping by position stands.  With a plan on screen that the declared devices made, `data-state` is the job's: `ok`, `warn` (a name needs a decision, or a route still names a port that moved), `block` (a target port was given two sources, or a port is not found by its hardware in the output), or `unapplied` (the server could not pair).  Otherwise it is what the next Apply will do: `ready` (a pair will be sent), `incomplete` (no pair: one side is missing, the target is another vendor's, or no model is known for the source vendor), `checking`, `invalid` (the server refused a declaration; it is sent and will be refused again), `unchecked` (a preview could not be fetched; the pair is sent), `held` (two of the operator's own entries share a target), `cleared` (the devices were cleared).  `data-stale="true"` while the table below is a plan made with other devices.  Hidden with no device declared and no plan |
+| `migrate-rename-plan-hint`            | `<span>`   | What the next Apply will do, while there is no current plan |
+| `migrate-rename-plan-unapplied`       | `<span>`   | Why no pairing was made |
+| `migrate-rename-plan-paired`          | `<span>`   | "N paired" -- used ports that stand where the plan paired them |
+| `migrate-rename-plan-your-moves`      | `<span>`   | "N paired port(s) sent elsewhere by your own entries"; absent at zero |
+| `migrate-rename-plan-your-drops`      | `<span>`   | "N paired port(s) dropped by your own entries"; absent at zero |
+| `migrate-rename-plan-members`         | `<span>`   | "member 3 → member 2" -- a stack member the pairing put on a member of another number where neither number is declared on the other side (members pair in the order they are listed); absent when there is none |
+| `migrate-rename-plan-crossed`         | `<span>`   | "crossed: member 2 → member 1; member 1 → member 2" -- members put beside a member of their own number instead of on it (the same members listed in another order); amber, holds nothing; absent when there is none, and for a member every used port of which the operator placed themselves |
+| `migrate-rename-plan-unplaced`        | `<span>`   | "N with no place on the target" -- dropped for want of one; absent at zero |
+| `migrate-rename-plan-your-places`     | `<span>`   | "N given a place by your own entries" -- ports the plan could not place; absent at zero |
+| `migrate-rename-plan-off-inventory`   | `<span>`   | "N not on the source device"; absent at zero |
+| `migrate-rename-plan-displaced`       | `<span>`   | "N displaced"; absent at zero |
+| `migrate-rename-plan-landed`          | `<span>`   | "N on a port the target does not have" -- logical names given a port-shaped name the target lacks; absent at zero |
+| `migrate-rename-plan-off-target`      | `<span>`   | "N on a name the target does not list, by your own entries"; absent at zero |
+| `migrate-rename-plan-slower`          | `<span>`   | "N on a slower port"; absent at zero |
+| `migrate-rename-plan-poe-lost`        | `<span>`   | "N PoE port(s) on a port without PoE"; absent at zero |
+| `migrate-rename-plan-fused`           | `<span>`   | Target ports given more than one source; absent at zero |
+| `migrate-rename-plan-unbound`         | `<span>`   | "N not found by its/their hardware in the output" -- a RouterOS target writes no Ethernet line for a port whose name reads as a VLAN, a bridge or a LAG; only another name clears it; absent at zero |
+| `migrate-rename-plan-stale-routes`    | `<span>`   | "N route(s) still name a port that moved" -- cleared by correcting the route in the output, or by entries that keep the names it uses; absent at zero |
+| `migrate-rename-plan-pending`         | `<span>`   | "N need your decision", or "N decision(s) recorded -- Apply to confirm" once the operator has decided them in the modal.  The strip stays `warn` until the job that comes back needs none |
+| `migrate-rename-plan-unsent`          | `<span>`   | "your entries changed since this mapping was made -- Apply to see the result"; present while the override map is not the one the job on screen was made with |
+| `migrate-rename-plan-accept`          | `<button>` | "Accept as shown" -- records the outcome on screen as the operator's decision for every undecided name (a dropped port stays dropped, a kept one stays where it landed).  Apply confirms it.  The record is for this pairing: it is forgotten when Apply is pressed with other devices declared, and is not kept across a page load; a row changed by hand afterwards is the operator's own |
+| `migrate-rename-plan-report`          | `<details>`| The plan's own warning lines, in the server's words; open while the strip is not `ok`, then as the operator leaves it.  Its header is `migrate-rename-plan-report-summary` |
+| `migrate-rename-plan-state-<source>`  | `<td>`     | In a port's row, in place of an auto target: what the plan did with a name it could not pair |
+| `migrate-rename-why-<source>`         | `<td>`     | The "Position" column, present while a plan is on screen: the role and position that decided the pairing ("uplink 1").  For a source of more than one member, the member's NUMBER too ("uplink 1 · member 2"), and where that member went when it is another number or none ("· member 3 → member 2", "· member 3 → no member") -- unless the operator's own entry sent the port elsewhere |
+| `migrate-rename-flag-<source>-<i>`    | `<span>`   | A flag in that cell.  `data-level` is `info` (a remark: the port's name in the device model, where its hardware is, where the operator's entry sent it), `warn` (a loss: a slower target port, no PoE, dropped by the operator's entry) or `block` (no line of the output finds the port) |
+| `migrate-rename-decision-<source>`    | `<span>`   | "?" marker on a row whose port still needs the operator's decision; the row carries CSS class `needs-decision` |
+| `migrate-rename-block-<source>`       | `<span>`   | ⛔ marker on a row with a `block` flag; the row carries CSS class `has-block` |
+| `migrate-rename-offtarget-<source>`   | `<span>`   | ⚠ marker on a row whose operator entry is a name the declared target does not list; the row carries CSS class `has-offtarget` |
+| `migrate-rename-decision-count-<kind>` | `<span>`  | "N need a decision" chip on a kind section's header |
+
+A row drawn from a port plan also carries `data-plan-state`
+(`paired` / `unplaced` / `off-inventory` / `displaced` / `follows` /
+`landed-off-target`).
+With a model family available for the target codec's vendor,
+`migrate-rename-target-model-select` lists the family's models as
+well, with values of the form `fam:<family>:<model>`; choosing one
+hides the profile module select and shows the target mode and member
+controls above.  A target device belongs to the target codec it was
+chosen for: a translation to another codec starts with none.
 
 **Supplementary panels:**
 
@@ -622,9 +717,9 @@ migrate.html):
 |---------------------------------------|------------|-------|
 | `migrate-rename-preview-pane`         | `<div>`    | Right pane holding preview + summary + fit-check |
 | `migrate-rename-preview`              | `<pre>`    | Client-side approximation of the target output with user overrides applied via whole-word replacement; informational only — the Apply button re-runs the server-side render for the authoritative result |
-| `migrate-rename-summary`              | `<div>`    | Inline summary above Apply: "N auto / M override / K drops / W ⚠ / C collisions". Collision count disables the Apply button |
+| `migrate-rename-summary`              | `<div>`    | Inline summary above Apply: "N auto / M override / K drops / W ⚠ / C collisions".  A collision holds Apply (see `migrate-rename-apply-btn` for the one exception) |
 | `migrate-rename-summary-vlans`        | `<span>`   | Nested sub-summary inside `migrate-rename-summary` — "VLAN: A auto / B overrides / C drops".  Only present when any VLAN-category state exists (server-applied rewrites or user overrides/drops); absent from port-only sessions |
-| `migrate-rename-fitcheck`             | `<div>`    | Hardware fit-check banner.  CSS class `fit-ok` / `fit-warn` / `fit-block` encodes overall state |
+| `migrate-rename-fitcheck`             | `<div>`    | Hardware fit-check banner.  CSS class `fit-ok` / `fit-warn` / `fit-block` encodes overall state.  Hidden while a port plan is on screen: `migrate-rename-plan` then answers the same question by port name |
 | `migrate-fitcheck-kind-<kind>`        | `<span>`   | Per-kind count line ("access: 24 / 24"); `<kind>` is one of `physical`, `uplink`, `mgmt` — **closed enumeration** as of this writing (fit-check.js hardcodes the list in `KIND_ORDER`).  Adding a new kind requires touching both the partial and this doc |
 | `migrate-fitcheck-module-note`        | `<span>`   | "(module: NM-8X)" suffix on the banner when a module SKU is selected; omitted for legacy profiles |
 | `migrate-rename-profile-notice`       | `<div>`    | Target-profile provenance notice under the fit-check banner (ports pane only).  Hidden when no profile is selected.  CSS class `notice-warn` only when the grade is `inferred` (a caveat on a verified profile is guidance, not an alarm); `data-evidence` is the grade (`capture` / `vendor-doc` / `inferred`) or `ungraded`, and is absent while hidden |
@@ -641,7 +736,7 @@ surfaces under a shared left-rail navigation):
 |---------------------------------------|------------|-------|
 | `migrate-rename-rail`                 | `<nav>`    | Left rail — vertical list of category buttons.  `aria-label="Rename modal categories"` |
 | `migrate-rename-rail-ports`           | `<button>` | Activates the Ports category pane.  Carries `data-category="ports"` and `active` CSS class when selected |
-| `migrate-rename-rail-ports-count`     | `<span>`   | Row-count badge on the Ports rail button (applied + warned rows) |
+| `migrate-rename-rail-ports-count`     | `<span>`   | Row-count badge on the Ports rail button (applied + warned rows, plus the names a port plan reports and ports that go through unchanged) |
 | `migrate-rename-rail-vlans`           | `<button>` | Activates the VLANs category pane.  `data-category="vlans"` |
 | `migrate-rename-rail-vlans-count`     | `<span>`   | Row-count badge on the VLANs rail button (source_vlans.length) |
 | `migrate-rename-ports-pane`           | `<div>`    | Ports category pane wrapper — holds the per-kind rename sections.  `active` CSS class when visible |

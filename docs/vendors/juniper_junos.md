@@ -194,7 +194,8 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   (`next-hop et-0/0/24.0`) follows that interface when a translation
   between two Junos configs renames it, and is removed with it when
   it is dropped.  Across vendors the unit form is left as written;
-  with both devices declared on the API the route is then listed
+  with both devices declared (in the Interface rename modal or on
+  the API) the route is then listed
   (`stale_next_hops`) and the job is `partial`.
 - **Declaring a Junos device** — every interface name is the system's
   and is lower-case, so an override typed in another case

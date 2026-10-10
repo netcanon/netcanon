@@ -38,7 +38,7 @@ authz shim (see Security posture) — as the Trusted Computing Base.
 | `/session/{t}/hb` | POST | Body `{"hidden": <bool>}` (from `document.visibilityState`). Update `last_heartbeat` and the stored visibility (tab-liveness only — does **not** reset the idle timer; only an allowlisted proxied POST does). Returns `{"idle_remaining_seconds": <int>}`. 404 for unknown/dead tokens. |
 | `/session/{t}/end` | POST | Immediate destroy. Idempotent 204. Must accept `sendBeacon` (no CORS preflight — same-origin, `text/plain`). |
 | `/i/{t}/{path:path}` | ANY | Token valid **and `{path}` on the route allowlist** → set the routing cookie, streamed proxy to instance `:{INSTANCE_PORT}` (8000); off-allowlist `{path}` (incl. bare `/i/{t}/` → instance `/`, the blocked backup dashboard) or bad token → 404. Frontend targets `/i/{t}/migrate`. |
-| allowlisted absolute paths (`/migrate`, `/api/v1/migration/*`, …) | ANY | Routed by **routing cookie** to the mapped instance; off-allowlist → 404. Any allowlisted **proxied POST** (`POST /api/v1/migration/plan` and all `/plan/*` sub-plans — `/ports`, `/vlans`, `/local_users`, `/snmp`, `/snmpv3` — plus `POST /api/v1/migration/detect` and `POST /api/v1/sanitize`) also refreshes the session's `last_activity` (resets the idle timer); GETs and `/hb` do not. Allowlist in [04](04-container-hardening.md). |
+| allowlisted absolute paths (`/migrate`, `/api/v1/migration/*`, …) | ANY | Routed by **routing cookie** to the mapped instance; off-allowlist → 404. Any allowlisted **proxied POST** (`POST /api/v1/migration/plan` and all `/plan/*` sub-plans — `/ports`, `/vlans`, `/local_users`, `/snmp`, `/snmpv3` — plus `POST /api/v1/migration/detect`, `POST /api/v1/migration/inventory`, `POST /api/v1/migration/detect-deployment` and `POST /api/v1/sanitize`) also refreshes the session's `last_activity` (resets the idle timer); GETs and `/hb` do not. Allowlist in [04](04-container-hardening.md). |
 | `/healthz` | GET | Pool size, active count, uptime, aggregate counters (see Operational telemetry). **No tokens, no per-session detail.** |
 
 ## Lifecycle rules
@@ -79,8 +79,11 @@ authz shim (see Security posture) — as the Trusted Computing Base.
     sessions faster, you do not renege on the advertised 15 minutes).
 - `last_activity` is updated by **any allowlisted POST proxied to the instance** —
   `POST /api/v1/migration/plan` and all `/plan/*` sub-plans (`/ports`, `/vlans`,
-  `/local_users`, `/snmp`, `/snmpv3`), `POST /api/v1/migration/detect`, and
-  `POST /api/v1/sanitize`. `last_heartbeat` tracks tab liveness and is updated by
+  `/local_users`, `/snmp`, `/snmpv3`), `POST /api/v1/migration/detect`,
+  `POST /api/v1/migration/inventory`,
+  `POST /api/v1/migration/detect-deployment` and `POST /api/v1/sanitize`
+  (the set is `ALLOW_POST_EXACT` in `demo/warden/constants.py`).
+  `last_heartbeat` tracks tab liveness and is updated by
   `/hb`; GETs and `/hb` do **not** refresh `last_activity`. The two clocks are
   deliberately separate: a heartbeat keeps a tab clear of the hb-timeout reaper
   but does **not** stave off the idle reclaim — only actually using netcanon does.

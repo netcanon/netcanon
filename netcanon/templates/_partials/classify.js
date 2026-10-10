@@ -4,10 +4,9 @@
    * classify_port_name regex patterns; the server is still the
    * authoritative classifier — these are UI grouping only.
    *
-   * Included by migrate.html BEFORE rename-table.js so both renderers
-   * reach the same shared definitions at module scope.  (JS function
-   * declarations are hoisted within the script block, so include order
-   * is a readability guarantee, not a correctness requirement.)
+   * Included by migrate.html beside the renderers that use it.  JS
+   * function declarations are hoisted within the script block, so the
+   * order of the includes does not matter.
    * ────────────────────────────────────────────────────────────────── */
 
   /** Client-side kind classifier shared between renderRenameTable

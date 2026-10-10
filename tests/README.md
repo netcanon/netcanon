@@ -112,7 +112,18 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
 
 3. **E2E**: add a `test_*.py` file under `tests/e2e/`.  Use the `page`
    fixture from pytest-playwright and helpers from `tests/e2e/helpers.py`.
-   All selectors should use `data-testid` attributes.
+   All selectors should use `data-testid` attributes.  A test of what
+   an operator SEES reads what was painted, not a class name or a
+   computed style: `tests/e2e/drawn.py` reads an element's background
+   from a screenshot, turns a theme token into the colour it paints,
+   and gives the contrast of the two (the theme's badge backgrounds are
+   translucent, so a tint over a tint is not the colour either was
+   asked for).  It also holds the two helpers for the rename table's
+   override lists, whose port options are made when a list is first
+   used.  Synthetic definitions a test needs -- an `inferred` profile,
+   a model family whose every string is markup -- live under
+   `tests/fixtures/target_profiles/` and `tests/fixtures/model_families/`
+   and are copied into the tier's definitions directory.
 
 4. **Desktop**: add a `test_*.py` file under `tests/desktop/`.  Use the
    `mock_pyside6`, `mock_pystray`, and `mock_generate_tray_image` fixtures

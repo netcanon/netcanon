@@ -405,6 +405,21 @@ jobs:
           fi
           echo "Dashboard renders."
           echo
+          echo "Now the translator page.  It is the one page that includes"
+          echo "the partials under templates/_partials/ -- the dashboard"
+          echo "includes none -- so it is the page a partial missing from"
+          echo "the wheel breaks."
+          if ! curl -fsS -o /dev/null http://127.0.0.1:8000/migrate; then
+            echo "FAIL: / rendered but /migrate did not."
+            echo "Likely cause: a file under templates/_partials/ is missing"
+            echo "from the built wheel -- check the package-data globs in"
+            echo "pyproject.toml."
+            echo "--- container logs ---"
+            docker logs smoke
+            exit 1
+          fi
+          echo "Translator page renders."
+          echo
           echo "Now verifying the translator VENDOR REGISTRY actually loaded."
           echo "The app boots and / renders even with ZERO vendors (empty"
           echo "dropdown), so a bare 200 check misses the packaging-bug class"

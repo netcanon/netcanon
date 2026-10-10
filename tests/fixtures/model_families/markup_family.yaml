@@ -1,0 +1,49 @@
+# A model family for tests -- never shipped.  See __init__.py beside it.
+#
+# Every string an operator can author here is markup that would run a
+# script if it were ever read as HTML: each `onerror` / `onload` pushes
+# a number onto `window.__markup_ran`, which the tests then require to
+# be empty.  The panel is graded `inferred`, which no shipped family is.
+schema_version: 1
+vendor: aruba_aoss
+family: FIXTURE-MARKUP
+display_name: '<img src=x onerror=window.__markup_ran.push(1)>FAMILY "><svg onload=window.__markup_ran.push(2)>'
+naming: aoss
+default_mode: standalone
+
+modes:
+  standalone:
+    label: '<img src=x onerror=window.__markup_ran.push(3)>ALONE &lt;b&gt;'
+    naming:
+      grade: vendor-doc
+      ref: '<img src=x onerror=window.__markup_ran.push(4)>NAMING-REF'
+    caveat: '<img src=x onerror=window.__markup_ran.push(5)>MODE-CAVEAT </li></ul></details><script>window.__markup_ran.push(6)</script>'
+  vsf:
+    label: 'javascript:window.__markup_ran.push(7) FABRIC'
+    member_ids: [1, 4]
+    naming:
+      grade: vendor-doc
+      ref: 'x'
+    caveat: '<a href="javascript:window.__markup_ran.push(8)">FABRIC-CAVEAT</a>'
+
+modules:
+  MARKUPMOD:
+    description: '<img src=x onerror=window.__markup_ran.push(9)>MODULE "><svg onload=window.__markup_ran.push(10)>'
+    inventory: {grade: vendor-doc, ref: '<img src=x onerror=window.__markup_ran.push(11)>INVENTORY-REF'}
+    caveat: '<img src=x onerror=window.__markup_ran.push(12)>MODULE-CAVEAT'
+    ports:
+      - {role: uplink, count: 2, speed: 10gig, cage: sfp+}
+
+models:
+  MARKUP-8:
+    skus: [MARKUP8SKU]
+    display_name: '<img src=x onerror=window.__markup_ran.push(13)>MODEL "><svg onload=window.__markup_ran.push(14)>'
+    panel:
+      grade: inferred
+      ref: '<img src=x onerror=window.__markup_ran.push(15)>PANEL-REF'
+      caveat: '<img src=x onerror=window.__markup_ran.push(16)>PANEL-CAVEAT: these port names describe no real device.'
+    caveat: '<img src=x onerror=window.__markup_ran.push(17)>MODEL-CAVEAT'
+    ports:
+      - {role: access, count: 8, speed: gig, cage: rj45}
+    bays:
+      A: {accepts: [MARKUPMOD]}

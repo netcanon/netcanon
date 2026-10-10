@@ -134,6 +134,8 @@ ALLOW_GET_EXACT = frozenset(
         "/health",
         "/api/v1/migration/adapters",
         "/api/v1/migration/target-profiles",
+        # The rename modal's device pickers list model families.
+        "/api/v1/migration/model-families",
     }
 )
 ALLOW_GET_PREFIX = (
@@ -149,6 +151,12 @@ ALLOW_POST_EXACT = frozenset(
         "/api/v1/migration/plan/snmp",
         "/api/v1/migration/plan/snmpv3",
         "/api/v1/migration/detect",
+        # The device pickers: compile a declared device to its port
+        # list, and read the source device out of the pasted config.
+        # Both only compute; neither stores anything.  Editing a
+        # device is the visitor working, so both count as activity.
+        "/api/v1/migration/inventory",
+        "/api/v1/migration/detect-deployment",
         "/api/v1/sanitize",
     }
 )

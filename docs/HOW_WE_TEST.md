@@ -195,6 +195,19 @@ NETCONF.
 Exercises the migrate-page flows: paste source, pick target, run
 plan, view diff, accept/decline review comments.
 
+For the rename modal's device pickers the tier also holds what an
+operator can **see and reach**, not only what the page's attributes
+say: that the table and the Apply button are still inside the modal
+and under the mouse on a laptop screen with a stack of ten on each
+side; that a state's colour is the colour that was painted (read from
+a screenshot — a class name is not a colour, and the theme's
+translucent tints make a computed style something else again); that
+the request Apply sends is what the screen showed, read off the wire;
+and what the page does when the server does not answer, answers late,
+or answers for a job that is no longer on the page.  These tests were
+written after a review broke the page in a hundred small ways and
+found that most of the breaks passed.
+
 ### Layer 4: Desktop tests
 
 `pytest tests/desktop` — PySide6 + pystray mocked at a shared

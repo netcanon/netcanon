@@ -837,8 +837,72 @@ correctly on a 2930M-48G with an SFP+ module in a one-member stack —
 `1`..`48` become `1/1`..`1/48`, and the built-in uplinks `49`..`52`
 become the module's `1/A1`..`1/A4`.
 
-**Today this is an API feature**; the pickers in the rename modal come
-later.
+**In the browser:** translate, open **Interface rename**, and on the
+Ports pane choose the *Source device* and the *Target device*.
+
+* A device is a model from a model family — then you also choose its
+  deployment mode, the module in each bay and, for a stack, its
+  members — or a profile, where no family describes the device yet.
+* A stack has one row of controls per member (**+ stack member** adds
+  one).  Two stacks pair row by row — the first source member with
+  the first target member — whatever numbers the members carry; where
+  the numbers differ the strip above the table says which member went
+  to which, and each port's row says its member.
+* The source device is filled in from the config where the config
+  states it; open "Read from the config" under it to see the lines.
+  It is a proposal: a `member` or `flexible-module` line shows what a
+  device is provisioned for, not what is fitted.  Change it if it is
+  wrong.  The line turns amber where the proposal does not stand on
+  its own: the config uses port names the device does not have (it
+  says how many, and the first few), or the config names no port, so
+  nothing could be checked against it.  Where no device could be
+  read, the line says why.
+* The line under the source device, and under a target chosen from a
+  model family, says what you declared, how many ports that is and
+  the first and last name, and how well the names are established.  A
+  bay you did not state is counted as empty, and the line says so in
+  amber.  A target chosen from a flat profile keeps the profile notice
+  it always had (deployment state, grade, caveat), which states no
+  port count.  A source device you chose or edited yourself is said
+  not to have been checked against the port names the config uses.
+* A declaration the server refuses — a member number the mode does
+  not have — turns the line red and says why, in the server's words.
+  It is still sent with Apply, which the server then refuses: the
+  output is left as it was, and the footer of the modal says *Not
+  applied* with the server's reason until you act again.  A line that
+  says the device *could not be checked* is not a refusal: the preview
+  did not arrive, and Apply sends the device for the server to compile
+  itself.
+* Before Apply the table lists the ports the config uses, in the
+  declared source device's port order (undeclared: in the order the
+  config first mentions them).
+* **Apply** pairs the ports.  The table then shows, per source port,
+  the target port and the position that decided it ("uplink 1"), and
+  a row for every name with no place on the target.
+* The strip above the table counts **what happened**: ports that
+  stand where they were paired; paired ports your own entries dropped
+  or sent elsewhere; ports with no place; ports you gave a place; PoE
+  or speed lost.  Green means the job needs nothing from you, amber
+  that a name needs a decision or a route still names a port that
+  moved, red that the job is held (a target port was given two
+  sources, or a RouterOS port is not found by its hardware).
+* **Accept as shown** records the outcome on screen as your decision
+  for each undecided name (a dropped port stays dropped, a kept one
+  stays where it landed), and Apply confirms it.  It is a decision
+  about the pairing on screen: with other devices declared it is
+  forgotten at the next Apply, and it is not kept across a page load.
+* **If Apply is greyed out it says why**, beside the button.  Two rows
+  that end on one target name hold it.  With both devices declared
+  and not yet applied, only a collision between entries of your own
+  does: two ports the name-shape translation put on one name are what
+  the pairing by position mends.
+* A target chosen with no source device works as before: its port
+  list fills the choices in the table, and nothing is paired.  A
+  target device belongs to the target codec it was chosen for.
+* The modal does not block the page: translate again behind it and it
+  is redrawn from the new job.
+
+**Through the API** the same steps are:
 
 1. `GET /api/v1/migration/model-families` lists the device families
    netcanon models, with each one's models, modes and modules.

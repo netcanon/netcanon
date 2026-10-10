@@ -171,8 +171,126 @@
   #mig-rename-profile-notice .mig-profile-notice-part { margin-right:1rem; }
   #mig-rename-profile-notice .mig-profile-notice-grade { font-weight:700; }
 
+  /* Device pickers -- the device a config came from and the device it
+     is going to, one row each (rendered by _partials/device-models.js).
+     Under the toolbar, a note per device says what the declaration
+     resolved to and how well its port names are established. */
+  #mig-rename-devices {
+    display:flex; flex-direction:column; gap:.35rem;
+    flex:1 1 auto; min-width:0;
+  }
+  .mig-device-row {
+    display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+  }
+  .mig-device-row > label { min-width:6.4rem; }
+  .mig-device-member {
+    display:inline-flex; align-items:center; gap:.4rem;
+    padding-left:.5rem; border-left:2px solid var(--border-strong);
+  }
+  /* A stack of several switches: a line per member under the row,
+     in line with the selects above it. */
+  .mig-device-members-stack {
+    flex:1 1 100%; display:flex; flex-direction:column;
+    align-items:flex-start; gap:.25rem; padding-left:6.9rem;
+  }
+  .mig-device-members-stack + .mig-device-add { margin-left:6.9rem; }
+  /* More members than fit in a glance: the lines fold under a count. */
+  .mig-device-members-fold > summary {
+    cursor:pointer; font-size:.8rem; color:var(--text-muted);
+  }
+  .mig-device-members-fold .mig-device-member { display:flex; margin-top:.25rem; }
+  #mig-rename-modal-toolbar .mig-device-member label {
+    font-weight:400; display:inline-flex; align-items:center; gap:.25rem;
+  }
+  .mig-device-member input[type="number"] {
+    width:3.4rem; padding:.2rem .3rem; font-size:.82rem; border-radius:3px;
+  }
+  /* A number outside the mode's range, or not a whole number: the
+     browser knows it from the field's own min / max / step. */
+  .mig-device-member input[type="number"]:invalid {
+    border-color:var(--badge-failed-fg);
+    box-shadow:0 0 0 1px var(--badge-failed-fg);
+  }
+  .mig-device-add, .mig-device-remove,
+  .mig-device-use-detected, .mig-plan-accept {
+    background:var(--surface); color:var(--text-primary);
+    border:1px solid var(--border-strong); border-radius:3px;
+    padding:.15rem .5rem; font-size:.78rem; cursor:pointer;
+    font-weight:normal;
+  }
+  .mig-device-add:hover, .mig-device-remove:hover,
+  .mig-device-use-detected:hover, .mig-plan-accept:hover {
+    background:var(--surface-hover);
+  }
+  .mig-device-note {
+    padding:.35rem .8rem; font-size:.78rem;
+    border-bottom:1px solid var(--border);
+    color:var(--text-muted);
+  }
+  .mig-device-note.notice-warn {
+    background:var(--badge-partial-bg); color:var(--badge-partial-fg);
+  }
+  .mig-device-note.notice-block {
+    background:var(--badge-failed-bg); color:var(--badge-failed-fg);
+  }
+  .mig-device-note .mig-device-note-part { margin-right:1rem; }
+  .mig-device-note .mig-device-note-device,
+  .mig-device-note .mig-device-note-grade { font-weight:700; }
+  .mig-device-note-list {
+    display:inline-block; vertical-align:top; margin-right:1rem;
+  }
+  .mig-device-note-list summary, .mig-plan-report summary { cursor:pointer; }
+  .mig-device-note-list ul, .mig-plan-report ul {
+    margin:.25rem 0 .1rem 1.1rem; padding:0;
+  }
+  .mig-device-note-list code { font-size:.76rem; }
+
+  /* Port-plan strip -- where the mapping by position stands: what to
+     do next while there is no plan, and what the plan did once there
+     is one.  Colour pairs through the --badge-* / --alert-* tokens. */
+  #mig-rename-plan {
+    padding:.4rem .8rem; font-size:.78rem;
+    border-bottom:1px solid var(--border);
+  }
+  #mig-rename-plan.plan-info  { background:var(--alert-info-bg);      color:var(--alert-info-fg); }
+  #mig-rename-plan.plan-ok    { background:var(--badge-completed-bg); color:var(--badge-completed-fg); }
+  #mig-rename-plan.plan-warn  { background:var(--badge-partial-bg);   color:var(--badge-partial-fg); }
+  #mig-rename-plan.plan-block { background:var(--badge-failed-bg);    color:var(--badge-failed-fg); }
+  #mig-rename-plan strong { margin-right:.75rem; }
+  .mig-plan-chip {
+    display:inline-block; margin-right:.9rem; font-family:monospace;
+  }
+  /* A chip carries its own colours.  The strip's are for the plan as a
+     whole, and a chip can say something the plan's state does not: a
+     crossing of stack members holds nothing, so the strip stays green,
+     and the chip still has to read as a warning there.
+     Its ground is the opaque surface, outlined in the chip's own
+     colour.  The badge background tokens are translucent tints, and a
+     tint laid on a strip that is itself a tint is darker than either:
+     drawn that way the text of a warning chip had a contrast of 2.7:1. */
+  .mig-plan-chip.chip-info, .mig-plan-chip.chip-warn, .mig-plan-chip.chip-block {
+    padding:0 .35rem; border-radius:3px; background:var(--surface);
+    box-shadow:inset 0 0 0 1px currentColor;
+  }
+  .mig-plan-chip.chip-warn, .mig-plan-chip.chip-block { font-weight:700; }
+  .mig-plan-chip.chip-info  { color:var(--text-primary); }
+  .mig-plan-chip.chip-warn  { color:var(--badge-partial-fg); }
+  .mig-plan-chip.chip-block { color:var(--badge-failed-fg); }
+  .mig-plan-report { margin-top:.3rem; }
+
+  /* Everything above the table -- the device rows, their notes, the
+     plan strip, the capacity banner -- is one region that scrolls by
+     itself.  A stack of ten members is ten lines of controls a side;
+     they must not push the table, or the Apply button, out of the
+     modal.  The body below gives way first (its shrink factor dwarfs
+     this region's), down to a floor of a few rows; only then does
+     this region shrink. */
+  #mig-rename-modal-top {
+    flex:0 1 auto; min-height:0; max-height:45vh; overflow-y:auto;
+    overscroll-behavior:contain;
+  }
   #mig-rename-modal-body {
-    flex:1; display:flex; overflow:hidden;
+    flex:1 1000 auto; min-height:13rem; display:flex; overflow:hidden;
   }
   /* Left rail — category navigation.  Narrow vertical list of panes
      the operator can switch between (Ports / VLANs today; more join
@@ -255,6 +373,7 @@
                                     font-family:monospace; font-size:.78rem;
                                     margin-left:.4rem; }
   .mig-rename-kind-section .warn-count { color:var(--badge-partial-fg); font-weight:700; }
+  .mig-rename-kind-section .collision-count { color:var(--badge-failed-fg); }
 
   table.mig-rename-table {
     width:100%; border-collapse:collapse; font-size:.8rem;
@@ -265,6 +384,7 @@
     color:var(--text-muted); border-bottom:1px solid var(--border);
     background:var(--surface-alt);
   }
+  table.mig-rename-table th.mig-rename-mark-col { width:1.5rem; }
   table.mig-rename-table td {
     padding:.25rem .4rem; vertical-align:top; font-family:monospace;
     font-size:.78rem; border-bottom:1px dashed var(--border);
@@ -312,16 +432,77 @@
     color:var(--badge-failed-fg); font-size:.95rem; cursor:help;
     user-select:none;
   }
+  /* Rows of a port plan.  A row whose port still needs the operator's
+     decision carries a bar on its leading edge; the "why" cell says
+     which position decided the pairing. */
+  table.mig-rename-table tr.needs-decision td:first-child {
+    box-shadow:inset 3px 0 0 var(--badge-partial-fg); font-weight:700;
+  }
+  table.mig-rename-table td.mig-rename-why {
+    color:var(--text-muted); font-family:system-ui, sans-serif;
+    font-size:.72rem; white-space:nowrap;
+  }
+  table.mig-rename-table td.mig-rename-why .flag {
+    margin-left:.4rem; white-space:normal;
+  }
+  /* What a flag says decides how it is drawn: a remark about the port
+     is muted, a loss is amber, and what holds the job is red -- with
+     a red bar on the row, as a row that needs a decision has an amber
+     one. */
+  table.mig-rename-table td.mig-rename-why .flag-info  { color:var(--text-muted); }
+  table.mig-rename-table td.mig-rename-why .flag-warn  {
+    color:var(--badge-partial-fg); font-weight:700;
+  }
+  table.mig-rename-table td.mig-rename-why .flag-block {
+    color:var(--badge-failed-fg); font-weight:700;
+  }
+  table.mig-rename-table tr.has-block td:first-child {
+    box-shadow:inset 3px 0 0 var(--badge-failed-fg); font-weight:700;
+  }
+  /* An entry of the operator's that put a port on a name the declared
+     target does not list -- the same amber as an auto target the
+     profile does not list. */
+  table.mig-rename-table tr.has-offtarget td { background:var(--badge-partial-bg); }
+  /* A name of any length wraps in its cell: one unbroken name of ten
+     thousand characters made the table that wide, and put every
+     override control out of reach. */
+  table.mig-rename-table td.mig-rename-source,
+  table.mig-rename-table td.mig-rename-source + td {
+    max-width:22rem; overflow-wrap:anywhere; word-break:break-all;
+  }
+  .mig-rename-decision-icon {
+    color:var(--badge-partial-fg); font-size:.95rem; font-weight:700;
+    cursor:help; user-select:none;
+  }
 
   #mig-rename-modal-footer {
     padding:.5rem .8rem; background:var(--surface-alt);
     border-top:1px solid var(--border);
     display:flex; gap:.5rem; align-items:center; flex:0 0 auto;
   }
+  /* The buttons keep their size; a long status line wraps beside
+     them. */
   #mig-rename-modal-footer button {
     padding:.35rem .9rem; font-size:.82rem;
+    flex:0 0 auto; white-space:nowrap;
   }
   #mig-rename-modal-footer .spacer { flex:1; }
+  #mig-rename-status {
+    font-size:.75rem; color:var(--text-faint);
+    min-width:0; overflow-wrap:anywhere;
+  }
+  /* Why an Apply did not happen.  It stays until the footer has
+     something else to say: the toast that also says it is gone in
+     four seconds.  A long answer scrolls in a few lines of its own
+     and leaves the table its height. */
+  #mig-rename-status[data-state="failed"] {
+    color:var(--badge-failed-fg); font-weight:700;
+    max-height:4.2em; overflow-y:auto;
+  }
+  #mig-rename-apply-why {
+    font-size:.75rem; font-weight:700; color:var(--badge-failed-fg);
+    text-align:right;
+  }
 
   /* "Open rename modal" entry button inside the output section. */
   .mig-rename-open-btn {
@@ -568,37 +749,117 @@
     </button>
   </div>
 
+  <!-- Everything above the table is one region that scrolls by
+       itself (see the #mig-rename-modal-top rule): a stack of ten
+       members must not push the table or the Apply button out. -->
+  <div id="mig-rename-modal-top" data-testid="migrate-rename-modal-top">
   <div id="mig-rename-modal-toolbar">
+   <div id="mig-rename-devices" data-testid="migrate-rename-devices">
+    <!-- Source device: the device the config came from.  Filled by
+         _partials/device-models.js -- from the config's own statement
+         of its hardware where it makes one.  With a target device as
+         well, Apply pairs the two port lists by position. -->
+    <div class="mig-device-row" id="mig-device-source"
+         data-testid="migrate-device-source"
+         role="group" aria-label="Source device">
+      <label for="mig-device-source-model">Source device:</label>
+      <select id="mig-device-source-model"
+              data-testid="migrate-device-source-model-select"
+              disabled>
+        <option value="">(not declared)</option>
+      </select>
+      <select id="mig-device-source-module"
+              data-testid="migrate-device-source-module-select"
+              style="display:none"
+              aria-label="Module fitted to the source device"
+              disabled></select>
+      <select id="mig-device-source-mode"
+              data-testid="migrate-device-source-mode-select"
+              style="display:none"
+              aria-label="How the source device is deployed"></select>
+      <span id="mig-device-source-members"
+            data-testid="migrate-device-source-members"></span>
+      <button type="button" class="mig-device-add"
+              id="mig-device-source-add"
+              data-testid="migrate-device-source-add-member"
+              style="display:none"
+              title="Add another member of the stack">+ stack member</button>
+    </div>
     <!-- Target-profile controls drive the Ports-pane dropdown-vs-freetext
          behaviour and the fit-check banner.  They have no effect on the
          VLAN / local-users panes, so the whole group hides when a non-
          ports category is active — prevents operators from thinking
          they need to pick a profile before renaming VLANs or users. -->
     <span id="mig-rename-target-profile-group"
+          class="mig-device-row"
           data-testid="migrate-rename-target-profile-group"
-          style="display:flex;align-items:center;gap:.75rem">
-      <label for="mig-rename-target-vendor">Target:</label>
+          role="group" aria-label="Target device"
+          style="display:flex;align-items:center;gap:.5rem">
+      <label for="mig-rename-target-vendor">Target device:</label>
       <select id="mig-rename-target-vendor"
               data-testid="migrate-rename-target-vendor-select">
         <option value="">(none — free-form)</option>
       </select>
       <select id="mig-rename-target-model"
               data-testid="migrate-rename-target-model-select"
+              aria-label="Target device model"
               disabled>
         <option value="">— pick vendor first —</option>
       </select>
       <select id="mig-rename-target-module"
               data-testid="migrate-rename-target-module-select"
               style="display:none"
+              aria-label="Module fitted to the target device"
               title="Uplink module variant — only meaningful for chassis with swappable NM / expansion cards"
               disabled>
         <option value="">— no modules —</option>
       </select>
+      <!-- A target chosen from a model family: its deployment mode,
+           and per stack member the member number and the module in
+           each bay.  Hidden while the target is a flat profile. -->
+      <select id="mig-device-target-mode"
+              data-testid="migrate-device-target-mode-select"
+              style="display:none"
+              aria-label="How the target device is deployed"></select>
+      <span id="mig-device-target-members"
+            data-testid="migrate-device-target-members"></span>
+      <button type="button" class="mig-device-add"
+              id="mig-device-target-add"
+              data-testid="migrate-device-target-add-member"
+              style="display:none"
+              title="Add another member of the stack">+ stack member</button>
     </span>
+   </div>
     <span class="summary"
           id="mig-rename-summary"
           data-testid="migrate-rename-summary"></span>
   </div>
+
+  <!-- What each declared device resolved to (the device in words,
+       its port count, how well its port names are established, the
+       config lines a detected source was read from), and where the
+       mapping by position stands.  All three are rendered by
+       _partials/device-models.js and belong to the ports pane. -->
+  <div id="mig-device-source-note"
+       data-testid="migrate-device-source-note"
+       class="mig-device-note"
+       style="display:none"
+       role="note"
+       aria-live="polite"
+       aria-label="Source device — what the declaration resolved to"></div>
+  <div id="mig-device-target-note"
+       data-testid="migrate-device-target-note"
+       class="mig-device-note"
+       style="display:none"
+       role="note"
+       aria-live="polite"
+       aria-label="Target device — what the declaration resolved to"></div>
+  <div id="mig-rename-plan"
+       data-testid="migrate-rename-plan"
+       style="display:none"
+       role="status"
+       aria-live="polite"
+       aria-label="Port mapping by position"></div>
 
   <div id="mig-rename-fitcheck"
        data-testid="migrate-rename-fitcheck"
@@ -614,6 +875,7 @@
        role="note"
        aria-live="polite"
        aria-label="Target profile provenance — how well its port names are established"></div>
+  </div>
 
   <div id="mig-rename-modal-body">
     <!-- Left rail: category navigation.  Each button activates one
@@ -817,10 +1079,15 @@
   </div>
 
   <div id="mig-rename-modal-footer">
-    <span style="font-size:.75rem;color:var(--text-faint)"
-          id="mig-rename-status"
+    <span id="mig-rename-status"
           data-testid="migrate-rename-status"></span>
     <span class="spacer"></span>
+    <!-- Why Apply is disabled, when it is.  A button that is greyed
+         out and does not say why is a dead end. -->
+    <span id="mig-rename-apply-why"
+          data-testid="migrate-rename-apply-why"
+          role="status" aria-live="polite"
+          style="display:none"></span>
     <button type="button" class="btn-secondary"
             data-testid="migrate-rename-cancel-btn"
             onclick="closeRenameModal()">Cancel</button>
@@ -853,10 +1120,18 @@
  *   _partials/snmp-rename-table.js — renderSnmpRenameTable (fourth per-
  *                                  pane category, single-row scalar
  *                                  community rename; P2C5)
+ *   _partials/snmpv3-user-rename-table.js — renderSnmpV3UserRenameTable
+ *                                  (fifth per-pane category)
  *   _partials/rename-panel.js    — renderRenamePreview + renderRenameSummary
  *   _partials/fit-check.js       — renderFitCheck hardware-capacity banner
  *                                  + renderProfileNotice target-profile
  *                                  provenance notice
+ *   _partials/device-models.js   — source + target device pickers
+ *                                  (model family or profile, mode,
+ *                                  modules, stack members), source
+ *                                  detection, the per-device notes,
+ *                                  renderPortPlan + the plan's row
+ *                                  data for the rename table
  *   _partials/rename-apply.js    — renameModalApply + drag handlers +
  *                                  modal-specific DOMContentLoaded wiring
  *
@@ -1775,16 +2050,44 @@
      ──────────────────────────────────────────────────────────── */
 
   // Module-scope state.  Reset on every successful translation.
-  var _renameProfiles = [];          // [{vendor, model, display_name, ports, lags}]
+  var _renameProfiles = [];          // target profiles, as GET /migration/target-profiles returns them
   var _lastJobBody = null;           // last POST body that produced an output
   var _lastJob = null;               // last MigrationJob from the server
-  var _renameUserMap = {};           // source_name -> target_name (user overrides)
+  // Keyed by interface names, which an operator chooses on some
+  // platforms: no prototype, so no name finds anything inherited.
+  var _renameUserMap = Object.create(null);  // source_name -> target_name (user overrides)
   var _renameVlanUserMap = {};       // source_vlan_id -> target_vlan_id | null
   var _renameLocalUserMap = {};      // source_username -> target_username | null
   var _renameSnmpCommunityMap = {};  // source_community -> target_community | null (effectively single-entry)
   var _renameSnmpV3UserMap = {};     // source_v3_name -> target_v3_name | null
   var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans' | 'local_users' | 'snmp' | 'snmpv3'
   var _renameDragState = null;       // { offsetX, offsetY } while dragging
+  var _renameApplying = false;       // an Apply is in flight
+  var _applyHeldReason = '';         // why Apply is held, as the last summary found it
+  var _renameSectionOpen = {};       // kind -> a section the operator opened / closed
+
+  // Device models (see _partials/device-models.js).
+  var _modelFamilies = [];           // GET /migration/model-families
+  var _deviceDecl = { source: null, target: null };       // family declarations
+  var _deviceInventory = { source: null, target: null };  // what each compiles to
+  var _deviceError = { source: '', target: '' };          // why one did not compile
+  var _deviceUnchecked = { source: false, target: false }; // ... because no verdict arrived
+  var _deviceChecking = { source: false, target: false };  // a preview is in flight
+  var _modelFamiliesFailed = false;  // the last fetch of the families failed
+  var _deviceSeq = { source: 0, target: 0 };              // drops a stale response
+  var _deviceBusy = { source: null, target: null };       // compile request in flight
+  var _deviceProposal = null;        // what the config says about its own hardware
+  var _deviceProposalFor = '';       // the source text that proposal was read from
+  var _deviceDetecting = '';         // the source text being asked about now
+  var _deviceDetectError = '';       // why the config could not be asked
+  var _deviceTargetCodec = '';       // the target codec the target device is for
+  var _deviceSourceKey = '';         // the source text the source declaration is for
+  var _deviceSourceTouched = false;  // the operator chose in the source select, for this text
+  var _devicePlanKey = '';           // the declarations the plan on screen was made with
+  var _deviceTargetPick = null;      // last target { vendor, model, module } pick
+  var _deviceMembersOpen = { source: false, target: false };  // a long member list, unfolded
+  var _planAccepted = Object.create(null);  // name -> what "Accept as shown" recorded, for the plan on screen
+  var _planReportOpen = null;        // the report under the strip, as the operator left it
 
   // Kind ordering in the modal (drives the collapsible section order).
   var _RENAME_KIND_ORDER = ['physical', 'breakout', 'lag', 'svi',
@@ -1845,7 +2148,9 @@
     // label so the dropdown is human-scannable.
     var vendors = Array.from(new Set(_renameProfiles.map(function(p) {
       return p.vendor;
-    }))).sort(function(a, b) {
+    }).concat(_modelFamilies.map(function(f) {
+      return f.vendor;
+    })))).sort(function(a, b) {
       return _vendorLabel(a).localeCompare(_vendorLabel(b));
     });
     vendors.forEach(function(vendor) {
@@ -1889,6 +2194,13 @@
       opt.textContent = p.display_name || p.model;
       msel.appendChild(opt);
     });
+    // Models from a model family, for the vendor the target codec
+    // writes: a family model is only ever sent as a declared device,
+    // and the server compiles it against the codec's own vendor.
+    if (typeof appendDeviceFamilyOptions === 'function'
+        && vendor === _codecVendor(_deviceCodec('target'))) {
+      appendDeviceFamilyOptions(msel, vendor);
+    }
     // Repopulate module dropdown for the (possibly-newly-selected)
     // model — no model yet → hides the dropdown.
     populateRenameModuleDropdown(vendor, msel.value);
@@ -1951,6 +2263,9 @@
     var msel = document.getElementById('mig-rename-target-model');
     var vendor = vsel ? vsel.value : '';
     var model = msel ? msel.value : '';
+    // A model picked from a model family is not a profile: it is
+    // declared with a mode, modules and members (device-models.js).
+    if (model.indexOf('fam:') === 0) return '';
     return (vendor && model) ? (vendor + '/' + model) : '';
   }
 
@@ -2052,8 +2367,16 @@
    *  browsing, quota exceeded) — persistence is a nice-to-have. */
   function saveRenameAck() {
     if (!_lastJob) return;
+    // What "Accept as shown" recorded is a verdict on one pairing of
+    // two devices, and the devices are not remembered across a page
+    // load: it is not the operator's standing decision about this
+    // host, and is not stored as one.
+    var ownPorts = Object.assign({}, _renameUserMap);
+    Object.keys(_planAccepted).forEach(function(name) {
+      if (ownPorts[name] === _planAccepted[name]) delete ownPorts[name];
+    });
     var payload = {
-      ports: Object.assign({}, _renameUserMap),
+      ports: ownPorts,
       vlans: Object.assign({}, _renameVlanUserMap),
       local_users: Object.assign({}, _renameLocalUserMap),
       snmp_community: Object.assign({}, _renameSnmpCommunityMap),
@@ -2092,7 +2415,14 @@
   function applyLoadedRenameAck(ack) {
     if (!ack) return;
     if (ack.ports && typeof ack.ports === 'object') {
-      _renameUserMap = Object.assign({}, ack.ports);
+      _renameUserMap = Object.assign(Object.create(null), ack.ports);
+      // What "Accept as shown" recorded for the plan on screen is not
+      // stored (see saveRenameAck) and is still in force.
+      Object.keys(_planAccepted).forEach(function(name) {
+        if (_renameUserMap[name] === undefined) {
+          _renameUserMap[name] = _planAccepted[name];
+        }
+      });
     }
     if (ack.vlans && typeof ack.vlans === 'object') {
       // localStorage round-trips int keys as strings; coerce back
@@ -2129,8 +2459,8 @@
       if (userCount) bits.push(userCount + ' user');
       if (snmpCount) bits.push(snmpCount + ' SNMP');
       if (v3Count) bits.push(v3Count + ' SNMPv3');
-      status.textContent = 'Restored prior overrides ('
-        + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.';
+      setRenameStatus('Restored prior overrides ('
+        + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.');
       status.setAttribute('data-testid-state', 'ack-restored');
     }
   }
@@ -2324,6 +2654,9 @@
     var fitcheck = document.getElementById('mig-rename-fitcheck');
     var portsOnly = (cat === 'ports');
     if (profileGroup) profileGroup.style.display = portsOnly ? 'flex' : 'none';
+    // The source-device row, the per-device notes and the port-plan
+    // strip are about port names too.
+    if (typeof showDevicePickers === 'function') showDevicePickers(portsOnly);
     if (fitcheck) {
       // Preserve the existing "no profile = hidden" rule when on
       // ports pane — fit-check.js manages its own show/hide based
@@ -2363,8 +2696,8 @@
 
   /** Update the rail buttons' count badges.  Called whenever the
    *  underlying state shifts (job swap, user override, reset all).
-   *  Counts reflect "rows in this category" — for ports that's
-   *  applied + warnings; for VLANs that's source_vlans.length.
+   *  Counts reflect "rows in this category" — for ports that's the
+   *  rows renderRenameTable drew; for VLANs that's source_vlans.length.
    *  Persistence lives on renderRenameSummary, which is a strict
    *  super-set of this function's callers. */
   function renderRenameRailCounts() {
@@ -2374,14 +2707,11 @@
     var usersCount = document.getElementById('mig-rename-rail-local-users-count');
     var snmpCount = document.getElementById('mig-rename-rail-snmp-count');
     var snmpv3Count = document.getElementById('mig-rename-rail-snmpv3-count');
-    if (portsCount) {
-      var applied = _lastJob.port_renames
-        ? Object.keys(_lastJob.port_renames).length : 0;
-      var warned = (_lastJob.warnings || []).filter(function(w) {
-        return /'[^']+'/.test(w);
-      }).length;
-      portsCount.textContent = String(applied + warned);
-    }
+    // The ports count is the number of rows the ports table draws.
+    // renderRenameTable writes it, where the rows are made: counted
+    // again here by another rule, it came out one more than the rows
+    // for a config with two warnings about one name.
+    if (portsCount && !portsCount.textContent) portsCount.textContent = '0';
     if (vlansCount) {
       var v = (_lastJob.source_vlans || []).length;
       vlansCount.textContent = String(v);
@@ -2410,11 +2740,19 @@
   function captureJobForRename(body, job) {
     _lastJobBody = body;
     _lastJob = job;
-    _renameUserMap = {};
+    _renameUserMap = Object.create(null);
     _renameVlanUserMap = {};
     _renameLocalUserMap = {};
     _renameSnmpCommunityMap = {};
     _renameSnmpV3UserMap = {};
+    // A new translation: a different source text starts with no
+    // source device declared, and nothing accepted for the last plan
+    // is this job's.
+    if (typeof resetDevicesForJob === 'function') resetDevicesForJob(body);
+    _devicePlanKey = '';
+    _planAccepted = Object.create(null);
+    _planReportOpen = null;
+    _renameSectionOpen = {};
     var btn = document.getElementById('mig-rename-open-btn');
     var badge = document.getElementById('mig-rename-badge-count');
     if (!btn) return;
@@ -2434,8 +2772,14 @@
       && job.source_local_users.length > 0;
     var hasSnmpCommunity = job && typeof job.source_snmp_community === 'string'
       && job.source_snmp_community.length > 0;
+    // A same-vendor translation renames nothing and may warn about
+    // nothing, and is exactly where declaring the two devices does
+    // the most: the ports the config uses are enough to open on.
+    var hasSourcePorts = job && Array.isArray(job.source_ports)
+      && job.source_ports.length > 0;
     var hasAnything = hasRenames || hasWarnings || hasVlans
-                      || hasLocalUsers || hasSnmpCommunity;
+                      || hasLocalUsers || hasSnmpCommunity
+                      || hasSourcePorts;
     if (job && job.rendered && hasAnything) {
       btn.style.display = '';
       var attentionCount = hasWarnings ? job.warnings.length : 0;
@@ -2447,6 +2791,14 @@
       }
     } else {
       btn.style.display = 'none';
+    }
+    // The modal does not block the page, so a translation can be
+    // submitted from the form behind it.  What it shows is then of a
+    // job that is no longer on the page: draw it again from this one.
+    var modal = document.getElementById('mig-rename-modal');
+    if (modal && modal.classList.contains('open')) {
+      if (job && job.rendered && hasAnything) refreshRenameModal();
+      else closeRenameModal();
     }
   }
 
@@ -2474,6 +2826,33 @@
     modal._returnFocus = document.activeElement;
     modal.classList.add('open');
     modal.style.display = 'flex';
+    refreshRenameModal();
+    // Move focus into the dialog so SR announces it and keyboard users
+    // can Tab through + Esc out (mirrors kbd-cheatsheet.js).
+    var closeBtn = modal.querySelector(
+      '[data-testid="migrate-rename-modal-close"]'
+    );
+    if (closeBtn) closeBtn.focus();
+  };
+
+  /** Write the footer's status line -- the one place it is written.
+   *  *state* is ``'failed'`` for why an Apply did not happen (drawn
+   *  as an error, and left until the next line written here); every
+   *  other line is a plain report and clears it, so a report is
+   *  never drawn as the error before it. */
+  function setRenameStatus(text, state) {
+    var status = document.getElementById('mig-rename-status');
+    if (!status) return;
+    status.textContent = text;
+    if (state) status.setAttribute('data-state', state);
+    else status.removeAttribute('data-state');
+  }
+
+  /** Draw the whole modal from the job on the page.  Called when the
+   *  modal opens, and when a new translation replaces the job it was
+   *  opened on. */
+  function refreshRenameModal() {
+    setRenameStatus('');
     // Restore persisted overrides for this (source, target, hostname)
     // triple, if any.  Runs BEFORE the initial render so the
     // restored state is visible on first paint rather than flashing
@@ -2502,6 +2881,10 @@
       vsel.value = suggestedVendor;
     }
     populateRenameModelDropdown(vsel.value);
+    // Device pickers: fill the source list, put the target pick
+    // back (the model list was just rebuilt), and ask the config
+    // which device it came from.
+    if (typeof openDevicePickers === 'function') openDevicePickers();
     // Initial render from the current job.  Render ALL category
     // panes so rail counts are accurate before the operator clicks
     // anything; the active-pane rule then hides the inactive ones.
@@ -2515,13 +2898,7 @@
     renderPerPaneFitCheck();
     renderRenamePreview();
     renderRenameSummary();
-    // Move focus into the dialog so SR announces it and keyboard users
-    // can Tab through + Esc out (mirrors kbd-cheatsheet.js).
-    var closeBtn = modal.querySelector(
-      '[data-testid="migrate-rename-modal-close"]'
-    );
-    if (closeBtn) closeBtn.focus();
-  };
+  }
 
   window.closeRenameModal = function() {
     var modal = document.getElementById('mig-rename-modal');
@@ -2549,7 +2926,8 @@
   });
 
   window.renameModalResetAll = function() {
-    _renameUserMap = {};
+    _renameUserMap = Object.create(null);
+    _planAccepted = Object.create(null);
     _renameVlanUserMap = {};
     _renameLocalUserMap = {};
     _renameSnmpCommunityMap = {};
@@ -2568,8 +2946,7 @@
     renderRenameRailCounts();
     renderRenamePreview();
     renderRenameSummary();
-    var status = document.getElementById('mig-rename-status');
-    if (status) status.textContent = 'All overrides cleared.';
+    setRenameStatus('All overrides cleared.');
   };
 
   /* ── Rename-modal table renderer (extracted to _partials/rename-table.js) ── */
@@ -2595,6 +2972,9 @@
 
   /* ── Shared client-side classifiers (extracted to _partials/classify.js) ── */
   {% include "_partials/classify.js" %}
+
+  /* ── Device pickers + port plan (extracted to _partials/device-models.js) ── */
+  {% include "_partials/device-models.js" %}
 
   /* ── Rename-modal apply flow + drag + selector wiring (extracted to _partials/rename-apply.js) ── */
   {% include "_partials/rename-apply.js" %}
@@ -2625,6 +3005,7 @@
   // Initial load
   loadAdapters();
   loadRenameTargetProfiles();
+  loadModelFamilies();
 })();
 </script>
 {% endblock %}

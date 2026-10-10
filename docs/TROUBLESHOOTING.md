@@ -237,20 +237,41 @@ to the API.  See [`CAPABILITIES.md`](CAPABILITIES.md) § F for what
 the line under the fit-check banner tells you about the profile's
 names.
 
-Through the API there is now a way to tell it: declare the source
-device as well as the target, and the ports are paired by position
-between the two.  See [`CAPABILITIES.md`](CAPABILITIES.md) § G.
+There is now a way to tell it: choose the *Source device* as well as
+the target in the modal (or declare both through the API), and the
+ports are paired by position between the two.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § G.
+
+### Apply is greyed out in the rename modal
+
+It says why, beside the button.  Two rows end on one target name: give
+one of them another target, or drop it.  If the two are ports the
+translator itself put on one name (two Catalyst ports that both read
+as `1/1` on an Aruba switch), declare the *Source device* and the
+*Target device*: with both declared, Apply is available and pairs
+each port with a port of its own.
+
+### The strip above the rename table is red
+
+The job is held.  Either a target port was given more than one source
+port — open "What the mapping reported" under the strip for which, and
+change one of the entries that point there — or, on a RouterOS target,
+a port's name reads as a VLAN, a bridge or a LAG and no line of the
+output finds its hardware: give that port another name.
 
 ### Detection proposes a device, and says ports are missing
 
-`POST /api/v1/migration/detect-deployment` returned a `deployment` with
-`consistent: false`.  The config says it is that device, and uses port
-names that device does not have (`missing_ports`; `missing_port_count`
-is how many).  Possible causes:
+In the rename modal the line under *Source device* is amber and says
+"N port names the config uses are not on this device", with the first
+few.  On the API, `POST /api/v1/migration/detect-deployment` returned a
+`deployment` with `consistent: false`.  Either way the config says it
+is that device, and uses port names that device does not have
+(`missing_ports`; `missing_port_count` is how many).  Possible causes:
 
 * **A module the config does not state.**  The config uses `A1`-`A4`
   and has no `flexible-module` line, so the proposal has an empty bay.
-  Add the module to the deployment's `modules` before you send it.
+  Set the bay's module in the *Source device* row (or add it to the
+  deployment's `modules` before you send it).
 * **Only part of the config was pasted**, or two were pasted together:
   a standalone banner over stacked port names (`1/24`).
 * **A name that is not a hardware port.**  The check counts any name
@@ -263,7 +284,8 @@ is how many).  Possible causes:
   its `module` or `stacking` lines and its VLAN port lists.
 
 `consistent: null` is not a pass: nothing was checked, because nothing
-was proposed, the text could not be parsed, or it names no port.
+was proposed, the text could not be parsed, or it names no port.  The
+modal shows that line in amber too.
 
 A `deployment` of `null` is not an error.  The first of `notes` says
 why: the config

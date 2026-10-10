@@ -12,8 +12,8 @@
    *
    * And module-scope helpers:
    *
-   *   renderFitCheck()       — inline fit-check banner (still in
-   *                            migrate.html; called at the end of
+   *   renderFitCheck()       — inline fit-check banner (in
+   *                            _partials/fit-check.js; called at the end of
    *                            renderRenameSummary so the banner
    *                            refreshes on every state change)
    * ────────────────────────────────────────────────────────────────── */
@@ -123,6 +123,9 @@
     preview.textContent = text;
   }
 
+  /** Why Apply is held, as the last summary found it, or ''. */
+  function applyHeldBy() { return _applyHeldReason; }
+
   /** Summary line above the rename modal's Apply button.  Reports:
    *    * total auto-applied renames from the server
    *    * user override count
@@ -132,8 +135,10 @@
    *
    *  Also disables the Apply button when collisions exist — the
    *  rendered output would have duplicated port stanzas which is
-   *  never the operator's intent.  Triggers renderFitCheck() at
-   *  the end so the hardware-capacity banner refreshes in lockstep. */
+   *  never the operator's intent — and says why beside it, in its
+   *  title and in ``#mig-rename-apply-why``.  Triggers
+   *  renderFitCheck() at the end so the hardware-capacity banner
+   *  refreshes in lockstep. */
   function renderRenameSummary() {
     var summ = document.getElementById('mig-rename-summary');
     if (!summ || !_lastJob) return;
@@ -160,7 +165,7 @@
 
     // Collision count re-compute.  Dropped sources don't contribute
     // (they won't reach the target).
-    var targetCounts = {};
+    var targetCounts = Object.create(null);
     var seenSources = new Set();
     function tally(src, tgt) {
       if (!tgt || seenSources.has(src)) return;
@@ -178,9 +183,35 @@
         }
       });
     }
+    // A port the config uses that was neither renamed nor dropped
+    // keeps its own name -- which an override may not also take.
+    // Counted only against an entry of the operator's: where the
+    // translator itself put a name on an unchanged port's name (a
+    // Junos unit onto its port), that is the job as it came back, and
+    // holding Apply for it would hold every other edit too.
+    var ownTargets = new Set();
+    Object.keys(_renameUserMap).forEach(function(src) {
+      if (_renameUserMap[src]) ownTargets.add(_renameUserMap[src]);
+    });
+    (_lastJob.source_ports || []).forEach(function(src) {
+      if (_renameUserMap[src] === undefined && !autoDroppedSet.has(src)
+          && ownTargets.has(src)) {
+        tally(src, src);
+      }
+    });
     var collisions = 0;
+    // The same count, of targets an entry of the operator's points at.
+    var ownCollisions = 0;
+    var firstShared = '';
+    var firstOwnShared = '';
     Object.keys(targetCounts).forEach(function(t) {
-      if (targetCounts[t] > 1) collisions += targetCounts[t];
+      if (targetCounts[t] <= 1) return;
+      collisions += targetCounts[t];
+      if (!firstShared) firstShared = t;
+      if (ownTargets.has(t)) {
+        ownCollisions += targetCounts[t];
+        if (!firstOwnShared) firstOwnShared = t;
+      }
     });
 
     // VLAN-category totals — parallel port stats.  Counted from
@@ -369,10 +400,41 @@
     // duplicate stanzas, silently shipping a merge is almost always
     // an operator confusion rather than intent.  Forcing the operator
     // to resolve or explicitly drop prevents accidental merges.
-    var totalCollisions = collisions + vlanCollisions + userCollisions
-      + snmpCollisions;
+    //
+    // One exception, for ports.  Two of the SERVER's own renames on
+    // one target name are what declaring the two devices is for: the
+    // pairing by position puts each port on a port of its own.  While
+    // an Apply would ask for that pairing, only a collision an entry
+    // of the operator's takes part in holds it -- the server
+    // re-decides the rest, and reports any that survives.
+    var pairWaiting = (typeof devicePairWaiting === 'function')
+      && devicePairWaiting();
+    var held = '';
+    if (pairWaiting ? ownCollisions : collisions) {
+      held = pairWaiting
+        ? 'two of your own entries end on one target name ('
+          + firstOwnShared + ')'
+        : 'two rows end on one target name (' + firstShared
+          + ') — give one another target, or drop it';
+    } else if (vlanCollisions) {
+      held = 'two VLANs end on one VLAN id — change one, or drop it';
+    } else if (userCollisions) {
+      held = 'two local users end on one name — change one, or drop it';
+    } else if (snmpCollisions) {
+      held = 'two SNMP communities end on one name';
+    }
+    _applyHeldReason = held;
     var applyBtn = document.getElementById('mig-rename-apply-btn');
-    if (applyBtn) applyBtn.disabled = totalCollisions > 0;
+    if (applyBtn) {
+      applyBtn.disabled = _renameApplying || !!held;
+      // A disabled button that does not say why is a dead end.
+      applyBtn.title = held ? 'Apply is held: ' + held : '';
+    }
+    var applyWhy = document.getElementById('mig-rename-apply-why');
+    if (applyWhy) {
+      applyWhy.textContent = held ? 'Apply is held: ' + held + '.' : '';
+      applyWhy.style.display = held ? '' : 'none';
+    }
 
     // Fit-check banner is re-rendered whenever the summary is —
     // same inputs (job state + user overrides can change source

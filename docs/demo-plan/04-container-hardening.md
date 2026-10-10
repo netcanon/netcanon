@@ -135,8 +135,9 @@ Notes:
 ## <a name="route-allowlist"></a>Feature surface reduction
 
 The demo needs exactly two flows — **migrate/translate** and **sanitize** —
-plus the read-only capability and target-profile lookups their UIs call. It
-must NOT expose netcanon's device-backup, inventory, schedule, saved-config, or
+plus the read-only lookups and the compute-only calls their UIs make. It
+must NOT expose netcanon's device-backup, device-inventory (`/api/v1/devices*`),
+schedule, saved-config, or
 definition-management surfaces. No-egress makes those inert, but the warden
 also enforces a **default-deny route allowlist** (anything not listed → 404 at
 the warden). netcanon has **no root-path support** and its UI uses absolute
@@ -146,7 +147,11 @@ allow — all CSS/JS is inlined into the pages — and there is **no
 `/api/v1/translate` route**; translation runs through `POST
 /api/v1/migration/plan` and its typed sub-plans.
 
-**ALLOW** (verified against the image route table):
+**ALLOW** (each is a route of the product version that serves it:
+`tests/unit/test_demo_allowlist_routes.py` holds the warden's lists to the
+application's route table and to this list.  `model-families`, `inventory` and
+`detect-deployment` exist from the first release after v0.7.7; an older image
+answers 404 for them, and its migrate page does not call them):
 
 - `GET  /migrate`
 - `GET  /sanitize`
@@ -154,9 +159,13 @@ allow — all CSS/JS is inlined into the pages — and there is **no
 - `GET  /api/v1/migration/adapters`
 - `GET  /api/v1/migration/adapters/{name}/capabilities`
 - `GET  /api/v1/migration/target-profiles` (+ `/{vendor}/{model}`)
+- `GET  /api/v1/migration/model-families`
 - `POST /api/v1/migration/plan` (+ `/plan/ports`, `/plan/vlans`,
   `/plan/local_users`, `/plan/snmp`, `/plan/snmpv3`)
 - `POST /api/v1/migration/detect`
+- `POST /api/v1/migration/inventory` and `POST
+  /api/v1/migration/detect-deployment` (the rename modal's device
+  pickers; both only compute)
 - `POST /api/v1/sanitize`
 
 **BLOCK** (default-deny; called out because a visitor might probe them):
