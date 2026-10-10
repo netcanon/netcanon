@@ -404,35 +404,56 @@ tests use these exclusively — never CSS classes or element structure.  See
   and PROVENANCE, so a plaintext secret that merely CONTAINS a colon
   (`my:secret`) stays migratable while an unregistered envelope from an
   unvouched source is refused.
-- **Never** begin a line-anchored pattern with `\s` when it is applied to
-  a whole text, and never hand text nobody vouches for to a pattern whose
-  cost you have not measured.  A config is whatever was pasted.  Under
-  `re.MULTILINE`, `^\s+X` does not mean "X, indented": `\s` matches a
-  newline, so from every line start the pattern walks to the end of the
-  run of blank lines it is in, fails, and walks back — a run of N blank
-  lines costs N squared.  A probe window of lines of spaces (64 KB) held
-  `/detect` for about a minute, and one parse of a 32 KB run took up to
-  two seconds and four times that for each doubling, on patterns in the
-  `probe()` of nine codecs, in five parsers, and in the Tier-3 detection
-  that every `parse` runs.  It is also not what the pattern meant:
-  `^\s+bgp\b` matched a top-level `bgp` line that followed a blank one.
-  Write `[^\S\n]` (white space that is not a newline — `arista_eos/parse.py`
-  already called it `_WS`).  The same defect has other shapes, and each has
-  been shipped once: an unanchored search that restarts inside a word it
-  has already crossed (`([\w-]+)=` over a long token — the RouterOS
-  key=value pattern), and a scrub pattern applied to a fragment another
-  pattern matched (the first deployment detector, #499).  A list of the
-  patterns that were wrong cannot show that none is left, so the guard is
-  an experiment: `tests/unit/test_untrusted_text_cost.py` times every regex
-  the product holds — source literals, compiled patterns kept by a module
-  or class, patterns in the shipped device definitions — on repeated input
-  at growing sizes, and every public codec's `probe` and `parse` on a real
-  capture with a run of filler lines inserted.  A pattern that is slow and
-  safe (it reads only data the server ships) goes in that module's
-  `KNOWN_SLOW` with the reason; an entry that stops being slow fails the
-  test.  What the scan cannot see is a pattern assembled inside a function
-  from parts that are not literals — only the codec experiment reaches
-  those, so keep such patterns out of the paths that read pasted text.
+- **Never** hand text nobody vouches for to code whose cost you have not
+  measured.  A config is whatever was pasted, a request carries megabytes
+  of it, and a pattern at work does not let the server's other threads
+  run.  Four shapes took time that grew with the SQUARE of a run in the
+  text, each in shipped code, each found after the one before it had been
+  declared fixed:
+  (1) **a line-anchored pattern that begins with `\s`**, applied to a
+  whole text under `re.MULTILINE`.  `^\s+X` does not mean "X, indented":
+  `\s` matches a newline, so from every line start the pattern walks to
+  the end of the run of blank lines it is in.  A probe window of lines of
+  spaces held `/detect` for about a minute.  Write `[^\S\n]` (white space
+  that is not a newline — `arista_eos/parse.py` already called it `_WS`).
+  It was also not what the pattern meant: `^\s+bgp\b` matched a
+  top-level `bgp` line that followed a blank one.
+  (2) **a lazy value in front of trailing white space** — `(\S.*?)\s*$`
+  re-reads the rest of the line for every character it takes.  Write
+  `(\S(?:.*\S)?)\s*$`: from the first character that is not white space
+  to the last.  And its cousin, two runs that can each take the separator
+  between them (`\S+:\S+`, `[ \t]+.*`): make one of them unable to.
+  (3) **a search that fails and starts again inside the run it has just
+  crossed** — `(\d+)$` on digits and then a letter, `([\w-]+)=` on a long
+  word.  Say where the thing begins: `(?<!\d)(\d+)$`.
+  (4) **code that is no pattern at all**: a continued line joined with
+  `buffer += ...` and trimmed with `buffer.rstrip()[:-1]` copies everything
+  gathered so far for every line it grows by.  Parsing three megabytes of
+  RouterOS lines that each end in a backslash took two and a half minutes.
+  Gather pieces and join once.
+  The first of these was fixed as "the class", with a test that timed
+  whole filler lines and short units repeated from the first character;
+  it passed, and the other three were then found by reading — one of
+  them in a file that change had edited.  **A check does not reach
+  further than the texts it builds**, so
+  `tests/unit/test_untrusted_text_cost.py` builds each text from the thing
+  it is for: for every regex the product holds (source literals, compiled
+  patterns and pattern-shaped strings a module or class keeps, patterns in
+  the shipped device definitions) what the pattern needs before one of its
+  repeats, then a run of what that repeat accepts, then something the rest
+  refuses; and for every public codec's `probe` and `parse`, a real capture
+  with a run put into it — of empty lines, of lines that go on (a
+  continuation, an open quote, an open brace), of white space inside each
+  of its own lines.  It is a search, not a proof: it does not reach a
+  pattern put together inside a function from parts that are not literals
+  on a path the capture does not drive, nor a shape nobody thought to
+  build.  When you find one it missed, add the shape to the search in the
+  same change as the fix.  A pattern that is slow and safe (it reads only
+  data the server ships) goes in that module's `KNOWN_SLOW` with the
+  reason; an `re` call whose pattern is not a literal goes in `NOT_LITERAL`
+  with what covers it.  Earlier fixes of single patterns are pinned in
+  `tests/unit/migration/test_redos_hardening.py` and
+  `test_parse_quadratic_scan_perf.py`.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

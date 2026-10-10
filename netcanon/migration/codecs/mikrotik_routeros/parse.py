@@ -246,22 +246,72 @@ def _extract_version(raw: str) -> str:
 
 
 def _join_continuations(raw: str) -> str:
-    """Collapse RouterOS ``\\`` line continuations into single lines."""
+    """Collapse RouterOS ``\\`` line continuations into single lines.
+
+    A line that ends in a backslash (white space after it aside) goes
+    on in the next one: the backslash and the white space before it
+    are dropped, and the next line is joined on, stripped, after one
+    space.  A line that is not continued is kept as it is, trailing
+    white space included.
+
+    The text is whatever was pasted, and every line of it may end in
+    a backslash.  So the line being joined is never copied while it
+    grows: it is held as pieces, each with the offset it ends at, and
+    a continuation only moves an offset back or drops pieces.  Built
+    as one string -- ``buffer += ...; buffer = buffer.rstrip()[:-1]``
+    -- each line cost the length of everything before it, and 3 MB of
+    continued lines held a plan request for minutes.
+    """
     out: list[str] = []
-    buffer = ""
+    pieces: list[str] = []
+    ends: list[int] = []
+
+    def trim() -> None:
+        """Drop trailing white space from the line being joined."""
+        while pieces:
+            piece, stop = pieces[-1], ends[-1]
+            while stop and piece[stop - 1].isspace():
+                stop -= 1
+            if stop:
+                ends[-1] = stop
+                return
+            pieces.pop()
+            ends.pop()
+
+    def joined() -> str:
+        return "".join(piece[:stop] for piece, stop in zip(pieces, ends, strict=True))
+
     for line in raw.splitlines():
-        if buffer:
-            buffer += " " + line.strip()
+        if pieces:
+            more = line.strip()
+            pieces += (" ", more)
+            ends += (1, len(more))
         else:
-            buffer = line
-        if buffer.rstrip().endswith("\\"):
-            # Strip the trailing backslash and keep buffering.
-            buffer = buffer.rstrip()[:-1].rstrip()
+            pieces, ends = [line], [len(line)]
+        # Where the line ends once trailing white space is looked
+        # past -- found without changing it, because a line that is
+        # NOT continued keeps its trailing white space.
+        at, stop = len(pieces) - 1, ends[-1]
+        while at >= 0:
+            piece = pieces[at]
+            while stop and piece[stop - 1].isspace():
+                stop -= 1
+            if stop:
+                break
+            at -= 1
+            stop = ends[at] if at >= 0 else 0
+        if at >= 0 and pieces[at][stop - 1] == "\\":
+            # Drop the backslash and the white space before it and
+            # keep joining.  If nothing is left, the next line starts
+            # afresh.
+            del pieces[at + 1:], ends[at + 1:]
+            ends[at] = stop - 1
+            trim()
             continue
-        out.append(buffer)
-        buffer = ""
-    if buffer:
-        out.append(buffer)
+        out.append(joined())
+        pieces, ends = [], []
+    if pieces:
+        out.append(joined())
     return "\n".join(out)
 
 

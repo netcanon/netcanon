@@ -448,39 +448,63 @@ at its boundary, against the named constant),
 ## Input Validation — Config Text (what it costs to read)
 
 **Files:** `netcanon/migration/_tier3_detection.py`, every codec's
-`codec.py` (`probe`) and `parse.py` under `netcanon/migration/codecs/`,
-`netcanon/services/migration_detect.py`
+`codec.py` (`probe`), `parse.py` and `render.py` under
+`netcanon/migration/codecs/`, `netcanon/services/migration_detect.py`,
+the probe and prompt patterns under `netcanon/definitions/library/`
 
 A config is whatever was pasted.  `POST /api/v1/migration/detect`, `/plan`,
-the per-pane plan endpoints and `POST /api/v1/sanitize` hand it to patterns
-written for real configs.  The pasted text is capped in length (10,000,000 characters on
-a plan request); the cap bounds memory, not time, because a pattern can take
-time that grows with the square of a run in the text.
+the per-pane plan endpoints and `POST /api/v1/sanitize` hand it to code
+written for real configs.  The pasted text is capped in length (10,000,000
+characters on a plan request); the cap bounds memory, not time, because code
+can take time that grows with the square of a run in the text.  The server is
+one process and a pattern at work does not let its other threads run, so one
+such request delays every other.  There is no time limit on a request.
 
-One class did: a line-anchored pattern that began with `\s`, applied to the
-whole text under `re.MULTILINE`.  `\s` matches a newline, so from every line
-start the pattern walked to the end of the run of blank lines it was in.  A
-probe window of lines of spaces held detection for about a minute; a parse
-of a 32 KB run took up to two seconds and quadrupled with each doubling.  The
-server is one process and a pattern at work does not let its other threads
-run, so one such request delayed every other.  Those patterns now use `[^\S\n]` — white space that is not a
-newline — and so does the same class in four patterns of the shipped device
-definitions, which the collectors apply to what a device printed.  A RouterOS
-key=value pattern that restarted inside a long word was closed the same way.
+Four shapes did, and were mended:
+
+* **A line-anchored pattern that began with `\s`**, applied to the whole
+  text under `re.MULTILINE`.  `\s` matches a newline, so from every line
+  start the pattern walked to the end of the run of blank lines it was in.  A
+  probe window of lines of spaces held detection for about a minute; a parse
+  of a 32 KB run took up to two seconds and quadrupled with each doubling.
+  Such patterns now begin with `[^\S\n]` — white space that is not a newline.
+* **A lazy value in front of trailing white space**, or two runs either side
+  of a separator that each could take it: a run of spaces inside a Dell OS10
+  route line, or after an IOS-XR `ntp` line, cost its square.
+* **A search that started again inside the run it had just crossed**: a
+  trailing number in a port name made of digits and then a letter; the
+  RouterOS key=value pattern on a long word.
+* **Code that was no pattern**: RouterOS line continuations were joined by
+  adding to one string, which was copied for every line it grew by.  Parsing
+  3 MB of continued lines took two and a half minutes.
+
+The same shapes in the shipped device definitions — probe patterns, which
+the collectors apply to what a device printed, and prompt patterns — were
+mended with them.
 
 Results are unchanged on every config in the repository and the development
 corpora: detection, every codec's probe and every codec's parsed tree were
-compared before and after.  One meaning did change, and was the defect: a
-pattern for an *indented* keyword no longer matches that keyword at the left
-margin when the line before it is blank.
+compared before and after, and every committed capture was replayed through
+the plan endpoints.  What did change in meaning is in each case the defect,
+or a text no device prints: a pattern for an *indented* keyword no longer
+matches that keyword at the left margin when the line before it is blank; a
+device-definition probe for a value no longer takes a value that is only
+white space; the RouterOS export banner has to be on one line; and in a
+prompt pattern the user or host part can no longer contain the separator
+that follows it.
 
-There is no time limit on a request.  The control is that reading the text
-costs what its length costs, and the test that holds it is an experiment
-rather than a list of patterns: `tests/unit/test_untrusted_text_cost.py`
-times every regex the product holds on repeated input, and every public
-codec's `probe` and `parse` on a real capture with a run of filler lines
-inserted.  It is a search over repeated short units, not a proof: a pattern
-that is slow only on some other shape of input would pass it.
+The control is that reading the text costs what its length costs, and it is
+held by a search rather than by a list of patterns:
+`tests/unit/test_untrusted_text_cost.py` builds, for every regex the product
+holds, texts from that pattern's own structure, and times every public
+codec's `probe` and `parse` on a real capture with a run put into it.  **A
+search is not a proof.**  It does not reach a pattern assembled inside a
+function from parts that are not literals on a path the capture does not
+drive, nor code that is slow on a shape the search does not build; the
+second, third and fourth shapes above were each found by a reader after an
+earlier version of this test had passed.  A deployment that takes text from
+people it does not trust should put a request timeout in front of the
+application.
 
 ---
 

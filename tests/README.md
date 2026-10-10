@@ -80,6 +80,15 @@ pytest --cov=netcanon --cov-report=term-missing
 pytest -m "not e2e" -n auto
 ```
 
+One unit module is slower than its neighbours on purpose:
+`tests/unit/test_untrusted_text_cost.py` reads the clock.  It builds a
+text for every regex the product holds and times every codec's `probe`
+and `parse` on a capture with a run put into it, to find code whose
+cost grows faster than its input.  It takes tens of seconds, and far
+longer when it fails, because what it has then found is slow.  A
+failure there is not flakiness to retry: its readings are the best of
+several and it asks twice before it says a thing is slow.
+
 ## Test Isolation
 
 | Layer       | Isolation mechanism |

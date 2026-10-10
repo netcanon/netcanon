@@ -115,8 +115,13 @@ _NAMESERVER_RE = re.compile(
 #: [maxpoll N] [prefer]`` / ``source <iface>`` / ``update-calendar`` leaves.
 #: Capture the indented body, then pull ``server`` leaves from it (the
 #: ``source`` / ``update-calendar`` tails carry no ``server`` keyword).
+#:
+#: A body line is ``[ \t].*`` -- one space or tab, then the rest -- and
+#: not ``[ \t]+.*``: the two accept the same lines, but with ``+`` a
+#: long indent that is not followed by a newline is split between the
+#: two every way there is, and costs its square.
 _NTP_BLOCK_RE = re.compile(
-    r"^ntp[ \t]*\r?\n((?:[ \t]+.*\r?\n)+)", re.IGNORECASE | re.MULTILINE,
+    r"^ntp[ \t]*\r?\n((?:[ \t].*\r?\n)+)", re.IGNORECASE | re.MULTILINE,
 )
 #: The optional ``vrf <name>`` infix precedes the address on IOS-XR
 #: (``server vrf MGMT 10.11.23.7``); without it the ``vrf`` keyword was
@@ -377,9 +382,12 @@ def _extract_version(raw: str) -> str:
     #   ``!! IOS XR Configuration 6.3.1``            (older)
     #   ``!! IOS XR Configuration version = 6.2.1``  (newer; also ``version 7.x``)
     # Skip the optional ``version [=]`` keyword so the capture is the release
-    # number, not the literal word ``version``.
+    # number, not the literal word ``version``.  The white space before an
+    # ``=`` belongs to the ``=`` (``(?:\s*=)?``): written ``\s*=?\s*``, a
+    # run of spaces after ``version`` was shared out between the two every
+    # way there is before the release was found not to follow.
     m = re.search(
-        r"^!!\s+IOS XR Configuration\s+(?:version\s*=?\s*)?(\S+)",
+        r"^!!\s+IOS XR Configuration\s+(?:version(?:\s*=)?\s*)?(\S+)",
         raw, re.MULTILINE,
     )
     return m.group(1) if m else ""

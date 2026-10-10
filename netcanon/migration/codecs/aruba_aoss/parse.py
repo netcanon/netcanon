@@ -504,8 +504,11 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
     Aruba fixtures had near-empty port-membership lists on parse;
     the canonical coverage was materially under-reported.
     """
-    m_lo = re.match(r"^(.*?)(\d+)$", lo)
-    m_hi = re.match(r"^(.*?)(\d+)$", hi)
+    # ``(?<!\d)``: the number begins where the trailing digits begin,
+    # which is where the lazy prefix would stop anyway -- but without
+    # it a token of digits and then a letter is tried at every digit.
+    m_lo = re.match(r"^(.*?)(?<!\d)(\d+)$", lo)
+    m_hi = re.match(r"^(.*?)(?<!\d)(\d+)$", hi)
     if not m_lo or not m_hi:
         return [lo, hi]   # no trailing digits — pass through as-is
     prefix_lo, num_lo = m_lo.group(1), int(m_lo.group(2))

@@ -50,7 +50,7 @@ probe:
   command: "show system"
   patterns:
     detected_os_version: '^[^\S\n]*Software revision\s*:\s+(\S+)'
-    detected_model: '^[^\S\n]*Hardware\s*:\s+(.+?)\s*$'
+    detected_model: '^[^\S\n]*Hardware\s*:\s+(\S(?:.*\S)?)\s*$'
     detected_serial: '^[^\S\n]*Serial Number\s*:\s+(\S+)'
 
 notes: >

@@ -280,15 +280,18 @@ for the reference pattern).
    toward round-trip stability (`parse(render(parse(raw))) == parse(raw)`
    at the canonical level).
 4. **Write `probe()`** using 2-3 discriminating structural markers
-   unique to your vendor's wire format.  A probe — and any pattern
-   `parse` applies to the whole text — reads whatever was pasted, so
-   its cost has to fit the text's length: under `re.MULTILINE`, write
-   `^[^\S\n]+keyword`, never `^\s+keyword` (`\s` crosses newlines, and
-   a run of blank lines then costs its square).  See the Hard Rule in
-   `AGENTS.md`; `tests/unit/test_untrusted_text_cost.py` times every
-   public codec's `probe` and `parse` and fails for one that does not
-   scale, and needs a small capture under `tests/fixtures/` that
-   detection gives to the new codec.
+   unique to your vendor's wire format.  A probe — and everything
+   `parse` does — reads whatever was pasted, so its cost has to fit the
+   text's length.  Four shapes have each shipped and been mended (the
+   Hard Rule in `AGENTS.md` has them): under `re.MULTILINE` write
+   `^[^\S\n]+keyword`, never `^\s+keyword` (`\s` crosses newlines); a
+   value before trailing white space is `(\S(?:.*\S)?)\s*$`, never a
+   lazy `(\S.*?)\s*$`; a trailing number is `(?<!\d)(\d+)$`; and lines
+   gathered into one are joined once, not added to a string line by
+   line.  `tests/unit/test_untrusted_text_cost.py` builds texts from
+   every pattern of the codec and times its `probe` and `parse`, and
+   needs a small capture under `tests/fixtures/` that detection gives
+   to the new codec.
 5. **Fill in `capabilities._CAPS`** listing every canonical xpath your
    parse/render actually handles (not aspirational — just what works).
 6. **Add real fixtures** under `tests/fixtures/real/<vendor>/` with

@@ -29,23 +29,33 @@ timestamp if your timezone matters for an audit.
 ### Security
 
 - **Reading a pasted config could take time that grew with the square of
-  its blank lines.**  Patterns that began `^\s` and were applied to the
-  whole text walked, from every line start, to the end of the run of blank
-  lines they were in.  A 64 KB body of lines of spaces held `/detect` for
-  about a minute, and a parse slowed the same way; a pattern at work does
-  not let the server's other threads run, so that delayed every other
-  request.  The
-  patterns — in the `probe()` of nine codecs, in five parsers, in the
-  Tier-3 detection every `parse` runs, and in four probe patterns of the
-  shipped Arista and AOS-S device definitions — now use white space that
-  cannot cross a line.  A RouterOS key=value pattern that restarted inside
-  a long word is closed too.  Detection, every probe and every parsed tree
-  are unchanged on every config in the repository and the development
-  corpora.  One meaning changed, and was the defect: a pattern for an
-  indented keyword no longer matches it at the left margin after a blank
-  line.  A new test times every regex the product holds, and every codec's
-  `probe` and `parse`, so the next such pattern fails CI
-  (`tests/unit/test_untrusted_text_cost.py`).
+  a run in it.**  Four shapes, each in shipped code.  Patterns that began
+  `^\s` and were applied to the whole text walked, from every line start,
+  to the end of the run of blank lines they were in: a 64 KB body of lines
+  of spaces held `/detect` for about a minute.  A lazy value in front of
+  trailing white space re-read the line for every character it took: a
+  run of spaces inside a Dell OS10 route line, or after an IOS-XR `ntp`
+  line.  A search for a trailing number, or for a RouterOS key, started
+  again inside the run it had just crossed.  And RouterOS line
+  continuations were joined by adding to one string: parsing 3 MB of
+  lines that each end in a backslash took two and a half minutes.  A
+  pattern at
+  work does not let the server's other threads run, so each delayed every
+  other request.  All are mended — in the `probe()` of nine codecs, in
+  the parsers and renderers, in the Tier-3 detection every `parse` runs,
+  and in the probe and prompt patterns of the shipped device definitions.
+  Detection, every probe and every parsed tree are unchanged on every
+  config in the repository and the development corpora, and every
+  committed capture replays identically through the plan endpoints.  What
+  changed in meaning is the defect or a text no device prints: a pattern
+  for an indented keyword no longer matches it at the left margin after a
+  blank line; a device-definition probe no longer takes a value that is
+  only white space; the RouterOS export banner has to be on one line; a
+  prompt pattern's user or host part cannot contain the separator after
+  it.  A new test searches for the next one: it builds texts from each
+  regex the product holds and times every codec's `probe` and `parse` on
+  a capture with a run put into it (`tests/unit/test_untrusted_text_cost.py`).
+  It is a search, not a proof — see SECURITY.md.
 
 ### Fixed
 

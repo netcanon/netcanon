@@ -21,7 +21,7 @@ commands:
 
 prompts:
   trailing:
-    - '^root@\S+:.*[#$]\s*$'   # root@OPNsense:/root #
+    - '^root@[^\s:]+:.*[#$]\s*$'   # root@OPNsense:/root #
 
 collector:
   strategy: paramiko_shell
