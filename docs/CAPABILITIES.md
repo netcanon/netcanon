@@ -870,9 +870,12 @@ Ports pane choose the *Source device* and the *Target device*.
   It is still sent with Apply, which the server then refuses: the
   output is left as it was, and the footer of the modal says *Not
   applied* with the server's reason until you act again.  A line that
-  says the device *could not
-  be checked* is not a refusal: the preview did not arrive, and Apply
-  sends the device for the server to compile itself.
+  says the device *could not be checked* is not a refusal: the preview
+  did not arrive, and Apply sends the device for the server to compile
+  itself.
+* Before Apply the table lists the ports the config uses, in the
+  declared source device's port order (undeclared: in the order the
+  config first mentions them).
 * **Apply** pairs the ports.  The table then shows, per source port,
   the target port and the position that decided it ("uplink 1"), and
   a row for every name with no place on the target.

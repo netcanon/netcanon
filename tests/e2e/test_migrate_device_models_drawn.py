@@ -2345,3 +2345,63 @@ class TestWhyAnApplyDidNotHappenStays:
             }"""
         )
         assert hit == "mig-rename-apply-btn"
+
+
+# ---------------------------------------------------------------------------
+# Before Apply: the rows are in the source device's port order
+# ---------------------------------------------------------------------------
+
+_PORT_ROWS = """() => Array.from(
+    document.querySelectorAll('[data-testid^="migrate-rename-source-"]')
+).map((cell) => cell.textContent.trim()).filter((name) => /^[0-9]+$/.test(name))"""
+
+
+def _port_rows(page: Page, first: list[str]) -> list[str]:
+    """The numbered ports in the order the table lists them, once the
+    list begins with *first* (the table is redrawn a moment after a
+    device changes)."""
+    page.wait_for_function(
+        "(first) => JSON.stringify(("
+        + _PORT_ROWS
+        + ")().slice(0, first.length)) === JSON.stringify(first)",
+        arg=first,
+    )
+    return page.evaluate(_PORT_ROWS)
+
+
+class TestTheTableBeforeApplyIsInPortOrder:
+    """An AOS-S config names its ports VLAN by VLAN, and the job lists
+    them as the config first mentions them: 1, 48-52, 35-47, 2...  That
+    was the table's order until Apply, for fifty-two ports.  Where the
+    source device is declared the rows are in its port order."""
+
+    def test_a_declared_source_puts_the_rows_in_its_port_order(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        # The source device is read from the config: 52 ports, 1 to 52.
+        expect(page.locator(_tid("migrate-device-source-note-ports"))).to_contain_text("52 ports")
+        numbered = [str(n) for n in range(1, 53)]
+        assert _port_rows(page, ["1", "2", "3"]) == numbered
+        # Not declared, the order is the job's: as the config first
+        # mentions them.
+        source = page.locator(_tid("migrate-device-source-model-select"))
+        source.select_option(value="")
+        as_named = _port_rows(page, ["1", "48", "49"])
+        assert sorted(as_named, key=int) == numbered and as_named != numbered
+        # A device with fewer ports: its own in its order, and the names
+        # it does not have after them, in the order they had.
+        source.select_option(value="fam:2930F:2930F-24G-4SFP")
+        expect(page.locator(_tid("migrate-device-source-note-ports"))).to_contain_text("28 ports")
+        rows = _port_rows(page, ["1", "2", "3"])
+        assert rows[:28] == numbered[:28]
+        assert rows[28:] == [name for name in as_named if int(name) > 28]
+
+    def test_after_apply_the_order_is_the_plans(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """The plan's rows are in the plan's order -- the source
+        device's -- with whatever the operator did to them."""
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        _apply(page)
+        expect(_plan(page)).to_have_attribute("data-state", "ok")
+        assert _port_rows(page, ["1", "2", "3"]) == [str(n) for n in range(1, 53)]

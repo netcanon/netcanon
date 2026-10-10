@@ -136,6 +136,12 @@ timestamp if your timezone matters for an audit.
 - **A new translation left the open modal describing the last one.**
   The modal does not block the page.  Translating again behind it now
   redraws all of it from the new job.
+- **The rename table listed an AOS-S config's ports as the config
+  first mentions them** — 1, 48–52, 35–47, 2… for a 48-port
+  switch, since AOS-S names its ports VLAN by VLAN.  Where the source
+  device is declared (it is read from an AOS-S config by itself), the
+  rows are in the device's own port order before Apply as well as
+  after it.
 - **Smaller things in the rename table.**  The rail's ports count is
   the number of rows drawn (it was one more for a config with two
   warnings about one name); a warning that quotes a *target* port no

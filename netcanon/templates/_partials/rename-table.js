@@ -10,6 +10,8 @@
    * migrate.html:
    *
    *   _lastJob               — most recent server job response
+   *   _deviceInventory       — the compiled source device: before a
+   *                            plan, its port order is the rows' order
    *   _renameUserMap         — {source_name: target_name | null}
    *   _planAccepted          — entries "Accept as shown" recorded; a
    *                            row edited by hand leaves it
@@ -244,6 +246,32 @@
       if (rowOf[src]) return;
       addRow(src, _guessKind(src), '', '').plain = true;
     });
+
+    // Without a plan the rows are in the order the job named them,
+    // which is the order the config first mentions its ports in.  A
+    // config that lists its ports VLAN by VLAN (AOS-S) mentions them
+    // as 1, 48-52, 35-47, 2...: no order to look a port up in.  Where
+    // the source device is declared, the rows go in its own port
+    // order, as they will after Apply; a name the device does not
+    // have keeps its place, after them.  Under a plan the order is
+    // already the plan's, and is left alone.
+    var sourceInv = (typeof _deviceInventory === 'object' && _deviceInventory)
+      ? _deviceInventory.source : null;
+    if (!planActive && sourceInv && Array.isArray(sourceInv.ports)) {
+      var portRank = Object.create(null);
+      sourceInv.ports.forEach(function(p, i) { portRank[p.name] = i; });
+      var placeOf = function(row) {
+        return (row.source in portRank) ? portRank[row.source] : Infinity;
+      };
+      _RENAME_KIND_ORDER.forEach(function(kind) {
+        if (!rowsByKind[kind]) return;
+        // A stable sort: rows with no place keep the order they had.
+        rowsByKind[kind].sort(function(a, b) {
+          var first = placeOf(a), second = placeOf(b);
+          return first === second ? 0 : (first < second ? -1 : 1);
+        });
+      });
+    }
 
     var totalRows = 0;
     _RENAME_KIND_ORDER.forEach(function(kind) { totalRows += (rowsByKind[kind] || []).length; });
