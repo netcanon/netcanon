@@ -152,7 +152,10 @@ def test_capability_prefixes_are_allowed_but_not_open_ended():
 def test_the_device_pickers_can_reach_their_three_endpoints():
     """The rename modal lists model families, compiles a declared
     device and reads the source device from the config.  Without
-    these the pickers would be empty on the demo and say nothing."""
+    these the source picker lists flat profiles only, a device that is
+    chosen cannot be previewed (the modal says the server answered 404,
+    and that Apply sends it all the same), and nothing is read from the
+    config -- which the modal says too."""
     assert C.route_allowed("GET", "/api/v1/migration/model-families")
     assert C.route_allowed("POST", "/api/v1/migration/inventory")
     assert C.route_allowed("POST", "/api/v1/migration/detect-deployment")

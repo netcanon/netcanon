@@ -8,11 +8,15 @@ table shows the pairing and every name it could not place.
 The headline case is the one the feature was built for: a real
 standalone Aruba 2930F-48G config moved onto a 2930M-48G with an SFP+
 module, deployed as a one-member stack.  Same vendor on both sides, so
-the name-shape translation renames nothing at all -- before this the
-modal's ports pane was empty for it.
+the name-shape translation renames nothing -- before this the ports
+pane listed only the nine names its warnings quoted, and for a clean
+config none at all.
 
-Everything here runs the committed real captures through the real
-server; nothing is mocked.  The pairing itself is pinned in
+The corridor tests run two committed real captures through the real
+server; the stack, RouterOS, FortiGate, Catalyst and detection cases
+run small configs written beside them.  Nothing is mocked.  What is
+drawn and what is sent are held in
+``test_migrate_device_models_drawn.py``.  The pairing itself is pinned in
 ``tests/unit/migration/test_run_plan_with_models.py`` and the API in
 ``tests/integration/test_migration_models_api.py``.
 """
@@ -26,6 +30,16 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e.drawn import (
+    alike,
+    choose_override,
+    contrast,
+    ink,
+    override_options,
+    painted_background,
+    painted_token,
+    token_ink,
+)
 from tests.e2e.helpers import MigratePage
 
 pytestmark = pytest.mark.e2e
@@ -170,6 +184,14 @@ def _pick_target(page: Page, value: str, bay_a: str | None = None) -> None:
         page.locator(_tid("migrate-device-target-member-0-bay-A")).select_option(value=bay_a)
 
 
+def _apply_request(page: Page) -> dict:
+    """Click Apply; return the body of the plan request it sent,
+    without waiting for an answer the caller wants to read itself."""
+    with page.expect_request("**/api/v1/migration/plan") as request:
+        page.locator(_tid("migrate-rename-apply-btn")).click()
+    return json.loads(request.value.post_data or "{}")
+
+
 def _apply(page: Page) -> dict:
     """Click Apply; return the body of the plan request it sent."""
     with (
@@ -305,9 +327,15 @@ class TestSourceDeviceIsReadFromTheConfig:
     def test_a_part_no_family_describes_is_named(
         self, page: Page, live_server_url: str,
     ) -> None:
+        """Nothing is proposed, so the server's notes are shown, the
+        reason first -- it names the part and says what can be done."""
         _open(page, live_server_url, _AOSS_UNKNOWN_PART)
-        expect(page.locator(_tid("migrate-device-source-note-unknown-parts"))).to_contain_text(
-            "The config states ZZ999A, which no model family describes yet"
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value("")
+        expect(page.locator(_tid("migrate-device-source-note-detect-note-0"))).to_contain_text(
+            "No model family describes ZZ999A"
+        )
+        expect(page.locator(_tid("migrate-device-source-note-detect-note-0"))).to_contain_text(
+            "A target profile for that device can be declared instead"
         )
 
     def test_a_standalone_device_has_no_member_number(
@@ -412,13 +440,15 @@ class TestStandalone2930FOntoStacked2930M:
         expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("52 paired")
         row = page.locator(_tid("migrate-rename-row-49"))
         expect(row).to_have_attribute("data-plan-state", "paired")
-        expect(row.locator("td").nth(1)).to_have_text("49")
-        expect(page.locator(_tid("migrate-rename-row-1")).locator("td").nth(1)).to_have_text("1")
+        expect(page.locator(_tid("migrate-rename-auto-49"))).to_have_text("49")
+        expect(page.locator(_tid("migrate-rename-auto-1"))).to_have_text("1")
         # No paired row says nothing was mapped.  (A row for a name the
         # translator left as it was -- a VLAN interface, a LAG -- still
         # may: that is what the note is for.)
         expect(
-            page.locator('tr[data-plan-state="paired"]').get_by_text("needs override")
+            page.locator(
+                '[data-testid^="migrate-rename-row-"][data-plan-state="paired"]'
+            ).get_by_text("needs override")
         ).to_have_count(0)
 
     def test_apply_pairs_every_port_by_position(
@@ -443,7 +473,7 @@ class TestStandalone2930FOntoStacked2930M:
         # The built-in uplinks land on the module's ports, by position.
         row = page.locator(_tid("migrate-rename-row-49"))
         expect(row).to_have_attribute("data-plan-state", "paired")
-        expect(row.locator("td").nth(1)).to_have_text("1/A1")
+        expect(page.locator(_tid("migrate-rename-auto-49"))).to_have_text("1/A1")
         expect(page.locator(_tid("migrate-rename-why-49"))).to_have_text("uplink 1")
         expect(page.locator(_tid("migrate-rename-why-1"))).to_have_text("access 1")
         expect(aoss_2930f.output).to_contain_text("untagged 1/48,1/A1,1/A2,1/A3,1/A4")
@@ -459,12 +489,29 @@ class TestStandalone2930FOntoStacked2930M:
         _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
         _apply(page)
         expect(_plan(page)).to_have_attribute("data-state", "ok")
+        # A list's target ports are made when the list is first used:
+        # until then it holds the choices that are not ports.
         override = page.locator(_tid("migrate-rename-override-49"))
-        values = override.locator("option").evaluate_all("els => els.map(e => e.value)")
+        unused = override.locator("option").evaluate_all("els => els.map(e => e.value)")
+        assert unused == ["", "__DROP__"]
+        values = [value for value, _text in override_options(page, "49")]
         assert [v for v in values if "/" in v] == ["1/A1", "1/A2", "1/A3", "1/A4"]
-        access = page.locator(_tid("migrate-rename-override-1"))
-        access_values = access.locator("option").evaluate_all("els => els.map(e => e.value)")
+        access_values = [value for value, _text in override_options(page, "1")]
         assert "1/48" in access_values and "1/A1" not in access_values
+        # A press fills it as a key does: the mouse reaches the same list.
+        pressed = page.locator(_tid("migrate-rename-override-50"))
+        pressed.dispatch_event("pointerdown")
+        assert "1/A2" in pressed.locator("option").evaluate_all("els => els.map(e => e.value)")
+        # A choice is kept across the redraw it causes, and the list
+        # that made it still has the focus.
+        choose_override(page, "49", "1/A2")
+        expect(override).to_have_value("1/A2")
+        expect(override).to_be_focused()
+        # A row that was never touched shows its choice without its list.
+        untouched = page.locator(_tid("migrate-rename-override-51"))
+        assert untouched.locator("option").evaluate_all("els => els.map(e => e.value)") == [
+            "", "__DROP__",
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -516,6 +563,18 @@ class TestPortsWithNoPlace:
         expect(page.locator(_tid("migrate-rename-row-49"))).not_to_have_class(
             re.compile(r"\bneeds-decision\b")
         )
+        # Recorded in the modal is not sent: the job on the page is
+        # still the one that needs them, and the strip is still amber.
+        expect(_plan(page)).to_have_attribute("data-state", "warn")
+        expect(page.locator(_tid("migrate-rename-plan-pending"))).to_have_text(
+            "4 decisions recorded — Apply to confirm"
+        )
+        assert alike(
+            painted_background(_plan(page)),
+            painted_token(page, "#mig-rename-modal-top", "--badge-partial-bg"),
+        )
+        expect(aoss_2930f.status_summary).to_contain_text("partial")
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_focused()
         body = _apply(page)
         assert body["port_rename_map"] == {
             "49": None, "50": None, "51": None, "52": None,
@@ -534,14 +593,27 @@ class TestPortsWithNoPlace:
         _pick_target(page, TARGET_2930M_48G)
         _apply(page)
         expect(_plan(page)).to_have_attribute("data-state", "warn")
-        override = page.locator(_tid("migrate-rename-override-49"))
-        values = override.locator("option").evaluate_all("els => els.map(e => e.value)")
+        values = [value for value, _text in override_options(page, "49")]
         assert "1/48" in values and "__DROP__" in values
-        override.select_option(value="1/48")
+        choose_override(page, "49", "1/48")
         expect(page.locator(_tid("migrate-rename-row-49"))).to_have_class(
             re.compile(r"\bhas-collision\b")
         )
-        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_disabled()
+        # Held, and it says why -- beside the button and in its title.
+        button = page.locator(_tid("migrate-rename-apply-btn"))
+        expect(button).to_be_disabled()
+        why = page.locator(_tid("migrate-rename-apply-why"))
+        expect(why).to_be_visible()
+        expect(why).to_have_text(
+            "Apply is held: two rows end on one target name (1/48) — "
+            "give one another target, or drop it."
+        )
+        expect(button).to_have_attribute("title", re.compile(r"^Apply is held: two rows end on"))
+        # Undone, it is available again and says nothing.
+        choose_override(page, "49", "")
+        expect(button).to_be_enabled()
+        expect(why).to_be_hidden()
+        expect(button).to_have_attribute("title", "")
 
     def test_a_dropped_port_does_not_hold_its_old_name(
         self, aoss_2930f: MigratePage, page: Page,
@@ -559,12 +631,16 @@ class TestPortsWithNoPlace:
         _apply(page)
         expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("28 paired")
         row = page.locator(_tid("migrate-rename-row-49"))
-        expect(row.locator("td").nth(1)).to_have_text("25")
+        expect(page.locator(_tid("migrate-rename-auto-49"))).to_have_text("25")
         expect(row).not_to_have_class(re.compile(r"\bhas-collision\b"))
         expect(page.locator(_tid("migrate-rename-row-25"))).to_have_class(
             re.compile(r"\bhas-drop\b")
         )
         expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
+        # Two rules make that true -- the table's and the summary's --
+        # and the summary's is the one that holds the button.
+        expect(page.locator(_tid("migrate-rename-summary"))).not_to_contain_text("collision")
+        expect(page.locator(_tid("migrate-rename-apply-why"))).to_be_hidden()
 
     def test_a_smaller_switch_leaves_access_ports_behind_too(
         self, aoss_2930f: MigratePage, page: Page,
@@ -578,7 +654,7 @@ class TestPortsWithNoPlace:
             "no access port left on the target"
         )
         # The uplinks still found their place, on the module.
-        expect(page.locator(_tid("migrate-rename-row-49")).locator("td").nth(1)).to_have_text("1/A1")
+        expect(page.locator(_tid("migrate-rename-auto-49"))).to_have_text("1/A1")
 
 
 # ---------------------------------------------------------------------------
@@ -617,30 +693,75 @@ class TestStackMembers:
         body = _apply(page)
         assert [m["id"] for m in body["target_deployment"]["members"]] == [1, 2]
         expect(_plan(page)).to_have_attribute("data-state", "ok")
-        override = page.locator(_tid("migrate-rename-override-52"))
-        texts = override.locator("option").all_text_contents()
+        texts = [text for _value, text in override_options(page, "52")]
         assert any(t.startswith("2/A1") and "(free)" in t for t in texts), texts
         assert not any(t.startswith("1/A1") and "(free)" in t for t in texts), texts
-        override.select_option(value="2/A1")
+        choose_override(page, "52", "2/A1")
         _apply(page)
         expect(aoss_2930f.output).to_contain_text("2/A1")
         expect(_plan(page)).to_have_attribute("data-state", "ok")
+        # The strip says what happened: 51 ports stand where they were
+        # paired, and one is where the operator sent it.
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("51 paired")
+        expect(page.locator(_tid("migrate-rename-plan-your-moves"))).to_have_text(
+            "1 paired port sent elsewhere by your own entries"
+        )
+        expect(page.locator(_tid("migrate-rename-why-52"))).to_contain_text(
+            "sent to 2/A1 by your own entry"
+        )
 
     def test_a_member_number_outside_the_stack_is_refused_in_words(
         self, aoss_2930f: MigratePage, page: Page,
     ) -> None:
         expect(_source_note(page)).to_be_visible()
         _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        _apply(page)
+        expect(_plan(page)).to_have_attribute("data-state", "ok")
+        before = aoss_2930f.output.inner_text()
         member = page.locator(_tid("migrate-device-target-member-0-id"))
         member.fill("11")
         member.dispatch_event("change")
         error = page.locator(_tid("migrate-device-target-note-error"))
         expect(error).to_be_visible()
+        expect(error).to_contain_text("member id 11 is outside 1-10")
         expect(_target_note(page)).to_have_class(re.compile(r"\bnotice-block\b"))
-        expect(page.locator(_tid("migrate-rename-plan-hint"))).to_contain_text("not valid yet")
-        # A declaration that does not compile is not sent.
-        body = _apply(page)
-        assert "target_deployment" not in body and "source_deployment" not in body
+        expect(_target_note(page)).to_have_attribute("data-state", "invalid")
+        # The strip says what Apply will do, in red.
+        hint = page.locator(_tid("migrate-rename-plan-hint"))
+        expect(hint).to_contain_text("A device declaration is not valid")
+        expect(hint).to_contain_text("the server will refuse it")
+        expect(_plan(page)).to_have_attribute("data-state", "invalid")
+        assert alike(
+            painted_background(_plan(page)),
+            painted_token(page, "#mig-rename-modal-top", "--badge-failed-bg"),
+        )
+        # The declaration IS sent.  Left out, the server would translate
+        # by name shape and the toast would say the rename was applied:
+        # the pairing on screen gone from the output, reported as success.
+        with page.expect_response("**/api/v1/migration/plan") as answer:
+            body = _apply_request(page)
+        assert body["target_deployment"]["members"][0]["id"] == 11
+        assert "source_deployment" in body
+        assert answer.value.status == 422
+        toast = page.locator(_tid("toast"))
+        expect(toast).to_have_class(re.compile(r"\btoast-error\b"))
+        expect(toast).to_contain_text("Request rejected")
+        expect(toast).to_contain_text("member id 11 is outside 1-10")
+        expect(page.locator(_tid("migrate-rename-status"))).to_have_text(
+            "Not applied — the server refused the request."
+        )
+        # Nothing was applied: the output is what it was.
+        assert aoss_2930f.output.inner_text() == before
+        # Put right, the error is gone and the device is as declared.
+        member.fill("2")
+        member.dispatch_event("change")
+        expect(page.locator(_tid("migrate-device-target-note-ports"))).to_have_text(
+            re.compile(r"^52 ports: 2/1 . 2/A4$")
+        )
+        expect(error).to_have_count(0)
+        expect(_target_note(page)).not_to_have_class(re.compile(r"\bnotice-block\b"))
+        assert _apply(page)["target_deployment"]["members"][0]["id"] == 2
+        expect(aoss_2930f.output).to_contain_text("2/A1")
 
     def test_standing_alone_takes_the_member_number_away(
         self, aoss_2930f: MigratePage, page: Page,
@@ -768,19 +889,21 @@ class TestAStackOnBothSides:
         # An uplink of the SECOND member lands on the second member's module.
         row = page.locator(_tid("migrate-rename-row-2/49"))
         expect(row).to_have_attribute("data-plan-state", "paired")
-        expect(row.locator("td").nth(1)).to_have_text("2/A1")
+        expect(page.locator(_tid("migrate-rename-auto-2/49"))).to_have_text("2/A1")
         expect(page.locator(_tid("migrate-rename-why-2/49"))).to_have_text("uplink 1 · member 2")
         expect(page.locator(_tid("migrate-rename-why-1/50"))).to_have_text("uplink 2 · member 1")
         expect(page.locator(_tid("migrate-rename-why-2/30"))).to_have_text("access 30 · member 2")
         # An access port keeps its name between the two stacks.  That is
         # a pairing like any other, and the row shows it as one.
-        expect(page.locator(_tid("migrate-rename-row-2/30")).locator("td").nth(1)).to_have_text("2/30")
-        expect(page.locator(_tid("migrate-rename-row-1/1")).locator("td").nth(1)).to_have_text("1/1")
+        expect(page.locator(_tid("migrate-rename-auto-2/30"))).to_have_text("2/30")
+        expect(page.locator(_tid("migrate-rename-auto-1/1"))).to_have_text("1/1")
         # No paired row says nothing was mapped.  (A row for a name the
         # translator left as it was -- a VLAN interface, a LAG -- still
         # may: that is what the note is for.)
         expect(
-            page.locator('tr[data-plan-state="paired"]').get_by_text("needs override")
+            page.locator(
+                '[data-testid^="migrate-rename-row-"][data-plan-state="paired"]'
+            ).get_by_text("needs override")
         ).to_have_count(0)
         # A LAG with a port on each member keeps one on each.
         expect(mp.output).to_contain_text("trunk 1/A1,2/A1 trk1 lacp")
@@ -802,12 +925,11 @@ class TestAStackOnBothSides:
         )
         # A renumbering: neither number is declared on the other side.
         expect(page.locator(_tid("migrate-rename-plan-crossed"))).to_have_count(0)
-        row = page.locator(_tid("migrate-rename-row-3/49"))
-        expect(row.locator("td").nth(1)).to_have_text("2/A1")
+        expect(page.locator(_tid("migrate-rename-auto-3/49"))).to_have_text("2/A1")
         expect(page.locator(_tid("migrate-rename-why-3/49"))).to_have_text(
             "uplink 1 · member 3 → member 2"
         )
-        expect(page.locator(_tid("migrate-rename-row-3/7")).locator("td").nth(1)).to_have_text("2/7")
+        expect(page.locator(_tid("migrate-rename-auto-3/7"))).to_have_text("2/7")
         expect(page.locator(_tid("migrate-rename-why-1/1"))).to_have_text("access 1 · member 1")
         expect(page.locator(_tid("migrate-rename-plan-report"))).to_contain_text(
             "stack members pair in the order they are declared, not by member number: "
@@ -841,34 +963,27 @@ class TestAStackOnBothSides:
         crossed = page.locator(_tid("migrate-rename-plan-crossed"))
         expect(crossed).to_have_text("crossed: member 1 → member 2; member 2 → member 1")
         expect(crossed).to_have_class(re.compile(r"\bchip-warn\b"))
-        # The class is not the colour.  The strip is green here -- a
-        # crossing holds nothing -- and the chip took the strip's green
-        # with it: what is drawn is what has to be amber.
-        drawn = crossed.evaluate(
-            """(chip) => {
-                const probe = document.createElement('span');
-                probe.style.background = 'var(--badge-partial-bg)';
-                probe.style.color = 'var(--badge-partial-fg)';
-                chip.parentElement.appendChild(probe);
-                const want = getComputedStyle(probe);
-                const got = getComputedStyle(chip);
-                const strip = getComputedStyle(chip.parentElement);
-                const out = {
-                    amber: got.backgroundColor === want.backgroundColor && got.color === want.color,
-                    apart: got.color !== strip.color && got.backgroundColor !== strip.backgroundColor,
-                };
-                probe.remove();
-                return out;
-            }"""
-        )
-        assert drawn == {"amber": True, "apart": True}
+        # The class is not the colour, and a computed colour is not a
+        # pixel.  The strip is green here -- a crossing holds nothing --
+        # and the chip once took the strip's green with it; then it got
+        # a tint of its own, laid over the strip's tint, and read 2.7:1.
+        # What is PAINTED is read: the warning ink, on the opaque
+        # surface, apart from the strip, and legible.
+        expect(crossed).to_be_visible()
+        strip = painted_background(_plan(page))
+        assert alike(strip, painted_token(page, "#mig-rename-modal-top", "--badge-completed-bg"))
+        ground = painted_background(crossed)
+        assert alike(ground, painted_token(page, "#mig-rename-modal-top", "--surface"))
+        assert not alike(ground, strip)
+        assert ink(crossed) == token_ink(page, "--badge-partial-fg")
+        assert contrast(ink(crossed), ground) >= 4.5
         expect(page.locator(_tid("migrate-rename-plan-members"))).to_have_count(0)
         # The plan's own line for it, in the server's words.
         expect(page.locator(_tid("migrate-rename-plan-report"))).to_contain_text(
             "2 stack member(s) are paired with a member of ANOTHER number while one of the "
             "two numbers is declared on both sides"
         )
-        expect(page.locator(_tid("migrate-rename-row-1/1")).locator("td").nth(1)).to_have_text("2/1")
+        expect(page.locator(_tid("migrate-rename-auto-1/1"))).to_have_text("2/1")
         expect(page.locator(_tid("migrate-rename-why-2/49"))).to_have_text(
             "uplink 1 · member 2 → member 1"
         )
@@ -921,12 +1036,12 @@ class TestWhatApplySends:
         expect(page.locator(_tid("migrate-rename-plan-hint"))).to_contain_text(
             "Choose the source device as well"
         )
-        override = page.locator(_tid("migrate-rename-override-GigabitEthernet1/0/1"))
-        values = override.locator("option").evaluate_all("els => els.map(e => e.value)")
+        expect(_plan(page)).to_have_attribute("data-state", "incomplete")
+        values = [value for value, _text in override_options(page, "GigabitEthernet1/0/1")]
         assert "1/1" in values and "1/48" in values
         body = _apply(page)
         assert not [k for k in body if "deployment" in k or "profile" in k]
-        expect(_plan(page)).not_to_have_attribute("data-state", "ok")
+        expect(_plan(page)).to_have_attribute("data-state", "incomplete")
 
     def test_a_profile_can_be_the_source(
         self, page: Page, live_server_url: str,
@@ -946,7 +1061,7 @@ class TestWhatApplySends:
         assert "source_deployment" not in body
         assert body["target_deployment"]["members"][0]["model"] == "2930M-48G-PoEP"
         expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("2 paired")
-        expect(page.locator(_tid("migrate-rename-row-GigabitEthernet1/0/2")).locator("td").nth(1)).to_have_text("1/2")
+        expect(page.locator(_tid("migrate-rename-auto-GigabitEthernet1/0/2"))).to_have_text("1/2")
 
     def test_clearing_a_device_takes_it_out_of_the_next_request(
         self, aoss_2930f: MigratePage, page: Page,
@@ -959,10 +1074,18 @@ class TestWhatApplySends:
         assert "source_deployment" in first and "target_deployment" in first
         expect(_plan(page)).to_have_attribute("data-state", "ok")
         page.locator(_tid("migrate-device-source-model-select")).select_option(value="")
-        expect(_plan(page)).to_have_attribute("data-state", "stale")
+        # Two facts: no pair goes out with the next Apply, and the
+        # table below is still the mapping made with the devices as
+        # they were.
+        expect(_plan(page)).to_have_attribute("data-state", "incomplete")
+        expect(_plan(page)).to_have_attribute("data-stale", "true")
+        expect(page.locator(_tid("migrate-rename-plan-hint"))).to_have_text(
+            re.compile(r"^The table below is still the mapping made with the devices as they were\. ")
+        )
         second = _apply(page)
         assert "source_deployment" not in second and "target_deployment" not in second
-        expect(_plan(page)).not_to_have_attribute("data-state", "ok")
+        expect(_plan(page)).to_have_attribute("data-state", "incomplete")
+        expect(_plan(page)).not_to_have_attribute("data-stale", "true")
         expect(aoss_2930f.output).not_to_contain_text("1/A1")
 
     def test_clearing_a_target_profile_takes_it_out_too(
@@ -1132,8 +1255,8 @@ class TestWhatThePlanSaysBeyondPairs:
         self, page: Page, live_server_url: str,
     ) -> None:
         """A list of gateways is not followed when its ports move.
-        Nothing in the port map clears that, so the strip says it and
-        the job is not a clean success."""
+        Only entries that keep the names the route uses clear that, so
+        the strip says it and the job is not a clean success."""
         mp = _translate(
             page, live_server_url, "mikrotik_routeros", "mikrotik_routeros",
             _ROUTEROS_GATEWAY_LIST,

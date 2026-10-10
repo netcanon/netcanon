@@ -192,18 +192,25 @@ class TestModelTranslationServedByEmbeddedServer:
 
         # The desktop window shows the same page as the browser: the
         # device pickers and the port-plan strip are in it, with the
-        # script that drives them (a partial missing from the build
-        # would be a template error here, not a blank row).
+        # script that drives them (a partial missing from the tree is a
+        # template error here; one missing from a built wheel or MSI is
+        # not something this test can see -- the Docker smoke job asks a
+        # built image for this page).
         for testid in (
             "migrate-device-source-model-select",
             "migrate-device-target-mode-select",
             "migrate-device-source-note",
             "migrate-rename-plan",
+            # The region above the table that scrolls by itself, and
+            # the line that says why Apply is held.
+            "migrate-rename-modal-top",
+            "migrate-rename-apply-why",
         ):
             assert f'data-testid="{testid}"' in migrate_page, testid
         for function in (
             "function renderPortPlan", "function applyDeviceDeclarations",
-            "function detectSourceDevice",
+            "function detectSourceDevice", "function forgetAcceptedDecisions",
+            "function rebuildRenameTableSoon", "function refreshRenameModal",
         ):
             assert function in migrate_page, function
 

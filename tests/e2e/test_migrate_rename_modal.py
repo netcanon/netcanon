@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
+from tests.e2e.drawn import choose_override, override_options
 from tests.e2e.helpers import MigratePage
 
 pytestmark = pytest.mark.e2e
@@ -235,21 +236,13 @@ class TestRenameModalTargetProfileTwoStage:
         page.locator(
             '[data-testid="migrate-rename-target-model-select"]'
         ).select_option(value="6300M-48G-PoE4-SFP56")
-        lag = page.locator(
-            '[data-testid="migrate-rename-override-Port-channel1"]'
-        )
-        values = lag.locator("option").evaluate_all(
-            "els => els.map(e => e.value)"
-        )
+        values = [value for value, _text in override_options(page, "Port-channel1")]
         assert "lag 1" in values and "lag 256" in values, values[:6]
         assert "lag1" not in values
         # Access rows are offered member/slot/port names.
-        access = page.locator(
-            '[data-testid="migrate-rename-override-GigabitEthernet1/0/1"]'
-        )
-        access_values = access.locator("option").evaluate_all(
-            "els => els.map(e => e.value)"
-        )
+        access_values = [
+            value for value, _text in override_options(page, "GigabitEthernet1/0/1")
+        ]
         assert "1/1/1" in access_values and "1/1/48" in access_values
         assert "1/A1" not in access_values
 
@@ -274,9 +267,7 @@ class TestRenameModalOrphanedOverride:
         ).select_option(value="2930F-48G-PoEP")
         # Override GigabitEthernet1/0/1 → 12 (valid on the standalone
         # 2930F-48G-PoEP, whose ports are bare numbers).
-        page.locator(
-            '[data-testid="migrate-rename-override-GigabitEthernet1/0/1"]'
-        ).select_option(value="12")
+        choose_override(page, "GigabitEthernet1/0/1", "12")
         # Now switch profile to one that has DIFFERENT port names
         # (Cisco uses GigabitEthernet1/0/N style).
         page.locator(
@@ -778,9 +769,7 @@ class TestRenameModalOffProfileAutoTarget:
             '[data-testid="migrate-rename-offprofile-count-physical"]'
         )).to_contain_text("not on profile")
         # Choosing a real port clears it.
-        page.locator(
-            '[data-testid="migrate-rename-override-GigabitEthernet1/0/1"]'
-        ).select_option(value="12")
+        choose_override(page, "GigabitEthernet1/0/1", "12")
         row = page.locator(self.ROW)
         assert "has-offprofile" not in (row.get_attribute("class") or "")
         expect(page.locator(self.MARK)).to_have_count(0)

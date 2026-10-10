@@ -1,9 +1,11 @@
   /* ── Rename-modal hardware fit-check banner ───────────────────────────
-   * When a target profile is selected, compares source-side port
-   * counts (grouped by kind) against the profile's effective
-   * capacity (chassis + selected module) and surfaces the deltas
-   * so the operator sees capacity overage before committing
-   * mappings.  Module-aware via currentRenameModuleSku().
+   * When a target device is selected -- a flat profile, or a model
+   * from a model family -- compares source-side port counts (grouped
+   * by kind) against the device's capacity (a profile's chassis plus
+   * its selected module; a family model's compiled inventory) and
+   * surfaces the deltas so the operator sees capacity overage before
+   * committing mappings.  Hidden while a port plan is applied: the
+   * plan answers the capacity question by name, in its own strip.
    *
    * MVP scope: per-kind count + overage flag.  Fancier dimensions
    * (speed-downshift warnings, LAG headroom, PoE budget) are
@@ -14,10 +16,12 @@
    * this banner's lifecycle and is driven from renderFitCheck().
    *
    * Depends on module-scope state:
-   *   _lastJob, _renameProfiles
+   *   _lastJob, _renameProfiles, _deviceInventory
    *
    * And module-scope helpers (some in partials, some still inline):
    *   _guessKind, _looksLikeUplink            (classify.js)
+   *   currentTargetDevice, currentPortPlan,
+   *   renderPortPlan                           (device-models.js)
    *   currentRenameProfileKey, effectivePortsFor,
    *   currentRenameModuleSku                   (migrate.html inline)
    * ────────────────────────────────────────────────────────────────── */
@@ -70,15 +74,29 @@
       el.className = '';
       return;
     }
-    // Count source interfaces by kind.  Sources come from three
+    // Count source interfaces by kind.  Sources come from four
     // places in the job: port_renames (successfully auto-translated),
     // port_drops (auto-dropped), warnings (unclassified / complexity
-    // cases).  Union them to cover the full source universe.
+    // cases), and source_ports (every hardware port the config uses --
+    // on a same-vendor translation the first three are empty, and the
+    // banner said "0 / 48" in green over a table of 52 ports).
     var seenSources = new Set();
     var sourceByKind = {};
+    // Where the source device is declared and compiled, a port's kind
+    // is its role in that device, not a guess from its name.
+    var declaredKind = Object.create(null);
+    var sourceInv = (typeof _deviceInventory === 'object' && _deviceInventory)
+      ? _deviceInventory.source : null;
+    ((sourceInv && sourceInv.ports) || []).forEach(function(p) {
+      declaredKind[p.name] = p.role === 'access' ? 'physical' : p.role;
+    });
     function bumpSource(name) {
       if (!name || seenSources.has(name)) return;
       seenSources.add(name);
+      if (declaredKind[name]) {
+        sourceByKind[declaredKind[name]] = (sourceByKind[declaredKind[name]] || 0) + 1;
+        return;
+      }
       var kind = _guessKind(name);
       // Roll uplink-looking physical into 'uplink' bucket for the
       // fitcheck math — matches how target-dropdown options are
@@ -94,10 +112,22 @@
     Object.keys(applied).forEach(bumpSource);
     var drops = (_lastJob.port_drops) || [];
     drops.forEach(bumpSource);
+    (_lastJob.source_ports || []).forEach(bumpSource);
+    // A warning can quote a name of the TARGET ("multiple source
+    // ports map to '1/1'"): a name a rename ends on, that the job
+    // names as a source nowhere, is not a source port.
+    var renameTargets = new Set();
+    Object.keys(applied).forEach(function(src) {
+      if (typeof applied[src] === 'string') renameTargets.add(applied[src]);
+    });
+    var namedAsSource = new Set(Object.keys(applied).concat(drops)
+      .concat(_lastJob.source_ports || []));
     var warns = (_lastJob.warnings) || [];
     warns.forEach(function(w) {
       var m = w.match(/'([^']+)'/);
-      if (m) bumpSource(m[1]);
+      if (!m) return;
+      if (renameTargets.has(m[1]) && !namedAsSource.has(m[1])) return;
+      bumpSource(m[1]);
     });
 
     // Count target capacity by kind using the effective port list

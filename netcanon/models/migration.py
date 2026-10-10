@@ -653,9 +653,9 @@ class MigrationJob(BaseModel):
     #: ``port_mapping_plan.pairings`` lists it.)
     #:
     #: :attr:`port_renames` holds only names that CHANGED, so on a
-    #: same-vendor translation it is empty and the rename modal's
-    #: ports pane shows nothing.  This field is the data that fix
-    #: needs; the modal does not read it yet.  Populated by
+    #: same-vendor translation it is usually empty.  The rename
+    #: modal's ports pane lists every name here that nothing else gave
+    #: a row, and its capacity banner counts them.  Populated by
     #: :func:`run_plan_with_overrides` via the capture transform.
     source_ports: list[str] = Field(default_factory=list)
 

@@ -1184,21 +1184,45 @@ pane has a source-device row and a target-device row.  A device is a
 model from a model family — with its mode, the module in each bay
 and, in a stacking mode, its members — or a flat profile where no
 family describes it.  The source row is pre-filled from the config
-(`/detect-deployment`) and shows the lines it was read from; each
-declaration is compiled by the server (`/inventory`) as it is
-edited, and the note under it says what it resolved to, how well
-its port names are established, and every caveat.  The browser
-holds no naming rule and no port list of its own for a family
-model: it shows what the server compiled.  Apply sends the two
+(`/detect-deployment`) and shows the lines it was read from.  The
+source declaration, and a target family model, are compiled by the
+server (`/inventory`) as they are edited, and the note under each
+says what it resolved to, how well its port names are established,
+and every caveat; a target flat profile is not compiled — the
+browser already holds its port list, and shows the profile notice.
+The browser holds no naming rule and no port list of its own for a
+family model: it shows what the server compiled.  Apply sends the two
 declarations with the operator's overrides; the table then draws
 the plan — each pairing with the position that decided it, and
 each name the plan could not place, with what happened to it and a
-marker while it still needs a decision.  Two rules keep the request
-honest: every device field is removed from the cloned request body
-before the current declarations are added, so a device that was
-cleared cannot ride along from the last Apply; and a source device,
-or a target family model, is sent only as one of a pair — a target
-alone stays advice for the choices in the table, as it always was.
+marker while it still needs a decision.  Five rules keep the screen
+and the request honest:
+
+* every device field is removed from the cloned request body before
+  the current declarations are added, so a device that was cleared
+  cannot ride along from the last Apply;
+* a source device, or a target family model, is sent only as one of
+  a pair — a target alone stays advice for the choices in the table,
+  as it always was;
+* a pair is sent **whether or not its preview compiled**.  The
+  browser does not judge a declaration: one the server would refuse
+  is refused by the server, in words, and nothing is applied.
+  Leaving it out instead turned a mistyped member number into a
+  translation by name shape that reported success;
+* the strip is drawn from what **happened** — `port_renames`,
+  `port_drops` and the plan's outcome fields — not from `pairings`,
+  which is the pairing as made, before the operator's entries; and
+  its colour is the state of the job on the page, not of edits that
+  have not been sent;
+* what **Accept as shown** records is kept apart from the operator's
+  own override map (`_planAccepted`): it is a verdict on one pairing,
+  so it is dropped when Apply is pressed with other devices declared,
+  and it is not written to `localStorage`.
+
+The modal does not block the page, so the job under it can be
+replaced; `captureJobForRename` then redraws the modal from the new
+job, and an answer that arrives for the old one — a preview, a
+detection, an Apply — is dropped.
 
 **Reading the source device from the config**
 (`netcanon/migration/deployment_detect.py`).  An AOS-S `show

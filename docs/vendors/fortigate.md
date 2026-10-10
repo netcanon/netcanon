@@ -201,7 +201,8 @@ and 100E physical hardware.
   canonical `hashed_password` field with format-preservation; never
   decoded to plaintext.
 - **Declaring a FortiGate as the source device** — with both devices
-  declared on the API, a correctly declared FortiGate is still
+  declared (in the Interface rename modal or on the API), a correctly
+  declared FortiGate is still
   `partial`: pseudo-interfaces the codec does not classify come back
   as off-inventory, and the stock `fortilink` aggregate — which the
   ordinary translation gives a port-shaped name — is dropped and

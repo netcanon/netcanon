@@ -857,20 +857,47 @@ Ports pane choose the *Source device* and the *Target device*.
   says how many, and the first few), or the config names no port, so
   nothing could be checked against it.  Where no device could be
   read, the line says why.
-* The line under each device says what you declared, how many ports
-  that is and the first and last name, and how well the names are
-  established.  A bay you did not state is counted as empty, and the
-  line says so in amber.
+* The line under the source device, and under a target chosen from a
+  model family, says what you declared, how many ports that is and
+  the first and last name, and how well the names are established.  A
+  bay you did not state is counted as empty, and the line says so in
+  amber.  A target chosen from a flat profile keeps the profile notice
+  it always had (deployment state, grade, caveat), which states no
+  port count.  A source device you chose or edited yourself is said
+  not to have been checked against the port names the config uses.
+* A declaration the server refuses — a member number the mode does
+  not have — turns the line red and says why, in the server's words.
+  It is still sent with Apply, which the server then refuses: the
+  output is left as it was.  A line that says the device *could not
+  be checked* is not a refusal: the preview did not arrive, and Apply
+  sends the device for the server to compile itself.
 * **Apply** pairs the ports.  The table then shows, per source port,
   the target port and the position that decided it ("uplink 1"), and
-  a row for every name with no place on the target.  The strip above
-  the table counts what was paired and what needs your decision;
-  **Accept as shown** records the outcome on screen as your decision
-  for each (a dropped port stays dropped), and Apply confirms it.
+  a row for every name with no place on the target.
+* The strip above the table counts **what happened**: ports that
+  stand where they were paired; paired ports your own entries dropped
+  or sent elsewhere; ports with no place; ports you gave a place; PoE
+  or speed lost.  Green means the job needs nothing from you, amber
+  that a name needs a decision or a route still names a port that
+  moved, red that the job is held (a target port was given two
+  sources, or a RouterOS port is not found by its hardware).
+* **Accept as shown** records the outcome on screen as your decision
+  for each undecided name (a dropped port stays dropped, a kept one
+  stays where it landed), and Apply confirms it.  It is a decision
+  about the pairing on screen: with other devices declared it is
+  forgotten at the next Apply, and it is not kept across a page load.
+* **If Apply is greyed out it says why**, beside the button.  Two rows
+  that end on one target name hold it.  With both devices declared
+  and not yet applied, only a collision between entries of your own
+  does: two ports the name-shape translation put on one name are what
+  the pairing by position mends.
 * A target chosen with no source device works as before: its port
-  list fills the choices in the table, and nothing is paired.
+  list fills the choices in the table, and nothing is paired.  A
+  target device belongs to the target codec it was chosen for.
+* The modal does not block the page: translate again behind it and it
+  is redrawn from the new job.
 
-**Through the API** the same four steps are:
+**Through the API** the same steps are:
 
 1. `GET /api/v1/migration/model-families` lists the device families
    netcanon models, with each one's models, modes and modules.

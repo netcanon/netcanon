@@ -114,6 +114,24 @@ timestamp if your timezone matters for an audit.
   values are now removed from the request.
 - **The SNMPv3 pane was not redrawn after Apply**, so it showed the
   previous job's rows until the modal was reopened.
+- **A free-text port override could not be typed.**  The rename table
+  was rebuilt on every key, and the field being typed in with it: typed
+  `17`, the field held `1` and the focus was gone.  The table is now
+  rebuilt when the field is left, at a moment when that cannot take a
+  control out from under a click, and the control that had the focus
+  has it again afterwards.
+- **Apply could be disabled without a word.**  Two rows that end on
+  one target name have always held it; the button now says why, beside
+  itself and in its title.
+- **A new translation left the open modal describing the last one.**
+  The modal does not block the page.  Translating again behind it now
+  redraws all of it from the new job.
+- **Smaller things in the rename table.**  The rail's ports count is
+  the number of rows drawn (it was one more for a config with two
+  warnings about one name); a warning that quotes a *target* port no
+  longer becomes a row for it; a name of any length wraps instead of
+  widening the table; a section you opened stays open when the table
+  is redrawn.
 - **The ports fit-check banner reappeared on the VLAN and user panes.**
   Editing an override on another pane refreshed the summary, which
   re-rendered the ports banner there.  It is ports-pane only again.
@@ -130,29 +148,68 @@ timestamp if your timezone matters for an audit.
   stack members, or a flat profile where no family describes the
   device — and **Apply** pairs the two port lists by position.
   - The source device is read from the config where the config
-    states it, and the modal shows the lines it was read from.
-  - Under each device a note says what was declared, how many ports
-    it has and their first and last name, how well those names are
-    established, and every caveat.  A bay nobody stated is counted
-    as empty, and said.
+    states it, and the modal shows the lines it was read from, each as
+    far as its part number.  A device you choose or edit yourself is
+    said not to have been checked against the port names the config
+    uses.
+  - Under the source device, and under a target chosen from a model
+    family, a note says what was declared, how many ports it has and
+    their first and last name, how well those names are established,
+    and every caveat.  A bay nobody stated is counted as empty, and
+    said.  A target chosen from a flat profile keeps the profile
+    notice it always had, which states no port count.
   - The table becomes the pairing: each source port, the target port
     it was paired with and the position that decided it, a flag where
     the target port is slower or has no PoE, and a row for every
     name that has no place on the target or is not a port of the
-    source device.  Names that need a decision are marked, counted
-    on the strip above the table, and can be accepted as shown in
-    one click.  The strip also says when a logical name was given a
-    port name the target does not have, when a route was left
-    naming a port that moved, and when a RouterOS target's output has
-    no line that finds a port by its hardware; and a RouterOS port
-    you had named, or named in the modal, says which port of the
-    model it is and which port of the target it is on.
+    source device.  Names that need a decision are marked and counted
+    on the strip above the table.
+  - **The strip counts what happened, not what was planned.**  A
+    paired port you dropped or sent elsewhere is counted as that, an
+    unplaced port you gave a place is counted as placed, and PoE or
+    speed lost is counted for the ports that are on the ports that
+    lack it.  Its colour is the job's: it stays amber until the job
+    that comes back needs no decision.  It also says when a logical
+    name was given a port name the target does not have, when an
+    entry of yours is a name the target does not list, when a route
+    was left naming a port that moved, and when a RouterOS target's
+    output has no line that finds a port by its hardware.  A RouterOS
+    port the config names says which port of the model it is; a port
+    given a name that is not a port of the target says which target
+    port its hardware is on.
+  - **Accept as shown** records the outcome on screen as your decision
+    for every undecided name.  It is a decision about *that pairing*:
+    press Apply with other devices declared and it is forgotten, so a
+    port that had no place is not kept dropped once it has one; and it
+    is not remembered across a page load.  A row you then change by
+    hand is your own, and is.
+  - A declaration the server would refuse — a member number the mode
+    does not have — is said in red under the device, and is still sent
+    with Apply: the server refuses the request in words and the output
+    is left as it was.  (It used to be left out without a word, and
+    Apply then reported success for a translation by name shape.)  A
+    preview that could not be fetched at all is said to be unchecked,
+    and the server compiles the device itself.
+  - Where the name-shape translation put two ports on one target name,
+    Apply is no longer held once both devices are declared: the
+    pairing by position is what puts each on a port of its own.  A
+    collision made by your own entries still holds it, and says so.
   - A stack can be declared on both sides, a member to a row; the
     rows pair in order, and where that puts a member on a member of
-    another number the strip and each port's row say so.
-  - A same-vendor translation (Aruba to Aruba, say) renames nothing
-    by itself and used to open on "No port names recognised"; the
-    table now lists every port the config uses.
+    another number the strip and each port's row say so.  More than
+    four members fold under their count; a stack set aside by
+    choosing a mode in which a device stands alone comes back with a
+    stacking mode, and choosing another model for the first member
+    keeps the rest.
+  - Everything above the table scrolls by itself, so a stack of ten on
+    each side leaves the table and the Apply button where they were.
+  - A target device belongs to the target codec it was chosen for; a
+    translation to another codec starts with none.
+  - A same-vendor translation (Aruba to Aruba, say) usually renames no
+    port by itself, and the table listed only the names a rename or a
+    warning mentioned — none at all for a clean config, which read
+    "No port names recognised in the translated output".  It now also
+    lists every hardware port the config uses.
 - **Model-to-model port mapping (API).**  Declare the device a config
   came from and the device it is going to, and ports are paired by
   *position* instead of being guessed from the shape of their names.  A
@@ -456,7 +513,19 @@ timestamp if your timezone matters for an audit.
   are then paired by position.
 - **Device declarations are not remembered across a page reload.**  The
   source device is read from the config again; the target device has to
-  be chosen again.  Overrides are remembered, as before.
+  be chosen again.  Your own overrides are remembered, as before;
+  decisions recorded by **Accept as shown** are not, since they are
+  about a pairing of devices that is no longer declared.
+- **A source device chosen or edited by hand is not checked against the
+  config before Apply.**  Only a device read from the config is (the
+  note says which is the case).  After Apply the strip counts the names
+  that are not ports of the declared source device.
+- **Tinted notes and strips are below WCAG AA contrast in the light
+  theme.**  The amber, green and red banners of the modal — the device
+  notes and the plan strip, like the fit-check banner and the profile
+  notice before them — draw the theme's badge text on a tint of the
+  same colour: about 3.4:1 to 4.0:1 for small text, where AA asks
+  4.5:1.  The chips on the strip are on the opaque surface and meet it.
 - **Model families cover two Aruba AOS-S series.**  Every other device is
   declared through its target profile, as one device in the one state the
   profile documents, with its ports in the profile's list order — which
