@@ -42,6 +42,7 @@ from ..._user_secrets import classify_hash, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
+from .port_names import trunk_number
 
 # ---------------------------------------------------------------------------
 # Render-only constants and helpers
@@ -83,7 +84,7 @@ _IS_AOS_PHYSICAL_PORT_RE = re.compile(
     r"|loopback\d+"              # loopback: loopback1
     r"|vlan\d+"                  # vlan SVI: vlan10 (rare on AOS-S)
     r"|oobm"                     # OOBM management
-    r"|[Tt]rk\d+"                # LAG: trk1 / Trk1
+    r"|[Tt][Rr][Kk]\d+"          # LAG: trk1 / Trk1, in any letter case
     r")$"
 )
 
@@ -261,7 +262,7 @@ def _lag_name_to_aos_trunk(name: str) -> str:
     ``trk<N>`` or ``Trk<N>`` (AOS-native), it's used as-is in lowercase.
     Names with no trailing digits fall back to ``trk1``.
     """
-    if re.match(r"^[Tt]rk\d+$", name):
+    if trunk_number(name) is not None:
         return name.lower()
     m = re.search(r"(\d+)$", name)
     if m:
@@ -274,12 +275,13 @@ def _as_the_device_writes(name: str) -> str:
 
     The device writes a LAG ``trk1`` on its ``trunk`` line and ``Trk1``
     everywhere else -- a VLAN's port list, the LAG's own ``interface``
-    stanza.  The parsed tree has one name for it (the definition's,
-    ``trk1``); this is the other form, for those other places.  Any
-    name that is not a trunk's is returned as it is.
+    stanza.  The parsed tree has one name for it (``trk1``); this is
+    the other form, for those other places.  A trunk's name in any
+    other letter case comes back in the device's form too; any name
+    that is not a trunk's is returned as it is.
     """
-    trunk = re.match(r"^[Tt]rk(\d+)$", name)
-    return f"Trk{trunk.group(1)}" if trunk else name
+    number = trunk_number(name)
+    return name if number is None else f"Trk{number}"
 
 
 def _lag_mode_to_aos_type(mode: str) -> str:
@@ -936,19 +938,22 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # Administrative distance → the ``distance N`` suffix (canonical
         # ``metric``; 0 = unset, emit nothing so the device default applies).
         dist = f" distance {route.metric}" if route.metric else ""
+        # A next hop that names a LAG is one more place the device
+        # writes ``Trk1``.
+        hop = _as_the_device_writes(route.gateway) if route.gateway else route.gateway
         if ":" in (route.destination or ""):
             lines.append(
-                f"ipv6 route {route.destination} {route.gateway}{dist}"
+                f"ipv6 route {route.destination} {hop}{dist}"
             )
         elif route.destination in ("0.0.0.0/0", "default") and not route.metric:
             # AOS-S convention for the default route.  ``ip default-gateway``
             # has no admin-distance form, so a default route WITH a metric
             # falls through to the explicit ``ip route 0.0.0.0/0 <gw>
             # distance N`` form below instead.
-            lines.append(f"ip default-gateway {route.gateway}")
+            lines.append(f"ip default-gateway {hop}")
         else:
             lines.append(
-                f"ip route {route.destination} {route.gateway}{dist}"
+                f"ip route {route.destination} {hop}{dist}"
             )
 
     return "\n".join(lines) + "\n"

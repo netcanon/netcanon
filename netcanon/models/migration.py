@@ -746,6 +746,12 @@ class MigrationPlanRequest(BaseModel):
     ``None``-disengages-the-translator behaviour is a property of the
     lower-level ``run_plan_with_overrides`` function, not the API route.
 
+    A key is the name the config uses for the port.  Where the source
+    platform's names have no letter case (every vendor but FortiOS and
+    RouterOS), a key in another letter case is taken for that name,
+    when the config writes the name one way and that spelling has no
+    entry of its own.
+
     Entry value semantics:
 
     * ``str`` — use this name as the target-side port name verbatim

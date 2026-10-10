@@ -25,6 +25,14 @@ This module defines the **vendor-agnostic bridge**:
    committed captures and comparing the two outputs parsed again.
 4. :func:`route_port_reference` — a route's next hop that is the
    name of an interface, which follows that interface.
+5. :func:`rewrite_port_names` — the sweep itself: every place a port
+   name is kept, written through a resolver.  Used by the translator
+   and by a parser that finds one port under two names.
+6. :func:`key_by_the_configs_spelling` — on a platform whose names
+   have no letter case, a rename-map key in another case is the name
+   the config uses.  The rule exists once: the translator applies it,
+   and so does ``run_plan_with_models`` before it merges an
+   operator's entries with a pairing's.
 
 What the sweep does NOT rewrite is a port's FACTORY name
 (``interfaces[].default_name``, RouterOS).  That field is the port's
@@ -50,7 +58,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Collection, Iterable, Iterator
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -59,6 +67,8 @@ if TYPE_CHECKING:
     from .intent import CanonicalIntent, CanonicalStaticRoute
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 
 PortKind = Literal[
@@ -579,6 +589,47 @@ def collect_hardware_port_names(
 # ---------------------------------------------------------------------------
 
 
+def single_spellings(names: Iterable[str]) -> dict[str, str]:
+    """Folded name -> its spelling, for each name written exactly one
+    way among *names*.  A name written in two letter cases is left
+    out: nothing can say which of the two a third spelling means."""
+    spelt: dict[str, set[str]] = {}
+    for name in names:
+        spelt.setdefault(name.casefold(), set()).add(name)
+    return {fold: next(iter(found)) for fold, found in spelt.items() if len(found) == 1}
+
+
+def key_by_the_configs_spelling(entries: dict[str, _T], names: Iterable[str]) -> None:
+    """Re-key, in place, an entry whose key is another letter case of
+    a name the config uses.
+
+    For a source platform whose port names have no letter case
+    (``port_names_case_sensitive`` is false): an operator who writes
+    ``Trk1`` means the port the config calls ``trk1``, and the entry
+    goes to that name.  Only where it cannot be read two ways -- the
+    config writes the name exactly one way, and that spelling has no
+    entry of its own.  An entry is never guessed between two names,
+    nor laid over one written exactly.  Of two keys that are spellings
+    of one name the first is taken; the other stays as typed, and
+    whoever applies the map reports it.
+
+    The rule exists once, here.  The translator applies it to the map
+    it is given.  ``run_plan_with_models`` applies it to the
+    operator's entries BEFORE merging them with the pairing's own:
+    merged first, the pairing's entry for a port is "an entry of its
+    own", and the operator's is the one set aside.
+
+    Args:
+        entries: Keyed by port name; re-keyed in place.
+        names: Every name the config uses.
+    """
+    one_way = single_spellings(names)
+    for key in list(entries):
+        name = one_way.get(key.casefold()) if isinstance(key, str) else None
+        if name is not None and name not in entries:
+            entries[name] = entries.pop(key)
+
+
 def translate_port_names(  # noqa: C901
     intent: CanonicalIntent,
     source_codec: CodecBase,
@@ -588,6 +639,14 @@ def translate_port_names(  # noqa: C901
 ) -> PortRenameResult:
     """Rewrite every port-name reference in *intent* from source-vendor
     convention to target-vendor convention.
+
+    A key of *rename_map* is the name the config uses for the port.
+    Where the source platform's names have no letter case, a key in
+    another letter case is taken for that name
+    (:func:`key_by_the_configs_spelling`): only when the config writes
+    the name one way and that spelling has no entry of its own.  A
+    key that is a second spelling of a name with an entry is reported
+    and ignored, unless the two entries say the same thing.
 
     Priority for each name:
         1. If *rename_map* contains an entry for the source name with
@@ -710,19 +769,11 @@ def translate_port_names(  # noqa: C901
     # A key in another letter case.  On a platform whose names have no
     # case, an operator who writes ``Trk1`` means the port the config
     # calls ``trk1`` (the device itself prints it both ways): the entry
-    # goes to the name the config uses.  Only where one name answers to
-    # the key and has no entry of its own -- an entry is never guessed
-    # between two names, nor laid over one the operator wrote exactly.
-    # The flag is read, not defaulted: there is no safe default for it.
+    # goes to the name the config uses.  The flag is read, not
+    # defaulted: there is no safe default for it.
     one_case = not source_codec.port_names_case_sensitive
     if one_case:
-        held: dict[str, list[str]] = {}
-        for name in collect_port_names(intent):
-            held.setdefault(name.casefold(), []).append(name)
-        for key in list(user_map):
-            spellings = held.get(key.casefold(), [])
-            if key not in spellings and len(spellings) == 1 and spellings[0] not in user_map:
-                user_map[spellings[0]] = user_map.pop(key)
+        key_by_the_configs_spelling(user_map, collect_port_names(intent))
 
     # Split user map into drops (value is None) and renames (value is str).
     # Drops never go through the target codec.
@@ -999,26 +1050,41 @@ def translate_port_names(  # noqa: C901
     #    this did not mask.
     # 2. Identity pairs were excluded, so a port that KEPT its name while
     #    another was renamed onto it counted as a single source.
+    #
+    # Whether two FINAL names are one place is the target's rule, as it
+    # is two blocks below: on a target with no letter case ``Trk1`` and
+    # ``trk1`` are one port, and a source port sent to either is on it.
+    # Grouped by the exact string, ``{"5": "trk1"}`` put port 5 on the
+    # LAG the translator itself writes ``Trk1``, with nothing said.
+    fold_final = not target_codec.port_names_case_sensitive
     fused: dict[str, set[str]] = {}
+    written: dict[str, set[str]] = {}
     gone = user_dropped | auto_dropped
     for source, final in memo.items():
         # A dropped name reached no target, so it shares none.
         if final is not None and source not in gone:
-            fused.setdefault(final, set()).add(source)
+            place = final.casefold() if fold_final else final
+            fused.setdefault(place, set()).add(source)
+            written.setdefault(place, set()).add(final)
     # Two spellings of one name are one source: on a platform whose
     # names have no letter case, ``A1`` and ``a1`` are one port, not two
     # ports sharing a target.  (An AOS-S LAG, which the device itself
     # writes ``trk1`` and ``Trk1``, no longer reaches here as two names:
-    # its parser gives every reference the spelling of the definition.)
-    for final in sorted(fused):
+    # its parser gives the LAG one.)
+    for place in sorted(fused):
         distinct: dict[str, str] = {}
-        for source in sorted(fused[final]):
+        for source in sorted(fused[place]):
             distinct.setdefault(source.casefold() if one_case else source, source)
         sources = sorted(distinct.values())
-        if len(sources) < 2 or final in warned_finals:
+        if len(sources) < 2 or written[place] & warned_finals:
             continue
+        final, *others = sorted(written[place])
+        also = (
+            f" (also written {', '.join(repr(other) for other in others)}: "
+            f"one port on {target_codec.name})"
+        ) if others else ""
         warnings.append(
-            f"port_rename: multiple source ports map to {final!r} "
+            f"port_rename: multiple source ports map to {final!r}{also} "
             f"(sources: {', '.join(sources)}); these are distinct ports "
             f"on the source device and their VLAN membership will be "
             f"merged — map each source to a distinct target"
@@ -1062,12 +1128,26 @@ def translate_port_names(  # noqa: C901
 
     # (#49b) Operator drop/rename keys that named a port absent from the tree
     # did nothing — warn instead of silently over-reporting them as dropped.
+    # A key that is a second spelling of a name which has an entry is
+    # not a port that "does not exist": say what it is, and say nothing
+    # where the two entries agree.
+    one_way = single_spellings(present_names) if one_case else {}
     for key in user_map:
-        if key not in present_names:
-            warnings.append(
-                f"port_rename: source port {key!r} does not exist in the "
-                f"parsed config; entry ignored"
-            )
+        if key in present_names:
+            continue
+        other = one_way.get(key.casefold())
+        if other is not None and other in user_map:
+            if user_map[key] != user_map[other]:
+                warnings.append(
+                    f"port_rename: source port {key!r} is another spelling "
+                    f"of {other!r}, which has an entry of its own; entry "
+                    f"ignored"
+                )
+            continue
+        warnings.append(
+            f"port_rename: source port {key!r} does not exist in the "
+            f"parsed config; entry ignored"
+        )
     # Report only drops that actually removed a present name (auto-dropped
     # unmappable names were resolved from real references, so they qualify).
     reported_dropped = sorted(

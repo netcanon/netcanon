@@ -40,7 +40,7 @@ user identity. The campus L2 surface has nowhere to land.
 ## The structural finding — the interface list GROWS
 
 <!-- one-lag-one-name-500 -->
-> **Update 2026-10-10 (#500) — the counts in this section and in "The LAG surface" have changed.**  The AOS-S parser now gives every reference to a LAG the name its `trunk` line gave it, so an `interface Trk1` stanza and the LAG `trk1` are one record name, not two.  Measured after the change: 85 source interface records, **86** after the round-trip, the count differing on **1** of 7 cells.  `kitchen_sink.cfg` no longer gains records (13 → 13): the bare `ethernet trk1` / `ethernet trk2` stanzas its two trunks fall through to are records the source already has, and its rendered config has one `ethernet trk1 { description … }` stanza where the snippet below shows two.  The Central stack still gains one (`trk1`, 49 → 50).  The 3 LAG records still become 0 and the 4 `lag_member_of` pointers still come back null; with the kitchen sink's record count steady, its 2 pointers are now compared record by record, the loss is evidenced, and `interfaces[].lag_member_of` is recorded `lossy` rather than `good`.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoss__vyos.yaml`.
+> **Update 2026-10-10 (#500) — the counts in this section and in "The LAG surface" changed, and the tables below now carry the new ones.**  The AOS-S parser now gives a LAG one name wherever it reads one, so an `interface Trk1` stanza and the LAG `trk1` are one record name, not two.  Measured after the change: 85 source interface records, **86** after the round-trip, the count differing on **1** of 7 cells.  `kitchen_sink.cfg` no longer gains records (13 → 13): the bare `ethernet trk1` / `ethernet trk2` stanzas its two trunks fall through to are records the source already has, and its rendered config has one `ethernet trk1 { description … }` stanza where the snippet below shows two.  The Central stack still gains one (`trk1`, 49 → 50).  The 3 LAG records still become 0 and the 4 `lag_member_of` pointers still come back null; with the kitchen sink's record count steady, its 2 pointers are now compared record by record, the loss is evidenced, and `interfaces[].lag_member_of` is recorded `lossy` rather than `good`.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoss__vyos.yaml`.
 
 Most pairs in this mesh lose interface records. This one gains them, and the
 distinction changes what the `interfaces[].*` keys mean.
@@ -48,18 +48,20 @@ distinction changes what the `interfaces[].*` keys mean.
 | measurement | value |
 |---|---|
 | source interface records, all 7 cells | **85** |
-| records after parse → render → re-parse | **88** |
+| records after parse → render → re-parse | **86** |
 | source interface names missing from the target | **0** |
-| cells where the record count differs | **2** of 7 |
+| cells where the record count differs | **1** of 7 |
 
-Every AOS-S port survives with its name intact. The extra three records are
-**phantom LAG stanzas**: `trk1` on `aruba_central_5memberstack_rendered.cfg`,
-`trk1` + `trk2` on `kitchen_sink.cfg` (see "The LAG surface" below).
+Every AOS-S port survives with its name intact. The extra record is a
+**phantom LAG stanza**: `trk1` on `aruba_central_5memberstack_rendered.cfg`
+(see "The LAG surface" below). `kitchen_sink.cfg` has an `interface Trk1` and
+an `interface Trk2` stanza of its own, so the stanzas its two trunks fall
+through to are records the source already has.
 
-Because the record count moves on those 2 cells, the audit routes the whole
+Because the record count moves on that 1 cell, the audit routes the whole
 `interfaces` cell to STRUCTURAL_ONLY there and lets `interfaces[].name` carry
 the signal. That is why several interface sub-fields below are recorded `good`
-with a measurement rather than a loss: their drift on those cells is the parent
+with a measurement rather than a loss: their drift on that cell is the parent
 count moving, not the attribute failing, and the loss is recorded once where it
 is actually caused.
 
@@ -70,7 +72,7 @@ is actually caused.
 | hostname | 7 | 0 | 0 |
 | dns_servers | 3 | 0 | 4 |
 | ntp_servers | 1 | 0 | 6 |
-| interfaces (record set) | 5 | 2 | 0 |
+| interfaces (record set) | 6 | 1 | 0 |
 | vlans | 0 | 7 | 0 |
 | static_routes | 5 | 0 | 2 |
 | snmp | 4 | 2 | 1 |
@@ -178,10 +180,8 @@ ports come back with `lag_member_of` null. The rendered config shows exactly
 what happened:
 
 ```
-    ethernet Trk1 {
-        description "stack-uplink-A"
-    }
     ethernet trk1 {
+        description "stack-uplink-A"
     }
 ```
 
@@ -190,10 +190,10 @@ The mechanism is in `netcanon/migration/codecs/vyos/render.py`:
 `^bond\d+$`, and `_bond_extra()` — which emits `mode 802.3ad` and the
 `member { interface … }` list — is called only when that block type is
 `bonding`. An AOS-S trunk is called `trk1`, so it falls through to
-`ethernet trk1`, an empty stanza with no mode and no members. Re-parsing that
+`ethernet trk1`, a stanza with no mode and no members. Re-parsing that
 yields a plain interface record and no LAG at all. One mechanism, three
-signals: the vanished LAG record, the phantom interface record, and the null
-`lag_member_of`.
+signals: the vanished LAG record, the null `lag_member_of`, and — where the
+source has no `interface Trk1` stanza of its own — a phantom interface record.
 
 **This is recoverable, and it was verified rather than assumed.** Running the
 standard cross-vendor port-name step first:
@@ -213,11 +213,12 @@ express the concept; `vyos` declares `/lags/lag/name` and `/lags/lag/members`
 **supported**, and the proof above shows the renderer honours them. Calling it
 `unsupported` would block a migration that works.
 
-`interfaces[].lag_member_of` is recorded `good`, deliberately. Its 4 drifting
-records sit on exactly the 2 cells where the interface count moves, so the
-audit attributes that signal to `interfaces[].name`; a loss declared here could
-never be evidenced. The membership loss is real and it is recorded — under
-`lags`, where it is caused.
+`interfaces[].lag_member_of` is recorded `lossy`. Two of its 4 drifting
+records sit on the kitchen-sink cell, whose record count no longer moves, so
+they are compared record by record and the loss is evidenced there; the other
+two sit on the Central stack's cell, where the count still moves and the audit
+attributes the signal to `interfaces[].name`. The membership loss is also
+recorded under `lags`, where it is caused.
 
 ### 3. Every local user arrives as an administrator
 

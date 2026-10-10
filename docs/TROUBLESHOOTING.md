@@ -207,7 +207,14 @@ sources are two ports this is a **real loss**, not cosmetic: two
 physically distinct source ports resolved to a single name on the
 target, and their VLAN memberships merged.  (One exception: a Junos
 interface named with and without its unit, `sources: lo0, lo0.0`, is
-one interface.)
+one interface.)  Where the line reads `map to 'Trk1' (also written
+'trk1': one port on <platform>)`, the two were sent to names that
+differ only in letter case, which on that platform is one port.
+
+If the line is instead `... are one name on <platform>, written in
+more than one letter case, and do not end together`, nothing was
+merged: one port is in the config under two spellings, and they were
+sent to two places.  Give both spellings the same entry.
 
 The common case is Aruba AOS-S uplink-module ports.  `1/A1` (module
 **A**, port 1) and `1/1` (access port 1) are different ports, but no

@@ -1285,14 +1285,27 @@ nothing, as before.
   has no warning for it; with a 2930F fabric or a 2930M stack
   declared from a model family, the plan's `caveats` say so.
 * An AOS-S config defines a LAG as `trk1` and lists it in a VLAN as
-  `Trk1`.  That is one LAG and one name, `trk1` — the spelling of its
-  `trunk` line — in `port_renames`, in the rename modal and as a key
-  of a rename map; a key in another letter case (`Trk1`) reaches it
-  too.  A HARDWARE port typed in two letter cases (`A1` in one VLAN,
-  `a1` in another, which no device prints) is still two names: an
-  entry for one leaves the other as it was, and the job says so (`...
-  are one name on aruba_aoss, written in more than one letter case,
-  and do not end together`).  Give both the same entry.
+  `Trk1`.  That is one LAG and one name, `trk1`, in `port_renames`,
+  in the rename modal and as a key of a rename map; a key in another
+  letter case (`Trk1`) reaches it too, with or without devices
+  declared.  A HARDWARE port typed in two letter cases (`A1` in one
+  VLAN, `a1` in another, which no device prints) is still two names:
+  an entry for one leaves the other as it was, and the job says so
+  (`... are one name on aruba_aoss, written in more than one letter
+  case, and do not end together`).  Give both the same entry —
+  through the API.  The rename modal shows the two spellings as two
+  rows, counts two rows on one target as a collision and will not
+  apply; that holds for a name typed in two letter cases on any
+  platform without letter case (an IOS-XE route that names
+  `loopback0` beside `interface Loopback0`).
+* A key of a rename map is the name the config uses for the port.
+  Where the source platform's names have no letter case — every
+  vendor but FortiOS and RouterOS — a key in another letter case is
+  taken for that name, when the config writes the name one way and
+  that spelling has no entry of its own.  A TARGET written in another
+  letter case is the same port on a target without letter case: two
+  source ports sent to `Trk1` and `trk1` on AOS-S are on one LAG, and
+  the job says so.
 
 ---
 

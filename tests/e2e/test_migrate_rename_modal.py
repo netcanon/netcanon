@@ -337,8 +337,9 @@ vlan 1
 class TestRenameModalAosSLag:
     """The two spellings of one LAG used to be two rows aimed at one
     target: both drawn as a collision, and an Apply button that stayed
-    disabled until one of them was dropped -- for any AOS-S config with
-    a LAG, onto any other vendor."""
+    disabled until one of them was dropped -- for an AOS-S config that
+    names a LAG outside its ``trunk`` line (a VLAN that lists it, its
+    own ``interface`` stanza), onto any other vendor."""
 
     @pytest.mark.parametrize("target", ["juniper_junos", "cisco_iosxe_cli", "arista_eos", "aruba_aoss"])
     def test_a_lag_is_one_row_and_apply_works(

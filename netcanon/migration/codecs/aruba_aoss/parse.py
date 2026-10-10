@@ -60,6 +60,7 @@ from ...canonical.intent import (
 from .._helpers import _mask_to_prefix
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .port_names import one_spelling
 
 logger = logging.getLogger(__name__)
 
@@ -415,7 +416,7 @@ def _dest_to_cidr(dest: str) -> str:
 #: ``tagged xe-0/0/0,xe-0/0/2`` getting shredded into
 #: ``["xe", "0/0/0", "0/0/2"]`` on parse-back.
 _AOS_PORT_SHAPE_RE = re.compile(
-    r"^(?:[Tt]rk\d+|\d+(?:/[A-Za-z]?\d+)?|[A-Za-z]\d+)$",
+    r"^(?:[Tt][Rr][Kk]\d+|\d+(?:/[A-Za-z]?\d+)?|[A-Za-z]\d+)$",
 )
 
 #: DoS clamp on port-range expansion.  A fully-stacked AOS-S chassis tops out
@@ -477,7 +478,8 @@ def _parse_port_list(text: str) -> list[str]:
             if token not in seen:
                 seen.add(token)
                 result.append(token)
-    return result
+    # A LAG has one name in the tree, whatever case the line has it in.
+    return list(dict.fromkeys(one_spelling(name) for name in result))
 
 
 def _expand_port_range(lo: str, hi: str) -> list[str]:
@@ -530,7 +532,7 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
 
 
 def _one_name_per_lag(intent: CanonicalIntent) -> None:
-    """Give every reference to a LAG the name its ``trunk`` line gave it.
+    """Give a LAG one name everywhere the tree refers to it.
 
     The device writes one LAG two ways: ``trunk 51-52 trk1 lacp`` where
     it is defined, and ``Trk1`` where a VLAN lists it or an ``interface
@@ -541,20 +543,27 @@ def _one_name_per_lag(intent: CanonicalIntent) -> None:
     source names on a target counts two (the rename modal showed the
     LAG as a collision and would not apply).
 
-    The spelling kept is the definition's, which is what the tree
-    already called the LAG.  The renderer writes each form where the
-    device does, whatever the tree holds.  Every place a port name is
-    referenced is rewritten, by the same sweep the port translator uses,
-    and a list that named the LAG twice names it once.
+    The one name is ``trk<n>``, in lower case
+    (:func:`~.port_names.one_spelling`): what a ``trunk`` line the
+    device printed says, and so what the tree has always called the
+    LAG.  It does not depend on a definition being in the text, nor on
+    how a hand spelt one: ``TRK1`` on a ``trunk`` line is the same
+    LAG, and a name that is not a trunk's (``A1``) is nobody's other
+    spelling.  The renderer writes each form where the device does,
+    whatever the tree holds.
+
+    The lines that hold most references are read that way to begin
+    with -- a port list, a ``trunk`` line, an ``interface`` header --
+    so that what the parser does with a name while it reads (a port
+    moved by a later ``untagged``, a stanza met twice) is done to one
+    name.  This pass is for every other place a port name is kept, by
+    the same sweep the port translator uses: it cannot be a field
+    short of it.  AOS-S has no unit suffix, so none is followed.
     """
-    defined = {lag.name.casefold(): lag.name for lag in intent.lags if lag.name}
-    if not defined:
-        return
     from ...canonical.port_names import rewrite_port_names
 
-    rewrite_port_names(
-        intent, lambda name: defined.get(name.casefold(), name), units=True,
-    )
+    rewrite_port_names(intent, one_spelling, units=False)
+    # Two lines of one stanza can name a port twice between them.
     for vlan in intent.vlans:
         vlan.tagged_ports = list(dict.fromkeys(vlan.tagged_ports))
         vlan.untagged_ports = list(dict.fromkeys(vlan.untagged_ports))
@@ -566,7 +575,7 @@ def _build_lag_from_trunk_line(m: re.Match[str]) -> CanonicalLAG | None:
     members = _parse_port_list(port_list_text)
     mode = _AOS_TRUNK_TYPE_TO_MODE.get(trunk_type.lower(), "static")
     return CanonicalLAG(
-        name=trunk_name,
+        name=one_spelling(trunk_name),
         members=members,
         mode=mode,
     )
@@ -828,14 +837,24 @@ def _parse_vrrp_group_stanza(
 
 
 def _parse_interface_stanza(
-    lines: list[str], start: int, iface_name: str,
+    lines: list[str], start: int, iface_name: str, into: CanonicalInterface | None = None,
 ) -> tuple[CanonicalInterface, int]:
     """Parse an ``interface X`` stanza starting at *start*.
+
+    Args:
+        lines: The config, cut into lines.
+        start: Index of the first line after the stanza's header.
+        iface_name: The interface the header names.
+        into: The record an earlier stanza for the same interface
+            made.  The lines of this one are read into it -- a later
+            line replaces what an earlier one set, an address is
+            added -- which is what the device does with two stanzas
+            for one interface.
 
     Returns the parsed :class:`CanonicalInterface` and the index of
     the first line AFTER the stanza's ``exit``.
     """
-    iface = CanonicalInterface(
+    iface = into if into is not None else CanonicalInterface(
         name=iface_name,
         enabled=True,
         interface_type=_infer_iface_type(iface_name),
@@ -952,6 +971,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     intent.source_version = _extract_version(raw)
 
     lines = raw.splitlines()
+    # One record for an interface and one for a LAG, however many
+    # stanzas or ``trunk`` lines the text has for it.
+    stanza_of: dict[str, CanonicalInterface] = {}
+    lag_by_name: dict[str, CanonicalLAG] = {}
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -1251,8 +1274,16 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         tk = _TRUNK_LINE_RE.match(stripped_line)
         if tk:
             lag = _build_lag_from_trunk_line(tk)
-            if lag is not None:
+            defined = None if lag is None else lag_by_name.get(lag.name)
+            if lag is not None and defined is not None:
+                # A second ``trunk`` line for a LAG adds its ports to
+                # the first: one LAG, one record.
+                defined.members = list(dict.fromkeys(defined.members + lag.members))
+                lag = defined
+            elif lag is not None:
+                lag_by_name[lag.name] = lag
                 intent.lags.append(lag)
+            if lag is not None:
                 # Reverse-link each member to this LAG so the
                 # canonical tree stays consistent.
                 iface_by_name = {i.name: i for i in intent.interfaces}
@@ -1324,9 +1355,14 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
         im = _IFACE_HEADER_RE.match(stripped_line)
         if im:
-            iface_name = im.group(1).strip('"')
-            iface, next_i = _parse_interface_stanza(lines, i + 1, iface_name)
-            intent.interfaces.append(iface)
+            iface_name = one_spelling(im.group(1).strip('"'))
+            # A second stanza for an interface goes on with the first,
+            # as the device reads them: one interface, one record.
+            earlier = stanza_of.get(iface_name)
+            iface, next_i = _parse_interface_stanza(lines, i + 1, iface_name, into=earlier)
+            if earlier is None:
+                stanza_of[iface_name] = iface
+                intent.interfaces.append(iface)
             i = next_i
             continue
 
