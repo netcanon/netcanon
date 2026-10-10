@@ -249,7 +249,15 @@
   .mig-plan-chip {
     display:inline-block; margin-right:.9rem; font-family:monospace;
   }
-  .mig-plan-chip.chip-warn, .mig-plan-chip.chip-block { font-weight:700; }
+  .mig-plan-chip.chip-warn, .mig-plan-chip.chip-block {
+    font-weight:700; padding:0 .35rem; border-radius:3px;
+  }
+  /* A chip carries its own colours.  The strip's are for the plan as a
+     whole, and a chip can say something the plan's state does not: a
+     crossing of stack members holds nothing, so the strip stays green,
+     and the chip still has to read as a warning there. */
+  .mig-plan-chip.chip-warn  { background:var(--badge-partial-bg); color:var(--badge-partial-fg); }
+  .mig-plan-chip.chip-block { background:var(--badge-failed-bg);  color:var(--badge-failed-fg); }
   .mig-plan-report { margin-top:.3rem; }
 
   #mig-rename-modal-body {

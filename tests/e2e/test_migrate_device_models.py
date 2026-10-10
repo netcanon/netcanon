@@ -841,6 +841,27 @@ class TestAStackOnBothSides:
         crossed = page.locator(_tid("migrate-rename-plan-crossed"))
         expect(crossed).to_have_text("crossed: member 1 → member 2; member 2 → member 1")
         expect(crossed).to_have_class(re.compile(r"\bchip-warn\b"))
+        # The class is not the colour.  The strip is green here -- a
+        # crossing holds nothing -- and the chip took the strip's green
+        # with it: what is drawn is what has to be amber.
+        drawn = crossed.evaluate(
+            """(chip) => {
+                const probe = document.createElement('span');
+                probe.style.background = 'var(--badge-partial-bg)';
+                probe.style.color = 'var(--badge-partial-fg)';
+                chip.parentElement.appendChild(probe);
+                const want = getComputedStyle(probe);
+                const got = getComputedStyle(chip);
+                const strip = getComputedStyle(chip.parentElement);
+                const out = {
+                    amber: got.backgroundColor === want.backgroundColor && got.color === want.color,
+                    apart: got.color !== strip.color && got.backgroundColor !== strip.backgroundColor,
+                };
+                probe.remove();
+                return out;
+            }"""
+        )
+        assert drawn == {"amber": True, "apart": True}
         expect(page.locator(_tid("migrate-rename-plan-members"))).to_have_count(0)
         # The plan's own line for it, in the server's words.
         expect(page.locator(_tid("migrate-rename-plan-report"))).to_contain_text(
