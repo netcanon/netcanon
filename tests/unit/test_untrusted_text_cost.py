@@ -14,14 +14,19 @@ the text:
 * a search that failed and started again inside the run it had just
   crossed (``(\\d+)$`` on digits and then a letter, ``([\\w-]+)=`` on a
   long word);
-* and code that was no pattern at all: a line continuation joined by
-  ``buffer += ...``, copied whole for every line it grew by.
+* code that was no pattern at all: a line continuation joined by
+  ``buffer += ...``, copied whole for every line it grew by;
+* and a handler that runs once per line and looked through everything
+  the earlier lines had made (``next(r for r in intent.routes if
+  ...)``, ``any(...)``, ``name in a_list``, a dict rebuilt from a
+  list): the square of the NUMBER of stanzas, on text with nothing
+  odd in any one line of it.
 
 This has been fixed before, a pattern at a time, where a scanner named
 the pattern (``test_redos_hardening.py`` pins those) or a reader
 named the loop (``test_parse_quadratic_scan_perf.py``).  A list of what
 was wrong cannot show that nothing is left, so nothing here is a list
-of patterns.  It is a SEARCH, in two halves:
+of patterns.  It is a SEARCH, in two halves, and a list beside them:
 
 * every regex the product holds -- each literal in the source, each
   compiled pattern or pattern-shaped string a module or class keeps,
@@ -34,11 +39,27 @@ of patterns.  It is a SEARCH, in two halves:
   go on (a continuation, an open quote, an open brace), and of white
   space inside each of the capture's own lines.
 
-A search is not a proof.  What neither half reaches: a pattern put
-together inside a function from parts that are not literals, on a path
-the capture and its runs do not drive; code that is slow on a shape
-nobody thought to build.  The calls the first half cannot read are
-listed by name, so a new one is at least looked at.
+The last shape is the one the two halves do not build: nothing about
+one line of it is slow.  The search for it is a tool,
+``tools/stanza_cost_search.py``, which writes every line and block of
+every capture many times over and takes minutes; what it found is
+pinned here, a text for each handler that was fixed
+(``TestParseFitsTheNumberOfItsStanzas``).  That part IS a list, and
+says so: run the tool when a parser's handler changes.
+
+A search is not a proof.  What is not reached: a pattern put together
+inside a function from parts that are not literals and not kept, on a
+path the capture and its runs do not drive; a handler no capture has a
+line for; work that needs two kinds of stanza to grow together; code
+that is slow on a shape nobody thought to build.  The calls the first
+half cannot read -- a pattern that is not a literal, flags that are
+not written out -- are listed by name, so a new one is at least
+looked at.
+
+Nor is any of this about what a config expands TO.  ``1-4094`` is a
+few bytes that parse to thousands of entries; reading it costs the
+size of what was asked for, which no search for work that grows
+faster than the text will report.
 
 Each check is also handed something that is slow, and has to say so.
 """
@@ -311,52 +332,104 @@ _RE_CALLS = {
 }
 
 
-def _re_calls(root: Path) -> Iterator[tuple[Path, str, ast.Call]]:
+def _names_of_re(tree: ast.AST) -> tuple[set[str], dict[str, str]]:
+    """The names a module gives ``re`` itself (``import re``, ``import
+    re as _re``, at the top or inside a function), and the names it
+    gives ``re``'s functions (``from re import search as find``)."""
+    modules: set[str] = set()
+    functions: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.asname or "re" for alias in node.names if alias.name == "re")
+        elif isinstance(node, ast.ImportFrom) and node.module == "re" and not node.level:
+            functions.update(
+                (alias.asname or alias.name, alias.name) for alias in node.names if alias.name in _RE_CALLS
+            )
+    return modules, functions
+
+
+def _re_calls(root: Path) -> Iterator[tuple[Path, str, ast.Call, str, set[str]]]:
+    """Every call of one of ``re``'s functions under *root*, with the
+    function's own name and the names the module gives ``re`` --
+    whatever the module calls it, and whether or not the pattern is
+    passed by position."""
     for path in sorted(root.rglob("*.py")):
         source = path.read_text(encoding="utf-8")
-        for node in ast.walk(ast.parse(source)):
+        tree = ast.parse(source)
+        modules, functions = _names_of_re(tree)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
             if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr in _RE_CALLS
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "re"
-                and node.args
+                isinstance(func, ast.Attribute)
+                and func.attr in _RE_CALLS
+                and isinstance(func.value, ast.Name)
+                and func.value.id in modules
             ):
-                yield path, source, node
+                yield path, source, node, func.attr, modules
+            elif isinstance(func, ast.Name) and func.id in functions:
+                yield path, source, node, functions[func.id], modules
 
 
-def _flags(call: ast.Call) -> int | None:
+def _pattern_of(call: ast.Call) -> ast.expr | None:
+    """The pattern argument, by position or by name."""
+    if call.args and not isinstance(call.args[0], ast.Starred):
+        return call.args[0]
+    for keyword in call.keywords:
+        if keyword.arg == "pattern":
+            return keyword.value
+    return None
+
+
+def _flags(call: ast.Call, function: str, modules: set[str]) -> int | None:
+    """The flags of a call, or ``None`` if the source does not say:
+    ``re.MULTILINE | re.DOTALL`` is read, under any name the module
+    has for ``re``; a variable is not."""
     exprs = [kw.value for kw in call.keywords if kw.arg == "flags"]
-    position = _RE_CALLS[call.func.attr]  # type: ignore[attr-defined]
+    position = _RE_CALLS[function]
     if len(call.args) > position:
         exprs.append(call.args[position])
+    names = dict.fromkeys(modules | {"re"}, re)
     flags = 0
     for expr in exprs:
         try:
-            flags |= int(eval(compile(ast.Expression(expr), "<flags>", "eval"), {"re": re}))
+            flags |= int(eval(compile(ast.Expression(expr), "<flags>", "eval"), names))
         except Exception:
             return None
     return flags
 
 
+def _where(path: Path) -> str:
+    return path.relative_to(REPO_ROOT).as_posix() if path.is_relative_to(REPO_ROOT) else path.name
+
+
+def _is_literal(node: ast.expr | None) -> bool:
+    return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
 def _literals(root: Path) -> Iterator[tuple[str, str, int]]:
-    """``(where, pattern, flags)`` for every ``re.<call>("literal", ...)``."""
-    for path, _source, node in _re_calls(root):
-        first, flags = node.args[0], _flags(node)
-        if isinstance(first, ast.Constant) and isinstance(first.value, str) and flags is not None:
-            yield f"{path.relative_to(REPO_ROOT).as_posix()}:{node.lineno}", first.value, flags
+    """``(where, pattern, flags)`` for every call of an ``re`` function
+    with a literal pattern and flags that can be read."""
+    for path, _source, node, function, modules in _re_calls(root):
+        pattern, flags = _pattern_of(node), _flags(node, function, modules)
+        if _is_literal(pattern) and flags is not None:
+            yield f"{_where(path)}:{node.lineno}", pattern.value, flags  # type: ignore[union-attr]
 
 
 def _not_literal(root: Path) -> set[tuple[str, str]]:
-    """``(file, first argument as written)`` for every ``re`` call
-    whose pattern is not a string literal."""
+    """``(file, what was written)`` for every ``re`` call the scan
+    cannot time: its pattern is not a string literal, or its flags are
+    not ones that can be read from the source (a pattern means
+    different things under different flags)."""
     found = set()
-    for path, source, node in _re_calls(root):
-        first = node.args[0]
-        if not (isinstance(first, ast.Constant) and isinstance(first.value, str)):
-            written = " ".join((ast.get_source_segment(source, first) or "").split())
-            found.add((path.relative_to(REPO_ROOT).as_posix(), written[:60]))
+    for path, source, node, function, modules in _re_calls(root):
+        pattern = _pattern_of(node)
+        if not _is_literal(pattern):
+            written = " ".join((ast.get_source_segment(source, pattern) or "").split()) if pattern else ""
+            found.add((_where(path), written[:60] or "<no pattern argument>"))
+        elif _flags(node, function, modules) is None:
+            found.add((_where(path), "flags of " + repr(pattern.value)[:50]))  # type: ignore[union-attr]
     return found
 
 
@@ -576,6 +649,39 @@ class TestEveryRegexTheProductHolds:
         is argued here.  There is no default."""
         assert _not_literal(PACKAGE) == set(NOT_LITERAL)
 
+    def test_the_scan_reads_re_however_a_module_names_it(self, tmp_path: Path) -> None:
+        """A scan that knew only ``re.<function>("literal", flags)``
+        passed over a slow pattern behind ``import re as _re``, behind
+        ``from re import search``, in a call that names its arguments,
+        and beside flags held in a variable.  One module with each."""
+        (tmp_path / "forms.py").write_text(
+            "import re\n"
+            "import re as _rx\n"
+            "from re import search as find, compile\n"
+            "FLAGS = re.MULTILINE\n"
+            "def f(text):\n"
+            "    import re as inner\n"
+            "    _rx.search(r'aliased\\s+x$', text)\n"
+            "    find(r'imported\\s+x$', text)\n"
+            "    compile(r'compiled\\s+x$', re.MULTILINE)\n"
+            "    re.search(pattern=r'named\\s+x$', string=text, flags=_rx.IGNORECASE)\n"
+            "    inner.sub(r'local\\s+x$', '', text)\n"
+            "    re.search(r'variable flags\\s+x$', text, FLAGS)\n"
+            "    re.search(text, text)\n"
+            "    re.compile(*[text])\n"
+            "    text.search('not re at all')\n",
+            encoding="utf-8",
+        )
+        read = {pattern.split("\\")[0]: flags for _where_found, pattern, flags in _literals(tmp_path)}
+        assert read == {
+            "aliased": 0, "imported": 0, "compiled": re.MULTILINE, "named": re.IGNORECASE, "local": 0,
+        }
+        assert _not_literal(tmp_path) == {
+            ("forms.py", "flags of 'variable flags\\\\s+x$'"),
+            ("forms.py", "text"),
+            ("forms.py", "<no pattern argument>"),
+        }
+
 
 # ---------------------------------------------------------------------------
 # Every public codec, on a real capture with a run put into it
@@ -750,3 +856,270 @@ class TestEveryPublicCodec:
 
     def test_netcanon_is_the_package_under_test(self) -> None:
         assert Path(netcanon.__file__).resolve().parent == PACKAGE
+
+
+# ---------------------------------------------------------------------------
+# One kind of stanza, written many times
+# ---------------------------------------------------------------------------
+
+
+def _config(*lines: str) -> str:
+    return "\n".join(lines) + "\n"
+
+
+_AOSS_TOP = ("; J9729A Configuration Editor; Created on release #WB.16.08.0001", 'hostname "sw"')
+
+
+def _eos_vxlan_stanzas(count: int) -> str:
+    stanza = (
+        "interface Vxlan1", "   vxlan source-interface Loopback1", "   vxlan udp-port 4789",
+        "   vxlan vlan 110 vni 10110", "   vxlan vlan 111 vni 10111", "!",
+    )
+    return _config("hostname sw", "!", *(stanza * count))
+
+
+def _eos_trunks(count: int) -> str:
+    return _config("hostname sw", "!", *(
+        line for number in range(1, count + 1) for line in (
+            f"interface Port-Channel{number}", "   switchport mode trunk",
+            "   switchport trunk allowed vlan 10-13", "   switchport trunk native vlan 10", "!",
+        )
+    ))
+
+
+def _eos_bgp_vrfs(count: int) -> str:
+    return _config("hostname sw", "!", "router bgp 65001", *(
+        line for number in range(1, count + 1) for line in (f"   vrf T{number}", f"      rd 65001:{number}")
+    ), "!")
+
+
+def _eos_vxlan_vrfs(count: int) -> str:
+    return _config(
+        "hostname sw", "!", "interface Vxlan1", "   vxlan source-interface Loopback1",
+        *(f"   vxlan vrf T{number} vni {50000 + number}" for number in range(1, count + 1)), "!",
+    )
+
+
+def _cx_trunks(count: int) -> str:
+    return _config("hostname sw", "vlan 1,10-13", *(
+        line for number in range(1, count + 1) for line in (
+            f"interface 1/1/{number}", "    no shutdown", "    no routing", "    vlan trunk native 10",
+            "    vlan trunk allowed 10-13",
+        )
+    ))
+
+
+def _fortigate_interface_blocks(count: int) -> str:
+    block = (
+        "config system interface", '    edit "port1"', '        set vdom "root"', "    next",
+        '    edit "agg1"', '        set vdom "root"', "        set type aggregate",
+        '        set member "port1" "port2"', "    next", "end",
+    )
+    return _config(*(block * count))
+
+
+def _net(number: int) -> str:
+    return f"10.{number // 256 % 256}.{number % 256}"
+
+
+def _junos_routes(count: int) -> str:
+    return _config("set system host-name r1", *(
+        f"set routing-options static route {_net(number)}.0/24 next-hop 192.0.2.1" for number in range(count)
+    ))
+
+
+def _junos_vrf_routes(count: int) -> str:
+    return _config("set system host-name r1", *(
+        f"set routing-instances RED routing-options static route {_net(number)}.0/24 next-hop 192.0.2.1"
+        for number in range(count)
+    ))
+
+
+def _junos_instances(count: int) -> str:
+    return _config("set system host-name r1", *(
+        f"set routing-instances VRF{number} instance-type vrf" for number in range(count)
+    ))
+
+
+def _junos_users(count: int) -> str:
+    return _config("set system host-name r1", *(
+        f"set system login user u{number} class operator" for number in range(count)
+    ))
+
+
+def _junos_applied_groups(count: int) -> str:
+    return _config("set system host-name r1", *(f"set apply-groups g{number}" for number in range(count)))
+
+
+def _aoss_vlans(count: int) -> str:
+    return _config(*_AOSS_TOP, *(
+        line for number in range(count) for line in (f"vlan {number % 4000 + 2}", "   untagged 1-48", "   exit")
+    ))
+
+
+def _aoss_radius(count: int) -> str:
+    """A host and then a global key, again and again; the key is the
+    empty one on every other line, which gives nothing to anyone."""
+    return _config(*_AOSS_TOP, *(
+        line for number in range(count) for line in (
+            f"radius-server host 10.{number // 65536 % 256}.{number // 256 % 256}.{number % 256}",
+            'radius-server key ""' if number % 2 else 'radius-server key "fake-shared-secret"',
+        )
+    ))
+
+
+def _aoss_radius_no_key(count: int) -> str:
+    return _config(*_AOSS_TOP, *(
+        line for number in range(count) for line in (
+            f"radius-server host 10.{number // 65536 % 256}.{number // 256 % 256}.{number % 256}",
+            'radius-server key ""',
+        )
+    ))
+
+
+def _aoss_v3_users(count: int) -> str:
+    return _config(*_AOSS_TOP, *(
+        line for number in range(count) for line in (
+            f'snmpv3 user "u{number}" auth sha "fakeauthpass"',
+            f'snmpv3 group "operatorauth" user "u{number}" sec-model ver3',
+        )
+    ))
+
+
+def _aoss_trunks(count: int) -> str:
+    return _config(
+        *_AOSS_TOP,
+        *(line for number in range(1, count + 1) for line in (f"interface {number}", '   name "p"', "   exit")),
+        *(f"trunk {number} trk{number} lacp" for number in range(1, count + 1)),
+    )
+
+
+def _opnsense_laggs(count: int) -> str:
+    return _config(
+        '<?xml version="1.0"?>', "<opnsense>",
+        "<system><hostname>fw</hostname><domain>example.test</domain></system>", "<interfaces>",
+        *(f"<opt{number}><if>igb{number}</if><enable>1</enable></opt{number}>" for number in range(count)),
+        "</interfaces>", "<laggs>",
+        *(
+            f"<lagg><laggif>lagg{number}</laggif><members>igb{number}</members><proto>lacp</proto></lagg>"
+            for number in range(count)
+        ),
+        "</laggs>", "</opnsense>",
+    )
+
+
+def _routeros_pools(count: int) -> str:
+    return _config(
+        "# 2026-01-01 00:00:00 by RouterOS 7.14", "/ip dhcp-server network",
+        *(f"add address={_net(number)}.0/24 gateway={_net(number)}.1" for number in range(count)),
+        "/ip pool",
+        *(f"add name=p{number} ranges={_net(number)}.10-{_net(number)}.20" for number in range(count)),
+    )
+
+
+#: What was slow, by the handler that was fixed: codec, the smaller
+#: count, the text.  Each was read in time that grew with the square of
+#: the count -- measured before the fix at four times the count here:
+#: from under a second (trunks that share their VLANs) to half a minute
+#: (RouterOS pools), on half a megabyte to two megabytes of text.
+STANZAS: dict[str, tuple[str, int, Callable[[int], str]]] = {
+    "arista_eos: the Vxlan stanza again and again": ("arista_eos", 1500, _eos_vxlan_stanzas),
+    "arista_eos: trunks that share their VLANs": ("arista_eos", 3000, _eos_trunks),
+    "arista_eos: a VRF under router bgp": ("arista_eos", 4000, _eos_bgp_vrfs),
+    "arista_eos: a VRF's VNI": ("arista_eos", 4000, _eos_vxlan_vrfs),
+    "aruba_aoscx: trunks that share their VLANs": ("aruba_aoscx", 3000, _cx_trunks),
+    "fortigate_cli: the interface block again and again": ("fortigate_cli", 2500, _fortigate_interface_blocks),
+    "juniper_junos: static routes": ("juniper_junos", 4000, _junos_routes),
+    "juniper_junos: a VRF's static routes": ("juniper_junos", 4000, _junos_vrf_routes),
+    "juniper_junos: routing instances": ("juniper_junos", 4000, _junos_instances),
+    "juniper_junos: users": ("juniper_junos", 4000, _junos_users),
+    "juniper_junos: applied groups": ("juniper_junos", 8000, _junos_applied_groups),
+    "aruba_aoss: VLAN stanzas that claim the same ports": ("aruba_aoss", 2500, _aoss_vlans),
+    "aruba_aoss: RADIUS hosts and a global key": ("aruba_aoss", 3000, _aoss_radius),
+    "aruba_aoss: RADIUS hosts and a key that is empty": ("aruba_aoss", 3000, _aoss_radius_no_key),
+    "aruba_aoss: SNMPv3 users and their groups": ("aruba_aoss", 3000, _aoss_v3_users),
+    "aruba_aoss: trunks over many interfaces": ("aruba_aoss", 2500, _aoss_trunks),
+    "opnsense: laggs over many interfaces": ("opnsense", 3000, _opnsense_laggs),
+    "mikrotik_routeros: pools over many networks": ("mikrotik_routeros", 1500, _routeros_pools),
+}
+
+
+class TestParseFitsTheNumberOfItsStanzas:
+    """A handler runs once per line.  One that reads through what the
+    earlier lines made costs the square of the lines, and no line of
+    such a config is odd in itself.
+
+    This is a list -- one text for each handler that was found doing
+    it -- and not a search: the search is ``tools/stanza_cost_search.py``,
+    which takes minutes.  Each text is one kind of stanza written N
+    times and then 4N.
+    """
+
+    @pytest.mark.parametrize("title", sorted(STANZAS))
+    def test_one_kind_of_stanza_written_many_times(self, title: str) -> None:
+        name, small, make = STANZAS[title]
+        tree = get_codec(name).parse(make(3))
+        assert tree is not None
+        slow = _grows_faster_than_its_input(get_codec(name).parse, make, small)
+        assert not slow, f"{title}: {slow}"
+
+    def test_each_text_is_read_and_makes_what_it_says(self) -> None:
+        """A text the codec refused, or read as nothing, would be read
+        quickly whatever the handler did."""
+        made = {
+            "arista_eos: the Vxlan stanza again and again": lambda t: len(t.vxlan_vnis),
+            "arista_eos: trunks that share their VLANs": lambda t: len(t.interfaces),
+            "arista_eos: a VRF under router bgp": lambda t: len(t.routing_instances),
+            "arista_eos: a VRF's VNI": lambda t: len(t.routing_instances),
+            "aruba_aoscx: trunks that share their VLANs": lambda t: len(t.interfaces),
+            "fortigate_cli: the interface block again and again": lambda t: len(t.lags),
+            "juniper_junos: static routes": lambda t: len(t.static_routes),
+            "juniper_junos: a VRF's static routes": lambda t: len(t.static_routes),
+            "juniper_junos: routing instances": lambda t: len(t.routing_instances),
+            "juniper_junos: users": lambda t: len(t.local_users),
+            "juniper_junos: applied groups": lambda t: 40,
+            "aruba_aoss: VLAN stanzas that claim the same ports": lambda t: len(t.vlans),
+            "aruba_aoss: RADIUS hosts and a global key": lambda t: len(t.radius_servers),
+            "aruba_aoss: RADIUS hosts and a key that is empty": lambda t: len(t.radius_servers),
+            "aruba_aoss: SNMPv3 users and their groups": lambda t: len(t.snmp.v3_users),
+            "aruba_aoss: trunks over many interfaces": lambda t: len(t.lags),
+            "opnsense: laggs over many interfaces": lambda t: len(t.lags),
+            "mikrotik_routeros: pools over many networks": lambda t: len(t.dhcp_servers),
+        }
+        assert set(made) == set(STANZAS)
+        for title, (name, _small, make) in STANZAS.items():
+            assert made[title](get_codec(name).parse(make(40))) >= 40, title
+
+    def test_the_check_can_fail(self) -> None:
+        """A reader whose cost is the square of its lines, whatever
+        the machine.  (One that really looks through a list it is
+        making, for every line, is quick enough on a fast machine at
+        this size to pass under the check's floor: the control then
+        said the check could not fail.  The search tool's own tests
+        read such a reader, with a floor set for it.)"""
+
+        def costs_the_square_of_its_lines(text: str) -> None:
+            lines = text.count("\n")
+            time.sleep(lines * lines * 2.5e-8)
+
+        # Asked up to three times: the first pair of readings decides
+        # that a text is read in time, so one stalled reading of the
+        # smaller text would pass a slow reader.  That is the safe way
+        # round for the check, and the wrong way round for this test.
+        assert any(
+            _grows_faster_than_its_input(
+                costs_the_square_of_its_lines, lambda count: _config(*(f"route {n}" for n in range(count))), 1500,
+            )
+            for _attempt in range(3)
+        )
+
+    def test_and_passes_a_reader_whose_cost_is_its_length(self) -> None:
+        """As long at the larger size as the reader above, and four
+        times the smaller, not sixteen."""
+
+        def costs_its_lines(text: str) -> None:
+            time.sleep(text.count("\n") * 1.5e-4)
+
+        assert not _grows_faster_than_its_input(
+            costs_its_lines, lambda count: _config(*(f"route {n}" for n in range(count))), 1500,
+        )

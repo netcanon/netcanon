@@ -29,7 +29,7 @@ timestamp if your timezone matters for an audit.
 ### Security
 
 - **Reading a pasted config could take time that grew with the square of
-  a run in it.**  Four shapes, each in shipped code.  Patterns that began
+  it.**  Five shapes, each in shipped code.  Patterns that began
   `^\s` and were applied to the whole text walked, from every line start,
   to the end of the run of blank lines they were in: a 64 KB body of lines
   of spaces held `/detect` for about a minute.  A lazy value in front of
@@ -38,12 +38,18 @@ timestamp if your timezone matters for an audit.
   line.  A search for a trailing number, or for a RouterOS key, started
   again inside the run it had just crossed.  And RouterOS line
   continuations were joined by adding to one string: parsing 3 MB of
-  lines that each end in a backslash took two and a half minutes.  A
-  pattern at
+  lines that each end in a backslash took two and a half minutes.  And
+  a handler that runs once per line looked through everything the
+  earlier lines had made — the routing instance of a `vrf` line, the
+  static routes so far, every interface for each `trunk` line — so a
+  config with nothing odd in it cost the square of the number of its
+  stanzas: six thousand RouterOS DHCP networks and their pools took 37
+  seconds, sixteen thousand Junos static routes 7.  A pattern at
   work does not let the server's other threads run, so each delayed every
   other request.  All are mended — in the `probe()` of nine codecs, in
   the parsers and renderers, in the Tier-3 detection every `parse` runs,
-  and in the probe and prompt patterns of the shipped device definitions.
+  in the switchport-to-VLAN projection the switch codecs share, and in
+  the probe and prompt patterns of the shipped device definitions.
   Detection, every probe and every parsed tree are unchanged on every
   config in the repository and the development corpora, and every
   committed capture replays identically through the plan endpoints.  What
@@ -55,7 +61,15 @@ timestamp if your timezone matters for an audit.
   it.  A new test searches for the next one: it builds texts from each
   regex the product holds and times every codec's `probe` and `parse` on
   a capture with a run put into it (`tests/unit/test_untrusted_text_cost.py`).
-  It is a search, not a proof — see SECURITY.md.
+  The last shape has a search of its own, run by hand
+  (`tools/stanza_cost_search.py`), and a pinned text for each handler it
+  found.  It is a search, not a proof, and two things are known and not
+  mended: a list of one record that a line adds to after reading it
+  (32,000 addresses on one Junos unit take 8 seconds), and what a config
+  expands to (a thousand trunks that each allow VLANs 2-4000 are 86 KB
+  and over 3 GB) — see SECURITY.md.  Put a request timeout and a memory
+  limit in front of a server that takes text from people it does not
+  trust.
 
 ### Fixed
 

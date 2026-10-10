@@ -87,7 +87,12 @@ and `parse` on a capture with a run put into it, to find code whose
 cost grows faster than its input.  It takes tens of seconds, and far
 longer when it fails, because what it has then found is slow.  A
 failure there is not flakiness to retry: its readings are the best of
-several and it asks twice before it says a thing is slow.
+several and it asks twice before it says a thing is slow.  The longer
+search for the same thing — every line and block of every capture
+written many times over — is not a test: `python
+tools/stanza_cost_search.py` takes minutes and is run by hand when a
+parser's handler changes (`tests/unit/tools/test_stanza_cost_search.py`
+pins that it can find what it is for).
 
 ## Test Isolation
 

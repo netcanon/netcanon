@@ -448,6 +448,11 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # ----- <laggs> block (Tier 2 LAGs) -----
     laggs_el = root.find("laggs")
     if laggs_el is not None:
+        # Every interface of a name, in order, so that a member is not
+        # looked for among all of them for each lagg that names it.
+        named: dict[str, list[CanonicalInterface]] = {}
+        for iface in intent.interfaces:
+            named.setdefault(iface.name, []).append(iface)
         for lagg_el in laggs_el.findall("lagg"):
             laggif_el = lagg_el.find("laggif")
             if laggif_el is None or not (laggif_el.text or "").strip():
@@ -468,8 +473,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             ))
             # Reverse-link members to this LAG.
             for m in members:
-                for iface in intent.interfaces:
-                    if iface.name == m and iface.lag_member_of is None:
+                for iface in named.get(m, ()):
+                    if iface.lag_member_of is None:
                         iface.lag_member_of = name
 
     # ----- <snmpd> block (Tier 2) -----

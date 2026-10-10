@@ -1190,7 +1190,22 @@ def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> None:
     Matching strategy: find the pool whose network contains the range's
     start IP.  If none matches (orphan pool) we create a new
     CanonicalDHCPPool with just the range populated.
+
+    The pool is found by the network, not by trying every pool for
+    every range (and parsing each pool's network again each time): by
+    prefix length, a network's address to the first pool, in the order
+    the config has them, that serves it.  A range asks once for each
+    prefix length there is.
     """
+    served: dict[int, dict[int, tuple[int, CanonicalDHCPPool]]] = {}
+    for position, pool in enumerate(intent.dhcp_servers):
+        try:
+            network = ipaddress.IPv4Network(pool.network, strict=False)
+        except (ValueError, ipaddress.AddressValueError):
+            continue
+        served.setdefault(network.prefixlen, {}).setdefault(
+            int(network.network_address), (position, pool),
+        )
     for line in lines:
         if not line.startswith("add"):
             continue
@@ -1207,20 +1222,19 @@ def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> None:
             start_ip = ipaddress.IPv4Address(start_str.strip())
         except ipaddress.AddressValueError:
             continue
-        # Find an existing pool whose network contains start_ip.
+        # Find the first existing pool whose network contains start_ip.
+        # (A pool this loop appends has no network and serves none.)
         merged = False
-        for pool in intent.dhcp_servers:
-            if not pool.network:
-                continue
-            try:
-                network = ipaddress.IPv4Network(pool.network, strict=False)
-            except (ValueError, ipaddress.AddressValueError):
-                continue
-            if start_ip in network:
-                pool.start_ip = start_str.strip()
-                pool.end_ip = end_str.strip()
-                merged = True
-                break
+        address = int(start_ip)
+        first: tuple[int, CanonicalDHCPPool] | None = None
+        for prefixlen, by_address in served.items():
+            hit = by_address.get(address >> (32 - prefixlen) << (32 - prefixlen))
+            if hit is not None and (first is None or hit[0] < first[0]):
+                first = hit
+        if first is not None:
+            first[1].start_ip = start_str.strip()
+            first[1].end_ip = end_str.strip()
+            merged = True
         if not merged:
             intent.dhcp_servers.append(CanonicalDHCPPool(
                 start_ip=start_str.strip(),

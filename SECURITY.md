@@ -486,11 +486,11 @@ A config is whatever was pasted.  `POST /api/v1/migration/detect`, `/plan`,
 the per-pane plan endpoints and `POST /api/v1/sanitize` hand it to code
 written for real configs.  The pasted text is capped in length (10,000,000
 characters on a plan request); the cap bounds memory, not time, because code
-can take time that grows with the square of a run in the text.  The server is
-one process and a pattern at work does not let its other threads run, so one
-such request delays every other.  There is no time limit on a request.
+can take time that grows with the square of the text.  The server is one
+process and a pattern at work does not let its other threads run, so one such
+request delays every other.  There is no time limit on a request.
 
-Four shapes did, and were mended:
+Five shapes did, and were mended:
 
 * **A line-anchored pattern that began with `\s`**, applied to the whole
   text under `re.MULTILINE`.  `\s` matches a newline, so from every line
@@ -507,6 +507,19 @@ Four shapes did, and were mended:
 * **Code that was no pattern**: RouterOS line continuations were joined by
   adding to one string, which was copied for every line it grew by.  Parsing
   3 MB of continued lines took two and a half minutes.
+* **A handler that looked through everything the earlier lines had made**,
+  once per line: the routing instance of a `vrf` line, the static routes so
+  far, every interface for each `trunk` line, every earlier VLAN for each
+  `vlan` stanza.  Nothing in such a config is odd; the cost was the square of
+  the number of its stanzas.  Measured before the change: 6,000 RouterOS DHCP
+  networks and their pools (0.5 MB), 37 seconds; a FortiGate `config system
+  interface` block written 10,000 times (1.8 MB), 14; 12,000 AOS-S RADIUS
+  hosts (0.6 MB), 15; an Arista `interface Vxlan1` stanza written 6,000 times
+  (0.8 MB), 9; 16,000 Junos static routes (1 MB), 7.  Each is now under a
+  second: the record is found by key, and a pass over the whole tree is made
+  once.  Mended in the Arista, AOS-S, FortiGate, Junos, OPNsense and RouterOS
+  parsers, and in the switchport-to-VLAN projection the switch codecs share
+  (where AOS-CX and Dell OS10 had it).
 
 The same shapes in the shipped device definitions — probe patterns, which
 the collectors apply to what a device printed, and prompt patterns — were
@@ -523,18 +536,43 @@ white space; the RouterOS export banner has to be on one line; and in a
 prompt pattern the user or host part can no longer contain the separator
 that follows it.
 
-The control is that reading the text costs what its length costs, and it is
-held by a search rather than by a list of patterns:
-`tests/unit/test_untrusted_text_cost.py` builds, for every regex the product
-holds, texts from that pattern's own structure, and times every public
-codec's `probe` and `parse` on a real capture with a run put into it.  **A
-search is not a proof.**  It does not reach a pattern assembled inside a
-function from parts that are not literals on a path the capture does not
-drive, nor code that is slow on a shape the search does not build; the
-second, third and fourth shapes above were each found by a reader after an
-earlier version of this test had passed.  A deployment that takes text from
-people it does not trust should put a request timeout in front of the
-application.
+The control is a search for work that grows faster than the text, rather
+than a list of patterns: `tests/unit/test_untrusted_text_cost.py` builds, for
+every regex the product holds, texts from that pattern's own structure, and
+times every public codec's `probe` and `parse` on a real capture with a run
+put into it.  The fifth shape has a search of its own,
+`tools/stanza_cost_search.py`, which writes every line and block of every
+committed capture many times over; it takes minutes and is run by hand, and
+each handler it found is pinned in that test module with a text of its own.
+On the tree before this change it reports 51 units in six codecs; after, none.
+
+**A search is not a proof.**  It does not reach a pattern assembled at call
+time from parts that are not literals and not kept, a handler no capture has
+a line for, work that needs two kinds of stanza to grow together, or code
+that is slow on a shape the search does not build; the second to fifth shapes
+above were each found after an earlier version of the search had passed.
+
+**Known, and not mended by this change:**
+
+* **A list of one record that a line adds to after reading it.**  The
+  addresses of one interface, the members of one LAG, the route targets of one
+  VRF are kept in a list, and a line that adds one first looks for it there.
+  Many lines for ONE record cost their square: 32,000 addresses on one Junos
+  IRB unit (2 MB) take 8 seconds.  The same idiom is in most of the parsers.
+* **What a config expands to.**  A range is a few bytes that parse to
+  thousands of entries, so the size of a request does not bound the memory it
+  takes.  One AOS-S line of 800 ranges of 1,001 ports (11 KB) is 800,000
+  names: about six seconds and 265 MB.  1,000 Arista trunks that each allow
+  VLANs 2-4000 (86 KB) are four million memberships: tens of seconds and over
+  3 GB.  That cost is linear in what was asked for; a real config of that
+  size costs the same.  (A range of unbounded span is refused where one was
+  found: AOS-S clamps a single port range at 1,024 names.)
+* **There is no time limit on a request**, and none on the memory one takes.
+
+A deployment that takes text from people it does not trust should put a
+request timeout and a memory limit in front of the application.  That advice
+is not only for texts built to be slow: the two items above are reachable
+with a config that is merely large.
 
 ---
 

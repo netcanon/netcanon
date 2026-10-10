@@ -610,9 +610,23 @@ def _apply_system_interface(  # noqa: C901
 
         intent.interfaces.append(iface)
         iface_by_name[name] = iface
+    # A member defined AFTER its aggregate's edit is linked by
+    # ``_link_lag_members``, once, when every block has been read.
 
-    # Second pass: interface-order independence — members defined after
-    # their aggregate edit still get their lag_member_of stamped.
+
+def _link_lag_members(intent: CanonicalIntent) -> None:
+    """Stamp ``lag_member_of`` on every member an aggregate names that
+    the edit of the aggregate could not: one defined after it, or in
+    another ``config system interface`` block.
+
+    Run once, after every block.  It used to run at the end of each
+    ``config system interface`` block, over every LAG and every
+    interface the config had so far: a config with that block written
+    N times read its own interfaces N times over.  Once at the end
+    gives each interface the same answer -- the first LAG, in the
+    order the config defines them, that names it, unless an edit
+    already linked it -- because nothing reads the link in between.
+    """
     lag_members: dict[str, str] = {}
     for lag in intent.lags:
         for m in lag.members:
@@ -1052,6 +1066,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
             applier(block, intent)
         else:
             ignored_paths.append(block.config_path)
+    _link_lag_members(intent)
 
     logger.debug(
         "fortigate_cli parsed: hostname=%r ifaces=%d vlans=%d "

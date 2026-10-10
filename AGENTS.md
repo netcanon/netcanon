@@ -408,9 +408,9 @@ tests use these exclusively — never CSS classes or element structure.  See
 - **Never** hand text nobody vouches for to code whose cost you have not
   measured.  A config is whatever was pasted, a request carries megabytes
   of it, and a pattern at work does not let the server's other threads
-  run.  Four shapes took time that grew with the SQUARE of a run in the
-  text, each in shipped code, each found after the one before it had been
-  declared fixed:
+  run.  Five shapes took time that grew with the SQUARE of the text, each
+  in shipped code, each found after the one before it had been declared
+  fixed:
   (1) **a line-anchored pattern that begins with `\s`**, applied to a
   whole text under `re.MULTILINE`.  `^\s+X` does not mean "X, indented":
   `\s` matches a newline, so from every line start the pattern walks to
@@ -432,11 +432,26 @@ tests use these exclusively — never CSS classes or element structure.  See
   gathered so far for every line it grows by.  Parsing three megabytes of
   RouterOS lines that each end in a backslash took two and a half minutes.
   Gather pieces and join once.
+  (5) **a handler that runs once per line and looks through everything
+  the earlier lines made** — `next(r for r in intent.routing_instances
+  if r.name == name)`, `any(...)` over the routes so far, `name in
+  a_list`, `{i.name: i for i in intent.interfaces}` built for every
+  `trunk` line, a pass over every interface at the end of every block.
+  Nothing about one such line is slow; the cost is the square of the
+  NUMBER of stanzas, on a config with nothing odd in it.  Six thousand
+  RouterOS DHCP networks and their pools took 37 seconds; an Arista
+  `interface Vxlan1` stanza written six thousand times, 9; sixteen
+  thousand Junos static routes, 7.  Find the record by key:
+  `GrowingIndex` (`netcanon/migration/codecs/_helpers.py`) reads each
+  record of a growing list once, whoever appended it, and a pass over the
+  whole tree is made once, after the last line.
   The first of these was fixed as "the class", with a test that timed
   whole filler lines and short units repeated from the first character;
-  it passed, and the other three were then found by reading — one of
-  them in a file that change had edited.  **A check does not reach
-  further than the texts it builds**, so
+  it passed, and the next three were then found by reading — one of
+  them in a file that change had edited.  The fifth was found after the
+  test had been rewritten to build its texts from each pattern: no text
+  built from a pattern or a run has many stanzas in it.  **A check does
+  not reach further than the texts it builds**, so
   `tests/unit/test_untrusted_text_cost.py` builds each text from the thing
   it is for: for every regex the product holds (source literals, compiled
   patterns and pattern-shaped strings a module or class keeps, patterns in
@@ -445,14 +460,26 @@ tests use these exclusively — never CSS classes or element structure.  See
   refuses; and for every public codec's `probe` and `parse`, a real capture
   with a run put into it — of empty lines, of lines that go on (a
   continuation, an open quote, an open brace), of white space inside each
-  of its own lines.  It is a search, not a proof: it does not reach a
-  pattern put together inside a function from parts that are not literals
-  on a path the capture does not drive, nor a shape nobody thought to
-  build.  When you find one it missed, add the shape to the search in the
-  same change as the fix.  A pattern that is slow and safe (it reads only
-  data the server ships) goes in that module's `KNOWN_SLOW` with the
-  reason; an `re` call whose pattern is not a literal goes in `NOT_LITERAL`
-  with what covers it.  Earlier fixes of single patterns are pinned in
+  of its own lines.  The fifth shape has a search of its own, which
+  takes minutes and is run by hand: `tools/stanza_cost_search.py` writes
+  every line and block of every capture many times over.  **Run it when
+  you change a parser's handler or add a codec**; what it found is pinned
+  in the same test module, a text for each handler that was mended, and
+  a new finding is added there with its fix.  None of it is a proof.
+  Not reached: a pattern assembled at call time from parts that are not
+  literals and not kept; a handler no capture has a line for; work that
+  needs two kinds of stanza to grow together; a shape nobody thought to
+  build.  Known and NOT mended (SECURITY.md has the measurements): a
+  list of ONE record that a line adds to after reading it (`if pair not
+  in entry["ipv4"]: entry["ipv4"].append(pair)` — the addresses of one
+  interface, the members of one LAG, the route targets of one VRF), and
+  what a config EXPANDS to (`1-4094` is seven bytes).  When you find a
+  shape the search missed, add it to the search in the same change as
+  the fix.  A pattern that is slow and safe (it reads only data the
+  server ships) goes in that module's `KNOWN_SLOW` with the reason; an
+  `re` call whose pattern is not a literal, or whose flags are not
+  written out, goes in `NOT_LITERAL` with what covers it.  Earlier fixes
+  of single patterns are pinned in
   `tests/unit/migration/test_redos_hardening.py` and
   `test_parse_quadratic_scan_perf.py`.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
