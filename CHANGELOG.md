@@ -258,6 +258,21 @@ timestamp if your timezone matters for an audit.
   - `GET /api/v1/migration/model-families` lists the modelled families;
     `POST /api/v1/migration/inventory` shows the ports a declared device
     has, by name, with each port's role, position and evidence grade.
+  - `POST /api/v1/migration/detect-deployment` reads the source device
+    out of the config itself — the chassis part number, the modules and
+    the stacking state an AOS-S config states — and returns a
+    `deployment` to confirm and send back as `source_deployment`, with
+    the hardware lines it was read from (each as far as its part
+    number).  The proposal is checked against the port names the config
+    uses, so a module the config does not state shows up as ports the
+    proposed device lacks rather than as a silent wrong answer; a text
+    that names no port is reported as not checked (`consistent: null`),
+    not as consistent.  Every way a config can fail to yield a
+    deployment is an answer whose first note is the reason, and what a
+    proposal carries is capped whatever the text holds: the members,
+    the evidence, the list of missing ports, the notes.  A line that
+    sets out to state a member, a module or the chassis and cannot be
+    read is counted in a note, and so is a list that was cut.
 - **Device-model families.**  A new registry
   (`netcanon/definitions/library/model_families/`) that lists facts
   rather than names: a model's port groups, its module bays, and the

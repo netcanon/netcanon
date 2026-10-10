@@ -779,9 +779,11 @@ container, plus per-row, per-module, per-codec testids).
 
 **Where:** `netcanon/migration/device_models.py` (schema, compiler,
 loader), `netcanon/migration/port_mapping.py` (the mapper),
-`netcanon/models/port_inventory.py` (the data shapes),
-`netcanon/definitions/library/model_families/*.yaml` (the data), and
-one naming rule per grammar beside each vendor's codec.
+`netcanon/migration/deployment_detect.py` (reading the source device
+from the config), `netcanon/models/port_inventory.py` (the data
+shapes), `netcanon/definitions/library/model_families/*.yaml` (the
+data), and one naming rule per grammar — and, where there is one, one
+detector — beside each vendor's codec.
 
 **The problem.**  A port name cannot be translated from its shape.
 The same string means different ports on different models, and the
@@ -1158,7 +1160,8 @@ definition loader does not try to read them.
 
 **API.**  `GET /api/v1/migration/model-families` lists families;
 `POST /api/v1/migration/inventory` compiles one declaration to its
-ports; a plan request that declares both devices
+ports; `POST /api/v1/migration/detect-deployment` proposes the source
+declaration from the config; a plan request that declares both devices
 (`source_deployment` or `source_profile`, with `target_deployment` or
 `target_profile`) is paired by position on every plan endpoint and
 returns the pairing on `MigrationJob.port_mapping_plan`; the body's
@@ -1174,9 +1177,38 @@ ports that belong to a stack rather than a member, literal
 non-systematic names, a sub-interface following its parent port
 across codecs, and whether a model has an out-of-band management
 port at all (a kept management port therefore always needs the
-operator's decision).  Reading the source model out of the config,
-and a picker in the rename modal, do not exist yet; today the
-feature is reachable through the API.
+operator's decision).  A picker in the rename modal does not exist
+yet; today the feature is reachable through the API.
+
+**Reading the source device from the config**
+(`netcanon/migration/deployment_detect.py`).  An AOS-S `show
+running-config` usually states its own hardware; no other vendor has a
+detector yet.  Detection is split the way naming is: a small *detector*
+beside the vendor's codec reads the lines that state the device and
+returns the part numbers, member numbers and bays they state — it has
+no table of models — and `propose_deployment` resolves what was read
+against the model registry, picks the family mode from whether the
+config is in a stacking mode, compiles the result, and **checks it
+against the config**: every port name the config uses should be a port
+of the device the config says it is.  That check is the collection a
+translation makes of the same config, with the same folding, so a
+proposal's missing ports are, up to the cap on that list, the ports a
+translation would report as off the inventory (a vendor whose ports
+keep a factory name gets no detector until that holds for it too).
+The result is a *proposal* with the hardware lines
+it was read from, each as far as its part number; it is never applied
+by itself, because a member or module line states what a device is
+provisioned for, not what is fitted.  A detector reads what a config
+states and must not infer a model from the shape or number of its port
+names — that is the guess this whole section exists to replace.  It
+also reads text nobody vouches for: its patterns are anchored to a
+line and bounded, what a proposal carries is capped (members,
+evidence, missing ports, notes), and every way of not arriving at a
+deployment is an answer whose first note is the reason rather than an
+error.  Guards: the detector must agree with
+every proven capture claim of a vendor that has a detector, since both
+describe the same committed capture; and every registered detector is
+handed text made to be slow.
 
 Authoring guide:
 [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md).

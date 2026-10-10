@@ -5,8 +5,9 @@ mapping exactly as the web platform does.
 Device-model families are data and the mapping is server logic, so the
 desktop platform needs no code of its own.  What it does need is for
 the embedded ``ServerThread`` to load the families at startup, serve
-them, compile an inventory and run a plan with both devices declared.
-This proves all four, so a change that wires the feature into the web
+them, compile an inventory, read the source device out of a config and
+run a plan with both devices declared.
+This proves each, so a change that wires the feature into the web
 app only (a lifespan step the desktop build skips, say) fails on the
 desktop tier and not only on the web tier.
 
@@ -127,6 +128,12 @@ class TestModelTranslationServedByEmbeddedServer:
                 inventory = _post(port, "/api/v1/migration/inventory", {
                     "codec": "aruba_aoss", "deployment": target,
                 })
+                proposal = _post(port, "/api/v1/migration/detect-deployment", {
+                    "source": "aruba_aoss", "raw_text": CAPTURE_2930F,
+                })
+                unstated = _post(port, "/api/v1/migration/detect-deployment", {
+                    "source": "aruba_aoss", "raw_text": 'hostname "sw"\n',
+                })
                 job = _post(port, "/api/v1/migration/plan", {
                     "source": "aruba_aoss",
                     "target": "aruba_aoss",
@@ -156,6 +163,19 @@ class TestModelTranslationServedByEmbeddedServer:
         # An inventory is compiled on the server, by the naming rule.
         names = [p["name"] for p in inventory["ports"]]
         assert names[0] == "1/1" and names[-1] == "1/A4"
+
+        # The source device is read out of the config itself.
+        assert proposal["deployment"] == {
+            "mode": "standalone",
+            "members": [{"model": "2930F-48G-4SFP", "id": None, "modules": {}}],
+        }
+        assert proposal["consistent"] is True
+        assert (proposal["used_port_count"], proposal["missing_port_count"]) == (52, 0)
+        assert proposal["notes"] == []
+        # With nothing proposed nothing was checked, and the first note
+        # is the reason.
+        assert unstated["deployment"] is None and unstated["consistent"] is None
+        assert "does not say which device" in unstated["notes"][0]
 
         # A plan with both devices declared pairs ports by position.
         assert job["status"] == "completed"
