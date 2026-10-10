@@ -392,7 +392,13 @@ class ModeDef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     label: str
-    """Words an operator recognises: ``"standalone (VSF disabled)"``."""
+    """Words an operator recognises: ``"standalone (VSF disabled)"``.
+
+    Read by a machine in one place.  Source-device detection compares
+    the word a config uses for its stacking stanza (``stacking``,
+    ``vsf``) with a stacking mode's name and this label, and remarks
+    on a stanza the mode does not go by.  Keep the vendor's own word
+    for the stanza in the name or the label of a stacking mode."""
 
     member_ids: tuple[StrictInt, StrictInt] | None = None
     """Inclusive range of member ids.  ``None`` means names carry no

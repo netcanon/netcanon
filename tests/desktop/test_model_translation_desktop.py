@@ -131,6 +131,9 @@ class TestModelTranslationServedByEmbeddedServer:
                 proposal = _post(port, "/api/v1/migration/detect-deployment", {
                     "source": "aruba_aoss", "raw_text": CAPTURE_2930F,
                 })
+                unstated = _post(port, "/api/v1/migration/detect-deployment", {
+                    "source": "aruba_aoss", "raw_text": 'hostname "sw"\n',
+                })
                 job = _post(port, "/api/v1/migration/plan", {
                     "source": "aruba_aoss",
                     "target": "aruba_aoss",
@@ -167,6 +170,12 @@ class TestModelTranslationServedByEmbeddedServer:
             "members": [{"model": "2930F-48G-4SFP", "id": None, "modules": {}}],
         }
         assert proposal["consistent"] is True
+        assert (proposal["used_port_count"], proposal["missing_port_count"]) == (52, 0)
+        assert proposal["notes"] == []
+        # With nothing proposed nothing was checked, and the first note
+        # is the reason.
+        assert unstated["deployment"] is None and unstated["consistent"] is None
+        assert "does not say which device" in unstated["notes"][0]
 
         # A plan with both devices declared pairs ports by position.
         assert job["status"] == "completed"

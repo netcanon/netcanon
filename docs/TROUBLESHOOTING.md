@@ -253,8 +253,9 @@ is how many).  Possible causes:
   Add the module to the deployment's `modules` before you send it.
 * **Only part of the config was pasted**, or two were pasted together:
   a standalone banner over stacked port names (`1/24`).
-* **A name that is not a hardware port.**  The check counts whatever
-  the config has where a port name goes.
+* **A name that is not a hardware port.**  The check counts any name
+  the config has where a port name goes, unless the config or the codec
+  marks it as a LAG or a VLAN interface.
 * **The model data is wrong.**  If none of the above fits, the family
   file may list the wrong ports for that part number — that is worth a
   bug report: sanitise the config first (`netcanon sanitize`; see
@@ -262,7 +263,7 @@ is how many).  Possible causes:
   its `module` or `stacking` lines and its VLAN port lists.
 
 `consistent: null` is not a pass: nothing was checked, because nothing
-was proposed or the text names no port.
+was proposed, the text could not be parsed, or it names no port.
 
 A `deployment` of `null` is not an error.  The first of `notes` says
 why: the config
@@ -272,8 +273,11 @@ model family describes a part number in `unknown_parts`; the members
 belong to different families; what the config states does not compile
 (a module the bay does not take, a member number outside the mode's
 range, more members than the mode allows); or the vendor has no
-detector yet.  A stack that comes back short of a member has a note
-that counts the member lines that could not be read.
+detector yet.  A stack that comes back short of a member, or with a
+bay empty that the config provisions, has a note that counts the
+member lines, member blocks or module lines that could not be read;
+so has a `module 1` line that could not be read, where the banner was
+used in its place.
 
 ### "Port mapping is incomplete" — the job is `partial`
 

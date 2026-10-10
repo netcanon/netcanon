@@ -93,8 +93,8 @@ Device models (model-to-model port mapping):
           part numbers, modules and stacking state it states,
           resolved against the model families and checked against
           the port names the config uses.  A proposal to confirm,
-          with the config lines it was read from; never applied
-          by itself.
+          with the hardware lines it was read from, each as far as
+          its part number; never applied by itself.
 
 Declaring both devices on a plan request — ``source_deployment`` or
 ``source_profile``, with ``target_deployment`` or ``target_profile`` —
@@ -997,7 +997,8 @@ def detect_source_deployment(
       have (``missing_ports`` is capped; ``missing_port_count`` is
       the whole number).  A module the config does not state is one
       cause.  ``consistent`` is ``null`` when there was nothing to
-      check — the config names no port.
+      check: nothing was proposed, the text could not be parsed, or
+      it names no port.
 
     ``deployment`` is ``null`` unless every device the config names is
     a model of one family, in a mode that is not in doubt, and the

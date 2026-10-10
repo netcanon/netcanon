@@ -1213,13 +1213,18 @@ class TestDetectDeployment:
             ),
         ]
         for raw, said in bodies:
-            started = time.perf_counter()
-            resp = client.post(
-                "/api/v1/migration/detect-deployment", json={"source": "aruba_aoss", "raw_text": raw},
-            )
             # Well under a second each; the pattern this replaced took
-            # over a minute on the last of them.
-            assert time.perf_counter() - started < 15.0, said
+            # over a minute on the last of them.  One slow reading is
+            # the machine; a second, or one several times over, is not.
+            for _ in range(2):
+                started = time.perf_counter()
+                resp = client.post(
+                    "/api/v1/migration/detect-deployment", json={"source": "aruba_aoss", "raw_text": raw},
+                )
+                took = time.perf_counter() - started
+                if not 15.0 <= took < 60.0:
+                    break
+            assert took < 15.0, said
             assert resp.status_code == 200, said
             proposal = resp.json()
             assert proposal["consistent"] is None
@@ -1228,6 +1233,47 @@ class TestDetectDeployment:
                 # The first note is the reason.
                 assert said in proposal["notes"][0], proposal["notes"]
             assert len(resp.content) < 20_000
+
+    def test_what_comes_back_does_not_grow_with_what_was_sent(self, client: TestClient) -> None:
+        """A megabyte of lines that state nothing readable.  Each was
+        once answered with most of a megabyte: an id, a part or every
+        member number it found, handed back."""
+        banner = "; hpStack_WC Configuration Editor; Created on release #WC.16.07.0003\n"
+        top = "; JL322A Configuration Editor; Created on release #WC.16.07.0003\nmodule 1 type jl322a\n"
+        bodies = [
+            ("; hpStack_" + "x" * 100_000 + " Configuration Editor\n", "does not say which device"),
+            (
+                banner + "vsf\n" + "".join(f"   member {n}\n" for n in range(100_000)) + "   exit\n",
+                "no line in it names a member",
+            ),
+            (
+                banner + 'stacking\n   member 1 type "JL322A"\n' + "".join(
+                    f"   member {n} flexible-module A type JL083A\n" for n in range(2, 50_002)
+                ) + "   exit\n",
+                "A member line shows",
+            ),
+            (top + "flexible-module A type " + "J" * 100_000 + "\n", "could not be read as a module"),
+            (top.replace("jl322a", "j" * 100_000), "could not be read as the chassis line"),
+        ]
+        for raw, first in bodies:
+            resp = client.post(self.URL, json={"source": "aruba_aoss", "raw_text": raw})
+            assert resp.status_code == 200, first
+            assert first in resp.json()["notes"][0], (first, resp.json()["notes"])
+            assert len(resp.content) < 8_000, (first, len(resp.content))
+
+    def test_text_the_parser_refuses_is_answered_unchecked(self, client: TestClient) -> None:
+        """A paste that begins like JSON and then states a device: the
+        AOS-S parser refuses it.  That is the third way ``consistent``
+        is ``null``, and it is an answer."""
+        raw = (
+            '{"a": 1}\n; JL322A Configuration Editor; Created on release #WC.16.07.0003\n'
+            "module 1 type jl322a\nvlan 1\n   untagged 1-4\n   exit\n"
+        )
+        resp = client.post(self.URL, json={"source": "aruba_aoss", "raw_text": raw})
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["deployment"] is not None and proposal["consistent"] is None
+        assert proposal["notes"][-1].startswith("The config could not be parsed")
 
     def test_a_paste_that_names_no_port_is_not_called_consistent(self, client: TestClient) -> None:
         proposal = client.post("/api/v1/migration/detect-deployment", json={
@@ -1289,11 +1335,25 @@ class TestDetectDeployment:
         assert proposal["stated"] is False and proposal["deployment"] is None
         assert "No detector" in proposal["notes"][0]
 
-    def test_a_stored_config_can_be_read_too(self, client: TestClient) -> None:
+    def test_a_stored_config_can_be_read_too(self, client: TestClient, test_settings) -> None:
         """``source_filename`` names a config in the backup store, as on
-        a plan request.  The stored text here is the fake collector's
-        Cisco snippet, which states no AOS-S device: a 200 that says so
-        proves the file was found and read."""
+        a plan request.  The stored file is a stacked capture, so the
+        answer shows its TEXT was read: a file found and then ignored
+        would say the config states no device."""
+        filename = "Aruba_192.0.2.9_20260101_000000.cfg"
+        (test_settings.configs_dir / filename).write_text(CAPTURE_2930M, encoding="utf-8")
+        assert filename in [entry["filename"] for entry in client.get("/api/v1/configs/").json()]
+        resp = client.post(self.URL, json={"source": "aruba_aoss", "source_filename": filename})
+        assert resp.status_code == 200
+        proposal = resp.json()
+        assert proposal["fabric"] == "stacking" and proposal["consistent"] is True
+        assert proposal["deployment"]["members"] == [
+            {"model": "2930M-40G-8SR-PoEP", "id": 1, "modules": {"A": "JL083A"}},
+        ]
+
+    def test_a_stored_config_that_states_no_device(self, client: TestClient) -> None:
+        """What the backup route stored, read back: the fake collector's
+        Cisco snippet states no AOS-S device."""
         client.post("/api/v1/backups", json={"devices": [{
             "type_key": "Cisco", "host": "10.77.77.77",
             "credentials": {"username": "admin", "password": "x"},

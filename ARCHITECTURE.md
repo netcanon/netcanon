@@ -1192,19 +1192,20 @@ config is in a stacking mode, compiles the result, and **checks it
 against the config**: every port name the config uses should be a port
 of the device the config says it is.  That check is the collection a
 translation makes of the same config, with the same folding, so a
-proposal's missing ports are the ports a translation would report as
-off the inventory (a vendor whose ports keep a factory name gets no
-detector until that holds for it too).  The result is a *proposal*
-with the hardware lines
+proposal's missing ports are, up to the cap on that list, the ports a
+translation would report as off the inventory (a vendor whose ports
+keep a factory name gets no detector until that holds for it too).
+The result is a *proposal* with the hardware lines
 it was read from, each as far as its part number; it is never applied
 by itself, because a member or module line states what a device is
 provisioned for, not what is fitted.  A detector reads what a config
 states and must not infer a model from the shape or number of its port
 names — that is the guess this whole section exists to replace.  It
 also reads text nobody vouches for: its patterns are anchored to a
-line and bounded, a proposal carries no more than a declaration could
-hold, and every way of not arriving at a deployment is an answer with
-a note rather than an error.  Guards: the detector must agree with
+line and bounded, what a proposal carries is capped (members,
+evidence, missing ports, notes), and every way of not arriving at a
+deployment is an answer whose first note is the reason rather than an
+error.  Guards: the detector must agree with
 every proven capture claim of a vendor that has a detector, since both
 describe the same committed capture; and every registered detector is
 handed text made to be slow.

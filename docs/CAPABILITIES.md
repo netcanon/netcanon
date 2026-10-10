@@ -947,17 +947,21 @@ confirm, never applied by itself, and it tells you how far to trust it:
   out or had to choose.  A stack member or a module line states what
   the switch is *provisioned* for; a member can be configured before it
   is connected, and a bay can be provisioned for a module that is not
-  fitted.  A member line that could not be read, a member stated two
-  ways, a banner and a `module 1` line that disagree are each said
-  here;
+  fitted.  A member, module or `module 1` line that could not be read,
+  a member or a bay stated two ways, a banner and a `module 1` line
+  that disagree, a second banner or stanza, a banner or `module 1`
+  line of one switch beside a stanza are each said here.  A note names
+  a few member numbers and counts the rest, and says when `evidence`
+  or the notes themselves were cut short;
 * `missing_ports` / `consistent` — the check against the config itself:
   port names the config uses that the proposed device does not have.
   One cause is a module the config does not state; another is a partial
   paste.  `missing_ports` holds the first few hundred and
   `missing_port_count` the whole number.  `consistent` is `true` when
   none is missing, `false` when some are, and `null` when there was
-  nothing to check — nothing was proposed, or the text names no port
-  (only its top was pasted).  `null` is not a pass.
+  nothing to check: nothing was proposed, the text could not be
+  parsed, or it names no port (only its top was pasted).  `null` is
+  not a pass.
 
 `deployment` is `null` unless every device the config names is a model
 of one family, in a mode that is not in doubt, and the result compiles.

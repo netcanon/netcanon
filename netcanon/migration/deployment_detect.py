@@ -14,7 +14,8 @@ type it.
 Two halves, kept apart on purpose:
 
 * a **detector** per vendor, beside that vendor's codec, reads the
-  lines that state the hardware and returns them as printed
+  lines that state the hardware and returns what they state: part
+  numbers (upper-cased), member numbers, bays
   (:class:`~netcanon.models.port_inventory.DetectedDeployment`).  It
   has no table of models;
 * :func:`propose_deployment` resolves what was read against the model
@@ -24,10 +25,18 @@ Two halves, kept apart on purpose:
   lines cannot show everything: a module the config does not state,
   or text from more than one device.
 
-What a proposal carries is bounded, whatever the text holds: a config
+What a proposal carries is capped, whatever the text holds: a config
 that states more devices than a declaration may list is answered with
-a note, and the evidence and the list of missing ports are capped
-(``MAX_EVIDENCE_LINES``, ``MAX_MISSING_PORTS``).
+a note; the evidence and the list of missing ports are capped
+(``MAX_EVIDENCE_LINES``, ``MAX_MISSING_PORTS``); and so are a
+detector's notes, in number and in length (``MAX_NOTES``,
+``MAX_NOTE_LENGTH``), whatever the detector does.  A list that was
+cut says so: ``missing_port_count`` has the whole number, and a note
+counts the evidence lines or the notes that are not shown.
+
+When there is no deployment the FIRST note says why.  A detector that
+reads no member puts its reason first; one that gives none gets a
+reason here.
 
 A proposal is never applied by itself.  What a config says is what the
 device is PROVISIONED for, which is not always what is fitted, and
@@ -65,17 +74,25 @@ if TYPE_CHECKING:
     from .codecs.base import CodecBase
 
 __all__ = [
-    "MAX_EVIDENCE_LINES", "MAX_MISSING_PORTS", "detection_vendors", "propose_deployment",
+    "MAX_EVIDENCE_LINES", "MAX_MISSING_PORTS", "MAX_NOTES", "MAX_NOTE_LENGTH",
+    "detection_vendors", "propose_deployment",
 ]
 
 #: The most evidence lines a proposal carries.  A stack of the largest
-#: declarable size, with a module line per member and a banner, fits.
+#: declarable size, with a module line per member and a banner, fits;
+#: a note says so when a longer list was cut.
 MAX_EVIDENCE_LINES = 2 * MAX_DEPLOYMENT_MEMBERS + 8
 
 #: The most port names ``missing_ports`` carries.  A few short lines of
 #: port ranges expand to hundreds of thousands of names;
 #: ``missing_port_count`` has the whole number.
 MAX_MISSING_PORTS = 256
+
+#: The most notes a detector's answer carries, and the longest one may
+#: be.  A detector is asked to keep its notes short; this holds the
+#: answer to that whether or not it does.
+MAX_NOTES = 24
+MAX_NOTE_LENGTH = 600
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +193,8 @@ def propose_deployment(
         ``True`` when there are none, and ``None`` when there was
         nothing to check: nothing was proposed, the config could not
         be parsed, or it names no port.  Never raises on any text: a
-        detector that does is answered with a note.
+        detector that does is answered with a note, and so is a parser
+        that refuses the text.
     """
     vendor = codec.capabilities.vendor_id
     proposal = DeploymentProposal(vendor=vendor)
@@ -207,12 +225,34 @@ def propose_deployment(
         return proposal
 
     proposal.fabric = detected.fabric
-    proposal.evidence = list(dict.fromkeys(detected.evidence))[:MAX_EVIDENCE_LINES]
-    proposal.notes = list(detected.notes)
+    evidence = list(dict.fromkeys(detected.evidence))
+    proposal.evidence = evidence[:MAX_EVIDENCE_LINES]
+    kept = detected.notes[:MAX_NOTES]
+    proposal.notes = [
+        note if len(note) <= MAX_NOTE_LENGTH else note[: MAX_NOTE_LENGTH - 2] + " …"
+        for note in kept
+    ]
     proposal.stated = bool(detected.members)
-    if not detected.members:
+    if not detected.members and not proposal.notes:
         # The detector's first note is why: a stanza that names no
-        # member, a stack banner with no stanza.
+        # member, a stack banner with no stanza.  A detector that says
+        # nothing still gets a reason.
+        proposal.notes.append(
+            "The lines that state the hardware name no device's model; "
+            "declare the device yourself."
+        )
+    # A list that was cut says so.
+    if len(detected.notes) > len(kept):
+        proposal.notes.append(
+            f"{len(detected.notes) - len(kept)} more remark(s) about the "
+            f"hardware lines are not shown."
+        )
+    if len(evidence) > MAX_EVIDENCE_LINES:
+        proposal.notes.append(
+            f"The config has {len(evidence)} hardware lines; the first "
+            f"{MAX_EVIDENCE_LINES} are listed."
+        )
+    if not detected.members:
         return proposal
     if len(detected.members) > MAX_DEPLOYMENT_MEMBERS:
         # More devices than any declaration may list: not resolved one
@@ -282,8 +322,8 @@ def propose_deployment(
         )
     except ValidationError as exc:
         # More members, or a longer name, than any declaration may
-        # carry.  Said in our own words: pydantic's message quotes its
-        # input.
+        # carry.  Pydantic's ``msg`` for each error and not its whole
+        # text, which quotes the input.
         reasons = sorted({error["msg"] for error in exc.errors()})
         proposal.notes.insert(
             0,

@@ -268,8 +268,11 @@ timestamp if your timezone matters for an audit.
     proposed device lacks rather than as a silent wrong answer; a text
     that names no port is reported as not checked (`consistent: null`),
     not as consistent.  Every way a config can fail to yield a
-    deployment is an answer with the reason in `notes`, and what a
-    proposal carries is bounded whatever the text holds.
+    deployment is an answer whose first note is the reason, and what a
+    proposal carries is capped whatever the text holds: the members,
+    the evidence, the list of missing ports, the notes.  A line that
+    sets out to state a member, a module or the chassis and cannot be
+    read is counted in a note, and so is a list that was cut.
 - **Device-model families.**  A new registry
   (`netcanon/definitions/library/model_families/`) that lists facts
   rather than names: a model's port groups, its module bays, and the

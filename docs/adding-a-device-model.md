@@ -226,9 +226,14 @@ The rules:
 * **Say what the lines do not prove**, in the detection's notes.  A
   member or module line is provisioning; the device may differ.
 * **Say what was left out and what was chosen.**  A line that set out
-  to state a member and could not be read, a member stated two ways:
-  a note each, so that a stack does not come back a member short with
-  nothing to show for it.
+  to state a member or a module and could not be read, a member stated
+  two ways: a note each, so that a stack does not come back a member
+  or a module short with nothing to show for it.  A note names a few
+  member numbers and counts the rest; the proposer cuts a long note
+  and keeps the first few, whatever a detector does.
+* **When no device is read, the first note is the reason.**  A
+  proposal with no deployment shows its first note as why; the remarks
+  about what else was or was not read come after it.
 * **Keep device identifiers out of the evidence lines.**  They are
   shown to an operator and may be logged; a MAC address or a serial
   number says nothing about what the device is.  End each pattern at
@@ -236,8 +241,8 @@ The rules:
 * **The text is not vouched for.**  The route hands a detector whatever
   was pasted.  Anchor every pattern to a line, bound what it takes (a
   member number, a part), and apply none to a fragment another pattern
-  matched: a pattern that backtracks over a run of spaces holds the
-  server.  A detector must not raise on any text; one that does is
+  matched unless that fragment is itself bounded: a pattern that
+  backtracks over a run of spaces holds the server.  A detector must not raise on any text; one that does is
   answered as "could not be read".
 
 Test it on every stanza form the vendor's documents and real captures

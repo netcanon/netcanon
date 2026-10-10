@@ -367,8 +367,9 @@ class DetectedMember(BaseModel):
 class DetectedDeployment(BaseModel):
     """What a vendor's detector read from a config.
 
-    Nothing here has been checked against the model registry: these
-    are the lines that state the hardware, as printed.
+    Nothing here has been checked against the model registry: this
+    is what the hardware lines state -- part numbers (upper-cased),
+    member numbers, bays.
     """
 
     fabric: str = ""
@@ -387,7 +388,11 @@ class DetectedDeployment(BaseModel):
 
     notes: list[str] = Field(default_factory=list)
     """What the reader must know about how far the lines can be
-    trusted (a member line states provisioning, not presence)."""
+    trusted (a member line states provisioning, not presence), and
+    what the reading left out or had to choose.  With no members, the
+    FIRST note is the reason no device could be read: a proposal with
+    no deployment shows its first note as why.  Short: the proposer
+    cuts a long note and keeps the first few."""
 
 
 class DeploymentProposal(BaseModel):
@@ -474,7 +479,9 @@ class DeploymentProposal(BaseModel):
         description=(
             "The hardware lines the proposal was read from, each as far as "
             "its part number, runs of space collapsed.  Fragments for "
-            "whoever confirms it, not whole config lines.  Capped."
+            "whoever confirms it, not whole config lines.  Only the lines "
+            "that were used: one a later line replaced is not among them.  "
+            "Capped; a note says when the list was cut."
         ),
     )
     notes: list[str] = Field(
