@@ -126,7 +126,12 @@ it cites, which must identify itself as that exact model; the port
 names and roles of every shipped model, in every deployment mode and
 with every module, are pinned from hand-typed tables in the test
 rather than regenerated from the code under test; and which part
-number is which model is a table, not a comment.  A model-to-model
+number is which model is a table, not a comment.  Where a vendor has
+a detector that reads the source device from a config, it must propose
+for each such capture the deployment the capture claim states — two
+readings of one file that have to agree — and it is handed text made
+to be slow, which it must answer in time that fits the text's length
+(`test_deployment_detect.py`).  A model-to-model
 translation is additionally checked, on the jobs of
 `test_run_plan_with_models.py`, in two ways: for a hardware port
 sharing a target name with another name (the grouping recomputed in

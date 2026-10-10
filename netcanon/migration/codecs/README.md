@@ -62,6 +62,9 @@ netcanon/migration/codecs/<vendor>/
 │                       # when the codec participates in the Tier-3
 │                       # rename orchestrator; see cross-vendor mesh
 │                       # in netcanon/migration/canonical/port_names.py)
+├── deployment_detect.py  # (aruba_aoss) reads the lines of a config that
+│                       # state its own hardware; see
+│                       # netcanon/migration/deployment_detect.py
 ├── vlan_heuristics.py  # (fortigate_cli) shared parse/render helpers
 │                       # for VLAN iface-name detection
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule

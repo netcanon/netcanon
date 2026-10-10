@@ -349,7 +349,8 @@ Covered by `tests/unit/test_models.py` → `TestDeviceTarget` host validation ca
 ## Input Validation — Device Declarations
 
 **Files:** `netcanon/models/port_inventory.py`, `netcanon/migration/device_models.py`,
-`netcanon/api/routes/_migration_helpers.py`
+`netcanon/api/routes/_migration_helpers.py`, `netcanon/migration/deployment_detect.py`,
+`netcanon/migration/codecs/aruba_aoss/deployment_detect.py`
 
 A plan or inventory request may declare a device: a model family, a mode,
 members and modules.  The declaration only ever selects among entries the
@@ -438,9 +439,38 @@ the definitions directory.
   holds wherever a file is loaded from: a claim that cites a proven fixture
   for another model is a different claim, is logged, and grants nothing.
 
+`POST /api/v1/migration/detect-deployment` reads a pasted or stored config
+and proposes the device it came from.  It only reads: nothing is translated
+or stored, the pasted text is capped like a plan request's, and it runs the
+same parser a translation would — after a detector of its own, a set of
+line-anchored patterns over the whole text.  The text is not vouched for, so
+those patterns are bounded in what they take, each line is matched by itself,
+and none is applied to a fragment of unbounded length (two are applied to the
+banner's id, which is at most thirty-two characters): the detector's work
+grows with the length of the text and no faster.  (The parser's own cost on that text is the same as on a plan
+request.)  The answer quotes the hardware lines only as far as the part
+number — a member line's MAC address comes after it and is never read — and
+lists, in `missing_ports`, port names the config uses that the proposed device
+lacks; those are whatever text the config has where a port name goes — the
+first few are repeated inside a note — so a client escapes both before showing
+them.  What the config states is held to the bounds of a declaration
+(`MAX_DEPLOYMENT_MEMBERS`): past them there is no proposal and a note, not an
+error.  A line past the detector's own bounds on a part number or a member
+number is not read, and a note counts such member lines, module lines and
+`module 1` lines.
+The evidence, the list of missing ports and the notes are capped
+(`MAX_EVIDENCE_LINES`, `MAX_MISSING_PORTS`, `MAX_NOTES`, `MAX_NOTE_LENGTH`), a
+list that was cut says so (`missing_port_count`, or a note), and
+a note spells out a few member numbers and counts the rest.  A detector that
+raises is answered the same way, and the log line carries the exception's type
+only; so is a parser that refuses the text.
+
 Covered by `tests/unit/migration/test_device_models.py` (each bound is tested
 at its boundary, against the named constant),
-`tests/unit/migration/test_device_models_shipped.py` and
+`tests/unit/migration/test_device_models_shipped.py`,
+`tests/unit/migration/test_deployment_detect.py` (text made to be slow,
+against every registered detector and against each pattern of the AOS-S one;
+the caps; no MAC-shaped string anywhere in a proposal) and
 `tests/integration/test_migration_models_api.py`.
 
 ---
