@@ -261,6 +261,10 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
         * ``switchport_mode == "trunk"``:
             - for each vid in ``trunk_allowed_vlans``:
               append iface to ``vlans[vid].tagged_ports``.
+              A list of every id (``1-4094``), or of every id but
+              1 (``2-4094``), is not made into 4,094 VLANs: the
+              iface goes onto the VLANs already declared that the
+              list holds.
             - if ``trunk_native_vlan`` is set:
               append iface to ``vlans[native].untagged_ports`` AND
               remove it from ``tagged_ports`` on that same VLAN.
@@ -367,8 +371,13 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
                 # Configuration Guide ("VLAN-port binding").
                 # Bucket-A fix from
                 # ``phase4_findings_juniper_junos.md``.
+                #
+                # Only the VLANs the list holds: `2-4094` leaves
+                # VLAN 1 out, and a trunk written that way was
+                # stamped onto a declared VLAN 1 all the same.
                 for vlan in intent.vlans:
-                    _add_unique(vlan.tagged_ports, iface.name)
+                    if vlan.id in allowed_set:
+                        _add_unique(vlan.tagged_ports, iface.name)
             else:
                 for vid in iface.trunk_allowed_vlans:
                     _add_unique(_vlan(vid).tagged_ports, iface.name)

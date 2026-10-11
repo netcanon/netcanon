@@ -190,6 +190,14 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
 
 ## Common gotchas
 
+- **A trunk's allowed VLANs are written as the source states
+  them.**  `vlan members all` is written only for a list of every
+  VLAN id.  A list that leaves ids out (`2-4094`,
+  `1-99,101-4094`) becomes names for the VLANs the config defines
+  and id ranges for the rest (`vlan members 101-4094`).  Release
+  0.7.7 and earlier wrote `all` for any list of 4,000 ids or more,
+  which put the VLANs the source left out back on the trunk: check
+  the `vlan members` line of any trunk translated that way.
 - **A static route whose next hop is an interface**
   (`next-hop et-0/0/24.0`) follows that interface when a translation
   between two Junos configs renames it, and is removed with it when

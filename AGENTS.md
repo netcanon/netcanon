@@ -697,6 +697,24 @@ tests use these exclusively — never CSS classes or element structure.  See
   defect it is for, in the same module, and has to fail — and so is
   the wrapper, once per assertion, because a check that is never
   CALLED passes every test too.
+- **Never** write a target's word for "everything" for a list that is
+  not everything.  `vlan members all` is every VLAN the switch has and
+  every VLAN it is given later; the Junos renderer wrote it for any
+  trunk list of 4,000 ids or more, so `switchport trunk allowed vlan
+  1-99,101-4094` — a line whose whole point is VLAN 100 — came out as
+  `all`, VLAN 100 back on the trunk, in a job that said `completed`
+  with nothing to report.  The shared projection read `2-4094` as
+  "all" as well and stamped the trunk onto a declared VLAN 1.  A
+  shorthand is right for the exact set it names and for nothing near
+  it: "long enough" is not "all", and the ids a nearly-full list
+  leaves out are the ones the operator wrote the list for.  Where the
+  target can state the list as it stands (Junos takes ids and ranges
+  as members), write that.  The cross-mesh audit could not see this:
+  no committed capture has a trunk that leaves a VLAN out.  Guarded by
+  `tests/unit/migration/test_a_vlan_left_out_stays_out.py`, which
+  renders such trunks onto every public codec and reads the OUTPUT
+  back with the target's own parser — both halves: the VLAN left out
+  is on no port, and the VLANs the list holds are still there.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

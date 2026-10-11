@@ -102,12 +102,12 @@ def test_lag_round_trip_to_junos() -> None:
     assert sorted(roundtrip.lags[0].members) == ["ge-0/0/1", "ge-0/0/2"]
 
 
-def test_trunk_all_vlans_collapses_to_members_all() -> None:
+def test_all_but_the_default_vlan_is_one_range_and_not_all() -> None:
     """Arista MLAG peer ports often carry `switchport trunk allowed
-    vlan 2-4094` — the operator-form for "all VLANs except the
-    default".  Without this fix, render emits one `vlan members
-    VLAN-N` line per VID, exploding to 4000+ lines per port.  Junos
-    expresses the same intent as `vlan members all`."""
+    vlan 2-4094`: every VLAN but the default.  It was written as
+    `vlan members all`, which is every VLAN the switch has, VLAN 1
+    among them.  Junos takes a range of ids as a member, so the
+    list is written as it stands: one line, and no line per id."""
     intent = CanonicalIntent(
         interfaces=[CanonicalInterface(
             name="ae3",
@@ -116,11 +116,11 @@ def test_trunk_all_vlans_collapses_to_members_all() -> None:
         )],
     )
     out = render_intent(intent)
-    # The all-form is emitted exactly once.
     assert (
-        "set interfaces ae3 unit 0 family ethernet-switching vlan members all"
-        in out
+        "set interfaces ae3 unit 0 family ethernet-switching vlan members 2-4094"
+        in out.splitlines()
     )
+    assert "vlan members all" not in out
     # No phantom VLAN-N lines.
     assert "VLAN-1000" not in out
     assert "VLAN-4094" not in out
@@ -292,10 +292,8 @@ def test_irb_dot_unit_round_trip_canonical_stable() -> None:
     assert irb_iface.ipv4_addresses[0].prefix_length == 24
 
 
-def test_trunk_all_round_trip_canonical_stable() -> None:
-    """Source canonical with all-VLANs trunk → render emits `members
-    all` → reparse expands back to the full VID range.  Canonical
-    field comparison is set-equal across the round-trip."""
+def test_all_but_the_default_vlan_round_trips() -> None:
+    """`2-4094` is written as that range and read as that list."""
     intent = CanonicalIntent(
         interfaces=[CanonicalInterface(
             name="ae3",
@@ -307,14 +305,126 @@ def test_trunk_all_round_trip_canonical_stable() -> None:
     roundtrip = parse_intent(out)
     rt_iface = next(i for i in roundtrip.interfaces if i.name == "ae3")
     assert rt_iface.switchport_mode == "trunk"
-    # Reparse expands `members all` to the full 1-4094 range.
-    # Source had 2-4094 (4093 VIDs); reparse gives 1-4094 (4094 VIDs)
-    # — that's a documented one-VID asymmetry where Junos's `all`
-    # includes VLAN 1 (default-VLAN) by spec while Arista's
-    # `2-4094` explicitly excludes it.  Both forms canonicalise to
-    # the all-VLANs sentinel; the lone difference is operator-intent
-    # on whether VLAN 1 itself is permitted.  We accept the full
-    # range as correct on reparse.
-    assert len(rt_iface.trunk_allowed_vlans) >= 4093
-    assert 100 in rt_iface.trunk_allowed_vlans
-    assert 4094 in rt_iface.trunk_allowed_vlans
+    # The list comes back as it went: 2-4094, without VLAN 1.  (It
+    # used to come back as 1-4094, and that was written down here
+    # as an asymmetry of one id to accept.  The one id is the VLAN
+    # the operator left out.)
+    assert rt_iface.trunk_allowed_vlans == list(range(2, 4095))
+
+
+# ---------------------------------------------------------------------------
+# A trunk's list is written as it stands
+# ---------------------------------------------------------------------------
+
+
+def _members(out: str, port: str) -> list[str]:
+    head = f"set interfaces {port} unit 0 family ethernet-switching vlan members "
+    return [line[len(head):] for line in out.splitlines() if line.startswith(head)]
+
+
+def _three_vlans() -> list[CanonicalVlan]:
+    return [
+        CanonicalVlan(id=10, name="users"),
+        CanonicalVlan(id=100, name="secure"),
+        CanonicalVlan(id=999, name="mgmt"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "allowed,written",
+    [
+        # Every id but one the config declares.  More than 4,000 ids was
+        # once enough to be "all".
+        ([*range(1, 100), *range(101, 4095)], ["1-99", "101-4094"]),
+        ([*range(2, 100), *range(101, 4095)], ["2-99", "101-4094"]),
+        ([*range(1, 100), *range(101, 4001)], ["1-99", "101-4000"]),
+        (list(range(1, 4001)), ["1-4000"]),
+        # Under 4,000 ids every id was a line, and a name: 3,996 of them
+        # for VLANs the output does not define.
+        (list(range(1, 4000)), ["1-3999"]),
+        (list(range(200, 400)), ["200-399"]),
+    ],
+)
+def test_a_list_that_leaves_ids_out_is_written_as_ranges(
+    allowed: list[int], written: list[str],
+) -> None:
+    intent = CanonicalIntent(
+        vlans=_three_vlans(),
+        interfaces=[CanonicalInterface(
+            name="ge-0/0/1", switchport_mode="trunk", trunk_allowed_vlans=allowed,
+        )],
+    )
+    out = render_intent(intent)
+    assert _members(out, "ge-0/0/1") == written
+    # And read again it is the list it was: VLAN 100 where it was left
+    # out is still left out.
+    again = next(i for i in parse_intent(out).interfaces if i.name == "ge-0/0/1")
+    assert again.trunk_allowed_vlans == allowed
+
+
+def test_only_every_id_is_all() -> None:
+    intent = CanonicalIntent(
+        vlans=_three_vlans(),
+        interfaces=[
+            CanonicalInterface(
+                name="ge-0/0/1", switchport_mode="trunk",
+                trunk_allowed_vlans=list(range(1, 4095)),
+            ),
+            CanonicalInterface(
+                name="ge-0/0/2", switchport_mode="trunk",
+                trunk_allowed_vlans=list(range(1, 4094)),
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    assert _members(out, "ge-0/0/1") == ["all"]
+    assert _members(out, "ge-0/0/2") == ["1-4093"]
+
+
+def test_vlans_the_output_defines_are_written_by_name() -> None:
+    """A run of ids that are each a VLAN of this config is names, as
+    before; an id beside them with no VLAN of its own is the id, not a
+    name for a VLAN nothing defines."""
+    intent = CanonicalIntent(
+        vlans=[
+            CanonicalVlan(id=10, name="users"),
+            CanonicalVlan(id=11, name="voice"),
+            CanonicalVlan(id=999, name="mgmt"),
+        ],
+        interfaces=[CanonicalInterface(
+            name="ge-0/0/1", switchport_mode="trunk",
+            trunk_allowed_vlans=[10, 11, 50, 999],
+        )],
+    )
+    out = render_intent(intent)
+    assert _members(out, "ge-0/0/1") == ["users", "voice", "50", "mgmt"]
+    assert "VLAN-50" not in out
+    again = next(i for i in parse_intent(out).interfaces if i.name == "ge-0/0/1")
+    assert again.trunk_allowed_vlans == [10, 11, 50, 999]
+
+
+def test_a_list_out_of_order_keeps_its_order() -> None:
+    intent = CanonicalIntent(
+        vlans=_three_vlans(),
+        interfaces=[CanonicalInterface(
+            name="ge-0/0/1", switchport_mode="trunk",
+            trunk_allowed_vlans=[999, 20, 21, 22, 10],
+        )],
+    )
+    assert _members(render_intent(intent), "ge-0/0/1") == ["mgmt", "20-22", "users"]
+
+
+def test_an_access_vlan_the_output_does_not_define_is_its_id() -> None:
+    intent = CanonicalIntent(
+        vlans=_three_vlans(),
+        interfaces=[
+            CanonicalInterface(name="ge-0/0/1", switchport_mode="access", access_vlan=10),
+            CanonicalInterface(name="ge-0/0/2", switchport_mode="access", access_vlan=77),
+        ],
+    )
+    out = render_intent(intent)
+    assert _members(out, "ge-0/0/1") == ["users"]
+    assert _members(out, "ge-0/0/2") == ["77"]
+    assert "VLAN-77" not in out
+    again = {i.name: i.access_vlan for i in parse_intent(out).interfaces}
+    assert again["ge-0/0/2"] == 77

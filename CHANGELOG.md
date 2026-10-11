@@ -73,6 +73,33 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A trunk that leaves a VLAN out does not get it back on Junos.**
+  The Junos renderer wrote any trunk list of 4,000 VLAN ids or more
+  as `vlan members all`, which on Junos is every VLAN the switch has
+  and every VLAN it is given later.  So `switchport trunk allowed
+  vlan 1-99,101-4094` came out as `all`, with VLAN 100 back on the
+  trunk, and `2-4094` with VLAN 1 — in a job that said `completed`
+  and reported nothing.  `all` is now written only for a list of
+  every id (`1-4094`).  Any other list is written as it stands: the
+  VLANs the config defines by name, as before, and the rest as ids
+  and ranges of ids (`vlan members 1-99`, `vlan members 101-4094`),
+  which Junos takes as members beside names and this parser already
+  read.  A list under 4,000 ids was a line per id, each a name
+  `VLAN-<id>` for a VLAN the output does not define (`1-3999` was
+  3,999 lines, all but the declared VLANs such names); that is one
+  range now, and an access VLAN with no VLAN record is its id.  The
+  shared projection read `2-4094` as "all VLANs" and stamped the
+  trunk onto every declared VLAN, VLAN 1 included, so a
+  VLAN-centric target (AOS-S) tagged the port in VLAN 1; it stamps
+  the VLANs the list holds.  **If a trunk with a wide list that
+  leaves VLANs out was translated to Junos with release 0.7.7 or
+  earlier, check its `vlan members` line: it says `all`, and the
+  VLANs the source left out are on it.**  Two committed captures
+  change (an Arista MLAG peer link allowing `2-4094`: `vlan members
+  2-4094` now); no other capture has such a trunk, which is why the
+  cross-mesh audit never saw this.  A test now renders such trunks
+  onto every codec and reads the output back.
+
 - **An AOS-S LAG is one name, not two.**  The device writes a LAG
   `trk1` where it is defined and `Trk1` where a VLAN lists it or an
   `interface Trk1` stanza configures it, and both spellings were kept.

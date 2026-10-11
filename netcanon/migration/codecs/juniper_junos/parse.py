@@ -606,12 +606,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                     break
         elif iface.switchport_mode == "trunk":
             # Junos `vlan members all` is the operator-form for "all
-            # VLANs allowed on this trunk" — match Arista's
-            # `switchport trunk allowed vlan all` / `1-4094` /
-            # `2-4094`.  Expand to the full VID range so canonical
-            # comparison and any cross-vendor render carry the same
-            # semantic (Arista will collapse 2-4094 back to its own
-            # all-form on the symmetric render path).
+            # VLANs allowed on this trunk" — what Arista writes as
+            # `switchport trunk allowed vlan all` / `1-4094`.  Expand
+            # to the full VID range so canonical comparison and any
+            # cross-vendor render carry the same semantic.  (The
+            # renderer writes `all` for that full range and for no
+            # other list.)
             if any(vname == "all" for vname in names_list):
                 iface.trunk_allowed_vlans = list(range(1, 4095))
                 continue
