@@ -1234,11 +1234,25 @@ def _key_by_the_configs_name(
     plan: MappingPlan,
     every: list[str],
     ignored: list[str],
+    fold_source: bool,
 ) -> None:
-    """Re-key, in place, an operator's entry that names a port by its
-    FACTORY name where the config has a name of its own for the port.
+    """Re-key, in place, an operator's entry that names a port some
+    other way than the config does: in another letter case, where the
+    source platform's names have none, or by its FACTORY name where
+    the config has a name of its own for the port.
 
-    The key of an entry is the name the config uses.  A RouterOS port
+    The key of an entry is the name the config uses.  On a platform
+    without letter case ``1/a1`` is the port the config calls
+    ``1/A1`` (:func:`~netcanon.migration.canonical.port_names.
+    key_by_the_configs_spelling`, the rule the translator applies).
+    It is applied HERE as well, before the operator's entries are
+    merged with the pairing's: the pairing has an entry of its own for
+    every port it placed, under the config's spelling, and merged
+    first that entry is the one the translator finds -- the
+    operator's was then "ignored", a requested drop was not made, and
+    where it was applied the plan still called the port undecided.
+
+    A RouterOS port
     the operator called ``core-a`` is ``core-a`` there — but the
     device model, which an operator may be reading, lists ``ether2``.
     With devices declared the plan knows which port that is
@@ -1263,8 +1277,21 @@ def _key_by_the_configs_name(
         every: Every name the config references.
         ignored: Keys of the entries that were set aside; re-keyed in
             place.
+        fold_source: The source platform's names have no letter case.
     """
+    from ..migration.canonical.port_names import (
+        key_by_the_configs_spelling,
+        single_spellings,
+    )
+
     present = set(every)
+    if fold_source:
+        key_by_the_configs_spelling(operator_map, every)
+        one_way = single_spellings(every)
+        for index, key in enumerate(ignored):
+            name = one_way.get(key.casefold())
+            if key not in present and name is not None and name not in operator_map:
+                ignored[index] = name
     by_factory = {factory: name for name, factory in plan.labelled_ports.items()}
     for key in [key for key in operator_map if key not in present]:
         name = by_factory.get(key)
@@ -1761,8 +1788,9 @@ def run_plan_with_models(
     target_names = target_inventory.names()
     # Whether letter case is part of a name is a fact about each
     # platform, and each codec states it.
-    fold_source = not getattr(source, "port_names_case_sensitive", False)
-    fold_target = not getattr(target, "port_names_case_sensitive", False)
+    # Read, not defaulted: there is no safe default for it.
+    fold_source = not source.port_names_case_sensitive
+    fold_target = not target.port_names_case_sensitive
     # A factory name is one codec's own way of saying which hardware a
     # port is.  Only a target of the same codec can write "this
     # hardware, under that name"; on any other the name IS the port.
@@ -1817,10 +1845,11 @@ def run_plan_with_models(
             source_inventory, target_inventory, used, known_as=known_as,
             one_hardware=[name for name, count in looked_up.items() if count > 1],
         )
-        # An operator may key an entry by the factory name of a port
-        # the config calls something else.  The plan knows which port
-        # that is; the entry is taken for it.
-        _key_by_the_configs_name(operator_map, plan, every, ignored)
+        # An operator may key an entry by another letter case of a
+        # name, or by the factory name of a port the config calls
+        # something else.  The entry is taken for the port it means,
+        # before it is merged with the pairing's own.
+        _key_by_the_configs_name(operator_map, plan, every, ignored, fold_source)
 
     paired = plan is not None and plan.applied
     keeps_names = paired and same_codec
