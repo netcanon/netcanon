@@ -288,7 +288,23 @@ for the reference pattern).
    toward round-trip stability (`parse(render(parse(raw))) == parse(raw)`
    at the canonical level).
 4. **Write `probe()`** using 2-3 discriminating structural markers
-   unique to your vendor's wire format.
+   unique to your vendor's wire format.  A probe — and everything
+   `parse` does — reads whatever was pasted, so its cost has to fit the
+   text's length.  Five shapes have each shipped and been mended (the
+   Hard Rule in `AGENTS.md` has them): under `re.MULTILINE` write
+   `^[^\S\n]+keyword`, never `^\s+keyword` (`\s` crosses newlines); a
+   value before trailing white space is `(\S(?:.*\S)?)\s*$`, never a
+   lazy `(\S.*?)\s*$`; a trailing number is `(?<!\d)(\d+)$`; lines
+   gathered into one are joined once, not added to a string line by
+   line; and a handler that needs a record an earlier line made finds
+   it by key (`GrowingIndex`, below), never by reading the list —
+   `next(...)`, `any(...)`, `name in a_list` — once per line.
+   `tests/unit/test_untrusted_text_cost.py` builds texts from
+   every pattern of the codec and times its `probe` and `parse`, and
+   needs a small capture under `tests/fixtures/` that detection gives
+   to the new codec.  Then run `python tools/stanza_cost_search.py
+   --codec <name>`: it writes every line and block of the codec's
+   captures many times over, which no test does.
 5. **Fill in `capabilities._CAPS`** listing every canonical xpath your
    parse/render actually handles (not aspirational — just what works).
 6. **Add real fixtures** under `tests/fixtures/real/<vendor>/` with
@@ -444,6 +460,16 @@ the policy locally:
   `key_by_the_configs_spelling` is the one rule for a rename-map key
   in another letter case; the translator and `run_plan_with_models`
   both apply it.
+
+* **`netcanon/migration/codecs/_helpers.py::GrowingIndex`** — find a
+  record, by key, in a list that grows while a config is parsed.  A
+  handler runs once per line; one that reads through what the earlier
+  lines made (`next(r for r in intent.routing_instances if r.name ==
+  name)`) costs the square of the lines.  `GrowingIndex(lambda:
+  intent.routing_instances, lambda ri: ri.name).get(name)` reads each
+  record once, whoever appended it, and answers with the first of a key
+  (or the last, `last=True`).  Used by the Arista, AOS-S and Junos
+  parsers; make one per parse and hand it to the handlers that need it.
 
 * **LAG-name helpers (location note)** — two LAG-name helpers exist
   but are NOT shared cross-codec utilities and do NOT live in

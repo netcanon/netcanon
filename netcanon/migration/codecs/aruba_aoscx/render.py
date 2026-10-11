@@ -381,7 +381,8 @@ def _render_interface(
 
     # ── LAG membership (``lag N`` on the member port) ──
     if iface.lag_member_of:
-        m = re.search(r"(\d+)\s*$", iface.lag_member_of)
+        # ``(?<!\d)``: see the note in arista_eos/port_names.py.
+        m = re.search(r"(?<!\d)(\d+)\s*$", iface.lag_member_of)
         if m:
             block.append(f"    lag {m.group(1)}")
 

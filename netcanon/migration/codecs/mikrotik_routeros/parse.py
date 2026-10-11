@@ -246,22 +246,72 @@ def _extract_version(raw: str) -> str:
 
 
 def _join_continuations(raw: str) -> str:
-    """Collapse RouterOS ``\\`` line continuations into single lines."""
+    """Collapse RouterOS ``\\`` line continuations into single lines.
+
+    A line that ends in a backslash (white space after it aside) goes
+    on in the next one: the backslash and the white space before it
+    are dropped, and the next line is joined on, stripped, after one
+    space.  A line that is not continued is kept as it is, trailing
+    white space included.
+
+    The text is whatever was pasted, and every line of it may end in
+    a backslash.  So the line being joined is never copied while it
+    grows: it is held as pieces, each with the offset it ends at, and
+    a continuation only moves an offset back or drops pieces.  Built
+    as one string -- ``buffer += ...; buffer = buffer.rstrip()[:-1]``
+    -- each line cost the length of everything before it, and 3 MB of
+    continued lines held a plan request for minutes.
+    """
     out: list[str] = []
-    buffer = ""
+    pieces: list[str] = []
+    ends: list[int] = []
+
+    def trim() -> None:
+        """Drop trailing white space from the line being joined."""
+        while pieces:
+            piece, stop = pieces[-1], ends[-1]
+            while stop and piece[stop - 1].isspace():
+                stop -= 1
+            if stop:
+                ends[-1] = stop
+                return
+            pieces.pop()
+            ends.pop()
+
+    def joined() -> str:
+        return "".join(piece[:stop] for piece, stop in zip(pieces, ends, strict=True))
+
     for line in raw.splitlines():
-        if buffer:
-            buffer += " " + line.strip()
+        if pieces:
+            more = line.strip()
+            pieces += (" ", more)
+            ends += (1, len(more))
         else:
-            buffer = line
-        if buffer.rstrip().endswith("\\"):
-            # Strip the trailing backslash and keep buffering.
-            buffer = buffer.rstrip()[:-1].rstrip()
+            pieces, ends = [line], [len(line)]
+        # Where the line ends once trailing white space is looked
+        # past -- found without changing it, because a line that is
+        # NOT continued keeps its trailing white space.
+        at, stop = len(pieces) - 1, ends[-1]
+        while at >= 0:
+            piece = pieces[at]
+            while stop and piece[stop - 1].isspace():
+                stop -= 1
+            if stop:
+                break
+            at -= 1
+            stop = ends[at] if at >= 0 else 0
+        if at >= 0 and pieces[at][stop - 1] == "\\":
+            # Drop the backslash and the white space before it and
+            # keep joining.  If nothing is left, the next line starts
+            # afresh.
+            del pieces[at + 1:], ends[at + 1:]
+            ends[at] = stop - 1
+            trim()
             continue
-        out.append(buffer)
-        buffer = ""
-    if buffer:
-        out.append(buffer)
+        out.append(joined())
+        pieces, ends = [], []
+    if pieces:
+        out.append(joined())
     return "\n".join(out)
 
 
@@ -297,6 +347,7 @@ def _group_by_section(raw: str) -> list[tuple[str, list[str]]]:
 
 _KV_RE = re.compile(
     r"""
+    (?<![\w\-])       # a key starts where one can: not inside a longer word
     ([\w\-]+)             # key
     =
     (                     # value:
@@ -1139,7 +1190,22 @@ def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> None:
     Matching strategy: find the pool whose network contains the range's
     start IP.  If none matches (orphan pool) we create a new
     CanonicalDHCPPool with just the range populated.
+
+    The pool is found by the network, not by trying every pool for
+    every range (and parsing each pool's network again each time): by
+    prefix length, a network's address to the first pool, in the order
+    the config has them, that serves it.  A range asks once for each
+    prefix length there is.
     """
+    served: dict[int, dict[int, tuple[int, CanonicalDHCPPool]]] = {}
+    for position, pool in enumerate(intent.dhcp_servers):
+        try:
+            network = ipaddress.IPv4Network(pool.network, strict=False)
+        except (ValueError, ipaddress.AddressValueError):
+            continue
+        served.setdefault(network.prefixlen, {}).setdefault(
+            int(network.network_address), (position, pool),
+        )
     for line in lines:
         if not line.startswith("add"):
             continue
@@ -1156,20 +1222,19 @@ def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> None:
             start_ip = ipaddress.IPv4Address(start_str.strip())
         except ipaddress.AddressValueError:
             continue
-        # Find an existing pool whose network contains start_ip.
+        # Find the first existing pool whose network contains start_ip.
+        # (A pool this loop appends has no network and serves none.)
         merged = False
-        for pool in intent.dhcp_servers:
-            if not pool.network:
-                continue
-            try:
-                network = ipaddress.IPv4Network(pool.network, strict=False)
-            except (ValueError, ipaddress.AddressValueError):
-                continue
-            if start_ip in network:
-                pool.start_ip = start_str.strip()
-                pool.end_ip = end_str.strip()
-                merged = True
-                break
+        address = int(start_ip)
+        first: tuple[int, CanonicalDHCPPool] | None = None
+        for prefixlen, by_address in served.items():
+            hit = by_address.get(address >> (32 - prefixlen) << (32 - prefixlen))
+            if hit is not None and (first is None or hit[0] < first[0]):
+                first = hit
+        if first is not None:
+            first[1].start_ip = start_str.strip()
+            first[1].end_ip = end_str.strip()
+            merged = True
         if not merged:
             intent.dhcp_servers.append(CanonicalDHCPPool(
                 start_ip=start_str.strip(),

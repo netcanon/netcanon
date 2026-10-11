@@ -143,7 +143,7 @@ def _port_index_for(name: str) -> int:
     when no trailing digits are present.  Used as a tiebreaker in the
     VLAN-parent scorer — higher port-index ports are slightly less
     likely to be the WAN (which conventionally lands on port1/wan1)."""
-    m = re.search(r"(\d+)$", name)
+    m = re.search(r"(?<!\d)(\d+)$", name)
     return int(m.group(1)) if m else 0
 
 

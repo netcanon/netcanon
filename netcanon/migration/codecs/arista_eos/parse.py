@@ -56,7 +56,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
-from .._helpers import _mask_to_prefix, merge_trunk_allowed
+from .._helpers import GrowingIndex, _mask_to_prefix, merge_trunk_allowed
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
 from ..base import ParseError
@@ -92,7 +92,7 @@ _NTP_SERVER_RE = re.compile(
 # on any ``logging`` line and validate it with :mod:`ipaddress` — a numeric
 # sub-command argument is never a valid IPv4/IPv6 literal, so the guard rejects
 # the noise structurally (mirrors cisco_iosxe_cli ``_SYSLOG_LINE_RE``).
-_SYSLOG_LINE_RE = re.compile(r"^\s*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
+_SYSLOG_LINE_RE = re.compile(r"^[^\S\n]*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
 _IP_ROUTE_RE = re.compile(
     # ``ip route 0.0.0.0/0 10.0.0.1`` or ``ip route 10.0.0.0/8 Null0``,
     # plus the per-VRF form ``ip route vrf MGMT 0.0.0.0/0 192.168.2.1``.
@@ -843,6 +843,16 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
         "source_interface": "",
         "udp_port": 4789,
         "records": [],     # list of CanonicalVxlan records emitted from THIS Vxlan stanza
+        # The records a later ``vxlan source-interface`` / ``vxlan
+        # udp-port`` line still has to reach: the ones made before any
+        # source interface was seen, and the ones still on the default
+        # port.  Kept apart so that such a line reads those and not
+        # every record there is -- a stanza header repeated N times
+        # otherwise re-read N stanzas' records N times.
+        "unsourced": [],
+        "at_default_port": [],
+        # ``vxlan vrf <name> vni <N>`` finds its routing instance here.
+        "instances": GrowingIndex(lambda: intent.routing_instances, lambda ri: ri.name),
     }
 
     current_iface: CanonicalInterface | None = None
@@ -998,6 +1008,10 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:  # noqa: C901
     # Renamed from current_vrf — now tracks both VRF and MAC-VRF
     # contexts with the same RD/RT machinery.
     current_ri: CanonicalRoutingInstance | None = None
+    # A ``vrf`` or ``vlan`` line finds its record by key.  Scanned for,
+    # one line per VRF or VLAN cost the square of them.
+    instances = GrowingIndex(lambda: intent.routing_instances, lambda ri: ri.name)
+    vlans_by_id = GrowingIndex(lambda: intent.vlans, lambda vlan: vlan.id)
     for raw_line in raw.splitlines():
         stripped = raw_line.strip()
         # Blank line: end of file / section.
@@ -1030,10 +1044,7 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:  # noqa: C901
         leading_spaces = len(raw_line) - len(raw_line.lstrip(" "))
         if stripped.startswith("vrf "):
             vrf_name = stripped.split(None, 1)[1].strip()
-            current_ri = next(
-                (r for r in intent.routing_instances if r.name == vrf_name),
-                None,
-            )
+            current_ri = instances.get(vrf_name)
             if current_ri is None:
                 # ``router bgp X / vrf Y`` declares a VRF context
                 # even if no standalone ``vrf instance Y`` was
@@ -1068,14 +1079,9 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:  # noqa: C901
             except ValueError:
                 current_ri = None
                 continue
-            vlan = next(
-                (v for v in intent.vlans if v.id == vid), None,
-            )
+            vlan = vlans_by_id.get(vid)
             ri_name = (vlan.name if vlan and vlan.name else f"VLAN{vid}")
-            existing = next(
-                (r for r in intent.routing_instances if r.name == ri_name),
-                None,
-            )
+            existing = instances.get(ri_name)
             if existing is None:
                 current_ri = CanonicalRoutingInstance(
                     name=ri_name, instance_type="mac-vrf",
@@ -1545,9 +1551,12 @@ def _apply_iface_subcommand(  # noqa: C901
             # Back-patch any VNI records that were already emitted
             # before the source-interface line (rare; supports
             # operator orderings that put mappings before globals).
-            for rec in vxlan_state.get("records", []):
+            # Those are exactly the records in ``unsourced``: every
+            # record made after this line is made with a source.
+            for rec in vxlan_state["unsourced"]:
                 if not rec.source_interface:
                     rec.source_interface = m.group(1)
+            vxlan_state["unsourced"] = []
             return
         # GAP-EVPN-2: ``vxlan udp-port <N>`` — switch-level.
         m = re.match(r"^vxlan\s+udp-port\s+(\d+)\s*$", line)
@@ -1557,9 +1566,14 @@ def _apply_iface_subcommand(  # noqa: C901
             except ValueError:
                 return
             vxlan_state["udp_port"] = port
-            for rec in vxlan_state.get("records", []):
-                if rec.udp_port == 4789:
-                    rec.udp_port = port
+            # The records still on the default port are the only ones
+            # this line can change, and it changes nothing when the
+            # port it states IS the default.
+            if port != 4789:
+                for rec in vxlan_state["at_default_port"]:
+                    if rec.udp_port == 4789:
+                        rec.udp_port = port
+                vxlan_state["at_default_port"] = []
             return
         # ``vxlan vlan <vid> vni <vni>``
         m = re.match(r"^vxlan\s+vlan\s+(\d+)\s+vni\s+(\d+)\s*$", line)
@@ -1584,6 +1598,10 @@ def _apply_iface_subcommand(  # noqa: C901
             intent.vxlan_vnis.append(rec)
             if vxlan_state is not None:
                 vxlan_state["records"].append(rec)
+                if not rec.source_interface:
+                    vxlan_state["unsourced"].append(rec)
+                if rec.udp_port == 4789:
+                    vxlan_state["at_default_port"].append(rec)
             return
         # ``vxlan vrf <name> vni <vni>`` — L3 VNI for Type-5.
         m = re.match(r"^vxlan\s+vrf\s+(\S+)\s+vni\s+(\d+)\s*$", line)
@@ -1593,10 +1611,11 @@ def _apply_iface_subcommand(  # noqa: C901
                 l3_vni = int(m.group(2))
             except ValueError:
                 return
-            ri = next(
-                (r for r in intent.routing_instances if r.name == vrf_name),
-                None,
+            instances = (
+                vxlan_state["instances"] if vxlan_state is not None
+                else GrowingIndex(lambda: intent.routing_instances, lambda ri: ri.name)
             )
+            ri = instances.get(vrf_name)
             if ri is None:
                 ri = CanonicalRoutingInstance(
                     name=vrf_name, l3_vni=l3_vni,

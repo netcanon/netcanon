@@ -20,13 +20,80 @@ from __future__ import annotations
 
 import ipaddress
 import re
-from collections.abc import Callable
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Hashable
+from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .base import ParseError, RenderError
 
 if TYPE_CHECKING:
     from ..canonical.intent import CanonicalIntent
+
+_K = TypeVar("_K", bound=Hashable)
+_T = TypeVar("_T")
+
+
+class GrowingIndex(Generic[_K, _T]):
+    """Find a record, by key, in a list that grows while a config is
+    parsed -- without reading the list again for every line.
+
+    A parser's handler runs once per line.  One that looks through
+    everything the earlier lines made (``next(r for r in intent.routes
+    if r.name == name)``, ``any(...)``) costs the square of the lines,
+    and a config is whatever was pasted: sixteen thousand stanzas of
+    one kind held a worker for minutes.  This reads each record once,
+    whoever appended it: before every answer it takes in the records
+    the list has gained since the last.
+
+    ``get`` returns the FIRST record with a key, as the scan it
+    replaces did -- or the LAST, with ``last=True``, for the place
+    that used to build ``{record.name: record for record in ...}``
+    for every line.
+
+    Two things have to hold while it is in use, and both do for the
+    lists a parser fills as it reads: a record's key does not change
+    once the record is in the list, and records are not taken out of
+    the middle.  A list that was REPLACED, or that became shorter, is
+    read again from the start.
+
+    Args:
+        records: Returns the list.  Called before every answer, so
+            that a list the tree was given anew is the one read.
+        key: A record's key.
+        last: Of several records with one key, answer with the last
+            in the list and not the first.
+    """
+
+    def __init__(
+        self, records: Callable[[], list[_T]], key: Callable[[_T], _K], *, last: bool = False,
+    ) -> None:
+        self._records = records
+        self._key = key
+        self._last = last
+        self._first: dict[_K, _T] = {}
+        self._list: list[_T] | None = None
+        self._read = 0
+
+    def _catch_up(self) -> None:
+        records = self._records()
+        if records is not self._list or len(records) < self._read:
+            self._list, self._first, self._read = records, {}, 0
+        first, key = self._first, self._key
+        while self._read < len(records):
+            record = records[self._read]
+            if self._last:
+                first[key(record)] = record
+            else:
+                first.setdefault(key(record), record)
+            self._read += 1
+
+    def get(self, key: _K) -> _T | None:
+        """The first record in the list whose key is *key*, or ``None``."""
+        self._catch_up()
+        return self._first.get(key)
+
+    def __contains__(self, key: object) -> bool:
+        self._catch_up()
+        return key in self._first
 
 
 def same_vendor_version(

@@ -405,6 +405,83 @@ tests use these exclusively — never CSS classes or element structure.  See
   and PROVENANCE, so a plaintext secret that merely CONTAINS a colon
   (`my:secret`) stays migratable while an unregistered envelope from an
   unvouched source is refused.
+- **Never** hand text nobody vouches for to code whose cost you have not
+  measured.  A config is whatever was pasted, a request carries megabytes
+  of it, and a pattern at work does not let the server's other threads
+  run.  Five shapes took time that grew with the SQUARE of the text, each
+  in shipped code, each found after the one before it had been declared
+  fixed:
+  (1) **a line-anchored pattern that begins with `\s`**, applied to a
+  whole text under `re.MULTILINE`.  `^\s+X` does not mean "X, indented":
+  `\s` matches a newline, so from every line start the pattern walks to
+  the end of the run of blank lines it is in.  A probe window of lines of
+  spaces held `/detect` for about a minute.  Write `[^\S\n]` (white space
+  that is not a newline — `arista_eos/parse.py` already called it `_WS`).
+  It was also not what the pattern meant: `^\s+bgp\b` matched a
+  top-level `bgp` line that followed a blank one.
+  (2) **a lazy value in front of trailing white space** — `(\S.*?)\s*$`
+  re-reads the rest of the line for every character it takes.  Write
+  `(\S(?:.*\S)?)\s*$`: from the first character that is not white space
+  to the last.  And its cousin, two runs that can each take the separator
+  between them (`\S+:\S+`, `[ \t]+.*`): make one of them unable to.
+  (3) **a search that fails and starts again inside the run it has just
+  crossed** — `(\d+)$` on digits and then a letter, `([\w-]+)=` on a long
+  word.  Say where the thing begins: `(?<!\d)(\d+)$`.
+  (4) **code that is no pattern at all**: a continued line joined with
+  `buffer += ...` and trimmed with `buffer.rstrip()[:-1]` copies everything
+  gathered so far for every line it grows by.  Parsing three megabytes of
+  RouterOS lines that each end in a backslash took two and a half minutes.
+  Gather pieces and join once.
+  (5) **a handler that runs once per line and looks through everything
+  the earlier lines made** — `next(r for r in intent.routing_instances
+  if r.name == name)`, `any(...)` over the routes so far, `name in
+  a_list`, `{i.name: i for i in intent.interfaces}` built for every
+  `trunk` line, a pass over every interface at the end of every block.
+  Nothing about one such line is slow; the cost is the square of the
+  NUMBER of stanzas, on a config with nothing odd in it.  Six thousand
+  RouterOS DHCP networks and their pools took 37 seconds; an Arista
+  `interface Vxlan1` stanza written six thousand times, 9; sixteen
+  thousand Junos static routes, 7.  Find the record by key:
+  `GrowingIndex` (`netcanon/migration/codecs/_helpers.py`) reads each
+  record of a growing list once, whoever appended it, and a pass over the
+  whole tree is made once, after the last line.
+  The first of these was fixed as "the class", with a test that timed
+  whole filler lines and short units repeated from the first character;
+  it passed, and the next three were then found by reading — one of
+  them in a file that change had edited.  The fifth was found after the
+  test had been rewritten to build its texts from each pattern: no text
+  built from a pattern or a run has many stanzas in it.  **A check does
+  not reach further than the texts it builds**, so
+  `tests/unit/test_untrusted_text_cost.py` builds each text from the thing
+  it is for: for every regex the product holds (source literals, compiled
+  patterns and pattern-shaped strings a module or class keeps, patterns in
+  the shipped device definitions) what the pattern needs before one of its
+  repeats, then a run of what that repeat accepts, then something the rest
+  refuses; and for every public codec's `probe` and `parse`, a real capture
+  with a run put into it — of empty lines, of lines that go on (a
+  continuation, an open quote, an open brace), of white space inside each
+  of its own lines.  The fifth shape has a search of its own, which
+  takes minutes and is run by hand: `tools/stanza_cost_search.py` writes
+  every line and block of every capture many times over.  **Run it when
+  you change a parser's handler or add a codec**; what it found is pinned
+  in the same test module, a text for each handler that was mended, and
+  a new finding is added there with its fix.  None of it is a proof.
+  Not reached: a pattern assembled at call time from parts that are not
+  literals and not kept; a handler no capture has a line for; work that
+  needs two kinds of stanza to grow together; a shape nobody thought to
+  build.  Known and NOT mended (SECURITY.md has the measurements): a
+  list of ONE record that a line adds to after reading it (`if pair not
+  in entry["ipv4"]: entry["ipv4"].append(pair)` — the addresses of one
+  interface, the members of one LAG, the route targets of one VRF), and
+  what a config EXPANDS to (`1-4094` is seven bytes).  When you find a
+  shape the search missed, add it to the search in the same change as
+  the fix.  A pattern that is slow and safe (it reads only data the
+  server ships) goes in that module's `KNOWN_SLOW` with the reason; an
+  `re` call whose pattern is not a literal, or whose flags are not
+  written out, goes in `NOT_LITERAL` with what covers it.  Earlier fixes
+  of single patterns are pinned in
+  `tests/unit/migration/test_redos_hardening.py` and
+  `test_parse_quadratic_scan_perf.py`.
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

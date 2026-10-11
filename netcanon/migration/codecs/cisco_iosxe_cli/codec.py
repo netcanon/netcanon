@@ -610,9 +610,9 @@ class CiscoIOSXECLICodec(CodecBase):
             r"^feature\s+nv\s+overlay\b"
             r"|^feature\s+vn-segment-vlan-based\b"
             r"|^nv\s+overlay\s+evpn\b"
-            r"|^\s+vn-segment\s+\d+"
+            r"|^[^\S\n]+vn-segment\s+\d+"
             r"|^interface\s+lag\s+\d"
-            r"|^\s+vrf\s+attach\b"
+            r"|^[^\S\n]+vrf\s+attach\b"
             r"|^nxapi\b",  # NX-API mgmt plane — NX-OS-exclusive
             raw_prefix, re.IGNORECASE | re.MULTILINE,
         ):
@@ -631,7 +631,7 @@ class CiscoIOSXECLICodec(CodecBase):
         if (re.search(r"^feature\s+\S+", raw_prefix,
                       re.IGNORECASE | re.MULTILINE)
                 and not re.search(
-                    r"^\s+ip\s+address\s+\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+",
+                    r"^[^\S\n]+ip\s+address\s+\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+",
                     raw_prefix, re.IGNORECASE | re.MULTILINE)):
             return None
 
@@ -667,7 +667,7 @@ class CiscoIOSXECLICodec(CodecBase):
             r"^interface\s+breakout\s+\S+\s+map\b"
             r"|^system-user\s+linuxadmin\b"
             r"|^vlt-domain\s+\d+"
-            r"|^\s*vlt-port-channel\s+\d+"
+            r"|^[^\S\n]*vlt-port-channel\s+\d+"
             r"|^ip\s+vrf\s+default\s*$"
             r"|^vrrp\s+(?:version\s+\d|delay\s+reload\s+\d)",
             raw_prefix, re.IGNORECASE | re.MULTILINE,
@@ -776,13 +776,13 @@ class CiscoIOSXECLICodec(CodecBase):
                      r"loopback|vlan|port-channel|tunnel|serial)",
                      raw_prefix, re.IGNORECASE | re.MULTILINE):
             strong_hits += 1
-        if re.search(r"^\s+ip\s+address\s+\d+\.\d+\.\d+\.\d+\s+\d+\.",
+        if re.search(r"^[^\S\n]+ip\s+address\s+\d+\.\d+\.\d+\.\d+\s+\d+\.",
                      raw_prefix, re.IGNORECASE | re.MULTILINE):
             strong_hits += 1
-        if re.search(r"^\s+(no\s+)?shutdown\s*$",
+        if re.search(r"^[^\S\n]+(no\s+)?shutdown\s*$",
                      raw_prefix, re.IGNORECASE | re.MULTILINE):
             strong_hits += 1
-        if re.search(r"^\s+switchport\s+",
+        if re.search(r"^[^\S\n]+switchport\s+",
                      raw_prefix, re.IGNORECASE | re.MULTILINE):
             strong_hits += 1
         # If the operator's prompt-echo carries ``show running-config``

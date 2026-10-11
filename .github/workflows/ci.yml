@@ -83,6 +83,10 @@ jobs:
   test:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    # A pattern that is exponential rather than quadratic does not fail
+    # the cost guard: it hangs it, with no test named.  The job is then
+    # stopped here, not at GitHub's own limit of six hours.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -120,6 +124,7 @@ jobs:
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v7.0.1
@@ -161,6 +166,7 @@ jobs:
   desktop:
     name: Desktop (PySide6)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     # Exercises the PySide6/pystray desktop shell (netcanon_desktop) on a
     # headless Linux runner.  The 123-test suite mocks Qt/pystray/uvicorn via

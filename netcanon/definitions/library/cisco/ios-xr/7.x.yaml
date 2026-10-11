@@ -34,7 +34,7 @@ commands:
 
 prompts:
   trailing:
-    - '^RP/\S+:\S+#\s*$'      # RP/0/RP0/CPU0:hostname#
+    - '^RP/[^\s:]+:\S+#\s*$'      # RP/0/RP0/CPU0:hostname#
     - '^\S+[#>]\s*$'          # generic fallback
 
 collector:

@@ -235,24 +235,30 @@ _OS10_LAG_MODE_MAP = {"active": "active", "passive": "passive", "on": "static"}
 #: :func:`_split_nexthop` because OS10 accepts a SPACE-separated interface
 #: next-hop (``ip route 10.1.1.0/24 ethernet 1/1/1``) that a fixed
 #: ``(\S+)`` group would silently fail to match, dropping the route.
+#:
+#: The tail is ``\S(?:.*\S)?`` -- from its first character that is not
+#: white space to its last -- and not a lazy ``\S.*?`` in front of
+#: ``\s*$``: the lazy form re-reads the rest of the line for every
+#: character it takes, and a run of spaces inside a route line then costs
+#: its square.  The two capture the same text.
 _IP_ROUTE_RE = re.compile(
     r"^ip\s+route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?"
     r"(?P<dest>\d+\.\d+\.\d+\.\d+)"
     r"(?:/(?P<plen>\d+)|\s+(?P<mask>\d+\.\d+\.\d+\.\d+))"
-    r"\s+(?P<rest>\S.*?)\s*$",
+    r"\s+(?P<rest>\S(?:.*\S)?)\s*$",
     re.IGNORECASE,
 )
 #: ``ipv6 route [vrf <name>] <prefix>/<len> <next-hop...> [<distance>]``.
 _IPV6_ROUTE_RE = re.compile(
     r"^ipv6\s+route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?"
-    r"(?P<dest>[0-9A-Fa-f:]+/\d+)\s+(?P<rest>\S.*?)\s*$",
+    r"(?P<dest>[0-9A-Fa-f:]+/\d+)\s+(?P<rest>\S(?:.*\S)?)\s*$",
     re.IGNORECASE,
 )
 #: ``management route <dest>/<len> <gateway>`` — the management-VRF default.
 #: Trailing whitespace is real in the corpus, hence ``\s*$``.
 _MGMT_ROUTE_RE = re.compile(
     r"^management\s+route\s+(?P<dest>\d+\.\d+\.\d+\.\d+)/(?P<plen>\d+)"
-    r"\s+(?P<rest>\S.*?)\s*$",
+    r"\s+(?P<rest>\S(?:.*\S)?)\s*$",
     re.IGNORECASE,
 )
 
