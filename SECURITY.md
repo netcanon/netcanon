@@ -485,7 +485,8 @@ the probe and prompt patterns under `netcanon/definitions/library/`
 A config is whatever was pasted.  `POST /api/v1/migration/detect`, `/plan`,
 the per-pane plan endpoints and `POST /api/v1/sanitize` hand it to code
 written for real configs.  The pasted text is capped in length (10,000,000
-characters on a plan request); the cap bounds memory, not time, because code
+characters on a plan request); the cap bounds the size of the text, and
+neither the time nor the memory that reading it takes, because code
 can take time that grows with the square of the text.  The server is one
 process and a pattern at work does not let its other threads run, so one such
 request delays every other.  There is no time limit on a request.
@@ -518,8 +519,10 @@ Five shapes did, and were mended:
   (0.8 MB), 9; 16,000 Junos static routes (1 MB), 7.  Each is now under a
   second: the record is found by key, and a pass over the whole tree is made
   once.  Mended in the Arista, AOS-S, FortiGate, Junos, OPNsense and RouterOS
-  parsers, and in the switchport-to-VLAN projection the switch codecs share
-  (where AOS-CX and Dell OS10 had it).
+  parsers, in the switchport-to-VLAN projection the switch codecs share
+  (where AOS-CX and Dell OS10 had it), and in the Tier-3 detector every CLI
+  parse runs, which looked through the labels it had found for each new
+  one: 40,000 `class-map` lines (1.1 MB) took nine seconds.
 
 The same shapes in the shipped device definitions — probe patterns, which
 the collectors apply to what a device printed, and prompt patterns — were
@@ -543,8 +546,11 @@ times every public codec's `probe` and `parse` on a real capture with a run
 put into it.  The fifth shape has a search of its own,
 `tools/stanza_cost_search.py`, which writes every line and block of every
 committed capture many times over; it takes minutes and is run by hand, and
-each handler it found is pinned in that test module with a text of its own.
-On the tree before this change it reports 51 units in six codecs; after, none.
+the handlers it found are pinned in that test module, each with a text of its
+own, and so are the lookups an independent read found without one.  On the
+tree before this change it reported 51 units in six codecs, and after it
+none - a verdict from timings, which one run in three can put a unit back
+into on a busy machine.
 
 **A search is not a proof.**  It does not reach a pattern assembled at call
 time from parts that are not literals and not kept, a handler no capture has
@@ -578,9 +584,13 @@ after an earlier version of the search had passed.
 * **There is no time limit on a request**, and none on the memory one takes.
 
 A deployment that takes text from people it does not trust should put a
-request timeout and a memory limit in front of the application.  That advice
-is not only for texts built to be slow: the two items above are reachable
-with a config that is merely large.
+request timeout and a memory limit in front of the application - one that
+stops the WORKER, since a request handler here is a thread and a thread
+cannot be stopped: a limit that only frees the caller leaves the parse
+running, and every other request waiting for it.  That advice
+is not only for texts built to be slow: what a config expands to, and the
+product of its trunks and its VLANs, are reachable with a config that is
+merely large.
 
 ---
 

@@ -86,10 +86,12 @@ text for every regex the product holds and times every codec's `probe`
 and `parse` on a capture with a run put into it, to find code whose
 cost grows faster than its input.  It takes tens of seconds, and far
 longer when it fails, because what it has then found is slow.  It is
-built not to flake: each reading is the best of several, a text that
-looks slow is read again, and a step that still looks steep has to be
-steep at the next size too before anything is called slow (two
-readings once took a linear parse for a defect on a CI runner).  So a
+built not to flake: a reading is the CPU time the test's own thread
+had, not time on the wall (on a shared runner the wall clock put
+another process's turn into one reading and not the next, and took a
+linear parse for a defect); each is the best of several; a text that
+looks slow is read again; and a step that still looks steep has to be
+steep at another size too before anything is called slow.  So a
 failure there is something to look at before it is retried.  The longer
 search for the same thing — every line and block of every capture
 written many times over — is not a test: `python

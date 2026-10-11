@@ -418,9 +418,15 @@ def _detect_regex(
         Ordered list of unique section labels.
     """
     seen: list[str] = []
+    # Looked for in a set, kept in the list: where a pattern takes
+    # the whole line, every distinct `class-map` or `policy-map` line
+    # is a label, and looking through the list for each match cost
+    # the square of their number.
+    known: set[str] = set()
     for pattern in patterns:
         for match in pattern.finditer(raw):
             label = match.group(0).strip()
-            if label and label not in seen:
+            if label and label not in known:
+                known.add(label)
                 seen.append(label)
     return seen

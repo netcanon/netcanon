@@ -70,7 +70,9 @@ import ast
 import importlib
 import pkgutil
 import re
+import sys
 import time
+from collections import Counter
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from re import _constants as sre
@@ -106,14 +108,53 @@ _FLOOR = 0.5
 _PLAINLY_SLOW = 2.0
 
 
+def _cpu_clock() -> Callable[[], float]:
+    """Seconds of CPU the calling thread has had.
+
+    The readings below are compared with each other, and a ratio of two
+    wall-clock times is only as good as the machine is quiet: time
+    another process had the CPU is in one reading and not in the next,
+    and a reading of a few milliseconds fits inside one turn at the CPU
+    where a reading of a few hundred does not.  The thread's own CPU
+    time leaves all of that out.  On Windows the thread clock moves in
+    steps of 15.6 ms whatever resolution it reports, too coarse to read
+    a millisecond, so the thread's cycle count is read there instead:
+    ticks of the processor's time-stamp counter, at the rate the
+    registry states for it.
+    """
+    if sys.platform != "win32":
+        return time.thread_time
+    import ctypes
+    import winreg
+
+    kernel32 = ctypes.WinDLL("kernel32")
+    kernel32.GetCurrentThread.restype = ctypes.c_void_p
+    kernel32.QueryThreadCycleTime.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulonglong)]
+
+    def cycles() -> int:
+        count = ctypes.c_ulonglong()
+        kernel32.QueryThreadCycleTime(kernel32.GetCurrentThread(), ctypes.byref(count))
+        return count.value
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as key:
+            rate = winreg.QueryValueEx(key, "~MHz")[0] * 1e6
+    except OSError:
+        return time.perf_counter
+    return lambda: cycles() / rate
+
+
+_now = _cpu_clock()
+
+
 def _best(read: Callable[[str], object], text: str, tries: int = 3) -> float:
     """The quickest of *tries* readings.  A loaded machine only ever
     adds time, so the least of several is the one to believe."""
     best = float("inf")
     for _ in range(tries):
-        started = time.perf_counter()
+        started = _now()
         read(text)
-        best = min(best, time.perf_counter() - started)
+        best = min(best, _now() - started)
         if best > 1.0:
             break
     return best
@@ -426,19 +467,20 @@ def _literals(root: Path) -> Iterator[tuple[str, str, int]]:
             yield f"{_where(path)}:{node.lineno}", pattern.value, flags  # type: ignore[union-attr]
 
 
-def _not_literal(root: Path) -> set[tuple[str, str]]:
+def _not_literal(root: Path) -> Counter[tuple[str, str]]:
     """``(file, what was written)`` for every ``re`` call the scan
     cannot time: its pattern is not a string literal, or its flags are
     not ones that can be read from the source (a pattern means
-    different things under different flags)."""
-    found = set()
+    different things under different flags).  Counted: a second call
+    spelt like a listed one in the same file is a new call."""
+    found: Counter[tuple[str, str]] = Counter()
     for path, source, node, function, modules in _re_calls(root):
         pattern = _pattern_of(node)
         if not _is_literal(pattern):
             written = " ".join((ast.get_source_segment(source, pattern) or "").split()) if pattern else ""
-            found.add((_where(path), written[:60] or "<no pattern argument>"))
+            found[(_where(path), written[:60] or "<no pattern argument>")] += 1
         elif _flags(node, function, modules) is None:
-            found.add((_where(path), "flags of " + repr(pattern.value)[:50]))  # type: ignore[union-attr]
+            found[(_where(path), "flags of " + repr(pattern.value)[:50])] += 1  # type: ignore[union-attr]
     return found
 
 
@@ -656,7 +698,7 @@ class TestEveryRegexTheProductHolds:
     def test_every_call_the_scan_cannot_read_is_accounted_for(self) -> None:
         """A pattern that is not a literal is read some other way, or
         is argued here.  There is no default."""
-        assert _not_literal(PACKAGE) == set(NOT_LITERAL)
+        assert _not_literal(PACKAGE) == Counter(dict.fromkeys(NOT_LITERAL, 1))
 
     def test_the_scan_reads_re_however_a_module_names_it(self, tmp_path: Path) -> None:
         """A scan that knew only ``re.<function>("literal", flags)``
@@ -685,7 +727,7 @@ class TestEveryRegexTheProductHolds:
         assert read == {
             "aliased": 0, "imported": 0, "compiled": re.MULTILINE, "named": re.IGNORECASE, "local": 0,
         }
-        assert _not_literal(tmp_path) == {
+        assert set(_not_literal(tmp_path)) == {
             ("forms.py", "flags of 'variable flags\\\\s+x$'"),
             ("forms.py", "text"),
             ("forms.py", "<no pattern argument>"),
@@ -789,8 +831,16 @@ def _grows_faster_than_its_input(
     if not (high > _TOO_STEEP * low and high > floor):
         return ""
     measured = f"{small} units: {low:.3f}s; {4 * small} units: {high:.3f}s"
-    if high > _PLAINLY_SLOW or (largest is not None and 16 * small > largest):
+    if largest is not None and 16 * small > largest:
         return measured
+    if high > _PLAINLY_SLOW and small >= 4:
+        # Too slow to read sixteen times as much of.  Ask the question one
+        # step DOWN instead: a reader that costs the square of its input is
+        # steep there too, and a quarter of the smaller text costs little.
+        # If that step is not steep, the third size is read after all.
+        lower = _best(quietly, make(small // 4))
+        if low > _TOO_STEEP * lower:
+            return f"{small // 4} units: {lower:.3f}s; {measured}"
     higher = _best(quietly, make(16 * small), 1)
     if higher > _TOO_STEEP * high:
         return f"{measured}; {16 * small} units: {higher:.3f}s"
@@ -818,8 +868,12 @@ class TestEveryPublicCodec:
         """Larger than the others: joining a continued line by adding
         to one string is quick until the string is long."""
         codec, capture = get_codec(name), CAPTURES[name]
+        # A floor of its own: with the fourth shape put back, the larger
+        # text reads in under a second here -- on a faster machine, under
+        # the floor the other texts use, and so in time.  The mended
+        # parse reads it in a seventh of a second.
         slow = _grows_faster_than_its_input(
-            codec.parse, lambda lines: _with_a_run(capture, GOES_ON[shape] * lines), 16_000,
+            codec.parse, lambda lines: _with_a_run(capture, GOES_ON[shape] * lines), 16_000, floor=0.2,
         )
         assert not slow, f"{name}.parse on a capture with a run of {shape}: {slow}"
 
@@ -870,7 +924,12 @@ class TestEveryPublicCodec:
         def lines_of_spaces(lines: int) -> str:
             return _with_a_run(capture, "   \n" * lines)
 
-        assert _grows_faster_than_its_input(indented.findall, lines_of_spaces, 4_000, largest=16_000)
+        # Up to three times, and with a floor of its own: on a machine twice
+        # as fast the larger reading is under the floor the real texts use.
+        assert any(
+            _grows_faster_than_its_input(indented.findall, lines_of_spaces, 4_000, largest=16_000, floor=0.05)
+            for _attempt in range(3)
+        )
         assert not _grows_faster_than_its_input(mended.findall, lines_of_spaces, 4_000)
 
         def joined_by_adding(text: str) -> str:
@@ -886,7 +945,10 @@ class TestEveryPublicCodec:
         def continued(lines: int) -> str:
             return _with_a_run(capture, GOES_ON["continued lines"] * lines)
 
-        assert _grows_faster_than_its_input(joined_by_adding, continued, 16_000, largest=64_000)
+        assert any(
+            _grows_faster_than_its_input(joined_by_adding, continued, 16_000, largest=64_000, floor=0.05)
+            for _attempt in range(3)
+        )
 
     def test_netcanon_is_the_package_under_test(self) -> None:
         assert Path(netcanon.__file__).resolve().parent == PACKAGE
@@ -911,8 +973,8 @@ def _takes(seconds: float) -> None:
     whose shortest sleep is a scheduler tick -- fifteen milliseconds
     on Windows -- so that a planted cost of four came out as fifteen
     and the ratio the control is about was gone."""
-    until = time.perf_counter() + seconds
-    while time.perf_counter() < until:
+    until = _now() + seconds
+    while _now() < until:
         pass
 
 
@@ -1056,6 +1118,47 @@ def _aoss_trunk_lines_of_one_lag(count: int) -> str:
     )
 
 
+def _eos_bgp_vlans(count: int) -> str:
+    """``vlan N`` under ``router bgp``, looked up among the VLANs
+    and the MAC-VRFs made so far."""
+    return _config(
+        "hostname sw", "!", *(line for _ in range(count) for line in ("vlan 2", "!")),
+        "router bgp 65001", *("   vlan 3" for _ in range(count)), "!",
+    )
+
+
+def _eos_bgp_vrfs_then_vlans(count: int) -> str:
+    return _config(
+        "hostname sw", "!", "router bgp 65001", *(f"   vrf T{n}" for n in range(count)),
+        *(f"   vlan {n % 4000 + 2}" for n in range(count)), "!",
+    )
+
+
+def _eos_vxlan_stanzas_with_a_port(count: int) -> str:
+    """A UDP port that is not the default is written onto every
+    VNI made so far."""
+    stanza = (
+        "interface Vxlan1", "   vxlan source-interface Loopback1", "   vxlan udp-port 4790",
+        "   vxlan vlan 110 vni 10110", "   vxlan vlan 111 vni 10111", "!",
+    )
+    return _config("hostname sw", "!", *(stanza * count))
+
+
+def _junos_vnis(count: int) -> str:
+    return _config(
+        "set system host-name r1", "set vlans v10 vlan-id 10",
+        *(f"set vlans v10 vxlan vni {10000 + n}" for n in range(count)),
+    )
+
+
+def _iosxe_class_maps(count: int) -> str:
+    """Every line a Tier-3 section of its own.  The detector that
+    every CLI parse runs kept its labels in a list and looked
+    through it for each match: 40,000 of these lines, 1.1 MB, took
+    nine seconds."""
+    return _config("hostname r1", *(f"class-map match-any CM{n}" for n in range(count)))
+
+
 def _opnsense_laggs(count: int) -> str:
     return _config(
         '<?xml version="1.0"?>', "<opnsense>",
@@ -1102,6 +1205,11 @@ STANZAS: dict[str, tuple[str, int, Callable[[int], str]]] = {
     "aruba_aoss: SNMPv3 users and their groups": ("aruba_aoss", 3000, _aoss_v3_users),
     "aruba_aoss: trunks over many interfaces": ("aruba_aoss", 2500, _aoss_trunks),
     "aruba_aoss: trunk lines of one LAG": ("aruba_aoss", 2500, _aoss_trunk_lines_of_one_lag),
+    "arista_eos: a VLAN under router bgp, again and again": ("arista_eos", 4000, _eos_bgp_vlans),
+    "arista_eos: VRFs and then VLANs under router bgp": ("arista_eos", 4000, _eos_bgp_vrfs_then_vlans),
+    "arista_eos: Vxlan stanzas that set a UDP port": ("arista_eos", 1500, _eos_vxlan_stanzas_with_a_port),
+    "juniper_junos: the VNIs of one VLAN": ("juniper_junos", 4000, _junos_vnis),
+    "cisco_iosxe_cli: Tier-3 sections, each of its own": ("cisco_iosxe_cli", 10000, _iosxe_class_maps),
     "opnsense: laggs over many interfaces": ("opnsense", 3000, _opnsense_laggs),
     "mikrotik_routeros: pools over many networks": ("mikrotik_routeros", 1500, _routeros_pools),
 }
@@ -1147,6 +1255,11 @@ class TestParseFitsTheNumberOfItsStanzas:
             "aruba_aoss: SNMPv3 users and their groups": lambda t: len(t.snmp.v3_users),
             "aruba_aoss: trunks over many interfaces": lambda t: len(t.lags),
             "aruba_aoss: trunk lines of one LAG": lambda t: len(t.lags[0].members),
+            "arista_eos: a VLAN under router bgp, again and again": lambda t: len(t.vlans),
+            "arista_eos: VRFs and then VLANs under router bgp": lambda t: len(t.routing_instances),
+            "arista_eos: Vxlan stanzas that set a UDP port": lambda t: len(t.vxlan_vnis),
+            "juniper_junos: the VNIs of one VLAN": lambda t: len(t.vxlan_vnis),
+            "cisco_iosxe_cli: Tier-3 sections, each of its own": lambda t: len(t.dropped_tier3_sections),
             "opnsense: laggs over many interfaces": lambda t: len(t.lags),
             "mikrotik_routeros: pools over many networks": lambda t: len(t.dhcp_servers),
         }
@@ -1211,6 +1324,9 @@ class TestParseFitsTheNumberOfItsStanzas:
             _takes(lines * lines * 2e-9)
 
         assert not _grows_faster_than_its_input(squares_within_a_window, _routes, 1500, floor=0.02)
-        assert _grows_faster_than_its_input(
-            squares_within_a_window, _routes, 1500, floor=0.02, largest=6000,
+        # Asked up to three times, as the control above is: one stalled
+        # reading of the smaller text passes a slow reader.
+        assert any(
+            _grows_faster_than_its_input(squares_within_a_window, _routes, 1500, floor=0.02, largest=6000)
+            for _attempt in range(3)
         )
