@@ -302,17 +302,17 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
     def _add_unique(lst: list[str], name: str) -> None:
         _ports(lst).add(name)
 
-    # "Trunk all" sentinel detection: when an interface's
-    # ``trunk_allowed_vlans`` is the full 1-4094 (or 2-4094) range,
-    # this is the operator-form of "all VLANs allowed" — equivalent
-    # to Junos ``vlan members all`` / Arista ``switchport trunk
-    # allowed vlan all``.  Projecting that into VLAN-centric
-    # tagged_ports would synthesise 4094 phantom VLAN records, each
-    # of which renders out and reparses with a generated name (e.g.
-    # ``VLAN-N``), breaking round-trip stability and producing
-    # nonsensical 4000-line VLAN dumps on cross-vendor renders.  Skip
-    # projection on the trunk-all form; the renderer side detects
-    # this same shape and emits the appropriate "all" sentinel.
+    # Two lists are not expanded into a VLAN record per id: every id
+    # (1-4094: Junos ``vlan members all``, Arista ``switchport trunk
+    # allowed vlan all``) and every id but 1 (2-4094, common on an
+    # MLAG peer link).  Projecting either into VLAN-centric
+    # tagged_ports would synthesise some 4,094 phantom VLAN records,
+    # each of which renders out and reparses with a generated name
+    # (``VLAN-N``), breaking round-trip stability and producing
+    # 4000-line VLAN dumps on cross-vendor renders.  The trunk goes
+    # onto the VLANs already declared that its list holds instead.
+    # (The two are not the same list: 2-4094 leaves VLAN 1 out, and
+    # a renderer writes its word for "all" for the first only.)
     _TRUNK_ALL_RANGE_FULL = set(range(1, 4095))
     _TRUNK_ALL_RANGE_OPERATIONAL = set(range(2, 4095))
 

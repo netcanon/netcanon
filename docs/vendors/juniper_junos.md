@@ -190,14 +190,27 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
 
 ## Common gotchas
 
-- **A trunk's allowed VLANs are written as the source states
-  them.**  `vlan members all` is written only for a list of every
-  VLAN id.  A list that leaves ids out (`2-4094`,
-  `1-99,101-4094`) becomes names for the VLANs the config defines
-  and id ranges for the rest (`vlan members 101-4094`).  Release
-  0.7.7 and earlier wrote `all` for any list of 4,000 ids or more,
-  which put the VLANs the source left out back on the trunk: check
-  the `vlan members` line of any trunk translated that way.
+- **A trunk's allowed list is written as a list.**  `vlan members
+  all` is written only when the list is every VLAN id (1-4094).
+  Any other list is cut into runs of consecutive ids: a run made
+  only of VLANs this config defines is written by name; any other
+  run is written as one id range, which covers the defined VLANs
+  inside it (`1-99,101-4094` becomes `vlan members 1-99` and `vlan
+  members 101-4094`; `2-4094` becomes `vlan members 2-4094`).  The
+  output is the ELS form (`interface-mode`).  Release 0.7.7 and
+  earlier wrote `all` for any list of 4,000 ids or more, which put
+  the VLANs the source left out back on the trunk: check the `vlan
+  members` line of any trunk translated that way.  Not verified on
+  a device: that a switch commits a member range most of whose ids
+  have no VLAN — run `commit check` on the output before relying on
+  it.  Two exceptions, both older and open: a trunk that states no
+  list (every VLAN, on Cisco and Arista) and an AOS-CX `vlan trunk
+  allowed all` reach Junos as a trunk with **no** members.
+- **A VLAN named `all`, or named like another VLAN's number or
+  like a range (`50` for VLAN 100, `200-330`)** is written as
+  `VLAN-<id>`, with a `# review:` line saying so: in a member list
+  those names read as every VLAN, or as VLAN ids.  A VLAN named by
+  its own number keeps its name.
 - **A static route whose next hop is an interface**
   (`next-hop et-0/0/24.0`) follows that interface when a translation
   between two Junos configs renames it, and is removed with it when

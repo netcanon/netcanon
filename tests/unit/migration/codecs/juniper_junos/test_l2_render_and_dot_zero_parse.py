@@ -343,6 +343,10 @@ def _three_vlans() -> list[CanonicalVlan]:
         # for VLANs the output does not define.
         (list(range(1, 4000)), ["1-3999"]),
         (list(range(200, 400)), ["200-399"]),
+        # A run that BEGINS or ENDS with a VLAN the output defines, and
+        # holds one it does not, is a range all the same.
+        ([10, 11, 12], ["10-12"]),
+        ([998, 999], ["998-999"]),
     ],
 )
 def test_a_list_that_leaves_ids_out_is_written_as_ranges(
@@ -428,3 +432,130 @@ def test_an_access_vlan_the_output_does_not_define_is_its_id() -> None:
     assert "VLAN-77" not in out
     again = {i.name: i.access_vlan for i in parse_intent(out).interfaces}
     assert again["ge-0/0/2"] == 77
+
+
+# ---------------------------------------------------------------------------
+# A VLAN's name, where a member list would read it as something else
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["all", "50", "200-330"])
+def test_a_name_a_member_list_reads_otherwise_is_not_a_vlans_name(name: str) -> None:
+    """`all` is every VLAN, `50` an id and `200-330` a range of ids,
+    whatever VLAN has that for a name.  A trunk that allows the one
+    VLAN named `all` was a trunk of every VLAN."""
+    intent = CanonicalIntent(
+        vlans=[CanonicalVlan(id=5, name=name), CanonicalVlan(id=999, name="mgmt")],
+        interfaces=[
+            CanonicalInterface(name="ge-0/0/1", switchport_mode="trunk", trunk_allowed_vlans=[5]),
+            CanonicalInterface(name="ge-0/0/2", switchport_mode="access", access_vlan=5),
+        ],
+    )
+    out = render_intent(intent)
+    assert _members(out, "ge-0/0/1") == ["VLAN-5"]
+    assert _members(out, "ge-0/0/2") == ["VLAN-5"]
+    assert "set vlans VLAN-5 vlan-id 5" in out.splitlines()
+    assert f"set vlans {name} vlan-id 5" not in out
+    # The output says the VLAN's name was changed, and why.
+    assert f"# review: VLAN 5 is named {name!r} in the source" in out
+    again = parse_intent(out)
+    assert next(i for i in again.interfaces if i.name == "ge-0/0/1").trunk_allowed_vlans == [5]
+    assert next(i for i in again.interfaces if i.name == "ge-0/0/2").access_vlan == 5
+
+
+def test_an_id_in_a_list_is_not_the_vlan_named_by_that_number() -> None:
+    """VLAN 100 is named `50` and the trunk leaves VLAN 100 out.  Its
+    list holds the id 50, which has no VLAN; written as the member
+    `50` beside a VLAN of that name, it was VLAN 100 on the trunk."""
+    allowed = [50, *range(200, 331)]
+    intent = CanonicalIntent(
+        vlans=[CanonicalVlan(id=100, name="50")],
+        interfaces=[CanonicalInterface(
+            name="ge-0/0/1", switchport_mode="trunk", trunk_allowed_vlans=allowed,
+        )],
+    )
+    out = render_intent(intent)
+    assert _members(out, "ge-0/0/1") == ["50", "200-330"]
+    assert "set vlans VLAN-100 vlan-id 100" in out.splitlines()
+    again = next(i for i in parse_intent(out).interfaces if i.name == "ge-0/0/1")
+    assert again.trunk_allowed_vlans == allowed
+    assert 100 not in again.trunk_allowed_vlans
+
+
+def test_a_name_of_any_other_kind_is_kept() -> None:
+    intent = CanonicalIntent(
+        vlans=[
+            CanonicalVlan(id=5, name="ALL"), CanonicalVlan(id=6, name="v50"),
+            CanonicalVlan(id=7, name="50-a"), CanonicalVlan(id=8, name="-50"),
+            # A VLAN named by its own number, as NX-OS operators do:
+            # the member `409` is VLAN 409 whichever way it is read.
+            CanonicalVlan(id=409, name="409"),
+        ],
+        interfaces=[CanonicalInterface(
+            name="ge-0/0/1", switchport_mode="trunk", trunk_allowed_vlans=[5, 6, 7, 8, 409],
+        )],
+    )
+    out = render_intent(intent)
+    assert _members(out, "ge-0/0/1") == ["ALL", "v50", "50-a", "-50", "409"]
+    assert "set vlans 409 vlan-id 409" in out.splitlines()
+    assert "# review: VLAN" not in out
+
+
+def test_a_list_as_long_as_every_id_is_not_all() -> None:
+    """4,094 entries, and VLAN 4094 is not among them."""
+    intent = CanonicalIntent(
+        interfaces=[CanonicalInterface(
+            name="ge-0/0/1", switchport_mode="trunk",
+            trunk_allowed_vlans=[*range(1, 4094), 1],
+        )],
+    )
+    assert _members(render_intent(intent), "ge-0/0/1") == ["1-4093", "1"]
+
+
+def test_an_id_that_is_no_vlan_id_is_not_written() -> None:
+    intent = CanonicalIntent(
+        interfaces=[
+            CanonicalInterface(
+                name="ge-0/0/1", switchport_mode="trunk",
+                trunk_allowed_vlans=[0, *range(1, 4095), 4095],
+            ),
+            CanonicalInterface(
+                name="ge-0/0/2", switchport_mode="trunk", trunk_allowed_vlans=[0, 10, 4095],
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    assert _members(out, "ge-0/0/1") == ["all"]
+    assert _members(out, "ge-0/0/2") == ["10"]
+
+
+@pytest.mark.parametrize("count,by_name", [(128, True), (129, False)])
+def test_a_long_run_of_vlans_the_output_defines_is_one_range(count: int, by_name: bool) -> None:
+    """A config that defines every VLAN would otherwise have a line a
+    VLAN on every trunk.  A range names the same VLANs."""
+    ids = list(range(100, 100 + count))
+    intent = CanonicalIntent(
+        vlans=[CanonicalVlan(id=vid, name=f"v{vid}") for vid in ids],
+        interfaces=[CanonicalInterface(
+            name="ge-0/0/1", switchport_mode="trunk", trunk_allowed_vlans=ids,
+        )],
+    )
+    out = render_intent(intent)
+    expected = [f"v{vid}" for vid in ids] if by_name else [f"100-{99 + count}"]
+    assert _members(out, "ge-0/0/1") == expected
+    again = next(i for i in parse_intent(out).interfaces if i.name == "ge-0/0/1")
+    assert again.trunk_allowed_vlans == ids
+
+
+def test_a_range_that_begins_at_the_vlans_own_id_is_still_a_range() -> None:
+    """VLAN 200 named `200-330`: as a member that is 131 ids."""
+    intent = CanonicalIntent(
+        vlans=[CanonicalVlan(id=200, name="200-330")],
+        interfaces=[CanonicalInterface(
+            name="ge-0/0/1", switchport_mode="trunk", trunk_allowed_vlans=[200],
+        )],
+    )
+    out = render_intent(intent)
+    assert _members(out, "ge-0/0/1") == ["VLAN-200"]
+    again = next(i for i in parse_intent(out).interfaces if i.name == "ge-0/0/1")
+    assert again.trunk_allowed_vlans == [200]

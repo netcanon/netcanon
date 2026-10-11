@@ -85,6 +85,7 @@ from ..._usm_keys import (
     user_usm_kind,
 )
 from ...canonical.intent import CanonicalIntent
+from ...canonical.transforms import TRUNK_ALLOWED_SPECIFICITY_BOUND
 from ..base import RenderError
 
 logger = logging.getLogger(__name__)
@@ -314,14 +315,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 
     # --- L2 / LAG / SVI lookups (Phase 4 rank-4) ---
     #
-    # Junos references VLANs by NAME (not VID) inside
-    # ``family ethernet-switching vlan members``; build a
-    # vid -> vlan-key lookup once.  ``vlan_key`` mirrors the
-    # convention used a few lines below in the ``set vlans`` block:
-    # use ``vlan.name`` when populated, fall back to ``VLAN-<id>``.
+    # A member of ``family ethernet-switching vlan members`` is a
+    # VLAN's name, an id or a range of ids.  The VLANs this output
+    # defines are written by name; build a vid -> name lookup once,
+    # from the one function the ``set vlans`` block below uses too.
     vlan_name_by_id: dict[int, str] = {}
     for _v in tree.vlans:
-        vlan_name_by_id[_v.id] = _v.name or f"VLAN-{_v.id}"
+        vlan_name_by_id[_v.id] = _vlan_key(_v)
 
     # LAG mode lookup so we know whether to emit ``lacp active /
     # passive`` or static (no LACP).  LAG name is the canonical-side
@@ -649,7 +649,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         #
         # Junos models L2 ports as ``unit 0 family ethernet-
         # switching`` with ``interface-mode access|trunk`` and
-        # ``vlan members <NAME>`` (NAME, not VID).
+        # ``vlan members`` (a name, an id or a range of ids).
         # ``trunk_native_vlan`` surfaces as ``native-vlan-id <vid>``
         # at the iface level.  Emitted after IP addresses so the
         # L2 lines follow the L3 lines in deterministic order.
@@ -685,7 +685,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # on the trunk.  Junos takes ids and ranges of ids as
             # members beside names, so such a list is written as
             # it stands.
-            allowed = iface.trunk_allowed_vlans
+            #
+            # 0 and 4095 are not VLAN ids, and no parser here makes
+            # them; a tree built by hand could.
+            allowed = [
+                vid for vid in iface.trunk_allowed_vlans
+                if vid in _EVERY_VLAN_ID
+            ]
             if set(allowed) == _EVERY_VLAN_ID:
                 out.append(
                     f"set interfaces {name} unit 0 family "
@@ -694,9 +700,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             else:
                 for first, last in _runs_of_ids(allowed):
                     run = range(first, last + 1)
-                    if all(vid in vlan_name_by_id for vid in run):
+                    if len(run) <= _LONGEST_RUN_BY_NAME and all(
+                        vid in vlan_name_by_id for vid in run
+                    ):
                         # VLANs the output defines: by name, as
-                        # Junos prints them.
+                        # Junos prints them.  (A longer run of
+                        # them is the range below: it names the
+                        # same VLANs in one line, where a config
+                        # that defines every VLAN would have
+                        # thousands of lines on every trunk.)
                         members = [
                             _quote_if_needed(vlan_name_by_id[vid])
                             for vid in run
@@ -860,7 +872,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             except ValueError:
                 pass
     for vlan in tree.vlans:
-        vlan_key = vlan.name or f"VLAN-{vlan.id}"
+        vlan_key = _vlan_key(vlan)
+        if vlan.name and vlan_key != vlan.name:
+            out.append(
+                f"# review: VLAN {vlan.id} is named {vlan.name!r} in the "
+                f"source; a Junos member list reads that as "
+                f"{'every VLAN' if vlan.name == 'all' else 'VLAN ids'}, "
+                f"so it is {vlan_key} here"
+            )
         out.append(
             f"set vlans {_quote_if_needed(vlan_key)} vlan-id {vlan.id}"
         )
@@ -1427,6 +1446,39 @@ def _emit_vrrp_groups_for_address(
 
 #: What `vlan members all` stands for: every VLAN id there is.
 _EVERY_VLAN_ID = frozenset(range(1, 4095))
+
+#: The longest run of consecutive VLANs a trunk names one by one.  It
+#: is the width up to which a list is read as a specific statement
+#: (and its VLANs made), so every such list is written as before.
+_LONGEST_RUN_BY_NAME = TRUNK_ALLOWED_SPECIFICITY_BOUND
+
+
+def _reads_as_other_ids(name: str, vid: int) -> bool:
+    """``50`` and ``200-330`` as the name of some other VLAN: what
+    a member list takes for an id and for a range of ids.  A VLAN
+    named by its own number (NX-OS ``vlan 409`` / ``name 409``) is
+    not such a name: the member ``409`` is that VLAN either way.
+    (``str.isdigit``, as the parser reads them, and no pattern.)"""
+    low, dash, high = name.partition("-")
+    if not low.isdigit() or (dash and not high.isdigit()):
+        return False
+    return bool(dash) or int(low) != vid
+
+
+def _vlan_key(vlan: Any) -> str:
+    """The name the output gives a VLAN: its own, or ``VLAN-<id>``.
+
+    ``VLAN-<id>`` for a VLAN with no name, and for a name a member
+    list would read as something else.  ``all`` there is every
+    VLAN (and Junos does not take it as a VLAN's name); another
+    VLAN's number, or a range of numbers, is an id or a range of
+    ids.  A trunk that allows the one VLAN named ``all`` was
+    written as a trunk of every VLAN.
+    """
+    name = vlan.name
+    if not name or name == "all" or _reads_as_other_ids(name, vlan.id):
+        return f"VLAN-{vlan.id}"
+    return name
 
 
 def _runs_of_ids(ids: list[int]) -> list[tuple[int, int]]:

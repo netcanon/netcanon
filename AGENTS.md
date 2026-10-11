@@ -706,15 +706,28 @@ tests use these exclusively — never CSS classes or element structure.  See
   with nothing to report.  The shared projection read `2-4094` as
   "all" as well and stamped the trunk onto a declared VLAN 1.  A
   shorthand is right for the exact set it names and for nothing near
-  it: "long enough" is not "all", and the ids a nearly-full list
-  leaves out are the ones the operator wrote the list for.  Where the
-  target can state the list as it stands (Junos takes ids and ranges
-  as members), write that.  The cross-mesh audit could not see this:
-  no committed capture has a trunk that leaves a VLAN out.  Guarded by
+  it: "long enough" is not "all", "all this config declares" is not
+  "all", and the ids a nearly-full list leaves out are the ones the
+  operator wrote the list for.  Where the target can state the list
+  as it stands (Junos takes ids and ranges as members), write that.
+  The audit had the evidence and it was explained away: the only
+  committed trunks that leave a VLAN out are two Arista `2-4094`
+  peer links, and the VLAN 1 they gained on Junos was pinned by a
+  test as "a documented one-VID asymmetry".  Guarded by
   `tests/unit/migration/test_a_vlan_left_out_stays_out.py`, which
   renders such trunks onto every public codec and reads the OUTPUT
-  back with the target's own parser — both halves: the VLAN left out
-  is on no port, and the VLANs the list holds are still there.
+  three ways — the target's parser for the VLAN left out and for the
+  declared VLANs the list holds; the whole list as a set where the
+  target's parser reads one (the declared VLANs are a handful of
+  ids, and a renderer that lost thousands of the others passed the
+  first reading alone); and the text for the word itself, since a
+  parser may read its own word for "all" as an empty list.  **The
+  same class is still open one step on:** the tree has ONE value, an
+  empty list, for "none", for "nothing stated" and for AOS-CX's own
+  `all`, so a trunk that allows no VLAN is written as every VLAN on
+  AOS-CX, IOS-XE, EOS and NX-OS.  That module pins which targets
+  (`WRITES_NOTHING_AS_EVERYTHING`); the change that mends it empties
+  the pin.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

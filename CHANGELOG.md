@@ -80,25 +80,33 @@ timestamp if your timezone matters for an audit.
   vlan 1-99,101-4094` came out as `all`, with VLAN 100 back on the
   trunk, and `2-4094` with VLAN 1 — in a job that said `completed`
   and reported nothing.  `all` is now written only for a list of
-  every id (`1-4094`).  Any other list is written as it stands: the
-  VLANs the config defines by name, as before, and the rest as ids
-  and ranges of ids (`vlan members 1-99`, `vlan members 101-4094`),
-  which Junos takes as members beside names and this parser already
-  read.  A list under 4,000 ids was a line per id, each a name
-  `VLAN-<id>` for a VLAN the output does not define (`1-3999` was
-  3,999 lines, all but the declared VLANs such names); that is one
-  range now, and an access VLAN with no VLAN record is its id.  The
-  shared projection read `2-4094` as "all VLANs" and stamped the
-  trunk onto every declared VLAN, VLAN 1 included, so a
-  VLAN-centric target (AOS-S) tagged the port in VLAN 1; it stamps
-  the VLANs the list holds.  **If a trunk with a wide list that
-  leaves VLANs out was translated to Junos with release 0.7.7 or
-  earlier, check its `vlan members` line: it says `all`, and the
-  VLANs the source left out are on it.**  Two committed captures
-  change (an Arista MLAG peer link allowing `2-4094`: `vlan members
-  2-4094` now); no other capture has such a trunk, which is why the
-  cross-mesh audit never saw this.  A test now renders such trunks
-  onto every codec and reads the output back.
+  every id (`1-4094`).  Any other list is cut into runs of
+  consecutive ids: a run made only of VLANs the output defines is
+  written by name, as before; any other run is written as one range
+  of ids, which covers the defined VLANs inside it (`vlan members
+  1-99`, `vlan members 101-4094`).  Junos documents ids and ranges
+  as members beside names, and this parser already read them.  A
+  list of 129 to 3,999 ids was a line per id, each a name
+  `VLAN-<id>` for a VLAN the output does not define (`1-3999`:
+  3,999 lines); that is one range now.  A list of 128 ids or fewer
+  is unchanged: its VLANs are made, and named.  A VLAN whose own
+  name is `all`, another VLAN's number or a range of numbers is
+  written as `VLAN-<id>` with a `# review:` line: a member list
+  reads those names as every VLAN, or as ids.  The shared projection read
+  `2-4094` as "all VLANs" and stamped the trunk onto every declared
+  VLAN, VLAN 1 included, so AOS-S tagged the port in VLAN 1; it
+  stamps the VLANs the list holds.  **If a trunk with a wide list
+  that leaves VLANs out was translated to Junos with release 0.7.7
+  or earlier, check its `vlan members` line: it says `all`, and the
+  VLANs the source left out are on it.**  Not verified on a device:
+  that a switch commits a member range most of whose ids have no
+  VLAN.  Juniper's pages give the grammar, and an example of a
+  range with no VLAN defined; none says so in words.  Two committed
+  captures change (an Arista MLAG peer link allowing `2-4094`:
+  `vlan members 2-4094` now).  They are the only committed trunks
+  that leave a VLAN out, and the VLAN 1 they gained had been written
+  down in a test as an asymmetry to accept.  A test now renders such
+  trunks onto every codec and reads the output back three ways.
 
 - **An AOS-S LAG is one name, not two.**  The device writes a LAG
   `trk1` where it is defined and `Trk1` where a VLAN lists it or an
@@ -678,6 +686,19 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **A trunk that allows no VLAN comes out allowing every VLAN on four
+  targets.**  `switchport trunk allowed vlan none`, a list emptied by
+  `remove` or `except`, a Junos trunk with no members, and a trunk
+  whose only VLANs were dropped in the rename modal are all one value
+  in the canonical tree — an empty list — and so is a trunk that
+  states no list, and AOS-CX's own `vlan trunk allowed all`.  AOS-CX
+  writes the empty list as `vlan trunk allowed all`; IOS-XE, EOS and
+  NX-OS write a trunk with no allowed line, which on those platforms
+  is every VLAN.  The job says `completed`.  Older than this release;
+  found while mending the Junos `all` above, pinned by a test, and
+  not mended yet.  The other direction is in the same value: a Cisco
+  trunk that states no list, or an AOS-CX `all`, is a Junos trunk
+  with no members.  Check any trunk whose list is empty or absent.
 - **Selecting a profile in the rename modal still does not change
   auto-translated names.**  The translator derives a target name from the
   shape of the source name (Cisco `GigabitEthernet1/0/1` becomes AOS-S
