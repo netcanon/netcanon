@@ -485,6 +485,13 @@ class ProfileLoadError(Exception):
 #: the second prefix (between ``-`` and the end number) is optional
 #: and when present must match the first prefix.  Also accepts
 #: "GigabitEthernet1/0/1-24" (prefix on start only).
+#:
+#: Two lazy ``.*?`` round a ``\d+``: on a long run of digits with no
+#: dash this takes time that grows with the square of its length.  It is
+#: matched against one ``range:`` value of a profile file the server
+#: loads, and must never be handed text from a request.
+#: ``tests/unit/test_untrusted_text_cost.py`` excuses it by name for that
+#: reason.
 _RANGE_RE = re.compile(
     r"^(?P<prefix>.*?)(?P<start>\d+)-(?P<prefix2>.*?)(?P<end>\d+)$"
 )

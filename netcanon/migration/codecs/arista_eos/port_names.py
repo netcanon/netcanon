@@ -159,7 +159,11 @@ def format_port_identity(identity: PortIdentity) -> str | None:
             # like ``FortyGigabitEthernet1/1/1`` — pull the trailing
             # digit group as the parent port.
             parent = identity.breakout_parent
-            m = re.search(r"(\d+)$", parent)
+            # ``(?<!\d)``: the number begins where the digits begin.
+            # Without it a search that fails (a long run of digits
+            # and then a letter) starts again inside the run at every
+            # digit, and a port name is whatever the config held.
+            m = re.search(r"(?<!\d)(\d+)$", parent)
             if m:
                 parent_port = int(m.group(1))
         if parent_port is None:

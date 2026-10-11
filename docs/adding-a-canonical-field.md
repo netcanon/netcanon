@@ -306,8 +306,9 @@ extraction.
 If the new field references a port or interface by name (as
 `static_routes[].interface` and `vxlan_vnis[].source_interface` do), it
 has two more places to go in the same change, both in
-`netcanon/migration/canonical/port_names.py`: the rename pass in
-`translate_port_names`, so the name is translated with the rest, and
+`netcanon/migration/canonical/port_names.py`: the rename pass
+(`rewrite_port_names`, which `translate_port_names` and the AOS-S
+parser both call), so the name is translated with the rest, and
 `collect_port_names`, the list of port names a tree holds.
 Model-to-model port mapping checks a finished translation over that
 list — a place missing from it is a name the check never looks at,

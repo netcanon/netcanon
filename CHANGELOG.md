@@ -26,7 +26,105 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Security
+
+- **Reading a pasted config could take time that grew with the square of
+  it.**  Five shapes, each in shipped code.  Patterns that began
+  `^\s` and were applied to the whole text walked, from every line start,
+  to the end of the run of blank lines they were in: a 64 KB body of lines
+  of spaces held `/detect` for about a minute.  A lazy value in front of
+  trailing white space re-read the line for every character it took: a
+  run of spaces inside a Dell OS10 route line, or after an IOS-XR `ntp`
+  line.  A search for a trailing number, or for a RouterOS key, started
+  again inside the run it had just crossed.  And RouterOS line
+  continuations were joined by adding to one string: parsing 3 MB of
+  lines that each end in a backslash took two and a half minutes.  And
+  a handler that runs once per line looked through everything the
+  earlier lines had made — the routing instance of a `vrf` line, the
+  static routes so far, every interface for each `trunk` line — so a
+  config with nothing odd in it cost the square of the number of its
+  stanzas: six thousand RouterOS DHCP networks and their pools took 37
+  seconds, sixteen thousand Junos static routes 7.  A pattern at
+  work does not let the server's other threads run, so each delayed every
+  other request.  All are mended — in the `probe()` of nine codecs, in
+  the parsers and renderers, in the Tier-3 detection every `parse` runs,
+  in the switchport-to-VLAN projection the switch codecs share, and in
+  the probe and prompt patterns of the shipped device definitions.
+  Detection, every probe and every parsed tree are unchanged on every
+  config in the repository and the development corpora, and every
+  committed capture replays identically through the plan endpoints.  What
+  changed in meaning is the defect or a text no device prints: a pattern
+  for an indented keyword no longer matches it at the left margin after a
+  blank line; a device-definition probe no longer takes a value that is
+  only white space; the RouterOS export banner has to be on one line; a
+  prompt pattern's user or host part cannot contain the separator after
+  it.  A new test searches for the next one: it builds texts from each
+  regex the product holds and times every codec's `probe` and `parse` on
+  a capture with a run put into it (`tests/unit/test_untrusted_text_cost.py`).
+  The last shape has a search of its own, run by hand
+  (`tools/stanza_cost_search.py`), and a pinned text for each handler it
+  found.  It is a search, not a proof, and two things are known and not
+  mended: a list of one record that a line adds to after reading it
+  (32,000 addresses on one Junos unit take 8 seconds), and what a config
+  expands to (a thousand trunks that each allow VLANs 2-4000 are 86 KB
+  and over 3 GB) — see SECURITY.md.  Put a request timeout and a memory
+  limit in front of a server that takes text from people it does not
+  trust.
+
 ### Fixed
+
+- **An AOS-S LAG is one name, not two.**  The device writes a LAG
+  `trk1` where it is defined and `Trk1` where a VLAN lists it or an
+  `interface Trk1` stanza configures it, and both spellings were kept.
+  Every `/plan` request runs the port translator (an absent
+  `port_rename_map` is read as `{}`), so every job for such a config
+  carried `multiple source ports map to 'Trk1' (sources: Trk1, trk1)
+  ... their VLAN membership will be merged`, with nothing merged; onto
+  any other vendor `port_renames` had a key for each spelling, which
+  the rename modal drew as two rows aimed at one target, counted as a
+  collision, and would not apply until one was dropped; and an entry
+  of a rename map for one spelling left the other where it was — a
+  LAG no VLAN listed, or a VLAN listing a LAG nothing defined, in a
+  job that said nothing.  The AOS-S parser now writes a LAG one way,
+  `trk<n>`, wherever it reads one — whatever letter case a line has
+  it in, and whether or not its `trunk` line is in the text — so there
+  is one name: one key, one row, and a drop or a new name takes the
+  whole LAG.  The text an AOS-S config comes back as is unchanged
+  (`trunk 51-52 trk1 lacp`, `tagged Trk1`, `interface Trk1`): the
+  renderer writes each form where the device does.  A spelling no
+  device prints (`tagged TRK1`) comes back in the device's form.  A
+  second `interface` stanza for an interface goes on with the first,
+  and a second `trunk` line for a LAG adds its ports to the first:
+  one record each, as the device reads them, with an address the
+  second stanza states again kept once.  A next hop that names the
+  LAG (`ipv6 route <prefix> Trk1`) is read in the one spelling too,
+  so the route goes where the LAG goes.
+- **A rename-map key in another letter case reaches its port** where
+  the source platform's names have no case: `Trk1`, `trk1` and `TRK1`
+  are all the LAG the config calls `trk1`.  It was "does not exist in
+  the parsed config; entry ignored".  Only where the config writes
+  the name one way and that spelling has no entry of its own; of two
+  keys that are spellings of one name the first is taken, and the
+  other is reported as another spelling unless the two entries agree.
+  The same with both devices declared: the key replaces the pairing's
+  entry for that port, and the plan counts the port as decided.  On
+  FortiOS and RouterOS, where an operator chooses interface names, a
+  key is still the name exactly, and `DMZ` and `dmz` are still two
+  interfaces.
+- **One port name written in two letter cases counts as one source**
+  where the source platform's names have no case (a hardware port
+  typed `a1` beside the device's `A1`), and if the two spellings do
+  not end in one place the job now says so: `... are one name on
+  aruba_aoss, written in more than one letter case, and do not end
+  together`.
+- **Two final names that differ only in letter case are one port** on
+  a target whose names have no case, and the source ports sent there
+  are reported, all of them (`multiple source ports map to 'Trk1'
+  (also written 'trk1': one port on aruba_aoss)`), and written as
+  one stanza.  They were grouped by the exact
+  string: an entry that named the LAG as the config spells it
+  (`{"5": "trk1"}`), where the translator writes it `Trk1`, put a
+  port on the LAG in a job that said nothing.
 
 - **Target profiles that named ports the device does not have.**  A port
   id picked from a target profile in the rename modal is written verbatim

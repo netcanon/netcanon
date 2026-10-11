@@ -57,7 +57,7 @@ AOS-S port name lands in `unknown`:
 | `13` | `unknown` |
 | `A1` | `unknown` |
 | `Vlan1` | `unknown` (AOS-CX wants `vlan 1`, space-separated) |
-| `Trk1` | `unknown` (AOS-CX wants `lag 1`) |
+| `trk1` (the parsed name of the LAG a device prints `Trk1`) | `unknown` (AOS-CX wants `lag 1`) |
 
 From that single fact:
 
@@ -79,7 +79,7 @@ mesh path measures a raw parse → render. Routing the migration through the
 port-rename path instead — `run_plan_with_overrides`, which engages
 `translate_port_names` — classifies the name with the **source** codec and
 formats it with the **target** codec, rewriting `1/25` → `1/1/25` and
-`Trk1` → `lag 1`. Measured on the kitchen-sink cell, that restores real
+`trk1` → `lag 1`. Measured on the kitchen-sink cell, that restores real
 `vlan access 10` / `vlan trunk allowed 10,20,30,40` lines and brings back 11 of
 31 member tokens plus correct `ethernetCsmacd` / `ieee8023adLag` types. It
 converts a total drop into a partial one. It does **not** close it: `Vlan<N>`-

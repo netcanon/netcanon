@@ -566,7 +566,7 @@ class ArubaAOSSCodec(CodecBase):
             raw_prefix, re.MULTILINE,
         ))
         has_routing_keyword = bool(re.search(
-            r"^\s+routing\s*$", raw_prefix, re.MULTILINE,
+            r"^[^\S\n]+routing\s*$", raw_prefix, re.MULTILINE,
         ))
         has_aos_comment = bool(re.search(
             r"^;", raw_prefix, re.MULTILINE,

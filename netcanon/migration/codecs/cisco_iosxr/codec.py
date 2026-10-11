@@ -636,7 +636,7 @@ class CiscoIOSXRCodec(CodecBase):
             raw_prefix, re.IGNORECASE | re.MULTILINE,
         ):
             hits += 2  # 4-segment physical port — strong XR signal
-        if re.search(r"^\s+ipv4\s+address\s+\d", raw_prefix, re.MULTILINE):
+        if re.search(r"^[^\S\n]+ipv4\s+address\s+\d", raw_prefix, re.MULTILINE):
             hits += 1
         if re.search(
             r"^interface\s+MgmtEth\d+/(?:RP|RSP)\d+/CPU\d+/\d+",

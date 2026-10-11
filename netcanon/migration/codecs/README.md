@@ -181,6 +181,11 @@ class MyVendorCodec(CodecBase):
     # is the system's and is lower-case (Junos, VyOS, OPNsense), since
     # another case is then a misspelling of the same port.
     # Model-to-model port mapping compares final names by this rule.
+    # The port translator reads it on every translation as well.  The
+    # SOURCE's: to count source names when it reports two of them on
+    # one target, and to let a rename-map key in another letter case
+    # reach its port.  The TARGET's: to decide whether two final names
+    # are one place.
     # There is no safe default: False where case tells two interfaces
     # apart merges an operator's interface into a port in a job that
     # reports success; True where it does not lets a misspelling pass
@@ -283,7 +288,23 @@ for the reference pattern).
    toward round-trip stability (`parse(render(parse(raw))) == parse(raw)`
    at the canonical level).
 4. **Write `probe()`** using 2-3 discriminating structural markers
-   unique to your vendor's wire format.
+   unique to your vendor's wire format.  A probe — and everything
+   `parse` does — reads whatever was pasted, so its cost has to fit the
+   text's length.  Five shapes have each shipped and been mended (the
+   Hard Rule in `AGENTS.md` has them): under `re.MULTILINE` write
+   `^[^\S\n]+keyword`, never `^\s+keyword` (`\s` crosses newlines); a
+   value before trailing white space is `(\S(?:.*\S)?)\s*$`, never a
+   lazy `(\S.*?)\s*$`; a trailing number is `(?<!\d)(\d+)$`; lines
+   gathered into one are joined once, not added to a string line by
+   line; and a handler that needs a record an earlier line made finds
+   it by key (`GrowingIndex`, below), never by reading the list —
+   `next(...)`, `any(...)`, `name in a_list` — once per line.
+   `tests/unit/test_untrusted_text_cost.py` builds texts from
+   every pattern of the codec and times its `probe` and `parse`, and
+   needs a small capture under `tests/fixtures/` that detection gives
+   to the new codec.  Then run `python tools/stanza_cost_search.py
+   --codec <name>`: it writes every line and block of the codec's
+   captures many times over, which no test does.
 5. **Fill in `capabilities._CAPS`** listing every canonical xpath your
    parse/render actually handles (not aspirational — just what works).
 6. **Add real fixtures** under `tests/fixtures/real/<vendor>/` with
@@ -428,6 +449,27 @@ the policy locally:
   cross-vendor list-order parity in `vlan.tagged_ports` /
   `vlan.untagged_ports`.  Wave 7c (commit `87b2248`) added this as
   the systemic fix for cross-vendor lexical-order drift.
+
+* **`netcanon/migration/canonical/port_names.py::rewrite_port_names`**
+  — the port-name sweep: every place a canonical tree keeps a port
+  name, written through a resolver.  The translator uses it, and so
+  does a parser that finds one port under two names (AOS-S, whose
+  device writes a LAG `trk1` and `Trk1`): a codec that has to rename
+  a port everywhere calls this rather than walking the tree itself,
+  so that it cannot be a field short of the translator.  Beside it,
+  `key_by_the_configs_spelling` is the one rule for a rename-map key
+  in another letter case; the translator and `run_plan_with_models`
+  both apply it.
+
+* **`netcanon/migration/codecs/_helpers.py::GrowingIndex`** — find a
+  record, by key, in a list that grows while a config is parsed.  A
+  handler runs once per line; one that reads through what the earlier
+  lines made (`next(r for r in intent.routing_instances if r.name ==
+  name)`) costs the square of the lines.  `GrowingIndex(lambda:
+  intent.routing_instances, lambda ri: ri.name).get(name)` reads each
+  record once, whoever appended it, and answers with the first of a key
+  (or the last, `last=True`).  Used by the Arista, AOS-S and Junos
+  parsers; make one per parse and hand it to the handlers that need it.
 
 * **LAG-name helpers (location note)** — two LAG-name helpers exist
   but are NOT shared cross-codec utilities and do NOT live in

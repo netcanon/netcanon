@@ -232,7 +232,7 @@ The mechanism is declared: `cisco_iosxr` marks
 `/interfaces/interface/config/type` lossy because "CLI parser infers interface
 type from the name prefix (GigabitEthernet → ethernetCsmacd, Loopback →
 softwareLoopback, Bundle-Ether → ieee8023adLag, MgmtEth → ethernetCsmacd…)".
-AOS-S port names are bare ordinals — `1/25`, `23`, `A1`, `Trk1` — which match
+AOS-S port names are bare ordinals — `1/25`, `23`, `A1`, `trk1` — which match
 none of those prefixes, so the re-parse has nothing to infer from and every
 port lands on `other`.
 

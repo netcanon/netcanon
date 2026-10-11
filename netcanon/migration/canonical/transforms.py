@@ -64,6 +64,7 @@ Internal helper:
 from __future__ import annotations
 
 import re
+from collections import deque
 
 from .intent import CanonicalIntent, CanonicalInterface, CanonicalVlan
 
@@ -98,6 +99,51 @@ def _natural_port_sort_key(name: str) -> tuple:
         else:
             out.append(int(p))         # digit chunk → int for numeric ordering
     return tuple(out)
+
+
+class _PortList:
+    """A port list while ports are being stamped onto it.
+
+    Says whether a name is in the list, appends one that is not, and
+    takes the first entry of a name out -- what ``name in lst``,
+    ``lst.append`` and ``lst.remove`` do -- without reading the list
+    for any of them.  An entry taken out is struck and leaves the list
+    when :meth:`settle` is called; until then the list still holds it.
+    The order of what remains is the order ``remove`` would have left,
+    which matters to the stable sort that follows: two names can sort
+    alike (``Gi1`` and ``Gi01``) and keep the order they were in.
+    """
+
+    def __init__(self, ports: list[str]) -> None:
+        self._ports = ports
+        # name -> where its entries are that have not been struck,
+        # oldest first.
+        self._at: dict[str, deque[int]] = {}
+        self._struck: set[int] = set()
+        for index, name in enumerate(ports):
+            self._at.setdefault(name, deque()).append(index)
+
+    def add(self, name: str) -> None:
+        """Append *name* unless an entry for it is in the list."""
+        at = self._at.setdefault(name, deque())
+        if not at:
+            at.append(len(self._ports))
+            self._ports.append(name)
+
+    def remove_first(self, name: str) -> None:
+        """Strike the first entry of *name*, if there is one."""
+        at = self._at.get(name)
+        if at:
+            self._struck.add(at.popleft())
+
+    def settle(self) -> None:
+        """Take the struck entries out of the list, in place."""
+        if self._struck:
+            struck = self._struck
+            self._ports[:] = [
+                name for index, name in enumerate(self._ports) if index not in struck
+            ]
+            self._struck = set()
 
 
 def access_and_native_vlan_ids(intent: CanonicalIntent) -> set[int]:
@@ -237,9 +283,20 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
             by_id[vid] = v
         return v
 
+    # One reader per port list that is stamped, so that asking whether
+    # a port is already in a list, and taking one out of it, do not
+    # read the list: with a scan for each, a config of many trunks cost
+    # the square of its ports.
+    readers: dict[int, _PortList] = {}
+
+    def _ports(lst: list[str]) -> _PortList:
+        reader = readers.get(id(lst))
+        if reader is None:
+            reader = readers[id(lst)] = _PortList(lst)
+        return reader
+
     def _add_unique(lst: list[str], name: str) -> None:
-        if name not in lst:
-            lst.append(name)
+        _ports(lst).add(name)
 
     # "Trunk all" sentinel detection: when an interface's
     # ``trunk_allowed_vlans`` is the full 1-4094 (or 2-4094) range,
@@ -321,8 +378,7 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
                 _add_unique(vlan.untagged_ports, iface.name)
                 # Native VLAN rides the trunk untagged; purge any duplicate
                 # in tagged_ports that came from trunk_allowed_vlans.
-                if iface.name in vlan.tagged_ports:
-                    vlan.tagged_ports.remove(iface.name)
+                _ports(vlan.tagged_ports).remove_first(iface.name)
         # Any other mode ("dynamic", etc.) is left alone — we don't have
         # enough signal to decide membership.
 
@@ -337,6 +393,8 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
     # operator-natural ordering regardless of which order the
     # source codec materialised its interface records.  Idempotent —
     # sorting twice is the same as once.
+    for reader in readers.values():
+        reader.settle()
     for vlan in intent.vlans:
         vlan.tagged_ports.sort(key=_natural_port_sort_key)
         vlan.untagged_ports.sort(key=_natural_port_sort_key)

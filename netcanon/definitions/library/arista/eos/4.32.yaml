@@ -54,7 +54,7 @@ probe:
     # "Arista DCS-7050SX-64-F" -> "DCS-7050SX-64-F".  Covers DCS / CCS /
     # vEOS variants; leading whitespace tolerated for outputs that prefix
     # with banners.
-    detected_model: "^\\s*Arista\\s+(\\S+)"
+    detected_model: "^[^\\S\\n]*Arista\\s+(\\S+)"
     # Chassis serial — useful for asset audits.  Arista's label is
     # "Serial number:" (lowercase 'n', no hyphen).
     detected_serial: "Serial number:\\s+(\\S+)"

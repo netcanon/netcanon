@@ -18,10 +18,10 @@
 # READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: there the
 # interface inventory was fully preserved and every interface loss stood on
 # its own measurement.  Here the inventory does not shrink either — it GROWS,
-# 85 source records to 88, with ZERO source names missing.  The three extra
-# records are phantom LAG stanzas.  Because the count moves on 2 of 7 cells,
-# the audit routes those cells' `interfaces` compare to STRUCTURAL_ONLY and
-# lets `interfaces[].name` carry the signal, which is why several interface
+# 85 source records to 86, with ZERO source names missing.  The extra record
+# is a phantom LAG stanza.  Because the count moves on 1 of 7 cells, the
+# audit routes that cell's `interfaces` compare to STRUCTURAL_ONLY and lets
+# `interfaces[].name` carry the signal, which is why several interface
 # sub-fields below are `good` with a measurement attached rather than dragged
 # into `lossy` by their parent.
 #
@@ -138,34 +138,45 @@ per_field_expectation:
   # -- Interfaces -- inventory intact, two attributes lost --------------------
   #
   # The measured record count is the headline, and it moves the OPPOSITE way
-  # from most pairs: 85 source interface records across the 7 cells, 88 after
+  # from most pairs: 85 source interface records across the 7 cells, 86 after
   # the round-trip, with ZERO source names missing.  Every AOS-S port —
-  # `1/25`, `A1`, `23`, `Vlan10`, `Trk1` — survives the VyOS render verbatim.
-  # The 3 extra records are phantom LAG stanzas (see `lags`).
+  # `1/25`, `A1`, `23`, `Vlan10`, `trk1` — survives the VyOS render verbatim.
+  # The extra record is a phantom LAG stanza (see `lags`).
 
   "interfaces[].name":
     disposition: lossy
     reason: >
-      The interface record SET drifts on 2 of 7 cells, and the direction is
+      The interface record SET drifts on 1 of 7 cells, and the direction is
       unusual enough to state plainly: nothing is lost, something is added.
-      `aruba_central_5memberstack_rendered.cfg` goes 49 -> 50 records and
-      `kitchen_sink.cfg` goes 13 -> 15; all 85 source names are present in
-      the target on every cell.  The extra records are the AOS-S trunks
-      (`trk1`, `trk1`, `trk2`) materialising as bare `ethernet trk1 { }`
-      stanzas, because the vyos renderer only treats a name matching
-      `^bond\d+$` as a bonding interface — everything else falls through to
-      `ethernet <name>`.  Re-parsing that empty stanza yields a plain
-      interface record.
+      `aruba_central_5memberstack_rendered.cfg` goes 49 -> 50 records; all 85
+      source names are present in the target on every cell.  The extra record
+      is that config's AOS-S trunk (`trk1`) materialising as a bare
+      `ethernet trk1 { }` stanza, because the vyos renderer only treats a
+      name matching `^bond\d+$` as a bonding interface — everything else
+      falls through to `ethernet <name>`.  Re-parsing that empty stanza
+      yields a plain interface record.
+      `kitchen_sink.cfg` carries two trunks and gains nothing (13 -> 13).
+      Each has an `interface Trk<N>` stanza of its own in the source, which
+      the AOS-S parser files under the one name its `trunk` line gave the
+      LAG, so the stanza the LAG falls through to is a record the source
+      already has.  (Before the parser gave a LAG one name, the two
+      spellings were two records: that cell went 13 -> 15 and the pair
+      85 -> 88.)
       Recorded `lossy`, NOT `unsupported`: no source interface vanishes and
       every attribute of every source port survives, so the migration stays
       compatible; the operator simply inherits one phantom netdev per trunk
-      that has no members and no purpose.  #436's rule that forces
-      `unsupported` is for a vanished record, and nothing vanished here.
+      that has no interface stanza of its own, with no members and no
+      purpose.  #436's rule that forces `unsupported` is for a vanished
+      record, and nothing vanished here.
       This key also carries the structural signal for the whole `interfaces`
-      list on those 2 cells, which is why the sub-fields below are recorded
-      on their own measurements rather than dragged down with it.
-      Delete the phantom stanzas after cutover, or run the port-rename step
-      first (see `lags`), which makes them real bonds instead.
+      list on that 1 cell, which is why the sub-fields below are recorded
+      on their own measurements rather than dragged down with it.  On the
+      kitchen-sink cell the name set is preserved outright; the audit
+      reports that against this `lossy` as an expectation the cell did not
+      need, and it is left so because the disposition is the pair's and the
+      Central stack still needs it.
+      Delete the phantom stanza after cutover, or run the port-rename step
+      first (see `lags`), which makes it a real bond instead.
     references: [aoss-vyos-surface]
 
   "interfaces[].description":
@@ -250,24 +261,28 @@ per_field_expectation:
     references: [aoss-vyos-surface]
 
   "interfaces[].lag_member_of":
-    disposition: good
-    note: >
-      Recorded `good` deliberately, and the measurement is stated in full
-      rather than glossed: the membership pointer IS null after the
-      round-trip on the 4 records that carry one (`1/25`, `1/26` on the
-      Central stack; `23`, `24` on the kitchen sink).  Those 4 records sit on
-      exactly the 2 cells where the interface record count itself moves, so
-      the audit attributes that whole signal to `interfaces[].name` and a
-      loss declared here could never be evidenced.
-      More to the point, it would be the same finding twice.  The vanished
-      LAG record, the phantom `ethernet trk1` stanza and this null pointer
-      are ONE mechanism — the trunk name not matching `^bond\d+$` — and that
-      mechanism is recorded where it is caused, under `lags`, which also
-      carries the reproduction that makes all three survive.  Nothing here
-      corroborates anything there; they are the same event seen from three
-      angles.
-      vyos declares `/interfaces/interface/lag-member-of` SUPPORTED, and with
-      port-renamed input it holds.
+    disposition: lossy
+    reason: >
+      The membership pointer is null after the round-trip on all 4 records
+      that carry one: `1/25`, `1/26` on the Central stack and `23`, `24` on
+      the kitchen sink.  While the kitchen sink's interface record count
+      moved, all 4 sat on cells whose whole `interfaces` signal the audit
+      attributes to `interfaces[].name`, and this key was recorded `good`
+      with the measurement stated, because a loss declared here could not
+      be evidenced.  That cell's count no longer moves (see
+      `interfaces[].name`), its 2 records are compared one by one, and the
+      loss IS evidenced: 2 of 2 null.  The Central stack's 2 remain under
+      the structural signal.
+      It is the same finding as the vanished LAG record and the phantom
+      `ethernet trk1` stanza — ONE mechanism, the trunk name not matching
+      `^bond\d+$` — and that mechanism is recorded where it is caused,
+      under `lags`, which also carries the reproduction that makes all
+      three survive.  Recorded `lossy` and not `unsupported` for the reason
+      given there: vyos declares `/interfaces/interface/lag-member-of`
+      SUPPORTED, and with port-renamed input it holds.  The member port,
+      its addressing and its admin state survive; what is lost on the bare
+      path is that the port belongs to a bond.
+      Engage port translation, or re-add the members to the bond by hand.
     references: [aoss-vyos-surface]
 
   "interfaces[].vrrp_groups":

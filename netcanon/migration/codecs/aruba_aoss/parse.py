@@ -57,9 +57,10 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
-from .._helpers import _mask_to_prefix
+from .._helpers import GrowingIndex, _mask_to_prefix
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .port_names import one_spelling
 
 logger = logging.getLogger(__name__)
 
@@ -415,7 +416,7 @@ def _dest_to_cidr(dest: str) -> str:
 #: ``tagged xe-0/0/0,xe-0/0/2`` getting shredded into
 #: ``["xe", "0/0/0", "0/0/2"]`` on parse-back.
 _AOS_PORT_SHAPE_RE = re.compile(
-    r"^(?:[Tt]rk\d+|\d+(?:/[A-Za-z]?\d+)?|[A-Za-z]\d+)$",
+    r"^(?:[Tt][Rr][Kk]\d+|\d+(?:/[A-Za-z]?\d+)?|[A-Za-z]\d+)$",
 )
 
 #: DoS clamp on port-range expansion.  A fully-stacked AOS-S chassis tops out
@@ -477,7 +478,8 @@ def _parse_port_list(text: str) -> list[str]:
             if token not in seen:
                 seen.add(token)
                 result.append(token)
-    return result
+    # A LAG has one name in the tree, whatever case the line has it in.
+    return list(dict.fromkeys(one_spelling(name) for name in result))
 
 
 def _expand_port_range(lo: str, hi: str) -> list[str]:
@@ -504,8 +506,11 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
     Aruba fixtures had near-empty port-membership lists on parse;
     the canonical coverage was materially under-reported.
     """
-    m_lo = re.match(r"^(.*?)(\d+)$", lo)
-    m_hi = re.match(r"^(.*?)(\d+)$", hi)
+    # ``(?<!\d)``: the number begins where the trailing digits begin,
+    # which is where the lazy prefix would stop anyway -- but without
+    # it a token of digits and then a letter is tried at every digit.
+    m_lo = re.match(r"^(.*?)(?<!\d)(\d+)$", lo)
+    m_hi = re.match(r"^(.*?)(?<!\d)(\d+)$", hi)
     if not m_lo or not m_hi:
         return [lo, hi]   # no trailing digits — pass through as-is
     prefix_lo, num_lo = m_lo.group(1), int(m_lo.group(2))
@@ -529,13 +534,64 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
     return [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
 
 
+def _stated_once(items: list, key) -> list:
+    """*items* without the later of two that have one *key*, in the
+    order they were stated."""
+    kept: dict = {}
+    for item in items:
+        kept.setdefault(key(item), item)
+    return list(kept.values())
+
+
+def _one_name_per_lag(intent: CanonicalIntent) -> None:
+    """Give a LAG one name everywhere the tree refers to it.
+
+    The device writes one LAG two ways: ``trunk 51-52 trk1 lacp`` where
+    it is defined, and ``Trk1`` where a VLAN lists it or an ``interface
+    Trk1`` stanza configures it.  AOS-S names have no letter case, so
+    that is one LAG -- but two names in the tree are two ports to
+    everything downstream: the rename map has a key for each, an entry
+    for one leaves the other where it was, and anything that counts
+    source names on a target counts two (the rename modal showed the
+    LAG as a collision and would not apply).
+
+    The one name is ``trk<n>``, in lower case
+    (:func:`~.port_names.one_spelling`): what a ``trunk`` line the
+    device printed says, and so what the tree has always called the
+    LAG.  It does not depend on a definition being in the text, nor on
+    how a hand spelt one: ``TRK1`` on a ``trunk`` line is the same
+    LAG, and a name that is not a trunk's (``A1``) is nobody's other
+    spelling.  The renderer writes each form where the device does,
+    whatever the tree holds.
+
+    The lines that hold most references are read that way to begin
+    with -- a port list, a ``trunk`` line, an ``interface`` header --
+    so that what the parser does with a name while it reads (a port
+    moved by a later ``untagged``, a stanza met twice) is done to one
+    name.  This pass is for every other place a port name is kept, by
+    the same sweep the port translator uses: it cannot be a field
+    short of it.  AOS-S has no unit suffix, so none is followed.
+    """
+    from ...canonical.port_names import rewrite_port_names
+
+    rewrite_port_names(intent, one_spelling, units=False)
+    # Two lines of one stanza can name a port twice between them.
+    for vlan in intent.vlans:
+        vlan.tagged_ports = list(dict.fromkeys(vlan.tagged_ports))
+        vlan.untagged_ports = list(dict.fromkeys(vlan.untagged_ports))
+
+
+#: What the SNMPv3 user index reads while a config has no SNMP section.
+_NO_USERS: list[CanonicalSNMPv3User] = []
+
+
 def _build_lag_from_trunk_line(m: re.Match[str]) -> CanonicalLAG | None:
     """Convert a ``trunk <ports> <name> <type>`` regex match to a CanonicalLAG."""
     port_list_text, trunk_name, trunk_type = m.group(1), m.group(2), m.group(3)
     members = _parse_port_list(port_list_text)
     mode = _AOS_TRUNK_TYPE_TO_MODE.get(trunk_type.lower(), "static")
     return CanonicalLAG(
-        name=trunk_name,
+        name=one_spelling(trunk_name),
         members=members,
         mode=mode,
     )
@@ -797,14 +853,24 @@ def _parse_vrrp_group_stanza(
 
 
 def _parse_interface_stanza(
-    lines: list[str], start: int, iface_name: str,
+    lines: list[str], start: int, iface_name: str, into: CanonicalInterface | None = None,
 ) -> tuple[CanonicalInterface, int]:
     """Parse an ``interface X`` stanza starting at *start*.
+
+    Args:
+        lines: The config, cut into lines.
+        start: Index of the first line after the stanza's header.
+        iface_name: The interface the header names.
+        into: The record an earlier stanza for the same interface
+            made.  The lines of this one are read into it -- a later
+            line replaces what an earlier one set, an address is
+            added -- which is what the device does with two stanzas
+            for one interface.
 
     Returns the parsed :class:`CanonicalInterface` and the index of
     the first line AFTER the stanza's ``exit``.
     """
-    iface = CanonicalInterface(
+    iface = into if into is not None else CanonicalInterface(
         name=iface_name,
         enabled=True,
         interface_type=_infer_iface_type(iface_name),
@@ -921,6 +987,39 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     intent.source_version = _extract_version(raw)
 
     lines = raw.splitlines()
+    # One record for an interface and one for a LAG, however many
+    # stanzas or ``trunk`` lines the text has for it.
+    stanza_of: dict[str, CanonicalInterface] = {}
+    lag_by_name: dict[str, CanonicalLAG] = {}
+    # The ports each LAG has, so that a later ``trunk`` line for it
+    # finds the ones it adds without reading the list again; and the
+    # interfaces a second stanza was read into.
+    members_of: dict[str, set[str]] = {}
+    met_twice: dict[str, CanonicalInterface] = {}
+    # What a line looks for among everything the earlier lines made is
+    # found by key.  Looked for by reading the whole list -- per user
+    # line, per RADIUS line, per trunk line, per VLAN stanza -- a config
+    # of N such lines cost N squared.
+    v3_users = GrowingIndex(
+        lambda: intent.snmp.v3_users if intent.snmp is not None else _NO_USERS,
+        lambda user: user.name,
+    )
+    radius_by_host = GrowingIndex(lambda: intent.radius_servers, lambda server: server.host)
+    # The dict a trunk line used to build from every interface: of two
+    # records of one name the later one answered.  (Two ``interface``
+    # stanzas of one name are one record; a VLAN stanza met twice
+    # still makes two ``Vlan<N>`` records.)
+    iface_at_trunk = GrowingIndex(lambda: intent.interfaces, lambda iface: iface.name, last=True)
+    # RADIUS servers a global ``radius-server key`` line may still have
+    # to give its key to, and how many servers have been looked at.
+    keyless: list[CanonicalRADIUSServer] = []
+    servers_seen = 0
+    # Which VLAN record a port is untagged in, and the ports each
+    # record has since lost to a later stanza (taken out after the
+    # loop: until then the record still lists them, and nothing in the
+    # loop reads an earlier VLAN's list).
+    untagged_in: dict[str, CanonicalVlan] = {}
+    lost: dict[int, tuple[CanonicalVlan, set[str]]] = {}
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -989,10 +1088,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             if priv_p:
                 pl = priv_p.lower()
                 priv_norm = "aes128" if pl == "aes" else pl
-            existing = next(
-                (u for u in intent.snmp.v3_users if u.name == name),
-                None,
-            )
+            existing = v3_users.get(name)
             if existing is not None:
                 existing.auth_protocol = (auth_p or "").lower()
                 existing.auth_passphrase = auth_pw or ""
@@ -1017,12 +1113,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             if intent.snmp is None:
                 intent.snmp = CanonicalSNMP()
             group_name, user_name = v3g.groups()
-            found = False
-            for u in intent.snmp.v3_users:
-                if u.name == user_name:
-                    u.group = group_name
-                    found = True
-                    break
+            bound = v3_users.get(user_name)
+            found = bound is not None
+            if bound is not None:
+                bound.group = group_name
             if not found:
                 # Group declared for user we haven't seen yet —
                 # create a stub; later ``snmpv3 user`` merges.
@@ -1058,7 +1152,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         if rt6:
             intent.static_routes.append(CanonicalStaticRoute(
                 destination=rt6.group(1),  # already <prefix>/<len>
-                gateway=rt6.group(2),
+                # A next hop can name a LAG, and the renderer writes
+                # that ``Trk1``: read in the one spelling, like every
+                # other place a line names a port.  (The sweep after
+                # the loop cannot do it: it rewrites a next hop only
+                # where it IS an interface's name, and by then the
+                # interface is already ``trk1``.)
+                gateway=one_spelling(rt6.group(2)),
                 metric=int(rt6.group(3)) if rt6.group(3) else 0,
             ))
             i += 1
@@ -1127,10 +1227,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             km = _RADIUS_INLINE_KEY_RE.search(rest)
             if km:
                 key = km.group(1).strip().strip('"')
-            existing = next(
-                (s for s in intent.radius_servers if s.host == host),
-                None,
-            )
+            existing = radius_by_host.get(host)
             if existing is None:
                 intent.radius_servers.append(CanonicalRADIUSServer(
                     host=host,
@@ -1153,9 +1250,20 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             # Global-scope key — apply to any RADIUS server that
             # didn't carry its own inline key.
             global_key = rk.group(1).strip().strip('"')
-            for server in intent.radius_servers:
-                if not server.key:
-                    server.key = global_key
+            # Only a server with no key can take it.  Those are kept
+            # apart, and every server is looked at once to find them.
+            # An empty key gives nothing to anyone: after it every
+            # server is as it was, and none is read.
+            if global_key:
+                while servers_seen < len(intent.radius_servers):
+                    server = intent.radius_servers[servers_seen]
+                    servers_seen += 1
+                    if not server.key:
+                        keyless.append(server)
+                for server in keyless:
+                    if not server.key:
+                        server.key = global_key
+                keyless = []
             i += 1
             continue
 
@@ -1220,13 +1328,31 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         tk = _TRUNK_LINE_RE.match(stripped_line)
         if tk:
             lag = _build_lag_from_trunk_line(tk)
-            if lag is not None:
+            defined = None if lag is None else lag_by_name.get(lag.name)
+            # The ports THIS line names: the only ones it can add or
+            # link.  Going through every port the LAG already had,
+            # once per line, cost the square of the lines one LAG is
+            # given.
+            named_here = [] if lag is None else lag.members
+            if lag is not None and defined is not None:
+                # A second ``trunk`` line for a LAG adds its ports to
+                # the first: one LAG, one record.
+                have = members_of[lag.name]
+                fresh = [member for member in named_here if member not in have]
+                have.update(fresh)
+                defined.members.extend(fresh)
+                lag = defined
+            elif lag is not None:
+                lag_by_name[lag.name] = lag
+                members_of[lag.name] = set(lag.members)
                 intent.lags.append(lag)
+            if lag is not None:
                 # Reverse-link each member to this LAG so the
-                # canonical tree stays consistent.
-                iface_by_name = {i.name: i for i in intent.interfaces}
-                for member in lag.members:
-                    m_iface = iface_by_name.get(member)
+                # canonical tree stays consistent.  (The members of
+                # earlier lines were linked at their own line, and
+                # the pass after the loop links every one again.)
+                for member in named_here:
+                    m_iface = iface_at_trunk.get(member)
                     if m_iface is not None and m_iface.lag_member_of is None:
                         m_iface.lag_member_of = lag.name
             i += 1
@@ -1252,15 +1378,16 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             # Aruba 2930F config guide ("Configuring VLANs / VLAN
             # port assignments") confirms move-on-reassign as the
             # canonical AOS-Switch behaviour.
-            if vlan.untagged_ports:
-                claimed = set(vlan.untagged_ports)
-                for prior_vlan in intent.vlans:
-                    if not prior_vlan.untagged_ports:
-                        continue
-                    prior_vlan.untagged_ports = [
-                        p for p in prior_vlan.untagged_ports
-                        if p not in claimed
-                    ]
+            #
+            # A port is untagged in one record at a time, so the record
+            # that loses it is found by the port -- not by reading
+            # every earlier VLAN for every stanza, which made a config
+            # of N stanzas cost N squared.
+            for port in dict.fromkeys(vlan.untagged_ports):
+                holder = untagged_in.get(port)
+                if holder is not None:
+                    lost.setdefault(id(holder), (holder, set()))[1].add(port)
+                untagged_in[port] = vlan
             intent.vlans.append(vlan)
             # SVI absorption — codepath 1 of 3.  See
             # ._svi_absorption for the full rule.  AOS-S packs
@@ -1293,14 +1420,25 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
         im = _IFACE_HEADER_RE.match(stripped_line)
         if im:
-            iface_name = im.group(1).strip('"')
-            iface, next_i = _parse_interface_stanza(lines, i + 1, iface_name)
-            intent.interfaces.append(iface)
+            iface_name = one_spelling(im.group(1).strip('"'))
+            # A second stanza for an interface goes on with the first,
+            # as the device reads them: one interface, one record.
+            earlier = stanza_of.get(iface_name)
+            iface, next_i = _parse_interface_stanza(lines, i + 1, iface_name, into=earlier)
+            if earlier is None:
+                stanza_of[iface_name] = iface
+                intent.interfaces.append(iface)
+            else:
+                met_twice[iface_name] = iface
             i = next_i
             continue
 
         # Unrecognised top-level line — skip.
         i += 1
+
+    # The ports each VLAN lost to a later stanza leave it now.
+    for holder, ports in lost.values():
+        holder.untagged_ports = [p for p in holder.untagged_ports if p not in ports]
 
     # LAG-member linkage post-pass.  The inline linking at the
     # ``trunk`` line above only catches members whose
@@ -1318,6 +1456,20 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             m_iface = iface_by_name.get(member)
             if m_iface is not None and m_iface.lag_member_of is None:
                 m_iface.lag_member_of = lag.name
+
+    # A stanza met twice states its addresses twice, and that is one
+    # address each: the first statement keeps its place.  Done here,
+    # once and by key -- looking through the list at every line would
+    # cost the square of the lines one interface is given.
+    for again in met_twice.values():
+        again.ipv4_addresses = _stated_once(
+            again.ipv4_addresses, lambda a: (a.ip, a.prefix_length),
+        )
+        again.ipv6_addresses = _stated_once(
+            again.ipv6_addresses, lambda a: (a.ip, a.prefix_length, a.scope),
+        )
+
+    _one_name_per_lag(intent)
 
     # Bug 3 transpose: mirror any per-port switchport state into the
     # VLAN-centric tagged_ports / untagged_ports lists.  AOS-S source

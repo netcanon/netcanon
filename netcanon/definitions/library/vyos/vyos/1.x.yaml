@@ -36,7 +36,7 @@ commands:
 
 prompts:
   trailing:
-    - '^\S+@\S+:.*[$#]\s*$'   # vyos@hostname:~$  (operational mode; '#' if logged in as root)
+    - '^[^\s@]+@[^\s:]+:.*[$#]\s*$'   # vyos@hostname:~$  (operational mode; '#' if logged in as root)
 
 collector:
   strategy: netmiko
@@ -50,7 +50,7 @@ probe:
   command: "show version"
   patterns:
     detected_os_version: 'Version:\s+VyOS\s+(\d+\.\d+)'
-    detected_model: '^Hardware model:\s+(.+?)\s*$'
+    detected_model: '^Hardware model:\s+(\S(?:.*\S)?)\s*$'
     detected_serial: '^Hardware S/N:\s+(\S+)'
 
 notes: >

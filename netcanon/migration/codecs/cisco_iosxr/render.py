@@ -348,7 +348,7 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     for addr in iface.ipv6_addresses:
         block.append(f" ipv6 address {addr.ip}/{addr.prefix_length}")
     if iface.lag_member_of:
-        m = re.search(r"(\d+)\s*$", iface.lag_member_of)
+        m = re.search(r"(?<!\d)(\d+)\s*$", iface.lag_member_of)
         if m:
             mode = _CANON_TO_IOSXR_BUNDLE_MODE.get(
                 lag_mode_by_name.get(iface.lag_member_of, "active"), "active",

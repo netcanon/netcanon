@@ -684,7 +684,7 @@ class CiscoNXOSCodec(CodecBase):
             # Banner alone is still unambiguous, but require a CIDR
             # interface address as a minimal structural sanity check so
             # a bare banner pasted with non-NX-OS body doesn't claim it.
-            if re.search(r"^\s+ip\s+address\s+\d+\.\d+\.\d+\.\d+/\d+",
+            if re.search(r"^[^\S\n]+ip\s+address\s+\d+\.\d+\.\d+\.\d+/\d+",
                          raw_prefix, re.MULTILINE | re.IGNORECASE):
                 return (98, "NX-OS !Command banner + CIDR addressing")
             return (90, "NX-OS !Command banner")

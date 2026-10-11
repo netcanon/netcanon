@@ -449,7 +449,7 @@ _TOP_NTP_SERVER_RE = re.compile(
 # severity level, message id, UDP port) is never a valid IPv4/IPv6 literal, so
 # the guard rejects the noise structurally.  Mirrors the opnsense resolved-
 # next-hop IP guard.
-_SYSLOG_LINE_RE = re.compile(r"^\s*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
+_SYSLOG_LINE_RE = re.compile(r"^[^\S\n]*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
 
 # ``vrf definition <name>`` opens a VRF stanza; sub-commands include
 # ``description X``, ``rd <rd>``, ``route-target {import|export|both}
