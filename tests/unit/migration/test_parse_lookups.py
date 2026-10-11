@@ -440,17 +440,32 @@ class TestAossRecordsFoundByKey:
         assert linked == [("1", "trk1"), ("2", "trk1")]
 
 
-    def test_of_two_stanzas_of_one_name_a_trunk_line_links_the_later(self) -> None:
-        """What the dict a trunk line used to build from every
-        interface answered with: the last record of a name.  The pass
-        after the loop does the same, so the earlier one stays as it
-        was."""
+    def test_two_stanzas_of_one_interface_are_one_record_for_a_trunk_line(self) -> None:
+        """Two ``interface`` stanzas of one name are one record -- the
+        second goes on with the first, as the device reads them -- so
+        a trunk line has one record to link, and the later ``name``
+        is its description."""
         tree = _aoss(
             "interface 1", '   name "a"', "   exit", "interface 1", '   name "b"', "   exit", "trunk 1 trk1 lacp",
         )
         assert [(i.description, i.lag_member_of) for i in tree.interfaces if i.name == "1"] == [
-            ("a", None), ("b", "trk1"),
+            ("b", "trk1"),
         ]
+
+    def test_of_two_records_of_one_name_a_trunk_line_links_the_later(self) -> None:
+        """What the dict a trunk line used to build from every
+        interface answered with: the last record of a name.  The pass
+        after the loop does the same, so the earlier one stays as it
+        was.  Two records of one name are still made by a VLAN stanza
+        met twice: each makes a ``Vlan<N>`` interface."""
+        tree = _aoss(
+            "vlan 10", "   ip address 192.0.2.1 255.255.255.0", "   exit",
+            "vlan 10", "   ip address 198.51.100.1 255.255.255.0", "   exit",
+            "trunk Vlan10 trk1 lacp",
+        )
+        assert [
+            (i.ipv4_addresses[0].ip, i.lag_member_of) for i in tree.interfaces if i.name == "Vlan10"
+        ] == [("192.0.2.1", None), ("198.51.100.1", "trk1")]
 
 
 # ---------------------------------------------------------------------------

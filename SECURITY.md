@@ -548,9 +548,10 @@ On the tree before this change it reports 51 units in six codecs; after, none.
 
 **A search is not a proof.**  It does not reach a pattern assembled at call
 time from parts that are not literals and not kept, a handler no capture has
-a line for, work that needs two kinds of stanza to grow together, or code
-that is slow on a shape the search does not build; the second to fifth shapes
-above were each found after an earlier version of the search had passed.
+a line for, work that needs two kinds of stanza to grow together (one such
+case is known, and is in the list below), or code that is slow on a shape
+the search does not build; the second to fifth shapes above were each found
+after an earlier version of the search had passed.
 
 **Known, and not mended by this change:**
 
@@ -567,6 +568,13 @@ above were each found after an earlier version of the search had passed.
   3 GB.  That cost is linear in what was asked for; a real config of that
   size costs the same.  (A range of unbounded span is refused where one was
   found: AOS-S clamps a single port range at 1,024 names.)
+* **Two kinds of stanza that grow together.**  A switch config with N
+  interfaces that carry `switchport trunk allowed vlan all` and M declared
+  VLANs is N times M memberships once it is parsed: every such trunk is a
+  member of every VLAN, and the tree lists them VLAN by VLAN.  A thousand of
+  each (115 KB) is a million memberships and about three seconds.  Nothing
+  in that text is a range; the cost is the product of two honest counts.
+  Reachable wherever a switch config is parsed.
 * **There is no time limit on a request**, and none on the memory one takes.
 
 A deployment that takes text from people it does not trust should put a

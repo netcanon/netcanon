@@ -40,8 +40,27 @@ from ...canonical.port_names import PortIdentity
 # Regex patterns — module-level so they compile once per import
 # ---------------------------------------------------------------------------
 
-#: LAG: ``Trk<n>`` or ``trk<n>`` (forum pastes use either case).
-_TRUNK_RE = re.compile(r"^[Tt]rk(\d+)$")
+#: LAG: ``trk<n>`` in any letter case.  The device prints ``trk1`` on
+#: the ``trunk`` line that defines it and ``Trk1`` everywhere else; a
+#: hand types either, or ``TRK1``.
+_TRUNK_RE = re.compile(r"^trk(\d+)$", re.IGNORECASE)
+
+
+def trunk_number(name: str) -> str | None:
+    """The digits of *name* if it is a trunk's, in any letter case."""
+    trunk = _TRUNK_RE.fullmatch(name)
+    return trunk.group(1) if trunk else None
+
+
+def one_spelling(name: str) -> str:
+    """*name* as the parsed tree spells it.
+
+    AOS-S names have no letter case, and the device writes a LAG two
+    ways itself.  The tree has one spelling for it: ``trk<n>``, what
+    its ``trunk`` line says.  Any other name is returned as it is.
+    """
+    number = trunk_number(name)
+    return name if number is None else f"trk{number}"
 
 #: Stacked member with a letter-slot module: ``<stack>/<A-Z><port>``
 #: (e.g. ``1/A1``, ``2/B24``).  The letter is a flexible-module slot,

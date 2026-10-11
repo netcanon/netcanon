@@ -1043,6 +1043,19 @@ def _aoss_trunks(count: int) -> str:
     )
 
 
+def _aoss_trunk_lines_of_one_lag(count: int) -> str:
+    """One LAG, a ``trunk`` line for each of its ports.  A second
+    line for a LAG joins the first record, and a handler that goes
+    through the members it already has, once per line, costs the
+    square of the lines -- ten seconds for 16,000 of them, where
+    the text above (a LAG per line) was read in a fifth of one."""
+    return _config(
+        *_AOSS_TOP,
+        *(line for number in range(1, count + 1) for line in (f"interface {number}", '   name "p"', "   exit")),
+        *(f"trunk {number} trk1 lacp" for number in range(1, count + 1)),
+    )
+
+
 def _opnsense_laggs(count: int) -> str:
     return _config(
         '<?xml version="1.0"?>', "<opnsense>",
@@ -1088,6 +1101,7 @@ STANZAS: dict[str, tuple[str, int, Callable[[int], str]]] = {
     "aruba_aoss: RADIUS hosts and a key that is empty": ("aruba_aoss", 3000, _aoss_radius_no_key),
     "aruba_aoss: SNMPv3 users and their groups": ("aruba_aoss", 3000, _aoss_v3_users),
     "aruba_aoss: trunks over many interfaces": ("aruba_aoss", 2500, _aoss_trunks),
+    "aruba_aoss: trunk lines of one LAG": ("aruba_aoss", 2500, _aoss_trunk_lines_of_one_lag),
     "opnsense: laggs over many interfaces": ("opnsense", 3000, _opnsense_laggs),
     "mikrotik_routeros: pools over many networks": ("mikrotik_routeros", 1500, _routeros_pools),
 }
@@ -1132,6 +1146,7 @@ class TestParseFitsTheNumberOfItsStanzas:
             "aruba_aoss: RADIUS hosts and a key that is empty": lambda t: len(t.radius_servers),
             "aruba_aoss: SNMPv3 users and their groups": lambda t: len(t.snmp.v3_users),
             "aruba_aoss: trunks over many interfaces": lambda t: len(t.lags),
+            "aruba_aoss: trunk lines of one LAG": lambda t: len(t.lags[0].members),
             "opnsense: laggs over many interfaces": lambda t: len(t.lags),
             "mikrotik_routeros: pools over many networks": lambda t: len(t.dhcp_servers),
         }
