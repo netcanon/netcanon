@@ -30,6 +30,13 @@ pair with an adjacent tool — see
 [`COMPARISON.md`](COMPARISON.md) for Capirca / Aerleon (firewall
 DSL) and Batfish (network analysis).
 
+A row that begins `inactive:` is different: it is a Junos statement
+the source had deactivated (`deactivate interfaces ge-0/0/2`, or
+`inactive: ge-0/0/2 {` in the hierarchical form).  The device was
+not running it, so it is not translated.  **Action:** none, unless
+you meant to bring it back into force on the target — then add it
+there by hand.
+
 ### B. The unsupported-paths panel
 
 > "Field /routing-instances/instance is declared `unsupported` for

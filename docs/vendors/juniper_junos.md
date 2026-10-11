@@ -9,7 +9,9 @@ does for you, this is the page.
   **Certification: certified.**  Bidirectional.
 
 The codec works against `show configuration | display set` output
-across Junos majors from 15.1 through 25.4.  Fixtures cover QFX,
+across Junos majors from 15.1 through 25.4, and against the
+hierarchical output of `show configuration` as the device prints
+it.  Fixtures cover QFX,
 EX, and vMX-style platforms; the set-form grammar is consistent
 across Junos platform families, so SRX / MX would parse + render
 through the same pipeline (insofar as the surfaces overlap with
@@ -218,9 +220,24 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   ethernet-switching ...` only) used to be dropped on render until
   the placeholder-line fix landed; now preserved with empty unit
   attributes.
-- **Set-form vs hierarchical** — Netcanon parses `set`-form only.
-  If your captured config is in hierarchical form (curly-brace
-  nesting), pipe through `display set` first.
+- **Set-form and hierarchical** — both are read, and detection
+  offers the Junos codec for either.  The hierarchical form is
+  read as the device prints it: its `## Last commit:` line, the
+  `version` statement ahead of the first block, `## SECRET-DATA`
+  after a secret, and the `protect:` and `replace:` tags ahead of
+  a statement.  (Before, a capture that began with its `version`
+  line was read as an empty config, and a `## SECRET-DATA` marker
+  put every block after it one level out.)  Every committed capture is
+  set-form, so the hierarchical reader is held by built configs
+  only — a real `show configuration` capture is welcome.
+- **Deactivated statements are not translated.**  `deactivate
+  <path>` in set-form and `inactive:` in the hierarchical form
+  mark a statement the device holds and does not run.  It, and
+  everything under it, is left out of the translation and listed
+  in the Tier-3 banner as `inactive: <path>`.  (Before, its `set`
+  lines were read as if in force, and an interface the source had
+  switched off came out configured on the target.)  A Junos to
+  Junos job does not write it back as inactive either.
 
 ## See also
 

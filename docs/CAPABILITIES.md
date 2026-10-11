@@ -552,6 +552,14 @@ stanza headers.  The migrate page renders these as a warning banner:
 > rendered output.  Operator must apply them manually on the target
 > device.
 
+One kind of row is not a section to apply by hand.  A Junos
+statement the source had **deactivated** (`deactivate <path>` in
+set-form, `inactive:` in the hierarchical form) is not in force on
+the device, so it is left out of the translation and listed here as
+`inactive: <path>`; the banner then says so in a sentence of its
+own.  A same-vendor Junos job does not write the statement back as
+inactive: it is gone from the output, and the row is the record.
+
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):
 

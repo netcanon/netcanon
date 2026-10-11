@@ -73,6 +73,40 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A Junos config is read as the device prints it.**  The
+  hierarchical output of `show configuration` begins `## Last
+  commit: ...` and `version 21.4R3.15;`, and marks its secrets
+  `## SECRET-DATA`.  The parser read the hierarchical form only if
+  it began with a block: with the `version` line first the text was
+  taken for set-form, where no line of it is a statement, and the
+  config was read as empty — a job that rendered nothing and gave
+  no reason.  A `## SECRET-DATA` marker was read as words of a
+  statement (`set system login user admin authentication ##
+  SECRET-DATA`), and that put every block after it one level out:
+  in a small config the next user was written outside `login` and
+  lost, and the `snmp` block was not read at all.  And no probe
+  knew the hierarchical form, so
+  detection offered no codec for it.  `#` comments are skipped now,
+  statements of the top level may come before the first block, the
+  `protect:` and `replace:` tags are not taken for names (an
+  interface was named `replace:`), and detection offers Junos.
+  Detection is unchanged for every config file on disk; no
+  committed capture is hierarchical, so nothing in the corpus moves.
+- **A deactivated Junos statement is not translated as if it were in
+  force.**  `deactivate interfaces ge-0/0/2` (`inactive: ge-0/0/2 {`
+  in the hierarchical form) marks a statement the device holds and
+  does not run.  The parser skipped the `deactivate` line and read
+  the `set` lines under it, so an interface the source had switched
+  off came out with its addresses on the target, in a job that said
+  nothing; in the hierarchical form it became an interface named
+  `inactive:`.  The statement and everything under it is now left
+  out and listed in the Tier-3 banner as `inactive: <path>`, with a
+  sentence saying it is not something to apply by hand.  **If a
+  Junos config with deactivated statements was translated with
+  release 0.7.7 or earlier, check the output for what the source
+  had switched off.**  A Junos to Junos job does not write the
+  statement back as inactive: it is gone from the output.
+
 - **An AOS-S LAG is one name, not two.**  The device writes a LAG
   `trk1` where it is defined and `Trk1` where a VLAN lists it or an
   `interface Trk1` stanza configures it, and both spellings were kept.

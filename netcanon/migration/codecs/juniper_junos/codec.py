@@ -436,8 +436,13 @@ class JunosCodec(CodecBase):
         intent = parse_intent(raw)
         # Surface Tier-3 `set` lines the parser drops (`set firewall`,
         # `set security policies`, `set policy-options`, `set
-        # class-of-service`).  Notification-only.
-        intent.dropped_tier3_sections = detect_tier3_sections_junos(raw)
+        # class-of-service`).  Notification-only.  Ahead of them, the
+        # statements the parser left out because the source had them
+        # deactivated: in the source, and not translated.
+        intent.dropped_tier3_sections = [
+            *intent.dropped_tier3_sections,
+            *detect_tier3_sections_junos(raw),
+        ]
         return intent
 
     def render(self, tree: Any) -> str:
@@ -459,13 +464,18 @@ class JunosCodec(CodecBase):
 
     @classmethod
     def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
-        """Detect Junos set-form config.
+        """Detect Junos config, in set-form or as the device prints it.
 
         Signals:
           * ``set version <X>`` banner on the first non-comment line.
           * ``set system host-name`` — universal Junos line shape.
           * ``set interfaces <media>-<fpc>/<pic>/<port>`` —
             Junos-specific port naming.
+          * The hierarchical form of ``show configuration``: its
+            ``## Last commit:`` line, or two of ``version X;``,
+            ``system {`` and ``host-name X;``.  One of the two has
+            to end in ``;`` — VyOS writes ``system {`` as well, and
+            ends no statement with one.
         """
         # XML / JSON shape — shared helper tolerates leading shell-echo
         # / banner framing so real captures don't bypass the guard.
@@ -509,4 +519,17 @@ class JunosCodec(CodecBase):
             return (88, f"{hits} Junos set-form grammar markers")
         if hits == 2:
             return (68, "partial Junos set-form grammar match")
+        # The hierarchical form.  It was read by ``parse`` and known
+        # to no probe, so a pasted ``show configuration`` was offered
+        # no codec at all.
+        if re.search(r"^## Last commit: ", raw_prefix, re.MULTILINE):
+            return (92, "Junos '## Last commit' line of show configuration")
+        ended = 0
+        if re.search(r"^version [^\s;]+;[ \t]*$", raw_prefix, re.MULTILINE):
+            ended += 1
+        if re.search(r"^[ \t]+host-name [^\s;]+;[ \t]*$", raw_prefix, re.MULTILINE):
+            ended += 1
+        opened = bool(re.search(r"^system \{[ \t]*$", raw_prefix, re.MULTILINE))
+        if ended and ended + opened >= 2:
+            return (86, "Junos hierarchical (block-form) statements")
         return None

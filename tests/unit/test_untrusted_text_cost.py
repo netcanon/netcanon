@@ -1174,6 +1174,17 @@ def _junos_vnis(count: int) -> str:
     )
 
 
+def _junos_deactivated(count: int) -> str:
+    """An interface a line, and each deactivated.  A ``set`` line is
+    asked whether it is under a deactivated path: asked of each
+    path in turn, that is every line against every path."""
+    return _config(
+        "set system host-name r1",
+        *(f"set interfaces ge-0/0/{n} description d{n}" for n in range(count)),
+        *(f"deactivate interfaces ge-0/0/{n}" for n in range(count)),
+    )
+
+
 def _iosxe_class_maps(count: int) -> str:
     """Every line a Tier-3 section of its own.  The detector that
     every CLI parse runs kept its labels in a list and looked
@@ -1235,6 +1246,7 @@ STANZAS: dict[str, tuple[str, int, Callable[[int], str]]] = {
     "arista_eos: VRFs and then VLANs under router bgp": ("arista_eos", 4000, _eos_bgp_vrfs_then_vlans),
     "arista_eos: Vxlan stanzas that set a UDP port": ("arista_eos", 1500, _eos_vxlan_stanzas_with_a_port),
     "juniper_junos: the VNIs of one VLAN": ("juniper_junos", 4000, _junos_vnis),
+    "juniper_junos: deactivated paths": ("juniper_junos", 4000, _junos_deactivated),
     "cisco_iosxe_cli: Tier-3 sections, each of its own": ("cisco_iosxe_cli", 10000, _iosxe_class_maps),
     "opnsense: laggs over many interfaces": ("opnsense", 3000, _opnsense_laggs),
     "mikrotik_routeros: pools over many networks": ("mikrotik_routeros", 1500, _routeros_pools),
@@ -1288,6 +1300,7 @@ class TestParseFitsTheNumberOfItsStanzas:
             "arista_eos: VRFs and then VLANs under router bgp": lambda t: len(t.routing_instances),
             "arista_eos: Vxlan stanzas that set a UDP port": lambda t: len(t.vxlan_vnis),
             "juniper_junos: the VNIs of one VLAN": lambda t: len(t.vxlan_vnis),
+            "juniper_junos: deactivated paths": lambda t: len(t.dropped_tier3_sections),
             "cisco_iosxe_cli: Tier-3 sections, each of its own": lambda t: len(t.dropped_tier3_sections),
             "opnsense: laggs over many interfaces": lambda t: len(t.lags),
             "mikrotik_routeros: pools over many networks": lambda t: len(t.dhcp_servers),

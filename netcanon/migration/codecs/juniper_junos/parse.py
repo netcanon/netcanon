@@ -249,16 +249,46 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     applied: set[str] = set()
     found = _Found(intent)
 
+    # Statements the config holds and does not run: ``deactivate
+    # <path>`` (``inactive:`` in the hierarchical form).  The device
+    # ignores the statement and everything under it, so reading its
+    # ``set`` lines put on the target what the source did not have
+    # in force.  They are left out, and named among the sections of
+    # the source that were not translated.
+    inactive_paths: set[tuple[str, ...]] = set()
+    for raw_line in raw.splitlines():
+        line = raw_line.strip()
+        if line.startswith("deactivate "):
+            inactive_paths.add(tuple(_tokenise_set(line[11:])))
+        elif line.startswith("activate "):
+            inactive_paths.discard(tuple(_tokenise_set(line[9:])))
+    inactive_paths.discard(())
+    # A line is asked about once for each LENGTH of path there is,
+    # not once for each path.
+    inactive_depths = sorted({len(path) for path in inactive_paths})
+    inactive_met: dict[tuple[str, ...], None] = {}
+
     for raw_line in raw.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        # Junos set-form begins with `set ` (or `delete ` /
-        # `deactivate ` which we skip).
+        # Junos set-form begins with `set ` (`delete ` is skipped;
+        # `deactivate ` was read above).
         if not line.startswith("set "):
             continue
         tokens = _tokenise_set(line[4:])
         if not tokens:
+            continue
+        under = next(
+            (
+                tuple(tokens[:depth]) for depth in inactive_depths
+                if depth <= len(tokens)
+                and tuple(tokens[:depth]) in inactive_paths
+            ),
+            None,
+        )
+        if under is not None:
+            inactive_met.setdefault(under)
             continue
         head = tokens[0]
         if head == "groups" and len(tokens) >= 3:
@@ -906,6 +936,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     intent.dns_servers = list(dict.fromkeys(intent.dns_servers))
     intent.ntp_servers = list(dict.fromkeys(intent.ntp_servers))
     intent.syslog_servers = list(dict.fromkeys(intent.syslog_servers))
+    intent.dropped_tier3_sections = [
+        f"inactive: {' '.join(path)} (deactivated in the source; not translated)"
+        for path in inactive_met
+    ]
     return intent
 
 
@@ -952,6 +986,12 @@ def _extract_version(raw: str) -> str:
 
 _BLOCKFORM_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
 
+#: What a line of set-form begins with.
+_SETFORM_VERBS = ("set ", "delete ", "activate ", "deactivate ")
+
+#: Tags the hierarchical form prints ahead of a statement.
+_STATEMENT_TAGS = frozenset({"inactive:", "protect:", "replace:"})
+
 
 def _looks_like_blockform(raw: str) -> bool:
     """Heuristic: does *raw* look like Junos block-form (hierarchical
@@ -960,6 +1000,10 @@ def _looks_like_blockform(raw: str) -> bool:
     Signals:
       * Strip comments + leading whitespace; the first meaningful line
         starts with a word followed by ``{`` (and NOT with ``set``).
+        ``#`` lines and statements of the top level come before it
+        in what a device prints -- ``## Last commit: ...`` and
+        ``version 21.4R3.15;`` are the first two lines of ``show
+        configuration`` -- and are stepped over.
       * The text contains at least one ``{``-terminated line AND at
         least one statement-terminator ``;``.
     """
@@ -967,7 +1011,7 @@ def _looks_like_blockform(raw: str) -> bool:
     # detection on block-form configs that lead with a comment).
     cleaned = _BLOCKFORM_COMMENT_RE.sub("", raw)
     stripped = cleaned.lstrip()
-    if stripped.startswith(("set ", "version ")):
+    if stripped.startswith(_SETFORM_VERBS):
         return False
     # At least one opening curly on a line that isn't a comment.
     has_open_brace = bool(re.search(r"\{\s*$", cleaned, re.MULTILINE))
@@ -982,13 +1026,17 @@ def _looks_like_blockform(raw: str) -> bool:
     # level.
     for line in cleaned.splitlines():
         line = line.strip()
-        if not line:
+        if not line or line.startswith("#"):
             continue
         # Reject lines that look like JSON (key:value shape).
         if '"' in line and ":" in line:
             return False
         if line.endswith("{") and len(line) > 1:
             return True
+        if line.endswith(";") and not line.startswith(_SETFORM_VERBS):
+            # A statement of the top level ahead of the first block.
+            # (A Cisco ``version 17.12`` line has no ``;``.)
+            continue
         if line == "{":
             # Bare ``{`` as the first meaningful line — ambiguous
             # (could be JSON or a bare Junos block).  Favour
@@ -1017,6 +1065,15 @@ def _tokenise_blockform(raw: str) -> list[str]:
         if ch in "{};":
             tokens.append(ch)
             i += 1
+            continue
+        if ch == "#":
+            # To the end of the line: ``## Last commit: ...`` above
+            # the configuration, ``## SECRET-DATA`` after a statement.
+            # Left in, the words were read as a statement, and every
+            # block after one came out a level off.  (Inside a quoted
+            # string or a word a ``#`` is never met here.)
+            end = cleaned.find("\n", i)
+            i = n if end < 0 else end
             continue
         if ch == '"':
             # Quoted string — preserve the quotes for later rendering.
@@ -1146,6 +1203,20 @@ def _blockform_to_setform(raw: str) -> str:
                 # for tolerance, though this is unusual.
                 emit_leaf(words)
                 return
+            # What a device prints ahead of a statement: ``protect:``
+            # (in force), ``replace:`` (a load file's), ``inactive:``
+            # (deactivated: not in force).  Left on, the tag was the
+            # first word of the path -- an interface named
+            # ``inactive:``.
+            inactive = False
+            while words and words[0] in _STATEMENT_TAGS:
+                inactive = inactive or words[0] == "inactive:"
+                del words[0]
+            if inactive and words:
+                # As ``display set`` says it; the set-form parser
+                # below leaves out what is under the path.
+                held = words[:words.index("[")] if "[" in words else words
+                out_lines.append("deactivate " + " ".join(path_stack + held))
             if tokens[pos] == ";":
                 emit_leaf(words)
                 pos += 1

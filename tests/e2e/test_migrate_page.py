@@ -578,3 +578,63 @@ class TestScopeAdvisoryBanner:
         expect(
             page.locator('[data-testid="migrate-scope-advisory-banner"]')
         ).to_be_hidden()
+
+
+# ---------------------------------------------------------------------------
+# A statement the source had deactivated
+# ---------------------------------------------------------------------------
+
+_JUNOS_DEACTIVATED = (
+    "set system host-name r1\n"
+    "set interfaces ge-0/0/1 unit 0 family inet address 10.0.0.1/24\n"
+    "set interfaces ge-0/0/2 unit 0 family inet address 10.0.2.1/24\n"
+    "deactivate interfaces ge-0/0/2\n"
+)
+
+
+class TestADeactivatedStatement:
+    def test_it_is_listed_and_the_banner_says_what_it_is(
+        self, page: Page, base_url: str
+    ):
+        """It is in the list of what was not translated, and it is not
+        a section to apply by hand: the banner says so."""
+        page.goto("/migrate")
+        mig = MigratePage(page)
+        page.wait_for_function(
+            """() => document.querySelector(
+                '[data-testid="migrate-source-select"]'
+            ).options.length > 0"""
+        )
+        mig.pick_source("juniper_junos")
+        mig.pick_target("arista_eos")
+        mig.fill_raw(_JUNOS_DEACTIVATED)
+        mig.submit_and_wait()
+        row = page.locator('[data-testid="migrate-tier3-section-0"]')
+        expect(row).to_have_text(
+            "inactive: interfaces ge-0/0/2 (deactivated in the source; not translated)"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_contain_text(
+            "is a statement the source had deactivated"
+        )
+        expect(mig.output).to_contain_text("10.0.0.1")
+        expect(mig.output).not_to_contain_text("10.0.2.1")
+
+    def test_a_config_with_none_has_no_such_sentence(
+        self, page: Page, base_url: str
+    ):
+        page.goto("/migrate")
+        mig = MigratePage(page)
+        page.wait_for_function(
+            """() => document.querySelector(
+                '[data-testid="migrate-source-select"]'
+            ).options.length > 0"""
+        )
+        mig.pick_source("juniper_junos")
+        mig.pick_target("arista_eos")
+        mig.fill_raw(
+            "set system host-name r1\n"
+            "set firewall family inet filter F term 1 then accept\n"
+        )
+        mig.submit_and_wait()
+        expect(page.locator('[data-testid="migrate-tier3-banner"]')).to_be_visible()
+        expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_have_count(0)
