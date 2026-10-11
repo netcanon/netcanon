@@ -1769,6 +1769,7 @@
     el.className = '';
     el.removeAttribute('data-state');
     el.removeAttribute('data-stale');
+    el.removeAttribute('data-outcome');
     var portsPane = document.getElementById('mig-rename-ports-pane');
     if (portsPane && !portsPane.classList.contains('active')) {
       el.style.display = 'none';
@@ -1794,21 +1795,46 @@
       var hint = '';
       var state = 'incomplete';
       var look = 'plan-info';
+      var outcome = '';
+      // With a pairing on screen and a device missing, the next
+      // Apply takes the pairing out of the output: said, as it is
+      // when both were cleared.
+      var unpairs = plan
+        ? ' Apply now would go back to translating port names by their shape.' : '';
       var preview = problem ? '' : _devicePreviewState();
       var held = (!problem && typeof applyHeldBy === 'function') ? applyHeldBy() : '';
       if (problem === 'none') {
         hint = 'The devices were cleared — Apply to go back to translating '
           + 'port names by their shape.';
         state = 'cleared';
-      } else if (problem === 'no-source') {
-        hint = 'Choose the source device as well to pair ports by position. '
-          + 'Until then the target’s port list only fills the choices below.';
-      } else if (problem === 'no-source-models') {
-        hint = 'No device model is known for the source vendor yet, so ports '
-          + 'cannot be paired by position. The target’s port list only fills '
-          + 'the choices below.';
+      } else if (problem === 'no-source' || problem === 'no-source-models') {
+        // A target device with no source device pairs nothing: every
+        // name goes through as it is, or by its shape.  Where that
+        // leaves names in the output the target does not have, it
+        // is a warning with the count, not a hint in passing.
+        var strays = plan ? [] : _outputNamesOffTarget();
+        if (strays.length) {
+          hint = 'Ports are NOT paired by position: '
+            + (problem === 'no-source' ? 'no source device is declared'
+                                       : 'no device model is known for the source vendor')
+            + '. ' + _plural(strays.length, 'port name', 'port names') + ' in the output '
+            + (strays.length === 1 ? 'is not a port' : 'are not ports')
+            + ' of the target device (' + strays.slice(0, 4).join(', ')
+            + (strays.length > 4 ? ' …' : '') + '). '
+            + (problem === 'no-source' ? 'Choose the source device, then Apply.'
+                                       : 'Give each a port of the target below.');
+          look = 'plan-warn';
+          outcome = 'unpaired-names';
+        } else if (problem === 'no-source') {
+          hint = 'Choose the source device as well to pair ports by position. '
+            + 'Until then the target’s port list only fills the choices below.' + unpairs;
+        } else {
+          hint = 'No device model is known for the source vendor yet, so ports '
+            + 'cannot be paired by position. The target’s port list only fills '
+            + 'the choices below.' + unpairs;
+        }
       } else if (problem === 'no-target') {
-        hint = 'Choose the target device to pair ports by position.';
+        hint = 'Choose the target device to pair ports by position.' + unpairs;
       } else if (problem === 'target-vendor') {
         hint = 'The target device is not of the target codec’s vendor, so '
           + 'ports are not paired by position.';
@@ -1843,6 +1869,7 @@
         (plan && state !== 'cleared' && state !== 'ready') ? lead + hint : hint);
       el.className = look;
       el.setAttribute('data-state', state);
+      if (outcome) el.setAttribute('data-outcome', outcome);
       if (plan) el.setAttribute('data-stale', 'true');
       el.style.display = '';
       return;
@@ -1855,6 +1882,7 @@
         + (reason ? ': ' + reason : '; every name was translated by its shape.'));
       el.className = 'plan-block';
       el.setAttribute('data-state', 'unapplied');
+      el.setAttribute('data-outcome', 'not-paired');
       el.style.display = '';
       return;
     }
@@ -1887,8 +1915,14 @@
     var unbound = Object.keys(plan.unbound_ports || {}).length;
     var pending = pendingPlanDecisions(plan);
 
+    // No port the config uses is a port of the declared source device:
+    // no pair was made, and every name was translated by its shape.
+    // That is not a pairing, whatever was accepted afterwards.
+    var nothingPaired = usedPairs.length === 0 && (offInv > 0 || usedUnplaced.length > 0);
     var title = document.createElement('strong');
-    title.textContent = 'Ports paired by position';
+    title.setAttribute('data-testid', 'migrate-rename-plan-title');
+    title.textContent = nothingPaired
+      ? 'No port was paired by position' : 'Ports paired by position';
     el.appendChild(title);
     _planChip(el, 'migrate-rename-plan-paired', paired + ' paired');
     if (yourMoves) {
@@ -1998,7 +2032,7 @@
         'chip-info');
     }
     var state = (fused || unbound) ? 'block'
-      : ((unresolved.length || stale) ? 'warn' : 'ok');
+      : ((unresolved.length || stale || nothingPaired) ? 'warn' : 'ok');
     var lines = (plan.warnings || []).map(function(w) {
       return String(w).replace(/^port mapping: /, '');
     });
@@ -2029,7 +2063,37 @@
     }
     el.className = 'plan-' + state;
     el.setAttribute('data-state', state);
+    // What the footer says after Apply is read from here, so that
+    // the two cannot disagree.
+    el.setAttribute('data-outcome', state === 'block' ? 'blocked'
+      : (nothingPaired ? 'nothing-paired' : 'paired'));
     el.style.display = '';
+  }
+
+  /** Port names the job on screen wrote that the declared target
+   *  device does not list -- from the job, so it is what was last
+   *  sent, not what is typed in the table since. */
+  function _outputNamesOffTarget() {
+    var target = currentTargetDevice();
+    if (!target || !_lastJob) return [];
+    var listed = new Set(target.ports.map(function(p) {
+      return String(p.id).toLowerCase();
+    }));
+    var renames = _lastJob.port_renames || {};
+    var dropped = new Set(_lastJob.port_drops || []);
+    var strays = [];
+    (_lastJob.source_ports || []).forEach(function(src) {
+      if (dropped.has(src)) return;
+      var written = Object.prototype.hasOwnProperty.call(renames, src) ? renames[src] : src;
+      if (typeof written !== 'string' || !written) return;
+      if (!listed.has(written.toLowerCase())) strays.push(written);
+    });
+    // Each name once (two ports can be written on one name), in the
+    // order a person counts in, not the order the config first
+    // mentions them.
+    return Array.from(new Set(strays)).sort(function(a, b) {
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
   }
 
   /** Called when the modal opens (and when a new job replaces the one

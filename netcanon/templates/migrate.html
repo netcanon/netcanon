@@ -2063,6 +2063,10 @@
   var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans' | 'local_users' | 'snmp' | 'snmpv3'
   var _renameDragState = null;       // { offsetX, offsetY } while dragging
   var _renameApplying = false;       // an Apply is in flight
+  var _renameApplyAbort = null;      // ... and how to give its request up
+  // Long enough for a large config on a slow machine; an Apply the
+  // server never answers ends then, with a line in the footer.
+  var _RENAME_APPLY_TIMEOUT_MS = 120000;
   var _applyHeldReason = '';         // why Apply is held, as the last summary found it
   var _renameSectionOpen = {};       // kind -> a section the operator opened / closed
 
@@ -2371,7 +2375,9 @@
     // two devices, and the devices are not remembered across a page
     // load: it is not the operator's standing decision about this
     // host, and is not stored as one.
-    var ownPorts = Object.assign({}, _renameUserMap);
+    // Entry by entry, as Apply sends them: a port named ``__proto__``
+    // is an entry like any other.
+    var ownPorts = Object.fromEntries(Object.entries(_renameUserMap));
     Object.keys(_planAccepted).forEach(function(name) {
       if (ownPorts[name] === _planAccepted[name]) delete ownPorts[name];
     });
@@ -2740,6 +2746,10 @@
   function captureJobForRename(body, job) {
     _lastJobBody = body;
     _lastJob = job;
+    // An Apply still out was pressed for the job this one replaces.
+    // Its answer would be dropped; its request is given up now, so
+    // that Apply is free for this job.
+    if (_renameApplyAbort) _renameApplyAbort.abort();
     _renameUserMap = Object.create(null);
     _renameVlanUserMap = {};
     _renameLocalUserMap = {};

@@ -249,7 +249,33 @@ one of them another target, or drop it.  If the two are ports the
 translator itself put on one name (two Catalyst ports that both read
 as `1/1` on an Aruba switch), declare the *Source device* and the
 *Target device*: with both declared, Apply is available and pairs
-each port with a port of its own.
+the ports the source device has, each with a port of its own.  A
+name the declared source device does not have (a Catalyst's
+`AppGigabitEthernet1/0/1`) is listed as not on the source device and
+waits for your decision.
+
+### Apply said "Applied" and the port names did not change
+
+Ports are paired by position only when **both** devices are declared.
+With a target device and no source device, every port keeps its
+name (same vendor) or is translated by the shape of its name (another
+vendor).  The strip above the table says so -- in amber, with the
+count of names the target does not have -- and the footer says
+"Ports were NOT paired by position".  The source device is filled in
+by itself only where the config states its hardware and a model
+family describes it (an AOS-S 2930F or 2930M today); otherwise the
+line under *Source device* says why not.  Choose the source device,
+then Apply.
+
+### The strip says "No port was paired by position"
+
+Both devices are declared, and no port the config uses is a port of
+the source device: the device chosen as the source is not the one
+the config came from (a stack's `1/1` names against a config of `1`,
+`2`, `3`; a 25G model against `GigabitEthernet` names).  Every name
+was translated by its shape instead.  Choose the right source model,
+mode and member numbers; *Accept as shown* records the names as they
+are and pairs nothing.
 
 ### The strip above the rename table is red
 

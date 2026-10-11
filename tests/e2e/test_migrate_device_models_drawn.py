@@ -716,6 +716,12 @@ class TestWhatIsPainted:
         _apply(page)
         expect(_plan(page)).to_have_attribute("data-state", "block")
         assert alike(painted_background(_plan(page)), painted_token(page, TOP, "--badge-failed-bg"))
+        # Under a red strip the footer does not say "Applied." and stop,
+        # and the toast is not the green one.
+        expect(page.locator(_tid("migrate-rename-status"))).to_have_text(
+            "Applied. The mapping reports something that has to be put right \u2014 see above."
+        )
+        expect(page.locator(_tid("toast"))).to_have_class(re.compile(r"\btoast-info\b"))
         chip = page.locator(_tid("migrate-rename-plan-unbound"))
         expect(chip).to_be_visible()
         red = token_ink(page, "--badge-failed-fg")
@@ -1705,8 +1711,14 @@ class TestAServerThatDoesNotAnswer:
     ) -> None:
         """The summary re-enabled the button on every redraw, so a row
         edit while Apply was out allowed a second one; and an answer
-        that came back after a newer translation replaced its output."""
+        that came back after a newer translation replaced its output.
+
+        A request is given up when its job is replaced (the next
+        test).  This one takes that away, as a browser without it
+        would: the answer then does arrive, and must still not be
+        drawn."""
         expect(_source_note(page)).to_be_visible()
+        page.evaluate("window.AbortController = undefined")
         _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
         held: list = []
 
@@ -1818,11 +1830,16 @@ class TestWhatWasReadAndWhatWasChosen:
         )
         expect(_source_note(page)).not_to_contain_text("declare the device yourself")
         _pick_target(page, TARGET_2930M_48G)
-        expect(page.locator(_tid("migrate-rename-plan-hint"))).to_have_text(
-            "No device model is known for the source vendor yet, so ports cannot be "
-            "paired by position. The target\u2019s port list only fills the choices below."
-        )
+        # Two names in the output are not ports of that target, and no
+        # pairing can be had: said as a warning, with the names.
+        expect(page.locator(_tid("migrate-rename-plan-hint"))).to_have_text(re.compile(
+            r"^Ports are NOT paired by position: no device model is known for the source "
+            r"vendor\. \d+ port names? in the output (is not a port|are not ports) of the "
+            r"target device \(.+\)\. Give each a port of the target below\.$"
+        ))
         expect(_plan(page)).to_have_attribute("data-state", "incomplete")
+        expect(_plan(page)).to_have_attribute("data-outcome", "unpaired-names")
+        assert alike(painted_background(_plan(page)), painted_token(page, TOP, "--badge-partial-bg"))
         # By name both ports end on one name, and no pairing is on
         # offer to mend it: Apply is held, and says why.
         expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_disabled()
@@ -2288,7 +2305,7 @@ class TestWhyAnApplyDidNotHappenStays:
         )
         expect(status).to_have_attribute("data-state", "failed")
         assert alike(ink(status), token_ink(page, "--badge-failed-fg"))
-        expect(page.locator(_tid("toast"))).to_contain_text("Network error")
+        expect(page.locator(_tid("toast"))).to_contain_text("Not applied: the server did not answer")
         # Nothing was applied, and Apply can be pressed again.
         assert aoss_2930f.output.inner_text() == before
         expect(apply_button).to_be_enabled()
@@ -2405,3 +2422,442 @@ class TestTheTableBeforeApplyIsInPortOrder:
         _apply(page)
         expect(_plan(page)).to_have_attribute("data-state", "ok")
         assert _port_rows(page, ["1", "2", "3"]) == [str(n) for n in range(1, 53)]
+
+
+# ---------------------------------------------------------------------------
+# Nothing paired is not said to be paired
+# ---------------------------------------------------------------------------
+
+#: An AOS-S config whose banner names a device no model family describes.
+_UNDESCRIBED = (
+    "; J9729A Configuration Editor; Created on release #WB.16.10.0009\n"
+    'hostname "sw-edge-01"\n'
+    'vlan 1\n   name "DEFAULT_VLAN"\n   untagged 1-24\n   tagged 25-26\n   exit\n'
+)
+
+_WARN = "--badge-partial-bg"
+
+
+class TestNothingPairedIsNotSaidToBePaired:
+    """Two roads ended on a screen that said it had gone well when no
+    port had been paired.  With a source device chosen by hand that is
+    not the config's, "Accept as shown" and Apply gave a green strip
+    headed "Ports paired by position" over "0 paired", ``completed``.
+    And with a target declared and no source at all, Apply said
+    "Applied. Rendered output refreshed." over an output that named
+    twenty-six ports the target does not have -- the owner of this
+    project, at sign-off, could not tell why nothing had changed."""
+
+    def test_a_source_that_is_not_the_configs_pairs_nothing_and_says_so(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        expect(_source_note(page)).to_be_visible()
+        # The config is of a 2930F (ports 1-52); a stacked 2930M is chosen.
+        page.locator(_tid("migrate-device-source-model-select")).select_option(value=TARGET_2930M_48G)
+        expect(page.locator(_tid("migrate-device-source-note-ports"))).to_contain_text("1/1")
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        _apply(page)
+        title = page.locator(_tid("migrate-rename-plan-title"))
+        expect(title).to_have_text("No port was paired by position")
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("0 paired")
+        expect(page.locator(_tid("migrate-rename-plan-off-inventory"))).to_have_text(
+            "52 not on the source device"
+        )
+        # Accepting what is on screen records the decisions.  It pairs nothing.
+        page.locator(_tid("migrate-rename-plan-accept")).click()
+        job = _apply_and_read(page)
+        assert job["status"] == "completed"
+        expect(title).to_have_text("No port was paired by position")
+        expect(_plan(page)).to_have_attribute("data-state", "warn")
+        expect(_plan(page)).to_have_attribute("data-outcome", "nothing-paired")
+        assert alike(painted_background(_plan(page)), painted_token(page, TOP, _WARN))
+        expect(page.locator(_tid("migrate-rename-status"))).to_have_text(
+            "Applied. No port was paired by position — see above."
+        )
+        expect(page.locator(_tid("toast"))).to_have_class(re.compile(r"\btoast-info\b"))
+
+    def test_a_pairing_that_was_made_is_still_headed_as_one(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        _apply(page)
+        expect(page.locator(_tid("migrate-rename-plan-title"))).to_have_text("Ports paired by position")
+        expect(_plan(page)).to_have_attribute("data-outcome", "paired")
+        expect(page.locator(_tid("migrate-rename-status"))).to_have_text("Applied. Rendered output refreshed.")
+        expect(page.locator(_tid("toast"))).to_have_class(re.compile(r"\btoast-success\b"))
+        # Every paired port dropped by the operator is still a pairing
+        # that was made: the heading is about the plan, not the count.
+        for port in ("1", "2"):
+            choose_override(page, port, "__DROP__")
+        _apply(page)
+        expect(page.locator(_tid("migrate-rename-plan-title"))).to_have_text("Ports paired by position")
+
+    def test_a_target_with_no_source_says_what_the_output_names(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        mp = _open(page, live_server_url, _UNDESCRIBED)
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value("")
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        hint = page.locator(_tid("migrate-rename-plan-hint"))
+        expect(hint).to_have_text(
+            "Ports are NOT paired by position: no source device is declared. 26 port names in "
+            "the output are not ports of the target device (1, 2, 3, 4 …). Choose the source "
+            "device, then Apply."
+        )
+        expect(_plan(page)).to_have_attribute("data-outcome", "unpaired-names")
+        assert alike(painted_background(_plan(page)), painted_token(page, TOP, _WARN))
+        before = mp.output.inner_text()
+        body = _apply(page)
+        assert "source_deployment" not in body and "target_deployment" not in body
+        expect(page.locator(_tid("migrate-rename-status"))).to_have_text(
+            "Applied. Ports were NOT paired by position — see above."
+        )
+        expect(page.locator(_tid("toast"))).to_have_class(re.compile(r"\btoast-info\b"))
+        assert mp.output.inner_text() == before
+        # With the source chosen the same Apply pairs them.
+        page.locator(_tid("migrate-device-source-model-select")).select_option(
+            value="fam:2930F:2930F-24G-4SFP"
+        )
+        expect(page.locator(_tid("migrate-device-source-note-ports"))).to_contain_text("28 ports")
+        expect(_plan(page)).to_have_attribute("data-state", "ready")
+        _apply(page)
+        expect(page.locator(_tid("migrate-rename-plan-title"))).to_have_text("Ports paired by position")
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("26 paired")
+        expect(mp.output).to_contain_text("untagged 1/1,1/2,")
+        expect(mp.output).to_contain_text("tagged 1/A1,1/A2")
+        expect(page.locator(_tid("migrate-rename-status"))).to_have_text("Applied. Rendered output refreshed.")
+
+    def test_a_target_whose_names_the_output_has_is_a_hint_as_it_was(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """A flat profile of a switch that stands alone names its ports
+        as the config does: nothing in the output is off the target."""
+        _open(page, live_server_url, _UNDESCRIBED)
+        page.locator(_tid("migrate-rename-target-model-select")).select_option(value="2930F-48G")
+        hint = page.locator(_tid("migrate-rename-plan-hint"))
+        expect(hint).to_have_text(
+            "Choose the source device as well to pair ports by position. Until then the "
+            "target\u2019s port list only fills the choices below."
+        )
+        assert _plan(page).get_attribute("data-outcome") is None
+        assert alike(painted_background(_plan(page)), painted_token(page, TOP, "--alert-info-bg"))
+        _apply(page)
+        expect(page.locator(_tid("migrate-rename-status"))).to_have_text("Applied. Rendered output refreshed.")
+        expect(page.locator(_tid("toast"))).to_have_class(re.compile(r"\btoast-success\b"))
+
+    def test_a_device_cleared_after_a_pairing_says_what_apply_would_do(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        _apply(page)
+        expect(aoss_2930f.output).to_contain_text("1/A1")
+        page.locator(_tid("migrate-device-source-model-select")).select_option(value="")
+        hint = page.locator(_tid("migrate-rename-plan-hint"))
+        expect(hint).to_contain_text("The table below is still the mapping made with the devices as they were.")
+        expect(hint).to_contain_text("Apply now would go back to translating port names by their shape.")
+        expect(_plan(page)).to_have_attribute("data-stale", "true")
+
+
+# ---------------------------------------------------------------------------
+# An Apply ends
+# ---------------------------------------------------------------------------
+
+
+class TestAnApplyEnds:
+    """An Apply had three ways not to end: its request outlived the job
+    it was pressed for and held the button for the next one; a request
+    the server never answered was never given up; and an answer the
+    page could not read, or a translation that failed, left the footer
+    empty or saying "Applied."."""
+
+    def test_an_apply_is_given_up_when_its_job_is_replaced(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        expect(_source_note(page)).to_be_visible()
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        held: list = []
+
+        def hold_the_first(route) -> None:
+            if held:
+                route.continue_()
+            else:
+                held.append(route)
+
+        page.route("**/api/v1/migration/plan", hold_the_first)
+        button = page.locator(_tid("migrate-rename-apply-btn"))
+        with page.expect_request("**/api/v1/migration/plan"):
+            button.click()
+        expect(button).to_have_text("Applying…")
+        # A newer translation, behind the modal, while that Apply is out.
+        _translate_behind_the_modal(page, "aruba_aoss", "aruba_aoss", _NO_DEVICE_STATED)
+        expect(aoss_2930f.output).to_contain_text("printer")
+        # Apply is free for the job now on the page, at once, and the
+        # footer says nothing about a request nobody is waiting for.
+        expect(button).to_have_text("Apply & regenerate")
+        expect(button).to_be_enabled()
+        expect(page.locator(_tid("migrate-rename-status"))).to_have_text("")
+        expect(page.locator(_tid("toast"))).not_to_contain_text("Not applied")
+        page.unroute("**/api/v1/migration/plan")
+        _apply(page)
+        expect(page.locator(_tid("migrate-rename-status"))).to_contain_text("Applied")
+
+    def test_an_apply_the_server_never_answers_is_given_up_at_its_limit(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        expect(_source_note(page)).to_be_visible()
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        page.clock.install()
+        held: list = []
+        page.route("**/api/v1/migration/plan", lambda route: held.append(route))
+        button = page.locator(_tid("migrate-rename-apply-btn"))
+        before = aoss_2930f.output.inner_text()
+        button.click()
+        expect(button).to_have_text("Applying…")
+        page.clock.fast_forward(119_000)
+        expect(button).to_have_text("Applying…")
+        page.clock.fast_forward(2_000)
+        status = page.locator(_tid("migrate-rename-status"))
+        expect(status).to_have_text("Not applied — the server did not answer in 120 seconds.")
+        expect(status).to_have_attribute("data-state", "failed")
+        expect(button).to_have_text("Apply & regenerate")
+        expect(button).to_be_enabled()
+        assert aoss_2930f.output.inner_text() == before
+        assert len(held) == 1
+        page.unroute("**/api/v1/migration/plan")
+
+    def test_an_answer_the_page_cannot_read_is_not_applied_and_says_so(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """A proxy's own page with a 200 in front of it."""
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        before = aoss_2930f.output.inner_text()
+        page.route(
+            "**/api/v1/migration/plan",
+            lambda route: route.fulfill(status=200, content_type="text/html", body="<html>gateway</html>"),
+        )
+        page.locator(_tid("migrate-rename-apply-btn")).click()
+        status = page.locator(_tid("migrate-rename-status"))
+        expect(status).to_have_text(re.compile(r"^Not applied — the server\u2019s answer could not be read \(.+\)\.$"))
+        expect(status).to_have_attribute("data-state", "failed")
+        assert aoss_2930f.output.inner_text() == before
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
+        # An answer that is JSON and no job is no better.
+        page.unroute("**/api/v1/migration/plan")
+        page.route(
+            "**/api/v1/migration/plan",
+            lambda route: route.fulfill(status=200, content_type="application/json", body="{}"),
+        )
+        page.locator(_tid("migrate-rename-apply-btn")).click()
+        expect(status).to_have_text("Not applied — the server\u2019s answer could not be read.")
+        assert aoss_2930f.output.inner_text() == before
+        page.unroute("**/api/v1/migration/plan")
+
+    def test_a_translation_that_failed_is_not_applied_and_says_so(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        before = aoss_2930f.output.inner_text()
+        page.route(
+            "**/api/v1/migration/plan",
+            lambda route: route.fulfill(
+                status=200, content_type="application/json",
+                body=json.dumps({"status": "failed", "error": "render: no such thing"}),
+            ),
+        )
+        page.locator(_tid("migrate-rename-apply-btn")).click()
+        status = page.locator(_tid("migrate-rename-status"))
+        expect(status).to_have_text("Not applied — the translation failed: render: no such thing")
+        expect(status).to_have_attribute("data-state", "failed")
+        expect(page.locator(_tid("toast"))).to_have_class(re.compile(r"\btoast-error\b"))
+        # The output is what it was, and the modal still describes it.
+        assert aoss_2930f.output.inner_text() == before
+        expect(page.locator(_tid("migrate-rename-row-1"))).to_be_visible()
+        page.unroute("**/api/v1/migration/plan")
+        _apply(page)
+        expect(status).to_have_text("Applied. Rendered output refreshed.")
+
+
+# ---------------------------------------------------------------------------
+# A name is a name
+# ---------------------------------------------------------------------------
+
+
+class TestAPortNamedLikeAnObjectsOwnProperty:
+    """RouterOS lets an operator name a port anything, ``__proto__``
+    among them.  The override map has no prototype, so the row showed
+    the entry; Apply then copied the map onto an ordinary object, where
+    assigning that key sets the prototype and makes no entry.  The row
+    said overridden, the request did not hold it, the job said
+    ``completed``."""
+
+    @pytest.mark.parametrize("name", ["__proto__", "constructor", "toString"])
+    def test_what_the_row_shows_is_what_is_sent_and_what_is_kept(
+        self, page: Page, live_server_url: str, name: str,
+    ) -> None:
+        config = _ROUTEROS_NAMED.replace("core-a", name)
+        assert config.count(name) == 2
+        _translate(page, live_server_url, "mikrotik_routeros", "mikrotik_routeros", config)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        field = page.locator(_tid("migrate-rename-override-" + name))
+        field.click()
+        field.press_sequentially("wan-b")
+        body = _apply(page)
+        assert body["port_rename_map"] == {name: "wan-b"}
+        kept = page.evaluate(
+            """() => Object.keys(localStorage)
+                .filter((key) => key.startsWith('netcanon.rename-ack'))
+                .map((key) => localStorage.getItem(key))"""
+        )
+        assert [json.loads(text)["ports"] for text in kept] == [{name: "wan-b"}]
+        # Dropped, it is sent as dropped.
+        page.locator(_tid("migrate-rename-drop-" + name)).click()
+        assert _apply(page)["port_rename_map"] == {name: None}
+
+
+
+# ---------------------------------------------------------------------------
+# A release the page never sees
+# ---------------------------------------------------------------------------
+
+_ROW_ONE_IS_A_LIST = """(testid) => {
+    for (const el of document.querySelectorAll('[data-testid]')) {
+        if (el.getAttribute('data-testid') === testid) return el.tagName === 'SELECT';
+    }
+    return false;
+}"""
+
+
+def _press_and_no_release(page: Page) -> None:
+    page.evaluate(
+        "document.body.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, buttons: 1}))"
+    )
+
+
+def _a_target_that_answers_after_the_press(page: Page) -> None:
+    """Choose the target, press (and do not release) while its preview
+    is out, then let the preview answer: the table's rebuild is now
+    waiting for a release."""
+    held: list = []
+    page.route("**/api/v1/migration/inventory", lambda route: held.append(route))
+    page.locator(_tid("migrate-rename-target-model-select")).select_option(value=TARGET_2930M_48G)
+    expect(page.locator(_tid("migrate-device-target-note-checking"))).to_be_visible()
+    _press_and_no_release(page)
+    for route in held:
+        route.continue_()
+    page.unroute("**/api/v1/migration/inventory")
+    expect(page.locator(_tid("migrate-device-target-note-ports"))).to_be_visible()
+    _settle(page)
+    # The wait is real: the device is declared and the table has not been redrawn.
+    assert page.locator(_tid("migrate-rename-override-1")).evaluate("(el) => el.tagName") == "INPUT"
+
+
+class TestAReleaseThePageNeverSees:
+    """A rebuild of the table that nobody asked for by acting on it
+    waits while a mouse button is down.  A list the browser draws
+    outside the page can take the release with it; the page then waited
+    for the next click, with a target device chosen and the table still
+    offering free text.  Any later sign that no button is down ends the
+    wait."""
+
+    def test_a_pointer_that_moves_with_no_button_down_ends_the_wait(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        expect(_source_note(page)).to_be_visible()
+        _a_target_that_answers_after_the_press(page)
+        page.mouse.move(40, 40)
+        page.mouse.move(60, 60)
+        page.wait_for_function(_ROW_ONE_IS_A_LIST, arg="migrate-rename-override-1")
+
+    def test_a_key_ends_the_wait(self, aoss_2930f: MigratePage, page: Page) -> None:
+        expect(_source_note(page)).to_be_visible()
+        _a_target_that_answers_after_the_press(page)
+        page.keyboard.press("Shift")
+        page.wait_for_function(_ROW_ONE_IS_A_LIST, arg="migrate-rename-override-1")
+
+    def test_a_pointer_that_moves_with_a_button_down_does_not(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """A drag is a press that has not ended: the click it may
+        become must still find its element."""
+        expect(_source_note(page)).to_be_visible()
+        _a_target_that_answers_after_the_press(page)
+        page.evaluate(
+            "document.body.dispatchEvent(new PointerEvent('pointermove', {bubbles: true, buttons: 1}))"
+        )
+        _settle(page)
+        assert page.locator(_tid("migrate-rename-override-1")).evaluate("(el) => el.tagName") == "INPUT"
+        page.evaluate(
+            "document.body.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}))"
+        )
+        page.wait_for_function(_ROW_ONE_IS_A_LIST, arg="migrate-rename-override-1")
+
+
+#: Two ports, and a banner no model family describes.
+_TWO_PORTS = (
+    "; J9729A Configuration Editor; Created on release #WB.16.10.0009\n"
+    'hostname "two"\n'
+    "vlan 1\n   untagged 1-2\n   exit\n"
+)
+
+
+class TestWhatTheStripCallsAPairing:
+    def test_every_pair_dropped_by_the_operator_is_still_a_pairing(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """"No port was paired" is about the plan -- no port the config
+        uses is a port of the source device -- not about how many pairs
+        still stand after the operator's own entries."""
+        _open(page, live_server_url, _TWO_PORTS)
+        page.locator(_tid("migrate-device-source-model-select")).select_option(
+            value="fam:2930F:2930F-24G-4SFP"
+        )
+        _pick_target(page, TARGET_2930M_24G)
+        _apply(page)
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("2 paired")
+        for port in ("1", "2"):
+            choose_override(page, port, "__DROP__")
+        _apply(page)
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("0 paired")
+        expect(page.locator(_tid("migrate-rename-plan-your-drops"))).to_have_text(
+            "2 paired ports dropped by your own entries"
+        )
+        expect(page.locator(_tid("migrate-rename-plan-title"))).to_have_text("Ports paired by position")
+        expect(_plan(page)).to_have_attribute("data-outcome", "paired")
+
+    def test_names_translated_onto_the_targets_ports_are_not_strays(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """Onto another vendor every name is translated by its shape.
+        What is counted is the name in the OUTPUT: two Catalyst ports
+        written ``1/1`` and ``1/2`` are ports of a 2930M stack -- and
+        not of a 2930F that stands alone, whose ports are ``1``, ``2``
+        (the next test)."""
+        _translate(page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _CISCO_SRC)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        _pick_target(page, TARGET_2930M_48G)
+        hint = page.locator(_tid("migrate-rename-plan-hint"))
+        expect(hint).to_be_visible()
+        expect(hint).not_to_contain_text("NOT paired")
+        assert _plan(page).get_attribute("data-outcome") is None
+
+    def test_a_name_is_counted_once_and_a_dropped_port_not_at_all(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """Two Catalyst ports both read ``1/1``, which a 2930F that
+        stands alone does not have; the uplink the translator dropped
+        is in no output."""
+        _translate(page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _CISCO_TWO_ON_ONE_NAME)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        page.locator(_tid("migrate-rename-target-model-select")).select_option(value="2930F-48G")
+        expect(page.locator(_tid("migrate-rename-plan-hint"))).to_have_text(re.compile(
+            r"^Ports are NOT paired by position: .+\. 1 port name in the output is not a port of "
+            r"the target device \(1/1\)\. .+\.$"
+        ))
+
+    def test_the_window_losing_the_focus_ends_the_wait_for_a_release(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        expect(_source_note(page)).to_be_visible()
+        _a_target_that_answers_after_the_press(page)
+        page.evaluate("window.dispatchEvent(new Event('blur'))")
+        page.wait_for_function(_ROW_ONE_IS_A_LIST, arg="migrate-rename-override-1")

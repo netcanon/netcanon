@@ -869,7 +869,8 @@ Ports pane choose the *Source device* and the *Target device*.
   not have — turns the line red and says why, in the server's words.
   It is still sent with Apply, which the server then refuses: the
   output is left as it was, and the footer of the modal says *Not
-  applied* with the server's reason until you act again.  A line that
+  applied* with the server's reason until the next Apply (or *Accept
+  as shown*, or *Reset all*).  A line that
   says the device *could not be checked* is not a refusal: the preview
   did not arrive, and Apply sends the device for the server to compile
   itself.
@@ -885,7 +886,12 @@ Ports pane choose the *Source device* and the *Target device*.
   or speed lost.  Green means the job needs nothing from you, amber
   that a name needs a decision or a route still names a port that
   moved, red that the job is held (a target port was given two
-  sources, or a RouterOS port is not found by its hardware).
+  sources, or a RouterOS port is not found by its hardware).  If
+  the source device you chose is not the one the config is of,
+  nothing can be paired: the strip is headed **No port was paired
+  by position**, in amber, whatever is accepted afterwards.  After
+  Apply the footer says what the strip says; "Applied." by itself
+  is for a job the strip has nothing to say against.
 * **Accept as shown** records the outcome on screen as your decision
   for each undecided name (a dropped port stays dropped, a kept one
   stays where it landed), and Apply confirms it.  It is a decision
@@ -897,10 +903,17 @@ Ports pane choose the *Source device* and the *Target device*.
   does: two ports the name-shape translation put on one name are what
   the pairing by position mends.
 * A target chosen with no source device works as before: its port
-  list fills the choices in the table, and nothing is paired.  A
+  list fills the choices in the table, and nothing is paired.  Where
+  that leaves port names in the output the target does not have -- a
+  switch that stands alone translated for a stack keeps `1`, `2`, `3`
+  where the stack's ports are `1/1`, `1/2`, `1/3` -- the strip says
+  so in amber, with the count, and Apply's footer says the ports
+  were not paired.  Choose the source device and apply again.  A
   target device belongs to the target codec it was chosen for.
 * The modal does not block the page: translate again behind it and it
-  is redrawn from the new job.
+  is redrawn from the new job; an Apply still out for the old one is
+  given up.  An Apply the server does not answer in two minutes is
+  given up too, and says so.
 
 **Through the API** the same steps are:
 

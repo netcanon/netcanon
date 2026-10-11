@@ -83,7 +83,25 @@
       if (_renameTableDue) setTimeout(_rebuildRenameTableIfDue, 0);
     }, true);
   });
-  window.addEventListener('blur', function() { _renamePointerDown = false; });
+  // A release the page never sees -- a list the browser draws outside
+  // the page can take the mouse with it -- would leave every put-off
+  // rebuild waiting for the next click: a target device chosen, and
+  // the table still offering free text.  A later sign that no
+  // button is down ends the wait: the pointer moving with none, or
+  // a key.  (Not a ``change``: the press that leaves a text field
+  // fires one, and that press is the click being protected.)
+  ['pointermove', 'keydown'].forEach(function(type) {
+    document.addEventListener(type, function(e) {
+      if (!_renamePointerDown) return;
+      if (type === 'pointermove' && e.buttons !== 0) return;
+      _renamePointerDown = false;
+      if (_renameTableDue) setTimeout(_rebuildRenameTableIfDue, 0);
+    }, true);
+  });
+  window.addEventListener('blur', function() {
+    _renamePointerDown = false;
+    if (_renameTableDue) setTimeout(_rebuildRenameTableIfDue, 0);
+  });
 
   /** The element with *testid* under *root*, or null.  Test ids hold
    *  interface names, which may hold anything; compared as text, not

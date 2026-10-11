@@ -18,7 +18,8 @@
    *   currentRenameProfileKey, currentRenameModuleSku,
    *   populateRenameModelDropdown,
    *   populateRenameModuleDropdown            (migrate.html inline)
-   *   setRenameStatus                          (migrate.html inline)
+   *   setRenameStatus, _renameApplyAbort,
+   *   _RENAME_APPLY_TIMEOUT_MS                 (migrate.html inline)
    *   showToast                                (base.html global)
    * ────────────────────────────────────────────────────────────────── */
 
@@ -38,6 +39,8 @@
     // True once a translation submitted behind the modal has replaced
     // the job this Apply was pressed for.  Asked after every wait.
     var gone = function() { return _lastJobBody !== baseBody; };
+    // True once the answer has become the job on the page.
+    var adopted = false;
     _renameApplying = true;
     applyBtn.disabled = true;
     applyBtn.textContent = 'Applying…';
@@ -56,7 +59,11 @@
         renderRenameTable();
       }
       var body = JSON.parse(JSON.stringify(baseBody));
-      body.port_rename_map = Object.assign({}, _renameUserMap);
+      // Not Object.assign onto ``{}``: a port can be named
+      // ``__proto__``, and assigning that key to an ordinary object
+      // sets its prototype and makes no entry -- the row showed an
+      // override that was never sent.
+      body.port_rename_map = Object.fromEntries(Object.entries(_renameUserMap));
       // The body is a clone of the last request.  A per-pane map is
       // added below only when the operator touched that pane, so one
       // that was sent before and has since been cleared (Reset all)
@@ -115,19 +122,38 @@
       var devicesKey = _devicesKey();
       // Why an Apply did not happen is written in the footer, where it
       // stays; the toast that also says it is gone in four seconds.
+      // The request can be given up on: when the job it was made for
+      // is replaced (captureJobForRename aborts it -- an Apply nobody
+      // is waiting for must not hold the button for the next job),
+      // and after a time limit, since nothing else ends a request the
+      // server never answers.
       var resp;
+      var gaveUp = false;
+      var abort = (typeof AbortController === 'function') ? new AbortController() : null;
+      var limit = abort ? setTimeout(function() {
+        gaveUp = true;
+        abort.abort();
+      }, _RENAME_APPLY_TIMEOUT_MS) : null;
+      _renameApplyAbort = abort;
       try {
         resp = await fetch('/api/v1/migration/plan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
+          signal: abort ? abort.signal : undefined,
         });
       } catch (unsent) {
         if (gone()) return;
-        showToast('Network error: ' + unsent.message, 'error');
-        setRenameStatus('Not applied — the server did not answer ('
-          + unsent.message + ').', 'failed');
+        var silence = gaveUp
+          ? 'the server did not answer in '
+            + Math.round(_RENAME_APPLY_TIMEOUT_MS / 1000) + ' seconds'
+          : 'the server did not answer (' + unsent.message + ')';
+        showToast('Not applied: ' + silence + '.', 'error');
+        setRenameStatus('Not applied — ' + silence + '.', 'failed');
         return;
+      } finally {
+        if (limit) clearTimeout(limit);
+        if (_renameApplyAbort === abort) _renameApplyAbort = null;
       }
       if (gone()) return;
       if (!resp.ok) {
@@ -138,8 +164,30 @@
           + refusal, 'failed');
         return;
       }
-      var newJob = await resp.json();
+      // An answer the page cannot read (a proxy's page with a 200),
+      // and a translation that failed: neither is applied, the
+      // output is left as it was, and the footer says which.
+      var newJob = null;
+      var unread = '';
+      try {
+        newJob = await resp.json();
+      } catch (notJson) {
+        unread = notJson.message;
+      }
       if (gone()) return;
+      if (!newJob || typeof newJob !== 'object' || typeof newJob.status !== 'string') {
+        showToast('Not applied: the server’s answer could not be read.', 'error');
+        setRenameStatus('Not applied — the server’s answer could not be read'
+          + (unread ? ' (' + unread + ')' : '') + '.', 'failed');
+        return;
+      }
+      if (newJob.status === 'failed') {
+        var broke = newJob.error || 'no output was produced';
+        showToast('Not applied: the translation failed.', 'error');
+        setRenameStatus('Not applied — the translation failed: ' + broke, 'failed');
+        return;
+      }
+      adopted = true;
       _lastJob = newJob;
       _lastJobBody = body;
       _devicePlanKey = devicesKey;
@@ -164,18 +212,37 @@
       var applyPlan = currentPortPlan();
       var undecided = (applyPlan && applyPlan.applied)
         ? (applyPlan.unresolved_ports || []).length : 0;
-      if (applyPlan && !applyPlan.applied) {
+      // The strip has just been drawn from this job; the footer says
+      // the same thing it does.  "Applied." alone, and a green
+      // toast, are for a job the strip has nothing to say against.
+      var outcome = (strip && strip.style.display !== 'none')
+        ? (strip.getAttribute('data-outcome') || '') : '';
+      var plain = false;
+      if (outcome === 'not-paired' || outcome === 'unpaired-names') {
         setRenameStatus('Applied. Ports were NOT paired by position — see above.');
+      } else if (outcome === 'nothing-paired') {
+        setRenameStatus('Applied. No port was paired by position — see above.');
+      } else if (outcome === 'blocked') {
+        setRenameStatus('Applied. The mapping reports something that has to be '
+          + 'put right — see above.');
       } else if (undecided) {
         setRenameStatus('Applied. ' + undecided + ' port name'
           + (undecided === 1 ? '' : 's') + ' still need'
           + (undecided === 1 ? 's' : '') + ' your decision.');
+        plain = true;
       } else {
         setRenameStatus('Applied. Rendered output refreshed.');
+        plain = true;
       }
-      showToast('Rename applied; output regenerated.', 'success');
+      showToast('Rename applied; output regenerated.', plain ? 'success' : 'info');
     } catch (e) {
-      showToast('Network error: ' + e.message, 'error');
+      // Not the network: that is caught where the request is made.
+      var slipped = (e && e.message) ? e.message : String(e);
+      showToast('The rename dialog hit an error: ' + slipped, 'error');
+      setRenameStatus(adopted
+        ? 'The output was regenerated, but this dialog could not be redrawn ('
+          + slipped + ') — close it and open it again.'
+        : 'Not applied — ' + slipped + '.', 'failed');
     } finally {
       _renameApplying = false;
       applyBtn.textContent = origText;

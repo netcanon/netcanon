@@ -127,6 +127,38 @@ timestamp if your timezone matters for an audit.
   words were in a toast and nowhere else.  They are now the status
   line in the modal's footer, in red, until the next thing the footer
   has to say; so is an Apply the server never answered.
+- **Nothing paired was shown as a pairing.**  With a source device
+  chosen by hand that is not the one the config is of, no port is
+  paired: every name is "not on the source device".  After *Accept as
+  shown* and Apply the strip was green, headed "Ports paired by
+  position" over "0 paired", and the job `completed`.  The heading is
+  now "No port was paired by position" and the strip amber.  And with
+  a target device declared and **no** source device, Apply said
+  "Applied. Rendered output refreshed." over an output that kept every
+  port name: the strip now warns, with the count and the first of the
+  names the target does not have, and the footer says the ports were
+  not paired.  The footer is read from the strip, so the two cannot
+  disagree; under a red strip it no longer says "Applied." and stops,
+  and the toast is green only when the strip has nothing to say.
+- **An override for a port named `__proto__` was shown and not sent.**
+  RouterOS and FortiOS let an operator name a port anything.  The row
+  showed the entry; the request was built by copying the map onto an
+  ordinary object, where that key sets the prototype and makes no
+  entry.  Entries are now copied one by one, to the request and to
+  what the browser remembers.
+- **An Apply could fail to end.**  Its request outlived the job it
+  was pressed for and held the button for the next one; a request the
+  server never answered was never given up; an answer the page could
+  not read (a proxy's own page with a 200) left the footer empty, and
+  a translation that failed read "Applied."  The request is now given
+  up when its job is replaced and after two minutes, and each of
+  those says "Not applied" in the footer, with why, and leaves the
+  output as it was.
+- **A device chosen, and the table still asking for names by hand.**
+  The table's redraw waits while a mouse button is down, and a list
+  the browser draws outside the page can take the release with it.
+  The pointer moving with no button down, or a key, now ends the
+  wait.
 - **A toast could take a click meant for what was under it.**  On
   every page a toast is drawn above everything, and its tint lets
   what is under it show through.  A three-line error lay over the
