@@ -809,6 +809,25 @@ class TestTheEdgesOfOneRecordPerName:
             "1": "trk1", "4": "trk1",
         }
 
+    def test_a_port_two_lags_name_is_linked_by_the_first_line_that_names_it(self) -> None:
+        """No device accepts a port in two trunks; the parser has to do
+        something with one, and it is this: a ``trunk`` line links the
+        ports it names and no others.  A later line of the first LAG
+        that does not name the port does not take it -- as on
+        ``main``, where each line was a record of its own."""
+        tree = AOSS.parse(
+            'hostname "sw"\n'
+            "trunk 1-2 trk1 lacp\n"
+            "interface 1\n   exit\n"
+            "trunk 5 trk1 lacp\n"
+            "trunk 1 trk2 lacp\n"
+        )
+        (port,) = [iface for iface in tree.interfaces if iface.name == "1"]
+        assert port.lag_member_of == "trk2"
+        assert [(lag.name, lag.members) for lag in tree.lags] == [
+            ("trk1", ["1", "2", "5"]), ("trk2", ["1"]),
+        ]
+
     def test_the_trunk_lines_of_one_lag_do_not_cost_their_square(self) -> None:
         """Each line used to go through every port the LAG already had:
         16,000 lines took ten seconds, 40,000 would take a minute.  Read
