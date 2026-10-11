@@ -50,7 +50,10 @@ timestamp if your timezone matters for an audit.
   device prints (`tagged TRK1`) comes back in the device's form.  A
   second `interface` stanza for an interface goes on with the first,
   and a second `trunk` line for a LAG adds its ports to the first:
-  one record each, as the device reads them.
+  one record each, as the device reads them, with an address the
+  second stanza states again kept once.  A next hop that names the
+  LAG (`ipv6 route <prefix> Trk1`) is read in the one spelling too,
+  so the route goes where the LAG goes.
 - **A rename-map key in another letter case reaches its port** where
   the source platform's names have no case: `Trk1`, `trk1` and `TRK1`
   are all the LAG the config calls `trk1`.  It was "does not exist in
@@ -70,9 +73,10 @@ timestamp if your timezone matters for an audit.
   aruba_aoss, written in more than one letter case, and do not end
   together`.
 - **Two final names that differ only in letter case are one port** on
-  a target whose names have no case, and two source ports sent there
-  are reported (`multiple source ports map to 'Trk1' (also written
-  'trk1': one port on aruba_aoss)`).  They were grouped by the exact
+  a target whose names have no case, and the source ports sent there
+  are reported, all of them (`multiple source ports map to 'Trk1'
+  (also written 'trk1': one port on aruba_aoss)`), and written as
+  one stanza.  They were grouped by the exact
   string: an entry that named the LAG as the config spells it
   (`{"5": "trk1"}`), where the translator writes it `Trk1`, put a
   port on the LAG in a job that said nothing.

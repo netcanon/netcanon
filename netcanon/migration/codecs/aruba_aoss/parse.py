@@ -531,6 +531,15 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
     return [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
 
 
+def _stated_once(items: list, key) -> list:
+    """*items* without the later of two that have one *key*, in the
+    order they were stated."""
+    kept: dict = {}
+    for item in items:
+        kept.setdefault(key(item), item)
+    return list(kept.values())
+
+
 def _one_name_per_lag(intent: CanonicalIntent) -> None:
     """Give a LAG one name everywhere the tree refers to it.
 
@@ -975,6 +984,11 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # stanzas or ``trunk`` lines the text has for it.
     stanza_of: dict[str, CanonicalInterface] = {}
     lag_by_name: dict[str, CanonicalLAG] = {}
+    # The ports each LAG has, so that a later ``trunk`` line for it
+    # finds the ones it adds without reading the list again; and the
+    # interfaces a second stanza was read into.
+    members_of: dict[str, set[str]] = {}
+    met_twice: dict[str, CanonicalInterface] = {}
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -1112,7 +1126,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         if rt6:
             intent.static_routes.append(CanonicalStaticRoute(
                 destination=rt6.group(1),  # already <prefix>/<len>
-                gateway=rt6.group(2),
+                # A next hop can name a LAG, and the renderer writes
+                # that ``Trk1``: read in the one spelling, like every
+                # other place a line names a port.  (The sweep after
+                # the loop cannot do it: it rewrites a next hop only
+                # where it IS an interface's name, and by then the
+                # interface is already ``trk1``.)
+                gateway=one_spelling(rt6.group(2)),
                 metric=int(rt6.group(3)) if rt6.group(3) else 0,
             ))
             i += 1
@@ -1275,19 +1295,30 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         if tk:
             lag = _build_lag_from_trunk_line(tk)
             defined = None if lag is None else lag_by_name.get(lag.name)
+            # The ports THIS line names: the only ones it can add or
+            # link.  Going through every port the LAG already had,
+            # once per line, cost the square of the lines one LAG is
+            # given.
+            named_here = [] if lag is None else lag.members
             if lag is not None and defined is not None:
                 # A second ``trunk`` line for a LAG adds its ports to
                 # the first: one LAG, one record.
-                defined.members = list(dict.fromkeys(defined.members + lag.members))
+                have = members_of[lag.name]
+                fresh = [member for member in named_here if member not in have]
+                have.update(fresh)
+                defined.members.extend(fresh)
                 lag = defined
             elif lag is not None:
                 lag_by_name[lag.name] = lag
+                members_of[lag.name] = set(lag.members)
                 intent.lags.append(lag)
             if lag is not None:
                 # Reverse-link each member to this LAG so the
-                # canonical tree stays consistent.
+                # canonical tree stays consistent.  (The members of
+                # earlier lines were linked at their own line, and
+                # the pass after the loop links every one again.)
                 iface_by_name = {i.name: i for i in intent.interfaces}
-                for member in lag.members:
+                for member in named_here:
                     m_iface = iface_by_name.get(member)
                     if m_iface is not None and m_iface.lag_member_of is None:
                         m_iface.lag_member_of = lag.name
@@ -1363,6 +1394,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             if earlier is None:
                 stanza_of[iface_name] = iface
                 intent.interfaces.append(iface)
+            else:
+                met_twice[iface_name] = iface
             i = next_i
             continue
 
@@ -1385,6 +1418,18 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             m_iface = iface_by_name.get(member)
             if m_iface is not None and m_iface.lag_member_of is None:
                 m_iface.lag_member_of = lag.name
+
+    # A stanza met twice states its addresses twice, and that is one
+    # address each: the first statement keeps its place.  Done here,
+    # once and by key -- looking through the list at every line would
+    # cost the square of the lines one interface is given.
+    for again in met_twice.values():
+        again.ipv4_addresses = _stated_once(
+            again.ipv4_addresses, lambda a: (a.ip, a.prefix_length),
+        )
+        again.ipv6_addresses = _stated_once(
+            again.ipv6_addresses, lambda a: (a.ip, a.prefix_length, a.scope),
+        )
 
     _one_name_per_lag(intent)
 

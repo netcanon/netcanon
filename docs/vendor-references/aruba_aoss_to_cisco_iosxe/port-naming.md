@@ -26,7 +26,8 @@ render emits `<interface><name>GigabitEthernet1/0/1</name>...`
 verbatim — there is no IANA-form normalisation step on the wire.
 
 If the operator does not engage the rename mesh, the AOS-S bare
-numeric port names (e.g. `1`, `A2`, `Trk1`) flow through to the
+numeric port names (e.g. `1`, `A2`, and `trk1` - the parsed tree's one
+spelling of the LAG a device prints `Trk1`) flow through to the
 `<interface><name>...` text on the wire.  A real Cisco device
 receiving such NETCONF would reject the edit with an error
 ("interface 1 not found") because Catalyst devices expect

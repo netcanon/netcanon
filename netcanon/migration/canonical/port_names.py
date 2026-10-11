@@ -32,7 +32,9 @@ This module defines the **vendor-agnostic bridge**:
    have no letter case, a rename-map key in another case is the name
    the config uses.  The rule exists once: the translator applies it,
    and so does ``run_plan_with_models`` before it merges an
-   operator's entries with a pairing's.
+   operator's entries with a pairing's.  Beside it,
+   :func:`single_spellings` - the names a config writes exactly
+   one way, which are the only ones another spelling can mean.
 
 What the sweep does NOT rewrite is a port's FACTORY name
 (``interfaces[].default_name``, RouterOS).  That field is the port's
@@ -1076,7 +1078,10 @@ def translate_port_names(  # noqa: C901
         for source in sorted(fused[place]):
             distinct.setdefault(source.casefold() if one_case else source, source)
         sources = sorted(distinct.values())
-        if len(sources) < 2 or written[place] & warned_finals:
+        # Said already, by the sweep of the records, only if EVERY
+        # spelling written here was: a third source sent to ``trk1``
+        # beside two sent to ``Trk1`` is named by no line of that sweep.
+        if len(sources) < 2 or written[place] <= warned_finals:
             continue
         final, *others = sorted(written[place])
         also = (

@@ -860,13 +860,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if not _IS_AOS_PHYSICAL_PORT_RE.match(iface.name) and not _has_renderable_body(iface):
             continue
         physical_ifaces.append(iface)
+    # Grouped by the name as it is WRITTEN: ``trk1`` and ``Trk1`` are
+    # one header, ``interface Trk1``.
     seen_names: dict[str, list[Any]] = {}
     name_order: list[str] = []
     for iface in physical_ifaces:
-        if iface.name not in seen_names:
-            seen_names[iface.name] = []
-            name_order.append(iface.name)
-        seen_names[iface.name].append(iface)
+        header = _as_the_device_writes(iface.name)
+        if header not in seen_names:
+            seen_names[header] = []
+            name_order.append(header)
+        seen_names[header].append(iface)
     # Surface collisions up-front so the comment block reads as a
     # contiguous review header rather than getting interleaved with
     # the per-interface stanzas below.
@@ -885,12 +888,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     rendered_names: set[str] = set()
     for iface in physical_ifaces:
         lname = iface.name.lower()
-        if iface.name in rendered_names:
+        if _as_the_device_writes(iface.name) in rendered_names:
             # Duplicate canonical name maps to the same Aruba port —
             # already flagged in the comment block above; skip the
             # stanza so AOS-S doesn't see two ``interface <name>``.
             continue
-        rendered_names.add(iface.name)
+        rendered_names.add(_as_the_device_writes(iface.name))
         # Loopback interfaces use AOS-S `interface loopback <N>`
         # syntax; the rest of the body (ip address, ipv6 address,
         # description) is identical to the physical-port form.

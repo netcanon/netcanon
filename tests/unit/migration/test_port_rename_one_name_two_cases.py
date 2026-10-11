@@ -36,6 +36,7 @@ On FortiOS and RouterOS, where an operator chooses interface names,
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -692,3 +693,165 @@ class TestOneNameInTwoCasesAtTheTranslator:
     @pytest.mark.parametrize("source", ["fortigate_cli", "mikrotik_routeros"])
     def test_where_names_have_case_two_names_may_end_anywhere(self, source: str) -> None:
         assert _apart(_two_cases(source, "aruba_aoss", {"DMZ": "1/9"})) == []
+
+
+# ---------------------------------------------------------------------------
+# 6. The edges of "one record per name"
+# ---------------------------------------------------------------------------
+
+_JUNOS_THREE = "".join(
+    f"set interfaces ge-0/0/{n} unit 0 family inet address 10.0.{n}.1/24\n" for n in (1, 2, 3)
+)
+
+
+class TestTheEdgesOfOneRecordPerName:
+    """Found by an independent attempt to break the above: a next hop
+    the sweep could not reach, an address stated twice by a stanza met
+    twice, a third source the collision line did not name, and a cost
+    that grew with the square of the ``trunk`` lines one LAG is given."""
+
+    def test_a_next_hop_that_names_the_lag_is_read_in_the_one_spelling(self) -> None:
+        """The renderer writes a next hop ``Trk1``.  Read back as typed
+        it named no interface of the tree -- the interface is ``trk1``
+        by then -- so the route stayed behind when the LAG was renamed
+        or dropped, in a job that said ``completed``."""
+        text = _ONE_LAG + "ipv6 route 2001:db8:1::/48 Trk1\nipv6 route 2001:db8:2::/48 trk1\n"
+        tree = AOSS.parse(text)
+        assert [route.gateway for route in tree.static_routes] == ["trk1", "trk1"]
+        assert _spellings(collect_port_names(tree), "trk1") == {"trk1"}
+        # The text comes back: what the renderer writes, the parser reads.
+        rendered = AOSS.render(tree)
+        assert "ipv6 route 2001:db8:1::/48 Trk1" in rendered
+        assert AOSS.parse(rendered).static_routes == tree.static_routes
+        # And the route goes where the LAG goes.
+        job = run_plan_with_overrides(AOSS, JUNOS, text, port_rename_map={})
+        assert job.rendered and "Trk1" not in job.rendered and "trk1" not in job.rendered
+        dropped = run_plan_with_overrides(AOSS, JUNOS, text, port_rename_map={"trk1": None})
+        assert dropped.rendered and "2001:db8:1::/48" not in dropped.rendered
+
+    def test_a_next_hop_that_is_an_address_is_read_as_it_is(self) -> None:
+        tree = AOSS.parse(_ONE_LAG + "ip route 10.9.0.0/16 192.0.2.1\nipv6 route 2001:db8:3::/48 2001:db8::1\n")
+        assert [route.gateway for route in tree.static_routes] == ["192.0.2.1", "2001:db8::1"]
+
+    def test_a_stanza_met_twice_states_an_address_once(self) -> None:
+        """A config pasted twice says every address twice.  Joined into
+        one record, the address was there twice: two address lines in
+        one stanza, a ``secondary`` equal to the primary on IOS-XE."""
+        stanza = "interface 5\n   routing\n   ip address 10.0.0.2/30\n   ipv6 address 2001:db8::2/64\n   exit\n"
+        text = _ONE_LAG.replace("vlan 1\n", stanza + stanza + "vlan 1\n", 1)
+        (record,) = [iface for iface in AOSS.parse(text).interfaces if iface.name == "5"]
+        assert [(a.ip, a.prefix_length) for a in record.ipv4_addresses] == [("10.0.0.2", 30)]
+        assert [(a.ip, a.prefix_length) for a in record.ipv6_addresses] == [("2001:db8::2", 64)]
+        assert AOSS.render(AOSS.parse(text)).count("ip address 10.0.0.2/30") == 1
+
+    def test_a_second_stanza_with_another_address_adds_it_after_the_first(self) -> None:
+        text = _ONE_LAG.replace(
+            "vlan 1\n",
+            "interface 5\n   routing\n   ip address 10.0.0.2/30\n   exit\n"
+            "interface 5\n   ip address 10.0.9.2/30\n   ip address 10.0.0.2/30\n   exit\nvlan 1\n",
+            1,
+        )
+        (record,) = [iface for iface in AOSS.parse(text).interfaces if iface.name == "5"]
+        assert [a.ip for a in record.ipv4_addresses] == ["10.0.0.2", "10.0.9.2"]
+
+    def test_only_an_address_stated_again_exactly_is_one_address(self) -> None:
+        """The same address with another prefix length is another
+        statement, and both are kept, as they were."""
+        text = _ONE_LAG.replace(
+            "vlan 1\n",
+            "interface 5\n   routing\n   ip address 10.0.0.2/30\n   ipv6 address 2001:db8::2/64\n   exit\n"
+            "interface 5\n   ip address 10.0.0.2/24\n   ipv6 address 2001:db8::2/126\n   exit\nvlan 1\n",
+            1,
+        )
+        (record,) = [iface for iface in AOSS.parse(text).interfaces if iface.name == "5"]
+        assert [(a.ip, a.prefix_length) for a in record.ipv4_addresses] == [("10.0.0.2", 30), ("10.0.0.2", 24)]
+        assert [(a.ip, a.prefix_length) for a in record.ipv6_addresses] == [
+            ("2001:db8::2", 64), ("2001:db8::2", 126),
+        ]
+
+    def test_an_interface_with_one_stanza_keeps_what_it_states(self) -> None:
+        """Only a record that was met twice is looked through: one
+        stanza that states an address twice is left as it was read."""
+        text = _ONE_LAG.replace(
+            "vlan 1\n",
+            "interface 5\n   routing\n   ip address 10.0.0.2/30\n   ip address 10.0.0.2/30\n   exit\nvlan 1\n",
+            1,
+        )
+        (record,) = [iface for iface in AOSS.parse(text).interfaces if iface.name == "5"]
+        assert len(record.ipv4_addresses) == 2
+
+    def test_a_third_source_in_another_letter_case_is_named_too(self) -> None:
+        """Two ports sent to ``Trk1`` and one to ``trk1`` are three ports
+        on one LAG.  The line for the exact name counts two; the line
+        for the place has to name all three."""
+        job = run_plan_with_overrides(
+            JUNOS, AOSS, _JUNOS_THREE,
+            port_rename_map={"ge-0/0/1": "Trk1", "ge-0/0/2": "Trk1", "ge-0/0/3": "trk1"},
+        )
+        assert any("(sources: ge-0/0/1, ge-0/0/2, ge-0/0/3)" in line for line in _merged(job))
+        # One stanza for the one LAG, and the comment that says what was left out.
+        assert job.rendered.count("\ninterface Trk1\n") == 1
+        assert "; interface Trk1 collides — kept first occurrence, skipped 2 duplicate(s)" in job.rendered
+
+    def test_two_sources_on_one_exact_name_are_still_said_once(self) -> None:
+        job = run_plan_with_overrides(
+            JUNOS, AOSS, _JUNOS_THREE, port_rename_map={"ge-0/0/1": "Trk1", "ge-0/0/2": "Trk1"},
+        )
+        (line,) = _merged(job)
+        assert "(sources: ge-0/0/1, ge-0/0/2)" in line
+
+    def test_many_trunk_lines_for_one_lag_add_each_port_once_in_order(self) -> None:
+        trunks = "".join(f"trunk {n} trk1 lacp\n" for n in (3, 1, 2, 3, 1, 4))
+        tree = AOSS.parse('hostname "sw"\ninterface 1\n   exit\ninterface 4\n   exit\n' + trunks)
+        (lag,) = tree.lags
+        assert lag.members == ["3", "1", "2", "4"]
+        assert {i.name: i.lag_member_of for i in tree.interfaces if i.name in {"1", "4"}} == {
+            "1": "trk1", "4": "trk1",
+        }
+
+    def test_the_trunk_lines_of_one_lag_do_not_cost_their_square(self) -> None:
+        """Each line used to go through every port the LAG already had:
+        16,000 lines took ten seconds, 40,000 would take a minute.  Read
+        once each they take a fraction of a second; the bound is thirty
+        times that, for a slow machine."""
+        text = 'hostname "sw"\n' + "".join(f"trunk {n} trk1 lacp\n" for n in range(1, 40_001))
+        started = time.perf_counter()
+        (lag,) = AOSS.parse(text).lags
+        assert len(lag.members) == 40_000
+        assert time.perf_counter() - started < 8.0
+
+
+# ---------------------------------------------------------------------------
+# 7. Where names have case, with both devices declared
+# ---------------------------------------------------------------------------
+
+CAPTURE_ROUTEROS = (
+    REPO_ROOT / "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc"
+).read_text(encoding="utf-8")
+
+
+class TestCasedNamesWithDevicesDeclared:
+    """``run_plan_with_models`` hands the source platform's rule to the
+    key helper.  The helper was tested with the rule given by hand; with
+    the rule always "no letter case" at that one call, every test
+    passed, and a RouterOS key typed ``ETHER1`` dropped ``ether1``."""
+
+    @pytest.mark.parametrize("value", [None, "Ethernet9"])
+    def test_a_key_in_another_case_decides_nothing(self, value) -> None:
+        routeros, eos = get_codec("mikrotik_routeros"), get_codec("arista_eos")
+        assert routeros.port_names_case_sensitive
+
+        def job(port_map):
+            return run_plan_with_models(
+                routeros, eos, CAPTURE_ROUTEROS,
+                inventory_from_profile(PROFILES["mikrotik_routeros/CRS310-8G+2S+"]),
+                inventory_from_profile(PROFILES["arista_eos/DCS-7050CX3-32S"]),
+                port_rename_map=port_map, force=True,
+            )
+
+        undecided, typed = job({}), job({"ETHER1": value})
+        assert "ether1" in collect_port_names(routeros.parse(CAPTURE_ROUTEROS))
+        assert typed.port_renames == undecided.port_renames
+        assert typed.port_drops == undecided.port_drops
+        assert typed.rendered == undecided.rendered
+        assert [line for line in typed.warnings if "'ETHER1' does not exist" in line]

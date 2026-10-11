@@ -33,7 +33,8 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
   else; it is one name here, `trk1`, in the rename modal and as a key
   of a rename map (`Trk1` reaches it too).  A second `trunk` line for
   a LAG adds its ports to the first, and a second `interface` stanza
-  for an interface goes on with the first
+  for an interface goes on with the first (an address it states
+  again is kept once)
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats):
 
