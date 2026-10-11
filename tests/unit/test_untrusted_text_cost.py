@@ -1118,6 +1118,29 @@ def _aoss_trunk_lines_of_one_lag(count: int) -> str:
     )
 
 
+#: Ports named by each line of the text below.
+_PORTS_A_TRUNK_LINE = 64
+
+
+def _aoss_trunk_lines_of_many_ports(count: int) -> str:
+    """One LAG again, each ``trunk`` line a range of ports it does
+    not have yet.  The text above is a port a line, and it shows
+    what a handler does in Python once for each member.  It does
+    not show a membership test against the LAG's own list: that
+    is done in C at a tenth of the cost a step, and at a port a
+    line the lines cost as much to read as the looking does until
+    there are twenty thousand of them -- that break was caught in
+    two runs of three.  Here the ports are many and the lines
+    few, so the looking is all there is to measure."""
+    return _config(
+        *_AOSS_TOP,
+        *(
+            f"trunk {first}-{first + _PORTS_A_TRUNK_LINE - 1} trk1 lacp"
+            for first in range(1, count * _PORTS_A_TRUNK_LINE + 1, _PORTS_A_TRUNK_LINE)
+        ),
+    )
+
+
 def _eos_bgp_vlans(count: int) -> str:
     """``vlan N`` under ``router bgp``, looked up among the VLANs
     and the MAC-VRFs made so far."""
@@ -1205,6 +1228,9 @@ STANZAS: dict[str, tuple[str, int, Callable[[int], str]]] = {
     "aruba_aoss: SNMPv3 users and their groups": ("aruba_aoss", 3000, _aoss_v3_users),
     "aruba_aoss: trunks over many interfaces": ("aruba_aoss", 2500, _aoss_trunks),
     "aruba_aoss: trunk lines of one LAG": ("aruba_aoss", 2500, _aoss_trunk_lines_of_one_lag),
+    "aruba_aoss: trunk lines of one LAG, many ports a line": (
+        "aruba_aoss", 160, _aoss_trunk_lines_of_many_ports,
+    ),
     "arista_eos: a VLAN under router bgp, again and again": ("arista_eos", 4000, _eos_bgp_vlans),
     "arista_eos: VRFs and then VLANs under router bgp": ("arista_eos", 4000, _eos_bgp_vrfs_then_vlans),
     "arista_eos: Vxlan stanzas that set a UDP port": ("arista_eos", 1500, _eos_vxlan_stanzas_with_a_port),
@@ -1255,6 +1281,9 @@ class TestParseFitsTheNumberOfItsStanzas:
             "aruba_aoss: SNMPv3 users and their groups": lambda t: len(t.snmp.v3_users),
             "aruba_aoss: trunks over many interfaces": lambda t: len(t.lags),
             "aruba_aoss: trunk lines of one LAG": lambda t: len(t.lags[0].members),
+            "aruba_aoss: trunk lines of one LAG, many ports a line": (
+                lambda t: len(t.lags[0].members) // _PORTS_A_TRUNK_LINE
+            ),
             "arista_eos: a VLAN under router bgp, again and again": lambda t: len(t.vlans),
             "arista_eos: VRFs and then VLANs under router bgp": lambda t: len(t.routing_instances),
             "arista_eos: Vxlan stanzas that set a UDP port": lambda t: len(t.vxlan_vnis),
