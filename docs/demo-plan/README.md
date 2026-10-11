@@ -55,8 +55,10 @@ invariant, the invariant wins.
   demo iframe renders blank (see [03](03-warden-spec.md#proxying)).
 - Relevant endpoints for the demo: the migrate page, the sanitize page
   (`/sanitize`), the migration-plan APIs (`POST /api/v1/migration/plan` + its
-  `/ports`, `/vlans`, … variants, `POST /api/v1/migration/detect`), and
-  `POST /api/v1/sanitize`. There is **no `/api/v1/translate` route**, and `/` is
+  `/ports`, `/vlans`, … variants, `POST /api/v1/migration/detect`), the
+  device pickers' three calls (`GET /api/v1/migration/model-families`,
+  `POST /api/v1/migration/inventory`, `POST /api/v1/migration/detect-deployment`),
+  and `POST /api/v1/sanitize`. There is **no `/api/v1/translate` route**, and `/` is
   the backup **dashboard** (out of scope). Device-backup/devices/schedules/
   configs features are **out of scope** and must be unreachable (see 04).
 

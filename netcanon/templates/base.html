@@ -622,6 +622,12 @@
       position:fixed; bottom:1.5rem; right:1.5rem; max-width:360px;
       z-index:10001; padding:.75rem 1rem; border-radius:6px;
       box-shadow:var(--shadow-lift); font-size:.9rem; line-height:1.4;
+      /* A toast is a message: it has no control of its own, it is
+         above everything, and its tint lets what is under it show
+         through.  It must never take a click meant for that -- a
+         three-line error sat over a dialog's Cancel and Apply at
+         laptop heights and swallowed both for as long as it showed. */
+      pointer-events:none;
     }
     /* Toast variants: theme-aware colour pairs driven by CSS vars
        so dark mode inherits the same semantic hues.  The showToast

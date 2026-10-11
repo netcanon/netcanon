@@ -246,20 +246,67 @@ to the API.  See [`CAPABILITIES.md`](CAPABILITIES.md) § F for what
 the line under the fit-check banner tells you about the profile's
 names.
 
-Through the API there is now a way to tell it: declare the source
-device as well as the target, and the ports are paired by position
-between the two.  See [`CAPABILITIES.md`](CAPABILITIES.md) § G.
+There is now a way to tell it: choose the *Source device* as well as
+the target in the modal (or declare both through the API), and the
+ports are paired by position between the two.  See
+[`CAPABILITIES.md`](CAPABILITIES.md) § G.
+
+### Apply is greyed out in the rename modal
+
+It says why, beside the button.  Two rows end on one target name: give
+one of them another target, or drop it.  If the two are ports the
+translator itself put on one name (two Catalyst ports that both read
+as `1/1` on an Aruba switch), declare the *Source device* and the
+*Target device*: with both declared, Apply is available and pairs
+the ports the source device has, each with a port of its own.  A
+name the declared source device does not have (a Catalyst's
+`AppGigabitEthernet1/0/1`) is listed as not on the source device and
+waits for your decision.
+
+### Apply said "Applied" and the port names did not change
+
+Ports are paired by position only when **both** devices are declared.
+With a target device and no source device, every port keeps its
+name (same vendor) or is translated by the shape of its name (another
+vendor).  The strip above the table says so -- in amber, with the
+count of names the target does not have -- and the footer says
+"Ports were NOT paired by position".  The source device is filled in
+by itself only where the config states its hardware and a model
+family describes it (an AOS-S 2930F or 2930M today); otherwise the
+line under *Source device* says why not.  Choose the source device,
+then Apply.
+
+### The strip says "No port was paired by position"
+
+Both devices are declared, and no port the config uses is a port of
+the source device: the device chosen as the source is not the one
+the config came from (a stack's `1/1` names against a config of `1`,
+`2`, `3`; a 25G model against `GigabitEthernet` names).  Every name
+was translated by its shape instead.  Choose the right source model,
+mode and member numbers; *Accept as shown* records the names as they
+are and pairs nothing.
+
+### The strip above the rename table is red
+
+The job is held.  Either a target port was given more than one source
+port — open "What the mapping reported" under the strip for which, and
+change one of the entries that point there — or, on a RouterOS target,
+a port's name reads as a VLAN, a bridge or a LAG and no line of the
+output finds its hardware: give that port another name.
 
 ### Detection proposes a device, and says ports are missing
 
-`POST /api/v1/migration/detect-deployment` returned a `deployment` with
-`consistent: false`.  The config says it is that device, and uses port
-names that device does not have (`missing_ports`; `missing_port_count`
-is how many).  Possible causes:
+In the rename modal the line under *Source device* is amber and says
+"N port names the config uses are not on this device", with the first
+few.  On the API, `POST /api/v1/migration/detect-deployment` returned a
+`deployment` with `consistent: false`.  Either way the config says it
+is that device, and uses port names that device does not have
+(`missing_ports`; `missing_port_count` is how many).  Possible causes:
 
 * **A module the config does not state.**  The config uses `A1`-`A4`
   and has no `flexible-module` line, so the proposal has an empty bay.
-  Add the module to the deployment's `modules` before you send it.
+  Set the bay's module in the *Source device* row (or add it to the
+  deployment's `modules` before you send it).
 * **Only part of the config was pasted**, or two were pasted together:
   a standalone banner over stacked port names (`1/24`).
 * **A name that is not a hardware port.**  The check counts any name
@@ -272,7 +319,8 @@ is how many).  Possible causes:
   its `module` or `stacking` lines and its VLAN port lists.
 
 `consistent: null` is not a pass: nothing was checked, because nothing
-was proposed, the text could not be parsed, or it names no port.
+was proposed, the text could not be parsed, or it names no port.  The
+modal shows that line in amber too.
 
 A `deployment` of `null` is not an error.  The first of `notes` says
 why: the config

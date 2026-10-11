@@ -223,7 +223,8 @@ Provenance + per-fixture detail in
 - **Declaring a Catalyst as the source device** — IOS-XE lists the
   interfaces of every network module the chassis could take, whichever
   one is fitted, and an application-hosting port.  With both devices
-  declared on the API those names come back as off-inventory (and
+  declared — in the Interface rename modal or on the API — those
+  names come back as off-inventory (and
   some of them can be displaced), so the job is `partial` although the
   model is right.  Where the target model lists no management port, a
   management port is kept as the target's out-of-band form if it has

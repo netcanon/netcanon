@@ -174,7 +174,9 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   by the factory name of a port you named matches nothing and is
   ignored with a warning.
 - **Moving a port onto other hardware needs both device models
-  declared** (API: `source_profile` / `target_profile`).  Then every
+  declared** (the *Source device* and *Target device* rows of the
+  Interface rename modal; on the API, `source_profile` /
+  `target_profile`).  Then every
   port the mapping places that the config has an interface for is
   looked up by the port of the target it is on — also when the config
   came from another vendor, or stated no factory name for the port —

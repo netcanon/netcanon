@@ -202,7 +202,8 @@ Provenance in
 
 - **Declaring an OPNsense device** — BSD device names are the
   system's and are lower-case, so with both devices declared on the
-  API an override typed in another case (`IGB0`) is read as the port
+  API or in the Interface rename modal an override typed in another
+  case (`IGB0`) is read as the port
   `igb0`, not as a second interface.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **Backup capture artifact** — OPNsense backups via SSH +

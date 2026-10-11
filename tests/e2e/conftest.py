@@ -114,6 +114,15 @@ def _e2e_definitions_dir(tmp_path_factory) -> Path:
             UNVERIFIED_PROFILE_YAML,
             defs_dir / "target_profiles" / UNVERIFIED_PROFILE_YAML.name,
         )
+    # And one synthetic model family, as an operator's own would sit:
+    # beside the shipped ones, under the definitions directory.  Every
+    # string a person can author in it is markup, and its panel is
+    # graded `inferred`, which no shipped family is.
+    from tests.fixtures.model_families import MARKUP_FAMILY_YAML
+    (defs_dir / "model_families").mkdir()
+    (defs_dir / "model_families" / MARKUP_FAMILY_YAML.name).write_text(
+        MARKUP_FAMILY_YAML.read_text(encoding="utf-8"), encoding="utf-8"
+    )
     return defs_dir
 
 
