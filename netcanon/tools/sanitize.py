@@ -255,7 +255,12 @@ def sanitize_text(
             snippet=raw.lstrip()[:120],
         )
 
-    sanitized_intent, substitutions = sanitize_intent(intent)
+    # The tree was parsed here and nothing else holds it, so it is
+    # redacted where it stands.  A copy is the whole config a second
+    # time, for a request that needs it once.  Measured in a container
+    # of 256 MiB, on the largest config the `small` limits admit, eight
+    # requests in turn: 232 MB with the copy, 182 MB without.
+    sanitized_intent, substitutions = sanitize_intent(intent, in_place=True)
 
     if dry_run:
         return SanitizationResult(
@@ -272,21 +277,30 @@ def sanitize_text(
 
 def sanitize_intent(  # noqa: C901
     intent: CanonicalIntent,
+    *,
+    in_place: bool = False,
 ) -> tuple[CanonicalIntent, list[Substitution]]:
     """Apply field-typed redactions to a :class:`CanonicalIntent`.
 
-    Pure function — the input ``intent`` is not mutated; a deep-copy
-    is returned with sanitized fields.
+    Pure function by default — the input ``intent`` is not mutated;
+    a deep-copy is returned with sanitized fields.
 
     Args:
         intent: The parsed canonical intent to sanitize.
+        in_place: Redact ``intent`` itself and return it, making
+            no copy.  For a caller that owns the tree and has no
+            further use for it as it was read
+            (:func:`sanitize_text`): the copy is the whole config
+            in memory a second time.  The redactions are the same
+            either way.
 
     Returns:
         Tuple of ``(sanitized_intent, substitutions)``.  The
         ``substitutions`` list is the audit log: every replacement
         with original + redacted values for ``--dry-run`` review.
+        With ``in_place``, ``sanitized_intent`` is ``intent``.
     """
-    sanitized = intent.model_copy(deep=True)
+    sanitized = intent if in_place else intent.model_copy(deep=True)
     table = _SubstitutionTable()
     subs: list[Substitution] = []
 

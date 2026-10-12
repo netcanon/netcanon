@@ -67,7 +67,7 @@ import re
 from collections.abc import Iterable, Iterator, Sequence
 from typing import Any
 
-from ..._tier3_detection import left_out_rows
+from ..._tier3_detection import left_out_rows, shown_words
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -83,6 +83,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
+from ...limits import LimitExceeded, charge, tick, ticked
 from .._helpers import GrowingIndex, Uniques, unstated_trunk_list, vlan_id_run
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -119,6 +120,7 @@ def _resolve_vlan_member_to_vids(
     if sep and lo_str.isdigit() and hi_str.isdigit():
         lo, hi = int(lo_str), int(hi_str)
         if 1 <= lo <= hi <= 4094:
+            charge("vlan_ids", hi - lo + 1, vname)
             return vlan_id_run(lo, hi)
     return []
 
@@ -215,7 +217,10 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     if _looks_like_blockform(raw):
         try:
             set_lines, left_out = _blockform_convert(raw)
-        except ParseError:
+        except (ParseError, LimitExceeded):
+            # A refusal is not a conversion that failed: the handler
+            # below would tell the operator to run `display set` on a
+            # config that was read and is too large.
             raise
         except Exception as e:
             raise ParseError(
@@ -339,7 +344,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # the source that were not translated.
     lines = raw.splitlines()
     inactive_paths: set[tuple[str, ...]] = set()
-    for raw_line in lines:
+    for raw_line in ticked(lines):
         line = raw_line.strip()
         if line.startswith("deactivate "):
             inactive_paths.add(tuple(_tokenise_set(line[11:])))
@@ -370,7 +375,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         inactive_met.setdefault(under, len(lines))
         return True
 
-    for number, raw_line in enumerate(lines):
+    for number, raw_line in enumerate(ticked(lines)):
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
@@ -438,7 +443,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # all groups regardless of order.  Any group that wasn't
     # apply-grouped silently drops.
     for gname in reversed(applied_groups):
-        for tokens in group_lines.get(gname, []):
+        for tokens in ticked(group_lines.get(gname, [])):
             _dispatch_set(
                 tokens, intent, iface_state, range_state,
                 lag_state, irb_state, dhcp_pool_state, dhcp_group_iface,
@@ -447,7 +452,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # Pass 2b: apply top-level content.  Scalars set by group
     # content get overwritten; list-shaped fields accumulate
     # (duplicate-add protection lives in each _apply_* function).
-    for tokens in top_level_lines:
+    for tokens in ticked(top_level_lines):
         _dispatch_set(
             tokens, intent, iface_state, range_state,
             lag_state, irb_state, dhcp_pool_state, dhcp_group_iface,
@@ -483,6 +488,14 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     range_membership: dict[str, str] = {}
     for rname, rstate in range_state.items():
         attrs = rstate.get("attrs", {})
+        # Every address of the range is copied onto every member: the
+        # product of two honest counts, counted before any is copied.
+        copied = len(attrs.get("ipv4", [])) + len(attrs.get("ipv6", []))
+        if copied:
+            charge(
+                "copies", copied * len(rstate.get("members", [])),
+                f"interface-range {rname}",
+            )
         for member in rstate.get("members", []):
             # What the range gives a member goes where the member's
             # own statements go: under a path that is deactivated it
@@ -794,6 +807,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # renderer writes `all` for that full range and for no
             # other list.)
             if any(vname == "all" for vname in names_list):
+                charge("vlan_ids", 4094, "vlan members all")
                 iface.trunk_allowed_vlans = vlan_id_run(1, 4094)
                 continue
             # (#8) Each member may be a name, a numeric VID, or a numeric
@@ -1098,7 +1112,8 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     if not cut_lines:
         return intent, raw
     return intent, "\n".join(
-        line for number, line in enumerate(lines) if number not in cut_lines
+        line for number, line in enumerate(ticked(lines))
+        if number not in cut_lines
     ) + "\n"
 
 
@@ -1419,7 +1434,7 @@ def _looks_like_blockform(raw: str) -> bool:
         return False
     first = last = ""
     try:
-        for token in _blockform_tokens(raw, line_ends=True):
+        for token in ticked(_blockform_tokens(raw, line_ends=True)):
             if token != _LINE_END:
                 if not first:
                     if token in _SETFORM_WORDS or token[0] in '{}"':
@@ -1441,9 +1456,10 @@ def _looks_like_blockform(raw: str) -> bool:
 def _tokenise_blockform(raw: str) -> list[str]:
     """Tokenise Junos block-form into a flat list with ``{``, ``}``,
     and ``;`` as standalone tokens.  Quoted strings stay intact, and
-    comments are left out (:func:`_blockform_tokens`).
+    comments are left out (:func:`_blockform_tokens`).  The walk
+    looks at the request's deadline as it goes.
     """
-    return list(_blockform_tokens(raw))
+    return list(ticked(_blockform_tokens(raw)))
 
 
 #: Maximum curly-brace nesting depth accepted by the block-form
@@ -1458,15 +1474,38 @@ def _tokenise_blockform(raw: str) -> list[str]:
 _MAX_BLOCK_DEPTH = 100
 
 
+def _quoted(name: list[str]) -> str:
+    """What a refusal quotes of the statement at *name*: its last few
+    words, and none after a word that names a secret
+    (:func:`..._tier3_detection.shown_words`).  *name* is the path
+    and, of a leaf, its first word: what follows that is a value,
+    and the sentence of a refusal is shown, and pasted into a bug
+    report."""
+    return " ".join(shown_words(name)[-4:])
+
+
 def _leaf_lines(path: list[str], words: list[str]) -> list[str]:
-    """The set-form lines of the leaf statement *words* under *path*."""
+    """The set-form lines of the leaf statement *words* under *path*.
+
+    The whole path is written again for every leaf under it, and
+    for every value of a bracketed list: the lines are counted in
+    WORDS before any is written.  (A word costs what it costs to
+    keep as a token, about seventy bytes, however short it is.)
+
+    Raises:
+        LimitExceeded: The set commands written out so far, with
+            these, are more words than the limits allow.
+    """
     if not words:
         return []
     if words == ["..."]:
         # What ``display max-depth`` prints for the blocks it does
         # not show (``family inet { ... }``).  The block is there;
         # what is in it is not in the text.
-        return ["set " + " ".join(path)] if path else []
+        if not path:
+            return []
+        charge("words", len(path), _quoted(path))
+        return ["set " + " ".join(path)]
     # (#7) Expand a bracket value-list into one set-line per value.
     # Block-form writes multi-value leaves as ``key [ v1 v2 … ];``;
     # the set-form equivalent is one ``set <path> key <vi>`` per value.
@@ -1482,9 +1521,17 @@ def _leaf_lines(path: list[str], words: list[str]) -> list[str]:
         values = words[lb + 1:rb]
         trailing = words[rb + 1:]  # tokens after ] (rare); kept verbatim
         if prefix and values:
+            # One set command for each value, each with the whole
+            # path in front of it.
+            charge(
+                "words",
+                len(values) * (len(path) + len(prefix) + 1 + len(trailing)),
+                _quoted(path + prefix[:1]),
+            )
             return ["set " + " ".join(path + prefix + [v] + trailing) for v in values]
         # Empty list or bracket-first (no leaf key) — fall through to
         # verbatim emission rather than silently dropping the line.
+    charge("words", len(path) + len(words), _quoted(path + words[:1]))
     return ["set " + " ".join(path + words)]
 
 
@@ -1537,6 +1584,12 @@ def _blockform_convert(
         named = words[:words.index("[")] if "[" in words else words
         if not named:
             return False
+        # A line of the set form like any other, and its words are
+        # kept as a path besides: counted before it is written.
+        charge(
+            "words", len(path_stack) + len(named),
+            _quoted(path_stack + (named[:1] if leaf else named)),
+        )
         payload = " ".join(path_stack + named)
         out_lines.append("deactivate " + payload)
         path = tuple(_tokenise_set(payload))
@@ -1556,6 +1609,7 @@ def _blockform_convert(
                 snippet=raw[:120],
             )
         while True:
+            tick()
             if pos >= len(tokens):
                 # EOF inside a nested block is an unbalanced-braces
                 # error; at the top level it's the natural end.
@@ -1629,6 +1683,8 @@ def _blockform_convert(
                     # there all the same, and ``display set`` writes
                     # its path.  With no line, a Tier-3 section and a
                     # deactivated block of this kind went unnamed.
+                    # (Counted in words like every line written.)
+                    charge("words", len(path_stack), _quoted(path_stack))
                     out_lines.append("set " + " ".join(path_stack))
                 if words:
                     del path_stack[-len(words):]

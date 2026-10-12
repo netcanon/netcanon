@@ -47,6 +47,7 @@ INSTANCE_SPEC = dict(
         "NETCANON_PORT":       str(INSTANCE_PORT),       # = 8000
         "NETCANON_LOG_LEVEL":  "warning",               # bodies never logged — see note
         "NETCANON_FERNET_KEY": "<per-instance random>",  # RAM-only; no key file
+        "NETCANON_CONFIG_LIMITS": "small",              # what one paste may expand to — see note
     },
     log_config   = {"type": "none"},              # I2: Docker captures no stdout
 )
@@ -75,6 +76,24 @@ Notes:
   `$NETCANON_DATA_DIR/.fernet_key` is **never written**. The key lives only in
   the instance's RAM and dies with it — the claim is "no key file is created,"
   not merely "the file is in tmpfs."
+- **`NETCANON_CONFIG_LIMITS=small` sizes a paste to the container.**  A few
+  bytes of a config can stand for millions of entries, so the 2 MB body cap
+  does not bound what an instance is asked to hold.  netcanon counts what a
+  config makes and refuses past a limit, in a sentence; `small` is the set of
+  limits measured to fit this container ([07](07-budget.md#sizing)).  Without
+  the key an instance runs the product's default limits, which are sized for a
+  server.  **An image built before the limits existed ignores the key and
+  says nothing**: `deploy/VERIFY.md` proof 14 shows, by behaviour, that the
+  running image has them.  `small` also makes an instance work on ONE
+  request that reads config text at a time -- two of the largest at once
+  ended an instance that either of them fitted in -- with a second waiting
+  its turn and a request that waited out its 20 seconds refused in words;
+  proof 15 shows that by behaviour too.  A request is counted when its
+  headers arrive, so a burst is turned away before its bodies are read
+  (proof 16), and an answer nobody reads is let go at its request's
+  deadline (proof 17).  What `small` does not do: bound how many
+  connections a visitor opens and leaves open
+  ([07](07-budget.md#sizing)).
 - **`NETCANON_LOG_LEVEL=warning` is safe.** netcanon never logs request bodies
   at **any** level; only parsed config *fragments* appear at `debug`. `warning`
   excludes even those, so no payload can reach a log line regardless of driver.

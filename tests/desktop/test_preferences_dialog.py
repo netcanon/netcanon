@@ -92,6 +92,17 @@ def mock_qt_dialog(mock_pyside6):
         cb.isChecked.side_effect = lambda: cb._checked
         return cb
 
+    def make_qcombobox(*args, **kwargs):
+        combo = MagicMock()
+        combo._items = []
+        combo._index = -1
+        combo.addItem.side_effect = lambda text, *rest: combo._items.append(text)
+        combo.setCurrentIndex.side_effect = lambda i: setattr(combo, "_index", i)
+        combo.currentIndex.side_effect = lambda: combo._index
+        combo.count.side_effect = lambda: len(combo._items)
+        combo.itemText.side_effect = lambda i: combo._items[i]
+        return combo
+
     qt_widgets.QDialog = MagicMock(side_effect=make_qdialog)
     # Constants used as flags
     qt_widgets.QDialog.Accepted = 1
@@ -100,6 +111,7 @@ def mock_qt_dialog(mock_pyside6):
     qt_widgets.QLineEdit = MagicMock(side_effect=make_qlineedit)
     qt_widgets.QSpinBox = MagicMock(side_effect=make_qspinbox)
     qt_widgets.QCheckBox = MagicMock(side_effect=make_qcheckbox)
+    qt_widgets.QComboBox = MagicMock(side_effect=make_qcombobox)
     qt_widgets.QLabel = MagicMock(side_effect=lambda *a, **kw: MagicMock())
     qt_widgets.QFormLayout = MagicMock(side_effect=lambda *a, **kw: MagicMock())
     qt_widgets.QHBoxLayout = MagicMock(side_effect=lambda *a, **kw: MagicMock())
@@ -265,6 +277,73 @@ class TestSavePersistence:
         assert not (tmp_path / "preferences.json").exists()
         # And the dialog should not have been accepted
         dialog._dialog.accept.assert_not_called()
+
+
+class TestTheConfigSizeLimit:
+    """The desktop twin of ``NETCANON_CONFIG_LIMITS``: a combo box."""
+
+    def _dialog(self, tmp_path, **prefs):
+        from netcanon_desktop.preferences_dialog import PreferencesDialog
+
+        d = PreferencesDialog(
+            prefs=DesktopPreferences(**prefs),
+            prefs_path=tmp_path / "preferences.json",
+            configs_dir_default=tmp_path / "default_configs",
+        )
+        d.create()
+        return d
+
+    def _saved(self, tmp_path) -> dict:
+        return json.loads((tmp_path / "preferences.json").read_text(encoding="utf-8"))
+
+    def test_the_control_has_its_object_name(self, dialog):
+        dialog._limits_combo.setObjectName.assert_called_once_with(
+            "pref-dialog-config-limits-select"
+        )
+
+    def test_it_offers_three_and_shows_the_one_in_force(self, dialog):
+        combo = dialog._limits_combo
+        assert [combo.itemText(i) for i in range(combo.count())] == [
+            "Standard", "Large (four times Standard)", "Unlimited (no limit and no time limit)",
+        ]
+        assert combo.itemText(combo.currentIndex()) == "Standard"
+
+    def test_it_is_seeded_from_the_preferences(self, mock_qt_dialog, tmp_path):
+        d = self._dialog(tmp_path, config_limits="unlimited")
+        assert d._limits_combo.itemText(d._limits_combo.currentIndex()).startswith("Unlimited")
+
+    def test_the_choice_is_saved(self, mock_qt_dialog, dialog, tmp_path):
+        dialog._limits_combo.setCurrentIndex(1)
+        dialog._on_save()
+        assert self._saved(tmp_path)["config_limits"] == "large"
+        assert dialog.prefs.config_limits == "large"
+
+    def test_saving_untouched_keeps_what_was_in_force(self, mock_qt_dialog, tmp_path):
+        for stored in ("standard", "large", "unlimited", "small"):
+            d = self._dialog(tmp_path, config_limits=stored)
+            d._on_save()
+            assert self._saved(tmp_path)["config_limits"] == stored, stored
+
+    def test_small_is_listed_only_when_stored(self, mock_qt_dialog, tmp_path):
+        """It is the public demo's, and nothing a desktop operator is
+        offered; but a file that holds it is not changed by opening
+        the dialog and saving."""
+        from netcanon_desktop.preferences_dialog import LIMITS_OFFERED, limits_choices
+
+        assert LIMITS_OFFERED == ("standard", "large", "unlimited")
+        assert limits_choices("large") == ["standard", "large", "unlimited"]
+        assert limits_choices("small") == ["small", "standard", "large", "unlimited"]
+        d = self._dialog(tmp_path, config_limits="small")
+        combo = d._limits_combo
+        assert combo.itemText(0) == "Small (the public demo's: one config at a time)" and combo.count() == 4
+        assert combo.currentIndex() == 0
+
+    def test_every_offered_limit_has_a_label(self):
+        from netcanon.migration.limits import PROFILES
+        from netcanon_desktop.preferences_dialog import LIMITS_LABELS, LIMITS_OFFERED
+
+        assert set(LIMITS_LABELS) == set(PROFILES)
+        assert set(LIMITS_OFFERED) == set(PROFILES) - {"small"}
 
 
 class TestOpenConfigsFolder:

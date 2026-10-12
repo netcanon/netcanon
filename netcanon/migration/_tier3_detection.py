@@ -58,6 +58,8 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Sequence
 
+from .limits import ticked
+
 # IOS-XE CLI / Arista EOS shape — patterns target only stanzas that
 # the CLI parsers do NOT consume (firewall, QoS, route-maps, crypto).
 # Stanzas that the parsers DO consume (`interface`, `vlan`, `router`,
@@ -431,6 +433,22 @@ _LEFT_OUT: dict[str, tuple[str, str]] = {
 _NAMES_A_SECRET = ("community", "password", "secret", "key", "psk", "authentication")
 
 
+def shown_words(path: Sequence[str]) -> list[str]:
+    """The words of a statement's path that may be shown to someone:
+    all of them, or those up to and including the first that names
+    a secret and has something after it (:data:`_NAMES_A_SECRET`).
+    A statement is keyed by its secret often enough (``snmp
+    community <string>``) or ends in one (``authentication
+    encrypted-password <hash>``)."""
+    shown = list(path)
+    for at, word in enumerate(shown[:-1]):
+        lowered = word.lower()
+        if any(name in lowered for name in _NAMES_A_SECRET):
+            del shown[at + 1:]
+            break
+    return shown
+
+
 def left_out_row(kind: str, path: Sequence[str]) -> str:
     """The row for a statement a parser read and left out.
 
@@ -439,7 +457,7 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
     often enough (``snmp community <string>``) or ends in one
     (``authentication encrypted-password <hash>``).  The words are
     cut after the first that names a secret and has something after
-    it, and the cut is marked ``...``.
+    it (:func:`shown_words`), and the cut is marked ``...``.
 
     Args:
         kind: ``"inactive"`` (deactivated in the source) or
@@ -449,12 +467,7 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
     Returns:
         ``"<kind>: <path> (<why it was left out>)"``.
     """
-    shown = list(path)
-    for at, word in enumerate(shown[:-1]):
-        lowered = word.lower()
-        if any(name in lowered for name in _NAMES_A_SECRET):
-            del shown[at + 1:]
-            break
+    shown = shown_words(path)
     words = [f'"{word}"' if not word or any(ch.isspace() for ch in word) else word for word in shown]
     if len(shown) < len(path):
         words.append("...")
@@ -538,7 +551,7 @@ def _detect_regex(
     # the square of their number.
     known: set[str] = set()
     for pattern in patterns:
-        for match in pattern.finditer(raw):
+        for match in ticked(pattern.finditer(raw)):
             label = match.group(0).strip()
             if label and label not in known:
                 known.add(label)

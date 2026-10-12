@@ -89,6 +89,7 @@ from ...canonical.transforms import (
     TRUNK_ALLOWED_SPECIFICITY_BOUND,
     is_every_vlan,
 )
+from ...limits import charge
 from ..base import RenderError
 
 logger = logging.getLogger(__name__)
@@ -700,6 +701,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     vid for vid in iface.trunk_allowed_vlans
                     if vid in _VLAN_IDS
                 ]
+                member_lines: list[str] = []
                 for first, last in _runs_of_ids(allowed):
                     run = range(first, last + 1)
                     if len(run) <= _LONGEST_RUN_BY_NAME and all(
@@ -725,10 +727,21 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                             else f"{first}-{last}"
                         ]
                     for member in members:
-                        out.append(
+                        member_lines.append(
                             f"set interfaces {name} unit 0 family "
                             f"ethernet-switching vlan members {member}"
                         )
+                # A wide list is a range or two.  What is a line each
+                # is a run of the list, and a VLAN named in a short
+                # run: a list of every other id is two thousand
+                # lines.  One port's lines are counted before they
+                # join the output, so that a render stops at the
+                # limit and not at its end.
+                charge(
+                    "text", sum(map(len, member_lines)) + len(member_lines),
+                    f"{len(member_lines):,} 'vlan members' lines for one port",
+                )
+                out.extend(member_lines)
             if iface.trunk_native_vlan is not None:
                 out.append(
                     f"set interfaces {name} native-vlan-id "

@@ -66,6 +66,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
+from ...limits import ticked
 from .._helpers import (
     TrunksByName,
     Uniques,
@@ -73,6 +74,7 @@ from .._helpers import (
     _normalise_mac_to_colon_hex,
     _parse_vlan_list,
     address_key,
+    sole_vlan_id,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -1078,7 +1080,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
             m = re.match(r"^port-channel(\d+)$", name, re.IGNORECASE)
             declared.add(f"port-channel{int(m.group(1))}" if m else name.lower())
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _IFACE_RE.match(line)
         if m:
             current_iface = m.group(1)
@@ -1139,7 +1141,7 @@ def _parse_vlans(raw: str) -> list[CanonicalVlan]:
     lines = raw.splitlines()
     current_id: int | None = None
 
-    for line in lines:
+    for line in ticked(lines):
         tm = _VLAN_TOP_RE.match(line)
         if tm:
             ids = _parse_vlan_list(tm.group(1))
@@ -1283,7 +1285,7 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     caller.
     """
     routes: list[CanonicalStaticRoute] = []
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
             routes.append(_make_static_route_v6(
@@ -1322,11 +1324,14 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
     # Pass 1: vlan_id → vni from ``vlan N / vn-segment <vni>``.
     vn_by_vlan: dict[int, int] = {}
     current_id: int | None = None
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         tm = _VLAN_TOP_RE.match(line)
         if tm:
-            ids = _parse_vlan_list(tm.group(1))
-            current_id = ids[0] if len(ids) == 1 else None
+            # Only whether the line opens a stanza of ONE VLAN: the
+            # list is expanded, and counted, where the VLANs are read
+            # (``_parse_vlans``).  Expanded here as well, ``vlan
+            # 2-2502`` was charged as 5,002 ids.
+            current_id = sole_vlan_id(tm.group(1))
             continue
         if current_id is not None:
             sm = _VN_SEGMENT_RE.match(line)
@@ -1346,7 +1351,7 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
     flood_by_vni: dict[int, list[str]] = {}
     in_nve = False
     current_member_vni: int | None = None
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         im = _IFACE_RE.match(line)
         if im:
             in_nve = im.group(1).lower().startswith("nve")
@@ -1456,7 +1461,7 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
     """
     users: list[CanonicalLocalUser] = []
     seen: set[str] = set()
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _USERNAME_RE.match(line)
         if not m:
             continue

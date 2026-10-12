@@ -85,6 +85,7 @@ from ...canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVlan,
 )
+from ...limits import ticked
 from .._helpers import Uniques, _is_link_local_v6, _mask_to_prefix
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -350,7 +351,7 @@ def _parse_globals(raw: str, intent: CanonicalIntent) -> None:
     handled by :func:`_extract_domain`).  Mutates *intent* in place."""
     for m in _NAMESERVER_RE.finditer(raw):
         intent.dns_servers.append(m.group(1))
-    for block in _NTP_BLOCK_RE.finditer(raw):
+    for block in ticked(_NTP_BLOCK_RE.finditer(raw)):
         # ``server <ip>`` leaves inside the ``ntp`` block; drop the
         # ``maxpoll`` / ``prefer`` tails and the ``source`` / ``update-
         # calendar`` sibling lines (no ``server`` keyword).
@@ -628,7 +629,7 @@ def _parse_bgp_rd(raw: str) -> dict[str, str]:
     in_bgp = False
     current_vrf: str | None = None
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         if _ROUTER_BGP_RE.match(line):
             in_bgp = True
             current_vrf = None
@@ -689,7 +690,7 @@ def _parse_dot1q_vlans(raw: str) -> list[CanonicalVlan]:
     round-trip (the round-trip harness compares VLANs id-sorted).
     """
     seen: set[int] = set()
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _ENCAP_DOT1Q_RE.match(line)
         if m:
             vid = int(m.group(1))
@@ -783,7 +784,7 @@ def _parse_router_static(raw: str) -> list[CanonicalStaticRoute]:
     current_vrf = ""
     in_af = False
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         if not in_block:
             if _ROUTER_STATIC_RE.match(line):
                 in_block = True
@@ -858,7 +859,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
         if name.lower().startswith("bundle-ether"):
             declared.add(name)
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _IFACE_RE.match(line)
         if m:
             current_iface = m.group(1)
@@ -942,7 +943,7 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
             users.append(_build_user(current))
         current = None
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         im = _USERNAME_INLINE_RE.match(line)
         if im:
             _flush()

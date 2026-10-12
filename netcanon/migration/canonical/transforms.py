@@ -68,6 +68,7 @@ import re
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 
+from ..limits import charge, ticked
 from .intent import CanonicalIntent, CanonicalInterface, CanonicalVlan
 
 # Splits a port name into a tuple of (str, int, str, int, ...) for
@@ -404,6 +405,12 @@ def project_switchport_to_vlan(
     Raises:
         pydantic.ValidationError: An access, native or listed id is
             not a VLAN id (1-4094), with *keep* or without.
+        LimitExceeded: The memberships this is about to stamp, counted
+            before the first is stamped, are more than the limit in
+            force (:mod:`netcanon.migration.limits`).  Two honest
+            counts multiply here -- every trunk that allows every VLAN
+            goes onto every VLAN there is -- so the text that asks for
+            a million of them need hold no range at all.
     """
     # Index existing VLANs for O(1) lookup and for synthesizing missing ones.
     by_id: dict[int, CanonicalVlan] = {v.id: v for v in intent.vlans}
@@ -447,11 +454,16 @@ def project_switchport_to_vlan(
     # it that get a record (``listed``).
     whole: dict[int, frozenset[int]] = {}
     listed: dict[int, list[int]] = {}
-    for iface in intent.interfaces:
+    # The stamps PASS 2 makes one at a time: an access VLAN, a native
+    # VLAN, an id of a list.  (An upper bound: a port that a list names
+    # twice is stamped once.)
+    singly = 0
+    for iface in ticked(intent.interfaces):
         mode = iface.switchport_mode
         if mode == "access":
             if iface.access_vlan is not None:
                 _vlan(iface.access_vlan)
+                singly += 1
         elif mode == "trunk":
             every = _every_id(iface.trunk_allowed_vlans)
             if every is not None:
@@ -460,8 +472,10 @@ def project_switchport_to_vlan(
                 ids = listed[id(iface)] = _listed(iface.trunk_allowed_vlans, keep)
                 for vid in ids:
                     _vlan(vid)
+                singly += len(ids)
             if iface.trunk_native_vlan is not None:
                 _vlan(iface.trunk_native_vlan)
+                singly += 1
 
     # PASS 2 — stamp membership; the trunk-all branch now sees the full set.
     #
@@ -474,7 +488,20 @@ def project_switchport_to_vlan(
         ]
         for every in set(whole.values())
     }
-    for iface in intent.interfaces:
+    # What is about to be stamped is known now, and is counted before
+    # the first stamp: every trunk of a whole list goes onto every VLAN
+    # there is, so a thousand of each are a million memberships from a
+    # text that holds no range.
+    across = sum(len(onto[id(every)]) for every in whole.values())
+    if across:
+        said = (
+            f"{len(whole):,} trunks that allow every VLAN x "
+            f"{len(intent.vlans):,} VLANs"
+        ) + (f" + {singly:,} listed" if singly else "")
+    else:
+        said = "the VLANs that access and trunk ports name"
+    charge("memberships", across + singly, said)
+    for iface in ticked(intent.interfaces):
         mode = iface.switchport_mode
         if mode is None:
             continue
@@ -541,7 +568,7 @@ def project_switchport_to_vlan(
     # they always were: remembering a key for each name costs more than
     # working it out, when no name is asked for twice.
     key_of = _SortKeys().__getitem__ if readers else _natural_port_sort_key
-    for vlan in intent.vlans:
+    for vlan in ticked(intent.vlans):
         vlan.tagged_ports.sort(key=key_of)
         vlan.untagged_ports.sort(key=key_of)
 
@@ -589,7 +616,7 @@ def project_vlan_to_switchport(
     # Build per-interface aggregated view: which vids as tagged, which as untagged.
     tagged: dict[str, list[int]] = {}
     untagged: dict[str, list[int]] = {}
-    for vlan in intent.vlans:
+    for vlan in ticked(intent.vlans):
         for name in vlan.tagged_ports:
             tagged.setdefault(name, []).append(vlan.id)
         for name in vlan.untagged_ports:
@@ -603,7 +630,7 @@ def project_vlan_to_switchport(
     # of run.  See _natural_port_sort_key for how the key splits
     # numeric chunks.
     names = sorted(set(tagged) | set(untagged), key=_natural_port_sort_key)
-    for name in names:
+    for name in ticked(names):
         iface = iface_by_name.get(name)
         if iface is None:
             if not synthesise_missing:

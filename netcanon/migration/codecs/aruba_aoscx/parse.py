@@ -83,6 +83,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVxlan,
 )
+from ...limits import charge, ticked
 from .._helpers import (
     TrunksByName,
     Uniques,
@@ -461,7 +462,7 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
     """
     instances: list[CanonicalRoutingInstance] = []
     seen: set[str] = set()
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _VRF_DECL_RE.match(line)
         if not m:
             continue
@@ -630,10 +631,14 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
             val = tam.group(1).strip()
             trunks.says_trunk(current["trunk_key"])
-            trunks.allowed_is(current["trunk_key"], (
-                vlan_id_run(1, 4094) if val.lower() == "all"
-                else _parse_vlan_list(val)
-            ))
+            if val.lower() == "all":
+                # 4,094 ids from one word: counted before they are
+                # made, as the ids of a range are where it is read.
+                charge("vlan_ids", 4094, "vlan trunk allowed all")
+                allowed = vlan_id_run(1, 4094)
+            else:
+                allowed = _parse_vlan_list(val)
+            trunks.allowed_is(current["trunk_key"], allowed)
             return
 
         # ── LAG membership (Phase 2) ── ``lag N`` on a physical port.
@@ -742,7 +747,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
         else:
             current_lag = None
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _IFACE_RE.match(line)
         if m:
             current_iface = _iface_name(m)
@@ -877,7 +882,7 @@ def _parse_vlans(raw: str) -> list[CanonicalVlan]:
         return v
 
     current_id: int | None = None
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         tm = _VLAN_TOP_RE.match(line)
         if tm:
             vid = int(tm.group(1))
@@ -945,7 +950,7 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     unsupported).
     """
     routes: list[CanonicalStaticRoute] = []
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
             dest, gw_or_iface, gw2, metric_str = m6.groups()
@@ -1020,7 +1025,7 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
     in_vxlan = False
     current_vni: int | None = None
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         im = _IFACE_RE.match(line)
         if im:
             in_vxlan = _iface_name(im).lower().startswith("vxlan ")

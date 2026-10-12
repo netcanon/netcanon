@@ -119,6 +119,11 @@ def build_instance_create_kwargs(
             "NETCANON_PORT": str(INSTANCE_PORT),
             "NETCANON_LOG_LEVEL": "warning",  # bodies never logged at any level
             "NETCANON_FERNET_KEY": fernet_key,  # RAM-only; no key file is written
+            # What one paste may expand to and how long one request may
+            # take, sized for this container (INSTANCE_MEM_LIMIT, half a
+            # CPU, the proxy's 30 seconds).  Without it an instance runs
+            # the product's default, which is sized for a server.
+            "NETCANON_CONFIG_LIMITS": "small",
         },
     }
 

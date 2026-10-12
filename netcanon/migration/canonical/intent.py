@@ -75,7 +75,11 @@ Schema extensions (wire-through in same commit as schema):
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
+
+from ..limits import charge
 
 # ---------------------------------------------------------------------------
 # Tier 1 — auto-translatable
@@ -171,6 +175,14 @@ class CanonicalInterface(BaseModel):
     """A network interface — physical, VLAN SVI, LAG, loopback, tunnel.
 
     Tier 1 — auto-translatable cross-vendor primitive.
+
+    Each record is counted as it is made (``model_post_init``): an
+    interface is the heaviest thing one short line of a config makes,
+    every parser makes them in many places, a renderer makes one for
+    a port that only a VLAN names, and this is the one place they all
+    pass.  The count is held to the ``interfaces`` limit of
+    :mod:`netcanon.migration.limits` while a parse or a render is in
+    progress, and is nothing outside one.  A copy is not counted.
 
     Attributes:
         name: Vendor-native name (opaque).  For renamed MikroTik ports
@@ -305,6 +317,9 @@ class CanonicalInterface(BaseModel):
     vrf: str = ""
     kind: str = ""
     vrrp_groups: list[CanonicalVRRPGroup] = Field(default_factory=list)
+
+    def model_post_init(self, context: Any, /) -> None:
+        charge("interfaces", 1, self.__dict__.get("name", ""))
 
 
 class CanonicalVlan(BaseModel):

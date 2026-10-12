@@ -110,15 +110,21 @@ Each maps to a claim number in [06](06-privacy-whitepaper.md#claims-controls-pro
     `exec`): `docker exec <id> sh -c 'ls -la /app/data/.fernet_key'` → no such
     file; `docker exec <id> printenv NETCANON_FERNET_KEY` → set. `/app/data` is
     tmpfs regardless, so even had the file existed it never touched disk.
+14. **Proofs 14–17 (config limits; no whitepaper claim).** By behaviour, from
+    the host: a paste cannot ask an instance for more than it holds (14);
+    pastes at once take turns (15); a burst of them is turned away before it
+    is read (16); an answer nobody reads is let go at its request's deadline
+    (17). The commands and what they print are in `deploy/VERIFY.md`, and
+    the product's own tests run them from that file.
 
 ## Pre-launch gate
 
-All CI tests green **and** live proofs 1–13 executed on the production host with
+All CI tests green **and** live proofs 1–17 executed on the production host with
 output pasted into `VERIFY_RESULTS_<date>.md` (committed). The whitepaper links
 to that file. Re-run on every image-digest bump.
 
 ## Deliverables
 
 - `tests/` implementing the CI table
-- `VERIFY.md` with copy-paste commands for proofs 1–13
+- `VERIFY.md` with copy-paste commands for proofs 1–17
 - `VERIFY_RESULTS_<date>.md` from the real host, committed pre-launch

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -37,8 +38,8 @@ class DesktopPreferences(BaseModel):
     desktop-platform default" (the values returned by
     ``netcanon_desktop.settings.desktop_settings()`` for the current
     frozen-vs-dev mode).  The non-Optional fields ``port``,
-    ``open_in_editor`` and ``open_browser_on_start`` carry direct factory
-    defaults.
+    ``open_in_editor``, ``open_browser_on_start`` and ``config_limits``
+    carry direct factory defaults.
 
     Attributes:
         configs_dir: Override for the directory storing captured config
@@ -62,6 +63,18 @@ class DesktopPreferences(BaseModel):
             instead of (or in addition to) the WebView window.  Not
             currently wired; preserved here so the schema is forward-
             compatible.
+        config_limits: How much one config may expand to and how long
+            one translation may take: the name of one of the sets of
+            limits in ``netcanon.migration.limits``.  The desktop twin
+            of the web platform's ``NETCANON_CONFIG_LIMITS``, with the
+            same default (``standard``).  The dialog offers
+            ``standard``, ``large`` and ``unlimited``; ``small`` -- the
+            public demo's, and the only one under which the embedded
+            server works on one request at a time -- is a value this
+            model takes, so that a
+            file edited by hand is honoured, and one the dialog shows
+            only when it is the stored value.  Takes effect on the
+            next start.
     """
 
     configs_dir: Path | None = None
@@ -70,6 +83,7 @@ class DesktopPreferences(BaseModel):
     port: int = Field(default=8765, ge=1024, le=65535)
     open_in_editor: bool = True
     open_browser_on_start: bool = False
+    config_limits: Literal["small", "standard", "large", "unlimited"] = "standard"
 
     @classmethod
     def load(cls, path: Path) -> DesktopPreferences:

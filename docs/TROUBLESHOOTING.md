@@ -911,6 +911,50 @@ config onto other hardware, declare both device models (API:
 of the declared target then moves the port there.  See
 [`CAPABILITIES.md`](CAPABILITIES.md) § G.
 
+### The job says `refused:` — "my config was refused"
+
+Not a parse failure and not a bug: the config was read, and it asks
+for more than this server is set to take, or the request ran out of
+time.  The sentence says which limit, how many were asked for ("or
+more" means the count stopped there) and the limit.  What each one
+means, and what to do:
+
+| The sentence names | What it is | What to do |
+|---|---|---|
+| VLAN ids that the config's lists and ranges name / VLAN ids in the allowed lists of ports | The ids on ports: every `switchport trunk allowed vlan 2-4000`, every `all`, every `vlan members` range, added up — and, on IOS-XE, NX-OS, EOS and AOS-CX, every trunk with NO allowed line, which carries every VLAN there and counts as `all` does ("the last one read: a trunk with no allowed list, which is every VLAN: ...") | A real chassis written `all` on thousands of ports, or with thousands of trunks that state no list: allow more (below).  Otherwise look at the list the sentence quotes |
+| port memberships | (port, VLAN) pairs: each trunk that allows every VLAN is on every VLAN the config declares, so two ordinary counts multiply — the sentence gives both | Allow more, or translate the trunks and the VLANs you need |
+| different ports named by port ranges / ports that a VLAN's or a LAG's port list names and no interface stanza declares | Ports that exist only as names in a list (AOS-S `tagged 1-1001,...`) | Almost always a range that names ports the device does not have: check the range the sentence quotes |
+| interfaces | Interface records | A router with that many sub-interfaces is real: allow more |
+| entries copied from an interface-range onto its members | A Junos `interface-range` with addresses on it: every address goes onto every member | Rarely meant; check the range the sentence names |
+| words of set commands written out from block-form text | Block-form Junos is converted to set commands, and the whole path is written again for each statement | Paste `show configuration \| display set` instead: it is not converted, and not counted in words |
+| characters of rendered config / characters of nested blocks written out from set lines | The output would be longer than the limit; or VyOS set lines, each written out as nested blocks | A wide VLAN list written to IOS-XE or EOS is a line of every id: allow more, or translate to a target that writes ranges |
+| the request passed the N seconds it may take | The time limit | Allow more.  If the config is small, that is a slow path: please [report it](../BUG_REPORTING.md).  When the sentence goes on "while its body was still arriving" (HTTP 408) it was the REQUEST that was slow to arrive, which only a server set to `small` times: send it again |
+| the server works on one config at a time, and was busy with another ... / ... more were already waiting their turn / ... this request waited N seconds for its turn | **Busy, not too large.**  A server set to `small` (the public demo) works on one request that reads config text at a time.  This one waited its whole time behind another; or arrived when as many were in flight as may work and wait, and its body was not read; or got its turn after a wait, too late to finish.  Nothing is wrong with the config | Send it again.  The sanitiser and `detect` answer this as HTTP 503 with `Retry-After`, where a config that is too large is 413; a request that arrives with every place taken is answered 503 by every endpoint that reads config text, the ones that return a job too.  If it happens with nothing else running, something is holding the server: on the demo, start a new session |
+
+**To allow more**, where the server is yours: set
+`NETCANON_CONFIG_LIMITS=large` (or `unlimited`) in its environment and
+restart it; in the desktop application, **Preferences... -> Config
+size limit**; on the command line, `--limits large`.  The numbers are
+in [`CAPABILITIES.md`](CAPABILITIES.md#h-config-size-limits-a-job-that-says-refused)
+§ H.  On the public demo the limit is not yours to change, and the
+sentence says what a Netcanon you run yourself allows by default.
+Only `small` makes requests take turns: a server of your own that
+answers "busy" was set to it.
+
+**An answer that stopped part-way** -- the connection closed before the
+length the answer declared -- on a server set to `small`: an answer
+has the request's 20 seconds to be read in, counted from when the
+request arrived, and one that has not gone out by then is abandoned.
+That is for a client that does not read; a slow line and the largest
+answer `small` admits can meet it too.  The server's log has a line
+for each ("an answer from ... was abandoned").  Send the request
+again, or run a Netcanon of your own, which sets no such time.
+
+If you believe a limit refused a config of a real device that it
+should admit, that is worth a [bug report](../BUG_REPORTING.md): say
+which limit and what the device is.  (The sanitiser is under the same
+limits, so say what it answered if it refused the config too.)
+
 ### "The migrate page reports 'paramiko-shell capture artifact'"
 
 Specific to OPNsense backups via SSH + `cat /conf/config.xml`.

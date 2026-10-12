@@ -49,7 +49,10 @@ Netcanon ships on two platforms.  Both must always be kept at feature parity.
 Docker Hub mirror), `pip install netcanon`, and the Windows MSI are
 all distribution methods, not platforms.  Docker and pip both produce
 a **web-platform** install (the container's entrypoint is
-`uvicorn netcanon.main:app` — same code path as host-installed web);
+`netcanon serve`, which starts uvicorn on `netcanon.main:app` — the same
+application as host-installed web; under the `small` config limits
+`netcanon serve` also asks the system to end connections nobody reads,
+which a server started as `uvicorn netcanon.main:app` does not have);
 the MSI produces a **desktop-platform** install.  None of them require
 their own parity test row; a feature that lands on the web platform
 automatically reaches Docker + pip users on the next release tag.
@@ -89,7 +92,8 @@ cross-platform equivalents:
   **View** button (`config-view-link`) which renders the file in the browser.
 - **Preferences dialog** (`netcanon_desktop/preferences_dialog.py`) — operator-
   configurable paths (configs / definitions / data dir), embedded-server port,
-  and toggles.  Persisted to `%APPDATA%\Netcanon\preferences.json`.  Equivalent
+  the config size limit (the twin of `NETCANON_CONFIG_LIMITS`), and toggles.
+  Persisted to `%APPDATA%\Netcanon\preferences.json`.  Equivalent
   to the web platform's `NETCANON_*` env-var / `.env` configuration surface;
   desktop operators have no shell-level knob, so the dialog is the equivalent
   affordance.  PySide6 widgets carry `setObjectName()` IDs following the
@@ -165,6 +169,9 @@ mapping below is concrete; audit every applicable row before you run
 | A new or changed model-family YAML under `netcanon/definitions/library/model_families/` (a family, a model, a mode, a module) | Per [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md): (1) the hand-typed `(access names, uplink names)` entry for every model × mode × module combination in `EXPECTED_INVENTORIES` in `tests/unit/migration/test_device_models_shipped.py` — the test fails for any shipped combination that is not pinned; (2) each part number in `EXPECTED_PART_NUMBERS`, and a part graded `inferred` in `KNOWN_INFERRED_PARTS`, in the same file; (3) a `captures:` claim if a committed capture of that exact model exists AND names every port of it, mirrored whole in `EXPECTED_CLAIMS` and listed in `PROVEN_CAPTURE_CLAIMS` in `netcanon/migration/device_models.py` — a claim not in that list grants nothing (never grade a part `capture`; the schema refuses it); (4) the pair in `PROFILE_AGREES_WITH` if a flat target profile describes the same device.  Port groups go in port-NUMBER order, not left-to-right on the faceplate.  Write every `ref` so it stands on its own — it is served to API clients, who cannot read a legend in a YAML comment |
 | A new deployment detector in `_detectors()` (`netcanon/migration/deployment_detect.py`), or a change to one | The detector lives beside the vendor's codec (`deployment_detect.py`) and reads what a config STATES — part numbers, member ids, modules — never a model inferred from port names.  It reads text nobody vouches for: anchor every pattern to a line, bound what it takes, apply none to a fragment another matched unless that fragment is itself bounded, and say in the notes what was left out or chosen — a few member numbers and a count, never every one.  A detection with no members puts the REASON first in its notes: a proposal with no deployment shows its first note as why.  Name the vendor's codec in `_CODEC_OF` in `tests/unit/migration/test_deployment_detect.py` — the tests that walk every detector (the cross-check against that vendor's capture claims, the text made to be slow, the factory-name guard) fail until it is there.  Tests in that module over every stanza form the vendor documents and over the committed captures; the "what the lines do not prove" notes; no MAC or serial in the evidence lines.  `docs/CAPABILITIES.md` § G names the vendors detection reads; `SECURITY.md` "Input Validation — Device Declarations" lists the detector's file |
 | A new naming rule in `_naming_rules()` (`netcanon/migration/device_models.py`), or a change to one | The rule itself lives beside the vendor's codec; give it the set of roles it can name (a role it cannot name is refused at load).  Tests against the vendor's own printed examples, including one whose member number is not 1, in `tests/unit/migration/test_device_models.py`; `ARCHITECTURE.md` "Device models and inventories" if the rule introduces a new idea (a lane, a per-group prefix) |
+| A new place that turns a token into many entries (a range, a keyword for "every", a platform default that stands for a list, a product of two lists), or a new loop over config lines, in any module under `netcanon/migration/` | Charge it before the entries are made (`limits.charge`) and put the loop through `limits.ticked` -- the Hard Rule on counting has the three parts.  A `range(...)`, a slice of `VLAN_IDS` or a `vlan_id_run(...)` under `codecs/` goes in `RUNS_OF_ENTRIES` in `tests/unit/migration/test_limits.py` with its answer; a text that is refused BEFORE it is made goes in that module's `WIDE` (for a VLAN id list) or gets a test beside the others; `netcanon/migration/codecs/README.md` "Adding a codec" step 4 |
+| A new limit, a changed number, or a new kind in `netcanon/migration/limits.py` | The tables in [`SECURITY.md`](SECURITY.md) "Input Validation — Config Text" and [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) § H (`tests/unit/test_limits_docs_truth.py` fails until they agree); [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) "The job says `refused:`" for a new kind; `Refusal.limit` in `netcanon/models/migration.py`; and for `small`, a measurement in a container shaped like a demo instance, recorded in [`docs/demo-plan/07-budget.md`](docs/demo-plan/07-budget.md) |
+| A new handler that takes config text (a `raw_text` body field, an upload) | Open the SERVER's scope with the server's setting and the request's answer (`with server_scope(request_limits(request), answer=request_answer(request)):`) -- it takes the request's turn where the limits say how many work at once -- and answer a `LimitExceeded` in words, the one raised where the scope is opened included (the request did not get a turn: `refusal_as_http`, or the job `run_translation` makes); add the path to `READS_CONFIG_TEXT` in `_migration_helpers.py` -- a request is counted by its method and path when its headers arrive, before its body is read, and a handler that is not there has every body read first -- and to `TAKES_CONFIG_TEXT` in `tests/integration/test_config_limits_api.py`, which finds such handlers by what they take and fails until the new one is there, is counted at its arrival, takes its turn and answers "busy" in words.  A handler that returns a job returns `job_answer(job, response)`, never the job |
 | A new job-running migration handler in `netcanon/api/routes/migration.py` | Dispatch through `_migration_helpers.run_translation`, never the pipeline directly, and add the path to the parametrised endpoint tests in `tests/integration/test_migration_models_api.py` (`test_every_plan_endpoint_renders_the_same_port_names`, `test_the_operators_port_map_applies_on_every_plan_endpoint`, `test_acknowledged_drops_clear_partial_on_every_plan_endpoint`, and — by adding it to `_PLAN_PATHS` — the tests of a request that declares no devices: `TestPortNamesWithNoDevices`, `TestABlankTarget`, `TestForceOnEveryPlanEndpoint`) — otherwise the same request body renders different port names, or stays `partial` after the operator has decided every port, depending on which endpoint it is posted to.  The first of those alone cannot see it: it posts no port map.  A handler passes its own category map and nothing for ports: `run_translation` takes the port map from the body on every endpoint, since an entry there is what settles a job that is `partial` for its port names.  A blank target in that map is refused where the request is read (`MigrationPlanRequest`), so a new endpoint that takes another body has to refuse it too |
 | A target-profile gains `modules:` (migrates to module-variant shape) | Add its `{vendor}/{model}` key to the canonical allowlist at `tests/fixtures/module_variants.py`.  Both the unit-tier and integration-tier tests import from there; a CI-guard (`test_module_variant_allowlist_shared_with_integration_tier`) enforces the single-source invariant so no manual sync is required. |
 | A new canonical field on `CanonicalIntent` / `CanonicalInterface` / etc. | `docs/adding-a-canonical-field.md` — the MTU wire-through is the reference worked example.  A field that holds a PORT NAME also goes in `_swept_names` (see the Hard Rule on port names), and — where the config only REFERS to an interface there, as a route does — in `_only_referred_to` in `netcanon/migration/canonical/port_names.py`: left out, a name the translator cannot read in that field holds the job, which is the safe side |
@@ -478,10 +485,10 @@ tests use these exclusively — never CSS classes or element structure.  See
   `Uniques` (beside `GrowingIndex`), or keep a set beside the list.  The
   test module reads the source for that idiom, and a new one fails
   until it is mended or listed there with the bound that makes it
-  harmless.  Known and NOT mended (SECURITY.md has the measurements):
-  what a config EXPANDS to (`1-4094` is seven bytes), the product of
-  two kinds of stanza that grow together, and that nothing limits the
-  time or the memory a request takes.  When you find a
+  harmless.  None of this is about what a config EXPANDS to (`1-4094`
+  is seven bytes) or the product of two kinds of stanza that grow
+  together: those are counted and limited, by the rule after this
+  one.  When you find a
   shape the search missed, add it to the search in the same change as
   the fix.  A pattern that is slow and safe (it reads only data the
   server ships) goes in that module's `KNOWN_SLOW` with the reason; an
@@ -490,6 +497,105 @@ tests use these exclusively — never CSS classes or element structure.  See
   of single patterns are pinned in
   `tests/unit/migration/test_redos_hardening.py` and
   `test_parse_quadratic_scan_perf.py`.
+- **Never** turn a few bytes of a config into many entries without
+  counting them first, never loop over a config's lines without looking
+  at the deadline, and never catch broadly between the two and their
+  caller.  A range is thousands of entries, `all` is 4,094, two honest
+  counts multiply, and an interface stanza is one line: the size of a
+  text bounds neither the memory a request takes nor its time.  One
+  AOS-S line of 800 port ranges (11 KB) was 295 MB to parse; 1,000
+  trunks that allow `2-4000` were gigabytes; 50,000 one-line interface
+  stanzas (0.9 MB) were 240 MB.  `netcanon/migration/limits.py` counts
+  what a request makes and refuses past a limit, in a sentence:
+  (1) **an expander charges before it makes** -- `charge("vlan_ids",
+  high - low + 1, token)` on the line before the list -- so that the
+  refusal comes before the memory is spent.  The count of every
+  finished parse (`census`, at the boundary every `parse` crosses)
+  holds a tree whose expander nobody found to the same limits, after
+  the fact; a test tells the two apart, and fails a parser that is
+  refused only there.  What stands for many entries is not always a
+  token.  A trunk that states NO allowed list is the 4,094 ids on
+  four platforms, from a stanza of two lines: it is charged as `all`
+  is, where its list is made (`unstated_trunk_list`), and so are the
+  copy a first `add` or `remove` starts from and the list each
+  record of a stanza met again is given (`TrunksByName`).  When a
+  value is given a meaning that is thousands of entries, look for
+  every place that now MAKES them: the rule that reads the source
+  finds a new `range(...)`, not a copy of a list that has grown.
+  (2) **a loop over lines goes through `ticked(...)`** (a `while`
+  calls `tick()`), in every module that reads config text.  A thread
+  cannot be stopped from outside; only work that looks at the clock
+  stops.  A text that is not read a line at a time is walked all the
+  same: hierarchical Junos is cut into tokens a character at a time,
+  and whoever takes the tokens takes them through `ticked(...)` --
+  the rule that reads the source knows a loop over lines, and does
+  not know that walk, so it has a test of its own
+  (`TestJunosAsPrinted`).
+  (3) **a broad `except` on the way names `LimitExceeded` first.**  The
+  handler round the Junos block-form conversion turned a refusal into
+  advice to run `display set`; the per-probe net in detection would
+  turn "out of time" into "no codec knows this text".
+  And a refusal is a RESULT, with the same care a translation gets: a
+  `failed` job whose `error` begins `refused:` (never `parse failed`,
+  which the migrate page answers with "did you mean another vendor?")
+  and whose `refusal` says the same as data; HTTP 413 from the
+  sanitiser; a note from `detect-deployment`; exit 2 from the command
+  line.  It names what was large, how large, and the limit, and under
+  the public demo's limits it names no setting, because a visitor
+  cannot change one.  What a refusal quotes from the config goes to
+  the client and NEVER to a log.  Every handler that takes config text
+  opens the SERVER's scope with the server's own setting
+  (`limits.server_scope`, `_migration_helpers.request_limits`): work
+  that opens none runs under `standard`, which on the demo is several
+  times what an instance holds.
+  (4) **every limit is for ONE request, and "one request fits" was
+  measured one request at a time.**  Two of the largest requests the
+  demo's limits admit, at once, ended an instance either fitted in --
+  and the sanitise page itself sent two at once.  Under `small` a
+  server therefore works on one request at a time, the turn taken
+  where the scope is opened.  Serialising the WORK was not enough, and
+  the measurement said why, three times: the answer was made after the
+  handler returned, by the framework, at several times its size (a
+  job handler returns `job_answer(...)`, and the turn stays with the
+  request until its answer has gone out); memory a thread freed was
+  kept for that thread (a request with its turn trims first); and a
+  body was read before its request could ask for a turn, so a burst
+  of bodies ended an instance that refused nearly all of them (a
+  request is counted when its HEADERS arrive, in the outermost
+  middleware, and one more than may work and wait is answered there,
+  unread).  Two more of the same kind, each found by a client that
+  did not behave.  **A limit that gives a turn back and keeps the
+  memory has limited nothing**: the turn lent to an answer nobody
+  read was taken back at the deadline and the answer stayed, so four
+  of them ended the instance one at a time -- at its request's
+  deadline an answer that has not gone out is abandoned.  And **"the
+  server took it" is not "it went out"**: a server takes a whole body
+  into its buffer at once, so an answer is handed over a little at a
+  time.  And "the server closed the connection" is not "the connection
+  is closed": a server closes one when what it wrote has been taken,
+  and a client that takes nothing kept megabytes of socket buffer for
+  as long as it stayed -- which only the system can end, so the
+  launchers ask it to (`listening_sockets`).  Read what the CONTAINER
+  holds (`memory.stat`: `sock` is the server's too), not what the
+  process holds.  Measure a memory limit in a container shaped
+  like the target, with requests AT ONCE, with clients that leave,
+  stall and do not read, and many times over -- an
+  instance does not come back down, and four rounds do not show where
+  it levels off.  And say busy as busy: a request that waited for its
+  turn and then ran out of time was refused as slow, with advice to
+  run a server that allows more time.
+  The deadline does not stop a renderer; SECURITY.md
+  says so, and a test pins that the document says no more than the
+  code does.  Guarded by `tests/unit/migration/test_limits.py` (each
+  limit; every codec's parse stopped at a deadline it has passed;
+  the three rules above read from the source, each with a table a new
+  case fails until it is in) and
+  `tests/integration/test_config_limits_api.py` (every handler that
+  takes text, found by what it takes).  A number changes in
+  `limits.py`, in the documents and with the measurement that says
+  why: `tests/unit/test_limits_docs_truth.py` holds the three together,
+  and `small` was sized in a container shaped like a demo instance
+  (`docs/demo-plan/07-budget.md`).
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts
@@ -984,7 +1090,11 @@ tests use these exclusively — never CSS classes or element structure.  See
   recognise; asked of every port again for every VLAN, it was half a
   minute for a config of a thousand trunks and a thousand VLAN
   interfaces, and no cost test rendered.  Ask once a port, and time
-  the render (`TestARenderFitsTheTrunksItIsGiven`).  And a reader
+  the render (`TestARenderFitsTheTrunksItIsGiven`).  And it is
+  COUNTED where it is made, before it is made: a default trunk is
+  two lines of text and 35 KB of tree (the rule on counting;
+  `TestATrunkThatStatesNoList` in `tests/unit/migration/test_limits.py`).
+  And a reader
   that counts what a value "references" has to skip the statement
   that names nothing in particular: every id of a default trunk
   counted as a reference, and a VLAN map entry for a VLAN the config

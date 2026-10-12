@@ -334,7 +334,7 @@ for the reference pattern).
    is a trunk, not for one the parser takes for a trunk from another
    line: the platform's default is not given to a guess.
    Read the platform's own words for all and none as what they say
-   (`all` is `vlan_id_run(1, 4094)`).
+   (`all` is `vlan_id_run(1, 4094)`, counted first: step 4).
 3. **Write `render()`** against the same synthetic fixtures, driving
    toward round-trip stability (`parse(render(parse(raw))) == parse(raw)`
    at the canonical level).  **A trunk's list is one of three
@@ -372,6 +372,35 @@ for the reference pattern).
    to the new codec.  Then run `python tools/stanza_cost_search.py
    --codec <name>`: it writes every line and block of the codec's
    captures many times over, which no test does.
+
+   And what a text EXPANDS to is counted, which is the codec's to do in
+   two places (`netcanon/migration/limits.py`; the Hard Rule in
+   `AGENTS.md` has the reasons).  **An expander charges before it
+   makes**: where a token becomes many entries — a range of VLAN ids
+   or of ports, a keyword for "every", a list copied onto every member
+   — count what is about to be made on the line before it is, with what
+   the config wrote, which a refusal quotes:
+   `charge("vlan_ids", high - low + 1, token)`.  **A loop over lines
+   looks at the deadline**: `for line in ticked(raw.splitlines()):`,
+   and `tick()` as the first statement of a `while` that walks by
+   index.  Nothing else is the codec's: the meter is opened round its
+   `parse` and `render` by `CodecBase`, an interface is counted by the
+   model, and the finished tree and the output are counted at the
+   boundary.  The tests that fail if either is forgotten, all in
+   `tests/unit/migration/test_limits.py`:
+   `test_every_loop_over_lines_is_ticked`
+   (reads the source of every module here);
+   `test_a_parse_past_its_deadline_is_stopped` (runs over
+   every public codec, and needs the synthetic capture under
+   `tests/fixtures/synthetic/<codec>/`);
+   `test_every_run_of_entries_has_its_answer`
+   (a new `range(...)`, slice of `VLAN_IDS` or `vlan_id_run(...)` goes
+   in its table, as `charged` or with what bounds it); and, for a
+   reader of VLAN id lists, add its stanza to `WIDE` there — a parser
+   whose expander does not count is refused only when its tree is
+   finished, and that test tells the difference.  A broad `except` in a
+   parser names `LimitExceeded` before it
+   (`test_no_broad_handler_swallows_a_refusal`).
 5. **Fill in `capabilities._CAPS`** listing every canonical xpath your
    parse/render actually handles (not aspirational — just what works).
 6. **Add real fixtures** under `tests/fixtures/real/<vendor>/` with
@@ -581,6 +610,24 @@ the policy locally:
   new int an id as well — a config can state a wide range on every
   port it has.  Used by `_parse_vlan_list` and `merge_trunk_allowed`
   here and by the Arista and Junos parsers' own expanders.
+  **`sole_vlan_id(text)`** answers "does this list name exactly one id,
+  and which" without making the list: a second pass over a line that
+  another pass expands asks this, because a line expanded twice is
+  counted twice (NX-OS did, for `vlan <range>`).
+
+* **`netcanon/migration/limits.py`** — what one request may make, and
+  for how long.  `charge(kind, n, where)` before an expander makes its
+  entries; `distinct(kind, names, where)` where the same names made
+  again are not more of the kind (the ports `1-48` tagged in 400 VLANs
+  are 48 ports); `ticked(iterable)` / `tick()` in a loop over lines.
+  `_helpers.charge_id_lines(...)` is for a renderer that writes every
+  id of a port's allowed list (IOS-XE, EOS): it adds up the lines as
+  the renderer will write them — nothing for a trunk of every VLAN,
+  which is no line; the word for a trunk of none; else the ids, and
+  `joined_ids_length` says how long a list is written out, without
+  writing it — and charges before the first character.
+  Callers: `grep -rn "limits import" netcanon/migration`.  See
+  `ARCHITECTURE.md` "Config limits".
 
 * **`netcanon/migration/codecs/_helpers.py::TRUNK_THAT_STATES_NO_LIST`**
   — what a trunk carries when its config states NO allowed list, by
@@ -610,15 +657,18 @@ the policy locally:
     Callers: `grep -rn "TrunksByName(" netcanon/migration/codecs`
     (the five parsers of the table with the `switchport` or `vlan
     trunk` grammar; `juniper_junos` keeps its members by name itself).
-  * **`unstated_trunk_list(codec)`** — the list of a trunk with no
-    allowed line: every id or none, a new list each call.  Asked by
-    `TrunksByName` and by the Junos parser.
+  * **`unstated_trunk_list(codec, where)`** — the list of a trunk with
+    no allowed line: every id or none, a new list each call.  Asked by
+    `TrunksByName` and by the Junos parser.  Every id is 4,094
+    entries from a stanza of two lines, so it is charged as `all` is,
+    before the list is made (`limits.charge`, below); *where* is the
+    interface, for a refusal to name.
   * **`merge_trunk_allowed(existing, remainder, unstated=...)`** — one
     `switchport trunk allowed vlan` line applied to the interface's
     list.  `existing=None` while the interface has stated no line,
     and the platform's list as `unstated`: `add` and `remove` then
-    start from it, as they do on the device.  `TrunksByName` calls
-    it; a parser does not need to.
+    start from it, as they do on the device (the copy is charged).
+    `TrunksByName` calls it; a parser does not need to.
   * **`trunk_list_says(allowed)`** — `TRUNK_NONE`, `TRUNK_ALL` or
     `TRUNK_SOME`; it asks
     **`canonical/transforms.py::is_every_vlan(allowed)`**, the one

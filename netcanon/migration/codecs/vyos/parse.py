@@ -104,6 +104,7 @@ from ...canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVxlan,
 )
+from ...limits import charge, ticked
 from .._helpers import Uniques, _is_link_local_v6
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -227,7 +228,7 @@ def _looks_like_setform(raw: str) -> bool:
     ``set `` command).  Curly-brace ``config.boot`` opens with a block
     header (``interfaces {`` / ``system {`` …), so this is a clean
     either/or — the two grammars are never interleaved in practice."""
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         s = line.strip()
         if not s or s.startswith(("#", "//", "/*", "*")):
             continue
@@ -268,6 +269,14 @@ def _chunk_setline(tokens: list[str]) -> tuple[list[str], str | None]:
 
 _LEAVES_KEY = "\x00leaves"
 
+#: The deepest ``set`` path this reader takes.  A real one is a dozen
+#: words.  Every level is a nested block in the brace text, indented
+#: once more, so what one line becomes grows with the SQUARE of its
+#: depth -- and past about a thousand levels the walk that writes the
+#: blocks ran out of stack, which was an unexpected error where a
+#: parse failure was meant.
+_MAX_SET_DEPTH = 64
+
 
 def _setform_to_brace(raw: str) -> str:
     """Convert VyOS set-form text to the equivalent curly-brace text.
@@ -281,11 +290,17 @@ def _setform_to_brace(raw: str) -> str:
         return raw
 
     root: dict = {}
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         s = line.strip()
         if not s.startswith("set "):
             continue
         headers, leaf = _chunk_setline(s[4:].split())
+        if len(headers) > _MAX_SET_DEPTH:
+            raise ParseError(
+                f"vyos: a set line is nested {len(headers)} levels deep; "
+                f"the most this reader takes is {_MAX_SET_DEPTH}",
+                snippet=s[:120],
+            )
         node = root
         for h in headers:
             node = node.setdefault(h, {})
@@ -301,6 +316,15 @@ def _serialise_brace(node: dict, depth: int) -> list[str]:
     blocks; sibling order is irrelevant to the stack-based walker."""
     pad = "    " * depth
     out: list[str] = []
+    # What this block writes of its own, counted before it is written:
+    # a line for each leaf, and an opening and a closing line for each
+    # block under it, every one of them indented this deep.
+    charge(
+        "text",
+        sum(len(pad) + len(leaf) + 1 for leaf in node.get(_LEAVES_KEY, []))
+        + sum(2 * len(pad) + len(header) + 5 for header in node if header != _LEAVES_KEY),
+        what="characters of nested blocks written out from set lines",
+    )
     for leaf in node.get(_LEAVES_KEY, []):
         out.append(f"{pad}{leaf}")
     for header, child in node.items():
@@ -481,7 +505,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # ``system name-server`` dedup (perf review P2): a ``seen`` set keeps the
     # per-line membership test O(1) instead of an O(N^2) growing-list scan.
     seen_dns_servers = set(intent.dns_servers)
-    for raw_line in raw.splitlines():
+    for raw_line in ticked(raw.splitlines()):
         line = raw_line.strip()
         if (
             not line or line.startswith(("//", "/*", "*"))

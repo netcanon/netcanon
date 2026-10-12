@@ -64,6 +64,8 @@ from __future__ import annotations
 
 import re
 
+from ..limits import ticked
+
 __all__ = ["detect_input_shape"]
 
 
@@ -112,7 +114,7 @@ def detect_input_shape(raw: str, *, max_lines: int = 5) -> str | None:
         >>> detect_input_shape("interface Vlan10\\n description <upstream link>")
     """
     seen = 0
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         line = line.strip()
         if not line:
             continue

@@ -14,6 +14,7 @@ pure functions (or near-pure: ``get_target_profiles`` reads
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,6 +31,7 @@ from netcanon.api.routes._migration_helpers import (
     resolve_input_text,
     run_translation,
 )
+from netcanon.migration import limits
 from netcanon.models.backup import ConfigRecord
 from netcanon.models.migration import MigrationPlanRequest
 from netcanon.storage.base import BaseConfigStore
@@ -304,10 +306,19 @@ class TestRequestHasOverridesOrProfile:
 # ---------------------------------------------------------------------------
 
 
+def _request(config_limits: str | None = None) -> SimpleNamespace:
+    """A request made up for a test: an application whose settings
+    name *config_limits* (none: the standard ones), and no answer
+    kept for it."""
+    settings = SimpleNamespace(config_limits=config_limits)
+    return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(settings=settings)))
+
+
 class TestRunTranslation:
-    """Which pipeline entry a request reaches, and with which port
-    map.  What the entries then do is tested with the pipeline; what
-    a handler gets back, in the integration tier."""
+    """Which pipeline entry a request reaches, with which port map,
+    and under whose limits.  What the entries then do is tested
+    with the pipeline; what a handler gets back, in the integration
+    tier."""
 
     @staticmethod
     def _spies(monkeypatch) -> dict[str, list]:
@@ -331,7 +342,7 @@ class TestRunTranslation:
         calls = self._spies(monkeypatch)
         body = MigrationPlanRequest(source="mock", target="mock", raw_text="x")
         job = run_translation(
-            SimpleNamespace(), body, object(), object(), "x",
+            _request(), body, object(), object(), "x",
             vlan_rename_map={1: 2}, force=True,
         )
         assert job == "a job"
@@ -352,7 +363,7 @@ class TestRunTranslation:
             source="mock", target="mock", raw_text="x",
             target_profile="aruba_aoss/2930F-48G-PoEP", target_module="JL083A",
         )
-        job = run_translation(SimpleNamespace(), body, object(), object(), "x", force=False)
+        job = run_translation(_request(), body, object(), object(), "x", force=False)
         assert job == "a job"
         assert calls["checked"] == [{"port_rename_map": {}, "force": False}]
         assert calls["models"] == []
@@ -366,7 +377,7 @@ class TestRunTranslation:
             port_rename_map={"mgmt0": None, "1/A1": "Ethernet49"},
         )
         run_translation(
-            SimpleNamespace(), body, object(), object(), "x", port_rename_map={},
+            _request(), body, object(), object(), "x", port_rename_map={},
         )
         assert calls["checked"] == [
             {"port_rename_map": {"mgmt0": None, "1/A1": "Ethernet49"}},
@@ -383,7 +394,62 @@ class TestRunTranslation:
         body = MigrationPlanRequest(
             source="mock", target="mock", raw_text="x", port_rename_map={"49": None},
         )
-        job = run_translation(SimpleNamespace(), body, object(), object(), "x", force=False)
+        job = run_translation(_request(), body, object(), object(), "x", force=False)
         assert job == "a paired job"
         assert calls["models"] == [{"port_rename_map": {"49": None}, "force": False}]
         assert calls["checked"] == []
+
+    def test_either_entry_runs_in_the_servers_scope(self, monkeypatch):
+        """The limits this server is set to and the request's one
+        deadline are opened here, round whichever entry the request
+        reaches: the entry for a request with no devices is no
+        less a parse of a pasted config than the pairing is."""
+        under: list[str | None] = []
+
+        def entry(*args, **keywords):
+            scope = limits._SCOPE.get()
+            under.append(scope.limits.name if scope is not None else None)
+            return "a job"
+
+        monkeypatch.setattr(_migration_helpers, "run_plan_with_checked_names", entry)
+        monkeypatch.setattr(_migration_helpers, "run_plan_with_models", entry)
+        body = MigrationPlanRequest(source="mock", target="mock", raw_text="x")
+        run_translation(_request("large"), body, object(), object(), "x")
+        monkeypatch.setattr(
+            _migration_helpers, "resolve_port_inventories",
+            lambda request, body, source, target: ("the source", "the target"),
+        )
+        run_translation(_request("large"), body, object(), object(), "x")
+        run_translation(_request(), body, object(), object(), "x")
+        assert under == ["large", "large", "standard"]
+        assert limits._SCOPE.get() is None
+
+    @pytest.mark.parametrize("declared", [False, True])
+    def test_no_turn_is_a_refused_job_either_way(self, monkeypatch, declared):
+        """A request that did not get its turn was refused where the
+        scope is opened, before either entry: a ``failed`` job with
+        ``refusal`` set, as a refusal inside a stage is."""
+        calls = self._spies(monkeypatch)
+        if declared:
+            monkeypatch.setattr(
+                _migration_helpers, "resolve_port_inventories",
+                lambda request, body, source, target: ("the source", "the target"),
+            )
+
+        @contextmanager
+        def no_turn(*args, **keywords):
+            raise limits._busy(limits.SMALL, 4, None)
+            yield
+
+        monkeypatch.setattr(_migration_helpers, "server_scope", no_turn)
+        body = MigrationPlanRequest(
+            source="mock", target="mock", raw_text="x", port_rename_map={"49": None},
+        )
+        codec = SimpleNamespace(name="mock")
+        job = run_translation(_request("small"), body, codec, codec, "x")
+        assert calls == {"checked": [], "models": []}
+        assert job.status.value == "failed" and job.rendered is None
+        assert job.refusal is not None and job.refusal.limit == "at_once"
+        assert job.error.startswith("refused: the server works on one config at a time")
+        # Nothing was asked about the port names of a job that never ran.
+        assert (job.fused_ports, job.unresolved_ports, job.untranslated_ports) == ({}, [], [])

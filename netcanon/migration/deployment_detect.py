@@ -69,6 +69,7 @@ from .device_models import (
     FamilyDef,
     compile_deployment,
 )
+from .limits import LimitExceeded
 
 if TYPE_CHECKING:
     from .codecs.base import CodecBase
@@ -76,7 +77,7 @@ if TYPE_CHECKING:
 __all__ = [
     "MAX_EVIDENCE_LINES", "MAX_MISSING_PORTS", "MAX_NOTES", "MAX_NOTE_LENGTH",
     "MAX_PORT_NAME_SHOWN",
-    "detection_vendors", "propose_deployment",
+    "detection_vendors", "propose_deployment", "unread_proposal",
 ]
 
 #: The most evidence lines a proposal carries.  A stack of the largest
@@ -179,6 +180,26 @@ def _mode_for(family: FamilyDef, fabric: str) -> tuple[str | None, str]:
     )
 
 
+def unread_proposal(codec: CodecBase, refusal: LimitExceeded) -> DeploymentProposal:
+    """The answer to a request that was refused before any of the
+    config was read: the server was busy, and the request's time ran
+    out while it waited its turn.
+
+    It proposes nothing, and its one note is the refusal -- why, and
+    that the same request can be sent again.  Like every answer of
+    this module it is an answer and not an error.
+
+    Args:
+        codec: The source codec the request named.
+        refusal: What was raised where the request's scope was
+            opened.
+    """
+    return DeploymentProposal(
+        vendor=codec.capabilities.vendor_id,
+        notes=[f"Nothing was proposed: {refusal}"],
+    )
+
+
 def propose_deployment(
     codec: CodecBase, raw_text: str, registry: DeviceModelRegistry,
 ) -> DeploymentProposal:
@@ -202,9 +223,12 @@ def propose_deployment(
         ``missing_port_count`` is the whole number); ``consistent`` is
         ``True`` when there are none, and ``None`` when there was
         nothing to check: nothing was proposed, the config could not
-        be parsed, or it names no port.  Never raises on any text: a
-        detector that does is answered with a note, and so is a parser
-        that refuses the text.
+        be parsed, it asks for more than the limits in force allow, or
+        it names no port.  Never raises on any text: a detector that
+        does is answered with a note, and so is a parser that refuses
+        the text -- a refusal for size or time with a note that says
+        what was large and the limit
+        (:mod:`netcanon.migration.limits`).
     """
     vendor = codec.capabilities.vendor_id
     proposal = DeploymentProposal(vendor=vendor)
@@ -217,6 +241,13 @@ def propose_deployment(
         return proposal
     try:
         detected = detector(raw_text)
+    except LimitExceeded as exc:
+        # Out of time is not "could not be read".
+        proposal.notes.append(
+            f"The hardware lines were not read: {exc}  Declare the device "
+            f"yourself."
+        )
+        return proposal
     except Exception as exc:
         # The text is whatever was pasted.  A detector that cannot read
         # it has read nothing; that is an answer, not a server error.
@@ -360,6 +391,13 @@ def propose_deployment(
 
     try:
         tree = codec.parse(raw_text)
+    except LimitExceeded as exc:
+        # Too large is not unreadable: say which, and the limit.
+        proposal.notes.append(
+            f"The proposal was not checked against the port names the "
+            f"config uses: {exc}"
+        )
+        return proposal
     except Exception:
         tree = None
     if not isinstance(tree, CanonicalIntent):

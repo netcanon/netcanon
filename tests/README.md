@@ -165,6 +165,56 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
    `mock_pyside6`, `mock_pystray`, and `mock_generate_tray_image` fixtures
    from `tests/desktop/conftest.py` to keep tests headless and fast.
 
+### Config limits in tests
+
+A parse that opens no limits scope runs under the `standard` config
+limits (`netcanon/migration/limits.py`), in a test as anywhere else.
+Two things follow.
+
+* **A test of COST asks for the `no_config_limits` fixture**
+  (`tests/conftest.py`).  Such a test builds texts no device has —
+  forty thousand ports on one LAG — and the limits refuse some of them;
+  a refused text is read quickly whatever the code behind it costs, so
+  the test would pass on code that is slow.  `tests/unit/test_untrusted_text_cost.py`
+  uses it for every test, and treats a reading that is refused all the
+  same as an error.
+* **A test of the limits says which limits**: `with
+  limits_scope("small"):`, or a `Limits` of its own made with
+  `dataclasses.replace` — a few thousand entries are enough to pass a
+  limit of a few thousand, and nothing has to be large.
+* **`limits_scope` never waits; `server_scope` can.**  Under `small` a
+  server works on one request at a time, and the place is the
+  PROCESS's: a test that holds it (a thread inside
+  `server_scope("small")`) makes every `small` server in that test
+  process wait, which is how the tests of "busy" work.  Such a test
+  lets go in a `finally`, shows waiting with an event and never a
+  sleep, and ends with `limits.in_flight() == (0, 0)`.
+* **A place is the process's too** (`limits.places()`): under `small`
+  the application counts a request that reads config text when its
+  headers arrive.  A test fills the places with
+  `limits.Answer().arrived("small")` and gives each back with
+  `.sent()` in a `finally`; one that needs a client which stalls,
+  leaves or does not read speaks to a real server over a socket
+  (`_on_a_socket` in `tests/integration/test_config_limits_api.py`)
+  or plays the server itself (`_Wire`, same module), and ends with
+  `limits.places() == 0`.
+
+Where the limits themselves are tested: `tests/unit/migration/test_limits.py`
+(the mechanism, each limit, the measured texts, the deadline, and three
+rules read from the source), `tests/unit/test_limits_docs_truth.py`
+(every number a document prints), `tests/integration/test_config_limits_api.py`
+(the refusal on every HTTP surface; every handler that takes config
+text; one request at a time under `small`; a request counted before
+its body is read; an answer nobody reads; the proofs of
+`deploy/VERIFY.md`, run from that file),
+`tests/integration/test_job_answer.py` (a job's answer, written a piece
+at a time, is the framework's byte for byte), `tests/unit/test_cli.py`
+(the command line),
+`tests/desktop/test_config_limits_desktop.py` and
+`test_preferences_dialog.py` (the preference, the control, the embedded
+server) and `tests/e2e/test_config_limits_e2e.py` (the sentence as the
+migrate and sanitise pages paint it).
+
 ## Markers
 
 | Marker        | Meaning |

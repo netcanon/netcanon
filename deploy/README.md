@@ -198,6 +198,26 @@ Two things to know when reading it:
   the status code, when deciding whether to resize. (These replaced a single
   `503_count` that summed all three; samples written before 2026-07-27 carry
   the old key and cannot be broken down.)
+- **An instance can answer 503 itself**, and that one is none of the three.
+  An instance works on one request that reads config text at a time
+  (`NETCANON_CONFIG_LIMITS=small`), and answers `503` with `Retry-After`
+  and a sentence in two cases.  **At once**, to any request that reads
+  config text -- a translation too -- that arrives while three are in
+  flight (one at work, two waiting): its body is not read.  And after a
+  wait, to a sanitise or detection request that
+  waited its whole 20 seconds behind the visitor's other request, or got
+  its turn too late to finish (a translation in that case is a `200`
+  whose job says the same).  Both are in
+  `http_by_code` and in no warden counter.  One more reason to read the
+  counters and not the status codes.
+- **An instance can close a connection on an answer.**  An answer has the
+  request's 20 seconds to be read in; one that has not gone out by then
+  is abandoned and its connection closed.  A request whose body has
+  not arrived in that time is answered `408`.  Neither is a fault of
+  the instance; many of either is a visitor whose client does not read.
+  (The server writes a line to its log for each, with byte counts; an
+  instance's container keeps no log, so on the demo the sign is the
+  client's: an answer shorter than the length it declared.)
 
 ## Uptime monitoring
 

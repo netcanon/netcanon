@@ -57,6 +57,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
+from ...limits import census, charge, distinct, tick
 from .._helpers import GrowingIndex, _mask_to_prefix
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -531,7 +532,17 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
             num_hi - num_lo + 1, _MAX_PORT_RANGE_SPAN,
         )
         return [lo, hi]
-    return [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
+    # Counted before the names are made, whatever the line then does
+    # with them: a line can hold hundreds of ranges, and the clamp
+    # above is on each one.  Then the DIFFERENT ports that ranges have
+    # named so far: a range can name ports no device has, and every
+    # one of them is a port to everything that reads the tree.  (One
+    # range is at most ``_MAX_PORT_RANGE_SPAN`` + 1 names, so making it
+    # before that second count costs nothing worth counting.)
+    charge("memberships", num_hi - num_lo + 1, f"{lo}-{hi}")
+    names = [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
+    distinct("ports", names, f"{lo}-{hi}")
+    return names
 
 
 def _stated_once(items: list, key) -> list:
@@ -653,6 +664,7 @@ def _parse_vlan_stanza(
     svi_ipv6: list[CanonicalIPv6Address] = []
     i = start
     while i < len(lines):
+        tick()
         line = lines[i]
         stripped = line.strip()
 
@@ -786,6 +798,7 @@ def _parse_vrrp_group_stanza(
     group = CanonicalVRRPGroup(group_id=gid, mode="vrrp", preempt=False)
     i = start
     while i < len(lines):
+        tick()
         line = lines[i]
         stripped = line.strip()
         if not stripped or stripped.startswith(";"):
@@ -893,6 +906,7 @@ def _parse_interface_stanza(
     )
     i = start
     while i < len(lines):
+        tick()
         line = lines[i]
         stripped = line.strip()
 
@@ -1038,6 +1052,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     lost: dict[int, tuple[CanonicalVlan, set[str]]] = {}
     i = 0
     while i < len(lines):
+        tick()
         line = lines[i]
         stripped_line = line.strip()
 
@@ -1317,6 +1332,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             # introduced one.
             cont_idx = i + 1
             while cont_idx < len(lines) and not lines[cont_idx].strip():
+                tick()
                 cont_idx += 1
             if cont_idx < len(lines):
                 cont = _PASSWORD_HASH_CONTINUATION_RE.match(lines[cont_idx])
@@ -1484,6 +1500,10 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         again.ipv6_addresses = _stated_once(
             again.ipv6_addresses, lambda a: (a.ip, a.prefix_length, a.scope),
         )
+
+    # What the port lists hold, counted before anything sorts or
+    # copies them: a list written name by name passed no range.
+    census(intent)
 
     _one_name_per_lag(intent)
 

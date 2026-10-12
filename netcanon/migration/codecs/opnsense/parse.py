@@ -95,6 +95,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
+from ...limits import ticked
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -229,7 +230,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         # tests/fixtures/real/opnsense/user_contrib_supergate_opn25.xml
         # (lines 221, 223) and the "DNS Servers" section of
         # https://docs.opnsense.org/manual/settings_general.html.
-        for dns_el in sys_el.findall("dnsserver"):
+        for dns_el in ticked(sys_el.findall("dnsserver")):
             if dns_el.text and dns_el.text.strip():
                 # Normally one IP per element, but real-world configs
                 # occasionally cram several into a single element
@@ -249,7 +250,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         # RADIUS servers live under <system>/<authserver> with
         # <type>radius</type>.  Other <authserver> types (ldap,
         # local) are ignored here.
-        for auth_el in sys_el.findall("authserver"):
+        for auth_el in ticked(sys_el.findall("authserver")):
             type_el = auth_el.find("type")
             if type_el is None or (type_el.text or "").strip().lower() != "radius":
                 continue
@@ -277,7 +278,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 auth_port=auth_port,
                 acct_port=acct_port,
             ))
-        for user_el in sys_el.findall("user"):
+        for user_el in ticked(sys_el.findall("user")):
             name_el = user_el.find("name")
             if name_el is None or not (name_el.text or "").strip():
                 continue
@@ -396,7 +397,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     vip_parent = root.find("virtualip")
     if vip_parent is not None:
         iface_by_name = {i.name: i for i in intent.interfaces}
-        for vip_el in vip_parent.findall("vip"):
+        for vip_el in ticked(vip_parent.findall("vip")):
             group = _parse_opnsense_vip(vip_el, iface_alias_to_canonical)
             if group is None:
                 continue
@@ -420,7 +421,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # ----- <vlans> block -----
     vlans_el = root.find("vlans")
     if vlans_el is not None:
-        for vlan_el in vlans_el.findall("vlan"):
+        for vlan_el in ticked(vlans_el.findall("vlan")):
             tag_el = vlan_el.find("tag")
             if tag_el is not None and tag_el.text:
                 try:
@@ -453,7 +454,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         named: dict[str, list[CanonicalInterface]] = {}
         for iface in intent.interfaces:
             named.setdefault(iface.name, []).append(iface)
-        for lagg_el in laggs_el.findall("lagg"):
+        for lagg_el in ticked(laggs_el.findall("lagg")):
             laggif_el = lagg_el.find("laggif")
             if laggif_el is None or not (laggif_el.text or "").strip():
                 continue  # no name = useless record
@@ -490,7 +491,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         contact_el = snmpd_el.find("syscontact")
         if contact_el is not None and contact_el.text:
             snmp.contact = contact_el.text.strip()
-        for host_el in snmpd_el.findall("traphost"):
+        for host_el in ticked(snmpd_el.findall("traphost")):
             if host_el.text and host_el.text.strip():
                 snmp.trap_hosts.append(host_el.text.strip())
         if (snmp.community or snmp.location or snmp.contact

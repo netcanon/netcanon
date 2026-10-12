@@ -1894,6 +1894,157 @@ nothing, as before.
   source ports sent to `Trk1` and `trk1` on AOS-S are on one LAG, and
   the job says so.
 
+### H. Config size limits (a job that says `refused:`)
+
+A few characters of a config can stand for a great deal: `2-4000` is
+thousands of VLAN ids, `all` is every one, and every trunk that allows
+every VLAN is a member of every VLAN.  So Netcanon counts what a
+config makes, and refuses past a limit rather than spend the memory.
+It also gives each request a time limit.
+
+**What you see.**  The job is `failed`, its error begins `refused:`,
+and the sentence names what was large, how large, and the limit:
+
+> refused: reading the config as aruba_aoss would make 9,009 or more
+> different ports named by port ranges; the limit is 8,192 (counted
+> over 9 ranges; the last one read: 8009-9009).  This server runs with
+> the 'standard' config size limit.  To allow more, set
+> NETCANON_CONFIG_LIMITS=large (or unlimited) in its environment and
+> restart it; in the desktop application, choose Preferences... ->
+> Config size limit.
+
+The migrate page shows it in the red banner; the sanitise page shows
+it under the form (the API answers 413); `detect-deployment` still
+proposes the device, and says in a note why it could not check the
+proposal against the port names; the command line prints it and exits
+2.  The job also carries it as data (`refusal`: the limit, how many
+were asked for, the limit's number), for a client that must tell "too
+large for this server" from "could not be read".  "or more" means the
+count stopped at the limit: the whole number is larger.
+
+**One other refusal is not about size.**  A server set to `small` works
+on one request that reads config text at a time (below).  A request that
+waited its whole time behind another is refused too, and says so:
+
+> refused: the server works on one config at a time, and was busy with
+> another for the 20 seconds this request may take; this request was not
+> started and its config was not read.  Send it again.  This server runs
+> with the 'small' config size limit, the one the public demo uses.  A
+> Netcanon you run yourself does not make one request wait for another
+> by default.
+
+Nothing is wrong with the config: send it again.  The job's `refusal`
+has `at_once` as its limit; the sanitiser and `detect` answer **503**
+with `Retry-After` (not 413, which is "too large" and would be the same
+answer the next time); `detect-deployment` proposes nothing and gives
+the sentence as its note.
+
+A request that got its turn after a wait, and then ran out of time, is
+busy too.  It is not told that it was slow; it says how long it waited:
+
+> refused: the server works on one config at a time, and this request
+> waited 17.5 seconds for its turn; what was left of the 20 seconds it
+> may take was not enough, and it was stopped before reading the config
+> as cisco_iosxe_cli began.  Send it again.  This server runs with the
+> 'small' config size limit, the one the public demo uses.  A Netcanon
+> you run yourself does not make one request wait for another by
+> default.
+
+It is answered as the one above is: `at_once` in a job's `refusal`, 503
+with `Retry-After` from the sanitiser and `detect`.  (A request that did
+not wait and ran out of time is refused for its time: `seconds` in a
+job's `refusal`, 413 from the sanitiser.)
+
+Two answers come from the server before any handler runs, and are the
+same on every endpoint that reads config text -- the seven that return
+a job too, since there is no job to make of a request nobody read:
+
+* **503 with `Retry-After`**, at once, to a request that arrives while
+  as many are in flight as may work and wait.  Its body is not read.
+  The detail is the busy sentence: "... and 2 more were already
+  waiting their turn; this request was not started and its config was
+  not read.  Send it again. ..."
+* **408**, to a request whose body has not arrived inside the time a
+  request may take: "... the request passed the 20 seconds it may take
+  while its body was still arriving, and was stopped ..."  The
+  connection is closed.
+
+**The limits.**  One setting chooses a column by name.
+
+| Limit | What is counted | `small` | `standard` | `large` |
+|---|---|---:|---:|---:|
+| `vlan_ids` | VLAN ids that lists and ranges name (`2-4000`, `all`, `except 7`); the 4,094 of a trunk that states no allowed list, where that is every VLAN (IOS-XE, NX-OS, EOS, AOS-CX) | 1,048,576 | 16,777,216 | 67,108,864 |
+| `memberships` | one port in one VLAN's port list, or in one LAG | 50,000 | 1,000,000 | 4,000,000 |
+| `ports` | different ports that port ranges name; ports that only a VLAN's or a LAG's list names | 2,048 | 8,192 | 32,768 |
+| `interfaces` | interface records, wherever one is made | 2,500 | 50,000 | 200,000 |
+| `copies` | entries a Junos `interface-range` copies onto its members | 10,000 | 100,000 | 400,000 |
+| `words` | words of set commands written out from block-form Junos | 250,000 | 4,000,000 | 16,000,000 |
+| `text` | characters of an output; of the nested blocks VyOS set lines are written out as | 8,000,000 | 64,000,000 | 256,000,000 |
+| `seconds` | the time one request may take | 20 | 120 | 600 |
+
+`unlimited` is no limit and no time limit.
+
+**Requests at once.**  Every limit in the table is for one request.
+Under `small` the server also works on 1 request that reads config
+text at a time: a second waits its turn (inside its own 20 seconds), at
+most 2 wait, and one more is refused at once as busy.  A request is
+counted when its headers arrive, so that one more is refused before
+its body is read; and its 20 seconds run from then, for all of it --
+the body to arrive, the turn, the work, and the answer to be read.
+**Under `small` an answer has the request's seconds to be read in**:
+one that has not gone out by then is abandoned and its connection
+closed, however much of it was left (a client that reads, however
+slowly, is not cut before that).  A server started with `netcanon
+serve` on Linux also has the system end the connection of a client
+that has taken nothing for that long.  `standard`,
+`large` and `unlimited` limit no requests at once.  Pages, `/health`
+and endpoints that read no config text never wait; neither does the
+command line.
+
+| Platform | Default | How it is set |
+|---|---|---|
+| Web, Docker, pip | `standard` | `NETCANON_CONFIG_LIMITS=small\|standard\|large\|unlimited` in the environment or `.env`; restart.  A value that is none of the four stops the server at startup |
+| Desktop | `standard` | **Preferences... -> Config size limit** (Standard / Large / Unlimited); restart |
+| Command line | `standard` | `netcanon sanitize --limits <name>`, else `NETCANON_CONFIG_LIMITS` |
+| Public demo | `small` | Not yours to set: the sentence says so, and says what a Netcanon you run yourself allows.  One request at a time |
+
+**Where the `standard` numbers come from.**  `vlan_ids`: 4,096 ports
+that each allow every VLAN.  `memberships`: about three times the most
+(port, VLAN) pairs a vendor verifies on one device.  `ports`: about
+three times the most ports one system has.  `interfaces`: room for a
+router with tens of thousands of sub-interfaces.  `seconds`: the
+slowest honest request the other limits admit takes seconds on half a
+CPU, not minutes.  Every real capture this project holds is far under
+the `small` limits.
+
+**What is refused that is real**, so that nobody finds it later:
+
+* Under `standard`: more than 4,096 ports that each state `all`; more
+  than a million kept memberships; and an output of more than 64
+  million characters — which a few thousand ports that each allow
+  every VLAN are when the target writes every id (IOS-XE, EOS: about 19
+  KB a port; Junos, NX-OS, AOS-CX and Dell OS10 write a range).  Use
+  `large`, or `unlimited` for a config you know.
+* Block-form Junos is counted in the words of the set commands it is
+  converted to.  The same config pasted as `show configuration |
+  display set` is not converted, and is not counted in words.
+* Under `small` (the demo): a switch with more than 256 ports that each
+  state `all`, or more than 50,000 memberships.
+* **A trunk with no allowed line counts as one that states `all`** on
+  IOS-XE, NX-OS, EOS and AOS-CX, where such a trunk carries every VLAN
+  (on AOS-CX: a `vlan trunk native` line and no `vlan trunk allowed`).
+  A chassis whose every port is a trunk with no list is counted port by
+  port like one that writes `all` on each, and the sentence names the
+  last such trunk: "... the last one read: a trunk with no allowed list,
+  which is every VLAN: GigabitEthernet1/0/257".  On Dell OS10 and Junos
+  such a trunk carries no VLAN and counts as nothing.
+
+**What the limits do not bound** — requests in flight under every set
+but `small`, how many connections a client opens and leaves open, the
+size of an answer, a renderer that runs long, and records no limit
+counts (static routes, addresses) — is in
+[`SECURITY.md`](../SECURITY.md) "Input Validation — Config Text".
+
 ---
 
 ## Backup-side limitations

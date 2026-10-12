@@ -687,6 +687,54 @@ class TestSanitizePurity:
         # Original intent is untouched
         assert intent.hostname == "real-router"
 
+    def test_in_place_is_the_same_redaction_and_no_copy(self):
+        """A caller that owns the tree can have it redacted where it
+        stands: what comes back is the tree it gave, and it reads
+        as the copy does -- on every committed AOS-S, IOS-XE and
+        Junos capture, with the same audit."""
+        from netcanon.migration.codecs.registry import get_codec
+
+        compared = 0
+        for folder, name in (("aruba_aoss", "aruba_aoss"), ("cisco_iosxe", "cisco_iosxe_cli"),
+                             ("junos", "juniper_junos")):
+            codec = get_codec(name)
+            for path in sorted((REPO_ROOT / "tests" / "fixtures" / "real" / folder).glob("*")):
+                if not path.is_file() or path.suffix in (".md", ".json", ".yaml"):
+                    continue
+                raw = path.read_text(encoding="utf-8")
+                try:
+                    read, again = codec.parse(raw), codec.parse(raw)
+                except ParseError:
+                    continue
+                copied, audit = sanitize_intent(read)
+                assert copied is not read
+                where_it_stands, same_audit = sanitize_intent(again, in_place=True)
+                assert where_it_stands is again, path.name
+                assert where_it_stands == copied and same_audit == audit, path.name
+                compared += 1
+        assert compared > 20
+
+    def test_sanitize_text_makes_no_copy_of_the_config(self, monkeypatch):
+        """It parsed the tree itself and nothing else holds it.  A
+        deep copy was the whole config in memory a second time,
+        which on a small server is the difference between the
+        heaviest request it takes and the next heaviest."""
+        copies = []
+        real = CanonicalIntent.model_copy
+
+        def counted(self, **kwargs):
+            copies.append(kwargs)
+            return real(self, **kwargs)
+
+        monkeypatch.setattr(CanonicalIntent, "model_copy", counted)
+        raw = ARUBA_FIXTURE.read_text(encoding="utf-8")
+        for dry_run in (False, True):
+            result = sanitize_text(raw, "aruba_aoss", dry_run=dry_run)
+            assert len(result.substitutions) > 0
+        assert copies == [], "sanitize_text copied the tree it had just parsed"
+        sanitize_intent(CanonicalIntent(hostname="real-router"))
+        assert copies == [{"deep": True}], "the test would not see a copy"
+
 
 # ---------------------------------------------------------------------------
 # sanitize_text — end-to-end against real-capture fixtures

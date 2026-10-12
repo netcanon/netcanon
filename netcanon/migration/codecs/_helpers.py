@@ -20,10 +20,12 @@ from __future__ import annotations
 
 import ipaddress
 import re
-from collections.abc import Callable, Hashable, Sequence
-from typing import TYPE_CHECKING, Generic, TypeVar
+from bisect import bisect_left
+from collections.abc import Callable, Hashable, Iterable, Sequence
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from ..canonical.transforms import is_every_vlan
+from ..limits import charge
 from .base import ParseError, RenderError
 
 if TYPE_CHECKING:
@@ -183,7 +185,23 @@ def address_key(address: object) -> tuple:
 #: eight bytes of its place there.  Counted from a range it cost a new
 #: int as well, 38 bytes in all, and a config can state ``1-4094`` on
 #: every port it has.  Use :func:`vlan_id_run` to expand a range.
+#:
+#: A place that makes a list from this counts the ids it is about to
+#: make first (``charge("vlan_ids", ...)``): eight bytes an id is
+#: still four million ids from a kilobyte of ``2-4000`` tokens.
 VLAN_IDS: tuple[int, ...] = tuple(range(4095))
+
+#: Every VLAN id, 1-4094, as one tuple of those ints: what a trunk
+#: that carries every VLAN has for a list, before anyone has asked
+#: for a list of it.  ``add`` and ``remove`` on the first allowed
+#: line of such a trunk start from a copy, which is counted.
+EVERY_VLAN_ID: tuple[int, ...] = VLAN_IDS[1:]
+
+#: What a refusal says was counted, for the ids no character of the
+#: config stands for (a refusal quotes eighty characters, so the
+#: words come first and the name after).
+_NO_LIST_IS_EVERY_VLAN = "a trunk with no allowed list, which is every VLAN"
+_STANZA_MET_AGAIN = "the allowed list of a stanza that is met again"
 
 
 def vlan_id_run(low: int, high: int) -> list[int]:
@@ -192,7 +210,9 @@ def vlan_id_run(low: int, high: int) -> list[int]:
 
     Equal to ``list(range(low, high + 1))`` for ``1 <= low`` and
     ``high <= 4094``, which the caller has to have seen to: a slice
-    does not refuse a bound, it stops at the end of the tuple.
+    does not refuse a bound, it stops at the end of the tuple.  The
+    caller counts them, too, before it asks: it knows what the config
+    wrote, which a refusal quotes.
     """
     return list(VLAN_IDS[low:high + 1])
 
@@ -244,7 +264,7 @@ TRUNK_THAT_STATES_NO_LIST: dict[str, str] = {
 }
 
 
-def unstated_trunk_list(codec: str) -> list[int]:
+def unstated_trunk_list(codec: str, where: str = "") -> list[int]:
     """The allowed list of a trunk of *codec* that states none.
 
     Every id where the platform's trunk carries every VLAN by default,
@@ -252,10 +272,28 @@ def unstated_trunk_list(codec: str) -> list[int]:
     A new list each call; its entries are the shared ints of
     :data:`VLAN_IDS`.
 
+    Every id is 4,094 entries that no character of the config stands
+    for: a stanza of two lines makes them, and a config can hold as
+    many such stanzas as it likes.  They are counted like the word
+    ``all``, BEFORE the list is made, so that a config of many
+    default trunks is refused at the limit on VLAN ids and not when
+    its lists are already held.
+
+    Args:
+        codec: A codec of the table.
+        where: The trunk, as the config names it, for a refusal
+            to say which was the last one counted.
+
     Raises:
         KeyError: *codec* is not in the table.
+        LimitExceeded: With this list the config names more VLAN
+            ids than the limits allow.
     """
     if TRUNK_THAT_STATES_NO_LIST[codec] == TRUNK_ALL:
+        charge(
+            "vlan_ids", 4094,
+            f"{_NO_LIST_IS_EVERY_VLAN}: {where}" if where else _NO_LIST_IS_EVERY_VLAN,
+        )
         return vlan_id_run(1, 4094)
     return []
 
@@ -430,10 +468,45 @@ def _parse_vlan_list(text: str) -> list[int]:
                 continue
             lo_i, hi_i = max(1, lo_i), min(4094, hi_i)
             if lo_i <= hi_i:
+                # Counted before it is made: a range is a few bytes.
+                charge("vlan_ids", hi_i - lo_i + 1, part)
                 result.extend(VLAN_IDS[lo_i:hi_i + 1])
         elif part.isdigit():
             result.append(int(part))
     return result
+
+
+def sole_vlan_id(text: str) -> int | None:
+    """The id an id-list names when it names exactly ONE (``10``,
+    ``10-10``), and ``None`` when it names none or several.
+
+    What ``_parse_vlan_list(text)`` gives as a list of one, found
+    without making the list and without counting it.  For a pass
+    that only has to know whether a ``vlan <list>`` line opens a
+    stanza of one VLAN, on a line that another pass expands: a line
+    expanded twice is counted twice, and the number a refusal prints
+    is then twice what the config names.
+    """
+    found: int | None = None
+    for part in text.split(","):
+        part = part.strip()
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            try:
+                lo_i, hi_i = int(lo.strip()), int(hi.strip())
+            except ValueError:
+                continue
+            lo_i, hi_i = max(1, lo_i), min(4094, hi_i)
+            if lo_i > hi_i:
+                continue
+            if lo_i != hi_i or found is not None:
+                return None
+            found = lo_i
+        elif part.isdigit():
+            if found is not None:
+                return None
+            found = int(part)
+    return found
 
 
 #: Leading keywords in the Cisco / Arista / NX-OS ``switchport trunk
@@ -504,6 +577,12 @@ def merge_trunk_allowed(
     Returns:
         The interface's list after this line.  Always a list: a line
         was stated.
+
+    Raises:
+        LimitExceeded: The ids this line makes -- a range, ``all``,
+            ``except``, or the copy of *unstated* that a first
+            ``add`` or ``remove`` starts from -- pass the limit on
+            VLAN ids.  Counted before they are made.
     """
     tokens = remainder.split(None, 1)
     keyword = tokens[0].lower() if tokens else ""
@@ -513,13 +592,28 @@ def merge_trunk_allowed(
     if keyword == "none":
         return []
     if keyword == "all":
+        charge("vlan_ids", 4094, "all")
         return vlan_id_run(1, 4094)
     rest = tokens[1] if len(tokens) > 1 else ""
     ids = parse_ids(rest)
     if keyword == "except":
         blocked = set(ids)
+        charge(
+            "vlan_ids", 4094 - len(blocked.intersection(VLAN_IDS[1:])), remainder,
+        )
         return [vid for vid in VLAN_IDS[1:] if vid not in blocked]
-    base = list(unstated) if existing is None else list(existing)
+    if existing is None:
+        if unstated:
+            # The platform's own list, which no character of this
+            # line stands for: counted before it is copied.
+            charge(
+                "vlan_ids", len(unstated),
+                f"{keyword} on a trunk with no earlier list, which starts "
+                "from every VLAN",
+            )
+        base = list(unstated)
+    else:
+        base = list(existing)
     if keyword == "add":
         # (#11) ``vid not in base`` is an O(len(base)) list scan per id;
         # a config with K× ``allowed vlan add 1-4094`` lines drove the
@@ -585,6 +679,19 @@ class TrunksByName:
     * A port that is not a trunk has the list its own stanza states
       (IOS-XE keeps one on such a port), and none otherwise.
 
+    What this makes from few bytes is counted before it is made, as
+    VLAN ids (:func:`...limits.charge`).  The platform's list is
+    4,094 ids for a trunk whose stanza is two lines
+    (:func:`unstated_trunk_list`), and for the first ``add`` or
+    ``remove`` of an interface (:func:`merge_trunk_allowed`).  And a
+    stanza that is met again is a record of its own with a list of
+    its own: the interface's list copied for it (:meth:`settle`), or
+    made anew by an ``add`` or a ``remove`` while the list it
+    started from stays with the record of the earlier stanza
+    (:meth:`allowed_line`).  A list a line states outright is
+    counted where its ranges are read, and once: the ids of a line
+    are read one time, whatever is made of them.
+
     Args:
         codec: A codec of :data:`TRUNK_THAT_STATES_NO_LIST`.
         parse_ids: Reads a comma/hyphen id list, for
@@ -605,7 +712,7 @@ class TrunksByName:
         # What ``add`` and ``remove`` start from on an interface's
         # first allowed line: the platform's list.
         self._platform: tuple[int, ...] = (
-            VLAN_IDS[1:] if TRUNK_THAT_STATES_NO_LIST[codec] == TRUNK_ALL
+            EVERY_VLAN_ID if TRUNK_THAT_STATES_NO_LIST[codec] == TRUNK_ALL
             else ()
         )
         self._allowed: dict[str, list[int]] = {}
@@ -666,21 +773,46 @@ class TrunksByName:
         Returns:
             The interface's list after the line.  It is not changed
             afterwards: the next line makes a new one.
+
+        Raises:
+            LimitExceeded: What the line makes passes the limit on
+                VLAN ids.
         """
         before = self._allowed.get(key)
+        word = remainder.split(None, 1)[0].lower() if remainder.strip() else ""
+        relative = word in ("add", "remove")
+        # ``add`` and ``remove`` copy the list they start from.
+        # Within a stanza the list a line started from is let go
+        # when the line has been applied.  A list stated in an
+        # EARLIER stanza is not: it stays with the record made of
+        # that stanza, and this line makes another beside it -- so
+        # a stanza of two lines, met again and again, is its
+        # interface's whole list each time.  Counted first.
+        again = relative and key not in self._in_this_stanza
+        said = f"{_STANZA_MET_AGAIN}: {remainder.strip()}"
+        if again and before:
+            charge("vlan_ids", len(before), said)
+        # The ids of the line are read ONCE, for both lists below.
+        # Read twice a range is counted twice, and the number a
+        # refusal prints is then more than the config names.
+        read: dict[str, list[int]] = {}
+
+        def ids_of(text: str) -> list[int]:
+            if text not in read:
+                read[text] = self._parse_ids(text)
+            return read[text]
+
         after = self._allowed[key] = merge_trunk_allowed(
-            before, remainder,
-            parse_ids=self._parse_ids, unstated=self._platform,
+            before, remainder, parse_ids=ids_of, unstated=self._platform,
         )
         self._in_this_stanza.add(key)
         if self._platform:
-            word = remainder.split(None, 1)[0].lower() if remainder.strip() else ""
-            if word in ("add", "remove") and (
-                before is None or key in self._from_nothing
-            ):
+            if relative and (before is None or key in self._from_nothing):
+                started = self._from_nothing.get(key)
+                if again and started:
+                    charge("vlan_ids", len(started), said)
                 self._from_nothing[key] = merge_trunk_allowed(
-                    self._from_nothing.get(key), remainder,
-                    parse_ids=self._parse_ids,
+                    started, remainder, parse_ids=ids_of,
                 )
             else:
                 self._from_nothing.pop(key, None)
@@ -708,7 +840,13 @@ class TrunksByName:
         list of an interface, or say that it is a trunk, after a
         record of it was made.
 
-        No two records are given the same list object.
+        No two records are given the same list object.  A list made
+        here -- the platform's, for a trunk that states none, or a
+        copy for the record of a stanza that is met again -- is
+        counted before it is made.
+
+        Raises:
+            LimitExceeded: The lists pass the limit on VLAN ids.
         """
         handed: set[int] = set()
         for iface, key, in_its_stanza, allowed, from_nothing in self._made:
@@ -727,11 +865,92 @@ class TrunksByName:
                     # platform's list.
                     allowed = [] if from_nothing is None else from_nothing
                 elif allowed is None:
-                    allowed = unstated_trunk_list(self._codec)
+                    allowed = unstated_trunk_list(self._codec, iface.name)
             if id(allowed) in handed:
+                if allowed:
+                    charge(
+                        "vlan_ids", len(allowed),
+                        f"{_STANZA_MET_AGAIN}: {iface.name}",
+                    )
                 allowed = list(allowed)
             handed.add(id(allowed))
             iface.trunk_allowed_vlans = allowed
+
+
+def joined_ids_length(ids: list[int]) -> int:
+    """How long ``",".join(str(vid) for vid in ids)`` is, without
+    writing it: a digit count and the commas.
+
+    Exact for ids from 0 to 9999, which is every VLAN id; an id with
+    more digits is counted as four, so the answer is never more than
+    the text.  One sort of the list in C and three lookups: nothing
+    is made for an id.
+    """
+    count = len(ids)
+    if not count:
+        return 0
+    ordered = sorted(ids)
+    shorter = (
+        bisect_left(ordered, 10) + bisect_left(ordered, 100)
+        + bisect_left(ordered, 1000)
+    )
+    return 4 * count - shorter + count - 1
+
+
+def charge_id_lines(
+    interfaces: Iterable[Any], lead: str, *, codec: str, trunks_only: bool,
+) -> None:
+    """Count the lines that carry a port's allowed-VLAN list, BEFORE a
+    renderer writes any of them.
+
+    IOS-XE and EOS take the list as ``lead`` and every id, so a tree
+    whose lists hold four million ids is nineteen megabytes of those
+    lines.  The lists' lengths say so before the first character: a
+    renderer calls this once, ahead of its output.  What is charged is
+    the length of those lines and nothing else, so it is never more
+    than the output is.
+
+    A list means what it says, and the count follows what is then
+    written (:func:`switchport_trunk_allowed_value`).  On a TRUNK the
+    list that is the platform's own for a trunk with no line -- every
+    VLAN, for both of these -- is no line, and nothing is counted
+    for that port; no VLAN is the line that says ``none``; any other
+    list is its ids.  On a port that is not a trunk a list is
+    written by IOS-XE alone, and every id is the word ``all`` there.
+
+    Args:
+        interfaces: The interfaces the renderer is about to write.
+        lead: The line up to the first id, as the renderer writes it.
+        codec: The renderer's codec, a key of
+            :data:`TRUNK_THAT_STATES_NO_LIST`.
+        trunks_only: The renderer writes the line for a port in trunk
+            mode only (EOS); otherwise for any port with a list.
+
+    Raises:
+        LimitExceeded: Those lines alone are longer than the output
+            may be (:mod:`netcanon.migration.limits`).
+        KeyError: *codec* is not in the table.
+    """
+    unwritten = TRUNK_THAT_STATES_NO_LIST[codec]
+    total = ports = 0
+    for iface in interfaces:
+        ids = iface.trunk_allowed_vlans
+        if iface.switchport_mode == "trunk":
+            says = trunk_list_says(ids)
+            if says == unwritten:
+                continue
+            value = len("none") if says == TRUNK_NONE else joined_ids_length(ids)
+        elif trunks_only or not ids:
+            continue
+        else:
+            value = len("all") if is_every_vlan(ids) else joined_ids_length(ids)
+        total += len(lead) + value + 1
+        ports += 1
+    if ports:
+        charge(
+            "text", total,
+            f"the allowed-VLAN lists of {ports:,} ports, written id by id",
+        )
 
 
 def _run_token(lo: int, hi: int) -> str:

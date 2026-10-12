@@ -128,7 +128,12 @@ Hard Rules (AGENTS.md, repeated here for proximity):
   * NEW pipeline behaviour goes on a NEW public function, not an
     existing one.
 
-Pure function — no I/O, no global state.
+No I/O.  One thing outside the arguments decides a result: the limits
+in force (:mod:`netcanon.migration.limits`).  A caller opens a scope to
+choose them; without one the standard limits apply.  A config that
+asks for more than they allow, or a request that runs past its
+deadline in a parser, comes back as a ``failed`` job whose ``error``
+begins ``refused:`` and whose ``refusal`` carries the same as data.
 """
 
 from __future__ import annotations
@@ -141,9 +146,11 @@ from typing import Any
 
 from ..migration._tier3_detection import is_left_out_row
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
+from ..migration.limits import LimitExceeded
 from ..models.migration import (
     MigrationJob,
     MigrationJobStatus,
+    Refusal,
     TransformSpec,
 )
 from ..models.port_inventory import Inventory, MappingPlan
@@ -242,6 +249,9 @@ def run_plan(
     Returns a fully-populated :class:`MigrationJob` regardless of
     outcome — successful runs reach ``completed``; any stage failure
     moves the job to ``failed`` with the error captured in ``.error``.
+    A config that asks for more than the limits in force allow is a
+    ``failed`` job too, with ``.refusal`` set and an ``.error`` that
+    begins ``refused:`` (:mod:`netcanon.migration.limits`).
 
     Cross-device-class guard:
         Before parsing, :func:`check_class_compat` is called.  If the
@@ -352,6 +362,28 @@ def run_plan(
         logger.debug("run_plan %s: stage=render", job.id[:8])
         job.rendered = target.render(tree)
 
+    except LimitExceeded as exc:
+        # Not a fault and not a parse failure: the config was read and
+        # is more than this server is set to take.  The words say what
+        # was large, how large and the limit; ``refusal`` is the same
+        # as data.  (Never "parse failed": the migrate page offers
+        # "did you mean another vendor?" for that beginning.)
+        job.status = MigrationJobStatus.failed
+        job.error = f"refused: {exc}"
+        job.refusal = Refusal(**exc.as_dict())
+        # A refusal at render comes after validation, whose report has
+        # a path for every membership: megabytes about a config that
+        # was not translated.  The answer to "too large" is small.
+        job.validation = None
+        # Counts and the names of limits only.  What the refusal
+        # quotes from the config (a range, a port name) goes to the
+        # client and never to a log.
+        logger.warning(
+            "run_plan %s: refused %s -> %s in stage %s: %s limit of the "
+            "%s limits (asked %s, limit %s, counted over %d)",
+            job.id[:8], source.name, target.name, exc.stage or "none",
+            exc.kind, exc.profile, exc.asked, exc.cap, exc.lists,
+        )
     except ParseError as exc:
         job.status = MigrationJobStatus.failed
         job.error = f"parse failed: {exc}"
@@ -2185,6 +2217,13 @@ def _unbound_hardware(
             used.update(
                 hop.partition("@")[0].strip() for hop in (route.gateway or "").split(",")
             )
+    except LimitExceeded as exc:
+        # The translation is done and stands; what was refused is
+        # reading it back.  Say that, and why.
+        job.warnings.append(
+            f"port mapping: the output was not read back with the target codec: {exc}"
+        )
+        return [*hardware, *expected], False
     except Exception:
         return [*hardware, *expected], False
 
@@ -2490,6 +2529,12 @@ def run_plan_with_models(
     own_names: list[str] = source_inventory.names()
     try:
         tree = source.parse(raw_text)
+    except LimitExceeded:
+        # Refused, not unreadable.  run_plan meets the same limit
+        # below -- a count is the same on every parse of one text, and
+        # a request that is out of time does not start another stage
+        # -- and makes the refused job of it.
+        tree = None
     except Exception:
         # Not reported here: run_plan parses again below and turns the
         # same failure into the failed job it has always produced.

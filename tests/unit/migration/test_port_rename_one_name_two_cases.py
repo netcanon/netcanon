@@ -883,11 +883,13 @@ class TestTheEdgesOfOneRecordPerName:
             ("trk1", ["1", "2", "5"]), ("trk2", ["1"]),
         ]
 
+    @pytest.mark.usefixtures("no_config_limits")
     def test_the_trunk_lines_of_one_lag_do_not_cost_their_square(self) -> None:
         """Each line used to go through every port the LAG already had:
         16,000 lines took ten seconds, 40,000 would take a minute.  Read
         once each they take a fraction of a second; the bound is thirty
-        times that, for a slow machine."""
+        times that, for a slow machine.  (Read with the config limits
+        off: 40,000 ports with no stanza are more than a parse admits.)"""
         text = 'hostname "sw"\n' + "".join(f"trunk {n} trk1 lacp\n" for n in range(1, 40_001))
         started = time.perf_counter()
         (lag,) = AOSS.parse(text).lags

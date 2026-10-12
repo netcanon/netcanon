@@ -64,6 +64,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
+from ...limits import ticked
 from .._helpers import _mask_to_prefix
 from .._helpers import _prefix_to_mask as _shared_prefix_to_mask
 from .._input_shape import detect_input_shape
@@ -221,7 +222,7 @@ def _parse_blocks(raw: str) -> list[_ConfigBlock]:
     # ``_EditBlock``.  Top of stack is the one receiving new tokens.
     stack: list[_ConfigBlock | _EditBlock] = []
 
-    for raw_line in lines:
+    for raw_line in ticked(lines):
         line = raw_line.strip()
         if not line or _COMMENT_RE.match(line):
             continue
@@ -337,7 +338,7 @@ def _apply_system_interface(  # noqa: C901
     # O(members x interfaces) quadratic that pinned a worker on adversarial
     # thousand-aggregate inputs (2026-07-06 review MEDIUM #30).
     iface_by_name: dict[str, CanonicalInterface] = {}
-    for edit in block.edits:
+    for edit in ticked(block.edits):
         name = edit.edit_id
         iface = CanonicalInterface(name=name, enabled=True)
 
@@ -656,7 +657,7 @@ def _apply_snmp_community(
 ) -> None:
     """Parse ``config system snmp community`` — community strings +
     trap host sub-tables."""
-    for edit in block.edits:
+    for edit in ticked(block.edits):
         name = edit.settings.get("name")
         if not name:
             continue
@@ -710,7 +711,7 @@ def _apply_snmp_user(
     quotes, or as two tokens otherwise.  Either shape round-trips
     because the renderer re-quotes on output.
     """
-    for edit in block.edits:
+    for edit in ticked(block.edits):
         name_tokens = [edit.edit_id] if edit.edit_id else (
             edit.settings.get("name") or []
         )
@@ -772,7 +773,7 @@ def _apply_snmp_user(
 def _apply_router_static(
     block: _ConfigBlock, intent: CanonicalIntent,
 ) -> None:
-    for edit in block.edits:
+    for edit in ticked(block.edits):
         dst = edit.settings.get("dst")
         if not dst or len(dst) < 2:
             # Default-route entries sometimes use `dstaddr` instead;
@@ -811,7 +812,7 @@ def _apply_router_static6(
     single ``<prefix>/<len>`` token (no dotted mask), so the destination
     is used verbatim.
     """
-    for edit in block.edits:
+    for edit in ticked(block.edits):
         dst = edit.settings.get("dst")
         if not dst:
             continue
@@ -848,7 +849,7 @@ def _apply_system_admin(
     under canonical ``hashed_password`` so a lossless round-trip back
     to a FortiGate target reconstructs the original command.
     """
-    for edit in block.edits:
+    for edit in ticked(block.edits):
         name = edit.edit_id
         pw_tokens = edit.settings.get("password") or edit.settings.get("old-password")
         hashed = ""
@@ -891,7 +892,7 @@ def _apply_user_radius(
     The ``ENC`` prefix is preserved on the canonical key so a lossless
     round-trip back to FortiGate reconstructs the original command.
     """
-    for edit in block.edits:
+    for edit in ticked(block.edits):
         server_tokens = edit.settings.get("server")
         if not server_tokens:
             continue
@@ -946,7 +947,7 @@ def _apply_system_dhcp_server(
             next
         end
     """
-    for edit in block.edits:
+    for edit in ticked(block.edits):
         pool = CanonicalDHCPPool()
         iface_tokens = edit.settings.get("interface")
         if iface_tokens:
@@ -1060,7 +1061,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # scope).  DEBUG surface lets ops see what was dropped without
     # requiring a separate grep pass.
     ignored_paths: list[str] = []
-    for block in blocks:
+    for block in ticked(blocks):
         applier = _DISPATCH.get(block.config_path)
         if applier is not None:
             applier(block, intent)

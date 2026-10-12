@@ -309,6 +309,33 @@ def fake_collector() -> FakeCollector:
 
 
 # ---------------------------------------------------------------------------
+# Config limits off — for the tests that measure what code COSTS.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def no_config_limits():
+    """Run the test with no limit on what a config may make.
+
+    A parse that opens no scope runs under the standard limits
+    (``netcanon.migration.limits``), and a test of COST builds texts
+    no device has: forty thousand ports on one LAG, to see that the
+    lines of one record do not cost their square.  The limits refuse
+    such a text, and a refused text is quick -- so a cost test would
+    pass on code that is slow, having timed the refusal.  Under this
+    fixture nothing is refused for size.  The deadline stays in force,
+    an hour away, so that the parsers' loops look at the clock as they
+    do on a request and what is timed is the code a request runs.
+    """
+    from dataclasses import replace
+
+    from netcanon.migration.limits import UNLIMITED, limits_scope
+
+    with limits_scope(replace(UNLIMITED, name="uncounted", seconds=3600.0)):
+        yield
+
+
+# ---------------------------------------------------------------------------
 # Keyring mock — autouse so every test gets a working keyring backend.
 # ---------------------------------------------------------------------------
 

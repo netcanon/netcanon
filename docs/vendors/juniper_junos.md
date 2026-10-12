@@ -193,6 +193,18 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
 
 ## Common gotchas
 
+- **Block-form input is counted in the set commands it becomes.**  A
+  block-form config is converted to set commands before it is read,
+  and the whole path is written again for every statement under it, so
+  a deep hierarchy with many statements is many times its own size
+  (a statement marked `inactive:` is two commands, its `set` line and
+  a `deactivate` line, and both are counted).
+  The server's config size limit counts it in words (`words`), and a
+  config past it is `refused:` with advice that is also the cure:
+  paste `show configuration | display set`, which is not converted and
+  not counted in words.  An `interface-range` with addresses on it is
+  counted too (`copies`): every address goes onto every member.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § H.
 - **A trunk's allowed list is written as a list.**  `vlan members
   all` is written only when the list is every VLAN id (1-4094).
   Any other list is cut into runs of consecutive ids: a run made

@@ -23,6 +23,8 @@ import re
 from collections.abc import Callable, Iterable
 from typing import TypeVar
 
+from ..limits import ticked
+
 _Scratch = TypeVar("_Scratch")
 _Result = TypeVar("_Result")
 
@@ -70,7 +72,7 @@ def scan_stanzas(
             results.append(build(current))
             current = None
 
-    for line in lines:
+    for line in ticked(lines):
         match = is_header(line)
         if match is not None:
             _flush()

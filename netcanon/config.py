@@ -304,6 +304,20 @@ class Settings(BaseSettings):
             shell collector inline, the Netmiko collector via an auth-less
             paramiko pre-flight (Netmiko has no native TOFU-persist API).
             See SECURITY.md.
+        config_limits: How much one config may expand to, and how long
+            one request may take: the name of one of the sets of limits
+            in :mod:`netcanon.migration.limits`.  ``standard`` (the
+            default) admits every device a vendor verifies; ``large``
+            is four times that; ``unlimited`` is no limit and no
+            deadline; ``small`` is what the public demo runs, in a
+            container of 256 MiB, and the only one under which the
+            server works on one request that reads config text at a
+            time (a second waits its turn).  A request past a limit is refused
+            in a sentence that names what was large, how large, and
+            the limit.  Override via ``NETCANON_CONFIG_LIMITS``; the
+            desktop application sets it in Preferences.  A value that
+            is none of the four stops the server at startup: it is not
+            read as "no limit".
     """
 
     definitions_dir: Path = Field(default_factory=_default_definitions_dir)
@@ -329,6 +343,9 @@ class Settings(BaseSettings):
     # api_key unless this opt-out is set (acknowledging that a reverse
     # proxy terminates auth).  See netcanon/api/auth.py.
     allow_insecure_bind: bool = False
+    # What one config may expand to and how long one request may take
+    # (netcanon/migration/limits.py).  Env: NETCANON_CONFIG_LIMITS.
+    config_limits: Literal["small", "standard", "large", "unlimited"] = "standard"
 
     model_config = SettingsConfigDict(
         env_prefix="NETCANON_",
@@ -344,7 +361,7 @@ class Settings(BaseSettings):
 
         ``configure_logging`` runs at import time (``main.py``), outside the
         graceful-startup handler, and passes this value to
-        ``logging.setLevel`` (and ``netcanon serve`` to ``uvicorn.run``).  A
+        ``logging.setLevel`` (and ``netcanon serve`` to uvicorn's own).  A
         mistyped value (``verbose``, ``warn``, a stray-whitespace
         ``"DEBUG "``, an empty string) would otherwise raise an unhandled
         ``ValueError`` and crash every entry path with a raw traceback
@@ -364,6 +381,17 @@ class Settings(BaseSettings):
             stacklevel=2,
         )
         return "info"
+
+    @field_validator("config_limits", mode="before")
+    @classmethod
+    def _normalize_config_limits(cls, v: object) -> object:
+        """Take ``NETCANON_CONFIG_LIMITS`` in any letter case, with
+        white space round it.  A value that is still none of the four
+        names is left as it is, for the field to refuse: unlike the
+        log level, this one is not given a default when it is wrong,
+        because the wrong default for a server that takes text from
+        strangers is one that admits ten times what it was meant to."""
+        return v.strip().lower() if isinstance(v, str) else v
 
     @property
     def effective_data_dir(self) -> Path:
