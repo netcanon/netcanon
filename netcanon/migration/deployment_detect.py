@@ -75,6 +75,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "MAX_EVIDENCE_LINES", "MAX_MISSING_PORTS", "MAX_NOTES", "MAX_NOTE_LENGTH",
+    "MAX_PORT_NAME_SHOWN",
     "detection_vendors", "propose_deployment",
 ]
 
@@ -93,6 +94,15 @@ MAX_MISSING_PORTS = 256
 #: answer to that whether or not it does.
 MAX_NOTES = 24
 MAX_NOTE_LENGTH = 600
+#: A port name repeated in the answer -- in ``missing_ports`` -- is
+#: cut to this many characters.  A real one is a tenth of it.
+MAX_PORT_NAME_SHOWN = 128
+
+
+def _clipped(name: str, limit: int = MAX_PORT_NAME_SHOWN) -> str:
+    """*name*, or its first *limit* characters and a mark that it
+    was cut."""
+    return name if len(name) <= limit else name[: limit - 1] + "\u2026"
 
 logger = logging.getLogger(__name__)
 
@@ -373,7 +383,9 @@ def propose_deployment(
     proposal.used_port_count = len(used)
     missing = [name for name in used if name not in names]
     proposal.missing_port_count = len(missing)
-    proposal.missing_ports = missing[:MAX_MISSING_PORTS]
+    # A port name is the config's own text and has no length of its
+    # own: each is cut to a length a list can be read at.
+    proposal.missing_ports = [_clipped(name) for name in missing[:MAX_MISSING_PORTS]]
     if not used:
         # Nothing to check against is not a check that passed.
         proposal.notes.append(
@@ -383,7 +395,10 @@ def propose_deployment(
         return proposal
     proposal.consistent = not missing
     if missing:
-        shown = ", ".join(missing[:8])
+        # This note is written here, after the detector's own were
+        # capped: the names in it are cut short, so that it stays
+        # within the same bound whatever the config calls a port.
+        shown = ", ".join(_clipped(name, 32) for name in missing[:8])
         if len(missing) > 8:
             shown += f" and {len(missing) - 8} more"
         proposal.notes.append(

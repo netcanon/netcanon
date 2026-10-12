@@ -505,6 +505,11 @@ class MigrationJob(BaseModel):
             parse so the migrate page can render a "Detected in
             source but not translated" banner.  Notification surface
             only — never read by any render-side code or transform.
+            A parser may also list a statement it read and left out
+            on purpose (a Junos statement the source had
+            deactivated): a row that begins ``inactive: `` or
+            ``delete: `` is one, and is not a section
+            (``_tier3_detection.is_left_out_row``).
             See also ``scope_advisories``, which reports the TARGET
             platform rather than the source.
             Populated by every codec's ``parse()``; see
@@ -731,7 +736,10 @@ class MigrationJob(BaseModel):
     #: translated" banner.  Notification surface only — never read by
     #: any render-side code or transform.  Populated by every codec's
     #: ``parse()``; see :mod:`netcanon.migration._tier3_detection` for
-    #: the per-vendor detectors.
+    #: the per-vendor detectors -- and for the rows that are not
+    #: sections: a statement a parser read and left out on purpose is
+    #: listed here too (``inactive: <path> ...``), and a client that
+    #: counts sections tells the two apart with ``is_left_out_row``.
     dropped_tier3_sections: list[str] = Field(default_factory=list)
 
     #: Scope notices about the TARGET platform, as opposed to

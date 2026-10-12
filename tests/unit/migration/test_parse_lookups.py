@@ -9,18 +9,39 @@ the ANSWERS each rewritten handler has to keep giving, on configs
 written to reach the cases where a lookup by key could differ from a
 scan -- two records of one key, a record made out of order, a list
 that was added to by something else, a value that is stated twice.
+
+The same goes for a list of ONE record that a line adds to after
+looking for its value there (the addresses of one interface, the
+members of one LAG): the look is now ``Uniques``, and what each such
+list comes to is pinned below, as it was when the handler read the
+list -- and for three scans over another list that were given an
+index of their own.
 """
 
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 
-from netcanon.migration.canonical.intent import CanonicalIntent
+from netcanon.migration.canonical.intent import (
+    CanonicalIntent,
+    CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalLAG,
+    CanonicalSNMPv3User,
+    CanonicalVlan,
+)
 from netcanon.migration.canonical.transforms import _PortList, project_switchport_to_vlan
-from netcanon.migration.codecs._helpers import GrowingIndex
+from netcanon.migration.codecs._helpers import GrowingIndex, Uniques, address_key
+from netcanon.migration.codecs.cisco_nxos import render as nxos_render
+from netcanon.migration.codecs.opnsense import render as opnsense_render
 from netcanon.migration.codecs.registry import get_codec
+from netcanon.migration.codecs.vyos import render as vyos_render
+from netcanon.services import migration_pipeline
+from netcanon.services.migration_pipeline import run_plan_with_overrides
 
 pytestmark = pytest.mark.unit
 
@@ -81,6 +102,138 @@ class TestGrowingIndex:
         index = GrowingIndex(lambda: records, lambda record: asked.append(record) or record)
         assert all(index.get(n) == n for n in range(10_000))
         assert len(asked) == 10_000
+
+
+# ---------------------------------------------------------------------------
+# The list that is added to unless it has the value
+# ---------------------------------------------------------------------------
+
+
+class TestUniques:
+    #: Among them 1, 1.0 and True, which are one value to a list.
+    VALUES = ["a", "b", "A", "", ("10.0.0.1", 24), ("10.0.0.1", 25), 1, 1.0, True, 2, None]
+
+    def test_it_does_what_looking_first_did(self) -> None:
+        """``add`` is ``if value not in lst: lst.append(value)``, on
+        several lists at once, with entries appended by someone else
+        and a list cut short between two questions."""
+        rng = random.Random(11)
+        for _ in range(2000):
+            once = Uniques()
+            plain: list[list[object]] = [[], [], []]
+            kept: list[list[object]] = [[], [], []]
+            for _ in range(rng.randint(0, 30)):
+                which, value, roll = rng.randrange(3), rng.choice(self.VALUES), rng.random()
+                if roll < 0.15:
+                    plain[which].append(value)
+                    kept[which].append(value)
+                    continue
+                if roll < 0.25:
+                    cut = rng.randrange(len(plain[which]) + 1)
+                    del plain[which][cut:]
+                    del kept[which][cut:]
+                is_new = value not in plain[which]
+                if is_new:
+                    plain[which].append(value)
+                assert once.add(kept[which], value) is is_new
+            assert kept == plain
+            assert [[type(value) for value in values] for values in kept] == [
+                [type(value) for value in values] for values in plain
+            ]
+
+    def test_a_value_is_appended_once_in_order(self) -> None:
+        once, kept = Uniques(), []
+        assert [once.add(kept, value) for value in ("b", "a", "b", "c", "a")] == [True, True, False, True, False]
+        assert kept == ["b", "a", "c"]
+
+    def test_an_entry_anyone_appended_is_known(self) -> None:
+        once, kept = Uniques(), ["a"]
+        assert not once.add(kept, "a")
+        kept.append("b")
+        assert not once.add(kept, "b") and once.add(kept, "c") and kept == ["a", "b", "c"]
+
+    def test_a_list_that_is_gone_is_not_taken_for_the_next(self) -> None:
+        """A parser drops a record in the middle of a config, and the
+        next list made may stand where the last one stood.  The
+        helper holds each list it has read, so the two are never
+        one list to it."""
+        for _ in range(100):
+            once = Uniques()
+            first = ["a"]
+            once.add(first, "b")
+            del first
+            other = ["x", "y"]
+            assert once.add(other, "a") and other == ["x", "y", "a"]
+
+    def test_a_shorter_list_is_read_again(self) -> None:
+        once, kept = Uniques(), []
+        once.add(kept, "a")
+        once.add(kept, "b")
+        del kept[:]
+        assert once.add(kept, "b") and kept == ["b"]
+
+    def test_a_list_given_anew_is_another_list(self) -> None:
+        once, record = Uniques(), {"members": ["a"]}
+        assert not once.add(record["members"], "a")
+        record["members"] = []
+        assert once.add(record["members"], "a") and record["members"] == ["a"]
+
+    def test_two_lists_are_kept_apart(self) -> None:
+        once, first, second = Uniques(), [], []
+        assert once.add(first, "a") and once.add(second, "a") and not once.add(first, "a")
+        assert (first, second) == (["a"], ["a"])
+
+    def test_each_entry_is_read_once(self) -> None:
+        """The point of it: five thousand values given to one list ask
+        for five thousand keys, and for one more for each entry that
+        someone else appended."""
+        asked: list[object] = []
+
+        def key(value: object) -> object:
+            asked.append(value)
+            return value
+
+        once, kept = Uniques(), []
+        for value in range(5000):
+            once.add(kept, value, key)
+        assert len(asked) == 5000 and kept == list(range(5000))
+        kept.extend(["x", "y"])
+        once.add(kept, "x", key)
+        assert len(asked) == 5003
+
+    def test_records_are_found_by_key(self) -> None:
+        once, kept = Uniques(), []
+        first = CanonicalIPv4Address(ip="10.0.0.1", prefix_length=24)
+        again = CanonicalIPv4Address(ip="10.0.0.1", prefix_length=24)
+        other = CanonicalIPv4Address(ip="10.0.0.1", prefix_length=24, is_secondary=True)
+        assert once.add(kept, first, address_key) and not once.add(kept, again, address_key)
+        assert once.add(kept, other, address_key) and kept == [first, other] and kept[0] is first
+
+    def test_a_coarse_key_costs_no_answer(self) -> None:
+        once, kept = Uniques(), []
+        addresses = [
+            CanonicalIPv4Address(ip="10.0.0.1", prefix_length=24),
+            CanonicalIPv4Address(ip="10.0.0.1", prefix_length=25),
+            CanonicalIPv4Address(ip="10.0.0.1", prefix_length=24),
+        ]
+        assert [once.add(kept, address, lambda _address: "one key") for address in addresses] == [True, True, False]
+
+    def test_addresses_that_differ_are_two(self) -> None:
+        """Whatever the record holds, now or later: a field the key
+        leaves out is still compared."""
+        plain = {"ip": "10.0.0.1", "prefix_length": 24}
+        different = {
+            "ip": "10.0.0.2", "prefix_length": 25, "is_secondary": True,
+            "virtual_gateway_address": "10.0.0.254", "virtual_gateway_mac": "00:00:5e:00:01:01",
+        }
+        assert set(different) == set(CanonicalIPv4Address.model_fields), "a field this test has no value for"
+        for field, value in different.items():
+            once, kept = Uniques(), []
+            base, changed = CanonicalIPv4Address(**plain), CanonicalIPv4Address(**{**plain, field: value})
+            assert base != changed
+            assert once.add(kept, base, address_key) and once.add(kept, changed, address_key), field
+            assert not once.add(kept, CanonicalIPv4Address(**{**plain, field: value}), address_key), field
+            assert address_key(changed) == address_key(CanonicalIPv4Address(**{**plain, field: value}))
 
 
 # ---------------------------------------------------------------------------
@@ -548,3 +701,493 @@ class TestRouterOsPools:
     def test_the_sections_may_come_in_either_order(self) -> None:
         tree = _ros(["10.0.0.0/24"], ["10.0.0.5-10.0.0.9"], pools_first=True)
         assert self._pools(tree) == [("10.0.0.0/24", "10.0.0.5", "10.0.0.9")]
+
+
+# ---------------------------------------------------------------------------
+# Lists of one record
+# ---------------------------------------------------------------------------
+
+
+def _parsed(codec: str, *lines: str) -> CanonicalIntent:
+    return get_codec(codec).parse("\n".join(lines) + "\n")
+
+
+def _named(records: Any, name: object, by: str = "name") -> Any:
+    return next(record for record in records if getattr(record, by) == name)
+
+
+def _written(addresses: Any) -> list[str]:
+    """``ip/length``, with an ``s`` on a secondary."""
+    return [
+        f"{address.ip}/{address.prefix_length}" + ("s" if getattr(address, "is_secondary", False) else "")
+        for address in addresses
+    ]
+
+
+_UNIT = "set interfaces ge-0/0/0 unit 0 family"
+_IRB = "set interfaces irb unit 100 family"
+_VRRP = "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/8 vrrp-group 1"
+_POOL = "set access address-assignment pool P family inet"
+_OLD_POOL = "set system services dhcp pool 10.0.0.0/8"
+_VRF = "set routing-instances V"
+_USM = "set snmp v3 usm local-engine user"
+_HOST = "set system host-name r1"
+_NETCONF = (
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="101">', "<data>",
+    '<interfaces xmlns="http://openconfig.net/yang/interfaces">',
+)
+
+
+def _netconf_svi(*addresses: str) -> str:
+    return (
+        "<interface><name>Vlan10</name><config><name>Vlan10</name><enabled>true</enabled></config>"
+        '<subinterfaces><subinterface><index>0</index><ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">'
+        "<addresses>" + "".join(
+            f"<address><ip>{address}</ip><config><ip>{address}</ip>"
+            "<prefix-length>24</prefix-length></config></address>"
+            for address in addresses
+        ) + "</addresses></ipv4></subinterface></subinterfaces></interface>"
+    )
+
+
+def _both_lists(instance: Any) -> list[list[str]]:
+    return [instance.rt_imports, instance.rt_exports]
+
+
+def _members(tree: CanonicalIntent) -> list[list[object]]:
+    return [[lag.name, lag.members] for lag in tree.lags]
+
+
+#: A text for each list of one record that a line adds to after
+#: looking for its value there, with a value stated twice and the
+#: values out of order -- and what the list came to before the look
+#: was taken out of the handler: each value once, where it first came.
+ONE_RECORD: dict[str, tuple[Callable[[], object], object]] = {
+    "juniper_junos: a unit's addresses": (
+        lambda: _written(_named(_parsed(
+            "juniper_junos", _HOST, f"{_UNIT} inet address 10.0.0.2/24", f"{_UNIT} inet address 10.0.0.1/24",
+            f"{_UNIT} inet address 10.0.0.2/24", f"{_UNIT} inet address 10.0.0.2/25",
+            f"{_UNIT} inet address 10.0.0.1/24",
+        ).interfaces, "ge-0/0/0").ipv4_addresses),
+        ["10.0.0.2/24", "10.0.0.1/24", "10.0.0.2/25"],
+    ),
+    "juniper_junos: a unit's IPv6 addresses": (
+        lambda: _written(_named(_parsed(
+            "juniper_junos", _HOST, f"{_UNIT} inet6 address 2001:db8::2/64", f"{_UNIT} inet6 address 2001:db8::1/64",
+            f"{_UNIT} inet6 address 2001:db8::2/64",
+        ).interfaces, "ge-0/0/0").ipv6_addresses),
+        ["2001:db8::2/64", "2001:db8::1/64"],
+    ),
+    "juniper_junos: an IRB unit's addresses": (
+        lambda: _written(_named(_parsed(
+            "juniper_junos", _HOST, f"{_IRB} inet address 10.0.0.2/24", f"{_IRB} inet address 10.0.0.1/24",
+            f"{_IRB} inet address 10.0.0.2/24",
+        ).interfaces, "irb.100").ipv4_addresses),
+        ["10.0.0.2/24", "10.0.0.1/24"],
+    ),
+    "juniper_junos: an IRB unit's addresses, folded onto its VLAN": (
+        lambda: _written(_named(_parsed(
+            "juniper_junos", _HOST, "set vlans V100 vlan-id 100", "set vlans V100 l3-interface irb.100",
+            f"{_IRB} inet address 10.0.0.2/24", f"{_IRB} inet address 10.0.0.1/24",
+            f"{_IRB} inet address 10.0.0.2/24",
+        ).vlans, 100, "id").ipv4_addresses),
+        ["10.0.0.2/24", "10.0.0.1/24"],
+    ),
+    "juniper_junos: an IRB unit's IPv6 addresses": (
+        lambda: _written(_named(_parsed(
+            "juniper_junos", _HOST, f"{_IRB} inet6 address 2001:db8::2/64", f"{_IRB} inet6 address 2001:db8::1/64",
+            f"{_IRB} inet6 address 2001:db8::2/64",
+        ).interfaces, "irb.100").ipv6_addresses),
+        ["2001:db8::2/64", "2001:db8::1/64"],
+    ),
+    "juniper_junos: a LAG's members": (
+        lambda: _named(_parsed(
+            "juniper_junos", _HOST, "set interfaces ge-0/0/7 ether-options 802.3ad ae0",
+            "set interfaces ge-0/0/3 ether-options 802.3ad ae0", "set interfaces ge-0/0/7 ether-options 802.3ad ae0",
+            "set interfaces ge-0/0/5 ether-options 802.3ad ae1",
+        ).lags, "ae0").members,
+        ["ge-0/0/7", "ge-0/0/3"],
+    ),
+    "juniper_junos: an interface-range's members and addresses": (
+        lambda: [[port.name, _written(port.ipv4_addresses)] for port in _parsed(
+            "juniper_junos", _HOST, "set interfaces interface-range R member ge-0/0/2",
+            "set interfaces interface-range R member ge-0/0/1", "set interfaces interface-range R member ge-0/0/2",
+            "set interfaces interface-range R unit 0 family inet address 10.0.0.2/24",
+            "set interfaces interface-range R unit 0 family inet address 10.0.0.1/24",
+            "set interfaces interface-range R unit 0 family inet address 10.0.0.2/24",
+        ).interfaces],
+        [["ge-0/0/1", ["10.0.0.2/24", "10.0.0.1/24"]], ["ge-0/0/2", ["10.0.0.2/24", "10.0.0.1/24"]]],
+    ),
+    "juniper_junos: a pool's name servers": (
+        lambda: _parsed(
+            "juniper_junos", _HOST, f"{_POOL} network 10.0.0.0/8", f"{_POOL} dhcp-attributes name-server 10.0.0.2",
+            f"{_POOL} dhcp-attributes name-server 10.0.0.1", f"{_POOL} dhcp-attributes name-server 10.0.0.2",
+        ).dhcp_servers[0].dns_servers,
+        ["10.0.0.2", "10.0.0.1"],
+    ),
+    "juniper_junos: a pool's name servers, old grammar": (
+        lambda: _parsed(
+            "juniper_junos", _HOST, f"{_OLD_POOL} name-server 10.0.0.2", f"{_OLD_POOL} name-server 10.0.0.1",
+            f"{_OLD_POOL} name-server 10.0.0.2",
+        ).dhcp_servers[0].dns_servers,
+        ["10.0.0.2", "10.0.0.1"],
+    ),
+    "juniper_junos: a VRF's route targets": (
+        lambda: _both_lists(_named(_parsed(
+            "juniper_junos", _HOST, f"{_VRF} instance-type vrf", f"{_VRF} vrf-target import target:65000:2",
+            f"{_VRF} vrf-target target:65000:1", f"{_VRF} vrf-target export target:65000:3",
+            f"{_VRF} vrf-target import target:65000:1", f"{_VRF} vrf-target target:65000:2",
+            f"{_VRF} vrf-target export target:65000:3",
+        ).routing_instances, "V")),
+        [["65000:2", "65000:1"], ["65000:1", "65000:3", "65000:2"]],
+    ),
+    "juniper_junos: a VRRP group's addresses and tracked interfaces": (
+        lambda: (lambda group: [group.virtual_ips, group.virtual_ipv6s, group.track_interfaces])(_named(_parsed(
+            "juniper_junos", _HOST, f"{_VRRP} virtual-address 10.0.0.9", f"{_VRRP} virtual-address 10.0.0.8",
+            f"{_VRRP} virtual-address 10.0.0.9", f"{_VRRP} track interface ge-0/0/2",
+            f"{_VRRP} track interface ge-0/0/1", f"{_VRRP} track interface ge-0/0/2",
+            f"{_VRRP} virtual-inet6-address 2001:db8::9", f"{_VRRP} virtual-inet6-address 2001:db8::9",
+        ).interfaces, "ge-0/0/0").vrrp_groups[0]),
+        [["10.0.0.9", "10.0.0.8"], ["2001:db8::9"], ["ge-0/0/2", "ge-0/0/1"]],
+    ),
+    "juniper_junos: SNMPv3 users, their lines in any order": (
+        lambda: [[user.name, user.auth_protocol, user.priv_protocol, user.group] for user in _parsed(
+            "juniper_junos", _HOST, f"{_USM} u2 authentication-sha authentication-password fakepass2",
+            f"{_USM} u1 authentication-md5 authentication-password fakepass1",
+            f"{_USM} u2 privacy-aes128 privacy-password fakepriv2",
+            "set snmp v3 vacm security-to-group security-model usm security-name u1 group G1",
+            "set snmp v3 vacm security-to-group security-model usm security-name u3 group G3",
+            f"{_USM} u2 authentication-sha authentication-password fakepass2",
+        ).snmp.v3_users],
+        [["u2", "sha", "aes128", ""], ["u1", "md5", "", "G1"], ["u3", "", "", "G3"]],
+    ),
+    "arista_eos: a VRF's route targets": (
+        lambda: _both_lists(_named(_parsed(
+            "arista_eos", "hostname sw", "!", "vrf instance V", "   route-target import 65000:2",
+            "   route-target both 65000:1", "   route-target export 65000:3", "   route-target import 65000:1",
+            "   route-target import 65000:2", "   route-target export 65000:3", "!",
+        ).routing_instances, "V")),
+        [["65000:2", "65000:1"], ["65000:1", "65000:3"]],
+    ),
+    "arista_eos: a VRF's route targets under router bgp": (
+        lambda: _both_lists(_named(_parsed(
+            "arista_eos", "hostname sw", "!", "router bgp 65001", "   vrf V", "      rd 65001:1",
+            "      route-target import evpn 65000:2", "      route-target both 65000:1",
+            "      route-target export evpn 65000:3", "      route-target import 65000:1",
+            "      route-target import evpn 65000:2", "      route-target export 65000:3", "!",
+        ).routing_instances, "V")),
+        [["65000:2", "65000:1"], ["65000:1", "65000:3"]],
+    ),
+    "arista_eos: a VRRP group's tracked interfaces": (
+        lambda: _named(_parsed(
+            "arista_eos", "hostname sw", "!", "interface Ethernet1", "   no switchport", "   ip address 10.0.0.1/8",
+            "   vrrp 1 track Ethernet7", "   vrrp 1 track Ethernet3", "   vrrp 1 track Ethernet7",
+            "   vrrp 2 track Ethernet7", "!",
+        ).interfaces, "Ethernet1").vrrp_groups[0].track_interfaces,
+        ["Ethernet7", "Ethernet3"],
+    ),
+    "aruba_aoscx: a LAG's members": (
+        lambda: _members(_parsed(
+            "aruba_aoscx", "hostname sw", "interface lag 1", "    no shutdown", "interface 1/1/7", "    lag 1",
+            "interface 1/1/3", "    lag 1", "interface 1/1/7", "    lag 1", "interface 1/1/5", "    lag 2",
+        )),
+        [["lag 1", ["1/1/7", "1/1/3"]], ["lag 2", ["1/1/5"]]],
+    ),
+    "cisco_iosxe_cli: a LAG's members": (
+        lambda: _members(_parsed(
+            "cisco_iosxe_cli", "hostname sw", "!", "interface GigabitEthernet1/0/7", " channel-group 1 mode active",
+            "!", "interface GigabitEthernet1/0/3", " channel-group 1 mode active", "!",
+            "interface GigabitEthernet1/0/7", " channel-group 1 mode on", "!", "interface GigabitEthernet1/0/5",
+            " channel-group 2 mode active", "!",
+        )),
+        [["Port-channel1", ["GigabitEthernet1/0/7", "GigabitEthernet1/0/3"]],
+         ["Port-channel2", ["GigabitEthernet1/0/5"]]],
+    ),
+    "cisco_iosxr: a LAG's members": (
+        lambda: _members(_parsed(
+            "cisco_iosxr", "hostname r1", "!", "interface GigabitEthernet0/0/0/7", " bundle id 1 mode active", "!",
+            "interface GigabitEthernet0/0/0/3", " bundle id 1 mode active", "!", "interface GigabitEthernet0/0/0/7",
+            " bundle id 1 mode active", "!", "interface GigabitEthernet0/0/0/5", " bundle id 2 mode active", "!",
+        )),
+        [["Bundle-Ether1", ["GigabitEthernet0/0/0/7", "GigabitEthernet0/0/0/3"]],
+         ["Bundle-Ether2", ["GigabitEthernet0/0/0/5"]]],
+    ),
+    "cisco_nxos: a LAG's members": (
+        lambda: _members(_parsed(
+            "cisco_nxos", "hostname sw", "feature lacp", "interface Ethernet1/7", "  channel-group 1 mode active",
+            "interface Ethernet1/3", "  channel-group 1 mode active", "interface Ethernet1/7",
+            "  channel-group 1 mode active", "interface Ethernet1/5", "  channel-group 2 mode active",
+        )),
+        [["port-channel1", ["Ethernet1/7", "Ethernet1/3"]], ["port-channel2", ["Ethernet1/5"]]],
+    ),
+    "dell_os10: a LAG's members": (
+        lambda: _members(_parsed(
+            "dell_os10", "! Version 10.5.4.0", "hostname sw", "!", "interface ethernet1/1/7",
+            " channel-group 1 mode active", "!", "interface ethernet1/1/3", " channel-group 1 mode active", "!",
+            "interface ethernet1/1/7", " channel-group 1 mode active", "!", "interface ethernet1/1/5",
+            " channel-group 2 mode active", "!",
+        )),
+        [["port-channel1", ["ethernet1/1/7", "ethernet1/1/3"]], ["port-channel2", ["ethernet1/1/5"]]],
+    ),
+    "aruba_aoscx: an SVI's addresses on its VLAN": (
+        lambda: _written(_named(_parsed(
+            "aruba_aoscx", "hostname sw", "vlan 10", "    name users", "interface vlan 10",
+            "    ip address 10.0.0.2/24", "    ip address 10.0.0.1/24 secondary",
+            "    ip address 10.0.0.2/24 secondary", "    ip address 10.0.0.1/24 secondary",
+        ).vlans, 10, "id").ipv4_addresses),
+        ["10.0.0.2/24", "10.0.0.1/24s", "10.0.0.2/24s"],
+    ),
+    "cisco_iosxe_cli: an SVI's addresses on its VLAN": (
+        lambda: _written(_named(_parsed(
+            "cisco_iosxe_cli", "hostname sw", "!", "vlan 10", " name users", "!", "interface Vlan10",
+            " ip address 10.0.0.2 255.255.255.0", " ip address 10.0.0.1 255.255.255.0 secondary",
+            " ip address 10.0.0.2 255.255.255.0 secondary", " ip address 10.0.0.1 255.255.255.0 secondary", "!",
+        ).vlans, 10, "id").ipv4_addresses),
+        ["10.0.0.2/24", "10.0.0.1/24s", "10.0.0.2/24s"],
+    ),
+    "cisco_nxos: an SVI's addresses on its VLAN": (
+        lambda: _written(_named(_parsed(
+            "cisco_nxos", "hostname sw", "feature interface-vlan", "vlan 10", "  name users", "interface Vlan10",
+            "  ip address 10.0.0.2/24", "  ip address 10.0.0.1/24 secondary", "  ip address 10.0.0.2/24 secondary",
+            "  ip address 10.0.0.1/24 secondary",
+        ).vlans, 10, "id").ipv4_addresses),
+        ["10.0.0.2/24", "10.0.0.1/24s", "10.0.0.2/24s"],
+    ),
+    "dell_os10: a second SVI stanza's addresses on the VLAN": (
+        lambda: _written(_named(_parsed(
+            "dell_os10", "! Version 10.5.4.0", "hostname sw", "!", "interface vlan10", " ip address 10.0.0.2/24",
+            "!", "interface vlan10", " ip address 10.0.0.1/24 secondary", " ip address 10.0.0.2/24",
+            " ip address 10.0.0.1/24 secondary", " ip address 10.0.0.2/24 secondary", "!",
+        ).vlans, 10, "id").ipv4_addresses),
+        ["10.0.0.2/24", "10.0.0.1/24s", "10.0.0.2/24s"],
+    ),
+    "cisco_iosxe: a second SVI element's addresses on the VLAN": (
+        lambda: _written(_named(_parsed(
+            "cisco_iosxe", *_NETCONF, _netconf_svi("10.0.0.2"),
+            _netconf_svi("10.0.0.1", "10.0.0.2", "10.0.0.1", "10.0.0.3"), "</interfaces>", "</data>", "</rpc-reply>",
+        ).vlans, 10, "id").ipv4_addresses),
+        ["10.0.0.2/24", "10.0.0.1/24", "10.0.0.3/24"],
+    ),
+    "vyos: a bond's members": (
+        lambda: _members(_parsed(
+            "vyos", _HOST, "set interfaces bonding bond0 mode 802.3ad",
+            "set interfaces bonding bond0 member interface eth7", "set interfaces bonding bond0 member interface eth3",
+            "set interfaces bonding bond0 member interface eth7", "set interfaces bonding bond1 member interface eth5",
+        )),
+        [["bond0", ["eth7", "eth3"]], ["bond1", ["eth5"]]],
+    ),
+    "vyos: NTP servers, under both paths": (
+        lambda: _parsed(
+            "vyos", _HOST, "set service ntp server 10.0.0.2", "set service ntp server 10.0.0.1",
+            "set service ntp server 10.0.0.2", "set system ntp server 10.0.0.3", "set system ntp server 10.0.0.1",
+        ).ntp_servers,
+        ["10.0.0.3", "10.0.0.1", "10.0.0.2"],
+    ),
+    "vyos: a VXLAN's remotes": (
+        lambda: _parsed(
+            "vyos", _HOST, "set interfaces vxlan vxlan10 vni 10010", "set interfaces vxlan vxlan10 remote 10.0.0.2",
+            "set interfaces vxlan vxlan10 remote 10.0.0.1", "set interfaces vxlan vxlan10 remote 10.0.0.2",
+        ).vxlan_vnis[0].flood_list,
+        ["10.0.0.2", "10.0.0.1"],
+    ),
+    "mikrotik_routeros: NTP servers from both sections": (
+        lambda: _parsed(
+            "mikrotik_routeros", "# 2026-01-01 00:00:00 by RouterOS 7.14", "/system ntp client",
+            "set enabled=yes servers=10.0.0.2,pool.ntp.org,10.0.0.2", "/system ntp client servers",
+            "add address=10.0.0.1", "add address=pool.ntp.org", "add address=0.0.0.0", "add address=10.0.0.3",
+            "add address=10.0.0.1",
+        ).ntp_servers,
+        ["10.0.0.2", "pool.ntp.org", "10.0.0.1", "10.0.0.3"],
+    ),
+    "mikrotik_routeros: NTP servers, the keys of RouterOS 6": (
+        lambda: _parsed(
+            "mikrotik_routeros", "# 2026-01-01 00:00:00 by RouterOS 7.14", "/system ntp client",
+            "set enabled=yes primary-ntp=10.0.0.2 secondary-ntp=10.0.0.2 "
+            "server-dns-names=b.example,a.example,b.example",
+        ).ntp_servers,
+        ["10.0.0.2", "b.example", "a.example"],
+    ),
+    "aruba_aoss: a VLAN's ports, stated and taken back": (
+        lambda: (lambda vlan: [vlan.untagged_ports, vlan.tagged_ports])(_named(_aoss(
+            "vlan 10", "   untagged 1-3", "   untagged 2,5", "   no untagged 2", "   untagged 2", "   no untagged 9",
+            "   tagged 7,8,7", "   tagged Trk1", "   no tagged 8", "   tagged 8,6", "   exit",
+        ).vlans, 10, "id")),
+        [["1", "2", "3", "5"], ["6", "7", "8", "trk1"]],
+    ),
+    "aruba_aoss: a VLAN's ports, every one of them taken back": (
+        lambda: (lambda vlan: [vlan.untagged_ports, vlan.tagged_ports])(_named(_aoss(
+            "vlan 10", "   untagged 1-3", "   no untagged 1-3", "   tagged 4", "   no tagged 4,5", "   untagged 3",
+            "   exit",
+        ).vlans, 10, "id")),
+        [["3"], []],
+    ),
+}
+
+
+class TestListsOfOneRecord:
+    @pytest.mark.parametrize("title", sorted(ONE_RECORD))
+    def test_a_value_stated_twice_is_there_once(self, title: str) -> None:
+        made, before = ONE_RECORD[title]
+        assert made() == before
+
+    def test_an_aoss_stanza_gives_the_same_list(self) -> None:
+        """Before the passes that drop a repeat and sort: the ports
+        of every line in the order they were stated (a line names a
+        port once), less what a ``no`` line found above it.  A port
+        stated again after such a line is there."""
+        from netcanon.migration.codecs.aruba_aoss.parse import _parse_vlan_stanza
+
+        lines = [
+            "   untagged 3,1", "   untagged 2,3", "   no untagged 1,7", "   untagged 1", "   no untagged 2",
+            "   untagged 2,2", "   untagged 2", "   tagged 9", "   tagged 8,9", "   no tagged 9", "   tagged 9",
+            "   exit",
+        ]
+        vlan, _groups, _v6, after = _parse_vlan_stanza(lines, 0, 10)
+        assert (vlan.untagged_ports, vlan.tagged_ports, after) == (["3", "3", "1", "2", "2"], ["8", "9"], len(lines))
+
+    def test_and_does_so_on_random_stanzas(self) -> None:
+        """Against the list written again for every ``no`` line, as
+        the reader used to do it."""
+        from netcanon.migration.codecs.aruba_aoss.parse import _parse_vlan_stanza
+
+        rng = random.Random(21)
+        for _ in range(500):
+            lines, untagged, tagged = [], [], []
+            for _ in range(rng.randrange(0, 12)):
+                ports = [str(rng.randrange(1, 7)) for _ in range(rng.randrange(1, 4))]
+                word, kept = rng.choice((("untagged", untagged), ("tagged", tagged)))
+                if rng.random() < 0.35:
+                    lines.append(f"   no {word} {','.join(ports)}")
+                    kept[:] = [port for port in kept if port not in ports]
+                else:
+                    lines.append(f"   {word} {','.join(ports)}")
+                    kept.extend(dict.fromkeys(ports))
+            vlan, _groups, _v6, _after = _parse_vlan_stanza([*lines, "   exit"], 0, 10)
+            assert (vlan.untagged_ports, vlan.tagged_ports) == (untagged, tagged), lines
+
+
+# ---------------------------------------------------------------------------
+# Scans over another list, each given an index that is built once
+# ---------------------------------------------------------------------------
+
+
+def _parent_by_walking(vlan: Any, intent: CanonicalIntent, default: str) -> str:
+    """The OPNsense renderer's search for a VLAN's parent as it was:
+    every interface for every LAG, and again for every member."""
+    for lag in intent.lags:
+        for iface in intent.interfaces:
+            if iface.name == lag.name and vlan.id in iface.trunk_allowed_vlans:
+                return lag.name
+        for member in lag.members:
+            for iface in intent.interfaces:
+                if iface.name == member and vlan.id in iface.trunk_allowed_vlans:
+                    return lag.name
+    members = {member for lag in intent.lags for member in lag.members}
+    for iface in intent.interfaces:
+        if iface.name.lower().startswith("vlan") or iface.name in members:
+            continue
+        if vlan.id in iface.trunk_allowed_vlans:
+            return iface.name
+    return default
+
+
+class TestAnIndexBuiltOnce:
+    def test_opnsense_parent_is_the_one_reached(self) -> None:
+        names = ["lagg0", "lagg1", "Po2", "igb0", "igb1", "igb2", "Vlan10", "vlan20", "ix0"]
+        lists = ([], [10], [10, 20], [20, 30, 40], list(range(1, 4095)), [5, 10, 5])
+        rng = random.Random(3)
+        for _ in range(400):
+            tree = CanonicalIntent(
+                interfaces=[
+                    CanonicalInterface(name=rng.choice(names), trunk_allowed_vlans=list(rng.choice(lists)))
+                    for _ in range(rng.randrange(0, 9))
+                ],
+                lags=[
+                    CanonicalLAG(name=rng.choice(names[:4]), members=rng.sample(names, rng.randrange(0, 4)))
+                    for _ in range(rng.randrange(0, 4))
+                ],
+                vlans=[CanonicalVlan(id=vid) for vid in rng.sample([5, 10, 20, 30, 40, 50], rng.randrange(1, 6))],
+            )
+            carriers = opnsense_render._vlan_carriers(tree)
+            for vlan in tree.vlans:
+                assert opnsense_render._vlan_parent_for(vlan, carriers, "lan") == _parent_by_walking(vlan, tree, "lan")
+
+    def test_what_a_dropped_port_took_from_a_lag(self) -> None:
+        """A LAG's ports are those it lists and those that say they
+        are its members."""
+        names = ["1", "2", "3", "4", "5", "6"]
+        rng = random.Random(5)
+        for _ in range(400):
+            tree = CanonicalIntent(
+                interfaces=[
+                    CanonicalInterface(name=name, lag_member_of=rng.choice([None, None, "trk1", "trk2", "trk9", ""]))
+                    for name in rng.sample(names, rng.randrange(0, 7))
+                ],
+                lags=[
+                    CanonicalLAG(name=name, members=rng.sample([*names, ""], rng.randrange(0, 4)))
+                    for name in rng.sample(["trk1", "trk2", "trk3"], rng.randrange(0, 4))
+                ],
+            )
+            drops = rng.sample(names, rng.randrange(0, 5))
+            emptied, shrunk = [], []
+            for lag in tree.lags:
+                ports = {member for member in lag.members if member} | {
+                    port.name for port in tree.interfaces if lag.name and port.lag_member_of == lag.name
+                }
+                lost = ports & set(drops)
+                if ports and lost == ports:
+                    emptied.append(lag.name)
+                elif lost:
+                    shrunk.append(lag.name)
+            _dropped, taken = migration_pipeline._taken_with_dropped_ports(tree, drops)
+            assert (taken["emptied_lags"], taken["shrunk_lags"]) == (emptied, shrunk)
+
+    def test_vyos_carries_or_names_each_user(self) -> None:
+        users = [
+            CanonicalSNMPv3User(name="u3", auth_protocol="sha", auth_passphrase="fakepass3"),
+            CanonicalSNMPv3User(name="u1", auth_protocol="sha"),
+            CanonicalSNMPv3User(name="u2", auth_protocol="md5", auth_passphrase="fakepass2"),
+            CanonicalSNMPv3User(name="u3", auth_protocol="sha", auth_passphrase="fakepass3"),
+            CanonicalSNMPv3User(name="u0"),
+        ]
+
+        def said(lines: list[str]) -> list[str]:
+            """``review u1`` for a user that is named in a comment, ``user u2`` for one that is carried."""
+            out = []
+            for line in lines:
+                words = line.split()
+                if words[:3] == ["/*", "snmpv3", "user"]:
+                    out.append("review " + words[3].strip('"'))
+                elif words[0] == "user":
+                    out.append("user " + words[1])
+            return out
+
+        assert said(vyos_render._render_snmp_v3(users, "vyos")) == ["review u1", "user u2", "user u3", "user u3"]
+        assert said(vyos_render._render_snmp_v3(users, "cisco_iosxe")) == [
+            "review u1", "review u2", "review u3", "review u3",
+        ]
+
+    def test_nxos_route_targets_of_both_lists(self) -> None:
+        rng = random.Random(9)
+        for _ in range(300):
+            imports = [rng.choice("abcdef") for _ in range(rng.randrange(0, 7))]
+            exports = [rng.choice("abcdef") for _ in range(rng.randrange(0, 7))]
+            assert nxos_render._render_route_targets(imports, exports) == [
+                *(f"    route-target both {rt}" for rt in imports if rt in exports),
+                *(f"    route-target import {rt}" for rt in imports if rt not in exports),
+                *(f"    route-target export {rt}" for rt in exports if rt not in imports),
+            ]
+
+    def test_a_shared_name_names_its_own_two(self) -> None:
+        """AOS-S ``1/1`` and module port ``1/A1`` are one name on
+        Junos; so are ``1/2`` and ``1/A2``."""
+        text = _AOSS_TOP + "".join(
+            f'interface {name}\n   name "p"\n   exit\n' for name in ("1/2", "1/A1", "1/1", "1/A2", "1/3")
+        )
+        job = run_plan_with_overrides(AOSS, JUNOS, text, port_rename_map={})
+        shared = [warning.split(";")[0] for warning in job.warnings if "multiple source ports map to" in warning]
+        assert shared == [
+            "port_rename: multiple source ports map to 'ge-1/0/1' (sources: 1/1, 1/A1)",
+            "port_rename: multiple source ports map to 'ge-1/0/2' (sources: 1/2, 1/A2)",
+        ]

@@ -30,6 +30,37 @@ pair with an adjacent tool — see
 [`COMPARISON.md`](COMPARISON.md) for Capirca / Aerleon (firewall
 DSL) and Batfish (network analysis).
 
+A row that begins `inactive:` is different: it is a Junos statement
+the source had deactivated (`deactivate interfaces ge-0/0/2`, or
+`inactive: ge-0/0/2 {` in the hierarchical form).  The device was
+not running it, so it is not translated, and the banner does not
+count it among the sections to apply by hand.  (A row that begins
+`delete:` is a statement a load file marks for deletion, and is
+treated the same.)  **Action:** none, unless you meant to bring it
+back into force on the target — then add it there by hand.  Two
+things to look at when the row is an interface: whether a
+`routing-instances` statement or a LAG member still names it — what
+names a deactivated statement is still read, see
+[`vendors/juniper_junos.md`](vendors/juniper_junos.md) — and
+whether the output has what you expected of the group or the
+interface-range that would have filled it: under a deactivated path
+that is left out too.
+
+A job that is `partial` with "No source constructs were recognized"
+and rows that all begin `inactive:` read nothing else: every
+statement it understood was deactivated in the source, or the text
+is not a Junos config.
+
+**A pasted Junos `show configuration` came out empty or was
+refused.**  Read are the hierarchical form as a device prints it and
+the lines of the session around it (the prompt, `{master:0}`,
+`[edit]`, a pager's prompt).  Refused, with the reason in the
+error: a `}` that closes nothing, a block that is never closed, a
+`/*` comment opened after the first block and never closed — a
+capture that was cut off.  If
+the text begins with anything else that is not configuration, take
+it off, or use `show configuration | display set`.
+
 ### B. The unsupported-paths panel
 
 > "Field /routing-instances/instance is declared `unsupported` for
@@ -381,6 +412,37 @@ port — open "What the mapping reported" under the strip for which, and
 change one of the entries that point there — or, on a RouterOS target,
 a port's name reads as a VLAN, a bridge or a LAG and no line of the
 output finds its hardware: give that port another name.
+
+### The line under *Source device* says the device could not be read
+
+"Reading the source device from the config …" is the question being
+put; it should be gone in a moment.  If it turns into "Could not read
+the device from the config (…)", the words in brackets are why: the
+server's status, a network failure, or "no answer from the server in
+20 seconds".  Nothing is wrong with the config.  Choose the source
+device yourself, or close the modal and open it again: the config is
+asked about again every time the modal opens until it has been
+answered for.
+
+### The footer says overrides "were left out"
+
+"Restored prior overrides (…)" means the browser had entries of yours
+for this source codec, target codec and host name, and put them
+back.  Two configs can share a host name.  "N kept for this host
+name are for a name this config does not have, and were left out"
+counts the entries that belong to the other config: a port, a VLAN
+or a user this one has no row for.  They are not sent, and they
+stay kept: back on the other config they are put back.  **Reset
+all** forgets what this config has rows for, and leaves the
+other config's entries as they are.
+
+### A VLAN override was typed and that VLAN did not change
+
+A number that is no VLAN id (1 to 4094) is not an entry: nothing is
+sent for that VLAN while the field holds it, and an earlier entry
+for it is gone too.  The field looks like any other; its title says
+"Not a VLAN id (1-4094): nothing is sent for VLAN N".  Type an id in
+range.
 
 ### Detection proposes a device, and says ports are missing
 

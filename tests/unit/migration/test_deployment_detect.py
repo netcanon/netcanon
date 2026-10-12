@@ -1720,3 +1720,51 @@ class TestDetectorTable:
         monkeypatch.setattr(deployment_detect, "_detectors", lambda: {"aruba_aoss": lambda _raw: None})
         proposal = propose_deployment(AOSS, CAPTURE_2930F_48, REGISTRY)
         assert not proposal.stated and proposal.deployment is None
+
+
+class TestTheNoteAboutMissingPortsIsBounded:
+    """The detector's own notes are capped in number and in length.
+    The note the proposal adds afterwards, about port names the
+    proposed device does not have, repeated the first eight of them
+    whole: with a name of a hundred thousand characters it was a note
+    of eight hundred thousand, and each of up to 256 names in
+    ``missing_ports`` had no bound either."""
+
+    def test_a_long_port_name_is_cut_short(self) -> None:
+        long = "x" * 100_000
+        ports = "".join(f"interface {long}{n}\n   name \"p\"\n   exit\n" for n in range(12))
+        raw = (
+            "; JL260A Configuration Editor; Created on release #WC.16.07.0002\n"
+            'hostname "sw"\n' + ports
+        )
+        proposal = propose_deployment(get_codec("aruba_aoss"), raw, REGISTRY)
+        assert proposal.missing_port_count == 12
+        assert len(proposal.missing_ports) == 12
+        assert max(len(name) for name in proposal.missing_ports) == deployment_detect.MAX_PORT_NAME_SHOWN
+        assert all(name.endswith("…") for name in proposal.missing_ports)
+        assert max(len(note) for note in proposal.notes) <= MAX_NOTE_LENGTH
+        (said,) = [note for note in proposal.notes if "does not have" in note]
+        assert "The config uses 12 port name(s)" in said and "and 4 more" in said
+
+    def test_an_ordinary_name_is_repeated_whole(self) -> None:
+        raw = (
+            "; JL260A Configuration Editor; Created on release #WC.16.07.0002\n"
+            'hostname "sw"\ninterface A1\n   name "p"\n   exit\n'
+        )
+        proposal = propose_deployment(get_codec("aruba_aoss"), raw, REGISTRY)
+        assert proposal.missing_ports == ["A1"]
+        assert any("(A1)" in note for note in proposal.notes)
+
+    def test_the_cut_is_at_the_named_length(self) -> None:
+        """A name of exactly the bound is whole; one character more
+        and it is cut to the bound, mark included."""
+        bound = deployment_detect.MAX_PORT_NAME_SHOWN
+        whole, over = "A" + "1" * (bound - 1), "B" + "2" * bound
+        raw = (
+            "; JL260A Configuration Editor; Created on release #WC.16.07.0002\n"
+            'hostname "sw"\n'
+            f'interface {whole}\n   name "p"\n   exit\n'
+            f'interface {over}\n   name "q"\n   exit\n'
+        )
+        proposal = propose_deployment(get_codec("aruba_aoss"), raw, REGISTRY)
+        assert sorted(proposal.missing_ports) == [whole, over[: bound - 1] + "…"]

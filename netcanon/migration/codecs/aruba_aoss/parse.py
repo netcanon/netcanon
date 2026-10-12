@@ -612,6 +612,14 @@ def _infer_iface_type(name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _stated_since(ports: list[str], gone: dict[str, int]) -> list[str]:
+    """*ports* without the entries a ``no`` line took out: for each
+    port in *gone*, those above the place the list had reached when
+    its last ``no`` line was read.  An entry stated after that line is
+    kept, as it was when the line removed what it found."""
+    return [port for at, port in enumerate(ports) if at >= gone.get(port, 0)]
+
+
 def _parse_vlan_stanza(
     lines: list[str], start: int, vlan_id: int,
 ) -> tuple[
@@ -633,6 +641,14 @@ def _parse_vlan_stanza(
     itself is IPv4-only.
     """
     vlan = CanonicalVlan(id=vlan_id)
+    # ``no untagged`` takes a port out of everything stated above it.
+    # How long the list is when such a line is read is kept for the
+    # port, and the entries above that mark leave the list once, when
+    # the stanza ends: the list used to be written again whole for
+    # every such line, which cost the square of the lines one VLAN
+    # was given.
+    untagged_gone: dict[str, int] = {}
+    tagged_gone: dict[str, int] = {}
     vrrp_groups: list[CanonicalVRRPGroup] = []
     svi_ipv6: list[CanonicalIPv6Address] = []
     i = start
@@ -659,10 +675,8 @@ def _parse_vlan_stanza(
         um = _UNTAGGED_RE.match(stripped)
         if um:
             if um.group(1):  # "no untagged ..." — strip ports
-                to_remove = set(_parse_port_list(um.group(2)))
-                vlan.untagged_ports = [
-                    p for p in vlan.untagged_ports if p not in to_remove
-                ]
+                for port in _parse_port_list(um.group(2)):
+                    untagged_gone[port] = len(vlan.untagged_ports)
             else:
                 vlan.untagged_ports.extend(_parse_port_list(um.group(2)))
             i += 1
@@ -671,10 +685,8 @@ def _parse_vlan_stanza(
         tm = _TAGGED_RE.match(stripped)
         if tm:
             if tm.group(1):  # "no tagged ..."
-                to_remove = set(_parse_port_list(tm.group(2)))
-                vlan.tagged_ports = [
-                    p for p in vlan.tagged_ports if p not in to_remove
-                ]
+                for port in _parse_port_list(tm.group(2)):
+                    tagged_gone[port] = len(vlan.tagged_ports)
             else:
                 vlan.tagged_ports.extend(_parse_port_list(tm.group(2)))
             i += 1
@@ -735,6 +747,10 @@ def _parse_vlan_stanza(
             continue
 
         i += 1
+    if untagged_gone:
+        vlan.untagged_ports = _stated_since(vlan.untagged_ports, untagged_gone)
+    if tagged_gone:
+        vlan.tagged_ports = _stated_since(vlan.tagged_ports, tagged_gone)
     return vlan, vrrp_groups, svi_ipv6, i
 
 

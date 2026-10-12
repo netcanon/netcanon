@@ -225,7 +225,12 @@ with MANY stanzas, read by a handler that looks through everything the
 earlier lines made: that search is `tools/stanza_cost_search.py`, which
 writes every line and block of every capture many times over, takes
 minutes and is run by hand; each handler it found is pinned in the
-test module with a text of its own.  Each check is also handed
+test module with a text of its own.  So is each record that was given
+many lines (the addresses of one interface, looked through before each
+was added) and each piece of work after the parse that was found doing
+the same; and for the first of those the module reads the source
+itself, with no clock, for a list one function both looks through and
+adds to.  Each check is also handed
 something slow, and has to say so.  It is a search and not a proof — its first version
 timed only whole lines and short units, passed, and missed three of
 the four shapes it now builds — so a slow path it does not reach is to

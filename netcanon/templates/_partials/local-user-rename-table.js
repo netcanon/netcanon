@@ -37,6 +37,7 @@
     var sectionsEl = document.getElementById('mig-rename-local-users-sections');
     var emptyEl = document.getElementById('mig-rename-local-users-empty');
     if (!sectionsEl) return;
+    var focusKept = renameFocusUnder(sectionsEl);
     sectionsEl.innerHTML = '';
 
     var sourceUsers = (_lastJob && _lastJob.source_local_users) || [];
@@ -46,13 +47,13 @@
     }
     if (emptyEl) emptyEl.style.display = 'none';
 
-    var appliedRenames = (_lastJob && _lastJob.local_user_renames) || {};
+    var appliedRenames = _nameMap(_lastJob && _lastJob.local_user_renames);
     var autoDroppedSet = new Set((_lastJob && _lastJob.local_user_drops) || []);
 
     // Build informational collision set — same-target merges are
     // documented server-side as "merged on privilege level + role",
     // not blocked.  UI surfaces the advisory so operator sees it.
-    var targetHits = {};
+    var targetHits = Object.create(null);
     sourceUsers.forEach(function(src) {
       var userVal = _renameLocalUserMap[src];
       if (userVal === null) return;
@@ -131,6 +132,10 @@
       inp.disabled = isDropped;
       inp.setAttribute('data-testid',
         'migrate-rename-local-user-override-' + src);
+      // Typing changes the map, the preview and the counts.  The table
+      // is rebuilt when the field is left, not on every key: a rebuild
+      // replaces the field being typed in, which then held one
+      // character and no focus.
       inp.addEventListener('input', function() {
         var raw = inp.value.trim();
         if (!raw) {
@@ -138,16 +143,19 @@
         } else {
           _renameLocalUserMap[src] = raw;
         }
-        renderLocalUserRenameTable();
         renderRenamePreview();
         renderRenameSummary();
         renderRenameRailCounts();
+      });
+      inp.addEventListener('change', function() {
+        rebuildRenamePaneSoon(renderLocalUserRenameTable);
       });
       overrideCell.appendChild(inp);
 
       // Drop / un-drop / keep-verbatim link — same three-state
       // machine as the ports + VLANs panes.
-      var dropLink = document.createElement('span');
+      var dropLink = document.createElement('button');
+      dropLink.type = 'button';
       dropLink.className = 'mig-rename-drop-link';
       if (isUserDropped) {
         dropLink.textContent = 'un-drop';
@@ -191,4 +199,5 @@
     });
     table.appendChild(tbody);
     sectionsEl.appendChild(table);
+    renameFocusBack(sectionsEl, focusKept);
   }

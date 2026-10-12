@@ -169,6 +169,12 @@ verify:
 - [ ] **Trunk port allowed-vlan lists**: comma-separated ranges
       (`switchport trunk allowed vlan 10,20,30-40`) round-trip
       through the VLAN-centric model; verify expansion is correct.
+      A wide list that leaves VLANs out (`1-99,101-4094`) is
+      written as id ranges (`vlan members 1-99`, `vlan members
+      101-4094`), and `vlan members all` only for every id.
+      Release 0.7.7 and earlier wrote `all` for any list of 4,000
+      ids or more: on a device migrated that way, the VLANs the
+      Cisco trunk left out are on the Junos trunk — re-check it.
 - [ ] **Hashed credentials**: Cisco type-9 hashes (`$9$`) survive
       round-trip; type-7 hashes are migration-blocked when targeting
       non-Cisco vendors and surface as `# REVIEW: ...` review

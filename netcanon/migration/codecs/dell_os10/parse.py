@@ -101,7 +101,13 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
-from .._helpers import _is_link_local_v6, _mask_to_prefix, merge_trunk_allowed
+from .._helpers import (
+    Uniques,
+    _is_link_local_v6,
+    _mask_to_prefix,
+    address_key,
+    merge_trunk_allowed,
+)
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
 from ..base import ParseError
@@ -433,7 +439,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
     legitimate_vlan_ids = (
         {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
-    project_switchport_to_vlan(intent)
+    project_switchport_to_vlan(intent, keep=legitimate_vlan_ids)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
     logger.debug(
@@ -738,6 +744,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
     :attr:`CanonicalLAG.mode`'s default.
     """
     members_by_lag: dict[str, list[str]] = {}
+    once = Uniques()
     mode_by_lag: dict[str, str] = {}
     declared: set[str] = set()
     current_iface: str | None = None
@@ -763,8 +770,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
             lag_name = f"port-channel{int(cgm.group(1))}"
             mode = _OS10_LAG_MODE_MAP.get(cgm.group(2).lower(), "active")
             members = members_by_lag.setdefault(lag_name, [])
-            if current_iface not in members:
-                members.append(current_iface)
+            once.add(members, current_iface)
             mode_by_lag.setdefault(lag_name, mode)
 
     lags: list[CanonicalLAG] = []
@@ -976,6 +982,7 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
     codecs can render the SVI.
     """
     existing_by_id: dict[int, CanonicalVlan] = {v.id: v for v in intent.vlans}
+    once = Uniques()
     for iface in intent.interfaces:
         m = _SVI_NAME_RE.match(iface.name)
         if not m:
@@ -994,5 +1001,4 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
             existing_by_id[vid] = synthesised
             continue
         for addr in iface.ipv4_addresses:
-            if addr not in existing.ipv4_addresses:
-                existing.ipv4_addresses.append(addr)
+            once.add(existing.ipv4_addresses, addr, address_key)

@@ -8,7 +8,11 @@ Accepts Junos ``set``-form configuration text — the flat
 command-style output of ``show configuration | display set`` — as
 the canonical paste form.  Block-form (``{ ... ; }`` hierarchical)
 input is auto-detected and converted to set-form ahead of the normal
-parser, so operators with block-form exports can paste either grammar.
+parser, so operators with block-form exports can paste either grammar:
+as a device prints it (its comments and tags), and with the lines of
+the terminal session it was copied from.  A statement the config
+holds and does not run (``deactivate <path>``, ``inactive:``) is left
+out and named in ``dropped_tier3_sections``.
 
 Render emits set-form Junos that round-trips through the parser;
 apply-groups statements + group content are preserved end-to-end

@@ -99,6 +99,17 @@ tools/stanza_cost_search.py` takes minutes and is run by hand when a
 parser's handler changes (`tests/unit/tools/test_stanza_cost_search.py`
 pins that it can find what it is for).
 
+Two of its checks read no clock.  `TestNoListIsLookedThroughThenAddedTo`
+in the same module reads the source for a list that one function both
+looks through and adds to (`if x not in lst: lst.append(x)`); a new one
+fails until it is mended (`Uniques`, or a set kept beside the list) or
+entered in that module's `LOOKED_THROUGH` with the bound that makes it
+harmless.  And `tests/unit/migration/test_projection_makes_what_is_kept.py`
+counts memory, in bytes, with `tracemalloc`: what a VLAN id on a port
+and a port on a VLAN may cost while a config is parsed.  Those
+ceilings are several times what is measured, so one that fails means
+an entry has come to cost several times what it did.
+
 ## Test Isolation
 
 | Layer       | Isolation mechanism |
@@ -137,7 +148,11 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
    from a screenshot, turns a theme token into the colour it paints,
    and gives the contrast of the two (the theme's badge backgrounds are
    translucent, so a tint over a tint is not the colour either was
-   asked for).  It also holds the two helpers for the rename table's
+   asked for).  A bar down an element's edge and a ring round it are
+   read from the pixels there as well (`painted_bar`, `painted_ring`):
+   a `box-shadow` no pixels wide has a computed colour all the same.
+   Read an ink on the element that holds the words, not on the box
+   they are in.  It also holds the two helpers for the rename table's
    override lists, whose port options are made when a list is first
    used.  Synthetic definitions a test needs -- an `inferred` profile,
    a model family whose every string is markup -- live under

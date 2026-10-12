@@ -43,6 +43,7 @@
     var sectionsEl = document.getElementById('mig-rename-snmp-sections');
     var emptyEl = document.getElementById('mig-rename-snmp-empty');
     if (!sectionsEl) return;
+    var focusKept = renameFocusUnder(sectionsEl);
     sectionsEl.innerHTML = '';
 
     var currentCommunity = (_lastJob && _lastJob.source_snmp_community) || '';
@@ -55,7 +56,7 @@
     }
     if (emptyEl) emptyEl.style.display = 'none';
 
-    var appliedRenames = (_lastJob && _lastJob.snmp_community_renames) || {};
+    var appliedRenames = _nameMap(_lastJob && _lastJob.snmp_community_renames);
     var autoDroppedSet = new Set(
       (_lastJob && _lastJob.snmp_community_drops) || []
     );
@@ -116,6 +117,11 @@
     inp.disabled = isDropped;
     inp.setAttribute('data-testid',
       'migrate-rename-snmp-community-override');
+    // Typing changes the map, the preview and the counts.  The table
+    // is rebuilt when the field is left, not on every key: a rebuild
+    // replaces the field being typed in, which then held one
+    // character and no focus -- ``private9`` typed was ``p``, and
+    // ``p`` was the community Apply sent.
     inp.addEventListener('input', function() {
       var raw = inp.value.trim();
       if (!raw) {
@@ -123,10 +129,12 @@
       } else {
         _renameSnmpCommunityMap[src] = raw;
       }
-      renderSnmpRenameTable();
       renderRenamePreview();
       renderRenameSummary();
       renderRenameRailCounts();
+    });
+    inp.addEventListener('change', function() {
+      rebuildRenamePaneSoon(renderSnmpRenameTable);
     });
     overrideCell.appendChild(inp);
 
@@ -134,7 +142,8 @@
     // machine as the ports + VLANs + local-users panes.  Clearing
     // the SNMP community tells the server to render no SNMP block
     // at all.
-    var dropLink = document.createElement('span');
+    var dropLink = document.createElement('button');
+    dropLink.type = 'button';
     dropLink.className = 'mig-rename-drop-link';
     if (isUserDropped) {
       dropLink.textContent = 'un-clear';
@@ -171,4 +180,5 @@
     tbody.appendChild(tr);
     table.appendChild(tbody);
     sectionsEl.appendChild(table);
+    renameFocusBack(sectionsEl, focusKept);
   }

@@ -412,7 +412,10 @@ the policy locally:
   `parse()` calls the matching detector and stamps the result onto
   `CanonicalIntent.dropped_tier3_sections` so the migrate page can
   surface the silent-drop in a "Detected in source but not translated"
-  banner.  Output is NOTIFICATION-ONLY — never read by render or any
+  banner.  (Junos: the detector is given the set-form the parser
+  read, not the text as it came; and `left_out_rows` makes the rows
+  for statements the parser read and left out, which
+  `is_left_out_row` tells from a section.)  Output is NOTIFICATION-ONLY — never read by render or any
   transform.  Patterns target stanzas the canonical schema doesn't
   model (firewall, NAT, QoS, route-maps, crypto/IPsec, OPNsense filter
   / NAT / VPN XML); supported stanzas are deliberately excluded so the
@@ -437,8 +440,16 @@ the policy locally:
   `dell_os10`, `juniper_junos`.  Helper
   internally guards the Junos `vlan members all` sentinel
   (`range(1,4095)`) to avoid synthesising 4094 phantom CanonicalVlans.
-  Because it synthesises a VLAN for every VID a switchport mentions,
-  every caller must pair it with the phantom prune below.
+  Left to itself it synthesises a VLAN for every VID a switchport
+  mentions, so every caller that prunes hands it the set it keeps:
+  `project_switchport_to_vlan(intent, keep=<the set below>)`.  With
+  `keep`, no record is made and no port stamped for a trunk-allowed id
+  outside the set — a trunk that states `1-4093` used to be 4,093
+  records and stamps for the handful that were kept — and an id that is
+  not a VLAN id is still handed to the record, so the parse still
+  refuses it.  The six codecs that prune pass `keep=`
+  (`grep -rn "keep=legitimate_vlan_ids" netcanon/migration/codecs`);
+  `aruba_aoss`, which prunes nothing, passes none.
 
 * **`netcanon/migration/canonical/transforms.py::switchport_declared_vlan_ids`**
   — the "legitimate VID" set the phantom-VLAN prune keeps: declared
@@ -448,9 +459,10 @@ the policy locally:
   wider than `TRUNK_ALLOWED_SPECIFICITY_BOUND`.  Currently called by
   `arista_eos`, `aruba_aoscx`, `cisco_iosxe_cli`, `cisco_nxos`,
   `dell_os10`, `juniper_junos` — the six port-centric codecs.  The call
-  pattern is fixed: snapshot the set BEFORE
-  `project_switchport_to_vlan(intent)`, prune `intent.vlans` to it
-  AFTER.  A narrow trunk list is a specific operator declaration and its
+  pattern is fixed: snapshot the set BEFORE the projection, hand it
+  over (`project_switchport_to_vlan(intent, keep=legitimate_vlan_ids)`),
+  and prune `intent.vlans` to it AFTER.
+  A narrow trunk list is a specific operator declaration and its
   VLANs are real; only a WIDE one ("allow everything") synthesises
   nothing.  Excluding trunk members outright — the behaviour before
   2026-09 — silently dropped VLANs at parse time, which no render check
@@ -505,6 +517,36 @@ the policy locally:
   record once, whoever appended it, and answers with the first of a key
   (or the last, `last=True`).  Used by the Arista, AOS-S and Junos
   parsers; make one per parse and hand it to the handlers that need it.
+
+* **`netcanon/migration/codecs/_helpers.py::Uniques`** — append a value
+  to a list unless the list has it, without reading the list.  For a
+  list of ONE record that a line adds to — the addresses of one
+  interface, the members of one LAG, the route targets of one VRF —
+  where `if x not in lst: lst.append(x)` costs the square of the lines
+  the record is given and `GrowingIndex` has nothing to index.
+  `once.add(lst, x)` keeps first-seen order and drops a repeat, as the
+  scan did; one `Uniques()` per parse serves any number of lists.  For
+  values that cannot be hashed give a key: `once.add(vlan.ipv4_addresses,
+  addr, address_key)` (`address_key` is beside it, for IPv4 address
+  records).  Do NOT use it on a list that is reassigned or has entries
+  taken out between two calls (an AOS-S VLAN's port lists, the lists
+  the switchport projection stamps): keep a set or an insertion-ordered
+  dict beside such a list instead.  Callers:
+  `grep -rn "Uniques()" netcanon/migration/codecs`.  A new
+  look-then-append fails
+  `TestNoListIsLookedThroughThenAddedTo` in
+  `tests/unit/test_untrusted_text_cost.py` until it is mended or listed
+  there with the bound that makes it harmless.
+
+* **`netcanon/migration/codecs/_helpers.py::VLAN_IDS`** and
+  **`vlan_id_run(low, high)`** — every VLAN id as one shared tuple of
+  ints, and a range of them as a list.  A parser that expands
+  `2-4000` builds the list from these (`vlan_id_run(2, 4000)`, or
+  `out.extend(VLAN_IDS[low:high + 1])`) and not from `range()`: the
+  list is equal either way, and holds a pointer an id where it held a
+  new int an id as well — a config can state a wide range on every
+  port it has.  Used by `_parse_vlan_list` and `merge_trunk_allowed`
+  here and by the Arista and Junos parsers' own expanders.
 
 * **LAG-name helpers (location note)** — two LAG-name helpers exist
   but are NOT shared cross-codec utilities and do NOT live in
