@@ -379,6 +379,19 @@ timestamp if your timezone matters for an audit.
   interface line; a port a routing instance still names; the member
   ports of a LAG whose own interface is deactivated, which still
   make the LAG, as a static bundle with none of its own settings.
+- **The rename modal held Apply on a job the server called
+  `completed`.**  A Junos config that names its VXLAN source as
+  Junos does — `vtep-source-interface lo0.0`, where the interface
+  is `lo0` — has two names that both read `Loopback0` on EOS, and
+  they are one interface.  The modal compared the two rows' targets
+  as text, counted "2 collisions", and held Apply until `lo0.0` was
+  renamed or dropped, either of which breaks the VTEP source.  With
+  no devices declared the job now says itself which names it wrote
+  as one interface (`fused_ports`, see Changed), and the modal takes
+  its word for the rows the job was made with: a pair it does not
+  list is not marked, counted or held.  Two rows given one name in
+  the fields before Apply are in no job yet, and hold Apply as they
+  did.  With a port plan on screen nothing changes.
 - **A translation changed port names nobody had mapped, and put a
   sub-interface on its parent port or left it behind.**  Every job
   runs the port translator on each name no rename-map entry decides
@@ -465,10 +478,14 @@ timestamp if your timezone matters for an audit.
 
   What is as it was.  A unit of a **loopback** across vendors is
   still put on the target's loopback beside `lo0`, with the warning
-  that two names share it.  Three kinds of unit are not sent after
+  that two names share it (and, with no devices declared, in a job
+  that is `partial` for it: see Changed).  Three kinds of unit are
+  not sent after
   their port across vendors and are left to the source classifier,
   as they were — which leaves a name it does not know under its
-  source name, with a warning: a unit of a **management port** —
+  source name, with a warning (and, with no devices declared, in a
+  job that is `partial` for it: see Changed): a unit of a
+  **management port** —
   one its name says is one (EOS `Management1.5`), and one its parser
   marks from context (the Catalyst port in `Mgmt-vrf`); a unit of a
   port the source classifier does not know (a channelized Junos
@@ -482,11 +499,10 @@ timestamp if your timezone matters for an audit.
   OS10, RouterOS, OPNsense, IOS-XE over NETCONF) gets an interface
   named `<port>.<unit>` without the tag; where the parsed source
   holds a tag the validation report lists it and the job is
-  `partial`.  A job whose ports the translator drops still
-  says `completed`; a unit now goes with such a port where it stayed
-  behind (NX-OS sub-interfaces onto AOS-S, which has no name for
-  `Ethernet1/1`).  And Junos `vlan-tagging` on the parent port is
-  read and written on no path.
+  `partial`.  A unit now goes with a port the translator drops,
+  where it stayed behind (NX-OS sub-interfaces onto AOS-S, which has
+  no name for `Ethernet1/1`).  And Junos `vlan-tagging` on the parent
+  port is read and written on no path.
 
   One more thing to check on an output with sub-interfaces.  VyOS
   and FortiOS take the VLAN id from the NUMBER in the interface's
@@ -1150,6 +1166,198 @@ timestamp if your timezone matters for an audit.
   family models now come first, as in the source list, and the
   profiles follow under "Profiles — one fixed port list".  A
   vendor with no family lists its profiles as before.
+- **A job with no devices declared is `partial` when the port
+  translator left a name unsettled: two names on one name, a name
+  dropped because the target has none for it, or a name it could not
+  read, left as the source config has it.**  A warning is not a
+  status.  Such a job said what had happened in a warning line and
+  in `port_renames` / `port_drops`, and said `completed`: its status
+  was the validation report's alone, and the check that refuses any
+  of this was made only where both devices are declared, and there
+  only for hardware ports.  Now every plan request that declares
+  none has its finished run read for three things:
+
+  - **two source names on one name of the output** — the config of
+    two interfaces written as one.  Any two names, a LAG or a
+    loopback as much as a port, compared as each platform tells
+    interfaces apart: AOS-S `1/1` and the uplink-module port `1/A1`
+    both `Ethernet1`; six interfaces of a Catalyst on `Ethernet1`;
+    VyOS `eth0` and `eth1` both `port1` on FortiOS, which numbers
+    from 1; Junos `ae0` and `ae1` both `Port-channel1`; a
+    per-instance loopback `lo0.2` on `Loopback0` beside `lo0`;
+  - **a name dropped** because the target has no name for it.  A
+    hardware port — a management port onto a platform with no form
+    for one, a breakout lane — and the sub-interfaces that went
+    with it; and a logical name just the same — a loopback, a
+    tunnel, a `VirtualPortGroup`, a FortiGate hardware switch
+    (`internal`) with the LAN address on it.  What was configured
+    on the name is not in the output;
+  - **a name left as the source config has it**, because the
+    translator could not read it as any kind of port (`could not
+    classify port name ...; left verbatim`): IOS `GigabitEthernet1`
+    (the one-number ports of a virtual router) in a Junos config,
+    OPNsense `igc0`, a RouterOS interface an operator named, the
+    `VlanN` interface an AOS-S VLAN's address is carried on, where
+    the target calls that interface something else (`set
+    interfaces Vlan10 ...` on Junos).  Whatever the output has of
+    it is under the source vendor's name.  A name the translator
+    left that is no foreign name on the target is not listed (see
+    "What is not counted").
+
+  The job is `partial`, `job.error` says "Port names are not settled:
+  ..." (after the sentence it already had, where it was `partial` for
+  the validation report), and three new fields carry the names:
+  **`fused_ports`** — each shared name of the output with the source
+  names that ended on it; **`unresolved_ports`** — the names that
+  were dropped (`source_ports` says which are hardware ports); and
+  **`untranslated_ports`** — the names left as the source has them.
+  The output is unchanged: nothing is renamed or dropped that was not
+  before, and the warnings are the ones the job had.
+
+  Over the committed captures, each onto each codec with no port map,
+  211 of the 603 jobs that said `completed` are `partial`.  69 of
+  them list a shared name, 64 a hardware port that was dropped, 29 a
+  logical name that was dropped and 107 a name left as the source
+  has it (84 of those a hardware port); 48 list more than one kind.
+  None is a job from a vendor to itself, no job moves the other way,
+  and none to or from `failed`; 400 jobs that were already `partial`
+  carry the sentence as well.  Each of the 211 is `completed` again,
+  with one more request, once every listed name has an entry.
+
+  **To settle such a job**, decide each name with an entry of
+  `port_rename_map` — in the Ports pane of the rename modal, or
+  through the API.  For two names on one name: a name of its own for
+  all but one of them, or `null` to drop it.  For a dropped name: a
+  target name, or `null`, which is you saying it is to go; an entry
+  that drops a port decides its sub-interfaces with it.  For a name
+  left as it was: the name it is to have on the target, or `null` —
+  and where it is right on the target as it stands (a RouterOS
+  interface you named `WAN`, onto FortiOS, where a name is yours to
+  choose), the name ITSELF: `{"WAN": "WAN"}` is how you say so.
+  Two entries of your own that point at one name are reported like
+  any other two.
+
+  **Declaring both devices settles the hardware ports among these
+  names, and no others.**  Ports are then paired by position, each
+  with a port of its own.  A pair of devices decides nothing about
+  two loopbacks on one loopback, a tunnel that was dropped or a VLAN
+  interface left under its source name: with both devices declared
+  the output has them the same and the job is not held for them (see
+  Known limitations).  So the job's sentence offers the devices only
+  where a hardware port is among what it lists, and says so where
+  they would decide only some of it.
+
+  **If you gate on the status** (`job.status`, or the
+  `X-Netcanon-Job-Status` header): on the captures above more than a
+  third of the jobs that passed do not pass until their names are
+  decided.  The output of such a job was no safer to apply before.
+  `netcanon demo` is not changed, and one of its four scenarios is
+  such a job: `opnsense__junos` leaves `igc0` and `igc1`, which are
+  no names of Junos.  The demo prints the output and lists the
+  names under its advisories; the API calls the same output
+  `partial`.  The other three are `completed` on both —
+  `aruba__arista` too: the translator leaves its `Vlan10` and
+  `Vlan20` as AOS-S names them, and that is what EOS calls those
+  interfaces.
+
+  What is not counted.  A Junos reference to unit 0 of an interface
+  (`lo0.0` where the interface is `lo0`) is that interface and no
+  second one — unless the config gives unit 0 a stanza of its own
+  beside its port (a VyOS `vif 0`), which is two interfaces.  A VLAN
+  interface on a target that writes it from its VLAN (AOS-S) keeps
+  its name by design, and is neither dropped nor left for want of a
+  name.  Between two configs of one vendor nothing is listed that an
+  entry of yours did not cause.
+
+  Nor is every name the translator left a foreign name where it
+  lands, and one that is not holds nothing.  Between the two
+  IOS-XE codecs (CLI text and NETCONF are one platform) a name the
+  CLI classifier does not read is still a name of IOS-XE.  And
+  across platforms a logical name — a VLAN's interface, a loopback,
+  an aggregate, a tunnel — is not listed where the target itself
+  writes exactly that name for the same kind of thing: the
+  `Vlan<id>` interface of an AOS-S VLAN's address is `interface
+  Vlan10` on EOS, IOS-XE and NX-OS.  Over the captures that is 75
+  names in 16 jobs: 56 `Vlan<id>` onto EOS, NX-OS and the two
+  IOS-XE codecs, and 19 names of IOS-XE from its CLI codec to its
+  NETCONF one.  Never a
+  hardware port: which port of another device a port is, is what a
+  declared device answers.  Never onto FortiOS or RouterOS, where
+  any string is a name, nor from them, where a name is whatever was
+  typed (a RouterOS `vlan100` may carry VLAN 20).  And not where
+  the target only READS the spelling and writes another: OS10
+  prints `vlan10`, so an AOS-S `Vlan10` is still listed there.  The
+  translator's warning line names every name it left, listed or
+  not.
+
+  And one thing is still said only in a warning: a name the config
+  only refers to — in a static route, a DHCP pool, a tracking entry
+  or a VXLAN source — that the translator cannot read (see Known
+  limitations).
+
+  With both devices declared nothing changes: the port plan carries
+  what that path found (`port_mapping_plan.fused`,
+  `.unresolved_ports`), and the job's three new fields are empty
+  there.
+
+  On the migrate page the status banner shows the sentence.  The
+  rename modal says above its table how many names share one, how
+  many were dropped and how many were left under their source name.
+  The rows the job wrote as one interface carry the collision mark; a
+  dropped row and a row left under its source name carry the mark of
+  a row that needs a decision, with the count on its section.  A
+  dropped row has a **drop** link beside *keep verbatim* — the
+  decision that it is to go — and **Accept the drops** records it
+  for all of them; with a target device chosen the row's list has its
+  *Drop* entry.  A row left under its source name says so, and has
+  its name field, **keep this name** and **drop** (with a target
+  device chosen, *Keep this name* in its list); no button keeps
+  several at once.  After Apply the footer says when names are still
+  not settled.  The strip sends nobody to the device pickers for
+  names a pair of devices would not settle: with one device chosen
+  and no hardware port among the names, it says that choosing the
+  other pairs hardware ports and settles none of these; and it
+  offers no pair, and no target device, for a vendor nobody has
+  described a device of.
+
+  New: `tests/unit/migration/test_run_plan_checked_names.py`.  It
+  pins the count above by source codec and reason, and for every job
+  that is still `completed` it reads the rendered output back with
+  the target's parser and finds interfaces by their addresses: none
+  may carry the addresses of two source interfaces, no interface
+  that has an address may be missing, and no interface of the source
+  may be one the translator's warning says it left under a foreign
+  name.  Which names left are the target's own the test decides
+  for itself, from the text of the output and a table typed by
+  hand; how many are not listed is pinned by pair of codecs.
+- **A blank target in `port_rename_map` is a 422.**  `{"mgmt0": ""}`
+  (or only white space) was written into the output as an interface
+  with no name — `interface ` and the port's address under it — in
+  a job that said `completed`; and an entry being what settles a
+  name, it would also have cleared the `partial` a dropped port now
+  holds a job in.  A target that draws nothing is blank too: one
+  made only of control or format characters — a zero-width space,
+  a NUL, a byte-order mark — wrote an interface whose name nobody
+  can see.  A name has at least one character that is neither white
+  space nor one of those.  A value is a name, or `null` to drop: the
+  refusal names the keys (a few, each cut short) and says so.  On
+  every plan endpoint, with devices
+  declared or not.  With both declared such an entry used to be set
+  aside and listed in `port_mapping_plan.ignored_overrides`; a caller
+  of the pipeline in Python still gets that, and one that reaches
+  the translator directly has the entry skipped with a warning.
+- **Every plan endpoint applies the request's `port_rename_map`.**
+  The four category panes — `/plan/vlans`, `/plan/local_users`,
+  `/plan/snmp`, `/plan/snmpv3` — set a posted port map aside unless
+  both devices were declared, and named every port by its shape.  A
+  job on one of them that is `partial` for its port names could then
+  not be settled there.  They apply the map now, as `/plan`,
+  `/plan/ports` and `/render` always did, so one body gives one
+  status and one set of port names whichever URL it is posted to.  A
+  client that posted a port map to one of those four panes and
+  counted on it being ignored gets the names it asked for.  The
+  other maps are as they were: a pane applies its own category and
+  no other.
 - **A static route whose next hop is the name of an interface follows
   that interface — in every translation, not only one that declares
   devices.**  Some parsers keep such a next hop in the route's
@@ -1334,12 +1542,17 @@ timestamp if your timezone matters for an audit.
   classifier does not know (a channelized Junos `xe-0/0/6:2.10`), a
   unit of a loopback and an interface numbered 0 are left to the
   ordinary translation, which leaves a name it does not recognise
-  under its source name and puts a Junos unit of a loopback or of a
-  management port on that port itself.  With devices declared a
+  under its source name (with no devices declared, in a job that is
+  `partial` for it: `untranslated_ports`) and puts a Junos unit of a
+  loopback or of a management port on that port itself.  With devices
+  declared a
   unit that stayed behind is reported ("did NOT move with their
   port"), and one that would have landed on a port is dropped and
-  reported; either way the job is `partial`.  A loopback's unit is
-  said only in the warning that two names share the loopback.  A unit
+  reported; either way the job is `partial`.  A loopback's unit
+  put on the target's loopback is two names on one: with no devices
+  declared the job is `partial` for it (`fused_ports`), and with
+  devices declared it is said only in the warning that two names
+  share the loopback.  A unit
   that did follow is written without an 802.1Q tag where none was
   read for it — every AOS-CX and OS10 sub-interface, whose parsers
   read none: a warning says so, and with devices declared it is held
@@ -1352,6 +1565,84 @@ timestamp if your timezone matters for an audit.
   classify are reported as off-inventory, and onto another vendor a
   FortiGate's stock `fortilink` aggregate is reported as displaced or
   as a logical name on a port the target does not list.
+- **With both devices declared, a logical name is still only warned
+  about.**  The port plan reports a shared name that has a hardware
+  port among its sources, and displaces a name nobody decided rather
+  than merge two interfaces; it holds a job for a hardware port.
+  Two loopbacks on one loopback, or two aggregates on one, are in no
+  port's clash; a tunnel or a loopback the target has no form for is
+  dropped; a VLAN interface the translator cannot read is left under
+  its source name.  Each is a warning there, in a job that can be
+  `completed`, where the same job with no devices declared is
+  `partial` and lists the name (`fused_ports`, `unresolved_ports`,
+  `untranslated_ports`).  Junos `lo0 unit 0` and `lo0 unit 2` onto
+  EOS, with an EX4300 and a DCS-7050SX-64 declared: `completed`, two
+  `interface Loopback0` stanzas.
+- **A name the config only refers to is left as it is, in a job that
+  can be `completed`.**  A name in a static route, a DHCP pool, a
+  tracking entry or a VXLAN source that the translator cannot read
+  gets the same `could not classify port name ...; left verbatim`
+  warning as any other, and holds no job: what those places hold is
+  not always an interface (a route to `Null0`, the keyword `dhcp`, a
+  zone, a source address), and nothing says which this one is.  `ip
+  route 10.50.0.0 255.255.0.0 Null0` onto RouterOS is
+  `gateway=Null0`; onto EOS it is right as it stands.  Over the
+  committed captures 21 of the 392 jobs that are still `completed`
+  have such a name.  Read a finished job's warnings for that line.
+- **A port with VLAN membership and no stanza of its own is in no
+  line of the output on four targets.**  An AOS-S config lists an
+  access port only under `vlan ... untagged`.  Onto AOS-CX, IOS-XR,
+  NX-OS and OS10 no line is written for such a port: those renderers
+  write a port from its interface stanza, and it has none.  The job
+  can be `completed`, and `port_renames` lists the port under a name
+  the output does not have.  (EOS, IOS-XE CLI and Junos write it;
+  onto IOS-XE over NETCONF, FortiOS, RouterOS, OPNsense and VyOS it
+  is not written either, in a job that is `partial` for other
+  reasons.)  On a committed capture: ten ports of a 2930F onto
+  NX-OS, none in the output, whose only `interface` lines are four
+  `Vlan`s.  The bare render loses them too: this is not the port
+  translator.  And a job that is `partial` because two such ports
+  ended on one name (`1/1` and `1/A1` both `Ethernet1/0/1`) names a
+  port of which the output has no line.
+- **Two spellings the target reads as one name are not seen as
+  one.**  IOS-XE onto Junos with `{"GigabitEthernet1/0/2":
+  "ge-1/0/1.0"}`: both addresses under `ge-1/0/1 unit 0`, which the
+  Junos parser reads back as one interface with two addresses, in a
+  job that is `completed` with `fused_ports` empty.  An EOS entry
+  `"Ethernet 1"` beside `Ethernet1` likewise.  Names are compared by
+  letter case and surrounding space only, on both paths.
+- **One AOS-S port written in two letter cases can be sent apart.**
+  `interface 1/A1` with `untagged 1/a1`, and an entry for `1/A1`
+  only: the stanza goes where the entry says and the membership
+  where the name's shape says, one port's config on two, in a job
+  that can be `completed`.  The warning says the two spellings "do
+  not end together"; give each the same entry.
+- **A name left as the source has it is listed whether or not the
+  output has a line for it.**  The bare Junos `irb`, which holds
+  nothing, is listed onto EOS, where no line is written for it; so
+  is a port the target's renderer writes nothing for.  Keeping such
+  a name keeps nothing: look for it in the output first.
+- **An AOS-S VLAN's address holds a job on every target that calls
+  its interface something else.**  The codec carries the address on
+  an interface named `Vlan<id>`, which the AOS-S classifier does
+  not read, so the translator leaves it as it is.  On EOS, IOS-XE
+  and NX-OS that is the interface's name and nothing is held.  On
+  Junos (`set interfaces Vlan10 ...`), AOS-CX, IOS-XR, VyOS,
+  OPNsense, FortiOS and RouterOS it is the source's name, and on
+  OS10 it is not the spelling OS10 prints (`vlan10`): there the job
+  is `partial` until each has an entry, one row at a time.  The
+  translator does not give it the target's own name
+  (`{"Vlan10": "irb.10"}` is yours to send).
+- **The job's sentence offers "declare both devices" wherever a
+  hardware port is among the names**, also for a vendor no device
+  is described for (NX-OS, IOS-XR, OS10 and VyOS as shipped).  The
+  rename modal knows which vendors have a device to choose and does
+  not offer it there; the sentence does not.
+- **With both devices chosen the strip no longer says which names
+  were not settled**, and the job that Apply then makes is the one
+  the limitation above describes: a logical name is only warned
+  about.  The strip says that the pairing settles none of them
+  while one device is chosen, not after the second is.
 - **A rename or a drop entered on a row of "Other names in the
   config" is recorded by the job and not always shown by the
   output.**  The job lists the entry in `port_renames` or
@@ -1378,7 +1669,11 @@ timestamp if your timezone matters for an audit.
   (`gateway=ether1,ether2`) or a routing-table suffix, and — across
   vendors — a Junos unit next hop, keep the name they had.  With
   devices declared the plan lists such a route (`stale_next_hops`) and
-  the job is `partial`; without, nothing is reported.
+  the job is `partial`; without, nothing is reported and the job can
+  be `completed`.  Junos `next-hop ge-0/0/0.0` onto EOS: `ip route
+  10.9.0.0/16 ge-0/0/0.0`, beside a `ge-0/0/0` that became
+  `Ethernet0` (so too onto AOS-CX, IOS-XE CLI, IOS-XR, NX-OS, OS10,
+  RouterOS and VyOS).
 - **A non-zero unit of a Junos management port follows its port under
   a name Junos does not accept.**  `me0 unit 5` comes out as
   `set interfaces me0.5 unit 0 ...`.  Map it by hand.
@@ -1396,7 +1691,11 @@ timestamp if your timezone matters for an audit.
   is written for the port; for `vlan10` a VLAN interface on another
   port is.  With devices declared the plan lists such a port
   (`unbound_ports`) and the job is `partial`; without, nothing is
-  reported.  Give the port another name.
+  reported and the job can be `completed`.  IOS-XE onto RouterOS
+  with `{"GigabitEthernet1/0/1": "bridge1"}`: no Ethernet line for
+  the port, and its address on a `bridge1` nothing defines; with
+  `"vlan5"`, the port becomes VLAN 5 of the other port.  Give the
+  port another name.
 - **The RouterOS codec does not read a value an export wraps onto
   the line after its key** (`name=\` and the name on the next line).
   The port's own line is then known by its factory name, while every

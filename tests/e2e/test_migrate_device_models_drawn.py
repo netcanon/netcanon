@@ -675,6 +675,19 @@ vlan 10
 """
 
 
+#: An OPNsense box with two ports.  AOS-S numbers its ports from 1,
+#: and both ``igb0`` and ``igb1`` are written ``1`` there.
+_OPNSENSE_TWO_PORTS = """<?xml version="1.0"?>
+<opnsense>
+  <system><hostname>fw</hostname></system>
+  <interfaces>
+    <wan><if>igb0</if><ipaddr>198.51.100.2</ipaddr><subnet>30</subnet></wan>
+    <lan><if>igb1</if><ipaddr>192.168.1.1</ipaddr><subnet>24</subnet></lan>
+  </interfaces>
+</opnsense>
+"""
+
+
 def _apply_and_read(page: Page) -> dict:
     """Click Apply; return the job the server answered with."""
     with page.expect_response("**/api/v1/migration/plan") as answer:
@@ -2104,9 +2117,16 @@ class TestWhatWasReadAndWhatWasChosen:
         ))
         expect(_plan(page)).to_have_attribute("data-state", "incomplete")
         expect(_plan(page)).to_have_attribute("data-outcome", "unpaired-names")
-        assert alike(painted_background(_plan(page)), painted_token(page, TOP, "--badge-partial-bg"))
-        # By name both ports end on one name, and no pairing is on
-        # offer to mend it: Apply is held, and says why.
+        # The hint is a warning.  The strip was amber for it; it is
+        # red now, because the job on screen is also ``partial`` for
+        # its names -- by name both ports end on ``1``, two interfaces
+        # written as one -- and the strip says that ahead of the hint,
+        # drawn as it is with nothing declared.
+        expect(page.locator(_tid("migrate-rename-names-fused"))).to_have_text(
+            "1 name of the output given more than one source name"
+        )
+        assert alike(painted_background(_plan(page)), painted_token(page, TOP, "--badge-failed-bg"))
+        # No pairing is on offer to mend it: Apply is held, and says why.
         expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_disabled()
         expect(page.locator(_tid("migrate-rename-apply-why"))).to_have_text(
             re.compile(r"^Apply is held: two rows end on one target name \(.+\) — ")
@@ -2456,6 +2476,36 @@ class TestEveryRowStateIsDrawn:
         expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_count(0)
         expect(page.locator(_tid("migrate-rename-status"))).to_have_text(
             "Applied. Ports were NOT paired by position — see above."
+        )
+
+    def test_an_unapplied_plan_has_no_account(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """Both devices declared, and nothing paired: the source
+        profile lists no ports, so every name went by its shape and
+        two ended on one.  A job made with devices declared has no
+        account of its own of names that share one -- its fields are
+        empty by design, and a plan that was not applied says nothing
+        either.  So under a plan the page compares the rows itself,
+        as it always did, and holds Apply for the pair."""
+        _translate(page, live_server_url, "opnsense", "aruba_aoss", _OPNSENSE_TWO_PORTS)
+        _declare(page, "Generic", TARGET_2930M_48G)
+        job = _apply_and_read(page)
+        assert job["port_mapping_plan"]["applied"] is False
+        assert job["port_renames"] == {"igb0": "1", "igb1": "1"}
+        assert job["fused_ports"] == {} and job["port_mapping_plan"]["fused"] == {}
+        expect(_plan(page)).to_have_attribute("data-state", "unapplied")
+        failed = painted_token(page, "#mig-rename-sections", "--badge-failed-bg")
+        for name, other in (("igb0", "igb1"), ("igb1", "igb0")):
+            mark = page.locator(_tid(f"migrate-rename-collision-{name}"))
+            assert mark.get_attribute("title") == f"Collides with: {other}"
+            assert alike(
+                painted_background(page.locator(_tid(f"migrate-rename-source-{name}"))), failed,
+            ), name
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_disabled()
+        assert page.locator(_tid("migrate-rename-apply-why")).inner_text() == (
+            "Apply is held: two rows end on one target name (1) — give one "
+            "another target, or drop it."
         )
 
     def test_a_member_beside_its_namesake_crosses_and_an_unused_member_is_not_named(

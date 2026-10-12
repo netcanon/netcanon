@@ -278,7 +278,63 @@ stages stay frozen.  See the module docstring.
 inventory of the source device and of the target device, pairs the
 ports the config uses by position, and forwards the resulting rename
 map to the frozen `run_plan_with_overrides`.  See "Device models and
-inventories" below.
+inventories" below.  `run_plan_with_checked_names` is another, for a
+request that declares no devices: `run_plan_with_overrides`, and then
+a look at what the port translator made of the names in the finished
+run.
+
+**What decides a job's status.**  A job that rendered is `completed`
+unless one of three things makes it `partial`; each adds its sentence
+to `job.error` after any the job already has.
+
+1. *The validation report* (`run_plan`): a block-level unsupported or
+   lossy path.
+2. *An input that parsed to nothing* (`run_plan`): non-trivial text
+   that yields an empty tree is a wrong source vendor, not a clean
+   result.
+3. *The port names.*  A warning is not a status.  The port translator
+   says in a warning line that two source names ended on one name of
+   the output, that it dropped a name the target has none for, or
+   that it could not read a name and left it as the source config
+   has it; none of those is a loss the capability matrix has a path
+   for.  With both devices declared `run_plan_with_models` checks its
+   own finished run, for the hardware ports, and records the outcome
+   on `port_mapping_plan`.  With none declared
+   `run_plan_with_checked_names` asks what became of every name in a
+   run made by name shape — logical ones included, since there is
+   no pairing whose ports alone need protecting — and puts the names
+   on the job (`fused_ports`, `unresolved_ports`,
+   `untranslated_ports`).  The third list starts from the
+   translator's own: it says as data which names it left
+   (`PortRenameResult.untranslated`), and keeps apart a name the
+   config only refers to — a route to `Null0`, a VXLAN source
+   address — which holds no job.  Of the names it left, the job
+   lists those that are a FOREIGN name on the target.  A name is
+   not one between two codecs of one platform (one `vendor_id`:
+   IOS-XE as CLI text and over NETCONF), nor where the target
+   itself writes that very name for the kind of thing the source
+   parser read it to be — a VLAN's interface, a loopback, an
+   aggregate, a tunnel; never a hardware port, and never to or
+   from a platform whose names are free text.  The AOS-S parser
+   names the interface of a VLAN's address `Vlan20`, its
+   classifier does not read that name, and `interface Vlan20` is
+   what EOS, IOS-XE and NX-OS call it: nothing is listed there.
+   What shares a name is not always two interfaces: Junos refers to
+   `lo0` as `lo0.0`.  Unit 0 beside its interface is told from a
+   second interface of that name by the tree that was rendered (how
+   many interfaces it holds under the name), not by the shape of the
+   two names.
+
+On either path an entry of `port_rename_map` is the operator deciding
+a name, so `run_translation` hands the body's own port map to
+whichever entry it dispatches to, on every plan endpoint: a status an
+entry cannot clear from the URL it was posted to is a trap.  An entry
+is a name or `null`; a blank target is neither — nor is one that
+draws nothing, such as a zero-width space — and the request model
+refuses it.  The job's sentence offers a pair of declared devices
+only where a hardware port is among what it lists: for logical names
+the path with devices holds nothing, and would call the same output
+`completed`.
 
 ---
 
@@ -306,10 +362,13 @@ RADIUS) has:
    `POST /api/v1/migration/plan/vlans`,
    `POST /api/v1/migration/plan/local_users`,
    `POST /api/v1/migration/plan/snmp`,
-   `POST /api/v1/migration/plan/snmpv3` — that accepts only
-   its category's override map and delegates to
+   `POST /api/v1/migration/plan/snmpv3` — that applies its
+   category's override map and delegates to
    `run_plan_with_overrides` with the other categories' maps
-   defaulted to `None`.
+   defaulted to `None`.  The port map is the exception: every
+   plan endpoint applies the one the body carries, because a
+   job's status depends on what was decided about its ports
+   (see "What decides a job's status" above).
 3. **A rail button + category pane** in the modal UI.  Panes are
    mutually exclusive (one visible at a time); the preview on
    the right stays cross-category.

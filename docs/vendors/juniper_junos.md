@@ -242,7 +242,14 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   (`Ethernet1.54`, `encapsulation dot1q vlan 54`).  A unit of `lo0`
   (`lo0.2`, a per-instance loopback) has no counterpart on another
   platform: it is put on the target's loopback beside `lo0` and the
-  job warns that two names share it — map it by hand.  ⚠️ Up to
+  job warns that two names share it — map it by hand.  With no
+  devices declared such a job is `partial` until the unit has a
+  loopback of its own, and lists the pair in `fused_ports`; a mere
+  reference to unit 0 (`lo0.0`) is the loopback itself and is not
+  counted.  Names the port translator does not read — a bare `irb`,
+  `vme`, `st0` and its units, a channelized `xe-0/0/6:2` — are left
+  as they are on the target, and such a job lists them in
+  `untranslated_ports` until each has an entry.  ⚠️ Up to
   0.7.7 a unit was written ONTO its port, also in a translation from
   Junos to Junos, where `fxp0` and `me0` also came back as `em0`;
   translate such a config again.  `vlan-tagging` on the parent port

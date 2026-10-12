@@ -283,12 +283,16 @@
       + _declKey(currentDeviceDecl('target'));
   }
 
-  /** True when the source select has a device to offer. */
-  function _sourceModelsKnown() {
-    var vendor = _codecVendor(_deviceCodec('source'));
+  /** True when the select of *side* has a device to offer: a model
+   *  family or a profile of that codec's vendor. */
+  function _modelsKnown(side) {
+    var vendor = _codecVendor(_deviceCodec(side));
     return _familiesOf(vendor).length > 0
       || _renameProfiles.some(function(p) { return p.vendor === vendor; });
   }
+
+  /** True when the source select has a device to offer. */
+  function _sourceModelsKnown() { return _modelsKnown('source'); }
 
   /** Why no pair of devices goes out with the next Apply, or ''.
    *
@@ -1688,13 +1692,73 @@
     return meta;
   }
 
-  /** Names the plan could not settle and the operator has not decided
-   *  in this modal either. */
+  /** What the job on screen says of its port names when no devices
+   *  were declared for it: the names of the output that more than one
+   *  source name ended on (``fused_ports``), the names that were
+   *  dropped with no entry saying so (``unresolved_ports``), and the
+   *  names the translator could not read and left as the source
+   *  config has them (``untranslated_ports``).  All three are empty
+   *  on a job that carries a port plan: the plan says it there. */
+  function jobNamesNotSettled() {
+    var job = _lastJob || {};
+    var fused = (job.fused_ports && typeof job.fused_ports === 'object')
+      ? job.fused_ports : {};
+    return {
+      fused: fused,
+      dropped: Array.isArray(job.unresolved_ports) ? job.unresolved_ports : [],
+      left: Array.isArray(job.untranslated_ports) ? job.untranslated_ports : [],
+    };
+  }
+
+  /** Names the job could not settle and the operator has not decided
+   *  in this modal either, that "Accept" can settle as they stand:
+   *  the plan's, where ports were paired; with no plan, the names
+   *  the job says were dropped undecided.  A name left under its
+   *  source name is not one of them -- see pendingNamesLeft. */
   function pendingPlanDecisions(plan) {
-    if (!plan || !plan.applied) return [];
-    return (plan.unresolved_ports || []).filter(function(name) {
+    var names = [];
+    if (plan) names = plan.applied ? (plan.unresolved_ports || []) : [];
+    else names = jobNamesNotSettled().dropped;
+    return names.filter(function(name) {
       return _renameUserMap[name] === undefined;
     });
+  }
+
+  /** Names the job left under their source name that have no entry
+   *  in this modal yet.  Kept apart from the dropped ones: accepting
+   *  a drop says "it is to go", and no one button should also say
+   *  "this name is right on the target" of names nobody read. */
+  function pendingNamesLeft() {
+    return jobNamesNotSettled().left.filter(function(name) {
+      return _renameUserMap[name] === undefined;
+    });
+  }
+
+  /** Whether choosing both devices would settle any of what the job
+   *  lists, and whether it would leave any of it as it is.  The
+   *  pairing by position is of hardware ports (``source_ports``): it
+   *  does nothing for two loopbacks on one loopback, a tunnel that
+   *  was dropped, or a VLAN interface left under its source name --
+   *  a job with both devices declared does not hold for those.
+   *
+   *  ``choose`` is whether there is a pair to choose at all: a
+   *  vendor nobody has described a device of (NX-OS, as shipped)
+   *  has none, and an operator is not to be told to choose one. */
+  function _devicesWouldSettle(open) {
+    var ports = new Set((_lastJob && _lastJob.source_ports) || []);
+    var some = false, rest = false;
+    function look(names) {
+      if (names.some(function(name) { return ports.has(name); })) some = true;
+      else rest = true;
+    }
+    Object.keys(open.fused).forEach(function(shared) {
+      look(open.fused[shared] || []);
+    });
+    open.dropped.concat(open.left).forEach(function(name) { look([name]); });
+    return {
+      some: some, rest: rest,
+      choose: _modelsKnown('source') && _modelsKnown('target'),
+    };
   }
 
   /** True when the operator's map is not the one the job on screen
@@ -1814,6 +1878,104 @@
     return count + ' ' + (count === 1 ? one : many);
   }
 
+  /** With no plan on the job: how many names it left unsettled, and
+   *  how that is drawn, or null when it left none.  Two interfaces
+   *  written as one is drawn as what holds a job; a name that was
+   *  dropped, or left under its source name, as what needs a
+   *  decision -- as the first two are under a plan. */
+  function _namesNotSettled() {
+    var open = jobNamesNotSettled();
+    var fused = Object.keys(open.fused).length;
+    var dropped = open.dropped.length;
+    var left = open.left.length;
+    if (!fused && !dropped && !left) return null;
+    var ports = new Set((_lastJob && _lastJob.source_ports) || []);
+    return {
+      fused: fused, dropped: dropped, left: left,
+      // Whether every dropped name is a hardware port: only then are
+      // they called ports.  A loopback or a tunnel is not one.
+      droppedArePorts: open.dropped.every(function(name) { return ports.has(name); }),
+      devices: _devicesWouldSettle(open),
+      look: fused ? 'plan-block' : 'plan-warn',
+    };
+  }
+
+  /** Say in *el* what the job left unsettled, and what settles it. */
+  function _drawNamesNotSettled(el, open) {
+    var title = document.createElement('strong');
+    title.setAttribute('data-testid', 'migrate-rename-names-title');
+    title.textContent = 'Port names are not settled';
+    el.appendChild(title);
+    if (open.fused) {
+      _planChip(el, 'migrate-rename-names-fused',
+        _plural(open.fused, 'name', 'names')
+        + ' of the output given more than one source name', 'chip-block');
+    }
+    if (open.dropped) {
+      _planChip(el, 'migrate-rename-names-dropped',
+        (open.droppedArePorts ? _plural(open.dropped, 'port', 'ports')
+                              : _plural(open.dropped, 'name', 'names'))
+        + ' dropped: the target has no name for '
+        + (open.dropped === 1 ? 'it' : 'them'), 'chip-warn');
+    }
+    if (open.left) {
+      _planChip(el, 'migrate-rename-names-left',
+        _plural(open.left, 'name', 'names')
+        + ' left under ' + (open.left === 1 ? 'its' : 'their')
+        + ' source name: not read as any kind of port', 'chip-warn');
+    }
+    var drops = pendingPlanDecisions(null);
+    var pending = drops.length + pendingNamesLeft().length;
+    if (pending) {
+      _planChip(el, 'migrate-rename-names-pending',
+        pending + ' need' + (pending === 1 ? 's' : '')
+        + ' your decision', 'chip-warn');
+    } else if (open.dropped || open.left) {
+      // Recorded in the modal, not yet sent: the job on screen is
+      // still the one that needs them.
+      _planChip(el, 'migrate-rename-names-pending',
+        _plural(open.dropped + open.left, 'decision', 'decisions')
+        + ' recorded — Apply to confirm', 'chip-warn');
+    }
+    if (drops.length) {
+      // For the drops only.  A name left under its source name is
+      // decided on its own row: whether it is right on the target
+      // is not something to say of several names with one button.
+      var accept = document.createElement('button');
+      accept.type = 'button';
+      accept.className = 'mig-plan-accept';
+      accept.textContent = 'Accept the drops';
+      accept.title = 'Record each dropped name as dropped by your own decision';
+      accept.setAttribute('data-testid', 'migrate-rename-names-accept');
+      accept.addEventListener('click', acceptPortPlanAsShown);
+      el.appendChild(accept);
+    }
+    var how = document.createElement('span');
+    how.setAttribute('data-testid', 'migrate-rename-names-how');
+    // Both devices are offered only where the pairing would decide
+    // one of these names: sent there for two loopbacks on one, an
+    // operator would get the same output called settled.  And only
+    // where each vendor has a device to choose.
+    var then = 'Then Apply. ';
+    var pairing = open.devices.some && open.devices.choose;
+    if (pairing && open.devices.rest) {
+      then = 'Then Apply. Choosing both devices pairs the hardware ports '
+        + 'among these by position; the other names need a decision '
+        + 'either way. ';
+    } else if (pairing) {
+      then = 'Then Apply — or choose both devices to pair ports by position. ';
+    }
+    how.textContent = (open.fused
+        ? 'Give all but one of the rows that share a name a target of '
+          + 'their own, or drop them. ' : '')
+      + (open.dropped ? 'Give each dropped name a target, or drop it. ' : '')
+      + (open.left
+        ? 'Give each name left as it is a target, keep it if it is right '
+          + 'on the target, or drop it. ' : '')
+      + then;
+    el.appendChild(how);
+  }
+
   /** The strip that says where the port mapping stands: what to do
    *  next while there is no plan, and what the plan did once there is
    *  one.  Every count is of what HAPPENED in the job on screen --
@@ -1826,7 +1988,12 @@
    *  summary -- one per key typed in a row.  Emptied and refilled,
    *  it was announced again though it said what it had said.  So it
    *  is drawn aside, and put in only where it differs from what is
-   *  there. */
+   *  there.
+   *
+   *  A job made with no devices declared says itself what the
+   *  translation by name shape left unsettled; the strip says that
+   *  too, ahead of what the next Apply will do, for as long as the
+   *  next Apply would translate by name shape again. */
   function renderPortPlan() {
     var live = document.getElementById('mig-rename-plan');
     if (!live) return;
@@ -1875,7 +2042,20 @@
     }
 
     if (!plan || changed) {
-      if (problem === 'none' && !plan) { el.style.display = 'none'; return; }
+      // Said while the next Apply would translate by name shape
+      // again.  Once both devices are declared the next Apply pairs
+      // the ports by position and the job reports through its plan:
+      // the strip then says that, and no longer this.
+      var open = (plan || !problem) ? null : _namesNotSettled();
+      if (problem === 'none' && !plan) {
+        if (!open) { el.style.display = 'none'; return; }
+        _drawNamesNotSettled(el, open);
+        el.className = open.look;
+        el.setAttribute('data-state', 'unsettled');
+        el.setAttribute('data-outcome', 'unsettled');
+        el.style.display = '';
+        return;
+      }
       // With a plan on screen, the table below is still that plan's.
       var lead = plan
         ? 'The table below is still the mapping made with the devices as they were. '
@@ -1889,6 +2069,14 @@
       // when both were cleared.
       var unpairs = plan
         ? ' Apply now would go back to translating port names by their shape.' : '';
+      // One device is declared and the job on screen lists names, none
+      // of them a hardware port.  The pairing is of hardware ports:
+      // with the other device chosen the next Apply says ``completed``
+      // for the same output, so the strip does not send anyone there
+      // for these.
+      var noPortListed = !!open && !open.devices.some;
+      var settlesNone = ' pairs hardware ports by position: that settles '
+        + 'none of the names above, none of which is a hardware port.';
       var preview = problem ? '' : _devicePreviewState();
       var held = (!problem && typeof applyHeldBy === 'function') ? applyHeldBy() : '';
       if (problem === 'none') {
@@ -1914,7 +2102,9 @@
           look = 'plan-warn';
           outcome = 'unpaired-names';
         } else if (problem === 'no-source') {
-          hint = 'Choose the source device as well to pair ports by position. '
+          hint = (noPortListed
+              ? 'Choosing the source device as well' + settlesNone + ' '
+              : 'Choose the source device as well to pair ports by position. ')
             + 'Until then the target’s port list only fills the choices below.' + unpairs;
         } else {
           hint = 'No device model is known for the source vendor yet, so ports '
@@ -1922,7 +2112,15 @@
             + 'the choices below.' + unpairs;
         }
       } else if (problem === 'no-target') {
-        hint = 'Choose the target device to pair ports by position.' + unpairs;
+        if (!_modelsKnown('target')) {
+          // Nothing to choose from: do not tell the operator to choose.
+          hint = 'No device model is known for the target vendor yet, so '
+            + 'ports cannot be paired by position.' + unpairs;
+        } else if (noPortListed) {
+          hint = 'Choosing the target device' + settlesNone + unpairs;
+        } else {
+          hint = 'Choose the target device to pair ports by position.' + unpairs;
+        }
       } else if (problem === 'target-vendor') {
         hint = 'The target device is not of the target codec’s vendor, so '
           + 'ports are not paired by position.';
@@ -1949,6 +2147,14 @@
           ? 'The devices changed since this mapping was made — Apply to pair again.'
           : 'Both devices are declared — Apply to pair their ports by position.';
         state = 'ready';
+      }
+      // The job on screen is still the one translated by name shape:
+      // what it left unsettled is said first, and drawn no weaker
+      // than it is with nothing declared.
+      if (open) {
+        _drawNamesNotSettled(el, open);
+        if (open.look === 'plan-block' || look === 'plan-info') look = open.look;
+        if (!outcome) outcome = 'unsettled';
       }
       // Two facts.  ``data-state`` is what the next Apply will do with
       // the devices as they are declared now; ``data-stale`` is that

@@ -130,23 +130,32 @@ module.
 `migration.py` exposes per-category override endpoints under
 `/api/v1/migration/plan/{ports|vlans|local_users|snmp|snmpv3}` for
 the Tier-3 rename modal.  Each one delegates to a single function,
-`run_plan_with_overrides`, with one category map populated and the
-others left empty.  This keeps the routes nearly identical and the
-service-layer work in one place.
+`run_plan_with_overrides`, with its own category map populated and
+the other categories left empty.  This keeps the routes nearly
+identical and the service-layer work in one place.
 
 Every job-running handler reaches the pipeline through
 `_migration_helpers.run_translation`, not by calling the pipeline
-directly.  When the request declares both devices
-(`source_deployment` / `source_profile` with `target_deployment` /
-`target_profile`) that helper sends the handler's own arguments to
-`run_plan_with_models` instead — with the body's own
-`port_rename_map` in place of whatever the handler passed, because
-the per-pane handlers other than `/plan/ports` pass an empty one on
-purpose and the positional pairing is itself a port map the operator
-edits.  So the
-same body renders the same port names, and an acknowledged drop
-stays acknowledged, on `/plan` and on every per-pane endpoint.  A
-new job-running handler must dispatch the same way.
+directly.  That helper passes the handler's own category map on, and
+the port map from the BODY — on every endpoint, whatever is
+declared.  A job's status depends on what was decided about its
+ports, so the decision cannot be set aside by the URL:
+
+* with both devices declared (`source_deployment` / `source_profile`
+  with `target_deployment` / `target_profile`) the helper dispatches
+  to `run_plan_with_models`, where the positional pairing is itself
+  a port map the operator edits;
+* with none declared it dispatches to `run_plan_with_checked_names`:
+  `run_plan_with_overrides`, and then a look at the finished run for
+  two source names on one name of the output, a name dropped with no
+  entry saying so, or a name the translator could not read and left
+  under a name the target does not have — any of which makes the
+  job `partial` until an entry decides the name.
+
+So the same body renders the same port names and comes back with the
+same status, and an acknowledged drop stays acknowledged, on `/plan`
+and on every per-pane endpoint.  A new job-running handler must
+dispatch the same way, and passes no port map of its own.
 
 **Hard Rule** (`AGENTS.md`): never change the
 `run_plan_with_overrides` signature.  New rename categories ride on
@@ -203,6 +212,8 @@ handlers.  **Never change them**; add new functions instead.
   freeze-and-extend contract.  `run_plan_with_models` is the
   contract in action: model-aware port mapping was added as a NEW
   function that calls the frozen one, not as a new parameter on it.
+  So is `run_plan_with_checked_names`, which gives a job with no
+  devices declared a status that says what the port translator did.
 - `POST /api/v1/backups` response shape — the entire test tier
   assumes the synchronous response is `pending` and that final
   state comes from a follow-up GET.  Changing this would silently

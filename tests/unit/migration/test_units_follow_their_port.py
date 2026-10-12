@@ -24,9 +24,11 @@ a sub-interface goes where its port goes, with its unit.
 
 What is read here is the RENDERED OUTPUT of jobs run the way ``POST
 /plan`` runs them when no devices are declared
-(``run_plan_with_overrides`` with an empty port map), parsed again
-with the target codec and compared with something the translator had
-no hand in:
+(``run_plan_with_overrides`` with an empty port map; where a test
+asks what STATUS such a job has, ``run_plan_with_checked_names``,
+which is that run and then a look at what it did to the names),
+parsed again with the target codec and compared with something the
+translator had no hand in:
 
 * between two configs of one codec, the output of the bare pipeline
   (``run_plan``: parse and render, no translator), as text and parsed;
@@ -55,7 +57,11 @@ from netcanon.migration.canonical.port_names import (
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.migration.fixture_dirs import DIR_TO_CODEC_NAME
 from netcanon.models.migration import MigrationJobStatus
-from netcanon.services.migration_pipeline import run_plan, run_plan_with_overrides
+from netcanon.services.migration_pipeline import (
+    run_plan,
+    run_plan_with_checked_names,
+    run_plan_with_overrides,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -229,13 +235,12 @@ _PAIRS = [(source, target) for source in _UNITS for target in list_public_codecs
 _PAIR_IDS = [f"{source}->{target}" for source, target in _PAIRS]
 
 #: Pairs on which the PORT has no name on the target, so the translator
-#: drops it and its units go with it -- in a job that still says
-#: ``completed``.  A job that drops interfaces should not say
-#: completed.  That is true of every port the translator drops and is
-#: older than the units: what a job's status owes to the port names is
-#: decided in a change of its own, and the pair is pinned here, as it
-#: is today, so that change has to come and take it away.
-_DROPPED_YET_COMPLETED = {("cisco_nxos", "aruba_aoss")}
+#: drops it and its units go with it.  The validation report has
+#: nothing to say of an interface that is not there, so the status of
+#: such a job is not the report's to give: it comes from what the run
+#: did to the names (``run_plan_with_checked_names``).  Such a job
+#: said ``completed`` while a status looked at the report alone.
+_PORT_HAS_NO_NAME = {("cisco_nxos", "aruba_aoss")}
 
 
 def _holders(tree, ip: str) -> list:
@@ -284,15 +289,18 @@ class TestASubInterfaceOnEveryPair:
 
     @pytest.mark.parametrize(
         ("source_name", "target_name"),
-        [pair for pair in _PAIRS if pair not in _DROPPED_YET_COMPLETED],
+        [pair for pair in _PAIRS if pair not in _PORT_HAS_NO_NAME],
         ids=[
             name for pair, name in zip(_PAIRS, _PAIR_IDS, strict=True)
-            if pair not in _DROPPED_YET_COMPLETED
+            if pair not in _PORT_HAS_NO_NAME
         ],
     )
     def test_a_lost_tag_is_not_completed(self, source_name: str, target_name: str) -> None:
         """Where the output cannot be read back as carrying the tag on
-        the unit's own interface, the job must not say ``completed``."""
+        the unit's own interface, the job must not say ``completed``
+        -- by the validation report alone, which is what lists a tag
+        the target cannot carry.  (Where the unit is not in the output
+        at all the report lists nothing: the next test.)"""
         source, target = get_codec(source_name), get_codec(target_name)
         _, text = _UNITS[source_name]
         job = run_plan_with_overrides(source, target, text, port_rename_map={})
@@ -307,23 +315,24 @@ class TestASubInterfaceOnEveryPair:
                 )
 
     @pytest.mark.parametrize(
-        ("source_name", "target_name"), sorted(_DROPPED_YET_COMPLETED),
+        ("source_name", "target_name"), sorted(_PORT_HAS_NO_NAME),
     )
-    def test_dropped_with_a_port_yet_completed(
+    def test_dropped_with_a_port_is_partial(
         self, source_name: str, target_name: str,
     ) -> None:
-        """What happens today, pinned (see ``_DROPPED_YET_COMPLETED``).
-        The job says which interfaces went, in ``port_drops`` and in a
-        warning each; it does not yet say so in its status.  This is
-        a known gap and is kept as one on purpose: a job that DROPS
-        interfaces and says ``completed`` is every job whose ports
-        the translator drops, with or without units, and what a
-        status owes to the port names is a change of its own.  (A
-        unit that MOVED and took no tag with it is not this gap: it
-        is said, see ``TestAUnitWithNoTag``.)"""
+        """The job says which interfaces went: in ``port_drops``, in a
+        warning each, and in its status.  It said ``completed`` while
+        a status looked at the validation report alone -- as did
+        every job whose ports the translator drops, with or without
+        units.  Run the way ``POST /plan`` runs it the job is
+        ``partial`` and lists the port and its units as dropped with
+        nothing deciding them; an entry that drops the port decides
+        its units with it.  (A unit that MOVED and took no tag with
+        it is another matter, and is said in a warning: see
+        ``TestAUnitWithNoTag``.)"""
         source, target = get_codec(source_name), get_codec(target_name)
         port, text = _UNITS[source_name]
-        job = run_plan_with_overrides(source, target, text, port_rename_map={})
+        job = run_plan_with_checked_names(source, target, text, port_rename_map={})
         units = [f"{port}.{unit}" for unit, _ in _UNIT_ADDRESSES]
         assert {port, *units} <= set(job.port_drops)
         for name in units:
@@ -332,7 +341,22 @@ class TestASubInterfaceOnEveryPair:
                 f"in the output; dropped with it"
             ) in job.warnings
         assert not any(ip in job.rendered for _, ip in _UNIT_ADDRESSES)
-        assert job.status == MigrationJobStatus.completed
+        assert job.status == MigrationJobStatus.partial
+        assert {port, *units} <= set(job.unresolved_ports)
+        assert job.error.startswith("Port names are not settled: ")
+        # The run itself is the one that was made before: the status
+        # of the pipeline's older entry is the report's, as it was.
+        before = run_plan_with_overrides(source, target, text, port_rename_map={})
+        assert before.status == MigrationJobStatus.completed
+        assert before.rendered == job.rendered
+        # Dropping each port is deciding its units.
+        ports = [name for name in job.unresolved_ports if split_unit(name) is None]
+        decided = run_plan_with_checked_names(
+            source, target, text, port_rename_map=dict.fromkeys(ports),
+        )
+        assert set(units) <= set(decided.port_drops)
+        assert decided.unresolved_ports == []
+        assert decided.status == MigrationJobStatus.completed
 
 
 # ---------------------------------------------------------------------------

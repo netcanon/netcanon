@@ -30,7 +30,16 @@ Two codecs ship for the IOS-XE family:
   > interface list before trusting the earlier output.  Management
   > interfaces (`Management1` / `mgmt0` / `mgmt`) are still dropped, as
   > they are for `cisco_iosxe_cli` — that is reported in the job's
-  > warnings, not silent.
+  > warnings, not silent, and in its status: with no devices declared
+  > the job is `partial` and lists each in `unresolved_ports` until a
+  > `port_rename_map` entry gives the port a name or confirms the drop.
+  > So is a tunnel or a `VirtualPortGroup` onto a target with no form
+  > for one.  And a port whose name the codec does not read — the
+  > one-number ports of a virtual router, `GigabitEthernet1` — is left
+  > under that name on every target and listed in `untranslated_ports`:
+  > give it the name it is to have.  (Not between the CLI codec and
+  > the NETCONF one: they are one platform, and the name is IOS-XE's
+  > own on both.)
 
 For 95% of operators wanting to translate IOS-XE configs to other
 vendors (or vice versa), use `cisco_iosxe_cli`.

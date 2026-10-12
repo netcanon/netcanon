@@ -94,6 +94,19 @@ itself.  Renaming other identity classes has its own sibling fields
 (`vlan_rename_map`, `local_user_rename_map`, `snmp_community_rename_map`,
 `snmpv3_user_rename_map`).
 
+**Two names in this output were not translated, and are right as
+they stand.**  The AOS-S codec carries each VLAN's address on an
+interface it names `Vlan10` / `Vlan20`, and the port translator does
+not read that name: it is left as it is, and `netcanon demo` lists
+both under its advisories (`could not classify port name 'Vlan10';
+left verbatim`).  On EOS `interface Vlan10` is what that interface is
+called, so through the migrate page or the API this job is
+`completed` and neither name asks for a decision.  Onto a target
+that calls the interface something else — Junos, AOS-CX — the same
+two names hold the job `partial` until each has an entry in
+`port_rename_map`.  See
+[`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
+
 ## Tier-3 boundary in this scenario
 
 Switch refreshes are mostly Tier-1/2 surface — interfaces, VLANs,

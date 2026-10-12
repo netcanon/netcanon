@@ -191,7 +191,10 @@ def painted_token(page: Page, ground: str, token: str) -> RGB:
     try:
         return painted_background(page.locator("#painted-token-probe"))
     finally:
-        page.evaluate("document.getElementById('painted-token-probe').remove()")
+        # The ground may have been redrawn meanwhile and the probe
+        # with it: then there is nothing to take out, and whatever
+        # failed above is what the test should say.
+        page.evaluate("document.getElementById('painted-token-probe')?.remove()")
 
 
 def ink(locator: Locator) -> RGB:

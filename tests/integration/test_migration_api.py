@@ -650,8 +650,8 @@ class TestPlanVlansEndpoint:
 
     Same structural parity with ``/plan/ports`` — each category
     endpoint accepts the full MigrationPlanRequest body and
-    dispatches to ``run_plan_with_overrides`` with only its
-    category's map populated."""
+    dispatches to ``run_plan_with_overrides`` with its category's
+    map populated, and the body's port map."""
 
     _IOSXE_WITH_VLANS = """\
 hostname TestCisco
@@ -726,10 +726,13 @@ interface GigabitEthernet1/0/1
         )
         assert resp.status_code == 422
 
-    def test_plan_vlans_ignores_port_rename_map(self, client):
-        """Per-pane endpoints apply their category only.  If the
-        operator sends a port_rename_map to /plan/vlans, it's
-        silently dropped — documented contract, not a bug."""
+    def test_plan_vlans_applies_the_port_map(self, client):
+        """The port map is the one map every plan endpoint applies.
+        This pane used to set a posted one aside ("its category
+        only").  A job's status now depends on what was decided
+        about its ports -- a dropped port, two names on one, hold it
+        ``partial`` until an entry decides them -- so a pane that set
+        the map aside returned a job nothing could settle there."""
         resp = client.post(
             "/api/v1/migration/plan/vlans",
             json={
@@ -744,14 +747,28 @@ interface GigabitEthernet1/0/1
         )
         assert resp.status_code == 200
         body = resp.json()
-        # VLAN applied.  Port auto-translation IS now engaged (#16) — Gi1/0/1
-        # -> aruba 1/1 — so the render carries no invalid source-vendor name;
-        # but the EXPLICIT port map on this VLAN pane is still ignored
-        # (GigabitEthernet99 never applied).
+        # VLAN applied, and the port entry with it: the name the
+        # operator gave, not the one the translator would have (1/1).
         vlan_renames = body["vlan_renames"]
         assert "10" in vlan_renames or 10 in vlan_renames
-        assert body["port_renames"].get("GigabitEthernet1/0/1") == "1/1"
-        assert "GigabitEthernet99" not in body["port_renames"].values()
+        assert body["port_renames"] == {"GigabitEthernet1/0/1": "GigabitEthernet99"}
+        assert "GigabitEthernet1/0/1" not in (body["rendered"] or "")
+
+    def test_plan_vlans_names_ports_with_no_map(self, client):
+        """(#16) With no port map posted the pane still translates
+        every port name by its shape -- Gi1/0/1 -> aruba 1/1 -- so the
+        render carries no source-vendor name."""
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+                "vlan_rename_map": {10: 100},
+            },
+        )
+        body = resp.json()
+        assert body["port_renames"] == {"GigabitEthernet1/0/1": "1/1"}
         assert "GigabitEthernet1/0/1" not in (body["rendered"] or "")
 
 
@@ -824,8 +841,10 @@ interface GigabitEthernet1/0/1
         )
         assert resp.status_code == 422
 
-    def test_ignores_port_and_vlan_maps(self, client):
-        """Per-pane endpoints apply their category only."""
+    def test_applies_the_port_map_and_no_other(self, client):
+        """Per-pane endpoints apply their category only -- and the
+        port map, which every plan endpoint applies: it is what
+        settles a job that is ``partial`` for its port names."""
         resp = client.post(
             "/api/v1/migration/plan/local_users",
             json={
@@ -842,11 +861,9 @@ interface GigabitEthernet1/0/1
         assert resp.status_code == 200
         body = resp.json()
         assert body["local_user_renames"] == {"admin": "netadmin"}
-        # VLAN map ignored; port auto-translation IS engaged (#16) — Gi1/0/1
-        # -> aruba 1/1 — but the EXPLICIT port map (GigabitEthernet99) is not
-        # applied.
-        assert body["port_renames"].get("GigabitEthernet1/0/1") == "1/1"
-        assert "GigabitEthernet99" not in body["port_renames"].values()
+        # VLAN map ignored; the port entry applied in place of the
+        # translator's own answer for that port (1/1).
+        assert body["port_renames"] == {"GigabitEthernet1/0/1": "GigabitEthernet99"}
         assert body["vlan_renames"] == {}
 
 
@@ -1257,9 +1274,11 @@ interface GigabitEthernet1/0/1
 
     def test_ignores_other_category_maps(self, client):
         """Per-pane endpoints apply their category only.  If the
-        operator sends port_rename_map / vlan_rename_map /
-        local_user_rename_map to /plan/snmp, they're silently dropped
-        — documented contract, same shape as /plan/ports + siblings."""
+        operator sends vlan_rename_map / local_user_rename_map to
+        /plan/snmp, they're silently dropped — documented contract,
+        same shape as /plan/ports + siblings.  The port map is not
+        one of them: every plan endpoint applies it (here it names a
+        port this config does not have, and the job says so)."""
         resp = client.post(
             "/api/v1/migration/plan/snmp",
             json={
@@ -1276,9 +1295,14 @@ interface GigabitEthernet1/0/1
         body = resp.json()
         assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
         # Other categories NOT engaged from this endpoint.
-        assert body["port_renames"] == {}
         assert body["vlan_renames"] == {}
         assert body["local_user_renames"] == {}
+        # The port map was read: its entry is reported, not dropped unseen.
+        assert body["port_renames"] == {}
+        assert any(
+            "'GigabitEthernet1/0/1' does not exist in the parsed config" in line
+            for line in body["warnings"]
+        )
 
 
 class TestPlanMultiCategoryRoutingSnmp:

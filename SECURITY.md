@@ -388,13 +388,27 @@ server has already loaded; it never supplies a port name, a count or a path.
   maps) must be text that can be written back.  A job echoes those names,
   and one holding a lone surrogate could not be serialised: it is refused
   with a 422 that echoes the map, never the pasted config.
+- A target in `port_rename_map` is a name or `null`.  A blank one (empty,
+  only white space, or only control and format characters — a NUL, a
+  zero-width space, a byte-order mark: anything with no character
+  that is drawn) is refused with a 422 on every plan endpoint,
+  with devices declared or not: taken as a name it was written into the
+  generated config as an interface with no name, and — an entry being
+  what settles a name a job is held for — it would have cleared that
+  hold without deciding anything.  The refusal's message names the
+  keys, cut short, and at most five of them.  (The `input` member of
+  that 422 is the map as it was sent: a field's refusal carries the
+  field's value and nothing else of the body, so never the pasted
+  config.)
 - An operator's `port_rename_map` target is read as the declared target
   device spells its ports where another letter case cannot be another
   interface on the target platform (it has no case, or it names every
   interface itself), and
-  a blank target is ignored.  So a target that differs from a port only in
-  case or surrounding space cannot be passed off as another port, and a
-  blank cannot be passed off as a decision.  An abbreviation the device
+  a blank target that reaches the pipeline without passing the request
+  model (a caller in Python) is set aside.  So a target that differs
+  from a port only in case or surrounding space cannot be passed off as
+  another port, and a blank cannot be passed off as a decision.  An
+  abbreviation the device
   would accept (`Gi1/0/1`) can: it is not recognised as the port, and is
   reported as a target the model does not list rather than as two ports
   on one.

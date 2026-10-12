@@ -21,12 +21,14 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
+from netcanon.api.routes import _migration_helpers
 from netcanon.api.routes._migration_helpers import (
     build_codec_info_list,
     get_target_profiles,
     request_has_overrides_or_profile,
     resolve_adapter_or_422,
     resolve_input_text,
+    run_translation,
 )
 from netcanon.models.backup import ConfigRecord
 from netcanon.models.migration import MigrationPlanRequest
@@ -295,3 +297,93 @@ class TestRequestHasOverridesOrProfile:
             source="mock", target="mock", raw_text="x", port_rename_map={}
         )
         assert request_has_overrides_or_profile(body) is True
+
+
+# ---------------------------------------------------------------------------
+# run_translation
+# ---------------------------------------------------------------------------
+
+
+class TestRunTranslation:
+    """Which pipeline entry a request reaches, and with which port
+    map.  What the entries then do is tested with the pipeline; what
+    a handler gets back, in the integration tier."""
+
+    @staticmethod
+    def _spies(monkeypatch) -> dict[str, list]:
+        calls: dict[str, list] = {"checked": [], "models": []}
+
+        def checked(source, target, raw_text, **keywords):
+            calls["checked"].append(keywords)
+            return "a job"
+
+        def models(source, target, raw_text, source_inventory, target_inventory, **keywords):
+            calls["models"].append(keywords)
+            return "a paired job"
+
+        monkeypatch.setattr(_migration_helpers, "run_plan_with_checked_names", checked)
+        monkeypatch.setattr(_migration_helpers, "run_plan_with_models", models)
+        return calls
+
+    def test_no_devices_reach_the_checked_entry(self, monkeypatch):
+        """Not ``run_plan_with_overrides`` itself, whose status says
+        nothing of what the port translator did."""
+        calls = self._spies(monkeypatch)
+        body = MigrationPlanRequest(source="mock", target="mock", raw_text="x")
+        job = run_translation(
+            SimpleNamespace(), body, object(), object(), "x",
+            vlan_rename_map={1: 2}, force=True,
+        )
+        assert job == "a job"
+        assert calls["checked"] == [
+            {"port_rename_map": {}, "vlan_rename_map": {1: 2}, "force": True},
+        ]
+        assert calls["models"] == []
+        assert not hasattr(_migration_helpers, "run_plan_with_overrides")
+
+    def test_one_device_is_checked_too(self, monkeypatch):
+        """A target profile on its own is advice for the page: the
+        browser sends it on every Apply once one is chosen, nothing
+        is paired, and the run is one made by name shape.  It is
+        checked like any other such run -- the commonest request the
+        page makes must not be the one whose status says less."""
+        calls = self._spies(monkeypatch)
+        body = MigrationPlanRequest(
+            source="mock", target="mock", raw_text="x",
+            target_profile="aruba_aoss/2930F-48G-PoEP", target_module="JL083A",
+        )
+        job = run_translation(SimpleNamespace(), body, object(), object(), "x", force=False)
+        assert job == "a job"
+        assert calls["checked"] == [{"port_rename_map": {}, "force": False}]
+        assert calls["models"] == []
+
+    def test_the_port_map_is_the_bodys(self, monkeypatch):
+        """Whatever a handler passes: a pane that set the body's map
+        aside returned a job that no entry could settle there."""
+        calls = self._spies(monkeypatch)
+        body = MigrationPlanRequest(
+            source="mock", target="mock", raw_text="x",
+            port_rename_map={"mgmt0": None, "1/A1": "Ethernet49"},
+        )
+        run_translation(
+            SimpleNamespace(), body, object(), object(), "x", port_rename_map={},
+        )
+        assert calls["checked"] == [
+            {"port_rename_map": {"mgmt0": None, "1/A1": "Ethernet49"}},
+        ]
+        # A copy: the pipeline is not handed the request's own dict.
+        assert calls["checked"][0]["port_rename_map"] is not body.port_rename_map
+
+    def test_declared_devices_reach_the_pairing(self, monkeypatch):
+        calls = self._spies(monkeypatch)
+        monkeypatch.setattr(
+            _migration_helpers, "resolve_port_inventories",
+            lambda request, body, source, target: ("the source", "the target"),
+        )
+        body = MigrationPlanRequest(
+            source="mock", target="mock", raw_text="x", port_rename_map={"49": None},
+        )
+        job = run_translation(SimpleNamespace(), body, object(), object(), "x", force=False)
+        assert job == "a paired job"
+        assert calls["models"] == [{"port_rename_map": {"49": None}, "force": False}]
+        assert calls["checked"] == []

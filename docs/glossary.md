@@ -200,6 +200,29 @@ by concern and listed alphabetically within each section.
   it was given the name of another port and only the first is found.
   Found by reading the output back; the job is `partial` until the
   port has a port of the target, or a name that can carry a line.
+- **Port names not settled** — why a job is `partial` with a clean
+  validation report when no devices were declared: two source names
+  ended on one name of the output (`fused_ports` on the job: the
+  config of two interfaces written as one); a name was dropped
+  because the target has none for it — a hardware port, or a
+  logical name such as a loopback or a tunnel (`unresolved_ports`);
+  or a name the translator could not read was left as the source
+  config has it (`untranslated_ports`).  Settled by entries of
+  `port_rename_map`: a name, `null`, or — for a name left as it
+  was — the name itself.  With both devices declared the port plan
+  carries what that path found, for hardware ports
+  (`port_mapping_plan.fused`, `.unresolved_ports`).
+- **Left under its source name** — a name the port translator could
+  not read as any kind of port, which it leaves as the source config
+  has it (`could not classify port name ...; left verbatim`).  A
+  source vendor's name in another vendor's config, listed in
+  `untranslated_ports`.  A name the config only refers to (a route to
+  `Null0`) is left the same way and is not listed.  Nor is a name
+  that is no foreign name where it lands: any name between two
+  codecs of one platform (IOS-XE over CLI and NETCONF), and a
+  logical name the target itself writes exactly so for the same
+  kind of thing (an AOS-S VLAN's `Vlan10`, on EOS, IOS-XE or
+  NX-OS).
 - **Landed off-target** — a logical name nobody decided that the
   name-shape translator gave a port-shaped name the declared target
   does not list. Kept, reported, and in need of a decision.

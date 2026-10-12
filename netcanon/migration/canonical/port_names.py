@@ -79,6 +79,8 @@ implementing the two methods; zero edits here.
 from __future__ import annotations
 
 import logging
+import unicodedata
+from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator
 from typing import TYPE_CHECKING, Literal, TypeVar
 
@@ -287,6 +289,48 @@ class PortRenameResult(BaseModel):
     app-hosting bridge, loopbacks where the target has no loopback
     concept, unused physical ports)."""
 
+    untranslated: list[str] = Field(default_factory=list)
+    """Source names that are still in the tree under the name the
+    source config has for them because the translator had no name to
+    give them, in the order they were met.  Across vendors only: a
+    name the source codec's classifier could not read as any kind of
+    interface (the "could not classify ... left verbatim" warning),
+    and -- with ``strip_unmappable=False`` -- a name the target has
+    no form for, which is otherwise dropped and listed in
+    :attr:`dropped`.
+
+    Said as data because a warning line is not something a caller
+    can act on: such a name is a source vendor's name written into
+    another vendor's config, and nobody decided that.  So a name is
+    never here by a decision or by a rule: not one an entry of the
+    map names (to another name, to ITSELF -- which is how an operator
+    says the name is right on the target -- or with ``None``), not a
+    name between two configs of one codec (it stands there, valid by
+    construction), and not a VLAN interface a target writes from its
+    VLAN stanza.
+
+    These are names the config CONFIGURES something under: an
+    interface, a LAG, a member of a LAG, a port in a VLAN's lists.
+    One it only refers to is in :attr:`untranslated_references`.
+
+    Every such name is here, whether or not it happens to be a
+    good name on the target as it stands: that is not the
+    translator's to judge.  The entry that reads the finished run
+    (:func:`~netcanon.services.migration_pipeline.run_plan_with_checked_names`)
+    decides which of them hold a job."""
+
+    untranslated_references: list[str] = Field(default_factory=list)
+    """As :attr:`untranslated`, for a name the tree holds only where
+    it REFERS to an interface: a static route's or a DHCP pool's
+    interface, a VRRP track entry, a VXLAN source.  What those
+    places hold is not always an interface -- a route to ``Null0``
+    or to the keyword ``dhcp``, a pool keyed by a zone name, a track
+    object number, a source ADDRESS -- and nothing says such a name
+    is one: the classifier, which alone could, did not read it.
+    Kept apart so that a caller can hold a job for a port left under
+    another vendor's name without holding one for every route to
+    ``Null0``."""
+
 
 # ---------------------------------------------------------------------------
 # Where port names live in a canonical tree
@@ -348,6 +392,27 @@ def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
     for vx in intent.vxlan_vnis:
         if vx.source_interface:
             yield vx.source_interface
+
+
+def _only_referred_to(intent: CanonicalIntent) -> set[str]:
+    """The names *intent* holds only where it REFERS to an interface:
+    a static route's or a DHCP pool's interface, a VRRP track entry,
+    a VXLAN source -- and in no other place the sweep visits.
+
+    Counted, not listed from the other side: a name is one of these
+    when every place :func:`_swept_names` finds it is one of the four
+    named here.  So a field added to the sweep later counts as a
+    place the config CONFIGURES a name, until this function is told
+    otherwise -- the reading that reports more, not less."""
+    referred: Counter[str] = Counter()
+    for iface in intent.interfaces:
+        for grp in iface.vrrp_groups:
+            referred.update(grp.track_interfaces)
+    referred.update(r.interface for r in intent.static_routes if r.interface)
+    referred.update(p.interface for p in intent.dhcp_servers if p.interface)
+    referred.update(v.source_interface for v in intent.vxlan_vnis if v.source_interface)
+    swept = Counter(_swept_names(intent))
+    return {name for name, times in referred.items() if swept[name] == times}
 
 
 def rewrite_port_names(
@@ -647,6 +712,28 @@ def split_unit(name: str) -> tuple[str, str] | None:
     return None
 
 
+def _is_drawn(char: str) -> bool:
+    """*char* is neither white space nor a control or format
+    character (Unicode ``Cc`` and ``Cf``: a NUL, a zero-width space,
+    a byte-order mark, a word joiner)."""
+    return not char.isspace() and unicodedata.category(char) not in ("Cc", "Cf")
+
+
+def names_a_target(value: object) -> bool:
+    """*value* is something an entry of a port map may say: a target
+    name, or ``None`` for a port that is to go.  A blank string is
+    neither -- and blank is a string that DRAWS nothing: an empty
+    one, one of white space, and one made only of control or format
+    characters.  ``"\\u200b"`` is not empty and not white space, and
+    taken as a name it wrote an interface whose name nobody can see.
+    A name has at least one character that is none of those
+    (:func:`_is_drawn`).  The rule exists once, here: the
+    translator sets such an entry aside, the request model refuses
+    it, and a caller that asks whether an entry DECIDED a name asks
+    this."""
+    return value is None or (isinstance(value, str) and any(map(_is_drawn, value)))
+
+
 def single_spellings(names: Iterable[str]) -> dict[str, str]:
     """Folded name -> its spelling, for each name written exactly one
     way among *names*.  A name written in two letter cases is left
@@ -704,7 +791,10 @@ def translate_port_names(  # noqa: C901
     (:func:`key_by_the_configs_spelling`): only when the config writes
     the name one way and that spelling has no entry of its own.  A
     key that is a second spelling of a name with an entry is reported
-    and ignored, unless the two entries say the same thing.
+    and ignored, unless the two entries say the same thing.  A value
+    is a target name or ``None``: an entry whose target is blank is
+    set aside with a warning (:func:`names_a_target`), and the name
+    is treated as one with no entry.
 
     Priority for each name:
         1. If *rename_map* contains an entry for the source name with
@@ -788,7 +878,11 @@ def translate_port_names(  # noqa: C901
            declared device could justify another.
         5. Else run ``source_codec.classify_port_name(name)`` →
            ``target_codec.format_port_identity(ident)`` and use the
-           target's native formatting.
+           target's native formatting.  A name the classifier does
+           not know stays as it is, with a warning, and the result
+           says so as data: ``untranslated`` where the config
+           configures something under the name, and
+           ``untranslated_references`` where it only refers to it.
         6. If the auto-path returns ``None`` (target has no equivalent
            for this kind — e.g. Aruba AOS-S can't express
            ``Loopback0``) the behaviour depends on *strip_unmappable*:
@@ -845,7 +939,8 @@ def translate_port_names(  # noqa: C901
 
     Mutates *intent* in place.
 
-    Returns a :class:`PortRenameResult` summarising what changed.
+    Returns a :class:`PortRenameResult` summarising what changed, what
+    was dropped, and what was left as the source config has it.
     """
     # Non-CanonicalIntent trees have no port-name structure to
     # rewrite — the legacy mock adapter and any future back-compat
@@ -894,6 +989,21 @@ def translate_port_names(  # noqa: C901
             )
             del user_map[key]
 
+    # A blank TARGET is no name, and neither is one that draws
+    # nothing (a zero-width space).  Taken as one it was written into
+    # the output -- ``interface `` with nothing after it -- and, being
+    # an entry, counted as the operator's decision about the port.  A
+    # value is a name or ``None``; the HTTP API refuses a blank one
+    # outright (``MigrationPlanRequest``), and a caller that reaches
+    # this function another way has the entry set aside and said.
+    for key in [k for k, v in user_map.items() if not names_a_target(v)]:
+        warnings.append(
+            f"port_rename: the entry for {key!r} has no target name (it "
+            f"is empty or blank); entry skipped — to drop the port, map "
+            f"it to null"
+        )
+        del user_map[key]
+
     # A key in another letter case.  On a platform whose names have no
     # case, an operator who writes ``Trk1`` means the port the config
     # calls ``trk1`` (the device itself prints it both ways): the entry
@@ -924,6 +1034,11 @@ def translate_port_names(  # noqa: C901
     # its own before the sweep, and these are stripped then, while every name
     # is still in source form (see below).
     auto_dropped: set[str] = set()
+    # Names left as they were for want of a name to give them, in the
+    # order they were met.  ``memo`` keeps each to one mention.  Keys
+    # of a dict and not a list: a unit asks whether its port is among
+    # them, and a pasted config can hold as many of either as it likes.
+    untranslated: dict[str, None] = {}
 
     # Per-interface kind overrides — populated by source codecs that
     # detect logical role (mgmt, etc.) from CONTEXT rather than from
@@ -1077,6 +1192,12 @@ def translate_port_names(  # noqa: C901
             memo[name] = out
             if out != name:
                 applied[name] = out
+            if port in untranslated:
+                # Its port was left as the source config has it (only
+                # with ``strip_unmappable=False``: otherwise such a
+                # port is dropped, and the unit with it).  The unit
+                # went where the port went, which is nowhere.
+                untranslated[name] = None
             if not same_codec and name not in tagged:
                 # Its name says which port it is on; its tag is a
                 # field, and there is none.  Not said between two
@@ -1107,6 +1228,7 @@ def translate_port_names(  # noqa: C901
                 f"{source_codec.name}: could not classify port name "
                 f"{name!r}; left verbatim"
             )
+            untranslated[name] = None
             memo[name] = name
             return name
         # Apply CanonicalInterface.kind override — used when the source
@@ -1188,6 +1310,8 @@ def translate_port_names(  # noqa: C901
             # name``) or the Tier 3 UI's "keep verbatim" link.
             if strip_unmappable:
                 auto_dropped.add(name)
+            else:
+                untranslated[name] = None
             memo[name] = name
             return name
         # A structurally-clean rename can STILL drop a source-side
@@ -1221,6 +1345,10 @@ def translate_port_names(  # noqa: C901
     # over-reporting those absent names as "dropped" (mirrors local_user /
     # snmpv3 honesty).
     present_names: set[str] = set(collect_port_names(intent))
+    # Names the config only refers to (a route's interface, a pool's,
+    # a track entry, a VXLAN source), read while every name is still
+    # in source form.  One of these left as it was is reported apart.
+    referred_only: set[str] = _only_referred_to(intent)
     # The names the config, and the map, each write exactly one way,
     # by their folded spelling: on a platform without letter case,
     # the only names another spelling can mean.
@@ -1464,6 +1592,15 @@ def translate_port_names(  # noqa: C901
         applied=applied,
         warnings=warnings,
         dropped=reported_dropped,
+        # As with the drops: only a name the config has.  A port named
+        # nowhere but through a unit of it was resolved too.
+        untranslated=[
+            name for name in untranslated
+            if name in present_names and name not in referred_only
+        ],
+        untranslated_references=[
+            name for name in untranslated if name in referred_only
+        ],
     )
 
 
@@ -1613,6 +1750,15 @@ def build_port_rename_transform(
             if name not in seen:
                 result.dropped.append(name)
                 seen.add(name)
+        for kept, more in (
+            (result.untranslated, outcome.untranslated),
+            (result.untranslated_references, outcome.untranslated_references),
+        ):
+            seen = set(kept)
+            for name in more:
+                if name not in seen:
+                    kept.append(name)
+                    seen.add(name)
         return intent
 
     return transform, result
