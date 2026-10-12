@@ -996,16 +996,17 @@ def translate_port_names(  # noqa: C901
         counts: dict[str, int] = {}
         for obj in objs:
             counts[obj.name] = counts.get(obj.name, 0) + 1
+        ended_on: dict[str, list[str]] = {}
+        for s, f in memo.items():
+            if s not in auto_dropped:
+                ended_on.setdefault(f, []).append(s)
         for final in sorted(n for n, c in counts.items() if c > 1):
             warned_finals.add(final)
             # A name the translator dropped reached no target, so it
             # shares none -- the same rule the membership sweep below
             # applies.  (An operator's drop is stripped before any name
             # is resolved, and is never among these.)
-            sources = sorted(
-                s for s, f in memo.items()
-                if f == final and s not in auto_dropped
-            ) or [final]
+            sources = sorted(ended_on.get(final, ())) or [final]
             warnings.append(
                 f"port_rename: multiple source ports map to {final!r} "
                 f"(sources: {', '.join(sources)}); the target will render "

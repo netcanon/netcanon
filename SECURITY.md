@@ -547,7 +547,11 @@ put into it.  The fifth shape has a search of its own,
 `tools/stanza_cost_search.py`, which writes every line and block of every
 committed capture many times over; it takes minutes and is run by hand, and
 the handlers it found are pinned in that test module, each with a text of its
-own, and so are the lookups an independent read found without one.  On the
+own, and so are the lookups an independent read found without one.  So is
+each place found since: a record that is given many lines, and work that is
+done after the parse.  For the first of those the module also reads the
+source, with no clock, for a list that one function both looks through and
+adds to; a new one fails until it is mended or listed with its bound.  On the
 tree before this change it reported 51 units in six codecs, and after it
 none - a verdict from timings, which one run in three can put a unit back
 into on a busy machine.
@@ -559,29 +563,75 @@ case is known, and is in the list below), or code that is slow on a shape
 the search does not build; the second to fifth shapes above were each found
 after an earlier version of the search had passed.
 
-**Known, and not mended by this change:**
+**Three more were mended after those five.**  None changes an output: every
+committed capture parses, renders and translates onto every codec as it did,
+and so does every text built to reach the mended lines, with repeats in it
+and its values out of order.
 
 * **A list of one record that a line adds to after reading it.**  The
   addresses of one interface, the members of one LAG, the route targets of one
-  VRF are kept in a list, and a line that adds one first looks for it there.
-  Many lines for ONE record cost their square: 32,000 addresses on one Junos
-  IRB unit (2 MB) take 8 seconds.  The same idiom is in most of the parsers.
+  VRF are kept in a list, and a line that adds one first looked for it there
+  — or compared a new address, field by field, with every address the record
+  had, or wrote the list again for each line that took something out.  Many
+  lines for ONE record cost their square, and no index of the records helps:
+  there is one record.  Measured before the mend: 32,000 addresses on one
+  Junos IRB unit (2 MB), 12 seconds; 8,000 secondary addresses on one AOS-CX
+  SVI (0.3 MB), 28; 32,000 RouterOS NTP servers (0.8 MB), 24; 32,000 Junos
+  SNMPv3 users (3 MB), 20; and in one AOS-S VLAN, 320 lines of `untagged
+  1-1000` and then 320 of `no untagged` (13 KB), 4.  Each is about a second
+  or less now, but the SNMPv3 users, which take about two.  The look is by key (`Uniques`, beside `GrowingIndex` in
+  `netcanon/migration/codecs/_helpers.py`).  Mended in every parser that had
+  it, and in the reverse projection, where an honest config reached it: 48
+  AOS-S ports tagged in 4,000 VLANs took two seconds to parse.
+* **A scan of another list, once for every item**, in what a request does
+  after the parse.  To find the parent of each VLAN, the OPNsense renderer
+  walked every interface for every LAG, and again for every member: 400
+  VLANs, port-channels and member ports (55 KB of IOS-XE) took 12 seconds to
+  render.  The port-name translator read every name it had translated for
+  each name two ports shared (16,000 such pairs, 1.2 MB: 15 seconds); the
+  plan made with both devices declared asked every interface about every LAG
+  (8,000 of each, 0.5 MB: 9); the NX-OS renderer looked each route target of
+  a VRF up in the other list; the VyOS renderer compared every SNMPv3 user
+  with every one it carried.  Each builds its index once now, and is under a
+  second on those texts.
+* **What the switchport projection made and then dropped.**  For a trunk
+  whose list is wide, a VLAN record and a membership were made for every id of
+  the list, and all but the declared ones were dropped on the next line.  50
+  Arista trunks that each allow VLANs 2-4000 (5 KB) took 180 MB to parse; so
+  did 48 trunks that state `1-99,101-4094`, which is an ordinary way to write
+  a trunk.  The projection is now told what its caller keeps and makes
+  nothing else: those texts take a megabyte or two.  The ids of a list are
+  built from one shared tuple of ints, so an id on a port costs the 8 bytes
+  of its place in the list where it cost 38; and a membership costs some 45
+  bytes while it is stamped, where it cost 800.
+
+**Known, and not mended:**
+
 * **What a config expands to.**  A range is a few bytes that parse to
   thousands of entries, so the size of a request does not bound the memory it
-  takes.  One AOS-S line of 800 ranges of 1,001 ports (11 KB) is 800,000
-  names: about six seconds and 265 MB.  1,000 Arista trunks that each allow
-  VLANs 2-4000 (86 KB) are four million memberships: tens of seconds and over
-  3 GB.  That cost is linear in what was asked for; a real config of that
-  size costs the same.  (A range of unbounded span is refused where one was
-  found: AOS-S clamps a single port range at 1,024 names.)
+  takes.  It costs less than it did, and nothing limits it.  One AOS-S line
+  of 800 ranges of 1,001 ports (11 KB) is 800,000 names: three to four seconds
+  and 295 MB.  1,000 Arista trunks that each allow VLANs 2-4000 (89 KB) are
+  four million ids on the ports: a sixth of a second and 32 MB to parse,
+  where it was over 3 GB — and 19 MB of output and 92 MB when translated to a
+  target that writes every id.  That cost is linear in what was asked for; a
+  real config of that size costs the same.  (A range of unbounded span is
+  refused where one was found: AOS-S clamps a single port range at 1,024
+  names.)
 * **Two kinds of stanza that grow together.**  A switch config with N
   interfaces that carry `switchport trunk allowed vlan all` and M declared
   VLANs is N times M memberships once it is parsed: every such trunk is a
-  member of every VLAN, and the tree lists them VLAN by VLAN.  A thousand of
-  each (115 KB) is a million memberships and about three seconds.  Nothing
-  in that text is a range; the cost is the product of two honest counts.
-  Reachable wherever a switch config is parsed.
+  member of every VLAN, and the tree lists them VLAN by VLAN.  Those
+  memberships are real, and are made.  A thousand of each (118 KB) is a
+  million of them: two thirds of a second and 72 MB when translated to
+  AOS-S, where it was three seconds and a gigabyte.  Nothing in that text is
+  a range; the cost is the product of two honest counts, and nothing limits
+  either.  A Junos `interface-range` is the same shape: every address of the
+  range is copied to every member.  Reachable wherever a switch config is
+  parsed.
 * **There is no time limit on a request**, and none on the memory one takes.
+  What is mended above is what was found; the next shape is stopped by
+  nothing.
 
 A deployment that takes text from people it does not trust should put a
 request timeout and a memory limit in front of the application - one that

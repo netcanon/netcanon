@@ -104,7 +104,7 @@ from ...canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVxlan,
 )
-from .._helpers import _is_link_local_v6
+from .._helpers import Uniques, _is_link_local_v6
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -370,6 +370,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     vxlan_order: list[str] = []
 
     stack: list[tuple[str, str]] = []
+    once = Uniques()
 
     def _touch_user(name: str) -> dict:
         u = users.get(name)
@@ -389,8 +390,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
     def _add_lag_member(bond: str, member: str) -> None:
         lg = _touch_lag(bond)
-        if member and member not in lg["members"]:
-            lg["members"].append(member)
+        if member:
+            once.add(lg["members"], member)
         # Materialise the member iface + set its back-reference.
         _touch_iface(member, "ethernet")["lag_member_of"] = bond
 
@@ -578,8 +579,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 and stack[0][0] in ("system", "service")
                 and stack[1][0] == "ntp"
             ):
-                if node[1] not in ntp_servers:
-                    ntp_servers.append(node[1])
+                once.add(ntp_servers, node[1])
             # A ``next-hop`` block under ``static route`` creates a route.
             elif node[0] == "next-hop":
                 cur_route = _open_route(stack, node[1], static_routes)
@@ -679,8 +679,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             and stack[0][0] in ("system", "service")
             and stack[1][0] == "ntp"
         ):
-            if value not in ntp_servers:
-                ntp_servers.append(value)
+            once.add(ntp_servers, value)
             continue
 
         # ── Phase 3: SNMP location / contact (service / snmp / <leaf>) ──
@@ -769,8 +768,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             elif key == "group":
                 vx["mcast"] = value
             elif key == "remote":
-                if value not in vx["flood"]:
-                    vx["flood"].append(value)
+                once.add(vx["flood"], value)
             elif key in ("source-address", "source-interface", "link", "dev"):
                 vx["source"] = value
             elif key == "port" and value.isdigit():

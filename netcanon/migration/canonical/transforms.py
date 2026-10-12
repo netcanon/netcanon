@@ -30,7 +30,8 @@ Public surface:
   ``switchport_mode`` / ``access_vlan`` / ``trunk_allowed_vlans``
   fields and back-fill the corresponding VLAN-centric port-membership
   lists on each :class:`CanonicalVlan`.  Called by Cisco-style codecs
-  whose native config is per-port.
+  whose native config is per-port.  Told which VLAN ids its caller
+  keeps (``keep``), it makes nothing the caller would then drop.
 * :func:`project_vlan_to_switchport` — the inverse: read VLAN-centric
   ``tagged_ports`` / ``untagged_ports`` lists and synthesise
   ``switchport_mode`` + ``access_vlan`` + ``trunk_allowed_vlans`` on each
@@ -64,7 +65,7 @@ Internal helper:
 from __future__ import annotations
 
 import re
-from collections import deque
+from collections.abc import Set as AbstractSet
 
 from .intent import CanonicalIntent, CanonicalInterface, CanonicalVlan
 
@@ -101,6 +102,16 @@ def _natural_port_sort_key(name: str) -> tuple:
     return tuple(out)
 
 
+class _SortKeys(dict):
+    """A port name's natural-sort key, worked out the first time it is
+    asked for.  A port on a thousand VLANs is in a thousand lists that
+    are each sorted; its key is the same in every one."""
+
+    def __missing__(self, name: str) -> tuple:
+        key = self[name] = _natural_port_sort_key(name)
+        return key
+
+
 class _PortList:
     """A port list while ports are being stamped onto it.
 
@@ -112,38 +123,52 @@ class _PortList:
     The order of what remains is the order ``remove`` would have left,
     which matters to the stable sort that follows: two names can sort
     alike (``Gi1`` and ``Gi01``) and keep the order they were in.
+
+    Two small counts are kept for a name, and nothing for an entry.
+    The entries struck for a name are always its FIRST ones in the
+    list -- each strike takes the oldest that is left, and a new entry
+    goes on the end -- so how many of its first entries are struck
+    says which they are.  (A queue of positions for every name was 760
+    bytes for each stamp: nine tenths of what a membership cost while
+    it was being made.)
     """
+
+    __slots__ = ("_live", "_ports", "_struck")
 
     def __init__(self, ports: list[str]) -> None:
         self._ports = ports
-        # name -> where its entries are that have not been struck,
-        # oldest first.
-        self._at: dict[str, deque[int]] = {}
-        self._struck: set[int] = set()
-        for index, name in enumerate(ports):
-            self._at.setdefault(name, deque()).append(index)
+        # name -> how many of its entries have not been struck.
+        self._live: dict[str, int] = {}
+        # name -> how many of its first entries have been.
+        self._struck: dict[str, int] = {}
+        live = self._live
+        for name in ports:
+            live[name] = live.get(name, 0) + 1
 
     def add(self, name: str) -> None:
         """Append *name* unless an entry for it is in the list."""
-        at = self._at.setdefault(name, deque())
-        if not at:
-            at.append(len(self._ports))
+        if not self._live.get(name):
+            self._live[name] = 1
             self._ports.append(name)
 
     def remove_first(self, name: str) -> None:
         """Strike the first entry of *name*, if there is one."""
-        at = self._at.get(name)
-        if at:
-            self._struck.add(at.popleft())
+        if self._live.get(name):
+            self._live[name] -= 1
+            self._struck[name] = self._struck.get(name, 0) + 1
 
     def settle(self) -> None:
         """Take the struck entries out of the list, in place."""
         if self._struck:
-            struck = self._struck
-            self._ports[:] = [
-                name for index, name in enumerate(self._ports) if index not in struck
-            ]
-            self._struck = set()
+            left = self._struck
+            kept: list[str] = []
+            for name in self._ports:
+                if left.get(name):
+                    left[name] -= 1
+                else:
+                    kept.append(name)
+            self._ports[:] = kept
+            self._struck = {}
 
 
 def access_and_native_vlan_ids(intent: CanonicalIntent) -> set[int]:
@@ -245,7 +270,60 @@ def switchport_declared_vlan_ids(intent: CanonicalIntent) -> set[int]:
     return vids
 
 
-def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
+# Two lists of a trunk are not expanded into a VLAN record per id:
+# every id (1-4094: Junos ``vlan members all``, Arista ``switchport
+# trunk allowed vlan all``) and every id but 1 (2-4094, common on an
+# MLAG peer link).  Projecting either into VLAN-centric tagged_ports
+# would synthesise some 4,094 phantom VLAN records, each of which
+# renders out and reparses with a generated name (``VLAN-N``),
+# breaking round-trip stability and producing 4000-line VLAN dumps on
+# cross-vendor renders.  The trunk goes onto the VLANs already
+# declared that its list holds instead.  (The two are not the same
+# list: 2-4094 leaves VLAN 1 out, and a renderer writes its word for
+# "all" for the first only.)
+_TRUNK_ALL_RANGE_FULL = frozenset(range(1, 4095))
+_TRUNK_ALL_RANGE_OPERATIONAL = frozenset(range(2, 4095))
+
+
+def _every_id(allowed: list[int]) -> frozenset[int] | None:
+    """Which of the two lists that are not expanded *allowed* is --
+    every id, or every id but 1 -- or ``None`` for any other list.
+
+    The order of a list and an id written twice do not matter, as they
+    did not when the list was compared as a set; a list too short to
+    be either is not made into one to find that out.
+    """
+    if len(allowed) < len(_TRUNK_ALL_RANGE_OPERATIONAL):
+        return None
+    ids = set(allowed)
+    if ids == _TRUNK_ALL_RANGE_FULL:
+        return _TRUNK_ALL_RANGE_FULL
+    if ids == _TRUNK_ALL_RANGE_OPERATIONAL:
+        return _TRUNK_ALL_RANGE_OPERATIONAL
+    return None
+
+
+def _listed(allowed: list[int], keep: AbstractSet[int] | None) -> list[int]:
+    """The ids of a trunk's list that are handed to a VLAN record.
+
+    All of them for a caller that keeps every VLAN (``keep`` is
+    ``None``): the list itself.  Otherwise the ids the caller keeps --
+    and any id that is not a VLAN id at all, because the record
+    refuses that one, and the parse has to fail as it did when every
+    id was handed over.
+    """
+    if keep is None:
+        return allowed
+    return [
+        vid for vid in allowed
+        if vid in keep or vid not in _TRUNK_ALL_RANGE_FULL
+    ]
+
+
+def project_switchport_to_vlan(
+    intent: CanonicalIntent,
+    keep: AbstractSet[int] | None = None,
+) -> None:
     """Port-centric -> VLAN-centric membership mirror.
 
     For every :class:`CanonicalInterface` with switchport state populated,
@@ -275,6 +353,30 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
     Idempotent: an interface already present in a list is not added twice.
 
     This is Bug 3 from translator-plans.txt (KNOWN DATA-LOSS BUGS).
+
+    Args:
+        intent: The tree; changed in place.
+        keep: The VLAN ids the caller keeps afterwards, or ``None``
+            for a caller that keeps every one.  The six port-centric
+            codecs drop, on the line after this call, every VLAN that
+            is not in a set they worked out on the line before it
+            (the VLANs already declared and
+            :func:`switchport_declared_vlan_ids`).  Given that set, no
+            record is made and no port stamped for an id of a trunk's
+            list that is outside it.  The tree the caller is left with
+            is the same either way; what differs is what is made on
+            the way: a trunk that states ``1-4093`` was 4,093 VLAN
+            records and as many stamps, so that a handful could be
+            kept -- on a 48-port switch, some 400 times what was kept
+            and nearly all the memory the parse took.  Access and
+            native VLANs are always made (they are in every caller's
+            set).  So is an id that is not a VLAN id at all, so that
+            the record still refuses it: ``1-200,5000`` fails with
+            *keep* as it does without.
+
+    Raises:
+        pydantic.ValidationError: An access, native or listed id is
+            not a VLAN id (1-4094), with *keep* or without.
     """
     # Index existing VLANs for O(1) lookup and for synthesizing missing ones.
     by_id: dict[int, CanonicalVlan] = {v.id: v for v in intent.vlans}
@@ -302,20 +404,6 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
     def _add_unique(lst: list[str], name: str) -> None:
         _ports(lst).add(name)
 
-    # Two lists are not expanded into a VLAN record per id: every id
-    # (1-4094: Junos ``vlan members all``, Arista ``switchport trunk
-    # allowed vlan all``) and every id but 1 (2-4094, common on an
-    # MLAG peer link).  Projecting either into VLAN-centric
-    # tagged_ports would synthesise some 4,094 phantom VLAN records,
-    # each of which renders out and reparses with a generated name
-    # (``VLAN-N``), breaking round-trip stability and producing
-    # 4000-line VLAN dumps on cross-vendor renders.  The trunk goes
-    # onto the VLANs already declared that its list holds instead.
-    # (The two are not the same list: 2-4094 leaves VLAN 1 out, and
-    # a renderer writes its word for "all" for the first only.)
-    _TRUNK_ALL_RANGE_FULL = set(range(1, 4095))
-    _TRUNK_ALL_RANGE_OPERATIONAL = set(range(2, 4095))
-
     # (#20) PASS 1 — materialise every VLAN record a switchport references
     # BEFORE any membership stamping.  The trunk-all branch below stamps the
     # iface onto every VLAN in ``intent.vlans``; if a trunk-all uplink is
@@ -325,22 +413,40 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
     # (violating the documented idempotency).  Pre-materialising decouples the
     # VLAN set from interface order.  This never stamps, so it can't change
     # what an already-order-correct config produced.
+    #
+    # What a trunk's list comes to is worked out here, once a trunk, and
+    # used again in PASS 2, by the id() of the trunk: which of the two
+    # lists that are not expanded it is (``whole``), or else the ids of
+    # it that get a record (``listed``).
+    whole: dict[int, frozenset[int]] = {}
+    listed: dict[int, list[int]] = {}
     for iface in intent.interfaces:
         mode = iface.switchport_mode
         if mode == "access":
             if iface.access_vlan is not None:
                 _vlan(iface.access_vlan)
         elif mode == "trunk":
-            allowed_set = set(iface.trunk_allowed_vlans)
-            if allowed_set not in (
-                _TRUNK_ALL_RANGE_FULL, _TRUNK_ALL_RANGE_OPERATIONAL
-            ):
-                for vid in iface.trunk_allowed_vlans:
+            every = _every_id(iface.trunk_allowed_vlans)
+            if every is not None:
+                whole[id(iface)] = every
+            else:
+                ids = listed[id(iface)] = _listed(iface.trunk_allowed_vlans, keep)
+                for vid in ids:
                     _vlan(vid)
             if iface.trunk_native_vlan is not None:
                 _vlan(iface.trunk_native_vlan)
 
     # PASS 2 — stamp membership; the trunk-all branch now sees the full set.
+    #
+    # PASS 1 made every record there will be, so the tagged lists a
+    # trunk of either whole list goes onto are found once for that
+    # list (by its id()), and not once for every such trunk.
+    onto: dict[int, list[_PortList]] = {
+        id(every): [
+            _ports(vlan.tagged_ports) for vlan in intent.vlans if vlan.id in every
+        ]
+        for every in set(whole.values())
+    }
     for iface in intent.interfaces:
         mode = iface.switchport_mode
         if mode is None:
@@ -349,11 +455,8 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
             if iface.access_vlan is not None:
                 _add_unique(_vlan(iface.access_vlan).untagged_ports, iface.name)
         elif mode == "trunk":
-            allowed_set = set(iface.trunk_allowed_vlans)
-            is_trunk_all = (
-                allowed_set in (_TRUNK_ALL_RANGE_FULL, _TRUNK_ALL_RANGE_OPERATIONAL)
-            )
-            if is_trunk_all:
+            every = whole.get(id(iface))
+            if every is not None:
                 # Trunk-all sentinel: do NOT synthesise 4094 phantom
                 # VLANs (would render to nonsensical output) but DO
                 # stamp the iface onto every operator-DECLARED VLAN's
@@ -375,11 +478,11 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
                 # Only the VLANs the list holds: `2-4094` leaves
                 # VLAN 1 out, and a trunk written that way was
                 # stamped onto a declared VLAN 1 all the same.
-                for vlan in intent.vlans:
-                    if vlan.id in allowed_set:
-                        _add_unique(vlan.tagged_ports, iface.name)
+                name = iface.name
+                for reader in onto[id(every)]:
+                    reader.add(name)
             else:
-                for vid in iface.trunk_allowed_vlans:
+                for vid in listed[id(iface)]:
                     _add_unique(_vlan(vid).tagged_ports, iface.name)
             native = iface.trunk_native_vlan
             if native is not None:
@@ -404,9 +507,16 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
     # sorting twice is the same as once.
     for reader in readers.values():
         reader.settle()
+    # A name's key is worked out once, not once for every VLAN the
+    # name is in: N trunks on M VLANs are N keys, where they were N x M.
+    # Only where a port was stamped, though.  The lists of a tree this
+    # projection added nothing to (a VLAN-centric config) are sorted as
+    # they always were: remembering a key for each name costs more than
+    # working it out, when no name is asked for twice.
+    key_of = _SortKeys().__getitem__ if readers else _natural_port_sort_key
     for vlan in intent.vlans:
-        vlan.tagged_ports.sort(key=_natural_port_sort_key)
-        vlan.untagged_ports.sort(key=_natural_port_sort_key)
+        vlan.tagged_ports.sort(key=key_of)
+        vlan.untagged_ports.sort(key=key_of)
 
 
 def project_vlan_to_switchport(
@@ -490,8 +600,12 @@ def project_vlan_to_switchport(
             # Trunk: tagged list -> trunk_allowed_vlans, first untagged vid
             # becomes the native.
             iface.switchport_mode = "trunk"
+            # Looked for in a set, kept in the list: a port tagged in
+            # 4,000 VLANs looked through its own list for each one.
+            allowed = set(iface.trunk_allowed_vlans)
             for vid in t_vids:
-                if vid not in iface.trunk_allowed_vlans:
+                if vid not in allowed:
+                    allowed.add(vid)
                     iface.trunk_allowed_vlans.append(vid)
             if u_vids and iface.trunk_native_vlan is None:
                 iface.trunk_native_vlan = u_vids[0]
