@@ -14,6 +14,12 @@ Design notes:
   the main thread (``webview.start()``) exits.
 * ``stop()`` sets ``server.should_exit = True``; Uvicorn's internal loop
   picks this up and performs a clean shutdown (draining in-flight requests).
+* The server is started on what
+  ``netcanon.api.routes._migration_helpers.listening_sockets`` gives for the
+  config limits it was told of, as ``netcanon serve`` is.  That is ``None``
+  -- the server binds its own socket -- under every set of limits the
+  Preferences dialog offers, and on every system without the socket option
+  it sets, which Windows is.
 """
 from __future__ import annotations
 
@@ -22,6 +28,8 @@ import time
 from typing import TYPE_CHECKING
 
 import uvicorn
+
+from netcanon.api.routes._migration_helpers import listening_sockets
 
 if TYPE_CHECKING:
     from starlette.applications import Starlette
@@ -65,9 +73,21 @@ class ServerThread(threading.Thread):
         host: str = "127.0.0.1",
         port: int = 8765,
         log_level: str = "warning",
+        config_limits: str | None = None,
     ) -> None:
+        """
+        Args:
+            app: The application to serve.
+            host: The address to bind (loopback).
+            port: The port to bind.
+            log_level: Uvicorn's log level.
+            config_limits: The config limits the application runs
+                under (``Settings.config_limits``), for the socket the
+                server is started on; ``None`` is the standard ones.
+        """
         super().__init__(name="netcanon-uvicorn", daemon=True)
         self._ready = threading.Event()
+        self._config_limits = config_limits
         config = uvicorn.Config(
             app,
             host=host,
@@ -82,6 +102,7 @@ class ServerThread(threading.Thread):
             use_colors=False,
             loop="asyncio",
         )
+        self._config = config
         self._server = _ReadyServer(config, self._ready)
         self._host = host
         self._port = port
@@ -147,4 +168,4 @@ class ServerThread(threading.Thread):
 
     def run(self) -> None:
         """Run the Uvicorn event loop (called by ``threading.Thread.start``)."""
-        self._server.run()
+        self._server.run(sockets=listening_sockets(self._config, self._config_limits))

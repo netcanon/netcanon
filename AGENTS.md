@@ -49,7 +49,10 @@ Netcanon ships on two platforms.  Both must always be kept at feature parity.
 Docker Hub mirror), `pip install netcanon`, and the Windows MSI are
 all distribution methods, not platforms.  Docker and pip both produce
 a **web-platform** install (the container's entrypoint is
-`uvicorn netcanon.main:app` — same code path as host-installed web);
+`netcanon serve`, which starts uvicorn on `netcanon.main:app` — the same
+application as host-installed web; under the `small` config limits
+`netcanon serve` also asks the system to end connections nobody reads,
+which a server started as `uvicorn netcanon.main:app` does not have);
 the MSI produces a **desktop-platform** install.  None of them require
 their own parity test row; a feature that lands on the web platform
 automatically reaches Docker + pip users on the next release tag.
@@ -167,7 +170,7 @@ mapping below is concrete; audit every applicable row before you run
 | A new naming rule in `_naming_rules()` (`netcanon/migration/device_models.py`), or a change to one | The rule itself lives beside the vendor's codec; give it the set of roles it can name (a role it cannot name is refused at load).  Tests against the vendor's own printed examples, including one whose member number is not 1, in `tests/unit/migration/test_device_models.py`; `ARCHITECTURE.md` "Device models and inventories" if the rule introduces a new idea (a lane, a per-group prefix) |
 | A new place that turns a token into many entries (a range, a keyword for "every", a product of two lists), or a new loop over config lines, in any module under `netcanon/migration/` | Charge it before the entries are made (`limits.charge`) and put the loop through `limits.ticked` -- the Hard Rule on counting has the three parts.  A `range(...)`, a slice of `VLAN_IDS` or a `vlan_id_run(...)` under `codecs/` goes in `RUNS_OF_ENTRIES` in `tests/unit/migration/test_limits.py` with its answer; a text that is refused BEFORE it is made goes in that module's `WIDE` (for a VLAN id list) or gets a test beside the others; `netcanon/migration/codecs/README.md` "Adding a codec" step 4 |
 | A new limit, a changed number, or a new kind in `netcanon/migration/limits.py` | The tables in [`SECURITY.md`](SECURITY.md) "Input Validation — Config Text" and [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) § H (`tests/unit/test_limits_docs_truth.py` fails until they agree); [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) "The job says `refused:`" for a new kind; `Refusal.limit` in `netcanon/models/migration.py`; and for `small`, a measurement in a container shaped like a demo instance, recorded in [`docs/demo-plan/07-budget.md`](docs/demo-plan/07-budget.md) |
-| A new handler that takes config text (a `raw_text` body field, an upload) | Open the limits scope with the server's setting (`with limits_scope(request_limits(request)):`) and answer a `LimitExceeded` in words; add the path to `TAKES_CONFIG_TEXT` in `tests/integration/test_config_limits_api.py`, which finds such handlers by what they take and fails until the new one is there |
+| A new handler that takes config text (a `raw_text` body field, an upload) | Open the SERVER's scope with the server's setting and the request's answer (`with server_scope(request_limits(request), answer=request_answer(request)):`) -- it takes the request's turn where the limits say how many work at once -- and answer a `LimitExceeded` in words, the one raised where the scope is opened included (the request did not get a turn: `refusal_as_http`, or the job `run_translation` makes); add the path to `READS_CONFIG_TEXT` in `_migration_helpers.py` -- a request is counted by its method and path when its headers arrive, before its body is read, and a handler that is not there has every body read first -- and to `TAKES_CONFIG_TEXT` in `tests/integration/test_config_limits_api.py`, which finds such handlers by what they take and fails until the new one is there, is counted at its arrival, takes its turn and answers "busy" in words.  A handler that returns a job returns `job_answer(job, response)`, never the job |
 | A new job-running migration handler in `netcanon/api/routes/migration.py` | Dispatch through `_migration_helpers.run_translation`, never the pipeline directly, and add the path to the parametrised endpoint tests in `tests/integration/test_migration_models_api.py` (`test_every_plan_endpoint_renders_the_same_port_names`, `test_the_operators_port_map_applies_on_every_plan_endpoint`, `test_acknowledged_drops_clear_partial_on_every_plan_endpoint`) — otherwise the same request body renders different port names, or stays `partial` after the operator has decided every port, depending on which endpoint it is posted to.  The first of those alone cannot see it: it posts no port map |
 | A target-profile gains `modules:` (migrates to module-variant shape) | Add its `{vendor}/{model}` key to the canonical allowlist at `tests/fixtures/module_variants.py`.  Both the unit-tier and integration-tier tests import from there; a CI-guard (`test_module_variant_allowlist_shared_with_integration_tier`) enforces the single-source invariant so no manual sync is required. |
 | A new canonical field on `CanonicalIntent` / `CanonicalInterface` / etc. | `docs/adding-a-canonical-field.md` — the MTU wire-through is the reference worked example |
@@ -527,10 +530,47 @@ tests use these exclusively — never CSS classes or element structure.  See
   the public demo's limits it names no setting, because a visitor
   cannot change one.  What a refusal quotes from the config goes to
   the client and NEVER to a log.  Every handler that takes config text
-  opens the scope with the server's own setting
-  (`_migration_helpers.request_limits`): work that opens none runs
-  under `standard`, which on the demo is several times what an
-  instance holds.  The deadline does not stop a renderer; SECURITY.md
+  opens the SERVER's scope with the server's own setting
+  (`limits.server_scope`, `_migration_helpers.request_limits`): work
+  that opens none runs under `standard`, which on the demo is several
+  times what an instance holds.
+  (4) **every limit is for ONE request, and "one request fits" was
+  measured one request at a time.**  Two of the largest requests the
+  demo's limits admit, at once, ended an instance either fitted in --
+  and the sanitise page itself sent two at once.  Under `small` a
+  server therefore works on one request at a time, the turn taken
+  where the scope is opened.  Serialising the WORK was not enough, and
+  the measurement said why, three times: the answer was made after the
+  handler returned, by the framework, at several times its size (a
+  job handler returns `job_answer(...)`, and the turn stays with the
+  request until its answer has gone out); memory a thread freed was
+  kept for that thread (a request with its turn trims first); and a
+  body was read before its request could ask for a turn, so a burst
+  of bodies ended an instance that refused nearly all of them (a
+  request is counted when its HEADERS arrive, in the outermost
+  middleware, and one more than may work and wait is answered there,
+  unread).  Two more of the same kind, each found by a client that
+  did not behave.  **A limit that gives a turn back and keeps the
+  memory has limited nothing**: the turn lent to an answer nobody
+  read was taken back at the deadline and the answer stayed, so four
+  of them ended the instance one at a time -- at its request's
+  deadline an answer that has not gone out is abandoned.  And **"the
+  server took it" is not "it went out"**: a server takes a whole body
+  into its buffer at once, so an answer is handed over a little at a
+  time.  And "the server closed the connection" is not "the connection
+  is closed": a server closes one when what it wrote has been taken,
+  and a client that takes nothing kept megabytes of socket buffer for
+  as long as it stayed -- which only the system can end, so the
+  launchers ask it to (`listening_sockets`).  Read what the CONTAINER
+  holds (`memory.stat`: `sock` is the server's too), not what the
+  process holds.  Measure a memory limit in a container shaped
+  like the target, with requests AT ONCE, with clients that leave,
+  stall and do not read, and many times over -- an
+  instance does not come back down, and four rounds do not show where
+  it levels off.  And say busy as busy: a request that waited for its
+  turn and then ran out of time was refused as slow, with advice to
+  run a server that allows more time.
+  The deadline does not stop a renderer; SECURITY.md
   says so, and a test pins that the document says no more than the
   code does.  Guarded by `tests/unit/migration/test_limits.py` (each
   limit; every codec's parse stopped at a deadline it has passed;

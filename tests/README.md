@@ -176,13 +176,34 @@ Two things follow.
   limits_scope("small"):`, or a `Limits` of its own made with
   `dataclasses.replace` — a few thousand entries are enough to pass a
   limit of a few thousand, and nothing has to be large.
+* **`limits_scope` never waits; `server_scope` can.**  Under `small` a
+  server works on one request at a time, and the place is the
+  PROCESS's: a test that holds it (a thread inside
+  `server_scope("small")`) makes every `small` server in that test
+  process wait, which is how the tests of "busy" work.  Such a test
+  lets go in a `finally`, shows waiting with an event and never a
+  sleep, and ends with `limits.in_flight() == (0, 0)`.
+* **A place is the process's too** (`limits.places()`): under `small`
+  the application counts a request that reads config text when its
+  headers arrive.  A test fills the places with
+  `limits.Answer().arrived("small")` and gives each back with
+  `.sent()` in a `finally`; one that needs a client which stalls,
+  leaves or does not read speaks to a real server over a socket
+  (`_on_a_socket` in `tests/integration/test_config_limits_api.py`)
+  or plays the server itself (`_Wire`, same module), and ends with
+  `limits.places() == 0`.
 
 Where the limits themselves are tested: `tests/unit/migration/test_limits.py`
 (the mechanism, each limit, the measured texts, the deadline, and three
 rules read from the source), `tests/unit/test_limits_docs_truth.py`
 (every number a document prints), `tests/integration/test_config_limits_api.py`
 (the refusal on every HTTP surface; every handler that takes config
-text), `tests/unit/test_cli.py` (the command line),
+text; one request at a time under `small`; a request counted before
+its body is read; an answer nobody reads; the proofs of
+`deploy/VERIFY.md`, run from that file),
+`tests/integration/test_job_answer.py` (a job's answer, written a piece
+at a time, is the framework's byte for byte), `tests/unit/test_cli.py`
+(the command line),
 `tests/desktop/test_config_limits_desktop.py` and
 `test_preferences_dialog.py` (the preference, the control, the embedded
 server) and `tests/e2e/test_config_limits_e2e.py` (the sentence as the

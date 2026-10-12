@@ -76,7 +76,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "MAX_EVIDENCE_LINES", "MAX_MISSING_PORTS", "MAX_NOTES", "MAX_NOTE_LENGTH",
-    "detection_vendors", "propose_deployment",
+    "detection_vendors", "propose_deployment", "unread_proposal",
 ]
 
 #: The most evidence lines a proposal carries.  A stack of the largest
@@ -167,6 +167,26 @@ def _mode_for(family: FamilyDef, fabric: str) -> tuple[str | None, str]:
     return None, (
         f"The config is {state}; {family.display()} has more than one such "
         f"mode ({', '.join(wanted)}) and the config does not say which."
+    )
+
+
+def unread_proposal(codec: CodecBase, refusal: LimitExceeded) -> DeploymentProposal:
+    """The answer to a request that was refused before any of the
+    config was read: the server was busy, and the request's time ran
+    out while it waited its turn.
+
+    It proposes nothing, and its one note is the refusal -- why, and
+    that the same request can be sent again.  Like every answer of
+    this module it is an answer and not an error.
+
+    Args:
+        codec: The source codec the request named.
+        refusal: What was raised where the request's scope was
+            opened.
+    """
+    return DeploymentProposal(
+        vendor=codec.capabilities.vendor_id,
+        notes=[f"Nothing was proposed: {refusal}"],
     )
 
 

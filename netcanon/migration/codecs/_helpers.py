@@ -337,6 +337,39 @@ def _parse_vlan_list(text: str) -> list[int]:
     return result
 
 
+def sole_vlan_id(text: str) -> int | None:
+    """The id an id-list names when it names exactly ONE (``10``,
+    ``10-10``), and ``None`` when it names none or several.
+
+    What ``_parse_vlan_list(text)`` gives as a list of one, found
+    without making the list and without counting it.  For a pass
+    that only has to know whether a ``vlan <list>`` line opens a
+    stanza of one VLAN, on a line that another pass expands: a line
+    expanded twice is counted twice, and the number a refusal prints
+    is then twice what the config names.
+    """
+    found: int | None = None
+    for part in text.split(","):
+        part = part.strip()
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            try:
+                lo_i, hi_i = int(lo.strip()), int(hi.strip())
+            except ValueError:
+                continue
+            lo_i, hi_i = max(1, lo_i), min(4094, hi_i)
+            if lo_i > hi_i:
+                continue
+            if lo_i != hi_i or found is not None:
+                return None
+            found = lo_i
+        elif part.isdigit():
+            if found is not None:
+                return None
+            found = int(part)
+    return found
+
+
 #: Leading keywords in the Cisco / Arista / NX-OS ``switchport trunk
 #: allowed vlan`` grammar that make the line RELATIVE to the running list
 #: rather than a fresh assignment.  ``show running-config`` emits a long

@@ -481,7 +481,8 @@ the caps; no MAC-shaped string anywhere in a proposal) and
 `codec.py` (`probe`), `parse.py` and `render.py` under
 `netcanon/migration/codecs/`, `netcanon/services/migration_detect.py`,
 the probe and prompt patterns under `netcanon/definitions/library/`,
-`netcanon/migration/limits.py`
+`netcanon/migration/limits.py`, `netcanon/api/routes/_migration_helpers.py`
+(a request's scope, its turn and its answer)
 
 A config is whatever was pasted.  `POST /api/v1/migration/detect`, `/plan`,
 the per-pane plan endpoints and `POST /api/v1/sanitize` hand it to code
@@ -642,7 +643,9 @@ in the desktop application; `--limits` on the command line.  The default is
 `standard` on both platforms.  `unlimited` is no limit and no deadline.  A
 value that is none of the four stops the server at startup: it is not read
 as "no limit".  Work that asks for no limits -- a tool, a test, a caller
-added next year -- runs under `standard`.
+added next year -- runs under `standard`.  The set also says how many
+requests a server works on at once: one under `small`, and no limit under
+the others ("Requests at once", below).
 
 A refusal is a result and not a fault.  The endpoints that return a job
 answer 200 with a `failed` job whose `error` begins `refused:` and whose
@@ -652,7 +655,11 @@ for an upload over its byte cap; `detect-deployment` still proposes the
 device and says in a note why the proposal was not checked against the port
 names; the command line exits 2.  What a refusal quotes from the config --
 the range that passed the limit, a port name -- goes to the client and never
-to a log: the log line has the name of the limit and the counts.
+to a log: the log line has the name of the limit and the counts.  A request
+that did not get a turn ("Requests at once", below) is refused the same
+way, with `at_once` as the limit -- except that the sanitiser and `detect`
+answer it 503 with `Retry-After`, not 413: nothing was too large, nothing
+of the config was read, and the same request can be sent again.
 
 What the texts measured above do now:
 
@@ -686,6 +693,110 @@ count, and when a stage starts -- a request that is out of time does not
 begin another parse or another render.  Past it the request is refused like
 any other, with `seconds` as the limit.
 
+**Requests at once.**  Every limit above is for ONE request, and requests
+at once add up: under `small`, two of the largest requests at once ended a
+256 MiB instance that either of them fitted in.  So under `small` -- and
+under no other set -- a server works on one request that reads config text
+at a time.  Every handler that takes config text opens the server's scope
+(`limits.server_scope`): the seven endpoints that return a job, the
+sanitiser, `detect` and `detect-deployment`; a test finds such handlers by
+what they take and fails for one that does not.  The scope takes the
+request's turn:
+
+* A request that finds the place taken waits, in order of arrival.  Its
+  deadline runs from when it ARRIVED (below), so the wait is time it has
+  spent, and a request still in the line when its deadline passes is
+  refused in words that say the server was busy and to send it again.
+  So is a request that got its turn after a wait and then ran out of
+  time: it is told how long it waited, and is answered as busy --
+  `at_once` in a job, 503 with `Retry-After` from the sanitiser and
+  `detect` -- and not as slow, because nothing was slow but the server.
+  (A request that did not wait and ran out of time is refused for its
+  time, as above.)
+* At most 2 requests wait.  One more is turned away at once, in the same
+  words: a request that waits holds a thread of the pool the pages are
+  served from, and its body.
+* **A request is counted when its headers arrive, before its body is
+  read.**  A body is memory, and it was read before the request could ask
+  for its turn, so requests that arrived together added up however few of
+  them were let work.  The application's outermost middleware now counts
+  a request to any of those handlers, by its method and path, when its
+  headers are in.  There are 3 places: as many as may work and wait.  One
+  more request is answered there and then -- 503 with `Retry-After`, the
+  busy sentence -- and its body is never read, whichever of the handlers
+  it was for (the seven that return a job answer 503 here too: there is no
+  job to make of a request nobody read).  The test that finds the
+  handlers by what they take fails for one that is not counted.  A
+  `GET`, `/health` and the pages are never counted.
+* **A request has its time from its arrival, for all of it.**  A request
+  that has a place and has sent no body holds the place, and a client
+  that sends no more would hold it for as long as it kept the
+  connection.  What bounds it is the request's deadline, which runs from
+  when its headers arrived: a body that has not arrived by then is
+  answered 408, in words, and the connection is closed.  The place comes
+  back on every way out -- an answer, a refusal, an exception, a client
+  that left while sending, waiting or reading.
+* The turn is given back on every way out -- an answer, a refusal, an
+  exception, a client that went away -- and is not given back before the
+  request's answer has gone out, because an answer is memory too.  A
+  client that does not read its answer cannot keep the turn: past the
+  request's deadline it is taken back for whoever is waiting.
+* **An answer nobody reads is abandoned at the request's deadline.**
+  Taking the turn back left the answer where it was -- tens of megabytes
+  that no client was reading -- and four such answers, one after the
+  other, ended an instance.  At the deadline an answer that has not gone
+  out is let go: nothing more of it is sent, what was held for it is
+  freed, and the connection is closed.  The log has a line for each, with
+  byte counts and a path and nothing of the request.  So **under `small`
+  an answer has the request's 20 seconds to be read in**.  A client that
+  reads, however slowly, is not cut inside them; the largest answer
+  `small` admits, read at a megabyte a second, is not read in them and is
+  cut.  To make "gone out" mean it, an answer is handed to the server 64
+  KiB at a time: a server takes whatever it is handed into its buffer at
+  once.
+* **The connection of a client that takes nothing is ended by the
+  system.**  A server closes a connection once what it has written has
+  been taken; a client that takes nothing keeps the connection, and
+  what the system holds for it is charged to the server.  Nothing in
+  the application can end such a connection, so `netcanon serve` -- the
+  entry point of the Docker image -- starts the server on a socket that
+  asks the system to: `TCP_USER_TIMEOUT`, set on the listening socket
+  and so on every connection accepted from it, to the seconds a request
+  may take.  A client that takes something, however little, starts the
+  time again.  This is Linux's option: on another system nothing is
+  set.  And it is the launcher's doing: **a server started another way
+  (`uvicorn netcanon.main:app`) binds its own socket and does not have
+  it** ("Not bounded", below).  The desktop application's embedded
+  server is started the same way as `netcanon serve`, on a system that
+  has no such option.
+* The wait is on the worker thread a handler runs on, never on the event
+  loop: `/health`, the pages, and every endpoint that reads no config text
+  are not behind it.
+* Work that is not a request to a server -- the command line, a tool, a
+  caller of the library -- takes no turn and never waits.
+
+`standard`, `large` and `unlimited` limit no requests at once.  The desktop
+application runs `standard`, and one user at a desktop has nobody to wait
+behind; on a server it is the operator who knows the machine and how many
+use it, and who chooses the set.
+
+Two things were found by measuring this in such a container, and neither
+is a limit.  **An answer is written a piece at a time.**  Left to the
+framework, a job is made into its answer in five passes (the model to a
+dict, the dict validated into a second model, that to JSON-ready values,
+those to a string, the string to bytes), and a job's validation report has
+a path for every membership: the answer to the largest job `small` admits
+is 38 MB, and making it cost more than the translation.  The job is now
+written straight to JSON, a field or a run of a long list at a time, under
+every set; the bytes and the `Content-Length` are the ones the framework
+sent, and a test compares the two job by job.  **Freed memory is handed
+back.**  The C library keeps what a thread freed for that thread, and a
+server runs its requests on whichever thread is idle, so requests in turn
+on different threads left the process holding what all of them had used.
+Under a set that limits requests at once, a request that has taken its
+turn first hands freed memory back to the system (`malloc_trim`, on Linux
+with glibc; nothing elsewhere).
+
 **What the deadline does not stop.**  A handler here is a thread, and a
 thread cannot be stopped from outside; only work that looks at the clock
 stops.  A renderer does not look.  Neither does a transform between the
@@ -698,38 +809,85 @@ What bounds a renderer is the counts: it writes a tree that passed them.
 
 **Not bounded, stated once:**
 
-* **Requests in flight.**  Every limit is for one request.  Several at once
-  multiply all of the above, and nothing counts them.  The sanitise page
-  itself sends two requests at once, the audit and the output.
+* **Requests in flight, under every set but `small`.**  Every limit is for
+  one request.  Under `standard`, `large` and `unlimited` several at once
+  multiply all of the above, and nothing counts them.
+* **Connections, under every set.**  Nothing in the application limits how
+  many connections a client opens or how long it keeps one.  Under
+  `small` what a connection can make the server hold is bounded as
+  above -- no body is read without a place, a body has the request's
+  seconds to arrive, an answer is abandoned at the deadline -- and under
+  `netcanon serve` on Linux the system ends the connection itself.
+  Measured in a 256 MiB container so started: 400 clients that asked for
+  the migrate page and read nothing took the instance to 103 MB; forty of
+  the largest answers one after the other, none of them read, to 198 in one
+  run and 206 in another.
+  **Without the system's part** -- a server started another way
+  (`uvicorn netcanon.main:app`), or on a system with no such option -- an
+  abandoned answer's connection lasts until its client lets go, with
+  about 3 MB of socket buffer charged to the server: 21 of them were
+  all the memory the instance had, and it was gone after the next.  Under the
+  other sets none of this applies: every body is read whole, and an
+  answer nobody reads is kept whole.  What bounds connections is whatever
+  stands in front, or the server's own limit on them.
+* **A request whose client has gone is worked on all the same.**  A thread
+  cannot be stopped, and a request keeps its place until its work is over:
+  thirty clients that send a translation and leave hold the three places
+  for the seconds three translations take, and a request sent in those
+  seconds is told that the server is busy.
+* **What the process keeps.**  Freed memory is not all handed back: after
+  ten or more rounds of the largest requests an instance that idled at 84
+  MB holds 148 to 190 at rest.  The next request uses it again, so the most
+  an instance reaches stops rising -- each request of the demo's table was
+  sent until it had, or the table says that it had not -- but it stops
+  high ("The public demo", below).
 * **The size of an answer.**  A job's validation report has a path for
   every membership, so a million memberships translated to a target that
-  reports each as unsupported are an answer of 188 MB under `standard`, and
-  50,000 are 38 MB under `small`.
+  reports each as unsupported are an answer of 188 MB under `standard`.
+  Under `small` the largest answer is 38 MB, for the text that reaches
+  every limit at once: its 50,000 memberships are 9.5 MB of that, and the
+  static routes that fill its two megabytes are most of the rest.
 * **Records that no limit counts**: static routes, addresses, users, DHCP
-  pools.  They are bounded by the cap on the text and by nothing else.  Two
-  megabytes of static routes cost 65 to 95 MB to translate, by target, and
-  about 100 MB to sanitise.
+  pools.  They are bounded by the cap on the text and by nothing else.  In
+  the container, two megabytes of static routes took an instance to
+  198 MB translated two at once, and to 156 MB sanitised.
 * **A renderer, a transform or one call into C that runs long**, as above.
 * **Linux.**  The megabytes in this section are a Windows process's, except
   where a container is named.
 
 **The public demo** runs `small`, in a container of 256 MiB and half a CPU
-for each visitor, behind a proxy that takes a body of two megabytes and
-waits 30 seconds.  Measured in such a container
-([`docs/demo-plan/07-budget.md`](docs/demo-plan/07-budget.md)): the text
-built to reach every limit at once is translated in two seconds with the
-instance at 205 MB, and sanitised with it at 240 MB.  Two such requests at
-once end the instance, as one paste did before; a visitor can end their own
-sandbox and cannot reach another's.
+for each visitor, started by `netcanon serve`, behind a proxy that takes
+a body of two megabytes and waits 30 seconds.  Measured in such a
+container, each request sent again and again until the instance's peak
+had stopped rising or sixty times
+([`docs/demo-plan/07-budget.md`](docs/demo-plan/07-budget.md) has every
+row): the text built to reach every limit at once is translated in two
+seconds, and the instance reaches 169 MB the first time and 215 MB of
+its 268 after 34 times; sanitised as the page does it, 188 MB.  Three such
+translations at once take turns, and reach 233 MB; of twenty at once
+seventeen are answered 503 unread, and the instance reaches 237; three
+sanitise requests at once and then ten translations at once, alternating
+28 times, 230.  None ends the instance.  Before requests took turns,
+three translations at once ended it the first time; with turns, and
+before a request was counted at its arrival and an unread answer let go,
+the fourth burst of twenty ended it, and so did the fourth answer nobody
+read.  The peaks are high, and they are the size of one request and of
+what the process keeps, not of how many requests arrive.  What is left
+is in the list above; a visitor can still end their own sandbox, with
+connections enough, and cannot reach another's.
 
 A deployment that takes text from people it does not trust should still put
 a request timeout and a memory limit in front of the application - one that
 stops the WORKER, since a limit that only frees the caller leaves the work
-running - and a limit on requests in flight.  The limits here bound what one
-request can ask for; they are not a wall round the process.
+running - and a limit on connections.  Under any set but `small` it should
+limit requests in flight too: there nothing turns a burst away unread, and
+nothing lets an answer go that nobody reads.  The limits here bound what
+one request can ask for, and under `small` how many work at once and for
+how long one may be answered; they are not a wall round the process.
 
 The control is three kinds of test (`tests/unit/migration/test_limits.py`,
-`tests/integration/test_config_limits_api.py`).  Each limit has a text
+`tests/integration/test_config_limits_api.py`,
+`tests/integration/test_job_answer.py`).  Each limit has a text
 under it that is translated as it is with no limit at all, and one over it
 that is refused before what it asks for is made.  Completeness is checked
 by experiment -- every codec's parse stops at a deadline it has passed,
@@ -737,6 +895,13 @@ every line of every committed capture is walked by a loop that looks at the
 clock, a tree whose entries nothing counted is still refused -- and by
 reading the code: every loop over the lines of a config, every `range(...)`
 in a module under `codecs/`, every broad exception handler on the way.
+Requests at once are tested with an event the first request holds, and no
+sleep: the second is seen in the line, then seen to run; the refusal of a
+request whose time passed in the line is read on every surface; the turn
+is seen to come back after an exception, a refusal and a client that left.
+The place a request is given at its arrival, the body that does not come
+and the answer nobody reads are tested against clients that do those
+things, over a real socket, and against a server the test plays itself.
 `tests/unit/test_limits_docs_truth.py` holds the numbers in this document
 to the code's.
 
@@ -1110,7 +1275,7 @@ constrains the *application* (the container).
 | Banner / comment text not sanitised | Operator-submitted bug reports may leak banner content | Documented | Sanitiser is canonical-model-driven; banner text is parse-and-ignored.  See `BUG_REPORTING.md`; hand-redact banners before submission. |
 | DNS-name in an UNMODELLED host region | An FQDN inside a Tier-3 / banner / comment region the canonical model doesn't type as a host passes through verbatim | Documented (narrowed) | The modelled host fields (NTP / syslog / SNMP-trap / RADIUS) now redact an FQDN target to `host-N.example.test`; only hosts the model can't see (Tier-3 / banner text, itself parse-and-ignored) remain.  Hand-redact those before submission. |
 | Backup artifacts (`configs/`) stored plaintext | Fetched device configs contain device secrets (`$9$`/type-7/`$6$`, SNMP/RADIUS/IKE) written verbatim | Yes (deliberate) | A backup must be the real, complete, diffable config; recommended at-rest control is an OS-encrypted volume (covers `configs/` + the key in one layer; offline-threat only).  See "Credential Storage → Backup artifacts" |
-| Translation requests in flight are not limited | Every config limit is for one request; several large ones at once multiply the memory, and nothing counts them (the backup engine has such a limit; the translator has none) | Accepted | A deployment that takes text from people it does not trust puts a limit on requests in flight, and a memory limit that stops the worker, in front of the application.  See "Input Validation — Config Text" |
+| Translation requests in flight are limited only under `small` | Every config limit is for one request.  Under `small` (the public demo) one request that reads config text works at a time and 2 may wait; under `standard`, `large` and `unlimited` several large ones at once multiply the memory, and nothing counts them.  Under `small` a request is also counted before its body is read and an answer nobody reads is let go at the request's deadline; under the other sets every body is read and every answer kept.  Under every set nothing limits how many connections are opened and kept | Accepted | A deployment that takes text from people it does not trust puts a limit on connections, a memory limit that stops the worker and -- unless it runs `small` -- a limit on requests in flight, in front of the application.  See "Input Validation — Config Text" |
 | A renderer is not stopped by the request's deadline | The deadline is looked at by parsers.  A request whose time runs out in a renderer, a transform or one call into C runs to its end, and its job reads as any other | Accepted | A thread cannot be stopped from outside.  What bounds a renderer is the counts on the tree it is handed.  See "Input Validation — Config Text" |
 | The size of an answer, and records no limit counts | A job's validation report grows with the memberships it reports (188 MB at the `standard` limit, to a target that reports each as unsupported); static routes and addresses are bounded only by the cap on the text | Documented | See "Input Validation — Config Text" |
 | Backup-engine resource exhaustion (many concurrent jobs) | The per-job worker pool caps a *single* job at `MAX_BACKUP_CONCURRENCY` (10), but several schedules firing together — or a schedule firing during a manual run — each spin up their own pool, so the total SSH/NETCONF session count was unbounded (N jobs x per-job cap), able to exhaust threads / file descriptors on the backup host | No (mitigated) | A process-wide `BoundedSemaphore` (`netcanon/services/backup_runner.py`) caps the *sum* of in-flight device collections across all concurrent jobs at `MAX_GLOBAL_BACKUP_CONCURRENCY` (defaults to the per-job cap, so single-job behaviour is unchanged); an over-limit worker blocks (back-pressure) until a slot frees, never failing.  Raise via `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`.  The 500-device per-request cap + opt-in egress allow-list bound the surface further.  (blind audit `3ec11f3`, r7) |

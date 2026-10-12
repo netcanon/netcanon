@@ -81,6 +81,16 @@ class TestDesktopAppConstruction:
 
         ServerThread.assert_called_once()
 
+    def test_server_is_told_the_config_limits(self, app, mock_server, mock_settings):
+        """The embedded server is started on the socket its config
+        limits ask for, as ``netcanon serve`` is: it has to be told
+        which limits those are."""
+        from netcanon_desktop.app import ServerThread
+
+        _, kwargs = ServerThread.call_args
+        assert kwargs["config_limits"] is mock_settings.config_limits
+        assert (kwargs["host"], kwargs["port"], kwargs["log_level"]) == ("127.0.0.1", 8765, "warning")
+
     def test_window_created_with_server_url(self, app, mock_window, mock_server):
         from netcanon_desktop.app import WebViewWindow
 

@@ -345,20 +345,27 @@ class MigrationJobStatus(str, Enum):
 
 class Refusal(BaseModel):
     """Why a job was refused: the config asks for more than the server's
-    limits allow, or the request ran out of time
+    limits allow, the request ran out of time, or the server was busy
+    with other requests for as long as this one may take
     (:mod:`netcanon.migration.limits`).
 
     The job is ``failed`` and its ``error`` says the same in words.  A
     client that has to tell "too large for this server" from "could
-    not be read" reads this, not the words.
+    not be read", or either from "busy: send it again", reads this,
+    not the words.
 
     Attributes:
         limit: Which limit: ``vlan_ids``, ``memberships``, ``ports``,
-            ``interfaces``, ``copies``, ``words``, ``text`` or
-            ``seconds``.
+            ``interfaces``, ``copies``, ``words``, ``text``,
+            ``seconds``, or ``at_once`` -- the server works on a set
+            number of requests at once, and this one did not get a
+            turn inside the time it may take.  Nothing of its config
+            was read; the same request can be sent again.
         what: That limit in words.
         asked: How many the config asked for when counting stopped;
-            for ``seconds``, how long the request had run.
+            for ``seconds``, how long the request had run; for
+            ``at_once``, how many requests were at work or waiting,
+            this one among them.
         exact: Whether ``asked`` is the whole number.  ``False`` for a
             count made before the entries were: at least this many.
         cap: The limit.
@@ -370,7 +377,7 @@ class Refusal(BaseModel):
 
     limit: Literal[
         "vlan_ids", "memberships", "ports", "interfaces", "copies", "words",
-        "text", "seconds",
+        "text", "seconds", "at_once",
     ]
     what: str
     asked: int | float

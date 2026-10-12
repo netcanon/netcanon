@@ -252,13 +252,26 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     # building the app on the refusal path.
     import uvicorn
 
-    uvicorn.run(
+    from .api.routes._migration_helpers import listening_sockets
+
+    # What `uvicorn.run` does for one worker, with one thing more: under
+    # limits that say how many requests work at once, the server is
+    # started on a socket on which the system ends a connection whose
+    # client takes nothing (see listening_sockets).  Under any other
+    # limits it binds its own, as ever.
+    config = uvicorn.Config(
         "netcanon.main:app",
         host=settings.host,
         port=settings.port,
         log_level=settings.log_level,
     )
-    return 0
+    server = uvicorn.Server(config)
+    try:
+        server.run(sockets=listening_sockets(config, settings.config_limits))
+    except KeyboardInterrupt:
+        pass
+    # 3 is uvicorn's own exit status for a server that did not start.
+    return 0 if server.started else 3
 
 
 if __name__ == "__main__":

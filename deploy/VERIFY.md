@@ -418,11 +418,222 @@ docker inspect -f '{{.State.Status}} {{.State.OOMKilled}}' <id>   # expected: ru
 ```
 
 An image without the limits is killed by the first of these, or answers
-`completed` or `partial` to it (one from before the limits, given the same
-variable, was killed: `exited true`).  Measured with the limits, in a
-container with an
-instance's own: the three are refused in under a tenth of a second with the
-instance at 85–91 MB of its 256, and the fourth is translated.
+`completed` or `partial` to it (the release before the limits, given the
+same variable, was killed by the first and, started again, by the second:
+`exited true`).  Measured with the limits, in a container with an
+instance's own, each sent five times: the three are refused in 0.05 seconds
+or less with the instance at 86–94 MB of the 268 that 256 MiB are, and the
+fourth is translated.
+
+### 15. Pastes at once take turns, and do not add up [O]
+
+Every limit of proof 14 is for one request.  Two of the largest requests
+`small` admits, at once, ended an instance that either of them fitted in;
+so under `small` an instance works on one request that reads config text at
+a time, and a second waits its turn.  An image built before that runs them
+together, and says nothing: by behaviour again, against one freshly
+assigned instance (`<ip>` and `<key>` as in proof 14).  Three at once, of
+the text that reaches every limit of `small`, in a body the proxy would
+take:
+
+```bash
+IP=<ip> KEY=<key> python3 - <<'PY'
+import json, os, threading, urllib.request
+
+# every limit of `small` at once: 256 trunks that allow every VLAN, 195 VLANs,
+# 2,244 one-line interfaces, and static routes up to the proxy's two megabytes
+text = "hostname T\n!\n" + "".join(f"vlan {v}\n name V{v}\n!\n" for v in range(2, 197)) + "".join(
+    f"interface GigabitEthernet{i // 48 + 1}/0/{i % 48 + 1}\n switchport mode trunk\n"
+    " switchport trunk allowed vlan all\n!\n" for i in range(256)) + "".join(
+    f"interface Gi{i + 100}\n" for i in range(2244)) + "".join(
+    f"ip route 10.{a >> 16}.{a >> 8 & 255}.{a & 255} 255.255.255.255 192.0.2.1\n"
+    for a in range(1, 38001)) + "end\n"
+body = json.dumps({"source": "cisco_iosxe_cli", "target": "opnsense", "raw_text": text}).encode()
+said = []
+
+def ask():
+    req = urllib.request.Request(
+        f"http://{os.environ['IP']}:8000/api/v1/migration/plan", data=body,
+        headers={"Authorization": "Bearer " + os.environ["KEY"], "Content-Type": "application/json"})
+    resp = urllib.request.urlopen(req, timeout=30)
+    said.append(resp.headers["X-Netcanon-Job-Status"])
+    resp.read()
+
+threads = [threading.Thread(target=ask) for _ in range(3)]
+for t in threads: t.start()
+for t in threads: t.join()
+print(len(body) < 2_000_000, sorted(said))
+PY
+# expected:
+#   True ['partial', 'partial', 'partial']
+
+docker exec <id> cat /sys/fs/cgroup/memory.events   # expected: oom_kill 0
+docker inspect -f '{{.State.Status}} {{.State.OOMKilled}}' <id>   # expected: running false
+```
+
+(`partial`: the target reports what it cannot carry, which is this text's
+answer whoever sends it.)  An image without the turns loses all three
+connections and is `exited true`: measured, both for the release before
+the limits and for an image with the limits of proof 14 and no turns.
+Measured with them, in a container with an instance's own limits and the
+two-megabyte text of the budget's table: the three
+are answered one after the other in 6 to 8 seconds, with the
+instance at 189 MB of its 268 the first time and at 233 MB after
+30 such rounds, by when it had stopped rising.
+
+### 16. A burst of pastes is turned away before it is read [O]
+
+Proof 15 sends three at once, which is as many as an instance takes: one
+at work and two waiting.  A request's body is memory before the request
+can ask for its turn, and bodies that arrived together used to add up
+however few of the requests were let work: twelve at once could end an
+instance, and twenty did.  So an instance counts a request that reads
+config text when its HEADERS arrive, and one that finds the three places
+taken is answered 503 at once, its body unread.  An image built before
+that reads every body first.  Twenty at once, of the request of proof 15
+(`<ip>` and `<key>` as in proof 14):
+
+```bash
+IP=<ip> KEY=<key> python3 - <<'PY'
+import json, os, threading, time, urllib.error, urllib.request
+
+text = "hostname T\n!\n" + "".join(f"vlan {v}\n name V{v}\n!\n" for v in range(2, 197)) + "".join(
+    f"interface GigabitEthernet{i // 48 + 1}/0/{i % 48 + 1}\n switchport mode trunk\n"
+    " switchport trunk allowed vlan all\n!\n" for i in range(256)) + "".join(
+    f"interface Gi{i + 100}\n" for i in range(2244)) + "".join(
+    f"ip route 10.{a >> 16}.{a >> 8 & 255}.{a & 255} 255.255.255.255 192.0.2.1\n"
+    for a in range(1, 38001)) + "end\n"
+body = json.dumps({"source": "cisco_iosxe_cli", "target": "opnsense", "raw_text": text}).encode()
+served, refused, other = [], [], []
+
+def ask():
+    req = urllib.request.Request(
+        f"http://{os.environ['IP']}:8000/api/v1/migration/plan", data=body,
+        headers={"Authorization": "Bearer " + os.environ["KEY"], "Content-Type": "application/json"})
+    try:
+        resp = urllib.request.urlopen(req, timeout=30)
+        resp.read()
+        (served if resp.headers["X-Netcanon-Job-Status"] == "partial" else other).append(time.monotonic())
+    except urllib.error.HTTPError as err:
+        words = json.load(err).get("detail", "")
+        busy = err.code == 503 and err.headers.get("Retry-After") and words.startswith(
+            "Refused: the server works on one config at a time")
+        (refused if busy else other).append(time.monotonic())
+    except OSError:
+        other.append(time.monotonic())
+
+threads = [threading.Thread(target=ask) for _ in range(20)]
+for t in threads: t.start()
+for t in threads: t.join()
+print(len(served), len(refused), len(other), max(refused, default=0) < min(served, default=0))
+PY
+# expected:
+#   3 17 0 True
+
+docker exec <id> cat /sys/fs/cgroup/memory.events   # expected: oom_kill 0
+docker inspect -f '{{.State.Status}} {{.State.OOMKilled}}' <id>   # expected: running false
+```
+
+Three are translated in turn; seventeen are told, in words, that the server
+was busy and to send the request again -- each of them before the first
+translation came back (the last `True`).  Measured in a container with an
+instance's limits, 44 such bursts one after the other: the instance was at
+185 MB of its 268 after the first and at 237 after the last, by when it had
+stopped rising; the seventeen came back inside 0.05 seconds in 34 of the
+bursts and inside 2.1 seconds in the others, which ran while the machine
+was busy with other work.  The image before this, which reads every body
+first: 266 MB after the first burst, at its limit after the second, and
+killed in the fourth (`exited true`).
+
+### 17. An answer nobody reads is let go [O]
+
+The answer to the request of proof 15 is 36 MB, and an instance keeps a
+request's turn until its answer has gone out.  A client that never reads
+would keep both for as long as it kept its connection; so the turn was
+taken back at the request's deadline -- and the answer stayed, and four
+such answers, each sent just before the last one's deadline, ended an
+instance.  At the deadline of a request (20 seconds from its arrival) an
+answer that has not gone out is now abandoned: no more of it is sent, what
+was held for it is let go, and the connection is closed.  By behaviour
+(`<ip>` and `<key>` as in proof 14); it takes a minute and a half:
+
+```bash
+IP=<ip> KEY=<key> python3 - <<'PY'
+import json, os, socket, time, urllib.request
+
+N, GAP = int(os.environ.get("N", "4")), float(os.environ.get("GAP", "19.5"))
+HOST, KEY = os.environ["IP"], os.environ["KEY"]
+
+def plan(text, target):
+    return json.dumps({"source": "cisco_iosxe_cli", "target": target, "raw_text": text}).encode()
+
+text = "hostname T\n!\n" + "".join(f"vlan {v}\n name V{v}\n!\n" for v in range(2, 197)) + "".join(
+    f"interface GigabitEthernet{i // 48 + 1}/0/{i % 48 + 1}\n switchport mode trunk\n"
+    " switchport trunk allowed vlan all\n!\n" for i in range(256)) + "".join(
+    f"interface Gi{i + 100}\n" for i in range(2244)) + "".join(
+    f"ip route 10.{a >> 16}.{a >> 8 & 255}.{a & 255} 255.255.255.255 192.0.2.1\n"
+    for a in range(1, 38001)) + "end\n"
+body = plan(text, "opnsense")
+head = (f"POST /api/v1/migration/plan HTTP/1.1\r\nHost: {HOST}:8000\r\nAuthorization: Bearer {KEY}\r\n"
+        f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n").encode()
+
+unread = []
+for _ in range(N):                      # N of the largest answers, never read,
+    sock = socket.socket()              # each sent just before the last one's deadline
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 65536)
+    sock.settimeout(60)
+    sock.connect((HOST, 8000))
+    sock.sendall(head + body)
+    unread.append(sock)
+    time.sleep(GAP)
+
+def ask(path, data=None):
+    req = urllib.request.Request(f"http://{HOST}:8000{path}", data=data, headers={
+        "Authorization": "Bearer " + KEY, "Content-Type": "application/json"})
+    return json.load(urllib.request.urlopen(req, timeout=60))
+
+small = ask("/api/v1/migration/plan", plan("hostname A\n", "juniper_junos"))["status"]
+alive = ask("/health")["status"] == "ok"
+
+cut = []
+for sock in unread:                     # read at last: part of an answer, and the end
+    data = b""
+    while True:
+        try:
+            piece = sock.recv(1 << 20)
+        except OSError:                 # ended by the system, after what it had sent
+            break
+        if not piece:
+            break
+        data += piece
+    top, _, rest = data.partition(b"\r\n\r\n")
+    length = int([line.split(b":")[1] for line in top.split(b"\r\n") if line.lower().startswith(b"content-length")][0])
+    cut.append(top.startswith(b"HTTP/1.1 200") and len(rest) < length)
+print(alive, small, all(cut))
+PY
+# expected:
+#   True completed True
+
+docker exec <id> cat /sys/fs/cgroup/memory.events   # expected: oom_kill 0
+docker inspect -f '{{.State.Status}} {{.State.OOMKilled}}' <id>   # expected: running false
+```
+
+(`N` and `GAP` can be set in the environment; the defaults are the proof.
+The last `True`: each of the answers was cut short of the length it
+declared.  A server's log has a line for every answer it abandons, with
+byte counts; an instance keeps no log, so there is nothing to count
+there.)  Measured in a container with an instance's limits and the text
+of the budget's table, whose answer is 38 MB: the image before this was at
+172, 215 and 254 MB of its 268 after the first three and was killed at the
+fourth (`exited true`); with it, eight in a row left the instance at 186 MB
+and forty at 198 in one run and 206 in another, alive.  A client that reads
+is not cut: an answer has the
+request's 20 seconds to be read in, and the largest there is, read at a
+megabyte a second, is not read in that time -- which is the price of
+this, and is said to operators in `SECURITY.md`.  The instance's part is
+to stop sending and let the answer go; the connection itself is ended by
+the system, which the image's entry point asks for on the socket it
+listens on.
 
 ---
 
@@ -431,7 +642,7 @@ instance at 85–91 MB of its 256, and the fourth is translated.
 The demo does not go (or stay) live on faith:
 
 - **All CI tests green**, and
-- **Proofs 1–14 executed on the production host**, with their raw output
+- **Proofs 1–17 executed on the production host**, with their raw output
   committed to `VERIFY_RESULTS_<date>.md`,
 - **re-run on every image-digest bump** — a new pin means a fresh full pass.
 

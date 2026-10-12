@@ -43,6 +43,7 @@ from .api.routes import migration as migration_router
 from .api.routes import sanitize as sanitize_router
 from .api.routes import schedules as schedules_router
 from .api.routes import ui as ui_router
+from .api.routes._migration_helpers import AnswerSent
 from .config import Settings
 from .definitions.loader import DefinitionLoader
 
@@ -387,6 +388,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             _CSP_DOCS if request.url.path == "/docs" else _CSP_DEFAULT
         )
         return response
+
+    # ------------------------------------------------------------------
+    # The answer has gone out (config limits: one request at a time)
+    # ------------------------------------------------------------------
+    # Added LAST, so that it is the outermost: the middlewares above
+    # pass an answer's bytes on, and a request's turn comes back only
+    # when they have left the process.  Outermost is also where a
+    # request is first seen: under limits that say how many requests
+    # work at once, one that would read config text is counted here
+    # when its headers arrive, before anything reads its body.  See
+    # AnswerSent.
+    app.add_middleware(AnswerSent, limits=settings.config_limits)
 
     # ------------------------------------------------------------------
     # Routers

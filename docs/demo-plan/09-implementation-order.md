@@ -109,13 +109,13 @@ HTTPS green; `make deploy` from a clean clone converges.
 
 ## Phase 4 — Proofs & whitepaper
 
-Run live proofs 1–13 ([08](08-testing-verification.md#live-proofs)) on prod;
+Run live proofs 1–17 ([08](08-testing-verification.md#live-proofs)) on prod;
 commit `VERIFY_RESULTS_<date>.md`. Fill the whitepaper's reproducibility block
 ([06](06-privacy-whitepaper.md#reproducibility-block-fill-at-deploy)); publish
 at `/whitepaper`.
 
 **Gate 4:** every whitepaper claim's proof has real output committed (**live
-proofs 1–13**); `make verify` output matches the published block.
+proofs 1–17**); `make verify` output matches the published block.
 
 ## Phase 5 — Launch wiring
 

@@ -255,8 +255,10 @@ how long one request may take: `standard` (the default), `large`,
 is refused past a limit — a range is a few characters that stand for
 thousands of entries — in a sentence that names what was large, how
 large, and the limit.  The numbers are in
-[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) § H; what the limits do
-not bound (requests in flight, the size of an answer) is in
+[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) § H.  `small` also makes
+a server work on one such request at a time; the other three limit no
+requests at once.  What the limits do not bound (requests in flight
+under any set but `small`, the size of an answer) is in
 [`SECURITY.md`](SECURITY.md) "Input Validation — Config Text".  A server
 that takes text from people you do not trust still wants a memory limit
 and a limit on requests in flight in front of it.

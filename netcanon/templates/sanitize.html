@@ -48,8 +48,9 @@
   .san-banner-info    { background:var(--alert-info-bg); color:var(--alert-info-fg);
                         padding:.5rem .75rem;
                         border-radius:4px; margin:.5rem 0; }
-  /* A refusal for size or time.  The server's sentence says what was
-     large, how large and the limit: three hundred characters and more,
+  /* A refusal: for size or time, or because the server was busy.  The
+     server's sentence says what was large, how large and the limit (or
+     that it was busy, and to send it again): three hundred characters and more,
      which a toast that is gone in four seconds cannot be read from.
      It stays here until the next submit.  The ground and the bar are
      the failed tint and its ink; the words are in the page's own text
@@ -135,9 +136,10 @@
   </div>
 </form>
 
-<!-- A config this server refused as too large (HTTP 413).  Not
-     interactive; it carries a test id so that a test can read what is
-     painted here. -->
+<!-- A config this server refused: as too large (HTTP 413), or because
+     it was busy with another for as long as a request may wait (HTTP
+     503).  Not interactive; it carries a test id so that a test can
+     read what is painted here. -->
 <div id="san-refusal" class="san-banner-refused" role="alert"
      data-testid="sanitize-refusal" style="display:none"></div>
 
@@ -356,19 +358,27 @@
   }
 
   /* ── Round-6 Q3 (option B): always-show-both UX ───────────────────
-   * When dry-run is unchecked, fire BOTH calls in parallel so the
+   * When dry-run is unchecked, make BOTH calls on one submit so the
    * operator sees the sanitized text AND the audit table together
    * without having to submit twice.  When dry-run is checked, only
    * the audit call fires; the output section hides.  Errors on
    * either call surface via formatApiError + showToast — same
-   * pattern as every other form on the site (Round-1.5 helper). */
+   * pattern as every other form on the site (Round-1.5 helper).
+   *
+   * The two calls go IN TURN, the audit first, and never at once.
+   * Each is a whole parse and render of the same config, so two at
+   * once hold it in memory twice over — on a small server, more than
+   * the server has.  A server set to work on one config at a time
+   * would only make the second wait for the first; the page does
+   * not lean on that. */
   /* A failed call.  413 is "more than this server is set to take":
    * an upload over the byte cap, or a config past a config size limit.
-   * Its detail is a sentence to read and act on, so it goes on the
-   * page and stays; every other failure is a toast, as before. */
+   * 503 is "busy with another config; send it again".  Either detail
+   * is a sentence to read and act on, so it goes on the page and
+   * stays; every other failure is a toast, as before. */
   function showFailure(which, resp, payload) {
     var said = formatApiError(payload, resp.statusText);
-    if (resp.status === 413) {
+    if (resp.status === 413 || resp.status === 503) {
       refusal.textContent = said;
       refusal.style.display = '';
       refusal.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -391,32 +401,32 @@
       // surface before the network round-trip.
       var dryFd = await buildFormData(true);
       var realFd = dryRunOnly ? null : await buildFormData(false);
-      // Fire in parallel — dry-run gives us the audit, non-dry-run
-      // gives us the sanitized text.  Promise.all rejects on the
-      // first failure, which we catch and surface.
-      var auditPromise = fetch('/api/v1/sanitize', {
+      // In turn: dry-run gives us the audit, and only when its answer
+      // is here does the non-dry-run call go out for the sanitized
+      // text.  A call that fails is surfaced, and the other is then
+      // not made: it would be refused for the same reason.
+      var auditResp = await fetch('/api/v1/sanitize', {
         method: 'POST', body: dryFd,
       });
-      var outputPromise = realFd
-        ? fetch('/api/v1/sanitize', { method: 'POST', body: realFd })
-        : Promise.resolve(null);
-      var responses = await Promise.all([auditPromise, outputPromise]);
-      var auditResp = responses[0];
-      var outputResp = responses[1];
-      // Check both responses for errors before consuming any body.
       if (!auditResp.ok) {
         var err = await auditResp.json().catch(function() { return {}; });
         showFailure('audit', auditResp, err);
         return;
       }
-      if (outputResp && !outputResp.ok) {
-        var err2 = await outputResp.json().catch(function() { return {}; });
-        showFailure('output', outputResp, err2);
-        return;
+      var auditJson = await auditResp.json();
+      var sanitizedText = null;
+      if (realFd) {
+        var outputResp = await fetch('/api/v1/sanitize', {
+          method: 'POST', body: realFd,
+        });
+        if (!outputResp.ok) {
+          var err2 = await outputResp.json().catch(function() { return {}; });
+          showFailure('output', outputResp, err2);
+          return;
+        }
+        sanitizedText = await outputResp.text();
       }
       // Both succeeded — render.
-      var auditJson = await auditResp.json();
-      var sanitizedText = outputResp ? await outputResp.text() : null;
       result.style.display = '';
       var dt = (performance.now() - t0).toFixed(0);
       statusSum.textContent =

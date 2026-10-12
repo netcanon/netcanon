@@ -23,6 +23,7 @@ import pytest
 from netcanon.migration.codecs._helpers import (
     _coalesce_vlan_ids,
     _parse_vlan_list,
+    sole_vlan_id,
 )
 from netcanon.migration.codecs.arista_eos.parse import (
     _expand_vlan_list as _arista_expand,
@@ -91,6 +92,16 @@ def test_parse_vlan_list_matches_every_inline_copy(text: str) -> None:
             f"{inline.__module__}._parse_vlan_list drifted from the shared "
             f"helper on {text!r}"
         )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("text", [*_PARSE_SWEEP, "7-7", "7-7,7", "3,", ",3", "0", "9-", "-9", "5-3,8", "4094-9000"])
+def test_sole_vlan_id_is_the_list_of_one(text: str) -> None:
+    """It answers "does this list name exactly one id, and which"
+    without making the list.  The answer has to be the one the list
+    gives, for every text: a caller swapped one for the other."""
+    ids = _parse_vlan_list(text)
+    assert sole_vlan_id(text) == (ids[0] if len(ids) == 1 else None), text
 
 
 @pytest.mark.unit

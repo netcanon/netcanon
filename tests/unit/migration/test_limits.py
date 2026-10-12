@@ -12,7 +12,9 @@ lines of a config.
 Four kinds of test, after what this project has learned more than
 once -- a guard that walks the list it guards agrees with the list:
 
-* **the mechanism**: counting, the deadline, the words of a refusal;
+* **the mechanism**: counting, the deadline, the words of a refusal,
+  the turn a request to a server waits for where the limits say
+  how many work at once, and the place it is given when it arrives;
 * **each limit, and the texts that were measured**: one text under a
   limit is translated as it is with no limit at all; one text over it
   is refused BEFORE what it asks for is made (the refusal says so, and
@@ -36,8 +38,10 @@ sanitiser, the command line, the pages -- is read in
 from __future__ import annotations
 
 import ast
+import contextvars
 import copy
 import random
+import sys
 import threading
 import time
 import tracemalloc
@@ -362,6 +366,18 @@ class TestTheWordsOfARefusal:
         assert "pass --limits large (or unlimited)." in said
         assert "restart" not in said and "Preferences" not in said
 
+    @pytest.mark.parametrize("kind", list(L.KINDS))
+    def test_on_the_command_line_small_names_the_option(self, kind: str) -> None:
+        """There is no server at a command line, and whoever is there
+        chose the limits: the sentence says what the run used and
+        the option that allows more, with the default's number."""
+        said = str(_refusal(L.SMALL, kind, surface="cli"))
+        assert "This run used the 'small' config size limit, the one the public demo uses." in said
+        allowed = f"{int(getattr(L.STANDARD, kind)):,}" + (" seconds" if kind == "seconds" else "")
+        assert f"The default, 'standard', allows {allowed}: pass --limits standard." in said
+        for word in ("server", "NETCANON_", "environment", "Preferences", "restart", "you run yourself"):
+            assert word not in said, said
+
     def test_limits_a_caller_made_name_no_setting(self) -> None:
         assert str(_refusal(TINY, "ports")).endswith("These limits were set by the caller.")
 
@@ -459,13 +475,37 @@ class TestEveryExpanderCountsFirst:
 
     @pytest.mark.parametrize(("codec", "stanza"), [(codec, stanza) for codec in WIDE for stanza in WIDE[codec]])
     def test_and_the_same_stanza_once_is_read(self, codec: str, stanza: str) -> None:
-        """One port of each is under a limit of two such lists (NX-OS
-        reads a ``vlan`` line of ranges twice, and counts both): the
-        text is the parser's own grammar, and is read."""
-        with L.limits_scope(replace(TINY, vlan_ids=9_000)):
+        """One port of each is under a limit of every VLAN there is,
+        once: the text is the parser's own grammar, and is read.  A
+        parser that reads a list twice and counts both is refused
+        here (NX-OS did, for a ``vlan`` line of ranges)."""
+        with L.limits_scope(replace(TINY, vlan_ids=4_094)):
             tree = get_codec(codec).parse(_wide(codec, stanza, ports=1))
         made = sum(len(port.trunk_allowed_vlans) for port in tree.interfaces) + len(tree.vlans)
         assert made >= 1
+
+    def test_the_number_a_refusal_prints_is_the_count(self) -> None:
+        """``vlan 2-2502`` names 2,501 ids.  Two passes of the NX-OS
+        parser read that line, and both expanded it: it was charged
+        as 5,002 ids "over 2 lists", so a limit refused half of what
+        it says it allows and a refusal printed twice the count."""
+        exact = replace(TINY, vlan_ids=2_501)
+        with L.limits_scope(exact):
+            assert len(get_codec("cisco_nxos").parse("hostname T\nvlan 2-2502\n").vlans) == 2_501
+        exc = _refused("cisco_nxos", "hostname T\nvlan 2-2503\n", exact)
+        assert (exc.kind, exc.asked, exc.cap, exc.lists, exc.exact) == ("vlan_ids", 2_502, 2_501, 1, False)
+        assert str(exc).startswith(
+            "reading the config as cisco_nxos would make 2,502 or more VLAN ids that the config's lists "
+            "and ranges name; the limit is 2,501 (at: 2-2503)."
+        )
+        # What is charged for one line is what the line names.
+        text = "hostname T\nvlan 2-2502\nvlan 3000\n  vn-segment 13000\nvlan 3001-3001\n  vn-segment 13001\n"
+        with L.limits_scope(UNCOUNTED):
+            trees: list[CanonicalIntent] = []
+            charged = _charges("vlan_ids", lambda: trees.append(get_codec("cisco_nxos").parse(text)))
+        assert charged == [2_501, 1]
+        # ...and the pass that no longer expands still finds the stanza of one VLAN.
+        assert sorted((v.vlan_id, v.vni) for v in trees[0].vxlan_vnis) == [(3000, 13000), (3001, 13001)]
 
     def test_an_aoss_line_stops_at_the_range_over(self) -> None:
         exc = _refused("aruba_aoss", aoss_ranges(800))
@@ -1571,3 +1611,969 @@ class TestReadingTheCode:
         assert _broad_handlers_that_could_swallow(both, "x.py") and _broad_handlers_that_could_swallow(bare, "x.py")
         assert not _broad_handlers_that_could_swallow(named, "x.py")
         assert not _broad_handlers_that_could_swallow(narrow, "x.py")
+
+
+# ---------------------------------------------------------------------------
+# 12. Requests at once
+# ---------------------------------------------------------------------------
+
+
+def _until(condition: Callable[[], bool], what: str, seconds: float = 10.0) -> None:
+    """Wait for *condition*, which another thread is on its way to
+    making true.  The time is how long a FAILURE takes to be reported;
+    a test that passes waits for the condition and no longer."""
+    end = time.monotonic() + seconds
+    while not condition():
+        if time.monotonic() > end:
+            raise AssertionError(f"never happened: {what}")
+        time.sleep(0.002)
+
+
+class _Hands:
+    """Stands in for ``time`` in the limits module: the time is what
+    the test last set it to."""
+
+    def __init__(self, now: float = 1_000.0) -> None:
+        self.now = now
+
+    def monotonic(self) -> float:
+        return self.now
+
+
+#: The helper requests a test made, and what lets each of them go.
+_MADE: list[tuple[threading.Thread, Callable[[], None]]] = []
+
+
+@pytest.fixture(autouse=True)
+def _one_failure_is_one_failure():
+    """Let go of every helper request a test left behind.  A test
+    that fails part-way leaves one inside its scope, holding the
+    process's turn for as long as it waits to be let go -- and every
+    test after it in the process then fails for that, and not for
+    anything of its own."""
+    yield
+    made = _MADE[:]
+    del _MADE[:]
+    for _thread, let_go in made:
+        let_go()
+    for thread, _let_go in made:
+        if thread.is_alive():
+            thread.join(10)
+
+
+class _Request(threading.Thread):
+    """One request to a server under *limits*, on a thread of its own
+    as a handler is: it opens the server's scope, says that it is
+    inside, and works until it is let go."""
+
+    def __init__(self, limits: L.Limits | str | None, entered: list[_Request] | None = None) -> None:
+        super().__init__(daemon=True)
+        self.limits, self.entered = limits, entered
+        self.inside, self.let_go = threading.Event(), threading.Event()
+        _MADE.append((self, self.let_go.set))
+        self.refused: L.LimitExceeded | None = None
+        self.deadline: float | None = None
+
+    def run(self) -> None:
+        try:
+            with L.server_scope(self.limits):
+                scope = L._SCOPE.get()
+                self.deadline = scope.deadline if scope is not None else None
+                if self.entered is not None:
+                    self.entered.append(self)
+                self.inside.set()
+                self.let_go.wait(30)
+        except L.LimitExceeded as exc:
+            self.refused = exc
+
+    def working(self) -> _Request:
+        """Start it, and come back when it is inside its scope."""
+        self.start()
+        assert self.inside.wait(10), "the request never got its turn"
+        return self
+
+    def finish(self) -> None:
+        self.let_go.set()
+        self.join(10)
+        assert not self.is_alive()
+
+
+class _WokenByTheTest:
+    """Stands in for the condition a ``_Turns`` waits on: a waiter
+    sleeps until the TEST wakes it, by its thread's name, and a call
+    to ``notify_all`` is only counted.  With it a test chooses which
+    of two waiters looks first."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.asleep: dict[str, threading.Event] = {}
+        self.told = 0
+
+    def __enter__(self) -> _WokenByTheTest:
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._lock.release()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        gate = threading.Event()
+        self.asleep[threading.current_thread().name] = gate
+        self._lock.release()
+        try:
+            gate.wait(30)
+        finally:
+            self._lock.acquire()
+        return True
+
+    def notify_all(self) -> None:
+        self.told += 1
+
+    def wake(self, name: str) -> None:
+        self.asleep.pop(name).set()
+
+
+_BUSY = (
+    "the server works on one config at a time, and was busy with another for the 20 seconds this request may "
+    "take; this request was not started and its config was not read.  Send it again.  This server runs with "
+    "the 'small' config size limit, the one the public demo uses.  A Netcanon you run yourself does not make "
+    "one request wait for another by default."
+)
+
+
+class TestRequestsAtOnce:
+    """Every limit is for one request, and requests at once add up.
+    Under ``small`` a server works on ONE request that reads config
+    text at a time: the others wait their turn, inside their own
+    deadline."""
+
+    @pytest.fixture(autouse=True)
+    def _nothing_is_left_behind(self):
+        assert L.in_flight() == (0, 0)
+        yield
+        assert L.in_flight() == (0, 0), "a turn was not given back, or a request is still in the line"
+
+    def test_only_small_says_one_at_a_time(self) -> None:
+        assert {name: limits.at_once for name, limits in L.PROFILES.items()} == {
+            "small": 1, "standard": None, "large": None, "unlimited": None,
+        }
+        assert L.describe(L.SMALL).endswith(", seconds 20, at_once 1)")
+        assert L.describe(L.STANDARD).endswith(", seconds 120, at_once none)")
+        # Not something a stage counts: no meter ever charges it.
+        assert L.AT_ONCE == "at_once" and L.AT_ONCE not in L.KINDS
+
+    def test_a_limit_at_once_needs_a_deadline(self) -> None:
+        """A request waits for its turn inside its deadline.  Limits
+        with a line and no deadline could keep one waiting for ever,
+        and cannot be made."""
+        with pytest.raises(ValueError, match="need seconds"):
+            replace(L.SMALL, seconds=None)
+        with pytest.raises(ValueError, match="1 or more"):
+            replace(L.SMALL, at_once=0)
+        assert replace(L.UNLIMITED, name="free").at_once is None
+
+    def test_the_second_waits_and_then_runs(self) -> None:
+        """Shown with an event the first request holds: while it is
+        inside, the second is in the line and not inside; when the
+        first leaves, the second runs."""
+        first = _Request("small").working()
+        second = _Request("small")
+        second.start()
+        _until(lambda: L.in_flight() == (1, 1), "the second request standing in the line")
+        assert not second.inside.is_set(), "two requests were at work at once"
+        first.finish()
+        assert second.inside.wait(10), "the second request never got its turn"
+        assert L.in_flight() == (1, 0)
+        second.finish()
+        assert first.refused is None and second.refused is None
+
+    def test_the_wait_is_time_the_request_has_spent(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """One deadline a request, counted from when it arrived.  A
+        request that stood twelve seconds in the line has eight left
+        to work in, and not twenty."""
+        clock = _Hands()
+        monkeypatch.setattr(L, "time", clock)
+        first = _Request("small").working()
+        clock.now = 1_005.0
+        second = _Request("small")
+        second.start()
+        _until(lambda: L.in_flight() == (1, 1), "the second request standing in the line")
+        clock.now = 1_017.0
+        first.finish()
+        assert second.inside.wait(10)
+        assert second.deadline == 1_005.0 + L.SMALL.seconds
+        second.finish()
+
+    def test_out_of_time_in_the_line_is_refused_in_words(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A refusal like any other -- with a sentence that says the
+        server was busy and to send the same thing again, and that
+        does not call the config large or unreadable."""
+        clock = _Hands()
+        monkeypatch.setattr(L, "time", clock)
+        first = _Request("small").working()
+        second = _Request("small")
+        second.start()
+        _until(lambda: L.in_flight() == (1, 1), "the second request standing in the line")
+        clock.now += L.SMALL.seconds + 0.5
+        with L._TURNS._changed:  # a request in the line looks at the clock when it is woken
+            L._TURNS._changed.notify_all()
+        second.join(10)
+        assert not second.is_alive() and not second.inside.is_set()
+        exc = second.refused
+        assert exc is not None
+        assert (exc.kind, exc.asked, exc.cap, exc.exact, exc.profile, exc.waited, exc.stage, exc.codec) == (
+            "at_once", 2, 1, True, "small", 20.0, "", "",
+        )
+        assert str(exc) == _BUSY
+        for word in ("parse failed", "would make", "the limit is", "NETCANON_", "environment", "Preferences"):
+            assert word not in str(exc), word
+        refusal = Refusal(**exc.as_dict())
+        assert (refusal.limit, refusal.asked, refusal.cap, refusal.exact, refusal.profile) == (
+            "at_once", 2, 1, True, "small",
+        )
+        assert refusal.what == "requests that read config text, at work at once"
+        assert refusal.how_to_raise == exc.hint and _BUSY.endswith(exc.hint)
+        # The one who gave up holds nothing, and the one at work was not disturbed.
+        assert L.in_flight() == (1, 0)
+        first.finish()
+
+    def test_a_request_in_the_line_gives_up_by_itself(self) -> None:
+        """No one has to wake it: with nothing changing, a request
+        whose time passes in the line is refused when it passes."""
+        first = _Request("small").working()
+        began = time.monotonic()
+        with pytest.raises(L.LimitExceeded) as caught, L.server_scope(replace(L.SMALL, seconds=0.2)):
+            raise AssertionError("a second request got in while the first was at work")
+        waited = time.monotonic() - began
+        assert caught.value.kind == "at_once" and caught.value.waited == 0.2
+        assert 0.15 < waited < 5.0, waited
+        assert "was busy with another for the 0.2 seconds this request may take" in str(caught.value)
+        first.finish()
+
+    def test_whoever_leaves_the_line_tells_the_next(self) -> None:
+        """Where two may work at once -- no set that ships says so,
+        and a set may -- two places can come free together.  The
+        second in the line looks first, finds that it is not first,
+        and sleeps again; the first takes ONE place and leaves the
+        line.  The second is first now, with a place free, and
+        nothing else would wake it before its deadline: whoever
+        leaves the line has to.  (With one at work the place that
+        came free is taken by whoever leaves the line, so there is
+        nothing for the next to be told.)"""
+        two = replace(L.SMALL, at_once=2, seconds=30.0)
+        turns, told = L._Turns(), _WokenByTheTest()
+        turns._changed = told  # type: ignore[assignment]
+        far = time.monotonic() + 30.0
+        at_work = [turns.take(two, far), turns.take(two, far)]
+        got: dict[str, object] = {}
+
+        def ask(name: str) -> None:
+            got[name] = turns.take(two, far)
+
+        waiters: dict[str, threading.Thread] = {}
+        for name in ("first", "second"):
+            waiters[name] = threading.Thread(target=ask, args=(name,), name=name, daemon=True)
+            waiters[name].start()
+            _until(lambda name=name: name in told.asleep, f"the {name} request asleep in the line")
+        assert (turns.working, turns.waiting) == (2, 2)
+        for held in at_work:
+            assert held is not None
+            turns.done(held, None)
+        assert turns.working == 0
+        told.wake("second")
+        _until(lambda: "second" in told.asleep, "the second request asleep again: it is not first")
+        assert "second" not in got
+        before = told.told
+        told.wake("first")
+        waiters["first"].join(10)
+        assert "first" in got and (turns.working, turns.waiting) == (1, 1)
+        assert told.told > before, "the first left the line and told nobody: the second sleeps on, a place free"
+        told.wake("second")
+        waiters["second"].join(10)
+        assert "second" in got and (turns.working, turns.waiting) == (2, 0)
+
+    def test_the_turn_is_given_back_on_every_way_out(self) -> None:
+        with pytest.raises(RuntimeError), L.server_scope("small"):
+            raise RuntimeError("a fault in the work")
+        assert L.in_flight() == (0, 0)
+        with pytest.raises(L.LimitExceeded) as caught, L.server_scope("small"):
+            get_codec("aruba_aoss").parse(aoss_ranges(12))
+        assert caught.value.kind == "ports" and L.in_flight() == (0, 0)
+        with pytest.raises(KeyboardInterrupt), L.server_scope("small"):
+            raise KeyboardInterrupt
+        assert L.in_flight() == (0, 0)
+        # A block that is entered and never left, and then dropped.
+        scope = L.server_scope("small")
+        scope.__enter__()
+        assert L.in_flight() == (1, 0)
+        del scope
+        assert L.in_flight() == (0, 0)
+        # The place is there to take: this would be refused in a fifth of a second.
+        with L.server_scope(replace(L.SMALL, seconds=0.2)):
+            assert L.in_flight() == (1, 0)
+
+    def test_a_scope_inside_a_scope_does_not_wait_for_itself(self) -> None:
+        """The pipeline calls codecs, a codec can parse in order to
+        render, the path that pairs ports parses more than once: work
+        inside a request that opens a scope again is the same request.
+        It takes no second turn, and does not wait for its own."""
+        brief = replace(L.SMALL, seconds=0.2)
+        text = nxos_trunks(2, "2-4000", 3)
+        with L.server_scope(brief):
+            assert L.in_flight() == (1, 0)
+            with L.server_scope(brief):
+                assert L.in_flight() == (1, 0), "a turn was taken twice"
+                with L.limits_scope("small"):
+                    assert len(get_codec("cisco_nxos").parse(text).interfaces) == 2
+            assert L.in_flight() == (1, 0), "the inner scope gave the outer one's turn back"
+            assert _plan("cisco_nxos", "arista_eos", text, "small").status.value == "completed"
+            # Work the request hands to another thread, with its context, is the request too.
+            said: list[object] = []
+
+            def elsewhere() -> None:
+                with L.server_scope(brief):
+                    said.append(L.in_flight())
+
+            worker = threading.Thread(target=contextvars.copy_context().run, args=(elsewhere,))
+            worker.start()
+            worker.join(10)
+            assert said == [(1, 0)]
+        assert L.in_flight() == (0, 0)
+
+    def test_a_turn_that_is_over_excuses_nobody(self) -> None:
+        """A copy of a request's context can outlive the request.
+        What it carries is a turn that was given back: work that runs
+        in it later waits like anyone."""
+        with L.server_scope("small"):
+            kept = contextvars.copy_context()
+        first = _Request("small").working()
+
+        def later() -> None:
+            with L.server_scope(replace(L.SMALL, seconds=0.2)):
+                raise AssertionError("it did not wait for the request at work")
+
+        with pytest.raises(L.LimitExceeded) as caught:
+            kept.run(later)
+        assert caught.value.kind == "at_once"
+        first.finish()
+
+    def test_work_that_opens_no_server_scope_never_waits(self) -> None:
+        """The command line, a tool, a library caller, a test: none
+        of them is a request to a server.  With the place taken, each
+        of these would be refused in a fifth of a second if it
+        waited."""
+        text = nxos_trunks(2, "2-4000", 3)
+        first = _Request("small").working()
+        brief = replace(L.SMALL, seconds=0.2)
+        for surface in ("server", "cli"):
+            with L.limits_scope(brief, surface=surface):
+                assert len(get_codec("cisco_nxos").parse(text).interfaces) == 2
+        assert len(get_codec("cisco_nxos").parse(text).interfaces) == 2
+        assert _plan("cisco_nxos", "arista_eos", text, brief).status.value == "completed"
+        assert L.in_flight() == (1, 0)
+        first.finish()
+
+    @pytest.mark.parametrize("name", ["standard", "large", "unlimited", None])
+    def test_nothing_waits_unless_the_limits_say_so(self, name: str | None) -> None:
+        """The default and the two sets above it limit no requests at
+        once: three are inside together, with the place of a ``small``
+        server taken besides.  They take no turn and stand in no
+        line."""
+        first = _Request("small").working()
+        others = [_Request(name).working() for _ in range(3)]
+        assert L.in_flight() == (1, 0)
+        for other in others:
+            other.finish()
+            assert other.refused is None
+        first.finish()
+
+    def test_turns_go_in_order_of_arrival_and_the_line_is_short(self) -> None:
+        """No more than ``MOST_WAITING`` wait: a request that waits
+        holds a thread of the pool the server runs handlers on, and
+        its body.  One more is turned away at once, in words, without
+        waiting."""
+        assert L.MOST_WAITING == 2
+        entered: list[_Request] = []
+        first = _Request("small", entered).working()
+        line = []
+        for n in range(L.MOST_WAITING):
+            waiter = _Request("small", entered)
+            waiter.let_go.set()  # each leaves as soon as it has had its turn
+            waiter.start()
+            line.append(waiter)
+            _until(lambda n=n: L.in_flight() == (1, n + 1), f"request {n + 2} standing in the line")
+        began = time.monotonic()
+        with pytest.raises(L.LimitExceeded) as caught, L.server_scope("small"):
+            raise AssertionError("one more request got in")
+        assert time.monotonic() - began < 2.0, "it waited, with the line full"
+        exc = caught.value
+        assert (exc.kind, exc.asked, exc.cap, exc.waited, exc.exact) == ("at_once", 4, 1, None, True)
+        assert str(exc).startswith(
+            "the server works on one config at a time, and 2 more were already waiting their turn; this "
+            "request was not started and its config was not read.  Send it again.  This server runs with"
+        )
+        assert L.in_flight() == (1, L.MOST_WAITING)
+        first.finish()
+        for waiter in line:
+            waiter.join(10)
+            assert not waiter.is_alive() and waiter.refused is None
+        assert entered == [first, *line]
+
+    def test_a_newcomer_goes_to_the_back_of_the_line(self) -> None:
+        """Even when there is a place it could take at that instant.
+        Two sets of limits are needed to show it (no server has two):
+        the first in the line may work one at a time and is waiting;
+        the newcomer may work two at a time, and one is at work."""
+        two = replace(L.SMALL, name="two", at_once=2)
+        entered: list[_Request] = []
+        first = _Request(two, entered).working()
+        ahead = _Request("small", entered)
+        ahead.start()
+        _until(lambda: L.in_flight() == (1, 1), "the one-at-a-time request standing in the line")
+        newcomer = _Request(two, entered)
+        newcomer.start()
+        _until(lambda: L.in_flight() == (1, 2), "the newcomer standing behind it")
+        assert not newcomer.inside.is_set() and not ahead.inside.is_set()
+        ahead.let_go.set()
+        newcomer.let_go.set()
+        first.finish()
+        ahead.join(10)
+        newcomer.join(10)
+        assert entered == [first, ahead, newcomer]
+
+
+class TestATurnStaysWithTheAnswer:
+    """The work of a request ends when its handler returns; its memory
+    does not.  The answer is still to be made into bytes and sent, and
+    a job's answer can be tens of megabytes.  A handler opens its scope
+    with the request's ``Answer``, and the turn comes back when that
+    has gone out."""
+
+    @pytest.fixture(autouse=True)
+    def _nothing_is_left_behind(self):
+        assert L.in_flight() == (0, 0)
+        yield
+        assert L.in_flight() == (0, 0), "a turn was not given back, or a request is still in the line"
+
+    def test_until_it_has_gone_out(self) -> None:
+        answer = L.Answer()
+        with L.server_scope("small", answer=answer):
+            assert L.in_flight() == (1, 0)
+        assert L.in_flight() == (1, 0), "the turn came back when the block ended, with the answer still to send"
+        second = _Request("small")
+        second.start()
+        _until(lambda: L.in_flight() == (1, 1), "the second request standing in the line")
+        assert not second.inside.is_set()
+        answer.sent()
+        assert second.inside.wait(10), "the turn did not come back when the answer went out"
+        answer.sent()  # told twice: nothing more is given back
+        assert L.in_flight() == (1, 0)
+        second.finish()
+
+    def test_an_answer_for_a_request_that_took_no_turn(self) -> None:
+        for limits in ("standard", None, "unlimited"):
+            answer = L.Answer()
+            with L.server_scope(limits, answer=answer):
+                assert L.in_flight() == (0, 0)
+            answer.sent()
+        L.Answer().sent()  # a request that opened no scope at all: every page
+
+    def test_a_refused_request_lends_nothing(self) -> None:
+        first = _Request("small").working()
+        answer = L.Answer()
+        with pytest.raises(L.LimitExceeded), L.server_scope(replace(L.SMALL, seconds=0.2), answer=answer):
+            raise AssertionError("it got in")
+        assert L.in_flight() == (1, 0)
+        answer.sent()
+        assert L.in_flight() == (1, 0), "an answer that held no turn gave another request's back"
+        first.finish()
+
+    def test_a_fault_in_the_work_still_waits_for_the_answer(self) -> None:
+        """A handler that raises is answered too -- with an error --
+        and the turn comes back when that has gone out, as the
+        application says it has for every request."""
+        answer = L.Answer()
+        with pytest.raises(RuntimeError), L.server_scope("small", answer=answer):
+            raise RuntimeError("a fault in the work")
+        assert L.in_flight() == (1, 0)
+        answer.sent()
+        assert L.in_flight() == (0, 0)
+
+    def test_the_client_left_before_the_work_ended(self) -> None:
+        """Nobody waits for the answer any more; the work is still
+        using the memory.  The turn stays until the block ends, and is
+        then given back at once: there is no answer to lend it to."""
+        answer = L.Answer()
+        with L.server_scope("small", answer=answer):
+            answer.sent()
+            assert L.in_flight() == (1, 0), "the turn was given back while its request was still at work"
+        assert L.in_flight() == (0, 0)
+
+    def test_the_same_request_at_work_again_keeps_its_turn(self) -> None:
+        """Two scopes, one after the other, for one answer: the second
+        does not wait for the turn the first one lent.  The lent turn
+        would not fall due for half a minute, and the second scope has
+        a fifth of a second: it would be refused if it waited."""
+        brief = replace(L.SMALL, seconds=0.2)
+        answer = L.Answer()
+        with L.server_scope(replace(L.SMALL, seconds=30.0), answer=answer):
+            pass
+        with L.server_scope(brief, answer=answer):
+            assert L.in_flight() == (1, 0)
+            with L.server_scope(brief, answer=answer):  # and inside itself
+                assert L.in_flight() == (1, 0)
+        assert L.in_flight() == (1, 0)
+        answer.sent()
+
+    def test_an_answer_nobody_reads_does_not_keep_the_turn_for_ever(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A client that does not read its answer would hold a lent
+        turn as long as its connection lasts.  Past the request's own
+        deadline the turn is taken back for whoever waits -- and the
+        late word that the answer went out gives nothing back a second
+        time."""
+        clock = _Hands()
+        monkeypatch.setattr(L, "time", clock)
+        unread = L.Answer()
+        with L.server_scope("small", answer=unread):  # arrives at 1,000: its deadline is 1,020
+            pass
+        clock.now = 1_005.0
+        second = _Request("small")  # its own deadline is 1,025
+        second.start()
+        _until(lambda: L.in_flight() == (1, 1), "the second request standing in the line")
+        clock.now = 1_019.0
+        with L._TURNS._changed:
+            L._TURNS._changed.notify_all()
+        _until(lambda: L.in_flight() == (1, 1), "the second request standing in the line")
+        assert not second.inside.is_set(), "the turn was taken back before its holder's time was up"
+        clock.now = 1_020.5
+        with L._TURNS._changed:
+            L._TURNS._changed.notify_all()
+        assert second.inside.wait(10), "the turn was never taken back"
+        assert L.in_flight() == (1, 0)
+        unread.sent()
+        assert L.in_flight() == (1, 0), "the late answer gave the second request's turn away"
+        second.finish()
+
+    def test_a_request_in_the_line_wakes_when_a_lent_turn_falls_due(self) -> None:
+        """Nobody has to wake it: it waits no longer than the lent
+        turn has to run, though its own deadline is far off."""
+        unread = L.Answer()
+        with L.server_scope(replace(L.SMALL, seconds=0.3), answer=unread):
+            pass
+        began = time.monotonic()
+        with L.server_scope(replace(L.SMALL, seconds=30.0)):
+            waited = time.monotonic() - began
+            assert L.in_flight() == (1, 0)
+        assert 0.2 < waited < 10.0, waited
+        unread.sent()
+
+    def test_a_turn_that_is_lent_wakes_who_was_already_waiting(self) -> None:
+        """The other order, which is the common one: the second
+        request arrives while the first is still AT WORK, and so
+        goes to sleep until its own deadline -- nothing was lent
+        yet for it to count on.  When the first one's block ends
+        and its turn is lent to an answer nobody reads, the one
+        in the line has to be told: it then waits to the lent
+        turn's deadline (a third of a second) and not to its own
+        (half a minute)."""
+        unread = L.Answer()
+        at_work, end_the_work = threading.Event(), threading.Event()
+
+        def first() -> None:
+            with L.server_scope(replace(L.SMALL, seconds=0.3), answer=unread):
+                at_work.set()
+                end_the_work.wait(30)
+
+        holder = threading.Thread(target=first, daemon=True)
+        holder.start()
+        assert at_work.wait(10)
+        second = _Request(replace(L.SMALL, seconds=30.0))
+        second.start()
+        _until(lambda: L.in_flight() == (1, 1), "the second request in the line, the first still at work")
+        end_the_work.set()
+        holder.join(10)
+        assert second.inside.wait(10), (
+            "the request in the line slept on, past the deadline of the turn that was lent"
+        )
+        assert L.in_flight() == (1, 0)
+        second.finish()
+        unread.sent()
+
+
+class TestANewTurnHandsFreedMemoryBack:
+    """Freed memory is not memory the system has back: the C library
+    keeps what a thread freed for that thread, and a server runs its
+    requests on whichever thread is idle.  A request that has taken its
+    turn trims first."""
+
+    def test_once_before_the_work_and_only_for_a_turn(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[object] = []
+        monkeypatch.setattr(L, "_trim", lambda pad: seen.append(("trim", pad, L.in_flight())) or 1)
+        with L.server_scope("small"):
+            seen.append("work")
+            with L.server_scope("small"):  # the same request: no second turn, no second trim
+                seen.append("inner work")
+            with L.limits_scope("small"):
+                pass
+        assert seen == [("trim", 0, (1, 0)), "work", "inner work"]
+        seen.clear()
+        for limits in ("standard", "large", "unlimited", None):
+            with L.server_scope(limits):
+                pass
+        with L.limits_scope("small"), L.limits_scope("small", surface="cli"):
+            get_codec("cisco_nxos").parse(nxos_trunks(1, "2-10", 2))
+        assert seen == [], "trimmed where no limit says memory is that tight"
+        assert L.in_flight() == (0, 0)
+
+    def test_a_request_that_did_not_get_a_turn_trims_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: list[int] = []
+        first = _Request("small").working()
+        monkeypatch.setattr(L, "_trim", lambda pad: seen.append(pad) or 1)
+        with pytest.raises(L.LimitExceeded), L.server_scope(replace(L.SMALL, seconds=0.2)):
+            raise AssertionError("it got in")
+        assert seen == []
+        first.finish()
+
+    def test_where_the_c_library_has_no_such_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Windows, macOS, a C library without it: nothing is trimmed
+        and nothing fails.  On Linux with glibc there is one."""
+        found = L._find_trim()
+        if not sys.platform.startswith("linux"):
+            assert found is None
+        else:
+            assert found is None or found(0) in (0, 1)
+        monkeypatch.setattr(L, "_trim", None)
+        with L.server_scope("small"):
+            assert L.in_flight() == (1, 0)
+        assert L.in_flight() == (0, 0)
+
+    def test_a_trim_that_fails_does_not_keep_the_turn(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def broken(pad: int) -> int:
+            raise OSError("the C library refused")
+
+        monkeypatch.setattr(L, "_trim", broken)
+        with pytest.raises(OSError), L.server_scope("small"):
+            raise AssertionError("the block was entered")
+        assert L.in_flight() == (0, 0)
+
+
+# ---------------------------------------------------------------------------
+# 13. Out of time after a wait is busy, and says so
+# ---------------------------------------------------------------------------
+
+_BUSY_HINT = (
+    "This server runs with the 'small' config size limit, the one the public demo uses.  A Netcanon you run "
+    "yourself does not make one request wait for another by default."
+)
+
+
+class _Late(threading.Thread):
+    """A request under ``small`` that does *work* when the test says
+    so, inside its scope; what the work raised is kept."""
+
+    def __init__(self, work: Callable[[], object]) -> None:
+        super().__init__(daemon=True)
+        self.work = work
+        self.inside, self.go = threading.Event(), threading.Event()
+        self.refused: L.LimitExceeded | None = None
+        self.left = False
+        _MADE.append((self, self._leave))
+
+    def _leave(self) -> None:
+        """The test is over: go, and do no work."""
+        self.left = True
+        self.go.set()
+
+    def run(self) -> None:
+        try:
+            with L.server_scope("small"):
+                self.inside.set()
+                self.go.wait(30)
+                if not self.left:
+                    self.work()
+        except L.LimitExceeded as exc:
+            self.refused = exc
+
+
+class TestBusyIsSaidAsBusy:
+    """A request that stood in the line and THEN ran out of time was
+    refused as ``seconds``: "the request passed the 20 seconds it may
+    take ... a Netcanon you run yourself allows 120".  Nothing in that
+    says the server was busy, or to send it again, and it sends the
+    reader to look for something slow in the config.  A refusal for
+    time that follows a wait is busy: it says how long the request
+    waited, and is filed as ``at_once``."""
+
+    @pytest.fixture(autouse=True)
+    def _nothing_is_left_behind(self):
+        assert L.in_flight() == (0, 0)
+        yield
+        assert L.in_flight() == (0, 0), "a turn was not given back, or a request is still in the line"
+
+    def _waited_then_late(self, monkeypatch: pytest.MonkeyPatch, work: Callable[[], object]) -> L.LimitExceeded:
+        """Arrives at 1,002.5 behind a request at work, gets its turn
+        at 1,020 -- 17.5 seconds in the line -- and does *work* at
+        1,023, half a second past its deadline."""
+        clock = _Hands()
+        monkeypatch.setattr(L, "time", clock)
+        first = _Request("small").working()
+        clock.now = 1_002.5
+        second = _Late(work)
+        second.start()
+        _until(lambda: L.in_flight() == (1, 1), "the second request standing in the line")
+        clock.now = 1_020.0
+        first.finish()
+        assert second.inside.wait(10)
+        clock.now = 1_023.0
+        second.go.set()
+        second.join(10)
+        assert not second.is_alive() and second.refused is not None, "it was not refused"
+        return second.refused
+
+    def test_it_says_how_long_it_waited_and_to_send_it_again(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        exc = self._waited_then_late(monkeypatch, lambda: get_codec("cisco_nxos").parse(nxos_trunks(1, "2-10", 2)))
+        assert (exc.kind, exc.asked, exc.cap, exc.exact, exc.profile) == ("at_once", 2, 1, True, "small")
+        assert (exc.waited, exc.out_of, exc.stage, exc.codec, exc.starting) == (17.5, 20.0, "parse", "cisco_nxos", True)
+        assert str(exc) == (
+            "the server works on one config at a time, and this request waited 17.5 seconds for its turn; what "
+            "was left of the 20 seconds it may take was not enough, and it was stopped before reading the config "
+            "as cisco_nxos began.  Send it again.  " + _BUSY_HINT
+        )
+        for word in ("passed the", "allows 120", "parse failed", "was not started", "NETCANON_", "Preferences"):
+            assert word not in str(exc), word
+        refusal = Refusal(**exc.as_dict())
+        assert (refusal.limit, refusal.asked, refusal.cap, refusal.stage, refusal.codec) == (
+            "at_once", 2, 1, "parse", "cisco_nxos",
+        )
+        assert refusal.how_to_raise == _BUSY_HINT
+
+    def test_and_so_does_a_loop_outside_any_stage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Reading the device out of a config is a loop over its
+        lines before any parse: its clock is the scope's."""
+
+        def reads_lines() -> None:
+            for _ in L.ticked(["a line"] * 600):
+                pass
+
+        exc = self._waited_then_late(monkeypatch, reads_lines)
+        assert (exc.kind, exc.waited, exc.out_of, exc.stage) == ("at_once", 17.5, 20.0, "")
+        assert str(exc).startswith(
+            "the server works on one config at a time, and this request waited 17.5 seconds for its turn; what "
+            "was left of the 20 seconds it may take was not enough, and it was stopped.  Send it again."
+        )
+
+    def test_and_a_count_made_out_of_time(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        exc = self._waited_then_late(monkeypatch, lambda: L.metered("render", "juniper_junos").__enter__())
+        assert (exc.kind, exc.stage, exc.codec) == ("at_once", "render", "juniper_junos")
+        assert "it was stopped before writing the config for juniper_junos began.  Send it again." in str(exc)
+
+    def test_a_request_that_did_not_wait_is_refused_for_time_as_before(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        clock = _Hands()
+        monkeypatch.setattr(L, "time", clock)
+        alone = _Late(lambda: get_codec("cisco_nxos").parse(nxos_trunks(1, "2-10", 2)))
+        alone.start()
+        assert alone.inside.wait(10)
+        clock.now = 1_020.5
+        alone.go.set()
+        alone.join(10)
+        exc = alone.refused
+        assert exc is not None
+        assert (exc.kind, exc.asked, exc.cap, exc.waited, exc.out_of) == ("seconds", 20.5, 20.0, None, None)
+        assert str(exc) == (
+            "the request passed the 20 seconds it may take before reading the config as cisco_nxos began, and "
+            "was stopped.  This server runs with the 'small' config size limit, the one the public demo uses.  "
+            "A Netcanon you run yourself allows 120 seconds by default."
+        )
+
+    def test_a_wait_too_short_to_print_is_still_said(self) -> None:
+        """Never "waited 0 seconds": a tenth is the least it says."""
+        exc = L._out_of_time(L.SMALL, "server", 0.2, 0.004, 2, "parse", "vyos")
+        assert exc.kind == "at_once" and "this request waited 0.1 seconds for its turn" in str(exc)
+        assert "it was stopped while reading the config as vyos." in str(exc)
+
+    def test_work_that_takes_no_turn_is_never_told_it_was_busy(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The command line, a tool, limits with no line: there is
+        nobody to have waited behind."""
+        clock = _Hands()
+        monkeypatch.setattr(L, "time", clock)
+        for scope in (L.limits_scope("small", surface="cli"), L.server_scope("standard"), L.limits_scope("small")):
+            clock.now = 1_000.0
+            with pytest.raises(L.LimitExceeded) as caught, scope:
+                clock.now += 700.0
+                get_codec("cisco_nxos").parse(nxos_trunks(1, "2-10", 2))
+            assert caught.value.kind == "seconds" and caught.value.waited is None
+
+    def test_a_body_that_did_not_arrive_has_its_own_words(self) -> None:
+        exc = L.body_late("small", 20.3)
+        assert (exc.kind, exc.asked, exc.cap, exc.stage, exc.profile) == ("seconds", 20.3, 20.0, "body", "small")
+        assert str(exc) == (
+            "the request passed the 20 seconds it may take while its body was still arriving, and was stopped.  "
+            "This server runs with the 'small' config size limit, the one the public demo uses.  A Netcanon you "
+            "run yourself allows 120 seconds by default."
+        )
+
+
+# ---------------------------------------------------------------------------
+# 14. A place, counted when a request arrives
+# ---------------------------------------------------------------------------
+
+
+class TestAPlaceIsCountedAtArrival:
+    """A request holds memory before it can ask for a turn: its body.
+    Requests that arrived together added up, however few of them were
+    let work.  So a request is counted when its headers arrive -- as
+    many places as may work and wait -- and its one deadline runs from
+    then."""
+
+    @pytest.fixture(autouse=True)
+    def _nothing_is_left_behind(self):
+        assert L.in_flight() == (0, 0) and L.places() == 0
+        yield
+        assert L.in_flight() == (0, 0), "a turn was not given back, or a request is still in the line"
+        assert L.places() == 0, "a place was not given back"
+
+    def test_as_many_places_as_may_work_and_wait(self) -> None:
+        assert (L.SMALL.at_once, L.MOST_WAITING) == (1, 2)
+        arrived = [L.Answer() for _ in range(3)]
+        for n, answer in enumerate(arrived, 1):
+            answer.arrived("small")
+            assert L.places() == n and answer.deadline is not None
+        late = L.Answer()
+        with pytest.raises(L.LimitExceeded) as caught:
+            late.arrived("small")
+        exc = caught.value
+        assert (exc.kind, exc.asked, exc.cap, exc.exact, exc.waited, exc.out_of) == ("at_once", 4, 1, True, None, None)
+        assert str(exc).startswith(
+            "the server works on one config at a time, and 2 more were already waiting their turn; this request "
+            "was not started and its config was not read.  Send it again."
+        )
+        assert L.places() == 3 and late.deadline is None
+        late.sent()
+        assert L.places() == 3, "a request that was refused a place gave another's back"
+        # Nothing of the three has asked for a turn yet: they are sending their bodies.
+        assert L.in_flight() == (0, 0)
+        arrived[1].sent()
+        assert L.places() == 2
+        late.arrived("small")
+        assert L.places() == 3
+        for answer in (*arrived, late):
+            answer.sent()
+            answer.sent()  # told twice: nothing more is given back
+        assert L.places() == 0
+
+    @pytest.mark.parametrize("name", ["standard", "large", "unlimited", None])
+    def test_nothing_is_counted_unless_the_limits_say_how_many(self, name: str | None) -> None:
+        answers = [L.Answer() for _ in range(10)]
+        for answer in answers:
+            answer.arrived(name)
+            assert answer.deadline is None and answer.left() is None
+        assert L.places() == 0
+        for answer in answers:
+            answer.sent()
+
+    def test_the_deadline_is_counted_from_the_arrival(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Seven seconds of a slow body are seven seconds the request
+        has spent: its scope ends at 1,020 and not at 1,027 -- and so
+        does a second scope of the same request."""
+        clock = _Hands()
+        monkeypatch.setattr(L, "time", clock)
+        answer = L.Answer()
+        answer.arrived("small")
+        assert answer.deadline == 1_020.0 and answer.left() == 20.0
+        clock.now = 1_007.0
+        assert answer.left() == 13.0
+        for _ in range(2):
+            with L.server_scope("small", answer=answer):
+                scope = L._SCOPE.get()
+                assert scope is not None and scope.deadline == 1_020.0
+            clock.now += 2.0
+        answer.sent()
+        # One that was not counted has its scope's own deadline, as ever.
+        uncounted = L.Answer()
+        with L.server_scope("small", answer=uncounted):
+            scope = L._SCOPE.get()
+            assert scope is not None and scope.deadline == clock.now + 20.0
+        uncounted.sent()
+
+    def test_the_place_comes_back_when_the_answer_has_gone(self) -> None:
+        answer = L.Answer()
+        answer.arrived("small")
+        with L.server_scope("small", answer=answer):
+            assert (L.places(), L.in_flight()) == (1, (1, 0))
+        assert (L.places(), L.in_flight()) == (1, (1, 0)), "the place came back with the answer still to send"
+        answer.sent()
+        assert (L.places(), L.in_flight()) == (0, (0, 0))
+
+    def test_a_request_that_never_asked_for_a_turn_gives_it_back_too(self) -> None:
+        """Refused before any handler ran -- an unknown vendor, a
+        body that is not JSON, no key -- or its client left while it
+        was still sending."""
+        answer = L.Answer()
+        answer.arrived("small")
+        assert L.places() == 1
+        answer.sent()
+        assert L.places() == 0
+
+    def test_the_place_stays_while_the_work_goes_on(self) -> None:
+        """The client left; the thread works on to the end of its
+        block, and the memory is in use until then."""
+        answer = L.Answer()
+        answer.arrived("small")
+        with L.server_scope("small", answer=answer):
+            answer.sent()
+            assert (L.places(), L.in_flight()) == (1, (1, 0)), "the place came back while its request was at work"
+        assert (L.places(), L.in_flight()) == (0, (0, 0))
+
+    @pytest.mark.parametrize("seconds, gets_its_turn", [(30.0, True), (0.3, False)])
+    def test_and_while_it_stands_in_the_line(self, seconds: float, gets_its_turn: bool) -> None:
+        """Its client left while it waited: the place is kept until
+        it has had its turn and its block has ended -- or until it
+        gives the line up at its deadline."""
+        first = _Request("small").working()
+        answer = L.Answer()
+        limits = replace(L.SMALL, seconds=seconds)
+        answer.arrived(limits)
+        refused: list[L.LimitExceeded] = []
+
+        def waits() -> None:
+            try:
+                with L.server_scope(limits, answer=answer):
+                    pass
+            except L.LimitExceeded as exc:
+                refused.append(exc)
+
+        thread = threading.Thread(target=waits, daemon=True)
+        thread.start()
+        _until(lambda: L.in_flight() == (1, 1), "the request standing in the line")
+        answer.sent()
+        assert L.places() == 1, "the place came back while its request stood in the line"
+        if gets_its_turn:
+            first.finish()
+        thread.join(10)
+        assert not thread.is_alive() and bool(refused) is not gets_its_turn
+        assert L.places() == 0
+        first.finish()
+
+    def test_a_turn_taken_back_does_not_take_the_place_with_it(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An answer nobody reads loses its turn at the deadline, to
+        whoever waits.  Its place is the application's to give back,
+        when it has let the answer go."""
+        clock = _Hands()
+        monkeypatch.setattr(L, "time", clock)
+        unread = L.Answer()
+        unread.arrived("small")
+        with L.server_scope("small", answer=unread):
+            pass
+        clock.now = 1_020.5
+        second = _Request("small")  # on a thread of its own: the clock is stopped, and a test must end
+        second.start()
+        try:
+            assert second.inside.wait(10), "the turn was never taken back from an answer nobody read"
+            assert (L.places(), L.in_flight()) == (1, (1, 0))
+        finally:
+            clock.now += 1_000.0  # whatever went wrong, nothing waits on this clock any more
+            unread.sent()
+            second.finish()
+        assert L.places() == 0

@@ -814,10 +814,13 @@ diff page — no `migrate-diff-viewer` testid is needed.
 ## Sanitize page (`/sanitize`)
 
 PII-redaction workbench.  Pick a source vendor, paste or select a stored
-config, submit to `POST /api/v1/sanitize`.  The page fires the sanitize
-call **twice in parallel** when dry-run is unchecked — once with
-`dry_run=true` for the audit table and once with `dry_run=false` for
-the sanitized text — so the operator sees both views in one round-trip.
+config, submit to `POST /api/v1/sanitize`.  The page makes the sanitize
+call **twice, in turn** when dry-run is unchecked — first with
+`dry_run=true` for the audit table, and when that has answered with
+`dry_run=false` for the sanitized text — so the operator sees both views
+from one submit.  Never both at once: each is a whole parse and render
+of the same config (`tests/e2e/test_config_limits_e2e.py` reads the
+order of the requests the page makes).
 When dry-run is checked, only the audit fires and the output section
 hides.  Mirrors the migrate page's input-mode pattern; testid prefix
 is `sanitize-` everywhere.
@@ -839,7 +842,7 @@ is `sanitize-` everywhere.
 | `sanitize-filename-select`          | `<select>`  | Options are existing ConfigRecord filenames |
 | `sanitize-dry-run-checkbox`         | `<input type="checkbox">` | When checked, only the audit fires (no sanitized output rendered) |
 | `sanitize-submit-btn`               | `<button type="submit">` | Runs the sanitization |
-| `sanitize-refusal`                  | `<div role="alert">` | Not interactive.  Hidden until the server answers 413 — an upload over the byte cap, or a config past a config size limit (`NETCANON_CONFIG_LIMITS`).  Holds the server's sentence (what was large, how large, the limit) and stays until the next submit; every other failure is a `toast`.  Class `san-banner-refused` |
+| `sanitize-refusal`                  | `<div role="alert">` | Not interactive.  Hidden until the server answers 413 — an upload over the byte cap, or a config past a config size limit (`NETCANON_CONFIG_LIMITS`) — or 503: a server set to work on one config at a time was busy with another for as long as a request may wait.  Holds the server's sentence (what was large, how large, the limit; or that it was busy, and to send it again) and stays until the next submit; every other failure is a `toast`.  Class `san-banner-refused` |
 | `sanitize-result`                   | `<div>`     | Hidden container for everything below; revealed after first result |
 | `sanitize-status-summary`           | `<div>`     | "Sanitized in {ms}ms — N redaction(s) applied" |
 | `sanitize-stats`                    | `<div>`     | Per-category counter strip; contains one `sanitize-counter-{category}` `<span>` per category present |
@@ -858,10 +861,11 @@ is `sanitize-` everywhere.
 The sanitize API returns one of two shapes depending on `dry_run` —
 `text/plain` (sanitized config) or `application/json` (substitution
 audit).  Operators consistently want both views: *what changed* AND
-*the final text*.  Round-6 Phase-3 chose dual-parallel-fetch
+*the final text*.  Round-6 Phase-3 chose two fetches on one submit
 (Option B in the design doc) over a single API call + audit-only
 trade-off so the operator never has to submit twice for the
-common case.
+common case.  The two were first sent at once; they are sent in
+turn, because two at once hold the config in memory twice over.
 
 ---
 

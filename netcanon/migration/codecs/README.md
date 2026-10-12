@@ -538,6 +538,10 @@ the policy locally:
   new int an id as well — a config can state a wide range on every
   port it has.  Used by `_parse_vlan_list` and `merge_trunk_allowed`
   here and by the Arista and Junos parsers' own expanders.
+  **`sole_vlan_id(text)`** answers "does this list name exactly one id,
+  and which" without making the list: a second pass over a line that
+  another pass expands asks this, because a line expanded twice is
+  counted twice (NX-OS did, for `vlan <range>`).
 
 * **`netcanon/migration/limits.py`** — what one request may make, and
   for how long.  `charge(kind, n, where)` before an expander makes its

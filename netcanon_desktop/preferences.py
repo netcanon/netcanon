@@ -69,7 +69,9 @@ class DesktopPreferences(BaseModel):
             of the web platform's ``NETCANON_CONFIG_LIMITS``, with the
             same default (``standard``).  The dialog offers
             ``standard``, ``large`` and ``unlimited``; ``small`` -- the
-            public demo's -- is a value this model takes, so that a
+            public demo's, and the only one under which the embedded
+            server works on one request at a time -- is a value this
+            model takes, so that a
             file edited by hand is honoured, and one the dialog shows
             only when it is the stored value.  Takes effect on the
             next start.

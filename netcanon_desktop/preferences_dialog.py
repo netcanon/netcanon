@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 #: that opening the dialog and saving never changes it unasked.
 LIMITS_OFFERED: tuple[str, ...] = ("standard", "large", "unlimited")
 LIMITS_LABELS: dict[str, str] = {
-    "small": "Small (the public demo's)",
+    "small": "Small (the public demo's: one config at a time)",
     "standard": "Standard",
     "large": "Large (four times Standard)",
     "unlimited": "Unlimited (no limit and no time limit)",

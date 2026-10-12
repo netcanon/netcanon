@@ -224,7 +224,18 @@ counted is still refused.  Then by reading the source, each rule with
 a table that a new case fails until it is in: every loop over a
 config's lines, every `range(...)` in a module under `codecs/`, every
 broad exception handler on the way.  A separate test holds every limit
-a document prints to the code's (`test_limits_docs_truth.py`).  What
+a document prints to the code's (`test_limits_docs_truth.py`).
+Requests at once -- under the demo's limits a server works on one at a
+time -- are tested with an event the first request holds, never a
+sleep: the second is seen in the line and then seen to run, and "busy"
+is read on every surface, the pages included.  Clients that do not
+behave are tested over a real socket and against a server the test
+plays itself: one that sends its headers and no body, one that leaves,
+one that never reads its answer.  A job's answer is
+compared byte for byte with what the framework would have sent
+(`test_job_answer.py`).  The memory itself is measured in a container
+with an instance's limits, by hand, and recorded in
+`docs/demo-plan/07-budget.md`: no test here can see a megabyte.  What
 none of this shows: that the numbers are right for a device nobody
 here has a capture of.
 

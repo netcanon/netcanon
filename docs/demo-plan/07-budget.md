@@ -64,40 +64,123 @@ why the cap is not the sizing basis: sizing off it would imply 8 GB and make an
   mode (swap-off + `memswap_limit == mem_limit` means reaching the cap can only
   end in a kill, never in swap thrash).
 
-**What one paste can do to an instance** (measured 2026-10-11, Docker
+**What one paste can do to an instance** (measured 2026-10-12, Docker
 Desktop: a container with this instance's limits — 256 MiB and no swap, half
-a CPU, 128 pids, read-only root — running netcanon with
-`NETCANON_CONFIG_LIMITS=small`; memory is the cgroup's own `memory.peak`, of
-268.4 MB).  An instance idles at 84 MB after two small translations.
+a CPU, 128 pids, read-only root — started by the image's own entry point,
+`netcanon serve`, with `NETCANON_CONFIG_LIMITS=small`; memory is the cgroup's
+own `memory.peak`, of 268.4 MB).  An instance idles at 84 MB after two small
+translations.  Every row is a fresh container and one round of requests sent
+again and again: until the peak had not risen by half a megabyte in twelve
+rounds (and at least fifteen had been run), or for sixty rounds, whichever
+came first.  The arrow is the peak after the first round and after the
+last; the last column is how many rounds, and whether the peak had stopped
+rising.  The first seven rows were sent five or six times each.  Up to four
+such containers ran at a time, on a machine that was running this project's
+tests besides: that does not move the memory, and it does move the seconds.
 
-| The request | The visitor gets | Most memory |
-|---|---|---|
-| A real 48-port switch whose trunks state `1-99,101-4094` (5 KB) | translated in 0.03 s | 86 MB |
-| One AOS-S line of 800 port ranges (11 KB) | `refused` in under 0.01 s | 85 MB |
-| 1,000 Arista trunks that allow 2-4000 (91 KB) | `refused` in 0.02 s | 91 MB |
-| 1,000 trunks that allow every VLAN x 1,000 VLANs (118 KB) | `refused` in 0.05 s | 91 MB |
-| 32,000 addresses on one Junos unit (2.0 MB) | translated in 1.4 s | 142 MB |
-| The largest committed capture (1.1 MB), sanitised: the page's two requests at once | sanitised in 0.6 s | 106 MB |
-| **Every limit at once** in a 1.98 MB body — 256 trunks that allow every VLAN, 195 VLANs, 2,244 one-line interfaces, static routes to fill — translated to OPNsense, four times over | translated in 1.4–1.6 s, a 38 MB answer | **193 → 205 MB** |
-| the same text, translated to Junos | translated in 1.5 s | 171 MB |
-| the same text, sanitised: one request after the other | sanitised in about 2 s each | **237 → 240 MB** |
-| the same text, two translations at once, or the sanitise page's two requests at once | connection lost | **instance killed** (`oom=true`) |
+| The request | The visitor gets | Most memory | Rounds |
+|---|---|---|---|
+| A real 48-port switch whose trunks state `1-99,101-4094` (5 KB) | translated in 0.04–0.07 s | 87 → 89 MB | 5 |
+| One AOS-S line of 800 port ranges (11 KB) | `refused` in 0.00–0.01 s | 86 → 87 MB | 5 |
+| 1,000 Arista trunks that allow 2-4000 (91 KB) | `refused` in 0.02–0.04 s | 91 → 93 MB | 5 |
+| 1,000 trunks that allow every VLAN x 1,000 VLANs (118 KB) | `refused` in 0.03–0.05 s | 92 → 94 MB | 5 |
+| 32,000 addresses on one Junos unit (2.0 MB) | translated in 1.6–1.6 s | 141 → 143 MB | 5 |
+| The largest committed capture (1.1 MB), sanitised as the page does it: the audit, then the output | sanitised, 0.26–0.43 s a request | 95 → 102 MB | 6 |
+| the same two requests at once | both sanitised, in turn; 0.6–0.7 s in all | 98 → 104 MB | 6 |
+| **Every limit at once** in a 1.98 MB body — 256 trunks that allow every VLAN, 195 VLANs, 2,244 one-line interfaces, static routes to fill — translated to OPNsense | translated in 1.6–2.0 s, a 38 MB answer | 169 → 215 MB | 34; stopped rising (last rise in round 22) |
+| the same text, translated to Junos | translated in 1.5–2.1 s, a 7 MB answer | 169 → 175 MB | 27; stopped rising (last rise in round 15) |
+| the same text, sanitised: the audit | 1.5–1.8 s | 164 → 170 MB | 33; stopped rising (last rise in round 21) |
+| the same text, sanitised: the text itself (7 MB) | 1.9–2.2 s | 182 → 188 MB | 30; stopped rising (last rise in round 18) |
+| the same text, sanitised as the page does it: the audit, then the output | 4.2–6.2 s in all | 180 → 188 MB | 23; stopped rising (last rise in round 11) |
+| **two translations of it at once** | both translated; the second waits for the first, 3.3–5.2 s in all | 173 → 225 MB | 32; stopped rising (last rise in round 20) |
+| **three at once** | all translated, in turn; 6.2–8.4 s in all | 189 → 233 MB | 30; stopped rising (last rise in round 18) |
+| the sanitise page's two requests **at once** (as the page used to send them) | both sanitised, in turn; 4.6–7.4 s in all | 183 → 194 MB | 32; stopped rising (last rise in round 20) |
+| a translation and the sanitise pair at once | all answered, in turn; 6.0–9.8 s in all | 185 → 224 MB | 24; stopped rising (last rise in round 12) |
+| three sanitise requests at once | all sanitised, in turn; 6.1–10.1 s in all | 186 → 198 MB | 16; stopped rising (last rise in round 4) |
+| 1.98 MB of static routes: two translations at once | both translated, 2.6–5.7 s in all | 165 → 198 MB | 18; stopped rising (last rise in round 6) |
+| 1.98 MB of static routes: the sanitise pair at once | both sanitised, 3.7–5.0 s in all | 156 MB | 15; stopped rising (last rise in round 1) |
+| **twelve translations at once** | three translated in turn (1.7–7.8 s); nine answered 503 in words, in 0.00–1.01 s | 186 → 232 MB | 35; stopped rising (last rise in round 23) |
+| sixteen at once | three translated; thirteen answered 503, in 0.00–1.15 s | 183 → 233 MB | 23; stopped rising (last rise in round 11) |
+| twenty at once | three translated; seventeen answered 503, in 0.00–2.15 s | 185 → 237 MB | 44; stopped rising (last rise in round 32) |
+| thirty at once | three translated; twenty-seven answered 503, in 0.00–2.57 s | 184 → 236 MB | 43; stopped rising (last rise in round 31) |
+| three sanitise requests at once, then ten translations at once, alternating | every sanitise request answered; of each ten translations three translated and seven answered 503 | 187 → 230 MB | 28; stopped rising (last rise in round 16) |
+| an honest heavy visitor: reading the vendor and the device out of the paste and translating it, at once; then the sanitise pair in turn; sixty times over | every request answered, none refused | 185 → 222 MB | 60; stopped rising (last rise in round 11) |
+
+`oom_kill` was 0 in every row.  `/health` was answered all the while: its
+slowest answer was 433 ms in the rows above "twelve translations at
+once", and 1022 to 1956 ms in the bursts and the alternating
+row.  Most of the 503s of a burst came back in under 0.05 seconds; the
+slowest of each row is in the table.
 
 So with `small`, one request does not end an instance, and the three texts
 that used to take hundreds of megabytes or gigabytes are refused in
-milliseconds.  Two things remain.  **Two large requests at once end the
-instance they were sent to** — and the sanitise page sends its two requests
-at once, so one click there with a paste near the body cap does it.  The
-kill is still contained to the sender's own sandbox, as before.  And most of
-the 240 MB is not anything a limit counts: two megabytes of static routes
-alone, sanitised, take the instance to 190 MB.  The limits are what was left
-after lowering them until the counted part was small beside that: with
-`vlan_ids` at four times its number and `interfaces` and `memberships` at
-twice theirs, the request built for those limits, repeated, took the
-instance to 264 MB, and one sanitise request of it ended the instance.  Past
-this, the levers are the body cap in Caddy and a limit on requests in
-flight, not the counts.  Re-measure on the real host with the release's own
-image, as for the numbers above.
+milliseconds.  **Requests at once do not end it either**, and that is four
+things, each found by measuring a container like this one:
+
+* An instance works on one request that reads config text at a time; a
+  second waits its turn inside its own 20 seconds, at most 2 wait, and one
+  more is refused in words that say the server was busy and to send it
+  again.
+* A request is counted when its headers arrive; there are 3 places, and a
+  request that finds them taken is answered 503 before its body is read.
+  A body used to be read before its request could ask for a turn, so a
+  burst cost what all its bodies cost, however few were let work.
+* At its request's deadline an answer nobody has read is abandoned, so
+  an answer has the request's 20 seconds to be read in; and the system
+  ends the connection of a client that has taken nothing for that long
+  (`netcanon serve` asks it to, on the socket it listens on).
+* The sanitiser redacts the tree it parsed, where it used to copy it:
+  the heaviest request an instance takes went from
+  231 MB to 188.
+
+**Clients that do not behave**, in the same container:
+
+| What the clients do | What happens | Most memory |
+|---|---|---|
+| Thirty send a translation with a two-megabyte body and leave; a small translation is sent a second later (36 rounds) | three of the thirty are worked on, for nobody; the small translation is translated after 0.0–3.8 s in 18 rounds and answered 503 at once in 18 | 187 → 232 MB; stopped rising |
+| Eight of the largest translations, one about every twenty seconds (19.5 s after the instance's counters were read for the last), whose answers are never read | each answer is abandoned at its request's 20 seconds, with 0.4–3.8 of its 38 MB taken; a small translation sent meanwhile is translated at once | 168 → 186 MB; socket buffers 4.2 MB at most |
+| Forty of them, twice (two fresh containers) | the same: 40 abandoned each time, the instance alive after all 40 | 169 → 198 MB and 173 → 206 MB; socket buffers 4.3 MB at most |
+| One largest translation read at a megabyte a second; a small one sent 3 s after it (3 rounds) | the reader gets 24–28 of its 38 MB, and the connection is closed on it at its request's 20 seconds; the small one waits 17.0 s for the turn and is translated | 170 → 178 MB |
+| Three send their headers and one byte of body, and no more | each is answered 408 at 20.0 s; another request sent meanwhile is answered 503 at once | 86 MB |
+| 400 ask for the migrate page and read nothing | every one is served; a translation sent meanwhile is translated at once | 96 → 103 MB |
+
+**What the same requests did before**, measured the same day with the image
+of each stage:
+
+| The request | Before | Now |
+|---|---|---|
+| three translations at once | the release before the limits, and the limits without turns: killed in the first round, both | 189 → 233 MB |
+| twelve at once | with turns, a body read before its request was counted: 214 → 267 MB in 30 rounds, and still rising | 186 → 232 MB |
+| twenty at once | the same image: 266 MB after the first burst, at its limit after the second, killed in the fourth | 185 → 237 MB |
+| three sanitise requests at once, then ten translations, alternating | the same image: killed in the sixth round | 187 → 230 MB |
+| thirty clients that send and leave | the same image: killed in the second round | 187 → 232 MB |
+| answers nobody reads, one about every twenty seconds | the same image: 172, 215 and 254 MB after the first three, killed at the fourth | 169 → 198 MB and 173 → 206 MB after 40 |
+| three sanitise requests at once | the same image: 251 → 264 MB in 20 rounds, and still rising | 186 → 198 MB |
+
+Three things remain.  **The peaks are high.**  One translation of the
+largest text takes an instance to 215 MB of its 268, three at once to
+233, and a burst to 232–237: that is the size of one request, most of
+it nothing a limit counts (two megabytes of static routes), and what the
+process keeps.  **An instance does not come back down**: after ten or more
+rounds of the largest requests it holds 148 to 190 MB at rest, where it
+idled at 84.  The next request uses the memory again, so the peaks stop
+rising -- every row was sent until its peak had, or says that it had not
+-- but they stop high.  **Nothing limits connections.**  What one
+connection can make an instance hold is small now, and not nothing: the
+table above is what was tried.  A visitor with connections enough can
+still end their own sandbox, and nobody else's; past this the levers are
+a limit on connections to an instance and the size of an answer, not the
+counts.
+
+The limits themselves are what was left after lowering them until the
+counted part was small beside the rest.  With everything above in, the
+numbers they were lowered from were measured again: with `vlan_ids` at
+four times its number and `interfaces` and `memberships` at twice theirs,
+the request built for those limits, translated 37 times, took an
+instance to 238 MB, and sanitised as the page does it 34 times, to
+202 MB; both had stopped rising.  The numbers were not changed.
+Re-measure on the real host with the release's own image, as for the
+numbers above.
 
 Per-box defaults:
 

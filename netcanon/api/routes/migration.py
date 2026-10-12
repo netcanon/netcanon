@@ -107,6 +107,25 @@ job-running handlers dispatch through
 :func:`._migration_helpers.run_translation`, so the same body renders
 the same port names whichever of them it is posted to.
 
+Every handler here that reads config text -- the seven that return a
+job, ``/detect`` and ``/detect-deployment`` -- works inside the
+server's scope (:func:`~netcanon.migration.limits.server_scope`):
+the limits this server is set to, one deadline for the request, and,
+where those limits say how many requests work at once, the request's
+turn, which it keeps until its answer has gone out.  A request that
+did not get one -- or got it after a wait, and too late to finish --
+is answered as a refusal: a ``failed`` job whose ``refusal.limit``
+is ``at_once``, a note from ``/detect-deployment``, 503 with
+``Retry-After`` from ``/detect``.
+
+Under such limits the application also counts a request to any of
+the nine when its headers arrive, before it reads the body
+(``_migration_helpers.AnswerSent``).  While as many are in flight
+as may work and wait, one more is answered 503 with ``Retry-After``
+at once, by the application and not by a handler here, whichever
+of the nine it was sent to; and a request whose body has not
+arrived inside the time a request may take is answered 408.
+
 Where an entry above says a handler "dispatches to
 run_plan_with_overrides" with only its own map engaged, that is the
 path of a request that does not declare its devices.  One that does
@@ -136,9 +155,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from ...migration.codecs.registry import get_codec
-from ...migration.deployment_detect import propose_deployment
+from ...migration.deployment_detect import propose_deployment, unread_proposal
 from ...migration.device_models import FamilyDef
-from ...migration.limits import LimitExceeded, limits_scope
+from ...migration.limits import LimitExceeded, server_scope
 from ...migration.target_profiles import TargetProfile
 from ...models.migration import (
     CapabilityMatrix,
@@ -155,6 +174,9 @@ from ._migration_helpers import (
     compile_declared_device,
     get_model_families,
     get_target_profiles,
+    job_answer,
+    refusal_as_http,
+    request_answer,
     request_has_overrides_or_profile,
     request_limits,
     resolve_adapter_or_422,
@@ -221,6 +243,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/migration", tags=["migration"])
 
 
+# What the application answers, before any handler here runs, to a request
+# that reads config text on a server whose limits say how many requests work
+# at once (under ``small``: one).  See ``_migration_helpers.AnswerSent``.
+_NO_PLACE_RESPONSES: dict[int | str, dict] = {
+    408: {
+        "description": (
+            "The request's body had not arrived inside the time a request "
+            "may take.  Only on a server whose limits say how many requests "
+            "work at once."
+        ),
+    },
+    503: {
+        "description": (
+            "The server works on a set number of requests at once, and as "
+            "many were in flight as may work and wait.  Nothing of this "
+            "request was read; send it again (`Retry-After`)."
+        ),
+    },
+}
+
 # Automation contract (audit f92e97a #7, e5b77d7 #8): every job-running POST
 # endpoint sets the ``X-Netcanon-Job-Status`` response header to the job
 # disposition so a naive CI gate that only reads the HTTP status can still
@@ -229,6 +271,12 @@ router = APIRouter(prefix="/migration", tags=["migration"])
 # runtime) makes it visible in the OpenAPI schema and generated clients.
 # Shared so all seven job-running handlers stay in lock-step; FastAPI merges
 # this 200 entry with the response_model-derived body schema.
+#
+# Each handler RETURNS ``job_answer(job, response)`` -- the job written to
+# JSON a piece at a time -- and not the job: left to the framework, a large
+# job's answer costs several times its size to make.  ``response_model``
+# stays declared, for the schema; the bytes are the ones the framework would
+# have sent.
 _JOB_STATUS_RESPONSES: dict[int | str, dict] = {
     200: {
         "headers": {
@@ -251,6 +299,7 @@ _JOB_STATUS_RESPONSES: dict[int | str, dict] = {
             "Invalid adapter name, input specification or device declaration"
         ),
     },
+    **_NO_PLACE_RESPONSES,
 }
 
 
@@ -300,7 +349,7 @@ def plan_migration(
     request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
-) -> MigrationJob:
+) -> Response:
     """Run the translator pipeline for *body* and return the job.
 
     Stages executed: class-guard → parse → (transforms) → validate →
@@ -337,7 +386,11 @@ def plan_migration(
       ``job.error`` begins ``refused:``, when the config asks for more
       than this server's limits allow or the request ran out of time
       (``NETCANON_CONFIG_LIMITS``).  The words name what was large,
-      how large, and the limit.
+      how large, and the limit.  ``refusal.limit`` is ``at_once``
+      when the server works on a set number of requests at once and
+      this one did not get a turn in the time it may take: nothing
+      of the config was read, and the same request can be sent
+      again.
 
     **Declared devices.**  When the body says which device the config
     came from and which it is going to (``source_deployment`` or
@@ -415,7 +468,7 @@ def plan_migration(
     # still distinguish completed / partial / failed (the endpoint
     # always returns 200 with the job body — see the docstring).
     response.headers["X-Netcanon-Job-Status"] = job.status.value
-    return job
+    return job_answer(job, response)
 
 
 @router.post(
@@ -429,7 +482,7 @@ def plan_migration_ports(
     request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
-) -> MigrationJob:
+) -> Response:
     """Port-rename-only entry into the migration pipeline.
 
     First concrete per-pane override endpoint.  Establishes the
@@ -476,7 +529,7 @@ def plan_migration_ports(
     # /plan and can yield partial/failed, so they must surface the job
     # disposition in the response header too (audit f92e97a #7).
     response.headers["X-Netcanon-Job-Status"] = job.status.value
-    return job
+    return job_answer(job, response)
 
 
 @router.post(
@@ -490,7 +543,7 @@ def plan_migration_vlans(
     request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
-) -> MigrationJob:
+) -> Response:
     """VLAN-rename-only entry into the migration pipeline.
 
     Second concrete per-pane override endpoint (ports was the first,
@@ -546,7 +599,7 @@ def plan_migration_vlans(
         job.status.value,
     )
     response.headers["X-Netcanon-Job-Status"] = job.status.value  # audit f92e97a #7
-    return job
+    return job_answer(job, response)
 
 
 @router.post(
@@ -560,7 +613,7 @@ def plan_migration_local_users(
     request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
-) -> MigrationJob:
+) -> Response:
     """Local-user-rename-only entry into the migration pipeline.
 
     Third concrete per-pane override endpoint (ports + vlans came
@@ -622,7 +675,7 @@ def plan_migration_local_users(
         job.status.value,
     )
     response.headers["X-Netcanon-Job-Status"] = job.status.value  # audit f92e97a #7
-    return job
+    return job_answer(job, response)
 
 
 @router.post(
@@ -636,7 +689,7 @@ def plan_migration_snmp(
     request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
-) -> MigrationJob:
+) -> Response:
     """SNMP-community-rename-only entry into the migration pipeline.
 
     Fourth concrete per-pane override endpoint (ports + vlans +
@@ -699,7 +752,7 @@ def plan_migration_snmp(
         job.status.value,
     )
     response.headers["X-Netcanon-Job-Status"] = job.status.value  # audit f92e97a #7
-    return job
+    return job_answer(job, response)
 
 
 @router.post(
@@ -713,7 +766,7 @@ def plan_migration_snmpv3(
     request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
-) -> MigrationJob:
+) -> Response:
     """SNMPv3-user-rename-only entry into the migration pipeline.
 
     Fifth concrete per-pane override endpoint after
@@ -776,7 +829,7 @@ def plan_migration_snmpv3(
         job.status.value,
     )
     response.headers["X-Netcanon-Job-Status"] = job.status.value  # audit f92e97a #7
-    return job
+    return job_answer(job, response)
 
 
 @router.post(
@@ -790,7 +843,7 @@ def render_migration(
     request: Request,
     response: Response,
     storage: BaseConfigStore = Depends(get_storage),
-) -> MigrationJob:
+) -> Response:
     """Currently an alias for :func:`plan_migration`.
 
     Kept as a separate route so Phase 2 can split plan (no render
@@ -810,8 +863,18 @@ def render_migration(
     summary="Auto-detect compatible source codecs for a raw config",
     responses={
         404: {"description": "source_filename does not exist"},
+        408: _NO_PLACE_RESPONSES[408],
         413: {"description": "Reading the text ran past the request's time limit"},
         422: {"description": "Invalid input specification"},
+        503: {
+            "description": (
+                "The server works on a set number of requests at once and "
+                "this one did not get a turn in the time it may take, or "
+                "got it too late to finish, or as many were in flight "
+                "already as may work and wait; send it again "
+                "(`Retry-After`)"
+            ),
+        },
     },
 )
 def detect_source_codec(
@@ -853,12 +916,13 @@ def detect_source_codec(
             ) from exc
     # Under the server's limits, as everything that reads config text
     # is.  A probe reads a bounded window and makes nothing, so the
-    # one limit that can be met here is the request's time.
+    # limits that can be met here are the request's time, and its
+    # turn where the server works on a set number at once.
     try:
-        with limits_scope(request_limits(request)):
+        with server_scope(request_limits(request), answer=request_answer(request)):
             return detect_codec(raw, min_confidence=body.min_confidence)
     except LimitExceeded as exc:
-        raise HTTPException(status_code=413, detail=f"Refused: {exc}") from exc
+        raise refusal_as_http(exc) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -983,6 +1047,7 @@ def compile_inventory(body: InventoryRequest, request: Request) -> Inventory:
     responses={
         404: {"description": "source_filename does not exist"},
         422: {"description": "Invalid codec or input specification"},
+        **_NO_PLACE_RESPONSES,
     },
 )
 def detect_source_deployment(
@@ -1018,6 +1083,13 @@ def detect_source_deployment(
       ``notes`` then says what was large and the limit), or it names
       no port.
 
+    On a server that works on a set number of requests at once, a
+    request that did not get a turn in the time it may take is
+    answered with nothing proposed and one note, which says the
+    server was busy and to send it again.  (One that arrives while
+    as many are in flight as may work and wait is answered 503 by
+    the application, before this handler runs.)
+
     ``deployment`` is ``null`` unless every device the config names is
     a model of one family, in a mode that is not in doubt, and the
     result compiles: so also when the config does not state its
@@ -1031,5 +1103,11 @@ def detect_source_deployment(
     """
     codec = resolve_adapter_or_422(body.source, side="source")
     raw_text = resolve_input_text(body, storage)
-    with limits_scope(request_limits(request)):
-        return propose_deployment(codec, raw_text, get_model_families(request))
+    try:
+        with server_scope(request_limits(request), answer=request_answer(request)):
+            return propose_deployment(codec, raw_text, get_model_families(request))
+    except LimitExceeded as exc:
+        # propose_deployment answers a refusal of the text itself.  What
+        # reaches here was raised where the scope is opened: the request
+        # did not get a turn.  An answer, as everything here is.
+        return unread_proposal(codec, exc)

@@ -49,8 +49,8 @@ your server runs on).
 3. **Preview redactions only** (optional checkbox).  When checked,
    only the audit table renders — useful to verify what *will* be
    redacted before trusting the round-tripped output.  When
-   unchecked (the default), the page fires both calls in parallel
-   and renders the audit + sanitized text together.
+   unchecked (the default), the page makes both calls, one after the
+   other, and renders the audit + sanitized text together.
 4. Click **Sanitize**.  The result panel shows a per-category
    counter strip, the sanitized output (with copy + download
    buttons), and a full substitution audit table.
@@ -169,7 +169,9 @@ Full rules and limitations in the sanitiser's module docstring at
   sanitised.**  The sanitiser parses and re-renders, so it is under the
   same limits as a translation: the page shows the sentence under the
   form, the API answers 413, and the CLI exits 2 (`--limits large`
-  allows more).  The sentence names what was large and the limit — see
+  allows more).  (On the public demo a sanitise request can also be
+  answered "busy" — 503 — when the instance was at work on another
+  config: send it again.)  The sentence names what was large and the limit — see
   [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) "The job says
   `refused:`".  If the refusal is the bug you are reporting, paste the
   sentence: it quotes one range or one port name from the config and

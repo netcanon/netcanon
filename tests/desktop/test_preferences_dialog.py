@@ -335,7 +335,7 @@ class TestTheConfigSizeLimit:
         assert limits_choices("small") == ["small", "standard", "large", "unlimited"]
         d = self._dialog(tmp_path, config_limits="small")
         combo = d._limits_combo
-        assert combo.itemText(0) == "Small (the public demo's)" and combo.count() == 4
+        assert combo.itemText(0) == "Small (the public demo's: one config at a time)" and combo.count() == 4
         assert combo.currentIndex() == 0
 
     def test_every_offered_limit_has_a_label(self):

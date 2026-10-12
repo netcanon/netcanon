@@ -310,7 +310,9 @@ class Settings(BaseSettings):
             default) admits every device a vendor verifies; ``large``
             is four times that; ``unlimited`` is no limit and no
             deadline; ``small`` is what the public demo runs, in a
-            container of 256 MiB.  A request past a limit is refused
+            container of 256 MiB, and the only one under which the
+            server works on one request that reads config text at a
+            time (a second waits its turn).  A request past a limit is refused
             in a sentence that names what was large, how large, and
             the limit.  Override via ``NETCANON_CONFIG_LIMITS``; the
             desktop application sets it in Preferences.  A value that
@@ -359,7 +361,7 @@ class Settings(BaseSettings):
 
         ``configure_logging`` runs at import time (``main.py``), outside the
         graceful-startup handler, and passes this value to
-        ``logging.setLevel`` (and ``netcanon serve`` to ``uvicorn.run``).  A
+        ``logging.setLevel`` (and ``netcanon serve`` to uvicorn's own).  A
         mistyped value (``verbose``, ``warn``, a stray-whitespace
         ``"DEBUG "``, an empty string) would otherwise raise an unhandled
         ``ValueError`` and crash every entry path with a raw traceback

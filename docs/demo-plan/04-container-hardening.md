@@ -84,8 +84,15 @@ Notes:
   the key an instance runs the product's default limits, which are sized for a
   server.  **An image built before the limits existed ignores the key and
   says nothing**: `deploy/VERIFY.md` proof 14 shows, by behaviour, that the
-  running image has them.  What `small` does not do: two large requests at
-  once can still end the instance they were sent to
+  running image has them.  `small` also makes an instance work on ONE
+  request that reads config text at a time -- two of the largest at once
+  ended an instance that either of them fitted in -- with a second waiting
+  its turn and a request that waited out its 20 seconds refused in words;
+  proof 15 shows that by behaviour too.  A request is counted when its
+  headers arrive, so a burst is turned away before its bodies are read
+  (proof 16), and an answer nobody reads is let go at its request's
+  deadline (proof 17).  What `small` does not do: bound how many
+  connections a visitor opens and leaves open
   ([07](07-budget.md#sizing)).
 - **`NETCANON_LOG_LEVEL=warning` is safe.** netcanon never logs request bodies
   at **any** level; only parsed config *fragments* appear at `debug`. `warning`

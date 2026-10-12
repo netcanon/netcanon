@@ -157,6 +157,20 @@ def test_an_instance_runs_the_small_limits(spec):
     )
 
 
+def test_an_instance_works_on_one_request_at_a_time(spec):
+    """Every number of ``small`` was measured with ONE request in the
+    container.  Two of the largest at once ended an instance either of
+    them fitted in, so the limits an instance runs are also the ones
+    under which the product takes requests in turn -- and a request's
+    whole time, its wait for a turn included, is inside the proxy's
+    timeout."""
+    from netcanon.migration import limits
+
+    small = limits.PROFILES[spec["environment"]["NETCANON_CONFIG_LIMITS"]]
+    assert small.at_once == 1
+    assert small.seconds < 30
+
+
 def test_instance_binds_all_interfaces_on_the_internal_net_only(spec):
     assert spec["environment"]["NETCANON_HOST"] == "0.0.0.0"
     assert spec["environment"]["NETCANON_PORT"] == str(C.INSTANCE_PORT) == "8000"

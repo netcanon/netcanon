@@ -74,6 +74,7 @@ from .._helpers import (
     _parse_vlan_list,
     address_key,
     merge_trunk_allowed,
+    sole_vlan_id,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -1300,8 +1301,11 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
     for line in ticked(raw.splitlines()):
         tm = _VLAN_TOP_RE.match(line)
         if tm:
-            ids = _parse_vlan_list(tm.group(1))
-            current_id = ids[0] if len(ids) == 1 else None
+            # Only whether the line opens a stanza of ONE VLAN: the
+            # list is expanded, and counted, where the VLANs are read
+            # (``_parse_vlans``).  Expanded here as well, ``vlan
+            # 2-2502`` was charged as 5,002 ids.
+            current_id = sole_vlan_id(tm.group(1))
             continue
         if current_id is not None:
             sm = _VN_SEGMENT_RE.match(line)

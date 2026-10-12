@@ -308,10 +308,12 @@ sets (`small`, `standard`, `large`, `unlimited`), are in
 **Three objects, and no signature that carries them.**
 
 * a *scope* (`limits_scope`) says which set applies and holds the
-  request's deadline.  An entry point opens it: the request path in
-  `_migration_helpers.run_translation`, the sanitiser's route on its
-  worker thread, detection, the command line.  Work that opens none runs
-  under `standard`, so a caller nobody thought about is still bounded.
+  request's deadline.  An entry point opens it: the command line, a
+  tool, a test.  A handler of the server opens `server_scope`, which is
+  the same and takes the request's turn as well (below): the request
+  path in `_migration_helpers.run_translation`, the sanitiser's route
+  on its worker thread, detection.  Work that opens none runs under
+  `standard`, so a caller nobody thought about is still bounded.
 * a *meter* (`metered`) holds the running counts of ONE stage.
   `CodecBase.__init_subclass__` already wrapped every codec's `parse`
   (to turn a model's validation error into a `ParseError`); the same
@@ -322,6 +324,85 @@ sets (`small`, `standard`, `large`, `unlimited`), are in
 
 Both are context variables: a request's handler runs on a worker
 thread, and its counts and its limits are that thread's.
+
+**Requests at once.**  Counts and a deadline are for one request, and
+requests at once add up.  A set of limits can therefore also say how
+many requests a server WORKS on at once (`Limits.at_once`: one under
+`small`, no limit under the others).  It is taken where the server's
+scope is opened, so every handler that reads config text is covered by
+opening its scope and by nothing else:
+
+* A request holds memory before any handler runs: its body.  So the
+  outermost middleware (`_migration_helpers.AnswerSent`) COUNTS a
+  request that would read config text when its headers arrive
+  (`Answer.arrived`; which requests those are is decided from the
+  method and the path, `READS_CONFIG_TEXT`).  There are as many places
+  as may work and wait.  One more request is answered there, 503 with
+  `Retry-After`, and its body is never asked for.  The request's one
+  deadline is set then too, and runs from its arrival.
+* `server_scope` takes that deadline (or sets one, for a request
+  nobody counted) and THEN waits for a turn
+  (`limits._Turns`: one for the process, a `threading.Condition`, in
+  order of arrival).  The wait is inside the deadline and on the
+  handler's worker thread; the event loop never waits, so `/health`
+  and the pages are not behind it.  At most `MOST_WAITING` wait: a
+  waiter holds a thread of the pool and its body.
+* A request still in the line at its deadline raises `LimitExceeded`
+  with the kind `at_once`, before its block is entered.  The pipeline
+  never sees it, so each handler answers it where it opened the scope:
+  `run_translation` makes the same `failed` job a refusal inside a
+  stage gets, the sanitiser and `detect` answer 503 with `Retry-After`
+  (`refusal_as_http`), `detect-deployment` a proposal with one note.
+* A request that stood in the line and THEN runs out of time is busy
+  too, and not slow: the scope remembers how long it waited, and the
+  clock raises `at_once` with that in its words where it would have
+  raised `seconds` (`limits._out_of_time`).  This one is raised inside
+  a stage, so it comes back the way any refusal does.
+* A scope inside a scope is the same request: the turn is carried in
+  the context, like the scope, and is not taken twice or waited for.
+* The turn outlasts the handler.  An answer is memory too, so the
+  application keeps an `Answer` for every request (the outermost
+  middleware, `AnswerSent`), the scope lends its turn to it, and the
+  turn comes back when the answer has gone out -- or at the request's
+  deadline, from a client that does not read.
+* At that deadline the answer goes too.  The application inside waits
+  for the client in two places -- for the body (`receive`) and for the
+  client to read (`send`) -- and for a request that holds a place the
+  middleware ends both waits at the deadline (`_InItsTime`): it tells
+  the application what it is told when a client leaves, so a streamed
+  answer runs to its end and lets go of its pieces; then it answers a
+  request whose body never came (408), or leaves an answer unfinished,
+  which makes the server close the connection.  Only waiting is
+  bounded: a refusal made at the deadline is still sent.  An answer is
+  handed to the server 64 KiB at a time, so that "gone out" does not
+  mean "in the server's buffer".
+* A server closes a connection once what it wrote has been taken, so
+  the connection of a client that takes nothing outlives all of the
+  above, with what the system holds for it.  Nothing inside the
+  application can end it; the system can.  Both launchers -- `netcanon
+  serve` and the desktop's embedded server -- therefore start the
+  server on what `_migration_helpers.listening_sockets` gives them:
+  under limits that say how many requests work at once, on a system
+  that has the option (Linux), a socket on which the system ends a
+  connection whose client has taken nothing for the seconds a request
+  may take (`TCP_USER_TIMEOUT`, which every accepted connection gets
+  from the listening socket); everywhere else `None`, and the server
+  binds its own.
+* A request that has taken its turn first hands freed memory back to
+  the system (`malloc_trim`, glibc): a server runs its requests on
+  whichever thread is idle, and the C library keeps what a thread
+  freed for that thread.
+
+**The answer to a job is written a piece at a time**
+(`_migration_helpers.job_answer`, `json_pieces`).  A handler that
+returns a model leaves the framework to make the answer in five passes
+over it, and a job's validation report has a path for every
+membership: the largest answer `small` admits cost more memory to make
+than the translation did.  The seven job handlers return the job
+written straight to JSON, a field or a run of a long list at a time --
+the same bytes and the same `Content-Length`, which a test compares
+with the framework's own job by job.  `response_model` stays declared,
+for the schema.
 
 **Where the counts are charged.**  Before the entries are made, at each
 place a token expands (`charge`): the VLAN id-list readers
@@ -361,7 +442,15 @@ command line exits 2.  The sentence names what was large, how large
 and the limit, and then what allows more for whoever reads it
 (`how_to_raise`): the environment variable and the Preferences dialog
 on a server, the option on the command line, and under `small` --
-which is the public demo's -- no setting at all.
+which is the public demo's -- no setting at all on a server (the
+command line, which has no server and whose user did choose, names its
+option there too).  A request that did not get a turn is refused in
+the same shapes, in words that say the server was busy and to send it
+again; so is one that got its turn too late to finish.  Two answers
+are the middleware's own, because no handler ran: 503 for a request
+that found every place taken, and 408 for one whose body did not
+arrive in its time -- the same on every endpoint that reads config
+text.
 
 **Guards** (`tests/unit/migration/test_limits.py`): each limit has a
 text under it and a text over it; every codec's parse is stopped at a
@@ -369,7 +458,14 @@ deadline it has passed; and three rules are read from the source, each
 with a table a new case fails until it is in -- every loop over a
 config's lines looks at the deadline, every `range(...)` under
 `codecs/` has an answer, and no broad handler stands between an
-expander and its caller without naming the refusal.
+expander and its caller without naming the refusal.  Requests at once
+are tested with an event the first request holds and no sleep; every
+handler that takes config text is found by what it takes
+(`tests/integration/test_config_limits_api.py`) and has to take its
+turn, for the answer the application keeps for it -- and to have been
+counted before that, when it arrived.  The middleware is also tested
+alone, against a server the test plays: what it hands on, what it
+waits for, and until when.
 
 ---
 

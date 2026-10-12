@@ -20,6 +20,17 @@ Three things are held together here:
 * **the words.**  What a refusal calls each kind is what the
   troubleshooting page explains, and the example a document quotes is
   the sentence the code gives for that text.
+* **requests at once.**  How many requests a server works on at once
+  under each set, and how many may wait, are numbers too; and the
+  sentence a busy server gives is quoted.
+* **a place, and an answer's time.**  How many places there are for
+  requests that have arrived, how long an answer has to be read in,
+  how much of an answer is handed over at a time, and the sentences
+  for a request that waited and ran out of time and for a body that
+  did not arrive -- all from the code.
+* **the proofs.**  The documents that say how many live proofs there
+  are say the number `deploy/VERIFY.md` has, and a proof a document
+  names by its number exists.
 """
 
 from __future__ import annotations
@@ -29,6 +40,7 @@ from pathlib import Path
 
 import pytest
 
+from netcanon.api.routes import _migration_helpers as helpers
 from netcanon.migration import limits as L
 from netcanon.migration.codecs.aruba_aoss.parse import _MAX_PORT_RANGE_SPAN
 from netcanon.migration.codecs.registry import get_codec
@@ -127,7 +139,8 @@ def _sentences() -> dict[str, list[str]]:
             f"refused at the {ordinal} range",
             f"Under `small` it is refused at the {trunk}rd trunk.",
             "a million memberships, which is the `standard` limit exactly",
-            f"{_number(small.memberships)} are 38 MB under `small`",
+            "Under `small` the largest answer is 38 MB, for the text that reaches every limit at once",
+            f"its {_number(small.memberships)} memberships are 9.5 MB of that",
             f"a set line nested more than {_MAX_SET_DEPTH} levels deep is a parse failure",
             "The default is `standard` on both platforms.",
         ],
@@ -201,3 +214,175 @@ class TestTheWords:
         for rel in ("SECURITY.md", "docs/TROUBLESHOOTING.md", "netcanon_desktop/README.md"):
             assert "Config size limit" in _flat(rel), rel
         assert "--limits" in _read("SECURITY.md") and "--limits large" in _read("docs/TROUBLESHOOTING.md")
+
+
+class TestRequestsAtOnce:
+    """Under ``small`` a server works on one request that reads config
+    text at a time, and a set number wait.  Documents say so in
+    figures and in words; both are written here from the code."""
+
+    def test_the_numbers_the_documents_rest_on(self) -> None:
+        assert {name: limits.at_once for name, limits in L.PROFILES.items()} == {
+            "small": 1, "standard": None, "large": None, "unlimited": None,
+        }
+        assert (L.MOST_WAITING, L.SMALL.seconds) == (2, 20.0)
+
+    def test_how_many_work_and_how_many_wait(self) -> None:
+        waiting, seconds = L.MOST_WAITING, int(L.SMALL.seconds)
+        said = {
+            "docs/CAPABILITIES.md": [
+                f"Under `small` the server also works on {L.SMALL.at_once} request that reads config text at a time",
+                f"at most {waiting} wait, and one more is refused at once as busy",
+                f"(inside its own {seconds} seconds)",
+                "`standard`, `large` and `unlimited` limit no requests at once.",
+            ],
+            "SECURITY.md": [
+                "a server works on one request that reads config text at a time",
+                f"At most {waiting} requests wait.",
+                "`standard`, `large` and `unlimited` limit no requests at once.",
+                f"one request that reads config text works at a time and {waiting} may wait",
+            ],
+            "docs/demo-plan/07-budget.md": [
+                f"waits its turn inside its own {seconds} seconds, at most {waiting} wait",
+            ],
+            "docs/demo-plan/04-container-hardening.md": [f"a request that waited out its {seconds} seconds"],
+            "deploy/README.md": [f"waited its whole {seconds} seconds"],
+            "README.md": ["`small` also makes a server work on one such request at a time"],
+            ".env.example": ["(one works at a time, a second waits)"],
+            "ARCHITECTURE.md": ["one under `small`, no limit under the others"],
+        }
+        for rel, sentences in said.items():
+            text = _flat(rel)
+            for sentence in sentences:
+                assert " ".join(sentence.split()) in text, f"{rel} does not say: {sentence}"
+
+    def test_the_busy_sentence_quoted_is_the_codes(self) -> None:
+        sentence = " ".join(f"refused: {L._busy(L.SMALL, 2, L.SMALL.seconds)}".split())
+        assert sentence in _flat("docs/CAPABILITIES.md")
+        page = _flat("docs/TROUBLESHOOTING.md")
+        waited, full = str(L._busy(L.SMALL, 2, L.SMALL.seconds)), str(L._busy(L.SMALL, 4, None))
+        assert waited.startswith("the server works on one config at a time, and was busy with another")
+        assert "the server works on one config at a time, and was busy with another" in page
+        assert f"{L.MOST_WAITING} more were already waiting their turn" in full
+        assert "more were already waiting their turn" in page
+        for rel in ("docs/CAPABILITIES.md", "docs/TROUBLESHOOTING.md", "SECURITY.md"):
+            assert "503" in _read(rel) and "Retry-After" in _read(rel), rel
+
+
+class TestAPlaceAndAnAnswersTime:
+    """Under ``small`` a request is counted when its headers arrive,
+    has one deadline from then, and its answer has that long to be
+    read.  The documents say so in figures; the figures are the
+    code's."""
+
+    def test_the_numbers_the_documents_rest_on(self) -> None:
+        assert (L.SMALL.at_once, L.MOST_WAITING, L.SMALL.seconds, helpers.WRITE) == (1, 2, 20.0, 65_536)
+        assert len(helpers.READS_CONFIG_TEXT) == 10
+
+    def test_how_many_places_and_how_long_an_answer_has(self) -> None:
+        places, seconds = L.SMALL.at_once + L.MOST_WAITING, int(L.SMALL.seconds)
+        word = {1: "one", 2: "two", 3: "three"}
+        handed = f"handed to the server {helpers.WRITE // 1024} KiB at a time"
+        said = {
+            "SECURITY.md": [
+                "A request is counted when its headers arrive, before its body is read.",
+                f"There are {places} places: as many as may work and wait.",
+                f"under `small` an answer has the request's {seconds} seconds to be read in",
+                "a body that has not arrived by then is answered 408",
+                handed,
+            ],
+            "docs/CAPABILITIES.md": [
+                f"its {seconds} seconds run from then",
+                "Under `small` an answer has the request's seconds to be read in",
+                "**503 with `Retry-After`**, at once, to a request that arrives while as many are in flight as "
+                "may work and wait.",
+                "**408**, to a request whose body has not arrived inside the time a request may take",
+            ],
+            "docs/TROUBLESHOOTING.md": [
+                f"has the request's {seconds} seconds to be read in",
+                "this request waited N seconds for its turn",
+                "while its body was still arriving",
+            ],
+            "deploy/README.md": [
+                f"arrives while {word[places]} are in flight ({word[L.SMALL.at_once]} at work, "
+                f"{word[L.MOST_WAITING]} waiting)",
+                f"An answer has the request's {seconds} seconds to be read in",
+            ],
+            "deploy/VERIFY.md": [
+                f"one that finds the {word[places]} places taken is answered 503 at once, its body unread",
+                f"At the deadline of a request ({seconds} seconds from its arrival)",
+            ],
+            "docs/demo-plan/07-budget.md": [
+                f"counted when its headers arrive; there are {places} places",
+                f"an answer has the request's {seconds} seconds to be read in",
+            ],
+            "ARCHITECTURE.md": [handed],
+        }
+        for rel, sentences in said.items():
+            text = _flat(rel)
+            for sentence in sentences:
+                assert " ".join(sentence.split()) in text, f"{rel} does not say: {sentence}"
+
+    def test_the_sentences_quoted_are_the_codes(self) -> None:
+        """A request that got its turn after 17.5 seconds and ran out
+        of its 20 while a parse was starting, as the capabilities page
+        quotes it; and what the middleware says of a body that did not
+        come and of a request it had no place for."""
+        late = L._out_of_time(L.SMALL, "server", 0.5, 17.5, 2, "parse", "cisco_iosxe_cli", True)
+        assert late.kind == "at_once"
+        page = _flat("docs/CAPABILITIES.md")
+        assert " ".join(f"refused: {late}".split()) in page
+        body = " ".join(str(L.body_late(L.SMALL, 20.0)).split())
+        assert body.startswith(
+            "the request passed the 20 seconds it may take while its body was still arriving, and was stopped."
+        )
+        assert body.split(".")[0] in page
+        full = " ".join(str(L._busy(L.SMALL, L.SMALL.at_once + L.MOST_WAITING + 1, None)).split())
+        quoted = (
+            f"and {L.MOST_WAITING} more were already waiting their turn; this request was not started and its "
+            "config was not read. Send it again."
+        )
+        assert quoted in full and quoted in page
+
+    def test_the_search_for_a_sentence_can_fail(self) -> None:
+        assert "There are 4 places: as many as may work and wait." not in _flat("SECURITY.md")
+        assert "an answer has the request's 120 seconds to be read in" not in _flat("SECURITY.md")
+
+
+class TestTheProofs:
+    """``deploy/VERIFY.md`` numbers its live proofs, and three
+    documents say how many there are."""
+
+    @staticmethod
+    def _numbered() -> list[int]:
+        return [int(n) for n in re.findall(r"^### (\d+)\. ", _read("deploy/VERIFY.md"), re.MULTILINE)]
+
+    def test_the_proofs_are_numbered_from_one_with_none_missing(self) -> None:
+        numbered = self._numbered()
+        assert numbered == list(range(1, len(numbered) + 1)) and len(numbered) >= 17
+
+    def test_every_document_that_counts_them_counts_them_all(self) -> None:
+        last = self._numbered()[-1]
+        counted = {
+            "deploy/VERIFY.md": 1, "docs/demo-plan/08-testing-verification.md": 2,
+            "docs/demo-plan/09-implementation-order.md": 2,
+        }
+        for rel, times in counted.items():
+            found = re.findall(r"[Pp]roofs 1\u2013(\d+)", _read(rel).replace("**", ""))
+            assert len(found) == times, f"{rel}: 'proofs 1\u2013N' is said {len(found)} times"
+            assert set(found) == {str(last)}, f"{rel} counts proofs 1\u2013{sorted(set(found))}; there are {last}"
+
+    def test_a_proof_named_by_its_number_exists(self) -> None:
+        numbered = set(self._numbered())
+        named = 0
+        for rel in ("SECURITY.md", "CHANGELOG.md", "deploy/README.md", "docs/demo-plan/04-container-hardening.md",
+                    "docs/demo-plan/07-budget.md", "docs/demo-plan/08-testing-verification.md"):
+            # Only what this work wrote: the changelog's older entries name proofs of documents long gone.
+            text = _read(rel)
+            if rel == "CHANGELOG.md":
+                text = text[:text.index("\n## [", text.index("## [Unreleased]") + 1)]
+            for n in re.findall(r"`deploy/VERIFY\.md`,? proofs? (\d+)|[Pp]roofs? (1[4-9]|[2-9]\d)\b", text):
+                number = int(n[0] or n[1])
+                named += 1
+                assert number in numbered, f"{rel} names proof {number}, and deploy/VERIFY.md has no such proof"
+        assert named >= 6

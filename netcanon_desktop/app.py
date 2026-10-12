@@ -62,6 +62,7 @@ class DesktopApp:
             host=settings.host,
             port=settings.port,
             log_level=settings.log_level,
+            config_limits=settings.config_limits,
         )
         self._window = WebViewWindow(
             url=self._server.url,

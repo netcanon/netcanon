@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import BinaryIO
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -24,21 +25,47 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from ... import config as app_config
 from ...migration.codecs.base import ParseError, RenderError
 from ...migration.codecs.registry import list_public_codecs
-from ...migration.limits import LimitExceeded, limits_scope
+from ...migration.limits import Answer, LimitExceeded, server_scope
 from ...tools.sanitize import SanitizationResult, sanitize_text
-from ._migration_helpers import request_limits
+from ._migration_helpers import refusal_as_http, request_answer, request_limits
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+class _UploadTooLarge(Exception):
+    """The upload is longer than the byte cap."""
+
+
 def _sanitize_within(
-    limits: str | None, raw: str, vendor: str, dry_run: bool,
+    limits: str | None, answer: Answer | None, upload: BinaryIO, cap: int,
+    vendor: str, dry_run: bool,
 ) -> SanitizationResult:
-    """``sanitize_text`` under this server's limits, with one deadline
-    for its parse and its render.  The scope is opened here, on the
-    worker thread that does the work."""
-    with limits_scope(limits):
+    """``sanitize_text`` of *upload* under this server's limits, with
+    one deadline for its parse and its render.  The scope is opened
+    here, on the worker thread that does the work -- and that waits
+    for the request's turn, where the limits say how many work at
+    once: the event loop is never the one waiting.  The turn is kept
+    until the answer has gone out (*answer*).
+
+    The upload is read HERE, with the turn, and not by the handler
+    before it: a request that waits then holds its upload once, as
+    the framework stored it, and not a second time as bytes and a
+    third as text.
+
+    Raises:
+        LimitExceeded: The config is past a limit, the request ran
+            out of time, or it did not get a turn.
+        _UploadTooLarge: The upload is more than *cap* bytes.
+    """
+    with server_scope(limits, answer=answer):
+        # At most cap+1 bytes: more than the cap is too large, and the
+        # rest is never pulled into memory.
+        raw_bytes = upload.read(cap + 1)
+        if len(raw_bytes) > cap:
+            raise _UploadTooLarge
+        raw = raw_bytes.decode("utf-8", errors="replace")
+        del raw_bytes
         return sanitize_text(raw, vendor, dry_run=dry_run)
 
 
@@ -88,6 +115,22 @@ def _sanitize_within(
                 "re-rendered in that vendor's format."
             )
         },
+        408: {
+            "description": (
+                "The upload had not arrived inside the time a request may "
+                "take.  Only on a server whose limits say how many requests "
+                "work at once."
+            )
+        },
+        503: {
+            "description": (
+                "The server works on a set number of requests at once "
+                "(under the `small` limits: one) and this one did not get "
+                "a turn in the time it may take, or got it too late to "
+                "finish, or as many were in flight already as may work and "
+                "wait.  Send it again (`Retry-After`)."
+            )
+        },
     },
 )
 async def post_sanitize(
@@ -107,21 +150,22 @@ async def post_sanitize(
 
     # Bound the read: without a cap the whole body is pulled into memory and
     # fed to the synchronous parse→redact→render pipeline, so an oversized
-    # upload is an availability footgun (blind-audit 276eaeb #19).  Read at
-    # most cap+1 bytes — if we get more than the cap, the body is too large.
+    # upload is an availability footgun (blind-audit 276eaeb #19).  At most
+    # cap+1 bytes are read — more than the cap is too large.  An upload
+    # whose size is known is refused here, before any of it is read; the
+    # read itself is in the worker (_sanitize_within), which checks again.
     # The cap is read at request time so it stays env-overridable + testable.
     cap = app_config.MAX_SANITIZE_UPLOAD_BYTES
-    raw_bytes = await config.read(cap + 1)
-    if len(raw_bytes) > cap:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"Config upload exceeds the {cap} byte limit. Raise "
-                "NETCANON_MAX_SANITIZE_UPLOAD_BYTES if you must sanitize a "
-                "larger file, or run the CLI 'netcanon sanitize' locally."
-            ),
-        )
-    raw = raw_bytes.decode("utf-8", errors="replace")
+    too_large = HTTPException(
+        status_code=413,
+        detail=(
+            f"Config upload exceeds the {cap} byte limit. Raise "
+            "NETCANON_MAX_SANITIZE_UPLOAD_BYTES if you must sanitize a "
+            "larger file, or run the CLI 'netcanon sanitize' locally."
+        ),
+    )
+    if config.size is not None and config.size > cap:
+        raise too_large
 
     try:
         # sanitize_text runs the full parse → redact → render pipeline,
@@ -129,13 +173,18 @@ async def post_sanitize(
         # the event loop (mirrors the scheduler's asyncio.to_thread dispatch
         # in routes/schedules.py).
         result = await asyncio.to_thread(
-            _sanitize_within, request_limits(request), raw, source_vendor, dry_run,
+            _sanitize_within, request_limits(request), request_answer(request),
+            config.file, cap, source_vendor, dry_run,
         )
+    except _UploadTooLarge:
+        raise too_large from None
     except LimitExceeded as e:
-        # The status an upload over the byte cap gets, for the same
-        # reason: more than this server is set to take.  Not the
-        # "failed unexpectedly, please report this" net below.
-        raise HTTPException(status_code=413, detail=f"Refused: {e}") from e
+        # 413, the status an upload over the byte cap gets, for the
+        # same reason: more than this server is set to take.  503
+        # for a request that did not get a turn, or got it too late
+        # to finish.  Never the "failed unexpectedly, please report
+        # this" net below.
+        raise refusal_as_http(e) from e
     except ParseError as e:
         raise HTTPException(
             status_code=400,
