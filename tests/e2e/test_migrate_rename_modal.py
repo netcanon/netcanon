@@ -1327,6 +1327,11 @@ class TestRenameModalTheJobsAccountAndApply:
             "Apply is held: two rows end on one target name (Ethernet9) — give "
             "one another target, or drop it."
         )
+        # The table is redrawn a moment after the last key, and the
+        # marks are drawn with it: wait for them before putting a
+        # probe in the table, or the redraw takes the probe away.
+        for name in ("ge-0/0/1", "lo0"):
+            expect(page.locator(_tid(f"migrate-rename-collision-{name}"))).to_be_visible()
         failed = painted_token(page, _TABLE, "--badge-failed-bg")
         for name, other in (("ge-0/0/1", "lo0"), ("lo0", "ge-0/0/1")):
             mark = page.locator(_tid(f"migrate-rename-collision-{name}"))
