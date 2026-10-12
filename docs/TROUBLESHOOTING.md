@@ -294,6 +294,37 @@ change one of the entries that point there — or, on a RouterOS target,
 a port's name reads as a VLAN, a bridge or a LAG and no line of the
 output finds its hardware: give that port another name.
 
+### The line under *Source device* says the device could not be read
+
+"Reading the source device from the config …" is the question being
+put; it should be gone in a moment.  If it turns into "Could not read
+the device from the config (…)", the words in brackets are why: the
+server's status, a network failure, or "no answer from the server in
+20 seconds".  Nothing is wrong with the config.  Choose the source
+device yourself, or close the modal and open it again: the config is
+asked about again every time the modal opens until it has been
+answered for.
+
+### The footer says overrides "were left out"
+
+"Restored prior overrides (…)" means the browser had entries of yours
+for this source codec, target codec and host name, and put them
+back.  Two configs can share a host name.  "N kept for this host
+name are for a name this config does not have, and were left out"
+counts the entries that belong to the other config: a port, a VLAN
+or a user this one has no row for.  They are not sent, and they
+stay kept: back on the other config they are put back.  **Reset
+all** forgets what this config has rows for, and leaves the
+other config's entries as they are.
+
+### A VLAN override was typed and that VLAN did not change
+
+A number that is no VLAN id (1 to 4094) is not an entry: nothing is
+sent for that VLAN while the field holds it, and an earlier entry
+for it is gone too.  The field looks like any other; its title says
+"Not a VLAN id (1-4094): nothing is sent for VLAN N".  Type an id in
+range.
+
 ### Detection proposes a device, and says ports are missing
 
 In the rename modal the line under *Source device* is amber and says

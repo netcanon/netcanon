@@ -106,3 +106,14 @@ def test_it_holds_no_jinja_delimiter(partial: tuple[str, str], delimiter: str) -
 def test_the_page_includes_it(name: str) -> None:
     page = (PARTIALS_DIR.parent / "migrate.html").read_text(encoding="utf-8")
     assert '{% include "_partials/' + name + '" %}' in page
+
+
+def test_section_chips_have_ids_of_their_own() -> None:
+    """A row's marks are ``migrate-rename-<what>-<its port>``, and a
+    port can be named anything: ``count-mgmt`` gave the row's "?" the
+    id of the management section's "N need a decision" chip."""
+    text = (PARTIALS_DIR / "rename-table.js").read_text(encoding="utf-8")
+    assert "'migrate-rename-decision-count-'" not in text
+    assert "'migrate-rename-offprofile-count-'" not in text
+    assert "'migrate-rename-section-decisions-'" in text
+    assert "'migrate-rename-section-offprofile-'" in text

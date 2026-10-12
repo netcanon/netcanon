@@ -137,7 +137,11 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
    from a screenshot, turns a theme token into the colour it paints,
    and gives the contrast of the two (the theme's badge backgrounds are
    translucent, so a tint over a tint is not the colour either was
-   asked for).  It also holds the two helpers for the rename table's
+   asked for).  A bar down an element's edge and a ring round it are
+   read from the pixels there as well (`painted_bar`, `painted_ring`):
+   a `box-shadow` no pixels wide has a computed colour all the same.
+   Read an ink on the element that holds the words, not on the box
+   they are in.  It also holds the two helpers for the rename table's
    override lists, whose port options are made when a list is first
    used.  Synthetic definitions a test needs -- an `inferred` profile,
    a model family whose every string is markup -- live under

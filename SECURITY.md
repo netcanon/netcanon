@@ -461,7 +461,12 @@ number is not read, and a note counts such member lines, module lines and
 The evidence, the list of missing ports and the notes are capped
 (`MAX_EVIDENCE_LINES`, `MAX_MISSING_PORTS`, `MAX_NOTES`, `MAX_NOTE_LENGTH`), a
 list that was cut says so (`missing_port_count`, or a note), and
-a note spells out a few member numbers and counts the rest.  A detector that
+a note spells out a few member numbers and counts the rest.  A port name the
+answer repeats is the config's own text and has no length of its own: each is
+cut to `MAX_PORT_NAME_SHOWN` characters in `missing_ports`, and shorter still
+in the note that names the first few, which is written after the detector's
+notes were capped and stays within `MAX_NOTE_LENGTH` whatever a port is called
+(`tests/unit/migration/test_deployment_detect.py`).  A detector that
 raises is answered the same way, and the log line carries the exception's type
 only; so is a parser that refuses the text.
 

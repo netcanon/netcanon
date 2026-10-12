@@ -111,6 +111,13 @@
       _modelFamiliesFailed = !arrived;
       _modelFamiliesLoad = null;
       if (arrived) _modelFamiliesArrived();
+      else {
+        // The note under the source said "no model family describes
+        // it" until the modal was reopened; it is that they could
+        // not be loaded.
+        var open = document.getElementById('mig-rename-modal');
+        if (open && open.classList.contains('open')) renderDeviceNote('source');
+      }
       return arrived;
     })();
     return _modelFamiliesLoad;
@@ -662,7 +669,10 @@
           sku, mod.description ? sku + ' — ' + mod.description : sku,
         ));
       });
-      var fitted = (member.modules || {})[bay];
+      // Its own entry: a bay named like a property every object has
+      // would otherwise read as fitted with a function.
+      var fitted = Object.prototype.hasOwnProperty.call(member.modules || {}, bay)
+        ? member.modules[bay] : undefined;
       baySel.value = (fitted === undefined) ? _DEVICE_BAY_UNSTATED
         : (fitted === null ? _DEVICE_BAY_EMPTY : fitted);
       baySel.addEventListener('change', function() {
@@ -1066,6 +1076,9 @@
     _deviceDetecting = key;
     _deviceProposal = null;
     _deviceDetectError = '';
+    // Said while it is out: the source reads "(not declared)" and
+    // then fills itself in.
+    renderDeviceNote('source');
     var request = { source: _lastJobBody.source };
     if (typeof _lastJobBody.raw_text === 'string') {
       request.raw_text = _lastJobBody.raw_text;
@@ -1074,11 +1087,20 @@
     }
     var proposal = null;
     var failed = '';
+    // Given up on after as long as a preview is: one that never
+    // answered was never asked for again for this text.
+    var silent = false;
+    var abort = (typeof AbortController === 'function') ? new AbortController() : null;
+    var limit = abort ? setTimeout(function() {
+      silent = true;
+      abort.abort();
+    }, _DEVICE_COMPILE_TIMEOUT_MS) : null;
     try {
       var resp = await fetch('/api/v1/migration/detect-deployment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
+        signal: abort ? abort.signal : undefined,
       });
       if (!resp.ok) {
         failed = 'the server answered ' + resp.status
@@ -1091,7 +1113,12 @@
         }
       }
     } catch (e) {
-      failed = (e && e.message) ? e.message : 'no answer';
+      failed = silent
+        ? 'no answer from the server in '
+          + Math.round(_DEVICE_COMPILE_TIMEOUT_MS / 1000) + ' seconds'
+        : ((e && e.message) ? e.message : 'no answer');
+    } finally {
+      if (limit) clearTimeout(limit);
     }
     // Another text is on the page by now: this answer is not for it.
     if (_deviceDetecting !== key) return;
@@ -1270,7 +1297,7 @@
       // Said by bay, with the members that have it unstated: ten
       // members with one unstated bay each are one phrase, not ten.
       // A member is named by its NUMBER, as its port names are.
-      var unstatedIn = {};
+      var unstatedIn = Object.create(null);
       (inv.members || []).forEach(function(m) {
         (m.unstated_bays || []).forEach(function(bay) {
           var numbered = m.member_id !== null && m.member_id !== undefined;
@@ -1370,6 +1397,9 @@
           _notePart(el, base + '-no-models',
             'No device model is known for this source vendor yet; its '
             + 'ports are translated by the shape of their names');
+        } else if (_deviceDetecting) {
+          _notePart(el, base + '-detecting',
+            'Reading the source device from the config …');
         } else if (_deviceDetectError) {
           _notePart(el, base + '-detect-failed',
             'Could not read the device from the config (' + _deviceDetectError
@@ -1761,10 +1791,39 @@
    *  read from where each name ended, not from the pairing as it was
    *  made -- and the colour is the job's: amber while a name needs a
    *  decision the server has not been sent, whatever is recorded in
-   *  the modal meanwhile. */
+   *  the modal meanwhile.
+   *
+   *  The strip is a polite live region, and this runs with every
+   *  summary -- one per key typed in a row.  Emptied and refilled,
+   *  it was announced again though it said what it had said.  So it
+   *  is drawn aside, and put in only where it differs from what is
+   *  there. */
   function renderPortPlan() {
-    var el = document.getElementById('mig-rename-plan');
-    if (!el) return;
+    var live = document.getElementById('mig-rename-plan');
+    if (!live) return;
+    var drawn = live.cloneNode(false);
+    try {
+      _drawPortPlan(drawn);
+    } catch (broke) {
+      // Half a strip is not put in, and the last one is not left to
+      // stand for a job it may no longer describe.
+      live.textContent = '';
+      live.style.display = 'none';
+      throw broke;
+    }
+    if (drawn.isEqualNode(live)) return;
+    ['class', 'data-state', 'data-stale', 'data-outcome'].forEach(function(name) {
+      if (drawn.hasAttribute(name)) live.setAttribute(name, drawn.getAttribute(name));
+      else live.removeAttribute(name);
+    });
+    live.style.display = drawn.style.display;
+    live.textContent = '';
+    while (drawn.firstChild) live.appendChild(drawn.firstChild);
+  }
+
+  /** Draw the strip into *el*: a copy of the strip's own element,
+   *  not yet in the page (see renderPortPlan). */
+  function _drawPortPlan(el) {
     el.textContent = '';
     el.className = '';
     el.removeAttribute('data-state');
