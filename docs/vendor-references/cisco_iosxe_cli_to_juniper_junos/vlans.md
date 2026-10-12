@@ -52,8 +52,9 @@ set interfaces ge-0/0/1 unit 0 family ethernet-switching interface-mode trunk
 set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members [ Production-Servers VoIP ]
 ```
 
-VLANs are referenced by name, NOT by id, on the per-unit `vlan
-members` line.  The native VLAN id lives at the parent interface
+VLANs are referenced by name on the per-unit `vlan members` line,
+or by id or range of ids (Junos takes all three; the renderer uses
+names for the VLANs it defines and ids for the rest).  The native VLAN id lives at the parent interface
 hierarchy (`native-vlan-id`), NOT under the unit.  Voice VLAN is not
 a first-class Junos construct — operators surface it through
 `protocols lldp-med` or via dedicated VLAN names that map to the
@@ -68,8 +69,9 @@ voice phone tag.
   canonical model is `CanonicalVlan` (vlan-centric) plus
   `CanonicalInterface.{switchport_mode, access_vlan,
   trunk_allowed_vlans, trunk_native_vlan}`.
-- **VLAN naming.** Junos's `vlan members <NAME>` requires the VLAN
-  to be addressed by name; the codec render path synthesises a
+- **VLAN naming.** A Junos VLAN has a name, and `vlan members`
+  takes that name (or an id, or a range of ids); the codec render
+  path synthesises a
   default name (typically `vlan<N>`) when the source VLAN had no
   explicit name.  Junos VLAN names are constrained to letters,
   digits, hyphens, and periods (see `vlan-name-constraints.md`).

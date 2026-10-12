@@ -261,6 +261,10 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
         * ``switchport_mode == "trunk"``:
             - for each vid in ``trunk_allowed_vlans``:
               append iface to ``vlans[vid].tagged_ports``.
+              A list of every id (``1-4094``), or of every id but
+              1 (``2-4094``), is not made into 4,094 VLANs: the
+              iface goes onto the VLANs already declared that the
+              list holds.
             - if ``trunk_native_vlan`` is set:
               append iface to ``vlans[native].untagged_ports`` AND
               remove it from ``tagged_ports`` on that same VLAN.
@@ -298,17 +302,17 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
     def _add_unique(lst: list[str], name: str) -> None:
         _ports(lst).add(name)
 
-    # "Trunk all" sentinel detection: when an interface's
-    # ``trunk_allowed_vlans`` is the full 1-4094 (or 2-4094) range,
-    # this is the operator-form of "all VLANs allowed" — equivalent
-    # to Junos ``vlan members all`` / Arista ``switchport trunk
-    # allowed vlan all``.  Projecting that into VLAN-centric
-    # tagged_ports would synthesise 4094 phantom VLAN records, each
-    # of which renders out and reparses with a generated name (e.g.
-    # ``VLAN-N``), breaking round-trip stability and producing
-    # nonsensical 4000-line VLAN dumps on cross-vendor renders.  Skip
-    # projection on the trunk-all form; the renderer side detects
-    # this same shape and emits the appropriate "all" sentinel.
+    # Two lists are not expanded into a VLAN record per id: every id
+    # (1-4094: Junos ``vlan members all``, Arista ``switchport trunk
+    # allowed vlan all``) and every id but 1 (2-4094, common on an
+    # MLAG peer link).  Projecting either into VLAN-centric
+    # tagged_ports would synthesise some 4,094 phantom VLAN records,
+    # each of which renders out and reparses with a generated name
+    # (``VLAN-N``), breaking round-trip stability and producing
+    # 4000-line VLAN dumps on cross-vendor renders.  The trunk goes
+    # onto the VLANs already declared that its list holds instead.
+    # (The two are not the same list: 2-4094 leaves VLAN 1 out, and
+    # a renderer writes its word for "all" for the first only.)
     _TRUNK_ALL_RANGE_FULL = set(range(1, 4095))
     _TRUNK_ALL_RANGE_OPERATIONAL = set(range(2, 4095))
 
@@ -367,8 +371,13 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
                 # Configuration Guide ("VLAN-port binding").
                 # Bucket-A fix from
                 # ``phase4_findings_juniper_junos.md``.
+                #
+                # Only the VLANs the list holds: `2-4094` leaves
+                # VLAN 1 out, and a trunk written that way was
+                # stamped onto a declared VLAN 1 all the same.
                 for vlan in intent.vlans:
-                    _add_unique(vlan.tagged_ports, iface.name)
+                    if vlan.id in allowed_set:
+                        _add_unique(vlan.tagged_ports, iface.name)
             else:
                 for vid in iface.trunk_allowed_vlans:
                     _add_unique(_vlan(vid).tagged_ports, iface.name)

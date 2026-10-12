@@ -69,7 +69,8 @@ render transposes back to per-interface
 Specifics:
 
 * `id`: Aruba `vlan 100` -> Junos `set vlans <name> vlan-id 100`.
-  Junos addresses the VLAN by name; the codec render synthesises a
+  Junos gives every VLAN a name (a member list may also use the id);
+  the codec render synthesises a
   default name (typically `vlan<N>`) when the source had no explicit
   name.
 * `name`: Aruba names allow underscores, spaces (quoted), and a wider
