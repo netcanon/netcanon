@@ -542,7 +542,11 @@ canonical surface, so codec parsers silently skip them.  Each parser
 calls its per-vendor `detect_tier3_sections_<vendor>(raw)` before
 returning, populating `CanonicalIntent.dropped_tier3_sections` with
 human-readable labels that the migrate page surfaces as a "Detected in
-source but not translated" banner.  Output-only — a notification
+source but not translated" banner.  (The Junos codec hands its
+detector the set-form the parser read, since the patterns begin
+`set `, and puts ahead of the sections a bounded list of rows for
+the statements the parser read and left out — `inactive: ...` for
+one the source had deactivated.)  Output-only — a notification
 surface, never fed to the renderer or any transform — so the
 deliberate drop is surfaced honestly (the silent-drop-honesty
 discipline `docs/METHODOLOGY.md` treats as flagship).

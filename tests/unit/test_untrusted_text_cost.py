@@ -1075,6 +1075,17 @@ def _junos_users(count: int) -> str:
     ))
 
 
+def _junos_v3_users(count: int) -> str:
+    """A user's key, and then its group: each line found its user by
+    reading every user so far."""
+    return _config("set system host-name r1", *(
+        line for number in range(count) for line in (
+            f"set snmp v3 usm local-engine user u{number} authentication-sha authentication-key fakeauthkey{number}",
+            f"set snmp v3 vacm security-to-group security-model usm security-name u{number} group readonly",
+        )
+    ))
+
+
 def _junos_applied_groups(count: int) -> str:
     return _config("set system host-name r1", *(f"set apply-groups g{number}" for number in range(count)))
 
@@ -1191,6 +1202,77 @@ def _junos_vnis(count: int) -> str:
     )
 
 
+def _junos_deactivated(count: int) -> str:
+    """An interface a line, and each deactivated.  A ``set`` line is
+    asked whether it is under a deactivated path: asked of each
+    path in turn, that is every line against every path."""
+    return _config(
+        "set system host-name r1",
+        *(f"set interfaces ge-0/0/{n} description d{n}" for n in range(count)),
+        *(f"deactivate interfaces ge-0/0/{n}" for n in range(count)),
+    )
+
+
+def _junos_open_comments(count: int) -> str:
+    """A ``/*`` in every line and no ``*/`` in the text.  Comments
+    were cut out of hierarchical text by a pattern, and the pattern
+    was run over every Junos text before its form was known: from
+    each ``/*`` it read to the end of the text for the ``*/``.
+    Set-form like this -- a description, a wildcard -- cost the
+    square of its lines: 8,000 of them, a third of a megabyte, took
+    seven seconds."""
+    return _config("set system host-name r1", *(
+        f"set interfaces ge-0/0/{n} description a/* b" for n in range(count)
+    ))
+
+
+#: Characters of the one word, for each unit of the two texts below.
+_WORD_A_UNIT = 100
+
+
+def _junos_long_word(count: int) -> str:
+    """One ``set`` line with one long word in it.  The words of a
+    line were split by ``shlex``, which builds a word by adding a
+    character at a time to a string it keeps: the word was copied
+    for each character of it."""
+    return _config("set system host-name r1", "set interfaces ge-0/0/1 description " + "a" * (_WORD_A_UNIT * count))
+
+
+def _junos_long_string(count: int) -> str:
+    """The same in quotes, with a backslash now and then."""
+    return _config(
+        "set system host-name r1",
+        'set interfaces ge-0/0/1 description "' + ("a" * (_WORD_A_UNIT - 2) + '\\"') * count + '"',
+    )
+
+
+#: Tags ahead of the statement, for each unit of the text below.
+_TAGS_A_UNIT = 10
+
+
+def _junos_tags(count: int) -> str:
+    """One statement with many tags ahead of it.  The tags were
+    taken off the front of the statement's words one at a time, and
+    each one moved every word after it."""
+    return _config(
+        "system {", "    host-name r1;", "}", "interfaces {",
+        "    " + "protect: " * (_TAGS_A_UNIT * count) + "ge-0/0/1 {", "        mtu 9000;", "    }", "}",
+    )
+
+
+def _junos_path_lengths(words: int, every_length: bool) -> str:
+    """``deactivate`` lines, and as many ``set`` lines of *words*
+    words that run beside them to the end and are under none.  With
+    *every_length* there is a path of each length from one word to
+    *words*; without, the same number of paths, all of half that
+    length -- the same text to read, near enough."""
+    if every_length:
+        paths = ("deactivate " + "x " * (length - 1) + "z" for length in range(1, words + 1))
+    else:
+        paths = ("deactivate " + "x " * (words // 2) + f"z{n}" for n in range(words))
+    return _config("set system host-name r1", *paths, *("set " + "x " * words for _ in range(words)))
+
+
 def _iosxe_class_maps(count: int) -> str:
     """Every line a Tier-3 section of its own.  The detector that
     every CLI parse runs kept its labels in a list and looked
@@ -1239,6 +1321,7 @@ STANZAS: dict[str, tuple[str, int, Callable[[int], str]]] = {
     "juniper_junos: routing instances": ("juniper_junos", 4000, _junos_instances),
     "juniper_junos: users": ("juniper_junos", 4000, _junos_users),
     "juniper_junos: applied groups": ("juniper_junos", 8000, _junos_applied_groups),
+    "juniper_junos: SNMPv3 users and their groups": ("juniper_junos", 4000, _junos_v3_users),
     "aruba_aoss: VLAN stanzas that claim the same ports": ("aruba_aoss", 2500, _aoss_vlans),
     "aruba_aoss: RADIUS hosts and a global key": ("aruba_aoss", 3000, _aoss_radius),
     "aruba_aoss: RADIUS hosts and a key that is empty": ("aruba_aoss", 3000, _aoss_radius_no_key),
@@ -1252,10 +1335,33 @@ STANZAS: dict[str, tuple[str, int, Callable[[int], str]]] = {
     "arista_eos: VRFs and then VLANs under router bgp": ("arista_eos", 4000, _eos_bgp_vrfs_then_vlans),
     "arista_eos: Vxlan stanzas that set a UDP port": ("arista_eos", 1500, _eos_vxlan_stanzas_with_a_port),
     "juniper_junos: the VNIs of one VLAN": ("juniper_junos", 4000, _junos_vnis),
+    "juniper_junos: deactivated paths": ("juniper_junos", 4000, _junos_deactivated),
+    "juniper_junos: comments that are never closed": ("juniper_junos", 2000, _junos_open_comments),
+    "juniper_junos: tags ahead of one statement": ("juniper_junos", 4000, _junos_tags),
+    "juniper_junos: one long word in a line": ("juniper_junos", 1000, _junos_long_word),
+    "juniper_junos: one long quoted string in a line": ("juniper_junos", 1000, _junos_long_string),
     "cisco_iosxe_cli: Tier-3 sections, each of its own": ("cisco_iosxe_cli", 10000, _iosxe_class_maps),
     "opnsense: laggs over many interfaces": ("opnsense", 3000, _opnsense_laggs),
     "mikrotik_routeros: pools over many networks": ("mikrotik_routeros", 1500, _routeros_pools),
 }
+
+
+#: Reading paths of every length may cost this many times what
+#: reading paths of one length costs.  Asked once for each length, the
+#: parser took two and a half to three times as long on the text the
+#: test uses; walking each line once, it takes the same.
+_FOR_THE_LENGTHS = 1.7
+
+
+def _costs_more_with_every_length(read: Callable[[str], object], words: int) -> str:
+    """Empty when *read* takes about as long over ``deactivate``
+    paths of every length as over paths of one length; otherwise what
+    was measured.  The quicker of two readings of each."""
+    every = _best(read, _junos_path_lengths(words, True), 2)
+    one = _best(read, _junos_path_lengths(words, False), 2)
+    if every <= _FOR_THE_LENGTHS * one:
+        return ""
+    return f"paths of every length up to {words} words: {every:.3f}s; of one length: {one:.3f}s"
 
 
 class TestParseFitsTheNumberOfItsStanzas:
@@ -1292,6 +1398,7 @@ class TestParseFitsTheNumberOfItsStanzas:
             "juniper_junos: routing instances": lambda t: len(t.routing_instances),
             "juniper_junos: users": lambda t: len(t.local_users),
             "juniper_junos: applied groups": lambda t: 40,
+            "juniper_junos: SNMPv3 users and their groups": lambda t: len(t.snmp.v3_users),
             "aruba_aoss: VLAN stanzas that claim the same ports": lambda t: len(t.vlans),
             "aruba_aoss: RADIUS hosts and a global key": lambda t: len(t.radius_servers),
             "aruba_aoss: RADIUS hosts and a key that is empty": lambda t: len(t.radius_servers),
@@ -1305,6 +1412,15 @@ class TestParseFitsTheNumberOfItsStanzas:
             "arista_eos: VRFs and then VLANs under router bgp": lambda t: len(t.routing_instances),
             "arista_eos: Vxlan stanzas that set a UDP port": lambda t: len(t.vxlan_vnis),
             "juniper_junos: the VNIs of one VLAN": lambda t: len(t.vxlan_vnis),
+            "juniper_junos: deactivated paths": lambda t: len(t.dropped_tier3_sections),
+            "juniper_junos: comments that are never closed": lambda t: len(t.interfaces),
+            # One port, whatever the count: it is behind every tag.
+            "juniper_junos: tags ahead of one statement": lambda t: 40 * [i.mtu for i in t.interfaces].count(9000),
+            # One word, whatever the count: as long as the text says.
+            "juniper_junos: one long word in a line": lambda t: len(t.interfaces[0].description) // _WORD_A_UNIT,
+            "juniper_junos: one long quoted string in a line": (
+                lambda t: len(t.interfaces[0].description) // (_WORD_A_UNIT - 1)
+            ),
             "cisco_iosxe_cli: Tier-3 sections, each of its own": lambda t: len(t.dropped_tier3_sections),
             "opnsense: laggs over many interfaces": lambda t: len(t.lags),
             "mikrotik_routeros: pools over many networks": lambda t: len(t.dhcp_servers),
@@ -1359,6 +1475,36 @@ class TestParseFitsTheNumberOfItsStanzas:
         assert not _grows_faster_than_its_input(
             costs_its_lines_after_a_quick_start, _routes, 1500, floor=0.02,
         )
+
+    def test_path_lengths_are_not_paid_for(self) -> None:
+        """Not a kind of stanza written many times, and not a cost the
+        check above can read: a ``set`` line asked once for each LENGTH
+        of deactivated path costs the square of its words, but the
+        paths of every length are themselves half the square of the
+        longest in text, so the whole grows as the text to the power
+        of one and a half -- eight times for four times the text,
+        which is exactly where that check draws its line.
+
+        So the same words are read twice: with a path of every
+        length, and with as many paths of one length.  They cost
+        about the same to read, or the lengths are being paid for."""
+        parse = get_codec("juniper_junos").parse
+        assert parse(_junos_path_lengths(40, True)).hostname == "r1"
+        said = _costs_more_with_every_length(parse, 800)
+        assert not said, said
+
+    def test_and_that_check_can_fail(self) -> None:
+        """A reader that asks once for each length, as the parser did."""
+
+        def asks_once_for_each_length(text: str) -> None:
+            lines = [line.split() for line in text.splitlines()]
+            paths = {tuple(words[1:]) for words in lines if words[0] == "deactivate"}
+            lengths = sorted({len(path) for path in paths})
+            for words in lines:
+                if words[0] == "set":
+                    assert not [length for length in lengths if tuple(words[1:1 + length]) in paths]
+
+        assert _costs_more_with_every_length(asks_once_for_each_length, 300)
 
     def test_a_third_size_is_not_read_past_the_largest_that_means_anything(self) -> None:
         """A probe reads a window.  Past it nothing grows, so a third
@@ -2033,7 +2179,7 @@ LOOKED_THROUGH: dict[tuple[str, str, str], str] = {
     ("migration/codecs/arista_eos/parse.py", "_vrrp_group_for", "iface.vrrp_groups"): (
         "the VRRP groups of one interface, found by number: at most the 4,096 group ids the model allows"
     ),
-    ("migration/codecs/juniper_junos/parse.py", "_blockform_to_setform", "words"): (
+    ("migration/codecs/juniper_junos/parse.py", "_blockform_convert", "words"): (
         "the words of one statement, looked through once when the statement ends"
     ),
     ("migration/deployment_detect.py", "propose_deployment", "proposal.unknown_parts"): (
