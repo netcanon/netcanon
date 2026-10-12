@@ -208,7 +208,25 @@ pipeline — they just aren't pinned by a fixture yet").
   never looked at).  Netcanon does not repair it automatically —
   there is no correct target port to invent.  Supply an explicit
   `port_rename_map` entry per uplink port, e.g.
-  `{"1/A1": "xe-1/1/1"}`, to place them somewhere distinct.
+  `{"1/A1": "xe-1/1/1"}`, to place them somewhere distinct.  Until
+  you do, a job with no devices declared is `partial`, not
+  `completed`, and lists each shared name with its two ports in
+  `fused_ports` (see [CAPABILITIES.md](../CAPABILITIES.md) section
+  D1); declaring both devices pairs each uplink with an uplink.
+- **A VLAN's address onto another vendor** — AOS-S writes a VLAN's
+  address in the `vlan` stanza, and the codec carries it on an
+  interface it names `Vlan<id>`.  The port translator does not read
+  that name, so it is left as it is on every target: `interface
+  Vlan10`.  On EOS, IOS-XE and NX-OS that is what the interface is
+  called, and the job is not held for it.  On Junos (`set
+  interfaces Vlan10 ...`), AOS-CX, IOS-XR, VyOS, OPNsense, FortiOS
+  and RouterOS it is not, and OS10 prints the name as `vlan10`:
+  onto those, with no devices declared, the job is `partial` and
+  lists each in `untranslated_ports` until you give it the
+  target's own name (`{"Vlan10": "irb.10"}` for Junos), or — if
+  you know the target takes it — keep it (`{"Vlan10": "Vlan10"}`,
+  or *keep this name* on its row).  See
+  [CAPABILITIES.md](../CAPABILITIES.md) section D1.
 - **Moving between AOS-S models** — an AOS-S port's name depends on
   the model, its uplink module and whether stacking or VSF is on, and
   a same-vendor translation does not rename ports by itself.  Declare

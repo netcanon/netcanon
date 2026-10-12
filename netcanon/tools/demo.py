@@ -23,11 +23,25 @@ demo is fully self-contained: no devices, no fixtures on disk, no FastAPI
 server.
 
 Internally this runs the rename-aware migration pipeline
-(``run_plan_with_rename``) — the same path the HTTP API's
-``POST /api/v1/migration/plan`` takes when a target profile is selected.
-So the cross-vendor interface-name translation you see here
+(``run_plan_with_rename``) — the run the HTTP API's
+``POST /api/v1/migration/plan`` makes for a request that declares no
+devices.  So the cross-vendor interface-name translation you see here
 (``GigabitEthernet1/0/1`` -> ``ge-1/0/1``) is exactly what the API and
-browser UI produce, through the same codec registry.
+browser UI produce, through the same codec registry.  The API then
+reads that run for port names it left unsettled — two source names on
+one name, a name dropped for want of one, a name the translator could
+not read and left as the source config has it — and calls such a job
+``partial`` until an entry of ``port_rename_map`` decides each.
+
+The demo does not: it prints the output, and lists such a name under
+its advisories.  The two scenarios on the landing page
+(``cisco__junos``, ``fortigate__mikrotik``) have none, and the API
+calls them ``completed``.  ``aruba__arista`` and ``opnsense__junos``
+each leave two names as the source has them.  ``Vlan10`` and
+``Vlan20`` are what EOS calls those interfaces, and the API calls
+that job ``completed`` too.  ``igc0`` and ``igc1`` are no names of
+Junos: one output, which the API calls ``partial``.
+``tests/unit/tools/test_demo.py`` pins which is which.
 """
 
 from __future__ import annotations

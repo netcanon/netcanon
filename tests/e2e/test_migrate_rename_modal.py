@@ -19,7 +19,17 @@ import re
 import pytest
 from playwright.sync_api import Page, expect
 
-from tests.e2e.drawn import choose_override, override_options
+from tests.e2e.drawn import (
+    alike,
+    choose_override,
+    ink,
+    override_options,
+    painted_background,
+    painted_token,
+    png_pixels,
+    shot,
+    token_ink,
+)
 from tests.e2e.helpers import MigratePage
 
 pytestmark = pytest.mark.e2e
@@ -715,6 +725,1029 @@ class TestRenameModalNamesThatAreNoPort:
         expect(summary).not_to_contain_text("collision")
         expect(page.locator(_tid("migrate-rename-apply-why"))).to_be_hidden()
         expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
+
+
+# ---------------------------------------------------------------------------
+# A job that is partial for its port names, with no devices declared
+# ---------------------------------------------------------------------------
+
+#: A Junos router: a port, the loopback and the loopback of a routing
+#: instance, and the management port.  Onto IOS-XE both loopbacks are
+#: written ``Loopback0``, and the management port has no name there.
+_JUNOS_NOT_SETTLED = """set system host-name r1
+set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24
+set interfaces lo0 unit 0 family inet address 192.0.2.1/32
+set interfaces lo0 unit 2 family inet address 192.0.2.2/32
+set interfaces fxp0 unit 0 family inet address 198.51.100.9/24
+"""
+
+#: An NX-OS switch with its management port, which IOS-XE has no name for.
+_NXOS_WITH_MGMT = """!Command: show running-config
+version 9.3(11) Bios:version
+hostname r1
+
+interface Ethernet1/1
+  no switchport
+  ip address 10.1.0.1/24
+
+interface mgmt0
+  vrf member management
+  ip address 192.0.2.9/24
+"""
+
+#: Two IOS ports, to be sent to two spellings of one AOS-S name.
+_IOS_TWO_PORTS = """!
+version 17.9
+hostname r1
+!
+interface GigabitEthernet1/0/1
+ description one
+!
+interface GigabitEthernet1/0/2
+ description two
+!
+end
+"""
+
+#: A Junos switch whose VXLAN source is named as Junos names it, with
+#: its unit: ``lo0.0`` where the interface is ``lo0``.  Both names end
+#: on ``Loopback0`` on EOS, and they are one interface.
+_JUNOS_VTEP_SOURCE = """set system host-name r1
+set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24
+set interfaces lo0 unit 0 family inet address 192.0.2.1/32
+set switch-options vtep-source-interface lo0.0
+set vlans VLAN100 vlan-id 100
+set vlans VLAN100 vxlan vni 10100
+"""
+
+#: A Junos router with its management port, which IOS-XE has no name for.
+_JUNOS_WITH_MGMT = """set system host-name r1
+set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24
+set interfaces fxp0 unit 0 family inet address 198.51.100.9/24
+"""
+
+#: A Catalyst port, and the port of a virtual router: ``GigabitEthernet1``
+#: has no slot, and the IOS-XE classifier does not read it.
+_IOS_ONE_UNREAD = """!
+version 17.9
+hostname r1
+!
+interface GigabitEthernet1/0/1
+ ip address 10.1.0.1 255.255.255.0
+!
+interface GigabitEthernet1
+ ip address 10.2.0.1 255.255.255.0
+!
+end
+"""
+
+#: An access port, and a tunnel: a name AOS-S has no form for.
+_IOS_WITH_A_TUNNEL = """!
+version 17.9
+hostname r1
+!
+interface GigabitEthernet1/0/1
+ description one
+!
+interface Tunnel7
+ ip address 10.77.0.1 255.255.255.0
+!
+end
+"""
+
+#: An AOS-S switch whose VLAN 20 has an address.  Its parser carries
+#: the address on an interface it names ``Vlan20``, which is what EOS,
+#: IOS-XE and NX-OS call that interface and no name of Junos.
+_AOSS_VLAN_ADDRESS = """; J9999A Configuration Editor; Created on release #WC.16.11.0001
+hostname "sw"
+vlan 1
+   name "DEFAULT_VLAN"
+   untagged 1-2
+   exit
+vlan 20
+   name "users"
+   tagged 2
+   ip address 10.0.20.1 255.255.255.0
+   exit
+"""
+
+#: A stacked AOS-S switch: ``1/1`` is an access port and ``1/A1`` a
+#: port of the uplink module.  No other vendor's names have a letter
+#: slot, so both are written as one port elsewhere.
+_AOSS_TWO_ON_ONE = """; J9999A Configuration Editor; Created on release #WC.16.11.0001
+hostname "sw"
+vlan 1
+   name "DEFAULT_VLAN"
+   untagged 1/1-1/2,1/A1
+   exit
+"""
+
+#: A Junos router with the loopback of a routing instance beside its
+#: own: two loopbacks, one ``Loopback0`` on EOS.
+_JUNOS_TWO_LOOPBACKS = """set system host-name r1
+set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24
+set interfaces lo0 unit 0 family inet address 192.0.2.1/32
+set interfaces lo0 unit 2 family inet address 192.0.2.2/32
+"""
+
+#: ... and a line that refers to the first as Junos does, with its unit.
+_JUNOS_THREE_ON_ONE = _JUNOS_TWO_LOOPBACKS + """set switch-options vtep-source-interface lo0.0
+set vlans VLAN100 vlan-id 100
+set vlans VLAN100 vxlan vni 10100
+"""
+
+#: A port the IOS-XE classifier does not read, and a tunnel AOS-S has
+#: no form for.
+_IOS_UNREAD_AND_A_TUNNEL = """!
+version 17.9
+hostname r1
+!
+interface GigabitEthernet1
+ ip address 10.2.0.1 255.255.255.0
+!
+interface Tunnel7
+ ip address 10.77.0.1 255.255.255.0
+!
+end
+"""
+
+#: One lane of a broken-out port, and a tunnel: AOS-S has neither.
+_IOS_A_LANE_AND_A_TUNNEL = """!
+version 17.9
+hostname r1
+!
+interface GigabitEthernet1/0/1
+ description one
+!
+interface TenGigabitEthernet1/1/1/1
+ description lane
+!
+interface Tunnel7
+ ip address 10.77.0.1 255.255.255.0
+!
+end
+"""
+
+_TOP = "#mig-rename-modal-top"
+_TABLE = "#mig-rename-sections"
+
+_SENTENCE = (
+    "Port names are not settled: 1 name(s) in the output received more "
+    "than one source name, so the config of two interfaces is written as one."
+)
+
+
+def _status_line(page: Page) -> str:
+    return page.locator(_tid("migrate-status-summary")).inner_text()
+
+
+def _banner(page: Page) -> str:
+    return page.locator(_tid("migrate-compatibility-banner")).inner_text()
+
+
+def _strip(page: Page):
+    return page.locator(_tid("migrate-rename-plan"))
+
+
+def _edge(cell) -> tuple[int, int, int]:
+    """The colour painted on the leading edge of a table cell: the bar
+    a row that needs a decision carries there."""
+    width, height, pixels = png_pixels(shot(cell))
+    return pixels[(height // 2) * width + 1]
+
+
+class TestRenameModalNamesNotSettled:
+    """A job in which two source names ended on one name, or a port
+    was dropped because the target has no name for it, is ``partial``
+    with no devices declared.  The page says why, marks the rows it
+    is about, and the job is ``completed`` once the operator has
+    decided each of them -- read here from what is painted."""
+
+    def test_the_page_says_why_and_it_is_settled(
+        self, page: Page, live_server_url: str,
+    ):
+        _open_modal_on(
+            page, live_server_url, "juniper_junos", "cisco_iosxe_cli", _JUNOS_NOT_SETTLED,
+        )
+        # Behind the modal, the page: the job's status and its sentence.
+        assert "status: partial" in _status_line(page)
+        assert _SENTENCE in _banner(page)
+        assert "1 port(s) the target has no name for were dropped" in _banner(page)
+
+        # In the modal, the strip: what was left unsettled, drawn as
+        # what holds a job (two interfaces written as one).
+        strip = _strip(page)
+        expect(strip).to_be_visible()
+        assert page.locator(_tid("migrate-rename-names-title")).inner_text() == (
+            "Port names are not settled"
+        )
+        assert page.locator(_tid("migrate-rename-names-fused")).inner_text() == (
+            "1 name of the output given more than one source name"
+        )
+        assert page.locator(_tid("migrate-rename-names-dropped")).inner_text() == (
+            "1 port dropped: the target has no name for it"
+        )
+        assert page.locator(_tid("migrate-rename-names-pending")).inner_text() == (
+            "1 needs your decision"
+        )
+        # A pair of devices would decide the port; the two loopbacks
+        # it would leave as they are, and the strip does not send the
+        # operator there for them.
+        assert page.locator(_tid("migrate-rename-names-how")).inner_text().strip() == (
+            "Give all but one of the rows that share a name a target of their "
+            "own, or drop them. Give each dropped name a target, or drop it. "
+            "Then Apply. Choosing both devices pairs the hardware ports among "
+            "these by position; the other names need a decision either way."
+        )
+        assert alike(painted_background(strip), painted_token(page, _TOP, "--badge-failed-bg"))
+        # Each chip in the colour of what it says: two interfaces
+        # written as one holds a job, a dropped port waits for a
+        # decision.
+        assert ink(page.locator(_tid("migrate-rename-names-fused"))) == token_ink(
+            page, "--badge-failed-fg",
+        )
+        assert ink(page.locator(_tid("migrate-rename-names-dropped"))) == token_ink(
+            page, "--badge-partial-fg",
+        )
+
+        # The rows it is about.  The two the job wrote as one
+        # interface are drawn as a collision, each naming the other,
+        # and counted on their section ...
+        failed = painted_token(page, _TABLE, "--badge-failed-bg")
+        for name, other in (("lo0", "lo0.2"), ("lo0.2", "lo0")):
+            mark = page.locator(_tid(f"migrate-rename-collision-{name}"))
+            expect(mark).to_be_visible()
+            assert mark.inner_text() == "⛔"
+            assert mark.get_attribute("title") == (
+                f"Written as one interface (Loopback0) with: {other}"
+            )
+            assert alike(
+                painted_background(page.locator(_tid(f"migrate-rename-source-{name}"))), failed,
+            ), name
+        for name in ("lo0", "lo0.2"):  # each in a section of its own
+            shared = page.locator(_tid(f"migrate-rename-row-{name}")).locator(
+                "xpath=ancestor::details"
+            )
+            assert "1 collisions" in shared.locator("summary").inner_text(), name
+        # ... and they hold Apply, with the reason beside it.
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_disabled()
+        assert page.locator(_tid("migrate-rename-apply-why")).inner_text() == (
+            "Apply is held: two rows end on one target name (Loopback0) — give "
+            "one another target, or drop it."
+        )
+        # ... and the dropped port asks for a decision: a mark, a bar
+        # on the row's edge, and the count on its section.
+        question = page.locator(_tid("migrate-rename-decision-fxp0"))
+        expect(question).to_be_visible()
+        assert question.inner_text() == "?"
+        cell = page.locator(_tid("migrate-rename-source-fxp0"))
+        assert alike(_edge(cell), token_ink(page, "--badge-partial-fg"), within=6)
+        assert _edge(page.locator(_tid("migrate-rename-source-ge-0/0/1"))) != _edge(cell)
+        assert page.locator(_tid("migrate-rename-auto-fxp0")).inner_text() == (
+            "(auto-dropped — won't render)"
+        )
+        section = page.locator(_tid("migrate-rename-row-fxp0")).locator("xpath=ancestor::details")
+        assert "1 needs a decision" in section.locator("summary").inner_text()
+
+        # Deciding each.  One of the two loopbacks gets a name of its own.
+        override = page.locator(_tid("migrate-rename-override-lo0.2"))
+        override.click()
+        override.press_sequentially("Loopback2")
+        override.press("Tab")
+        expect(page.locator(_tid("migrate-rename-collision-lo0"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-collision-lo0.2"))).to_have_count(0)
+        # The dropped port: "drop" makes the drop the operator's own.
+        acknowledge = page.locator(_tid("migrate-rename-ack-drop-fxp0"))
+        assert acknowledge.inner_text() == "drop"
+        acknowledge.click()
+        expect(question).to_have_count(0)
+        assert page.locator(_tid("migrate-rename-drop-fxp0")).inner_text() == "un-drop"
+        assert page.locator(_tid("migrate-rename-names-pending")).inner_text() == (
+            "1 decision recorded — Apply to confirm"
+        )
+        # Not sent yet: the job on screen is as it was, and so is the strip.
+        assert alike(painted_background(strip), painted_token(page, _TOP, "--badge-failed-bg"))
+
+        assert _apply(page)["port_rename_map"] == {"lo0.2": "Loopback2", "fxp0": None}
+        expect(strip).to_be_hidden()
+        assert page.locator(_tid("migrate-rename-status")).inner_text() == (
+            "Applied. Rendered output refreshed."
+        )
+        assert "status: completed" in _status_line(page)
+        assert "Port names are not settled" not in _banner(page)
+        output = page.locator(_tid("migrate-output")).inner_text()
+        assert "interface Loopback2" in output and "198.51.100.9" not in output
+
+    def test_dropped_ports_accepted_in_one_click(
+        self, page: Page, live_server_url: str,
+    ):
+        """A dropped port alone is drawn as what needs a decision,
+        not as what holds a job, and the strip offers to record the
+        drop of every one."""
+        _open_modal_on(
+            page, live_server_url, "cisco_nxos", "cisco_iosxe_cli", _NXOS_WITH_MGMT,
+        )
+        assert "status: partial" in _status_line(page)
+        assert (
+            "Port names are not settled: 1 port(s) the target has no name "
+            "for were dropped from the output."
+        ) in _banner(page)
+        strip = _strip(page)
+        expect(strip).to_have_attribute("data-state", "unsettled")
+        assert alike(painted_background(strip), painted_token(page, _TOP, "--badge-partial-bg"))
+        expect(page.locator(_tid("migrate-rename-names-fused"))).to_have_count(0)
+        accept = page.locator(_tid("migrate-rename-names-accept"))
+        assert accept.inner_text() == "Accept the drops"
+        accept.click()
+        assert page.locator(_tid("migrate-rename-status")).inner_text() == (
+            "1 decision recorded — Apply to confirm."
+        )
+        expect(accept).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-decision-mgmt0"))).to_have_count(0)
+        assert _apply(page)["port_rename_map"] == {"mgmt0": None}
+        expect(strip).to_be_hidden()
+        assert "status: completed" in _status_line(page)
+
+    def test_a_dropped_port_given_a_name_instead(
+        self, page: Page, live_server_url: str,
+    ):
+        _open_modal_on(
+            page, live_server_url, "cisco_nxos", "cisco_iosxe_cli", _NXOS_WITH_MGMT,
+        )
+        # The field of a dropped row is not open for typing until the
+        # row is kept; it then holds the port's own name.
+        override = page.locator(_tid("migrate-rename-override-mgmt0"))
+        expect(override).to_be_disabled()
+        keep = page.locator(_tid("migrate-rename-drop-mgmt0"))
+        assert keep.inner_text() == "keep verbatim"
+        keep.click()
+        expect(override).to_have_value("mgmt0")
+        expect(page.locator(_tid("migrate-rename-decision-mgmt0"))).to_have_count(0)
+        override.click()
+        override.press("Control+a")
+        override.press_sequentially("GigabitEthernet0/0")
+        override.press("Tab")
+        assert _apply(page)["port_rename_map"] == {"mgmt0": "GigabitEthernet0/0"}
+        assert "status: completed" in _status_line(page)
+        assert "192.0.2.9" in page.locator(_tid("migrate-output")).inner_text()
+
+    def test_a_list_of_ports_has_drop_for_it(
+        self, page: Page, live_server_url: str,
+    ):
+        """With a target device chosen a row has a list of that
+        device's ports, and the list's "Drop" entry is the operator's
+        decision that the port is to go.  A target alone pairs
+        nothing, so the strip still says what the job left unsettled,
+        ahead of what the next Apply will do."""
+        _open_modal_on(
+            page, live_server_url, "cisco_nxos", "cisco_iosxe_cli", _NXOS_WITH_MGMT,
+        )
+        page.locator(_tid("migrate-rename-target-vendor-select")).select_option(
+            value="cisco_iosxe"
+        )
+        page.locator(_tid("migrate-rename-target-model-select")).select_option(
+            value="C9300-24P"
+        )
+        strip = _strip(page)
+        expect(strip).to_have_attribute("data-state", "incomplete")
+        said = strip.inner_text()
+        assert said.index("Port names are not settled") < said.index("Ports are NOT paired")
+        assert page.locator(_tid("migrate-rename-names-dropped")).inner_text() == (
+            "1 port dropped: the target has no name for it"
+        )
+        expect(page.locator(_tid("migrate-rename-decision-mgmt0"))).to_be_visible()
+        assert ("__DROP__", "— Drop (don't render) —") in override_options(page, "mgmt0")
+        choose_override(page, "mgmt0", "__DROP__")
+        expect(page.locator(_tid("migrate-rename-decision-mgmt0"))).to_have_count(0)
+        assert _apply(page)["port_rename_map"] == {"mgmt0": None}
+        assert "status: completed" in _status_line(page)
+        # The hint about the devices is still there; the names are settled.
+        expect(page.locator(_tid("migrate-rename-plan-hint"))).to_be_visible()
+        expect(page.locator(_tid("migrate-rename-names-title"))).to_have_count(0)
+
+    def test_an_apply_that_settles_nothing(
+        self, page: Page, live_server_url: str,
+    ):
+        """Junos to OPNsense: ``lo0.2`` is put on ``lo0``, which keeps
+        its name.  Nothing holds Apply; pressed with nothing decided,
+        it comes back as it went, and the footer does not say
+        "Rendered output refreshed" over a job that is still not
+        settled."""
+        raw = _JUNOS_WITH_A_LOOPBACK + "set interfaces lo0 unit 2 family inet address 192.0.2.2/32\n"
+        _open_modal_on(page, live_server_url, "juniper_junos", "opnsense", raw)
+        strip = _strip(page)
+        assert page.locator(_tid("migrate-rename-names-fused")).inner_text() == (
+            "1 name of the output given more than one source name"
+        )
+        _apply(page)
+        assert page.locator(_tid("migrate-rename-status")).inner_text() == (
+            "Applied. Port names are still not settled — see above."
+        )
+        expect(strip).to_be_visible()
+        assert "status: partial" in _status_line(page)
+        # A loopback of its own settles it.
+        override = page.locator(_tid("migrate-rename-override-lo0.2"))
+        override.click()
+        override.press_sequentially("lo1")
+        override.press("Tab")
+        assert _apply(page)["port_rename_map"] == {"lo0.2": "lo1"}
+        expect(strip).to_be_hidden()
+        assert "status: completed" in _status_line(page)
+
+    def test_the_job_marks_two_spellings_of_one(
+        self, page: Page, live_server_url: str,
+    ):
+        """``Trk1`` and ``trk1`` are one port on AOS-S.  The page
+        compares two targets as text and sees two names; the job
+        compares them as the platform does, and its account marks
+        the rows -- until one of them is changed."""
+        _open_modal_on(page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _IOS_TWO_PORTS)
+        expect(_strip(page)).to_be_hidden()
+        for name, target in (("GigabitEthernet1/0/1", "Trk1"), ("GigabitEthernet1/0/2", "trk1")):
+            override = page.locator(_tid(f"migrate-rename-override-{name}"))
+            override.click()
+            override.press_sequentially(target)
+            override.press("Tab")
+        expect(page.locator(_tid("migrate-rename-summary"))).not_to_contain_text("collision")
+        _apply(page)
+        assert "status: partial" in _status_line(page)
+        assert _SENTENCE in _banner(page)
+        expect(_strip(page)).to_be_visible()
+        first = page.locator(_tid("migrate-rename-collision-GigabitEthernet1/0/1"))
+        second = page.locator(_tid("migrate-rename-collision-GigabitEthernet1/0/2"))
+        assert first.inner_text() == "⛔" and second.inner_text() == "⛔"
+        assert first.get_attribute("title") == (
+            "Written as one interface (Trk1) with: GigabitEthernet1/0/2"
+        )
+        # Counted on their section too, though no two rows here end
+        # on one string.
+        section = page.locator(_tid("migrate-rename-row-GigabitEthernet1/0/1")).locator(
+            "xpath=ancestor::details"
+        )
+        assert "2 collisions" in section.locator("summary").inner_text()
+        # Changing one of the two takes the job's account off both rows.
+        override = page.locator(_tid("migrate-rename-override-GigabitEthernet1/0/2"))
+        override.click()
+        override.press("End")
+        override.press_sequentially("0")
+        override.press("Tab")
+        expect(first).to_have_count(0)
+        expect(second).to_have_count(0)
+        assert _apply(page)["port_rename_map"] == {
+            "GigabitEthernet1/0/1": "Trk1", "GigabitEthernet1/0/2": "trk10",
+        }
+        expect(_strip(page)).to_be_hidden()
+        assert "status: completed" in _status_line(page)
+
+    def test_a_logical_name_that_was_dropped(self, page: Page, live_server_url: str):
+        """A tunnel AOS-S has no form for.  It is no hardware port,
+        and it is dropped all the same: the strip says so in words
+        that do not call it a port, and does not offer a pair of
+        devices, which would decide nothing about it."""
+        _open_modal_on(
+            page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _IOS_WITH_A_TUNNEL,
+        )
+        assert "status: partial" in _status_line(page)
+        assert (
+            "Port names are not settled: 1 other name(s) the target has no form "
+            "for (such as a loopback, a tunnel or a hardware switch) were dropped "
+            "from the output."
+        ) in _banner(page)
+        assert "devices" not in _banner(page).partition("Port names are not settled")[2]
+        strip = _strip(page)
+        assert alike(painted_background(strip), painted_token(page, _TOP, "--badge-partial-bg"))
+        assert page.locator(_tid("migrate-rename-names-dropped")).inner_text() == (
+            "1 name dropped: the target has no name for it"
+        )
+        assert page.locator(_tid("migrate-rename-names-how")).inner_text().strip() == (
+            "Give each dropped name a target, or drop it. Then Apply."
+        )
+        question = page.locator(_tid("migrate-rename-decision-Tunnel7"))
+        expect(question).to_be_visible()
+        assert alike(
+            _edge(page.locator(_tid("migrate-rename-source-Tunnel7"))),
+            token_ink(page, "--badge-partial-fg"), within=6,
+        )
+        page.locator(_tid("migrate-rename-names-accept")).click()
+        expect(question).to_have_count(0)
+        assert _apply(page)["port_rename_map"] == {"Tunnel7": None}
+        expect(strip).to_be_hidden()
+        assert "status: completed" in _status_line(page)
+
+    def test_beside_one_device_it_is_still_said(
+        self, page: Page, live_server_url: str,
+    ):
+        """A source device and no target pairs nothing.  The strip
+        says what the job left unsettled ahead of the hint about the
+        devices, and an Apply that decides nothing is answered with
+        that, not with "Rendered output refreshed"."""
+        _open_modal_on(
+            page, live_server_url, "juniper_junos", "cisco_iosxe_cli", _JUNOS_WITH_MGMT,
+        )
+        page.locator(_tid("migrate-device-source-model-select")).select_option(
+            value="profile:EX4300-48T"
+        )
+        strip = _strip(page)
+        expect(strip).to_have_attribute("data-state", "incomplete")
+        said = strip.inner_text()
+        assert said.index("Port names are not settled") < said.index(
+            "Choose the target device to pair ports by position."
+        )
+        assert alike(painted_background(strip), painted_token(page, _TOP, "--badge-partial-bg"))
+        _apply(page)
+        assert page.locator(_tid("migrate-rename-status")).inner_text() == (
+            "Applied. Port names are still not settled — see above."
+        )
+        assert "status: partial" in _status_line(page)
+
+    def test_nothing_unsettled_has_no_strip(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        assert "status: completed" in _status_line(page)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        expect(page.locator(_tid("migrate-rename-modal"))).to_be_visible()
+        expect(_strip(page)).to_be_hidden()
+        expect(page.locator(_tid("migrate-rename-names-title"))).to_have_count(0)
+        expect(page.locator('[data-testid^="migrate-rename-decision-"]')).to_have_count(0)
+
+
+class TestRenameModalTheJobsAccountAndApply:
+    """With no devices declared the job says itself which names it
+    wrote as one interface.  For the rows it was made with it is the
+    authority: a pair it does not list holds nothing.  What is typed
+    in the modal is in no job yet, and two rows given one name there
+    hold Apply as they always did."""
+
+    def test_a_pair_the_job_does_not_list(
+        self, page: Page, live_server_url: str,
+    ):
+        """``lo0.0`` is how Junos refers to ``lo0``.  Both rows show
+        ``Loopback0``, the job is ``completed``, and nothing is
+        marked, counted or held: renaming or dropping either row to
+        free Apply would have broken the VXLAN source."""
+        _open_modal_on(page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_VTEP_SOURCE)
+        assert "status: completed" in _status_line(page)
+        expect(_strip(page)).to_be_hidden()
+        _unfold(page, "loopback")
+        _unfold(page, "svi")
+        for name in ("lo0", "lo0.0"):
+            assert page.locator(_tid(f"migrate-rename-auto-{name}")).inner_text() == "Loopback0"
+            expect(page.locator(_tid(f"migrate-rename-collision-{name}"))).to_have_count(0)
+        # Painted as any other row, not as a collision.
+        failed = painted_token(page, _TABLE, "--badge-failed-bg")
+        plain = painted_background(page.locator(_tid("migrate-rename-source-ge-0/0/1")))
+        for name in ("lo0", "lo0.0"):
+            ground = painted_background(page.locator(_tid(f"migrate-rename-source-{name}")))
+            assert alike(ground, plain) and not alike(ground, failed), name
+        expect(page.locator(_tid("migrate-rename-summary"))).not_to_contain_text("collision")
+        expect(page.locator(_tid("migrate-rename-apply-why"))).to_be_hidden()
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
+        # And Apply goes through, with the source of the VTEP in place.
+        assert _apply(page).get("port_rename_map") == {}
+        assert "status: completed" in _status_line(page)
+        assert "vxlan source-interface Loopback0" in page.locator(
+            _tid("migrate-output")
+        ).inner_text()
+
+    def test_two_rows_typed_onto_one_hold_apply(
+        self, page: Page, live_server_url: str,
+    ):
+        """Typed before Apply, in no job yet: the page is all there
+        is to say that two rows now end on one name."""
+        _open_modal_on(page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_VTEP_SOURCE)
+        _unfold(page, "loopback")
+        for name in ("ge-0/0/1", "lo0"):
+            override = page.locator(_tid(f"migrate-rename-override-{name}"))
+            override.click()
+            override.press_sequentially("Ethernet9")
+            override.press("Tab")
+        apply_btn = page.locator(_tid("migrate-rename-apply-btn"))
+        expect(apply_btn).to_be_disabled()
+        assert page.locator(_tid("migrate-rename-apply-why")).inner_text() == (
+            "Apply is held: two rows end on one target name (Ethernet9) — give "
+            "one another target, or drop it."
+        )
+        failed = painted_token(page, _TABLE, "--badge-failed-bg")
+        for name, other in (("ge-0/0/1", "lo0"), ("lo0", "ge-0/0/1")):
+            mark = page.locator(_tid(f"migrate-rename-collision-{name}"))
+            assert mark.get_attribute("title") == f"Collides with: {other}"
+            assert alike(
+                painted_background(page.locator(_tid(f"migrate-rename-source-{name}"))), failed,
+            ), name
+        # One of the two given another name: free again.
+        override = page.locator(_tid("migrate-rename-override-lo0"))
+        override.click()
+        override.press("Control+a")
+        override.press_sequentially("Loopback5")
+        override.press("Tab")
+        expect(apply_btn).to_be_enabled()
+        expect(page.locator(_tid("migrate-rename-apply-why"))).to_be_hidden()
+        expect(page.locator(".has-collision")).to_have_count(0)
+
+    def test_a_name_typed_onto_the_jobs_holds(
+        self, page: Page, live_server_url: str,
+    ):
+        """The job put ``lo0`` and ``lo0.0`` on ``Loopback0`` and
+        called that one interface.  A third row typed onto the same
+        name is the operator's, and is in no job: it collides."""
+        _open_modal_on(page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_VTEP_SOURCE)
+        override = page.locator(_tid("migrate-rename-override-ge-0/0/1"))
+        override.click()
+        override.press_sequentially("Loopback0")
+        override.press("Tab")
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_disabled()
+        assert page.locator(_tid("migrate-rename-apply-why")).inner_text().startswith(
+            "Apply is held: two rows end on one target name (Loopback0)"
+        )
+        mark = page.locator(_tid("migrate-rename-collision-ge-0/0/1"))
+        assert sorted(mark.get_attribute("title").removeprefix("Collides with: ").split(", ")) == [
+            "lo0", "lo0.0",
+        ]
+
+
+    def test_one_listed_row_beside_its_unit_0(self, page: Page, live_server_url: str):
+        """A port sent to ``loopback0`` is on the loopback as EOS
+        reads names, and the job lists it with ``lo0``.  The row for
+        ``lo0`` shares the string ``Loopback0`` with ``lo0.0`` only,
+        which the job counts as the same interface: one row of that
+        pair being listed, with a row of another spelling, does not
+        make the pair a collision of two."""
+        _open_modal_on(page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_VTEP_SOURCE)
+        override = page.locator(_tid("migrate-rename-override-ge-0/0/1"))
+        override.click()
+        override.press_sequentially("loopback0")
+        override.press("Tab")
+        assert _apply(page)["port_rename_map"] == {"ge-0/0/1": "loopback0"}
+        assert "status: partial" in _status_line(page)
+        _unfold(page, "svi")
+        # The job's own account marks the two it wrote as one ...
+        for name, other in (("ge-0/0/1", "lo0"), ("lo0", "ge-0/0/1")):
+            mark = page.locator(_tid(f"migrate-rename-collision-{name}"))
+            assert mark.get_attribute("title") == (
+                f"Written as one interface (loopback0) with: {other}"
+            )
+        # ... and not the name that is ``lo0`` written with its unit.
+        expect(page.locator(_tid("migrate-rename-collision-lo0.0"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-summary"))).not_to_contain_text("collision")
+        expect(page.locator(_tid("migrate-rename-apply-why"))).to_be_hidden()
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
+
+
+class TestRenameModalNamesLeftAsTheyWere:
+    """A name the translator could not read is written into the
+    output as the source config has it.  Such a job is ``partial``
+    with no devices declared; the row says what happened and offers
+    the three ways to decide it: a name, the name as it is, or
+    drop."""
+
+    def _open(self, page: Page, base: str) -> None:
+        _open_modal_on(page, base, "cisco_iosxe_cli", "arista_eos", _IOS_ONE_UNREAD)
+
+    def test_the_row_says_so_and_keeping_settles(
+        self, page: Page, live_server_url: str,
+    ):
+        self._open(page, live_server_url)
+        assert "status: partial" in _status_line(page)
+        assert (
+            "Port names are not settled: 1 name(s) could not be read as any kind "
+            "of port: whatever the output has of them is under the name the "
+            "source config has for them"
+        ) in _banner(page)
+        assert "interface GigabitEthernet1\n" in page.locator(_tid("migrate-output")).inner_text()
+
+        strip = _strip(page)
+        expect(strip).to_have_attribute("data-state", "unsettled")
+        assert alike(painted_background(strip), painted_token(page, _TOP, "--badge-partial-bg"))
+        chip = page.locator(_tid("migrate-rename-names-left"))
+        assert chip.inner_text() == (
+            "1 name left under its source name: not read as any kind of port"
+        )
+        assert ink(chip) == token_ink(page, "--badge-partial-fg")
+        assert page.locator(_tid("migrate-rename-names-pending")).inner_text() == (
+            "1 needs your decision"
+        )
+        # No one button says of names nobody read that they are right.
+        expect(page.locator(_tid("migrate-rename-names-accept"))).to_have_count(0)
+        assert page.locator(_tid("migrate-rename-names-how")).inner_text().strip() == (
+            "Give each name left as it is a target, keep it if it is right on "
+            "the target, or drop it. Then Apply — or choose both devices to pair "
+            "ports by position."
+        )
+
+        # The row: what happened, a mark, the bar on its edge, its section.
+        assert page.locator(_tid("migrate-rename-auto-GigabitEthernet1")).inner_text() == (
+            "(left under its source name)"
+        )
+        question = page.locator(_tid("migrate-rename-decision-GigabitEthernet1"))
+        assert question.inner_text() == "?"
+        assert question.get_attribute("title") == (
+            "Left under its source name: give it a target, keep it if it is "
+            "right on the target, or drop it"
+        )
+        cell = page.locator(_tid("migrate-rename-source-GigabitEthernet1"))
+        assert alike(_edge(cell), token_ink(page, "--badge-partial-fg"), within=6)
+        assert _edge(page.locator(_tid("migrate-rename-source-GigabitEthernet1/0/1"))) != _edge(cell)
+        section = page.locator(_tid("migrate-rename-row-GigabitEthernet1")).locator(
+            "xpath=ancestor::details"
+        )
+        assert "1 needs a decision" in section.locator("summary").inner_text()
+        # The other row is a port that was read and renamed: no link.
+        expect(page.locator(_tid("migrate-rename-keep-GigabitEthernet1/0/1"))).to_have_count(0)
+
+        keep = page.locator(_tid("migrate-rename-keep-GigabitEthernet1"))
+        assert keep.inner_text() == "keep this name"
+        keep.click()
+        expect(question).to_have_count(0)
+        expect(keep).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-override-GigabitEthernet1"))).to_have_value(
+            "GigabitEthernet1"
+        )
+        assert page.locator(_tid("migrate-rename-names-pending")).inner_text() == (
+            "1 decision recorded — Apply to confirm"
+        )
+        assert _apply(page)["port_rename_map"] == {"GigabitEthernet1": "GigabitEthernet1"}
+        expect(strip).to_be_hidden()
+        assert "status: completed" in _status_line(page)
+        assert "Port names are not settled" not in _banner(page)
+        assert "interface GigabitEthernet1\n" in page.locator(_tid("migrate-output")).inner_text()
+
+    def test_given_a_name(self, page: Page, live_server_url: str):
+        self._open(page, live_server_url)
+        override = page.locator(_tid("migrate-rename-override-GigabitEthernet1"))
+        assert override.get_attribute("placeholder") == "Type a target name"
+        override.click()
+        override.press_sequentially("Ethernet7")
+        override.press("Tab")
+        expect(page.locator(_tid("migrate-rename-decision-GigabitEthernet1"))).to_have_count(0)
+        assert _apply(page)["port_rename_map"] == {"GigabitEthernet1": "Ethernet7"}
+        assert "status: completed" in _status_line(page)
+        output = page.locator(_tid("migrate-output")).inner_text()
+        assert "interface Ethernet7\n" in output and "GigabitEthernet1" not in output
+
+    def test_dropped(self, page: Page, live_server_url: str):
+        self._open(page, live_server_url)
+        drop = page.locator(_tid("migrate-rename-drop-GigabitEthernet1"))
+        assert drop.inner_text() == "drop"
+        drop.click()
+        expect(page.locator(_tid("migrate-rename-decision-GigabitEthernet1"))).to_have_count(0)
+        assert _apply(page)["port_rename_map"] == {"GigabitEthernet1": None}
+        assert "status: completed" in _status_line(page)
+        assert "10.2.0.1" not in page.locator(_tid("migrate-output")).inner_text()
+
+    def test_a_list_of_ports_offers_to_keep_it(self, page: Page, live_server_url: str):
+        """With a target device chosen the row has a list of that
+        device's ports.  The list says what happened to the name,
+        and has an entry that keeps it."""
+        self._open(page, live_server_url)
+        page.locator(_tid("migrate-rename-target-vendor-select")).select_option(
+            value="arista_eos"
+        )
+        page.locator(_tid("migrate-rename-target-model-select")).select_option(
+            value="DCS-7050SX-64"
+        )
+        options = override_options(page, "GigabitEthernet1")
+        assert options[0] == ("", "(left under its source name)")
+        assert ("__KEEP__", "Keep this name (GigabitEthernet1)") in options
+        # A port that was read has no such entry.
+        assert "__KEEP__" not in [value for value, _ in override_options(
+            page, "GigabitEthernet1/0/1",
+        )]
+        choose_override(page, "GigabitEthernet1", "__KEEP__")
+        expect(page.locator(_tid("migrate-rename-decision-GigabitEthernet1"))).to_have_count(0)
+        assert page.locator(
+            _tid("migrate-rename-override-GigabitEthernet1")
+        ).input_value() == "__KEEP__"
+        assert _apply(page)["port_rename_map"] == {"GigabitEthernet1": "GigabitEthernet1"}
+        assert "status: completed" in _status_line(page)
+
+
+class TestRenameModalWhereDevicesSettleNothing:
+    """The pairing by position is of hardware ports.  With both
+    devices declared a job does not hold for two loopbacks on one
+    loopback or for a VLAN interface under a foreign name -- the same
+    output is ``completed`` there -- so the strip sends nobody to the
+    device pickers for names like those, and tells nobody to choose a
+    device of a vendor that has none."""
+
+    _SETTLES_NONE = (
+        " pairs hardware ports by position: that settles none of the names "
+        "above, none of which is a hardware port."
+    )
+
+    def test_a_source_device_and_no_port_listed(self, page: Page, live_server_url: str):
+        """The source device is declared and the job lists one name,
+        a VLAN's interface.  The strip used to end "Choose the target
+        device to pair ports by position."."""
+        _open_modal_on(page, live_server_url, "aruba_aoss", "juniper_junos", _AOSS_VLAN_ADDRESS)
+        assert "status: partial" in _status_line(page)
+        source = page.locator(_tid("migrate-device-source-model-select"))
+        source.select_option(value="fam:2930F:2930F-48G-PoEP-4SFPP")
+        strip = _strip(page)
+        expect(strip).to_have_attribute("data-state", "incomplete")
+        hint = page.locator(_tid("migrate-rename-plan-hint"))
+        expect(hint).to_have_text("Choosing the target device" + self._SETTLES_NONE)
+        assert page.locator(_tid("migrate-rename-names-left")).inner_text() == (
+            "1 name left under its source name: not read as any kind of port"
+        )
+        said = strip.inner_text()
+        assert "Choose the target device" not in said and "choose both devices" not in said
+        assert said.index("Port names are not settled") < said.index("Choosing the target device")
+        assert alike(painted_background(strip), painted_token(page, _TOP, "--badge-partial-bg"))
+        # Settled on its row, the name is no longer listed, and the
+        # hint is the standing one again.
+        _unfold(page, "svi")
+        page.locator(_tid("migrate-rename-keep-Vlan20")).click()
+        assert _apply(page)["port_rename_map"] == {"Vlan20": "Vlan20"}
+        assert "status: completed" in _status_line(page)
+        expect(page.locator(_tid("migrate-rename-names-title"))).to_have_count(0)
+        expect(hint).to_have_text("Choose the target device to pair ports by position.")
+
+    def test_a_target_device_and_no_port_listed(self, page: Page, live_server_url: str):
+        """A target device is chosen and the job lists two loopbacks
+        on one loopback.  The strip used to add "Choose the source
+        device as well to pair ports by position."."""
+        _open_modal_on(page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_TWO_LOOPBACKS)
+        assert "status: partial" in _status_line(page)
+        page.locator(_tid("migrate-rename-target-vendor-select")).select_option(
+            value="arista_eos"
+        )
+        page.locator(_tid("migrate-rename-target-model-select")).select_option(
+            value="DCS-7050SX-64"
+        )
+        strip = _strip(page)
+        expect(strip).to_have_attribute("data-state", "incomplete")
+        expect(page.locator(_tid("migrate-rename-plan-hint"))).to_have_text(
+            "Choosing the source device as well" + self._SETTLES_NONE
+            + " Until then the target\u2019s port list only fills the choices below."
+        )
+        assert page.locator(_tid("migrate-rename-names-fused")).inner_text() == (
+            "1 name of the output given more than one source name"
+        )
+        said = strip.inner_text()
+        assert "Choose the source device" not in said and "choose both devices" not in said
+        assert alike(painted_background(strip), painted_token(page, _TOP, "--badge-failed-bg"))
+
+    def test_a_port_listed_is_still_offered(
+        self, page: Page, live_server_url: str,
+    ):
+        """The other way about: a hardware port among the names is
+        what the pairing is for, and the offer stands -- here beside
+        two loopbacks on one, which it says it leaves."""
+        _open_modal_on(
+            page, live_server_url, "juniper_junos", "cisco_iosxe_cli", _JUNOS_NOT_SETTLED,
+        )
+        page.locator(_tid("migrate-device-source-model-select")).select_option(
+            value="profile:EX4300-48T"
+        )
+        expect(page.locator(_tid("migrate-rename-names-fused"))).to_be_visible()
+        expect(page.locator(_tid("migrate-rename-names-dropped"))).to_be_visible()
+        expect(page.locator(_tid("migrate-rename-plan-hint"))).to_have_text(
+            "Choose the target device to pair ports by position."
+        )
+        assert page.locator(_tid("migrate-rename-names-how")).inner_text().strip().endswith(
+            "Then Apply. Choosing both devices pairs the hardware ports among "
+            "these by position; the other names need a decision either way."
+        )
+
+    def test_no_pair_for_a_source_with_no_device(
+        self, page: Page, live_server_url: str,
+    ):
+        """A management port NX-OS has and IOS-XE does not: a
+        hardware port, and what a pair of devices would decide -- but
+        no device of an NX-OS switch is described, so there is no
+        pair to choose and the strip does not say to choose one."""
+        _open_modal_on(
+            page, live_server_url, "cisco_nxos", "cisco_iosxe_cli", _NXOS_WITH_MGMT,
+        )
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_be_disabled()
+        assert page.locator(_tid("migrate-rename-names-dropped")).inner_text() == (
+            "1 port dropped: the target has no name for it"
+        )
+        assert page.locator(_tid("migrate-rename-names-how")).inner_text().strip() == (
+            "Give each dropped name a target, or drop it. Then Apply."
+        )
+        assert "devices" not in _strip(page).inner_text()
+
+    def test_no_pair_for_a_target_with_no_device(
+        self, page: Page, live_server_url: str,
+    ):
+        """Two ports of an AOS-S switch written as one on NX-OS.
+        The source has devices to choose from and the target has
+        none: there is still no pair."""
+        _open_modal_on(page, live_server_url, "aruba_aoss", "cisco_nxos", _AOSS_TWO_ON_ONE)
+        assert "status: partial" in _status_line(page)
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_be_enabled()
+        assert page.locator(_tid("migrate-rename-names-fused")).inner_text() == (
+            "1 name of the output given more than one source name"
+        )
+        assert page.locator(_tid("migrate-rename-names-how")).inner_text().strip() == (
+            "Give all but one of the rows that share a name a target of their "
+            "own, or drop them. Then Apply."
+        )
+
+    def test_no_target_device_to_choose(self, page: Page, live_server_url: str):
+        """The source device is declared and the target is NX-OS,
+        which has no device to choose: the hint does not say to
+        choose one."""
+        _open_modal_on(page, live_server_url, "aruba_aoss", "cisco_nxos", _AOSS_VLAN_ADDRESS)
+        # ``Vlan20`` is what NX-OS calls that interface: nothing is listed.
+        assert "status: completed" in _status_line(page)
+        page.locator(_tid("migrate-device-source-model-select")).select_option(
+            value="fam:2930F:2930F-48G-PoEP-4SFPP"
+        )
+        expect(page.locator(_tid("migrate-rename-plan-hint"))).to_have_text(
+            "No device model is known for the target vendor yet, so ports "
+            "cannot be paired by position."
+        )
+        expect(page.locator(_tid("migrate-rename-names-title"))).to_have_count(0)
+        assert "Choose the target device" not in _strip(page).inner_text()
+
+
+class TestRenameModalWhatTheStripCounts:
+    """Small things the strip and the summary say of a job, each read
+    from what is painted."""
+
+    def test_devices_are_for_two_ports_on_one(
+        self, page: Page, live_server_url: str,
+    ):
+        """Two hardware ports written as one.  The name they share
+        (``Trk1``) is no port of the source; the two names that share
+        it are, and a pair of devices would give each a port of its
+        own: the strip offers it."""
+        _open_modal_on(page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _IOS_TWO_PORTS)
+        for name, target in (("GigabitEthernet1/0/1", "Trk1"), ("GigabitEthernet1/0/2", "trk1")):
+            override = page.locator(_tid(f"migrate-rename-override-{name}"))
+            override.click()
+            override.press_sequentially(target)
+            override.press("Tab")
+        _apply(page)
+        assert "status: partial" in _status_line(page)
+        assert page.locator(_tid("migrate-rename-names-how")).inner_text().strip() == (
+            "Give all but one of the rows that share a name a target of their "
+            "own, or drop them. Then Apply \u2014 or choose both devices to pair "
+            "ports by position."
+        )
+
+    def test_accept_beside_a_name_left(
+        self, page: Page, live_server_url: str,
+    ):
+        """A tunnel that was dropped and a port left under its source
+        name, in one job.  "Accept the drops" is there for the tunnel
+        and takes the tunnel only: the name that was left still needs
+        its own decision."""
+        _open_modal_on(
+            page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _IOS_UNREAD_AND_A_TUNNEL,
+        )
+        assert page.locator(_tid("migrate-rename-names-pending")).inner_text() == (
+            "2 need your decision"
+        )
+        accept = page.locator(_tid("migrate-rename-names-accept"))
+        expect(accept).to_be_visible()
+        assert accept.inner_text() == "Accept the drops"
+        accept.click()
+        expect(accept).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-decision-Tunnel7"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-decision-GigabitEthernet1"))).to_be_visible()
+        assert page.locator(_tid("migrate-rename-names-pending")).inner_text() == (
+            "1 needs your decision"
+        )
+        page.locator(_tid("migrate-rename-keep-GigabitEthernet1")).click()
+        assert _apply(page)["port_rename_map"] == {
+            "Tunnel7": None, "GigabitEthernet1": "GigabitEthernet1",
+        }
+        assert "status: completed" in _status_line(page)
+
+    def test_a_port_and_a_tunnel_are_names(self, page: Page, live_server_url: str):
+        """A breakout lane and a tunnel, both dropped.  One is a
+        hardware port and the other is not: together they are two
+        names, not two ports."""
+        _open_modal_on(
+            page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _IOS_A_LANE_AND_A_TUNNEL,
+        )
+        assert page.locator(_tid("migrate-rename-names-dropped")).inner_text() == (
+            "2 names dropped: the target has no name for them"
+        )
+        banner = _banner(page)
+        assert "1 port(s) the target has no name for were dropped" in banner
+        assert "1 other name(s) the target has no form for" in banner
+
+    def test_the_summary_counts_the_jobs_rows(self, page: Page, live_server_url: str):
+        """Three rows end on ``Loopback0``: ``lo0``, the loopback of
+        a routing instance ``lo0.2``, and ``lo0.0``, which is ``lo0``
+        written with its unit.  The job lists the first two as two
+        interfaces written as one, and the summary counts those."""
+        _open_modal_on(page, live_server_url, "juniper_junos", "arista_eos", _JUNOS_THREE_ON_ONE)
+        for name in ("lo0", "lo0.2", "lo0.0"):
+            row = page.locator(_tid(f"migrate-rename-row-{name}"))
+            section = row.locator("xpath=ancestor::details")
+            if not section.evaluate("el => el.open"):
+                section.locator("summary").click()
+            assert page.locator(_tid(f"migrate-rename-auto-{name}")).inner_text() == "Loopback0"
+        expect(page.locator(_tid("migrate-rename-collision-lo0.0"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-collision-lo0"))).to_be_visible()
+        expect(page.locator(_tid("migrate-rename-collision-lo0.2"))).to_be_visible()
+        summary = page.locator(_tid("migrate-rename-summary")).inner_text()
+        assert "2 collisions" in summary and "3 collisions" not in summary
 
 
 class TestRenameModalModuleDropdown:

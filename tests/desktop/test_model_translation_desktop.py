@@ -85,6 +85,20 @@ def _post(port: int, path: str, body: dict) -> object:
         return json.loads(resp.read().decode("utf-8"))
 
 
+def _post_job(port: int, path: str, body: dict) -> tuple[str, dict]:
+    """POST a plan request; return the job disposition the response
+    header carries, and the job."""
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}{path}",
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=30) as resp:
+        assert resp.status == 200, path
+        return resp.headers["X-Netcanon-Job-Status"], json.loads(resp.read().decode("utf-8"))
+
+
 def _post_raw(port: int, path: str, body: bytes) -> tuple[int, object]:
     """POST bytes as they are; return the status and the decoded body,
     whatever the status."""
@@ -289,6 +303,113 @@ class TestModelTranslationServedByEmbeddedServer:
             "_lastJob.source_other_names", "'Other names in the config'",
             "hasOtherNames", "plan.untagged_units", "plan.unvouched_units",
             "'moved with its port to '",
+        ):
+            assert needed in migrate_page, needed
+
+    def test_no_devices_says_what_the_run_did(self, tmp_path: Path) -> None:
+        """A warning is not a status, through the embedded server.
+        With no devices declared, a job in which two source names
+        ended on one name and a port was dropped is ``partial``, says
+        which as data, and is settled by entries of the port map --
+        on a category pane as on ``/plan``.  And the page the desktop
+        window shows has the strip that says so, the marks, and the
+        link that acknowledges a drop."""
+        app = create_app(_settings(tmp_path))
+        port = _free_port()
+        body = {
+            "source": "juniper_junos", "target": "cisco_iosxe_cli",
+            "raw_text": "\n".join([
+                "set system host-name r1",
+                "set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24",
+                "set interfaces lo0 unit 0 family inet address 192.0.2.1/32",
+                "set interfaces lo0 unit 2 family inet address 192.0.2.2/32",
+                "set interfaces fxp0 unit 0 family inet address 198.51.100.9/24",
+                "",
+            ]),
+        }
+        decided = {**body, "port_rename_map": {"lo0.2": "Loopback2", "fxp0": None}}
+        # A name the translator cannot read (the port of a virtual
+        # router, which has no slot) and a tunnel AOS-S has no form
+        # for: left as the source has it, and dropped.
+        unread = {
+            "source": "cisco_iosxe_cli", "target": "aruba_aoss",
+            "raw_text": "\n".join([
+                "!", "version 17.9", "hostname r1", "!",
+                "interface GigabitEthernet1/0/1", " description one", "!",
+                "interface GigabitEthernet1", " description two", "!",
+                "interface Tunnel7", " ip address 10.77.0.1 255.255.255.0", "!",
+                "end", "",
+            ]),
+        }
+        kept = {**unread, "port_rename_map": {"GigabitEthernet1": "24", "Tunnel7": None}}
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=FakeCollector(output="! noop\n"),
+        ):
+            server = ServerThread(app, port=port, log_level="critical")
+            server.start()
+            try:
+                server.wait_ready(timeout=10.0)
+                migrate_page = _get_text(port, "/migrate")
+                said, job = _post_job(port, "/api/v1/migration/plan", body)
+                pane_said, pane = _post_job(port, "/api/v1/migration/plan/vlans", body)
+                settled_said, settled = _post_job(port, "/api/v1/migration/plan", decided)
+                pane_settled_said, pane_settled = _post_job(
+                    port, "/api/v1/migration/plan/snmp", decided,
+                )
+                unread_said, unread_job = _post_job(port, "/api/v1/migration/plan", unread)
+                kept_said, kept_job = _post_job(port, "/api/v1/migration/plan/ports", kept)
+                blank_status, blank = _post_raw(
+                    port, "/api/v1/migration/plan",
+                    b'{"source":"aruba_aoss","target":"aruba_aoss","raw_text":"x",'
+                    b'"port_rename_map":{"1":""}}',
+                )
+                unseen_status, unseen = _post_raw(
+                    port, "/api/v1/migration/plan",
+                    b'{"source":"aruba_aoss","target":"aruba_aoss","raw_text":"x",'
+                    b'"port_rename_map":{"1":"\\u200b"}}',
+                )
+            finally:
+                server.stop()
+                server.join(timeout=5.0)
+
+        assert unread_said == "partial"
+        assert unread_job["untranslated_ports"] == ["GigabitEthernet1"]
+        assert unread_job["unresolved_ports"] == ["Tunnel7"]
+        assert unread_job["fused_ports"] == {}
+        assert kept_said == "completed" and kept_job["error"] is None
+        assert (kept_job["untranslated_ports"], kept_job["unresolved_ports"]) == ([], [])
+        assert blank_status == 422
+        assert blank["detail"][0]["loc"] == ["body", "port_rename_map"]
+        assert "must not be blank ('1')" in blank["detail"][0]["msg"]
+        # A target that draws nothing -- a zero-width space -- is blank.
+        assert unseen_status == 422
+        assert "must not be blank ('1')" in unseen["detail"][0]["msg"]
+
+        for header, answer in ((said, job), (pane_said, pane)):
+            assert header == "partial" and answer["status"] == "partial"
+            assert answer["fused_ports"] == {"Loopback0": ["lo0", "lo0.2"]}
+            assert answer["unresolved_ports"] == ["fxp0"]
+            assert answer["error"].startswith(
+                "Port names are not settled: 1 name(s) in the output received "
+                "more than one source name"
+            )
+            assert answer["port_mapping_plan"] is None
+        for header, answer in ((settled_said, settled), (pane_settled_said, pane_settled)):
+            assert header == "completed" and answer["status"] == "completed"
+            assert (answer["fused_ports"], answer["unresolved_ports"]) == ({}, [])
+            assert answer["error"] is None and answer["port_drops"] == ["fxp0"]
+            assert "interface Loopback2" in answer["rendered"]
+
+        for needed in (
+            "function jobNamesNotSettled", "'Port names are not settled'",
+            "'migrate-rename-names-fused'", "'migrate-rename-names-accept'",
+            "'migrate-rename-ack-drop-'", "outcome === 'unsettled'",
+            # A name left under its source name: its chip, its row's
+            # link, and the job's account deciding what holds Apply.
+            "'migrate-rename-names-left'", "'migrate-rename-keep-'",
+            "'(left under its source name)'", "function jobFusedRows",
+            "function portRowAsSent", "job.untranslated_ports",
         ):
             assert needed in migrate_page, needed
 

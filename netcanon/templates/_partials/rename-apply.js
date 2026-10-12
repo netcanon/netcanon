@@ -13,7 +13,7 @@
    *   renderResult, renderRenameTable, renderRenamePreview,
    *   renderRenameSummary                     (migrate.html / partials)
    *   applyDeviceDeclarations, devicesSettled, _devicesKey,
-   *   currentPortPlan, deviceTargetPicked,
+   *   _devicePairProblem, currentPortPlan, deviceTargetPicked,
    *   forgetAcceptedDecisions                  (device-models.js)
    *   currentRenameProfileKey, currentRenameModuleSku,
    *   populateRenameModelDropdown,
@@ -54,8 +54,13 @@
       if (gone()) return;
       // Decisions "Accept as shown" recorded were a verdict on the
       // pairing on screen.  With other devices declared they are not
-      // sent on: a port that had no place may have one now.
-      if (_devicePlanKey !== _devicesKey() && forgetAcceptedDecisions()) {
+      // sent on: a port that had no place may have one now.  Drops
+      // accepted on a job made with no devices are a verdict on the
+      // translation by name shape, and stand for as long as that is
+      // what Apply asks for: they are forgotten when a pair goes out.
+      var otherDevices = currentPortPlan()
+        ? _devicePlanKey !== _devicesKey() : !_devicePairProblem();
+      if (otherDevices && forgetAcceptedDecisions()) {
         renderRenameTable();
       }
       var body = JSON.parse(JSON.stringify(baseBody));
@@ -225,6 +230,10 @@
       } else if (outcome === 'blocked') {
         setRenameStatus('Applied. The mapping reports something that has to be '
           + 'put right — see above.');
+      } else if (outcome === 'unsettled') {
+        // No devices declared, and the job still has two names on
+        // one or a port dropped undecided.
+        setRenameStatus('Applied. Port names are still not settled — see above.');
       } else if (undecided) {
         setRenameStatus('Applied. ' + undecided + ' port name'
           + (undecided === 1 ? '' : 's') + ' still need'

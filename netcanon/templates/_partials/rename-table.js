@@ -29,6 +29,15 @@
    *   currentTargetDevice()  — device-models.js: the target's ports,
    *                            from a profile or a family model
    *   currentPortPlan(), portPlanRowMeta(plan) — device-models.js
+   *   jobNamesNotSettled()   — device-models.js: what a job with no
+   *                            plan says of its own port names
+   *
+   * And two this file gives the summary (rename-panel.js):
+   *
+   *   portRowAsSent(name)    — the row's entry is the one the job on
+   *                            screen was made with
+   *   jobFusedRows()         — the rows the job says were written as
+   *                            one interface, while they are as sent
    *   renderRenamePreview()
    *   renderRenameSummary()
    *
@@ -103,6 +112,48 @@
     _renamePointerDown = false;
     if (_renameTableDue) setTimeout(_rebuildRenameTableIfDue, 0);
   });
+
+  /** True while the entry of the row for *name* is the one the job
+   *  on screen was made with: nothing typed, chosen or cleared for
+   *  it in the modal since.  The job's account of a name stands for
+   *  exactly that long; a row changed since is the operator's, and
+   *  the next Apply says what became of it. */
+  function portRowAsSent(name) {
+    var sent = (_lastJobBody && _lastJobBody.port_rename_map) || {};
+    var had = Object.prototype.hasOwnProperty.call(sent, name)
+      ? sent[name] : undefined;
+    return _renameUserMap[name] === had;
+  }
+
+  /** The rows the job itself says were written as one interface,
+   *  with no devices declared for it: source name to the name of the
+   *  output it shares (``on``) and the names it shares it with
+   *  (``others``).  Only names whose rows are as sent, and only
+   *  where two of a group still are.  Empty under a port plan, which
+   *  has an account of its own.
+   *
+   *  The job compares names as the two platforms do, which a
+   *  comparison of strings here is not: ``Trk1`` and ``trk1`` are
+   *  one name on a target with no letter case, and unit 0 of an
+   *  interface beside the interface (a Junos ``lo0.0``) is that
+   *  interface, not a second one on its name. */
+  function jobFusedRows() {
+    var rows = Object.create(null);
+    var plan = (typeof currentPortPlan === 'function') ? currentPortPlan() : null;
+    if (plan || typeof jobNamesNotSettled !== 'function') return rows;
+    var fused = jobNamesNotSettled().fused;
+    Object.keys(fused).forEach(function(shared) {
+      var names = (fused[shared] || []).filter(portRowAsSent);
+      if (names.length < 2) return;
+      names.forEach(function(name) {
+        rows[name] = {
+          on: shared,
+          others: names.filter(function(other) { return other !== name; }),
+        };
+      });
+    });
+    return rows;
+  }
 
   /** The element with *testid* under *root*, or null.  Test ids hold
    *  interface names, which may hold anything; compared as text, not
@@ -340,6 +391,38 @@
       });
     });
 
+    // What the job itself says of its names, when no devices were
+    // declared for it: which source names ended on one name of the
+    // output (compared as the two platforms compare names, which a
+    // string comparison here is not), which were dropped undecided,
+    // and which were left under their source name.  The job's
+    // account of a name stands for as long as the row's entry is
+    // the one the job was made with (portRowAsSent).
+    var jobOpen = (!plan && typeof jobNamesNotSettled === 'function')
+      ? jobNamesNotSettled() : { fused: {}, dropped: [], left: [] };
+    var jobFused = jobFusedRows();
+    var jobLeft = new Set(jobOpen.left);
+
+    /** The other rows that end on the target *effective* with the
+     *  row for *source*, when that is a collision; else null.
+     *
+     *  Under a port plan every such group is one, as it always was.
+     *  With no plan the job has an account of its own, and it is the
+     *  authority for the rows it was made with: where every row of
+     *  the group is as sent, the job has looked at exactly these
+     *  names, and the ones it wrote as one interface are in
+     *  ``jobFused`` -- a Junos ``lo0.0`` beside ``lo0`` is not among
+     *  them, and marking the pair held Apply on a job the server
+     *  called completed until one of the two was renamed or dropped.
+     *  A group with a row changed in the modal since is in no job
+     *  yet: two rows given one name in the fields collide here. */
+    function collidesWith(source, effective) {
+      var hits = effective ? targetHits[effective] : null;
+      if (!hits || hits.length < 2) return null;
+      if (!plan && hits.every(portRowAsSent)) return null;
+      return hits.filter(function(other) { return other !== source; });
+    }
+
     // Profile-driven dropdown options.  If a profile is selected,
     // dropdown lists the profile's known port ids, filtered by kind.
     var selectedProfile = (typeof currentTargetDevice === 'function')
@@ -437,11 +520,14 @@
       var warnCount = rows.filter(function(r) { return r.warning; }).length;
       var collisionCount = rows.filter(function(r) {
         var effective = _renameUserMap[r.source] || r.auto;
-        return effective && targetHits[effective] && targetHits[effective].length > 1;
+        return !!collidesWith(r.source, effective) || !!jobFused[r.source];
       }).length;
 
-      // Names the port plan left for the operator to decide.
-      var undecided = planActive ? (plan.unresolved_ports || []) : [];
+      // Names the port plan left for the operator to decide -- or,
+      // with no plan, the names the job says were dropped undecided
+      // or left under their source name.
+      var undecided = planActive ? (plan.unresolved_ports || [])
+        : jobOpen.dropped.concat(jobOpen.left);
       var decisionCount = rows.filter(function(r) {
         return undecided.indexOf(r.source) !== -1
           && _renameUserMap[r.source] === undefined;
@@ -521,8 +607,17 @@
         var isDropped = isUserDropped || isAutoDropped;
         var effective = isDropped ? null : (userVal || row.auto);
         var hasOverride = userVal !== undefined && !isUserDropped;
-        var hasCollision = !isDropped && effective && targetHits[effective]
-                           && targetHits[effective].length > 1;
+        var sharedWith = isDropped ? null : collidesWith(row.source, effective);
+        var sharesTarget = !!sharedWith;
+        // By the job's own account: the rows it wrote as one
+        // interface, whether or not their targets are one string
+        // here (``Trk1`` and ``trk1`` on a target with no letter
+        // case).
+        var fusedByJob = (!isDropped && !sharesTarget) ? jobFused[row.source] : null;
+        var hasCollision = sharesTarget || !!fusedByJob;
+        // The job left this name as the source config has it: the
+        // translator could not read it as any kind of port.
+        var isLeft = jobLeft.has(row.source);
         if (row.warning) tr.classList.add('has-warning');
         if (hasCollision) tr.classList.add('has-collision');
         if (hasOverride) tr.classList.add('has-override');
@@ -566,6 +661,9 @@
           // stacks, any port between two switches of one model -- it
           // is still a pairing, and the name is shown as one.
           autoCell = cell(row.auto, '', autoId);
+        } else if (isLeft) {
+          // Not "(unchanged)": nobody decided it should stand.
+          autoCell = cell('(left under its source name)', 'mig-rename-no-auto', autoId);
         } else if (row.plain && row.auto === row.source && !isAutoDropped) {
           autoCell = cell('(unchanged)', 'mig-rename-no-auto', autoId);
         } else if (isAutoDropped) {
@@ -609,7 +707,7 @@
           // dim-italic cell.
           blank.textContent = isAutoDropped
             ? '(auto-dropped)'
-            : '(auto: ' + row.auto + ')';
+            : (isLeft ? '(left under its source name)' : '(auto: ' + row.auto + ')');
           sel.appendChild(blank);
           // Orphaned user-override: if the user set an override
           // under a PREVIOUS target device and then changed the
@@ -629,12 +727,15 @@
             customOpt.selected = true;
             sel.appendChild(customOpt);
           }
-          // "Keep verbatim" — only shown when the row is auto-dropped;
-          // a no-op rename that beats the server's auto-drop.
-          if (isAutoDropped) {
+          // "Keep verbatim" — shown when the row is auto-dropped (a
+          // no-op rename that beats the server's auto-drop), and on a
+          // row left under its source name, where it is the operator
+          // saying that the name is right on the target as it is.
+          if (isAutoDropped || isLeft) {
             var keepOpt = document.createElement('option');
             keepOpt.value = '__KEEP__';
-            keepOpt.textContent = 'Keep verbatim (' + row.source + ')';
+            keepOpt.textContent = (isLeft ? 'Keep this name (' : 'Keep verbatim (')
+              + row.source + ')';
             if (userVal === row.source) keepOpt.selected = true;
             sel.appendChild(keepOpt);
           }
@@ -701,8 +802,8 @@
           // the user could keep by leaving the field blank) or whether
           // an override is effectively required (no auto was produced).
           inp.placeholder = row.auto === row.source
-            ? ((row.plain || meta) ? 'Type a target name'
-                                   : 'Type target name (required)')
+            ? ((row.plain || meta || isLeft) ? 'Type a target name'
+                                             : 'Type target name (required)')
             : 'auto: ' + row.auto;
           inp.value = isDropped ? '' : (_renameUserMap[row.source] || '');
           inp.disabled = isDropped;
@@ -757,6 +858,49 @@
             renderRenameSummary();
           });
           overrideCell.appendChild(dropLink);
+          if (isLeft && userVal === undefined) {
+            // The name may be right on the target as it stands (an
+            // interface another vendor calls the same).  Keeping it
+            // is an entry that names it with itself: the operator's
+            // decision, where until now nobody had made one.
+            var keepLink = document.createElement('span');
+            keepLink.className = 'mig-rename-drop-link';
+            keepLink.textContent = 'keep this name';
+            keepLink.title = 'Say that this name is right on the target as it is';
+            keepLink.setAttribute('data-testid',
+              'migrate-rename-keep-' + row.source);
+            keepLink.addEventListener('click', function() {
+              // (No accepted record to clear: this link is drawn only
+              // on a row with no entry, and a row loses its record
+              // with its entry.)
+              _renameUserMap[row.source] = row.source;
+              renderRenameTable();
+              renderRenamePreview();
+              renderRenameSummary();
+            });
+            overrideCell.appendChild(keepLink);
+          }
+          if (isAutoDropped) {
+            // The server dropped it; "drop" makes that the operator's
+            // own decision, which is what a job that is partial for a
+            // dropped port asks for.  (A list of target ports has its
+            // "Drop" entry for the same.)
+            var ackLink = document.createElement('span');
+            ackLink.className = 'mig-rename-drop-link';
+            ackLink.textContent = 'drop';
+            ackLink.title = 'Say that this name is to be dropped';
+            ackLink.setAttribute('data-testid',
+              'migrate-rename-ack-drop-' + row.source);
+            ackLink.addEventListener('click', function() {
+              // (As for "keep this name": no accepted record can be
+              // on a row that has no entry.)
+              _renameUserMap[row.source] = null;
+              renderRenameTable();
+              renderRenamePreview();
+              renderRenameSummary();
+            });
+            overrideCell.appendChild(ackLink);
+          }
         }
         tr.appendChild(overrideCell);
 
@@ -786,13 +930,17 @@
         var warnCell = document.createElement('td');
         if (needsDecision && !hasCollision) {
           warnCell.appendChild(mark('mig-rename-decision-icon', '?',
-            'Needs your decision: give it a target port, or drop it',
+            isLeft
+              ? 'Left under its source name: give it a target, keep it if '
+                + 'it is right on the target, or drop it'
+              : 'Needs your decision: give it a target port, or drop it',
             'migrate-rename-decision-' + row.source));
         } else if (hasCollision) {
           warnCell.appendChild(mark('mig-rename-collision-icon', '⛔',
-            'Collides with: ' + targetHits[effective].filter(function(s) {
-              return s !== row.source;
-            }).join(', '),
+            fusedByJob
+              ? 'Written as one interface (' + fusedByJob.on + ') with: '
+                + fusedByJob.others.join(', ')
+              : 'Collides with: ' + sharedWith.join(', '),
             'migrate-rename-collision-' + row.source));
         } else if (blocking.length) {
           warnCell.appendChild(mark('mig-rename-collision-icon', '⛔',

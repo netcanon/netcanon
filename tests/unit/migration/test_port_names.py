@@ -37,6 +37,8 @@ from netcanon.migration.canonical.intent import (
     CanonicalVxlan,
 )
 from netcanon.migration.canonical.port_names import (
+    PortRenameResult,
+    _only_referred_to,
     build_port_rename_transform,
     translate_port_names,
 )
@@ -1206,3 +1208,223 @@ class TestGroupContentFlattenedOnRename:
         assert intent.group_content != {}
         assert intent.apply_groups == ["G"]
         assert not any("apply-group" in w for w in result.warnings)
+
+
+# ---------------------------------------------------------------------------
+# What was left as the source config has it, said as data
+# ---------------------------------------------------------------------------
+
+
+class TestNamesLeftAsTheyWere:
+    """``PortRenameResult.untranslated``.  A name the classifier
+    cannot read stays in the tree under the source vendor's name, and
+    a warning line was all that said so -- nothing a caller can hold a
+    job for."""
+
+    @staticmethod
+    def _tree() -> CanonicalIntent:
+        """Three names the IOS-XE classifier does not read where the
+        config CONFIGURES something (an interface, a VLAN member, a
+        LAG member), and two where it only refers to one."""
+        return CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="GigabitEthernet1/0/1"),
+                CanonicalInterface(name="GigabitEthernet1"),
+                CanonicalInterface(name="Vlan10", interface_type="ianaift:l3ipvlan"),
+            ],
+            vlans=[
+                CanonicalVlan(id=10, untagged_ports=["GigabitEthernet1/0/1", "Async1"]),
+            ],
+            lags=[CanonicalLAG(name="Port-channel1", members=["Cable"])],
+            static_routes=[
+                CanonicalStaticRoute(destination="10.0.0.0/8", gateway="", interface="Null0"),
+                CanonicalStaticRoute(
+                    destination="10.9.0.0/16", gateway="", interface="GigabitEthernet1",
+                ),
+            ],
+            dhcp_servers=[CanonicalDHCPPool(interface="lan-zone", network="192.168.10.0/24")],
+        )
+
+    def test_each_is_listed_in_order(self):
+        intent = self._tree()
+        result = translate_port_names(intent, CiscoIOSXECLICodec(), ArubaAOSSCodec())
+        assert result.untranslated == ["GigabitEthernet1", "Async1", "Cable"]
+        for name in result.untranslated:
+            assert (
+                f"cisco_iosxe_cli: could not classify port name {name!r}; left verbatim"
+                in result.warnings
+            )
+        # Still in the tree, under the IOS name.
+        assert "GigabitEthernet1" in [iface.name for iface in intent.interfaces]
+        assert intent.vlans[0].untagged_ports == ["1/1", "Async1"]
+        # Left, not dropped: the two lists share no name.
+        assert not set(result.untranslated).intersection(result.dropped)
+
+    def test_a_reference_is_listed_apart(self):
+        """A route to ``Null0`` and a pool keyed by a zone name: what
+        those places hold is not always an interface, and nothing
+        says these are.  ``GigabitEthernet1`` is in a route too, and
+        is an interface of the config: it is not one of them."""
+        intent = self._tree()
+        result = translate_port_names(intent, CiscoIOSXECLICodec(), ArubaAOSSCodec())
+        assert result.untranslated_references == ["Null0", "lan-zone"]
+        assert "GigabitEthernet1" not in result.untranslated_references
+        assert not set(result.untranslated).intersection(result.untranslated_references)
+
+    def test_references_are_counted_by_place(self):
+        intent = self._tree()
+        intent.static_routes.append(
+            CanonicalStaticRoute(destination="10.8.0.0/16", gateway="", interface="Null0"),
+        )
+        intent.interfaces[0].vrrp_groups = [
+            CanonicalVRRPGroup(group_id=1, track_interfaces=["Async1", "7"]),
+        ]
+        intent.vxlan_vnis = [CanonicalVxlan(vni=10100, vlan_id=10, source_interface="192.0.2.1")]
+        # ``Async1`` is tracked AND a member of a VLAN: configured.
+        assert _only_referred_to(intent) == {"Null0", "lan-zone", "7", "192.0.2.1"}
+
+    def test_a_name_with_an_entry_is_not_listed(self):
+        """To another name, to ``None`` -- or to ITSELF, which is how
+        an operator says the name is right on the target."""
+        intent = self._tree()
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            rename_map={"GigabitEthernet1": "GigabitEthernet1", "Async1": "5", "Cable": None},
+        )
+        assert result.untranslated == []
+        assert "GigabitEthernet1" in [iface.name for iface in intent.interfaces]
+        assert not any("could not classify port name 'GigabitEthernet1'" in w for w in result.warnings)
+        assert result.dropped == ["Cable"]
+
+    def test_one_codec_lists_nothing(self):
+        """No name is classified there: each stands, valid by
+        construction."""
+        result = translate_port_names(self._tree(), CiscoIOSXECLICodec(), CiscoIOSXECLICodec())
+        assert (result.untranslated, result.untranslated_references) == ([], [])
+        assert not any("could not classify" in w for w in result.warnings)
+
+    def test_an_absorbed_vlan_is_not_listed(self):
+        """``Vlan10`` keeps its name on AOS-S by design: the target
+        writes the address from its VLAN stanza."""
+        intent = self._tree()
+        result = translate_port_names(intent, CiscoIOSXECLICodec(), ArubaAOSSCodec())
+        assert "Vlan10" in [iface.name for iface in intent.interfaces]
+        assert "Vlan10" not in result.untranslated + result.dropped
+
+    def test_no_form_is_listed_when_not_stripped(self):
+        """With ``strip_unmappable=False`` a name the target has no
+        form for stays as it is too; by default it is dropped, and
+        the drop list has it."""
+        def tree() -> CanonicalIntent:
+            return CanonicalIntent(
+                interfaces=[CanonicalInterface(name="FortyGigabitEthernet1/1/1")],
+            )
+
+        kept = translate_port_names(
+            tree(), CiscoIOSXECLICodec(), ArubaAOSSCodec(), strip_unmappable=False,
+        )
+        assert (kept.untranslated, kept.dropped) == (["FortyGigabitEthernet1/1/1"], [])
+        gone = translate_port_names(tree(), CiscoIOSXECLICodec(), ArubaAOSSCodec())
+        assert (gone.untranslated, gone.dropped) == ([], ["FortyGigabitEthernet1/1/1"])
+
+    def test_the_transform_hands_both_lists_on(self):
+        transform, result = build_port_rename_transform(
+            CiscoIOSXECLICodec(), ArubaAOSSCodec(), rename_map={},
+        )
+        transform(self._tree())
+        transform(self._tree())
+        assert result.untranslated == ["GigabitEthernet1", "Async1", "Cable"]
+        assert result.untranslated_references == ["Null0", "lan-zone"]
+
+    def test_a_plain_tree_lists_nothing(self):
+        result = translate_port_names({"x": 1}, CiscoIOSXECLICodec(), ArubaAOSSCodec())
+        assert result == PortRenameResult()
+
+
+class TestABlankTarget:
+    """A value of the map is a name or ``None``.  ``""`` was written
+    into the tree as a name: an interface with none.  So was a
+    target that draws nothing -- control and format characters
+    only."""
+
+    @pytest.mark.parametrize(
+        "blank", ["", " ", "\t", "\u200b", "\x00", "\ufeff", "\u2060 \u200e"],
+    )
+    def test_the_entry_is_set_aside_and_said(self, blank):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="GigabitEthernet1/0/1"),
+                CanonicalInterface(name="GigabitEthernet1/0/2"),
+            ],
+        )
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            rename_map={"GigabitEthernet1/0/1": blank, "GigabitEthernet1/0/2": "7"},
+        )
+        # Translated by its shape, as a name with no entry is.
+        assert [iface.name for iface in intent.interfaces] == ["1/1", "7"]
+        assert result.applied == {"GigabitEthernet1/0/1": "1/1", "GigabitEthernet1/0/2": "7"}
+        assert result.warnings == [
+            "port_rename: the entry for 'GigabitEthernet1/0/1' has no target "
+            "name (it is empty or blank); entry skipped \u2014 to drop the port, "
+            "map it to null"
+        ]
+
+    @pytest.mark.parametrize(
+        ("value", "names"),
+        [
+            (None, True), ("x", True), ("1/1", True), ("\u200bx", True),
+            ("x\u200b", True), (" x ", True), ("\u00e9", True),
+            ("", False), (" ", False), ("\t\n", False), ("\u00a0", False),
+            ("\u200b", False), ("\x00", False), ("\x7f", False), ("\ufeff", False),
+            ("\u2060", False), ("\u200e\u200f", False), ("\u00ad", False),
+            (" \u200b\t\x00", False), (5, False), ([], False),
+        ],
+    )
+    def test_what_names_a_target(self, value, names):
+        """A target has at least one character that is neither
+        white space nor a control or format character."""
+        from netcanon.migration.canonical.port_names import names_a_target
+
+        assert names_a_target(value) is names
+
+    def test_a_blank_target_leaves_it_listed(self):
+        """An entry decides a name the classifier cannot read.  A
+        blank one is no entry, and the name is listed."""
+        intent = CanonicalIntent(interfaces=[CanonicalInterface(name="GigabitEthernet1")])
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            rename_map={"GigabitEthernet1": ""},
+        )
+        assert [iface.name for iface in intent.interfaces] == ["GigabitEthernet1"]
+        assert result.untranslated == ["GigabitEthernet1"]
+
+
+class TestAUnitOfAPortThatWasLeft:
+    """With ``strip_unmappable=False`` a port the target has no form
+    for is left as it is.  A unit of it goes where it goes: nowhere."""
+
+    @staticmethod
+    def _tree() -> CanonicalIntent:
+        # The unit, and no line for its port: the config names the
+        # port only through it.
+        return CanonicalIntent(
+            interfaces=[CanonicalInterface(name="FortyGigabitEthernet1/1/1.5")],
+        )
+
+    def test_the_unit_is_listed_not_its_port(self):
+        intent = self._tree()
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(), strip_unmappable=False,
+        )
+        assert [iface.name for iface in intent.interfaces] == ["FortyGigabitEthernet1/1/1.5"]
+        # Only a name the config has: the port was resolved for its
+        # unit, and is no name of this config.
+        assert result.untranslated == ["FortyGigabitEthernet1/1/1.5"]
+        assert result.dropped == []
+
+    def test_stripped_it_goes_with_its_port(self):
+        intent = self._tree()
+        result = translate_port_names(intent, CiscoIOSXECLICodec(), ArubaAOSSCodec())
+        assert intent.interfaces == []
+        assert (result.untranslated, result.dropped) == ([], ["FortyGigabitEthernet1/1/1.5"])

@@ -3064,10 +3064,11 @@ class TestAnOverrideAsItIsTyped:
         assert job.port_renames["50"] == "1/A1"
         assert job.status == MigrationJobStatus.partial
 
-    @pytest.mark.parametrize("blank", ["", "   "])
+    @pytest.mark.parametrize("blank", ["", "   ", "\u200b", "\x00", " \ufeff"])
     def test_a_blank_target_decides_nothing(self, blank: str) -> None:
         """An HTML form posts ``""`` for a field nobody touched.  That
-        must not clear a drop, and must not render a port with no name."""
+        must not clear a drop, and must not render a port with no name
+        -- nor may a target that draws nothing, a zero-width space."""
         job = run_plan_with_models(
             AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, TARGET_2930M_24G,
             port_rename_map={"25": blank, **dict.fromkeys(_bare(26, 23))},
@@ -3078,6 +3079,7 @@ class TestAnOverrideAsItIsTyped:
         assert "25" in job.port_drops and "25" not in plan.overridden
         assert job.status == MigrationJobStatus.partial
         assert "untagged ," not in job.rendered and ",," not in job.rendered
+        assert not set("\u200b\x00\ufeff").intersection(job.rendered)
 
     def test_an_entry_for_a_port_the_config_does_not_have(self) -> None:
         job = run_plan_with_models(

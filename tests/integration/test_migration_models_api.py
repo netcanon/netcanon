@@ -412,8 +412,8 @@ class TestPlanWithDeclaredDevices:
         }
         if declared:
             body |= {"source_deployment": stack, "target_deployment": stack}
-        elif path not in ("/plan", "/plan/ports", "/render"):
-            pytest.skip("this pane sets a posted port map aside unless devices are declared")
+        # No pane sets a posted port map aside any more: the four
+        # category panes did, where no devices were declared.
         job = client.post(f"/api/v1/migration{path}", json=body).json()
         assert job["port_drops"] == ["1/A1"], path
         assert not [w for w in job["warnings"] if "does not exist" in w], path
@@ -441,19 +441,29 @@ class TestPlanWithDeclaredDevices:
         assert plan["off_target"] == [], path
         assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
 
-    def test_a_blank_target_is_ignored_not_taken_as_a_decision(
+    def test_a_blank_target_is_refused(
         self, client: TestClient,
     ) -> None:
-        """A form posts ``""`` for a field nobody touched."""
+        """``""`` is neither a name nor a way to drop.  With devices
+        declared the pipeline sets such an entry aside
+        (``ignored_overrides``, which a caller in Python still gets);
+        the API says so before any job is run, as it does with none
+        declared -- see ``TestABlankTarget``."""
         body = _models_body(port_rename_map={"25": ""})
         body["target_deployment"] = {
             "mode": "stacked",
             "members": [{"model": "JL320A", "modules": {"A": "JL083A"}}],
         }
+        resp = client.post("/api/v1/migration/plan", json=body)
+        assert resp.status_code == 422
+        (error,) = resp.json()["detail"]
+        assert error["loc"] == ["body", "port_rename_map"]
+        # ``null`` is how that port is dropped by decision.
+        body["port_rename_map"] = {"25": None}
         job = client.post("/api/v1/migration/plan", json=body).json()
-        plan = job["port_mapping_plan"]
-        assert plan["ignored_overrides"] == ["25"]
-        assert "25" in plan["unresolved_ports"] and "25" in job["port_drops"]
+        assert job["port_mapping_plan"]["ignored_overrides"] == []
+        assert "25" not in job["port_mapping_plan"]["unresolved_ports"]
+        assert "25" in job["port_drops"]
 
     @pytest.mark.parametrize(
         "path",
@@ -769,11 +779,16 @@ class TestAPortsFactoryName:
     had.  Only a request that declares the target device can move a
     port onto other hardware."""
 
-    @pytest.mark.parametrize("path", ["/plan", "/plan/ports", "/render"])
+    @pytest.mark.parametrize(
+        "path",
+        ["/plan", "/plan/ports", "/plan/vlans", "/plan/local_users",
+         "/plan/snmp", "/plan/snmpv3", "/render"],
+    )
     def test_without_devices_an_entry_names_a_port(self, client: TestClient, path: str) -> None:
         """What this request rendered before the feature existed, on a
         committed capture: pinned so that the shared translator cannot
-        move it again."""
+        move it again.  (On the four category panes it rendered no
+        entry at all until every plan endpoint applied the port map.)"""
         job = client.post(f"/api/v1/migration{path}", json={
             "source": "mikrotik_routeros", "target": "mikrotik_routeros",
             "raw_text": CAPTURE_CRS310,
@@ -1062,9 +1077,10 @@ class TestNamesThatAreNoHardwarePort:
         assert "trk1" not in job["source_ports"] and len(job["source_ports"]) == 52, path
         assert "trk1" not in job["port_renames"], path
 
-    @pytest.mark.parametrize("path", ["/plan", "/plan/ports", "/render"])
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
     def test_an_entry_keyed_by_one_renames_it(self, client: TestClient, path: str) -> None:
-        """What a client lists the names for."""
+        """What a client lists the names for -- on every plan
+        endpoint: none sets a posted port map aside."""
         job = client.post(f"/api/v1/migration{path}", json={
             "source": "aruba_aoss", "target": "aruba_aoss", "raw_text": _AOSS_WITH_A_LAG,
             "port_rename_map": {"trk1": "trk7"},
@@ -1146,6 +1162,437 @@ class TestAUnitThePlanDoesNotVouchFor:
         assert plan["unvouched_units"] == {} and plan["unresolved_ports"] == []
         assert plan["off_target"] == []
         assert resp.headers["X-Netcanon-Job-Status"] == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Port names that are not settled, with no devices declared
+# ---------------------------------------------------------------------------
+
+#: A Junos router: a port, the loopback and the loopback of a routing
+#: instance, and the management port.  Onto IOS-XE both loopbacks are
+#: written ``Loopback0``, and the management port has no name there.
+_JUNOS_NOT_SETTLED = "\n".join([
+    "set system host-name r1",
+    "set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24",
+    "set interfaces lo0 unit 0 family inet address 192.0.2.1/32",
+    "set interfaces lo0 unit 2 family inet address 192.0.2.2/32",
+    "set interfaces fxp0 unit 0 family inet address 198.51.100.9/24",
+    "",
+])
+
+
+#: A Catalyst port, and the port of a virtual router: ``GigabitEthernet1``
+#: has no slot, and the IOS-XE classifier does not read it.
+_IOS_UNREAD = "\n".join([
+    "!", "version 17.9", "hostname r1", "!",
+    "interface GigabitEthernet1/0/1", " ip address 10.1.0.1 255.255.255.0", "!",
+    "interface GigabitEthernet1", " ip address 10.2.0.1 255.255.255.0", "!",
+    "end", "",
+])
+
+#: A FortiGate whose LAN address is on its hardware switch.
+_FORTIOS_HARD_SWITCH = "\n".join([
+    "#config-version=FGT60F-7.2.5-FW-build1517-230606:opmode=0:vdom=0",
+    "config system interface",
+    '    edit "wan1"', "        set ip 198.51.100.2 255.255.255.252", "    next",
+    '    edit "internal"', "        set ip 192.168.1.99 255.255.255.0",
+    "        set type hard-switch", "    next",
+    "end", "",
+])
+
+#: An NX-OS switch with its management port, which IOS-XE has no name for.
+_NXOS_WITH_MGMT = "\n".join([
+    "!Command: show running-config", "version 9.3(11) Bios:version", "hostname r1", "",
+    "interface Ethernet1/1", "  no switchport", "  ip address 10.1.0.1/24", "",
+    "interface mgmt0", "  vrf member management", "  ip address 192.0.2.9/24", "",
+])
+
+
+def _not_settled_body(**extra) -> dict:
+    return {
+        "source": "juniper_junos", "target": "cisco_iosxe_cli",
+        "raw_text": _JUNOS_NOT_SETTLED, **extra,
+    }
+
+
+class TestPortNamesWithNoDevices:
+    """A warning is not a status.  Two source names on one name of the
+    output, and a hardware port dropped because the target has no name
+    for it, were said in warning lines by a job that was ``completed``.
+    Such a job is ``partial`` now, says which names as data, and is
+    settled by entries of ``port_rename_map`` -- the same way on every
+    plan endpoint."""
+
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_names_not_settled_on_every_endpoint(
+        self, client: TestClient, path: str,
+    ) -> None:
+        resp = client.post(f"/api/v1/migration{path}", json=_not_settled_body())
+        assert resp.status_code == 200
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
+        job = resp.json()
+        assert job["status"] == "partial", path
+        assert job["fused_ports"] == {"Loopback0": ["lo0", "lo0.2"]}, path
+        assert job["unresolved_ports"] == ["fxp0"], path
+        assert job["untranslated_ports"] == [], path
+        assert job["error"] == (
+            "Port names are not settled: 1 name(s) in the output received "
+            "more than one source name, so the config of two interfaces is "
+            "written as one. 1 port(s) the target has no name for were "
+            "dropped from the output. An entry in port_rename_map settles "
+            "each: a name of its own, or null, for all but one of the names "
+            "that share one; a target name for a dropped name, or null to "
+            "say it is to go. Declaring both devices pairs the hardware "
+            "ports among these by position; the names that are not hardware "
+            "ports need an entry either way."
+        ), path
+        assert job["port_mapping_plan"] is None, path
+        # The output is as it was: nothing is renamed or dropped for it.
+        assert job["rendered"].count("interface Loopback0\n") == 2, path
+        assert "198.51.100.9" not in job["rendered"], path
+
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_entries_settle_it_on_every_endpoint(
+        self, client: TestClient, path: str,
+    ) -> None:
+        """A name of its own for one of the two loopbacks, and
+        ``null`` for the port that went: the operator has decided
+        each, and must not be asked again because of the URL."""
+        resp = client.post(f"/api/v1/migration{path}", json=_not_settled_body(
+            port_rename_map={"lo0.2": "Loopback2", "fxp0": None},
+        ))
+        assert resp.headers["X-Netcanon-Job-Status"] == "completed", path
+        job = resp.json()
+        assert (job["fused_ports"], job["unresolved_ports"]) == ({}, []), path
+        assert job["error"] is None, path
+        assert job["port_drops"] == ["fxp0"], path
+        assert "interface Loopback2\n ip address 192.0.2.2 255.255.255.255" in job["rendered"]
+
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_one_entry_settles_one_name(self, client: TestClient, path: str) -> None:
+        resp = client.post(f"/api/v1/migration{path}", json=_not_settled_body(
+            port_rename_map={"fxp0": "GigabitEthernet0/0"},
+        ))
+        job = resp.json()
+        assert job["unresolved_ports"] == [], path
+        assert job["fused_ports"] == {"Loopback0": ["lo0", "lo0.2"]}, path
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
+        assert "198.51.100.9" in job["rendered"], path
+
+    def test_two_entries_on_one_name_are_said(self, client: TestClient) -> None:
+        """Whoever decided it, two interfaces are one."""
+        job = client.post("/api/v1/migration/plan", json=_not_settled_body(
+            port_rename_map={"lo0.2": "Loopback7", "fxp0": "Loopback7"},
+        )).json()
+        assert job["fused_ports"] == {"Loopback7": ["fxp0", "lo0.2"]}
+        assert job["status"] == "partial"
+
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_a_name_left_as_it_was_everywhere(
+        self, client: TestClient, path: str,
+    ) -> None:
+        """An IOS name the translator cannot read, written into an
+        EOS config as it stands.  Listed apart from what was dropped:
+        the name IS in the output, and what settles it is a name --
+        its own, if that is right on the target."""
+        body = {
+            "source": "cisco_iosxe_cli", "target": "arista_eos", "raw_text": _IOS_UNREAD,
+        }
+        resp = client.post(f"/api/v1/migration{path}", json=body)
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
+        job = resp.json()
+        assert job["untranslated_ports"] == ["GigabitEthernet1"], path
+        assert (job["fused_ports"], job["unresolved_ports"], job["port_drops"]) == ({}, [], [])
+        assert "interface GigabitEthernet1\n" in job["rendered"], path
+        assert job["error"].startswith(
+            "Port names are not settled: 1 name(s) could not be read as any "
+            "kind of port: whatever the output has of them is under the name "
+            "the source config has for them"
+        ), path
+        for entry, shown in (
+            ("GigabitEthernet1", "interface GigabitEthernet1\n"),
+            ("Ethernet7", "interface Ethernet7\n"),
+            (None, "interface Ethernet1\n"),
+        ):
+            resp = client.post(
+                f"/api/v1/migration{path}",
+                json={**body, "port_rename_map": {"GigabitEthernet1": entry}},
+            )
+            assert resp.headers["X-Netcanon-Job-Status"] == "completed", (path, entry)
+            job = resp.json()
+            assert (job["untranslated_ports"], job["error"]) == ([], None), (path, entry)
+            assert shown in job["rendered"], (path, entry)
+            assert ("10.2.0.1" in job["rendered"]) is (entry is not None), (path, entry)
+
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_a_logical_name_dropped_everywhere(
+        self, client: TestClient, path: str,
+    ) -> None:
+        """A FortiGate hardware switch that holds the LAN address is
+        no port of any other vendor: dropped, the address with it,
+        and listed as a dropped port is."""
+        body = {
+            "source": "fortigate_cli", "target": "cisco_iosxe_cli",
+            "raw_text": _FORTIOS_HARD_SWITCH,
+        }
+        resp = client.post(f"/api/v1/migration{path}", json=body)
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
+        job = resp.json()
+        assert job["source_other_names"] == ["internal"], path
+        assert job["unresolved_ports"] == ["internal"], path
+        assert "192.168.1.99" not in job["rendered"], path
+        assert "devices" not in job["error"], path
+        for entry in ("Vlan1", None):
+            resp = client.post(f"/api/v1/migration{path}", json={
+                **body, "port_rename_map": {"internal": entry},
+            })
+            assert resp.headers["X-Netcanon-Job-Status"] == "completed", (path, entry)
+            assert ("192.168.1.99" in resp.json()["rendered"]) is (entry is not None), path
+
+    def test_a_target_alone_is_checked_too(self, client: TestClient) -> None:
+        """What the page sends once a target is chosen and no source:
+        advice, which pairs nothing.  The run is still one made by
+        name shape, and says what it left unsettled."""
+        resp = client.post("/api/v1/migration/plan", json=_not_settled_body(
+            target_profile="cisco_iosxe/C9300-24P",
+        ))
+        assert resp.status_code == 200
+        job = resp.json()
+        assert job["port_mapping_plan"] is None
+        assert job["status"] == "partial"
+        assert job["fused_ports"] == {"Loopback0": ["lo0", "lo0.2"]}
+        assert job["unresolved_ports"] == ["fxp0"]
+
+    def test_devices_are_not_offered_for_these(
+        self, client: TestClient,
+    ) -> None:
+        """Two loopbacks on one loopback.  With both devices declared
+        the same output is ``completed`` -- the pairing is of
+        hardware ports and asks nothing of these -- so the sentence
+        of the job with none declared does not offer it."""
+        body = {
+            "source": "juniper_junos", "target": "arista_eos",
+            "raw_text": _JUNOS_NOT_SETTLED.replace(
+                "set interfaces fxp0 unit 0 family inet address 198.51.100.9/24\n", "",
+            ),
+        }
+        job = client.post("/api/v1/migration/plan", json=body).json()
+        assert job["status"] == "partial"
+        assert job["fused_ports"] == {"Loopback0": ["lo0", "lo0.2"]}
+        assert job["error"] == (
+            "Port names are not settled: 1 name(s) in the output received "
+            "more than one source name, so the config of two interfaces is "
+            "written as one. An entry in port_rename_map settles each: a "
+            "name of its own, or null, for all but one of the names that "
+            "share one."
+        )
+        paired = client.post("/api/v1/migration/plan", json={
+            **body, "source_profile": "juniper_junos/EX4300-48T",
+            "target_profile": "arista_eos/DCS-7050SX-64",
+        }).json()
+        # What the sentence must not send an operator to: the same
+        # two stanzas, and a status that says nothing of them.
+        assert paired["rendered"].count("interface Loopback0\n") == 2
+        assert (paired["status"], paired["port_mapping_plan"]["fused"]) == ("completed", {})
+
+    def test_with_devices_the_plan_says_it(self, client: TestClient) -> None:
+        """One account of one fact.  With both devices declared the
+        plan carries the names, by that path's own rule, and the
+        job's three fields stay empty."""
+        fused = client.post("/api/v1/migration/plan", json=_models_body(
+            port_rename_map={"50": "1/a1"},
+        )).json()
+        assert fused["port_mapping_plan"]["fused"] == {"1/A1": ["49", "50"]}
+        assert (fused["fused_ports"], fused["unresolved_ports"]) == ({}, [])
+        assert fused["untranslated_ports"] == []
+        # A name the translator cannot read, with both devices
+        # declared: the plan lists it as a name that is no port of
+        # the declared source, and the job's own list stays empty.
+        unread = client.post("/api/v1/migration/plan", json={
+            "source": "cisco_iosxe_cli", "target": "arista_eos", "raw_text": _IOS_UNREAD,
+            "source_profile": "cisco_iosxe/C9300-24P",
+            "target_profile": "arista_eos/DCS-7050SX-64",
+        }).json()
+        assert unread["untranslated_ports"] == []
+        assert unread["port_mapping_plan"]["unresolved_ports"] == ["GigabitEthernet1"]
+        assert unread["status"] == "partial"
+        body = _models_body()
+        body["target_deployment"] = {
+            "mode": "stacked",
+            "members": [{"model": "JL320A", "modules": {"A": "JL083A"}}],
+        }
+        short = client.post("/api/v1/migration/plan", json=body).json()
+        assert len(short["port_mapping_plan"]["unresolved_ports"]) == 24
+        assert (short["fused_ports"], short["unresolved_ports"]) == ({}, [])
+        assert short["error"].startswith("Port mapping is incomplete: ")
+        assert "Port names are not settled" not in short["error"]
+
+    def test_the_api_document_describes_each(self, client: TestClient) -> None:
+        """A client is told what each field holds and how to settle
+        it, where it reads the response schema."""
+        schemas = client.get("/api/v1/openapi.json").json()["components"]["schemas"]
+        fields = schemas["MigrationJob"]["properties"]
+        # The model's own description lists them too.
+        for name in ("fused_ports", "unresolved_ports", "untranslated_ports"):
+            assert f"{name}:" in schemas["MigrationJob"]["description"]
+        for name, how in (
+            ("fused_ports", "a name of their own in port_rename_map"),
+            ("unresolved_ports", "a target name, or null to say it is to be dropped"),
+            ("untranslated_ports", "its own name, if that is right there -- or null to drop it"),
+        ):
+            said = " ".join(fields[name]["description"].split())
+            assert "the job is partial while it is not empty" in said, name
+            assert how in said, name
+            assert "Empty when both devices were declared" in said, name
+        # Which of the names a pair of devices would decide.
+        assert "only where a hardware port (source_ports) is among" in " ".join(
+            fields["fused_ports"]["description"].split()
+        )
+        assert "a hardware port, or a logical name" in " ".join(
+            fields["unresolved_ports"]["description"].split()
+        )
+        # Which names the translator left are no foreign name, and
+        # so are not listed.
+        left = " ".join(fields["untranslated_ports"]["description"].split())
+        assert "between two codecs of one platform" in left
+        assert "where the target itself writes that very name" in left
+        assert "A hardware port is always listed" in left
+        assert fields["fused_ports"]["type"] == "object"
+        for name in ("unresolved_ports", "untranslated_ports"):
+            assert (fields[name]["type"], fields[name]["items"]) == (
+                "array", {"type": "string"},
+            ), name
+            assert "anyOf" not in fields[name], name
+        # What the pipeline hands the translator's own list on by is
+        # not a field of the job.
+        assert not [name for name in fields if name.startswith("_")]
+
+
+class TestForceOnEveryPlanEndpoint:
+    """``force`` skips the guard that refuses a pair of codecs with no
+    device class in common.  Every public codec has one in common
+    with every other, so no request through the API shows the guard:
+    what is held here is that each handler hands the flag on."""
+
+    @pytest.mark.parametrize("force", [True, False])
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_each_handler_hands_it_on(
+        self, client: TestClient, monkeypatch, path: str, force: bool,
+    ) -> None:
+        from netcanon.api.routes import migration as routes
+
+        seen: list[object] = []
+        real = routes.run_translation
+
+        def watched(request, body, source, target, raw_text, **overrides):
+            seen.append(overrides.get("force", "not passed"))
+            return real(request, body, source, target, raw_text, **overrides)
+
+        monkeypatch.setattr(routes, "run_translation", watched)
+        resp = client.post(f"/api/v1/migration{path}", json=_not_settled_body(force=force))
+        assert resp.status_code == 200
+        assert seen == [force], path
+
+
+class TestABlankTarget:
+    """A value of ``port_rename_map`` is a name or ``null``.  ``""``
+    was written into the output as an interface with no name, and --
+    being an entry -- cleared the ``partial`` a dropped port holds a
+    job in.  So was a target that draws nothing: a zero-width
+    space is not white space, and ``interface`` followed by one is
+    an interface nobody can see the name of."""
+
+    @pytest.mark.parametrize("declared", [False, True], ids=["no-devices", "devices"])
+    @pytest.mark.parametrize(
+        "blank",
+        ["", "   ", "\t", "\u200b", "\u0000", "\ufeff\u2060", " \u200b\t\u00ad"],
+        ids=[
+            "empty", "spaces", "tab", "zero-width space", "nul",
+            "byte-order mark and word joiner", "mixed",
+        ],
+    )
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_it_is_a_422_on_every_plan_endpoint(
+        self, client: TestClient, path: str, blank: str, declared: bool,
+    ) -> None:
+        body = _models_body() if declared else {
+            "source": "cisco_nxos", "target": "cisco_iosxe_cli", "raw_text": _NXOS_WITH_MGMT,
+        }
+        body["port_rename_map"] = {"mgmt0": blank, "Ethernet1/1": "GigabitEthernet1/0/9"}
+        resp = client.post(f"/api/v1/migration{path}", json=body)
+        assert resp.status_code == 422, path
+        (error,) = resp.json()["detail"]
+        assert error["loc"] == ["body", "port_rename_map"], path
+        assert error["msg"] == (
+            "Value error, a target name in port_rename_map must not be blank "
+            "('mgmt0'): give the port a name, or null to drop it"
+        ), path
+        # The refusal echoes the map, never the pasted config.
+        assert "hostname" not in resp.text, path
+
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_null_and_a_name_are_what_it_takes(self, client: TestClient, path: str) -> None:
+        body = {"source": "cisco_nxos", "target": "cisco_iosxe_cli", "raw_text": _NXOS_WITH_MGMT}
+        plain = client.post(f"/api/v1/migration{path}", json=body).json()
+        assert (plain["status"], plain["unresolved_ports"]) == ("partial", ["mgmt0"]), path
+        for entry in (None, "GigabitEthernet0/0"):
+            resp = client.post(
+                f"/api/v1/migration{path}", json={**body, "port_rename_map": {"mgmt0": entry}},
+            )
+            assert resp.status_code == 200, (path, entry)
+            job = resp.json()
+            assert (job["status"], job["unresolved_ports"]) == ("completed", []), (path, entry)
+            assert "interface \n" not in job["rendered"], (path, entry)
+
+    def test_several_are_named_a_few_at_a_time(self, client: TestClient) -> None:
+        body = {
+            "source": "cisco_nxos", "target": "cisco_iosxe_cli", "raw_text": _NXOS_WITH_MGMT,
+            "port_rename_map": {f"p{n}": "" for n in range(8)} | {"x" * 90: " "},
+        }
+        (error,) = client.post("/api/v1/migration/plan", json=body).json()["detail"]
+        assert error["msg"] == (
+            "Value error, a target name in port_rename_map must not be blank "
+            "('p0', 'p1', 'p2', 'p3', 'p4' and 4 more): give the port a name, "
+            "or null to drop it"
+        )
+
+    def test_a_long_key_is_cut_short(self, client: TestClient) -> None:
+        """The message is not to grow with what was sent: a key is
+        named by its first characters."""
+        body = {
+            "source": "cisco_nxos", "target": "cisco_iosxe_cli", "raw_text": _NXOS_WITH_MGMT,
+            "port_rename_map": {"k" * 5000: "", "m" * 61: " ", "n" * 60: ""},
+        }
+        (error,) = client.post("/api/v1/migration/plan", json=body).json()["detail"]
+        assert error["msg"] == (
+            "Value error, a target name in port_rename_map must not be blank "
+            f"('{'k' * 57}...', '{'m' * 57}...', '{'n' * 60}'): give the port a "
+            "name, or null to drop it"
+        )
+
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_one_such_character_in_a_name(
+        self, client: TestClient, path: str,
+    ) -> None:
+        """Only a target with NOTHING drawn is refused.  What else a
+        name may hold is the target platform's business."""
+        body = {
+            "source": "cisco_nxos", "target": "cisco_iosxe_cli", "raw_text": _NXOS_WITH_MGMT,
+            "port_rename_map": {"mgmt0": "\u200bGigabitEthernet0/0"},
+        }
+        resp = client.post(f"/api/v1/migration{path}", json=body)
+        assert resp.status_code == 200, path
+        assert resp.json()["unresolved_ports"] == [], path
+
+    def test_the_other_maps_are_not_asked_this(self, client: TestClient) -> None:
+        """The check is the port map's: a blank target there named an
+        interface.  What a blank user name or community does is each
+        of those panes' own business, as it was."""
+        body = {
+            "source": "cisco_nxos", "target": "cisco_iosxe_cli", "raw_text": _NXOS_WITH_MGMT,
+            "local_user_rename_map": {"admin": ""}, "port_rename_map": {"mgmt0": None},
+        }
+        assert client.post("/api/v1/migration/plan", json=body).status_code == 200
 
 
 # ---------------------------------------------------------------------------

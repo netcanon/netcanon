@@ -859,7 +859,7 @@
        style="display:none"
        role="status"
        aria-live="polite"
-       aria-label="Port mapping by position"></div>
+       aria-label="Port names and port mapping"></div>
 
   <div id="mig-rename-fitcheck"
        data-testid="migrate-rename-fitcheck"
@@ -1112,7 +1112,11 @@
  *
  *   _partials/classify.js        — _guessKind + _looksLikeUplink
  *                                  (shared between rename table + fit-check)
- *   _partials/rename-table.js    — renderRenameTable (per-kind sections)
+ *   _partials/rename-table.js    — renderRenameTable (per-kind sections),
+ *                                  and which rows the job's own account
+ *                                  counts as one interface (jobFusedRows,
+ *                                  portRowAsSent — the summary holds
+ *                                  Apply by the same rule)
  *   _partials/vlan-rename-table.js — renderVlanRenameTable (VLAN-pane
  *                                  rows under the left-rail nav; P2C3)
  *   _partials/local-user-rename-table.js — renderLocalUserRenameTable
@@ -1131,7 +1135,10 @@
  *                                  modules, stack members), source
  *                                  detection, the per-device notes,
  *                                  renderPortPlan + the plan's row
- *                                  data for the rename table
+ *                                  data for the rename table, and
+ *                                  what a job made with no devices
+ *                                  says of its own port names
+ *                                  (jobNamesNotSettled)
  *   _partials/rename-apply.js    — renameModalApply + drag handlers +
  *                                  modal-specific DOMContentLoaded wiring
  *
