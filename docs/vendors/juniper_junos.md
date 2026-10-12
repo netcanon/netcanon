@@ -221,6 +221,20 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   with both devices declared (in the Interface rename modal or on
   the API) the route is then listed
   (`stale_next_hops`) and the job is `partial`.
+- **Units.**  A tagged unit (`set interfaces ge-0/0/1 unit 54
+  vlan-id 54`) is an interface of its own here, `ge-0/0/1.54`.
+  Between two Junos configs it keeps its name, and follows a
+  `port_rename_map` entry for its port (`ge-0/0/7.54`).  Onto another
+  vendor it goes where its port goes, with its unit and its tag
+  (`Ethernet1.54`, `encapsulation dot1q vlan 54`).  A unit of `lo0`
+  (`lo0.2`, a per-instance loopback) has no counterpart on another
+  platform: it is put on the target's loopback beside `lo0` and the
+  job warns that two names share it — map it by hand.  ⚠️ Up to
+  0.7.7 a unit was written ONTO its port, also in a translation from
+  Junos to Junos, where `fxp0` and `me0` also came back as `em0`;
+  translate such a config again.  `vlan-tagging` on the parent port
+  is not read and not written: add it to an output that has tagged
+  units.
 - **Declaring a Junos device** — every interface name is the system's
   and is lower-case, so an override typed in another case
   (`GE-0/0/2`) is read as the port `ge-0/0/2`, not as a second
@@ -234,6 +248,13 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   doesn't descend into `set groups ...` content.  When migrating
   TO Junos from a non-Junos source, configs come out flat (no
   apply-groups inheritance).
+- **Renaming or dropping the bare `irb` in the rename modal does
+  nothing to its units.**  A translation from Junos to Junos lists
+  `irb` under *Other names in the config* beside each `irb.<unit>`.
+  An entry on an `irb.<unit>` row is shown by the output; one on
+  the bare `irb` is recorded by the job and the units stay under
+  `irb`.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 - **Root authentication** (`set system root-authentication
   encrypted-password`) is parse-and-ignore — root auth is
   distinct from user accounts and not in the canonical

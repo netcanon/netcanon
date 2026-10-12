@@ -238,7 +238,10 @@ sources are two ports this is a **real loss**, not cosmetic: two
 physically distinct source ports resolved to a single name on the
 target, and their VLAN memberships merged.  (One exception: a Junos
 interface named with and without its unit, `sources: lo0, lo0.0`, is
-one interface.)  Where the line reads `map to 'Trk1' (also written
+one interface.  A unit other than 0 is not: `sources: lo0, lo0.2`
+says a Junos per-instance loopback was put on the target's one
+loopback — give it a loopback of its own in `port_rename_map`.)
+Where the line reads `map to 'Trk1' (also written
 'trk1': one port on <platform>)`, the two were sent to names that
 differ only in letter case, which on that platform is one port.
 
@@ -260,6 +263,91 @@ mapping is distinct.
 
 ⚠️ If you migrated from AOS-S before #482, this was **silent** —
 re-run the translation and check for these warnings.
+
+### "A same-vendor translation renamed or dropped my ports" / "My sub-interface is on its parent port"
+
+Both were defects, up to 0.7.7, in jobs that said `completed`.
+
+* **Same vendor on both sides.**  Every name you had not mapped was
+  read by the source codec and written again by the target codec,
+  and on several platforms that is not the name it had (AOS-S,
+  IOS-XE, OS10, FortiOS, Junos and VyOS, on the configs we test
+  with): Junos `fxp0` and
+  `me0` came back `em0`, FortiOS `dmz` came back `dmz1`, IOS
+  `Ethernet0/0` came back `FastEthernet0/0`, a Catalyst's `Mgmt-vrf`
+  port and Dell OS10 breakout lanes (`ethernet1/1/1:1`) were dropped,
+  a Junos unit (`ge-0/0/1.54`, `lo0.2`) and a VyOS `vif` were written
+  onto their parent.  A name you did not map now stays as written.
+* **A sub-interface onto another vendor.**  A Junos or VyOS one was
+  written under its PORT's name — two stanzas of one interface, the
+  802.1Q tag on the second — and an IOS-XE, EOS, NX-OS or IOS-XR one
+  stayed in the output under its source name.  It now goes where its
+  port goes, with its unit (`Ethernet1.54`, `unit 54` of
+  `ge-0/0/1`).
+
+Translate the config again.  To check an output you already have:
+compare its interface names with the input's (same vendor), or look
+for a repeated interface stanza, a missing `encapsulation dot1q` /
+`vlan-id`, and an interface under the other vendor's name.  The job
+said what it had done in `port_renames` and `port_drops`, and
+nowhere in its status.
+
+If a sub-interface is still not where you expect: a unit of a
+loopback or of a management port is not followed across vendors, nor
+is one whose port the source codec does not recognise (a channelized
+Junos port), nor an interface numbered 0 (`.0`, `.00`), nor a name
+that ends in more than ten digits; and a
+target with no
+routed sub-interface gets an interface named `<port>.<unit>` without
+its tag, in a job that is `partial` where the source had a tag.
+See [`CAPABILITIES.md`](CAPABILITIES.md) § F and § G.
+
+### "... went with its port to ... with no 802.1Q tag"
+
+A sub-interface was moved with its port, and no VLAN tag was read
+for it from the source config, so the output has an interface of
+that name with no `encapsulation dot1q` / `vlan-id` — or, on VyOS
+and FortiOS, with the unit's NUMBER as its VLAN id.  The causes:
+
+* the source platform's parser reads no tag for a sub-interface.
+  That is every sub-interface of an AOS-CX or Dell OS10 config,
+  whatever its `encapsulation dot1q` line says;
+* the parser did not read the line that states it.  An IOS config
+  pasted without its indentation is read as stanzas with nothing
+  in them: the unit's address is not in the output either;
+* the stanza states none.
+
+Look the tag up in the source and set it on the target by hand.
+With both devices declared the same units are listed in
+`port_mapping_plan.untagged_units` ("N sub-interface name(s) moved
+with their port, but no 802.1Q tag was read ...") and the job is
+`partial` until `port_rename_map` has an entry for each — its own
+name on the target to keep it, `null` to drop it.  A unit of a
+port the target lists is not then reported as a name the device does
+not list.
+
+Between two configs of one vendor nothing is said — which is not a
+promise about the tag.  A tag the source platform's parser does not
+read (AOS-CX, OS10) is lost on every path, a job from that vendor to
+itself included, and there no warning, no validation line and no
+status reports it.  Compare the sub-interfaces of such an output with
+the source by hand.
+
+### "... moved with their port (...), but the plan does not vouch for where they went"
+
+With both devices declared, a sub-interface went where its port went
+— tag and all — and the plan still asks you to decide it.  The plan
+takes a name for a unit of a port only where the name spells the port
+as the config does.  Two kinds of name are outside that: a unit typed
+in another letter case than its port (`interface
+gigabitethernet1/0/1.54` under `interface GigabitEthernet1/0/1`, on a
+platform whose names have no letter case), and a unit of a unit
+(`ge-0/0/1.54.2`).  Each is listed in
+`port_mapping_plan.unvouched_units` with the name it has in the
+output, and its row in the rename modal says the same.  Check where
+it went.  Then give `port_rename_map` an entry for it — that name to
+keep it, `null` to drop it — or, in the modal, press **Accept as
+shown** and Apply.
 
 ### "The Auto target says `1/1` but my switch's ports are `1`"
 
@@ -577,8 +665,15 @@ A Catalyst source is a special case: IOS-XE prints the interfaces of
 every network module the chassis could take, so the modules you did
 not declare show up as off-inventory even when the declaration is
 right.  A sub-interface (`GigabitEthernet1/0/1.100`) follows its
-parent port only between two configs of the same codec; across
-vendors it is reported separately and does not move with its port.
+parent port, between two configs of the same codec and across
+vendors: it is listed in `sub_interfaces` with the name it was
+given, and is not off-inventory.  One that followed and took no
+802.1Q tag with it is the exception: it is listed in
+`untagged_units`, stays off-inventory and asks for a decision (see
+"... with no 802.1Q tag" above).  So is one the plan does not vouch
+for — typed in another letter case than its port, or a unit of a
+unit: it is listed in `unvouched_units` (see "... but the plan does
+not vouch for where they went" above).
 
 ### "A stack member's config came out on another member"
 

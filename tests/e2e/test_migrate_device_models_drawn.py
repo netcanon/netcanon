@@ -468,13 +468,13 @@ class TestAcceptedDecisionsAreForOnePairing:
     ) -> None:
         """A dropped name stays dropped and a KEPT one stays where it
         landed: the stock FortiGate aggregate, given a port-shaped
-        name the target lacks, is recorded under that name -- not as
+        name a QFX5120 lacks, is recorded under that name -- not as
         a drop."""
         _translate(
-            page, live_server_url, "fortigate_cli", "fortigate_cli",
+            page, live_server_url, "fortigate_cli", "juniper_junos",
             _FORTIGATE_WITH_AN_AGGREGATE,
         )
-        _declare(page, "100E", "100E")
+        _declare(page, "100E", "QFX5120-48Y")
         _apply(page)
         expect(_plan(page)).to_have_attribute("data-state", "warn")
         expect(page.locator(_tid("migrate-rename-plan-pending"))).to_have_text(
@@ -487,7 +487,7 @@ class TestAcceptedDecisionsAreForOnePairing:
             "1 decision recorded — Apply to confirm"
         )
         body = _apply(page)
-        assert body["port_rename_map"] == {"fortilink": "fortilink1"}
+        assert body["port_rename_map"] == {"fortilink": "ge-0/0/1"}
         expect(_plan(page)).to_have_attribute("data-state", "ok")
         # Accepted is not the same as fine: it is on a name the target
         # does not list, and the strip and the row go on saying so.
@@ -502,7 +502,7 @@ class TestAcceptedDecisionsAreForOnePairing:
             painted_token(page, PANE, "--badge-partial-bg"),
         )
         expect(page.locator(_tid("migrate-rename-offtarget-fortilink"))).to_have_attribute(
-            "title", "fortilink1 is not a port the declared target device lists"
+            "title", "ge-0/0/1 is not a port the declared target device lists"
         )
         expect(page.locator(_tid("migrate-rename-status"))).to_have_text(
             "Applied. Rendered output refreshed."
@@ -2150,9 +2150,174 @@ _OPNSENSE = (
 ).read_text(encoding="utf-8")
 
 
+#: An IOS-XE config whose VLAN interface and loopback have the same
+#: names on EOS, beside two ports of a Catalyst 9300.
+_IOS_WITH_AN_SVI = """hostname sw
+!
+vlan 10
+ name users
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+!
+interface GigabitEthernet1/0/2
+ switchport mode access
+ switchport access vlan 10
+!
+interface Vlan10
+ ip address 10.10.0.1 255.255.255.0
+!
+interface Loopback0
+ ip address 10.255.0.1 255.255.255.255
+!
+end
+"""
+
+#: An AOS-CX sub-interface.  The config states its tag; the AOS-CX
+#: parser reads none.
+_AOSCX_WITH_A_UNIT = """!Version ArubaOS-CX FL.10.10.1010
+hostname r1
+!
+interface 1/1/1
+    no shutdown
+    routing
+    description PARENT
+interface 1/1/1.54
+    no shutdown
+    encapsulation dot1q 300
+    ip address 10.54.0.1/24
+interface 1/1/2
+    no shutdown
+    routing
+    ip address 10.2.0.1/24
+"""
+
+#: An IOS-XE unit typed in another letter case than its port.
+_IOS_UNIT_IN_ANOTHER_CASE = """!
+version 17.9
+hostname r1
+!
+interface GigabitEthernet1/0/1
+ description PARENT
+!
+interface gigabitethernet1/0/1.54
+ encapsulation dot1Q 54
+ ip address 10.54.0.1 255.255.255.0
+!
+interface GigabitEthernet1/0/2
+ description OTHER
+!
+end
+"""
+
+
 class TestEveryRowStateIsDrawn:
     """States the change draws that no browser test reached.  With the
     code for any of them inverted or removed, the tier passed."""
+
+    @pytest.mark.parametrize(
+        ("target", "model"),
+        [("arista_eos", "DCS-7050SX-64"), ("cisco_iosxe_cli", "C9300-48P")],
+    )
+    def test_a_name_that_is_no_port_has_its_row(
+        self, page: Page, live_server_url: str, target: str, model: str,
+    ) -> None:
+        """With both devices declared the rows come from the plan,
+        and the plan is of ports.  A VLAN interface and a loopback
+        are ports of no device and nothing the plan lists.  Each
+        still has its one row, from the job's list of the names
+        that are no port, in the section after the plan's rows --
+        onto another vendor and onto its own."""
+        _translate(page, live_server_url, "cisco_iosxe_cli", target, _IOS_WITH_AN_SVI)
+        _declare(page, "C9300-24P", model)
+        job = _apply_and_read(page)
+        assert job["port_mapping_plan"]["applied"]
+        assert job["source_other_names"] == ["Vlan10", "Loopback0"]
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("2 paired")
+        section = page.locator(_tid("migrate-rename-section-other"))
+        for name in ("Vlan10", "Loopback0"):
+            expect(page.locator(_tid(f"migrate-rename-row-{name}"))).to_have_count(1)
+            expect(section.locator(_tid(f"migrate-rename-row-{name}"))).to_have_count(1)
+            expect(page.locator(_tid(f"migrate-rename-auto-{name}"))).to_have_text("(unchanged)")
+        # The two ports are rows of the plan; these two are not.
+        expect(
+            page.locator('[data-testid^="migrate-rename-row-"][data-plan-state]')
+        ).to_have_count(2)
+        expect(page.locator('[data-testid^="migrate-rename-row-"]')).to_have_count(4)
+        expect(page.locator(_tid("migrate-rename-rail-ports-count"))).to_have_text("4")
+        page.locator(_tid("migrate-rename-section-summary-other")).click()
+        expect(page.locator(_tid("migrate-rename-row-Vlan10"))).to_be_visible()
+
+    def test_a_unit_with_no_tag_says_it_moved(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """AOS-CX onto EOS.  The unit went with its port to
+        ``Ethernet1.54``, and no tag was read for it.  A row that
+        read "translated by name to Ethernet1.54", as the row of
+        any other name the device does not have reads, would not
+        say what happened to it.  It says it moved with its port,
+        and why the plan does not vouch for it.  Accepted as shown -- the
+        plan's line says to name the unit -- nothing is left to
+        decide, the row says whose entry put it there, and the
+        entry is not then marked as a name the target does not
+        list."""
+        mp = _translate(page, live_server_url, "aruba_aoscx", "arista_eos", _AOSCX_WITH_A_UNIT)
+        _declare(page, "6300M-48G-PoE4-SFP56", "DCS-7050SX-64")
+        job = _apply_and_read(page)
+        assert job["port_mapping_plan"]["untagged_units"] == {"1/1/1.54": "Ethernet1.54"}
+        row = page.locator(_tid("migrate-rename-row-1/1/1.54"))
+        expect(row).to_have_attribute("data-plan-state", "off-inventory")
+        expect(row).to_have_class(re.compile(r"\bneeds-decision\b"))
+        state = page.locator(_tid("migrate-rename-plan-state-1/1/1.54"))
+        expect(state).to_be_visible()
+        expect(state).to_have_text(
+            "moved with its port to Ethernet1.54, with no 802.1Q tag — the plan "
+            "does not vouch for it: no tag was read for it from the source config"
+        )
+        expect(mp.status_summary).to_contain_text("partial")
+        page.locator(_tid("migrate-rename-plan-accept")).click()
+        job = _apply_and_read(page)
+        assert job["port_mapping_plan"]["unresolved_ports"] == []
+        assert job["port_mapping_plan"]["off_target"] == []
+        expect(state).to_have_text(
+            "not a port of the declared source device — sent to Ethernet1.54 "
+            "by your own entry"
+        )
+        expect(row).not_to_have_class(re.compile(r"\bneeds-decision\b"))
+        expect(row).not_to_have_class(re.compile(r"\bhas-offtarget\b"))
+        expect(page.locator(_tid("migrate-rename-offtarget-1/1/1.54"))).to_have_count(0)
+        expect(mp.status_summary).to_contain_text("completed")
+
+    def test_one_in_another_case_says_it_moved(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """IOS names have no letter case, so the unit goes where
+        its port goes, tag and all.  The plan does not count it as
+        having followed.  Neither its row nor the plan's line may
+        say it was translated by the shape of its name: each says
+        what happened, and why the plan does not vouch for it."""
+        _translate(
+            page, live_server_url, "cisco_iosxe_cli", "arista_eos", _IOS_UNIT_IN_ANOTHER_CASE,
+        )
+        _declare(page, "C9300-24P", "DCS-7050SX-64")
+        job = _apply_and_read(page)
+        unit = "gigabitethernet1/0/1.54"
+        assert job["port_mapping_plan"]["unvouched_units"] == {unit: "Ethernet1.54"}
+        row = page.locator(_tid(f"migrate-rename-row-{unit}"))
+        expect(row).to_have_class(re.compile(r"\bneeds-decision\b"))
+        state = page.locator(_tid(f"migrate-rename-plan-state-{unit}"))
+        expect(state).to_be_visible()
+        expect(state).to_have_text(
+            "moved with its port to Ethernet1.54 — the plan does not vouch for "
+            "it: it is spelt in another letter case than its port, or is a "
+            "unit of a unit"
+        )
+        report = page.locator(_tid("migrate-rename-plan-report"))
+        expect(report).to_contain_text(
+            f"1 sub-interface name(s) moved with their port ({unit} -> Ethernet1.54)"
+        )
+        expect(report).not_to_contain_text("name-shape translation")
 
     def test_names_that_are_not_ports_of_the_source_and_names_displaced(
         self, aoss_2930f: MigratePage, page: Page,

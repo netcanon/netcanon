@@ -203,30 +203,35 @@ def _rotation(groups: dict[str, list[str]]) -> dict[str, str]:
     }
 
 
+def _units(names: list[str]) -> set[str]:
+    """The names among *names* that are a unit of another of them
+    (``ge-0/0/1.54`` beside ``ge-0/0/1``)."""
+    present = set(names)
+    return {
+        name for name in names
+        if name.rpartition(".")[2].isdigit() and name.rpartition(".")[0] in present
+    }
+
+
 def _ports_to_move(codec: Any, tree: CanonicalIntent) -> dict[str, str]:
     """Every physical port of each name shape, sent to the next port
     of its shape.
 
-    A port that has sub-interfaces in the tree is left out: without
-    declared devices a unit is translated by the shape of its own
-    name, apart from its port (a documented limit of that path; with
-    devices declared it follows its port, which
-    ``test_run_plan_with_models.py`` pins).  So is a port an operator
-    named (RouterOS), which the config does not call by its hardware
-    name.
+    A port that has sub-interfaces is moved like any other, and its
+    units are given no entry of their own: each has to FOLLOW its
+    port, and the comparison expects it where its port went.  A port
+    an operator named (RouterOS) is left out, which the config does
+    not call by its hardware name.
     """
-    every = collect_port_names(tree)
-    with_units = {
-        name.rpartition(".")[0] for name in every
-        if name.rpartition(".")[2].isdigit() and name.rpartition(".")[0]
-    }
+    hardware = collect_hardware_port_names(tree, classify=codec.classify_port_name)
+    units = _units(hardware)
     named = {
         iface.name for iface in tree.interfaces
         if iface.default_name and iface.default_name != iface.name
     }
     groups: dict[str, list[str]] = defaultdict(list)
-    for name in collect_hardware_port_names(tree, classify=codec.classify_port_name):
-        if name in with_units or name in named:
+    for name in hardware:
+        if name in units or name in named:
             continue
         if _kind(codec, name) in ("physical", "breakout"):
             groups[re.sub(r"\d+", "#", name)].append(name)
@@ -251,10 +256,10 @@ def _what_did_not_follow(codec: Any, text: str, moves: dict[str, str]) -> list[s
     the first output's with the names moved.  A port's hardware
     identity must stand still (see the module docstring)."""
     tree = codec.parse(text)
-    pin = {
-        name: name
-        for name in collect_hardware_port_names(tree, classify=codec.classify_port_name)
-    }
+    hardware = collect_hardware_port_names(tree, classify=codec.classify_port_name)
+    # A unit is not pinned: an entry of its own would keep it where it
+    # is, and it is there to follow its port.
+    pin = {name: name for name in hardware if name not in _units(hardware)}
     base = run_plan_with_overrides(codec, codec, text, port_rename_map=pin)
     moved = run_plan_with_overrides(codec, codec, text, port_rename_map={**pin, **moves})
     assert base.rendered and moved.rendered, (base.error, moved.error)
@@ -269,9 +274,10 @@ def _the_device_this_config_is_from(codec: Any, tree: CanonicalIntent) -> Invent
     factory = {
         iface.name: iface.default_name for iface in tree.interfaces if iface.default_name
     }
+    hardware = collect_hardware_port_names(tree, classify=codec.classify_port_name)
+    # A unit of a port is no port of any device.
     names = dict.fromkeys(
-        factory.get(name, name)
-        for name in collect_hardware_port_names(tree, classify=codec.classify_port_name)
+        factory.get(name, name) for name in hardware if name not in _units(hardware)
     )
     return Inventory(
         vendor=codec.name,
@@ -331,7 +337,7 @@ def _comparable(codec_name: str, path: Path) -> tuple[Any, str, CanonicalIntent 
 #: Pinned, so that a capture cannot leave the experiment quietly: a new
 #: capture that belongs here fails the test until it is added, and one
 #: listed here that has become comparable fails it until it is removed.
-_NO_TWO = "no two physical ports (or two LAGs) of one name shape, without sub-interfaces"
+_NO_TWO = "no two physical ports (or two LAGs) of one name shape"
 _APPLY_GROUPS = "carries Junos apply-groups, whose verbatim bodies a rename clears by design"
 _NOT_EXERCISED: dict[str, str] = {
     "aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": _NO_TWO,

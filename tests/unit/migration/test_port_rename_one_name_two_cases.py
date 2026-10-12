@@ -105,6 +105,13 @@ def _spellings(names, of: str) -> set[str]:
     return {name for name in names if name.casefold() == of}
 
 
+#: Every public target but AOS-S itself.  Between two AOS-S configs a
+#: name nobody mapped is not renamed, in letter case either, so a LAG
+#: has no key in ``port_renames`` there; those jobs have tests of
+#: their own, under names that say so.
+_OTHER_VENDORS = [name for name in list_public_codecs() if name != "aruba_aoss"]
+
+
 def _stack():
     """The device ``CAPTURE_2930M`` is of."""
     return compile_deployment(
@@ -215,30 +222,53 @@ class TestTheParserGivesALagOneName:
 
 
 class TestAJobHasOneNameForTheLag:
-    @pytest.mark.parametrize("target", list_public_codecs())
-    def test_one_key_and_no_line_on_every_public_target(self, target: str) -> None:
-        """``port_renames`` is what the rename modal draws its rows
-        from: two keys on one target were two rows, a collision, and
-        an Apply button that would not work.  The two targets whose own
-        names have case are among these on purpose -- the rule is the
-        SOURCE platform's."""
+    @pytest.mark.parametrize("target", _OTHER_VENDORS)
+    def test_one_key_no_line_on_other_vendors(self, target: str) -> None:
+        """``port_renames`` is one of the things the rename modal draws
+        its rows from: two keys on one target were two rows, a
+        collision, and an Apply button that would not work.  The two
+        targets whose own names have case are among these on purpose
+        -- the rule is the SOURCE platform's."""
         job = run_plan_with_overrides(AOSS, get_codec(target), _ONE_LAG, port_rename_map={})
         assert job.rendered, "a job that did not render carries no line either"
         assert _merged(job) == [] and _apart(job.warnings) == []
         assert _spellings(job.port_renames, "trk1") == {"trk1"}
 
-    @pytest.mark.parametrize("target", list_public_codecs())
+    def test_between_aoss_configs_it_has_no_key(self) -> None:
+        """The LAG keeps its name, so ``port_renames`` has no key for
+        it in either case and no line is said.  The job still names
+        it -- once -- among the names that are no hardware port,
+        which is what the modal draws its row from here."""
+        job = run_plan_with_overrides(AOSS, AOSS, _ONE_LAG, port_rename_map={})
+        assert job.rendered and _merged(job) == [] and _apart(job.warnings) == []
+        assert _spellings(job.port_renames, "trk1") == set()
+        assert _spellings(job.source_other_names, "trk1") == {"trk1"}
+        assert _spellings(job.source_ports, "trk1") == set()
+
+    @pytest.mark.parametrize("target", _OTHER_VENDORS)
     def test_the_committed_kitchen_sink_has_two_lags(self, target: str) -> None:
         """``trunk ... trk1`` / ``trk2`` beside ``interface Trk1`` /
-        ``Trk2``: the one committed config that names a LAG two ways."""
+        ``Trk2``: the one committed config that names a LAG two ways.
+        Each LAG has its one key."""
         job = run_plan_with_overrides(AOSS, get_codec(target), KITCHEN_SINK, port_rename_map={})
         assert job.rendered
         assert not [line for line in _merged(job) if "rk" in line]
         assert _spellings(job.port_renames, "trk1") == {"trk1"}
         assert _spellings(job.port_renames, "trk2") == {"trk2"}
 
+    def test_the_kitchen_sink_on_aoss_keeps_both(self) -> None:
+        """No key and no line, and both LAGs are in the output as
+        the two the config has."""
+        job = run_plan_with_overrides(AOSS, AOSS, KITCHEN_SINK, port_rename_map={})
+        assert job.rendered and not [line for line in _merged(job) if "rk" in line]
+        assert not _spellings(job.port_renames, "trk1") | _spellings(job.port_renames, "trk2")
+        assert [lag.name for lag in AOSS.parse(job.rendered).lags] == ["trk1", "trk2"]
+        assert [n for n in job.source_other_names if n.startswith("trk")] == ["trk1", "trk2"]
+
     def test_with_both_devices_declared(self) -> None:
-        """A declared job always carries a port map."""
+        """A declared job always carries a port map.  Between two
+        AOS-S devices the LAG is no port of either and keeps its name;
+        onto another vendor's device it has its one key."""
         source = compile_deployment(
             Deployment(vendor="aruba_aoss", mode="standalone", members=[{"model": "JL260A"}]), REGISTRY,
         )
@@ -249,6 +279,10 @@ class TestAJobHasOneNameForTheLag:
             REGISTRY,
         )
         job = run_plan_with_models(AOSS, AOSS, _ONE_LAG, source, target)
+        assert job.rendered and _merged(job) == [] and _apart(job.warnings) == []
+        assert _spellings(job.port_renames, "trk1") == set()
+        junos = inventory_from_profile(PROFILES["juniper_junos/EX4300-48T"])
+        job = run_plan_with_models(AOSS, JUNOS, _ONE_LAG, source, junos)
         assert job.rendered and _merged(job) == [] and _apart(job.warnings) == []
         assert _spellings(job.port_renames, "trk1") == {"trk1"}
 
@@ -359,13 +393,26 @@ class TestAKeyInAnotherCaseDevicesDeclared:
 
 
 class TestOneTargetInTwoLetterCases:
-    def test_a_port_sent_onto_the_lag_by_the_name_the_tree_uses(self) -> None:
-        """The tree calls the LAG ``trk1`` and the translator writes it
-        ``Trk1``: on AOS-S that is one place, and port 5 is on it.
-        Grouped by the exact string, nothing was said."""
-        job = run_plan_with_overrides(AOSS, AOSS, _ONE_LAG, port_rename_map={"5": "trk1"})
+    def test_a_port_sent_onto_the_lag_as_printed(self) -> None:
+        """The tree calls the LAG ``trk1``, and between two AOS-S
+        configs that name stands.  An entry that sends port 5 to
+        ``Trk1`` -- the LAG as the device prints it in a VLAN's list --
+        puts the port on it: on AOS-S that is one place.  Grouped by
+        the exact string, nothing was said."""
+        job = run_plan_with_overrides(AOSS, AOSS, _ONE_LAG, port_rename_map={"5": "Trk1"})
         (line,) = _merged(job)
         assert "(sources: 5, trk1)" in line
+        assert "map to 'Trk1' (also written 'trk1': one port on aruba_aoss)" in line
+
+    def test_from_another_vendor_it_is_trk(self) -> None:
+        """The same place from the other side: the AOS-S formatter
+        writes a LAG ``Trk1``, and an entry that sends a port to
+        ``trk1`` has put it on that LAG."""
+        text = "set interfaces ge-0/0/5 ether-options 802.3ad ae1\nset interfaces ge-0/0/7 description x\n"
+        job = run_plan_with_overrides(JUNOS, AOSS, text, port_rename_map={"ge-0/0/7": "trk1"})
+        assert job.port_renames["ae1"] == "Trk1"
+        (line,) = [w for w in _merged(job) if "rk1" in w]
+        assert "(sources: ae1, ge-0/0/7)" in line
         assert "map to 'Trk1' (also written 'trk1': one port on aruba_aoss)" in line
 
     def test_two_overrides_that_differ_only_in_letter_case(self) -> None:
@@ -391,9 +438,10 @@ class TestOneTargetInTwoLetterCases:
         assert "(sources: 1, 2)" in line and "interface stanzas" in line
 
     def test_one_final_spelling_reads_as_it_always_did(self) -> None:
-        job = run_plan_with_overrides(AOSS, AOSS, _ONE_LAG, port_rename_map={"5": "Trk1"})
+        """Sent to the name the tree uses, there is one spelling."""
+        job = run_plan_with_overrides(AOSS, AOSS, _ONE_LAG, port_rename_map={"5": "trk1"})
         (line,) = _merged(job)
-        assert "map to 'Trk1' (sources: 5, trk1)" in line
+        assert "map to 'trk1' (sources: 5, trk1)" in line
 
 
 # ---------------------------------------------------------------------------
@@ -411,13 +459,18 @@ class TestTheParserWhereNoTestLooked:
     def test_a_definition_typed_in_capitals_is_still_a_lag_on_every_target(self, target: str) -> None:
         """``TRK1`` on a ``trunk`` line is a spelling a hand can type.
         The references the device prints (``Trk1``) must not be dragged
-        onto a name the codec's own classifier cannot read."""
+        onto a name the codec's own classifier cannot read.  The job
+        knows it as the one LAG ``trk1``: by its key in
+        ``port_renames`` onto another vendor, and among the names
+        that are no hardware port on every target."""
         text = _ONE_LAG.replace("trunk 51-52 trk1 lacp", "trunk 51-52 TRK1 lacp")
         job = run_plan_with_overrides(AOSS, get_codec(target), text, port_rename_map={})
         assert job.rendered
         assert not [w for w in job.warnings if "could not classify" in w]
         assert "TRK1" not in job.rendered
-        assert _spellings(job.port_renames, "trk1") == {"trk1"}
+        assert _spellings(job.source_other_names, "trk1") == {"trk1"}
+        if target != "aruba_aoss":
+            assert _spellings(job.port_renames, "trk1") == {"trk1"}
 
     @pytest.mark.parametrize("typed", ["Trk1", "TRK1", "tRk1"])
     def test_however_the_definition_is_typed_the_tree_is_the_same(self, typed: str) -> None:
@@ -582,9 +635,11 @@ class TestAKeyInAnotherLetterCase:
         assert not [w for w in result.warnings if "another spelling" in w]
 
     def test_a_key_is_compared_as_typed_apart_from_its_letter_case(self) -> None:
-        """Space around a key is not letter case: the key names nothing."""
+        """Space around a key is not letter case: the key names nothing,
+        and the LAG is renamed to nothing."""
         job = run_plan_with_overrides(AOSS, AOSS, _ONE_LAG, port_rename_map={" Trk1 ": "Trk7"})
-        assert job.port_renames["trk1"] == "Trk1"
+        assert job.port_renames == {}
+        assert "Trk7" not in job.rendered and "trk7" not in job.rendered
         assert [w for w in job.warnings if "source port ' Trk1 ' does not exist" in w]
 
     def test_a_key_reaches_a_lag_that_has_no_stanza(self) -> None:

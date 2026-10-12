@@ -2196,9 +2196,11 @@
   var _planReportOpen = null;        // the report under the strip, as the operator left it
 
   // Kind ordering in the modal (drives the collapsible section order).
+  // 'other' is last: the names the job lists that are no hardware
+  // port and that no rename or warning gave a row of a kind above.
   var _RENAME_KIND_ORDER = ['physical', 'breakout', 'lag', 'svi',
                             'loopback', 'tunnel', 'hw_aggregate',
-                            'mgmt', 'virtual', 'unknown'];
+                            'mgmt', 'virtual', 'unknown', 'other'];
   var _RENAME_KIND_LABEL = {
     physical:      'Physical ports',
     breakout:      'Breakout lanes',
@@ -2210,6 +2212,7 @@
     mgmt:          'Management',
     virtual:       'Virtual',
     unknown:       'Unclassified',
+    other:         'Other names in the config',
   };
 
   /** Vendor-id → display-name lookup.  Derived on-demand from the
@@ -2961,9 +2964,13 @@
     // the most: the ports the config uses are enough to open on.
     var hasSourcePorts = job && Array.isArray(job.source_ports)
       && job.source_ports.length > 0;
+    // ... and so is a name that is no port: a config that is one
+    // loopback has a row to rename it by.
+    var hasOtherNames = job && Array.isArray(job.source_other_names)
+      && job.source_other_names.length > 0;
     var hasAnything = hasRenames || hasWarnings || hasVlans
                       || hasLocalUsers || hasSnmpCommunity
-                      || hasSourcePorts;
+                      || hasSourcePorts || hasOtherNames;
     if (job && job.rendered && hasAnything) {
       btn.style.display = '';
       var attentionCount = hasWarnings ? job.warnings.length : 0;

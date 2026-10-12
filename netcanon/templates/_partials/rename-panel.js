@@ -181,22 +181,25 @@
         }
       });
     }
-    // A port the config uses that was neither renamed nor dropped
+    // A name the config uses that was neither renamed nor dropped
     // keeps its own name -- which an override may not also take.
-    // Counted only against an entry of the operator's: where the
-    // translator itself put a name on an unchanged port's name (a
-    // Junos unit onto its port), that is the job as it came back, and
-    // holding Apply for it would hold every other edit too.
+    // That holds for a LAG or a loopback as for a port.  Counted
+    // only against an entry of the operator's: where the
+    // translator itself put a name on an unchanged name (a Junos
+    // loopback unit onto ``lo0``, which is the loopback's name on
+    // OPNsense too), that is the job as it came back, and holding
+    // Apply for it would hold every other edit too.
     var ownTargets = new Set();
     Object.keys(_renameUserMap).forEach(function(src) {
       if (_renameUserMap[src]) ownTargets.add(_renameUserMap[src]);
     });
-    (_lastJob.source_ports || []).forEach(function(src) {
-      if (_renameUserMap[src] === undefined && !autoDroppedSet.has(src)
-          && ownTargets.has(src)) {
-        tally(src, src);
-      }
-    });
+    (_lastJob.source_ports || []).concat(_lastJob.source_other_names || [])
+      .forEach(function(src) {
+        if (_renameUserMap[src] === undefined && !autoDroppedSet.has(src)
+            && ownTargets.has(src)) {
+          tally(src, src);
+        }
+      });
     var collisions = 0;
     // The same count, of targets an entry of the operator's points at.
     var ownCollisions = 0;

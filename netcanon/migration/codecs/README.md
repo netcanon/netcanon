@@ -111,6 +111,41 @@ pair of pure functions directly — a codec that inlines them inside
 `codec.py` blocks on circular imports.  Every codec that joins the
 rename-mode mesh ships this split; copy the closest one.
 
+**What the pair is not asked.**  The orchestrator puts a name to
+`classify_port_name` and `format_port_identity` only across vendors.
+In a job from a codec to itself a name nobody mapped stands as
+written, so the pair need not give a codec's own names back (several
+do not: `format(classify(name))` loses a Junos management prefix, a
+FortiOS role name, an OS10 breakout lane; the test named below
+keeps the list of the codecs it is true of).  And an interface named
+`<port>.<unit>` goes where its port goes, with its unit, whatever
+the classifier makes of the dotted name: a `PortIdentity` has no
+place for a unit, so a classifier that reads one can only read it as
+the port (Junos, VyOS) — which, left to itself, put two interfaces on
+one name.  What a classifier still decides is a dotted name that is
+no interface of the tree, such as a Junos reference to unit 0
+(`ge-0/0/1.0`): read it as the port.  It also still decides a unit
+of a management port, of a loopback and of a port it does not
+know, and an interface numbered 0: none of those is sent after its
+port across vendors.  Nor is a name that ends in more than ten
+digits: a renderer that makes a number of the unit in a name
+(FortiOS, VyOS) is not handed one longer than that from another
+vendor's config by the orchestrator.  A parser that knows a port's
+role from
+context sets `CanonicalInterface.kind` (the IOS-XE `Mgmt-vrf` port
+is `mgmt`), and the orchestrator reads that ahead of the name.  A
+parser that reads no 802.1Q tag for a sub-interface (AOS-CX, OS10)
+leaves each such unit to be written without one on every target.
+The orchestrator reports that across vendors; in a job from such a
+codec to itself the tag is lost the same way and nothing reports
+it.  A VLAN interface a platform
+NAMES after its parent (`ether1.55` on RouterOS) is classified
+`svi`, and keeps its own form on every target.  See
+`translate_port_names` and
+`tests/unit/migration/test_units_follow_their_port.py`, which runs
+every public codec's captures, and a sub-interface from each grammar
+that names one onto every codec.
+
 **Two codecs may SHARE one bridge when they are the same platform in
 different wire formats.**  `cisco_iosxe` (NETCONF / OpenConfig)
 delegates both methods to `cisco_iosxe_cli.port_names` rather than

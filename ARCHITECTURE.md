@@ -346,6 +346,65 @@ class fit the same recipe; the map shape is uniformly
 * `{src: tgt, ...}` — engage with explicit per-entry overrides.
   Values may include `None` to drop.
 
+**Two kinds of name the port heuristic never reads.**  The port
+orchestrator's auto-heuristic is `source.classify_port_name` →
+`target.format_port_identity`, and `translate_port_names` keeps two
+kinds of name away from it:
+
+* *Between two configs of one codec a name nobody mapped stands.*
+  It is a name of that platform by construction, and the round trip
+  is not the identity on several codecs' own names — Junos reads
+  `fxp0` and writes `em0`, FortiOS reads `dmz` and writes `dmz1`, the
+  OS10 formatter has no form for its own breakout lanes; AOS-S,
+  IOS-XE CLI and VyOS are the others on the committed inputs, and on
+  the rest it is the identity there — so a job from a
+  codec to itself renamed and dropped ports nobody had named, and
+  said `completed`.  With an empty port map the output of such a job
+  is the bare pipeline's.
+* *A sub-interface goes where its port goes, with its unit*
+  (`<port>.<unit>` becomes `<what the port became>.<unit>`), and is
+  dropped with a port that is dropped.  `PortIdentity` has no place
+  for a unit, so a classifier either reads the name as the port
+  (Junos, VyOS: two interfaces on one name) or does not know it (IOS,
+  EOS, NX-OS, IOS-XR: the name stays in the other vendor's config).
+  The rule names no vendor.  A name is a unit of `<port>` when the
+  source classifier does not read it as a thing of its own (it calls
+  it `unknown`, or gives it the port's own kind), the parser did not
+  type it as a VLAN interface, and — across vendors — it is an
+  interface of the tree, not numbered 0, whose port is a physical
+  port, a breakout lane or a LAG.  A unit is read as text and never
+  converted, and across vendors it is a number of at most ten
+  digits: a name that ends in a longer run is left to the
+  classifier, so that no renderer which makes a number of the unit
+  (FortiOS, VyOS) is handed one.  What the port IS decides that,
+  not only its name: a port its parser marked as the management
+  port from context (the IOS-XE `Mgmt-vrf` port,
+  `CanonicalInterface.kind`) carries no sub-interface another
+  platform has.  Between two configs of one codec a unit stands
+  like any other name, and moves only when an entry moves or drops
+  its port.  Where the source platform's names have no letter case
+  the port of a unit is found as the config — else a key of the map
+  — spells it, so `gigabitethernet0/0/1.54` is a unit of
+  `GigabitEthernet0/0/1`.  What the target makes of
+  `<its port>.<unit>` is its renderer's: where it has no tagged
+  sub-interface its capability matrix says so, and the job is
+  `partial` when the tree holds a tag for the validation report to
+  list.  The tag is a field (`dot1q_vlan`), not part of the name: a
+  unit that went with its port across vendors and has none in the
+  tree — the AOS-CX and OS10 parsers read none — is written without
+  one, and the translator says so in a warning of its own.  Between
+  two configs of one codec it says nothing, and such a tag is lost
+  there as on every path: a job from AOS-CX to AOS-CX writes the
+  sub-interface without it, as parse and render alone do, and
+  nothing reports it.
+
+`tests/unit/migration/test_units_follow_their_port.py` holds both by
+reading the rendered output against something the translator had no
+hand in: the bare pipeline's output for every committed capture and
+kitchen sink, and — from each source grammar that names a
+sub-interface, onto every codec — each sub-interface found in the
+output by its address.
+
 **Cross-category ordering:** port rename runs BEFORE VLAN rename
 in `run_plan_with_overrides` so port-name rewrites don't race
 with VLAN-ID references changing underneath them.  Current order
@@ -370,12 +429,17 @@ once version-targeted rendering grows an operator-facing surface).
 
 **Source-shape capture:** `run_plan_with_overrides` injects a
 capture-first transform that populates `MigrationJob.source_vlans`,
-`source_local_users`, `source_snmp_community`, `source_ports` and
+`source_local_users`, `source_snmp_community`, `source_ports`,
+`source_other_names` and
 `source_hostname` from the post-parse, pre-transform tree.  This
 is load-bearing for the VLAN / local-users / SNMP panes (they
 have no "auto-rewritten" rows to fall back on if the operator
 hasn't already sent overrides) and for the localStorage key
-(hostname).
+(hostname).  The ports pane needs it for the same reason since a
+name nobody mapped stands: between two configs of one codec no
+rename and no warning names a LAG or a loopback, so the two lists
+— the hardware ports, and every other name the translator
+rewrites — are where their rows come from.
 
 **Target-codec compatibility banners:** each codec exposes
 `unsupported_rename_categories: frozenset[str]` listing per-pane
@@ -798,7 +862,8 @@ deployed: an Aruba 2930F port is `24` standalone and `1/24` as a VSF
 member; a 2930M's first uplink is `A1` with stacking disabled, `1/A1`
 with it enabled, and does not exist with the bay empty.  The
 name-shape translator (`canonical/port_names.py`) is not told the
-model, so on a same-vendor pair it can only be the identity, and it
+model, so on a same-vendor pair it is the identity — a name nobody
+mapped stands as written — and it
 could never know that port `49` of one switch is `1/A1` of another.
 
 **The approach: translate positions, not names.**  Each end of a
@@ -810,8 +875,9 @@ the pairing is an ordinary `port_rename_map`, which the translator
 already applies ahead of its own guess.  The translator is shared with
 every translation, so what this feature needs from it is kept small
 and applies to all of them: a name the target cannot express is
-stripped before anything is renamed, and a route's next hop that is
-the name of an interface follows that interface.  Everything that
+stripped before anything is renamed, a route's next hop that is
+the name of an interface follows that interface, and a sub-interface
+goes where its port goes.  Everything that
 depends on knowing the target device is done by the caller that knows
 it.
 
@@ -870,14 +936,35 @@ out-of-band management is the `oobm` context, not a numbered port).
   another role, and never left out of the map: left to the name-shape
   translator it would keep its old name on a same-vendor pair, which
   can be the very name another port was just mapped to.
-* Between two configs of the **same codec**, a sub-interface
-  (`ge-0/0/0.54`) follows its parent port: the unit suffix means the
-  same thing on both sides.  Across codecs it does not, and the name
-  is left to the name-shape translator like any other the inventory
-  does not list.
+* A sub-interface (`ge-0/0/0.54`) follows its parent port, and is
+  dropped with it.  Between two configs of the **same codec** the
+  pipeline writes the entry beforehand: the unit suffix means the
+  same thing on both sides.  Across codecs the translator's own rule
+  for a unit sends it after the port it was PAIRED with
+  (`Ethernet1.54`), and the pipeline reads what followed from the
+  finished run.  Both are recorded in `sub_interfaces`, and neither
+  asks for a decision — with one exception, across codecs: a unit
+  the parsed source holds no 802.1Q tag for.  It went with its port
+  like the rest, the output has an interface of that name with no
+  VLAN, and nothing else in the job would say so (there is no tag
+  for the validation report to list).  It is recorded in
+  `untagged_units` instead, stays off-inventory and unresolved,
+  and has a line of its own.  A second exception, on either path: a
+  unit the plan does not take for a unit of its port — typed in
+  another letter case than the port, or a unit of a unit.  The
+  finished run shows it went where its port went; the plan records
+  that (`unvouched_units`) so that its line and the page's row say
+  what happened, and leaves it off-inventory and unresolved.  An
+  operator's entry that names a sub-interface onto a unit of a port
+  the target lists is where the plan itself would put one, and is
+  not reported as off-target.  A target with no sub-interfaces still
+  gets an interface of that name (`1.54` on AOS-S), which is not a
+  name of the device; where the source holds a tag the validation
+  report lists it as one the target cannot carry.
 * Some names are left to the name-shape translator — the ordinary
   port translation, which derives a target name from the shape of
-  the source name without knowing either model.  An unplaced
+  the source name without knowing either model (and, between two
+  configs of one codec, derives nothing: the name stands).  An unplaced
   *management* port, because the translator knows what each target
   does with out-of-band management (AOS-S has an `oobm` block, not a
   management interface).  A name the config uses that is not a port
@@ -930,7 +1017,9 @@ out-of-band management is the `oobm` context, not a numbered port).
   listed.  `unresolved_ports`, `displaced`, `fused`, `off_target`,
   `target_hardware`, `source_hardware`, `unbound_ports`,
   `landed_off_target`, `stale_next_hops`,
-  `sub_interfaces`, `emptied_lags`, `shrunk_lags`, `lost_routes`,
+  `sub_interfaces`, `untagged_units`, `unvouched_units`,
+  `emptied_lags`, `shrunk_lags`,
+  `lost_routes`,
   `lost_dhcp_pools`, `lost_tracking` and `lost_vtep_sources` are
   stored fields, so a client reads the outcome as data.  `pairings` and
   `rename_map` stay the pairing as it was made, before the
@@ -1180,8 +1269,9 @@ its own is refused.
 combination of a model is compiled when its family loads, and that
 product is capped), breakout lanes, ports a stack consumes as links,
 ports that belong to a stack rather than a member, literal
-non-systematic names, a sub-interface following its parent port
-across codecs, and whether a model has an out-of-band management
+non-systematic names, the form a tagged routed sub-interface takes
+on a target that has none (it is written `<port>.<unit>` and its tag
+is reported), and whether a model has an out-of-band management
 port at all (a kept management port therefore always needs the
 operator's decision).
 

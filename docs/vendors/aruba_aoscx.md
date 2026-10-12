@@ -167,6 +167,18 @@ source, plus configs exercising symmetric-IRB **L3VNI**, **VSX**, and
   port, so a config that uses `interface mgmt` reports it as
   off-inventory and the job is `partial`.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
+- **A routed sub-interface loses its tag.**  A stanza named
+  `interface 1/1/1.54` is read as an interface of that name; its
+  `encapsulation dot1q` line is not read.  Onto another vendor it
+  goes where its port goes (`Ethernet1.54`) with no VLAN — or, on
+  VyOS and FortiOS, with 54 as its VLAN id, whatever the line said.
+  The job warns for each such unit, and with both devices declared
+  lists it in `untagged_units` and stays `partial` until you name
+  it.  Set the tag on the target by hand.  **Onto AOS-CX itself the
+  tag is lost the same way and nothing says so**: the output has
+  `interface 1/1/1.54` with its address and no `encapsulation
+  dot1q`, in a job that is `completed` with no warning.  Compare the
+  sub-interfaces of an AOS-CX to AOS-CX output with the source.
 - **`active-gateway` is the anycast, not VRRP.**  The supported
   distributed-gateway surface is `active-gateway ip` / `active-gateway
   ip mac`; classic VRRP (`vrrp <vrid>`) is a later phase and drops.

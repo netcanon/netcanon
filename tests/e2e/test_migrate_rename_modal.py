@@ -13,6 +13,9 @@ Covers:
 
 from __future__ import annotations
 
+import json
+import re
+
 import pytest
 from playwright.sync_api import Page, expect
 
@@ -410,12 +413,372 @@ class TestRenameModalAosSLag:
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         # One row, under the name the config's ``trunk`` line gave it.  (A
         # section with nothing to attend to starts folded, so the row is
-        # counted, not looked for on screen.)
+        # counted, not looked for on screen.)  Onto AOS-S itself the
+        # job renames no name; the row is there all the same, drawn
+        # from the job's list of the names that are no hardware port.
         expect(page.locator('[data-testid="migrate-rename-row-trk1"]')).to_have_count(1)
         expect(page.locator('[data-testid="migrate-rename-row-Trk1"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-rename-row-51"]')).to_have_count(1)
         expect(page.locator(".has-collision")).to_have_count(0)
         expect(page.locator('[data-testid="migrate-rename-summary"]')).not_to_contain_text("collision")
         expect(page.locator('[data-testid="migrate-rename-apply-btn"]')).to_be_enabled()
+
+
+#: A Junos config with one port and a loopback.
+_JUNOS_WITH_A_LOOPBACK = (
+    "set system host-name r1\n"
+    "set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24\n"
+    "set interfaces lo0 unit 0 family inet address 192.0.2.1/32\n"
+)
+
+#: A Junos config that is a loopback and nothing else: no port, no
+#: VLAN, no user, no community.
+_JUNOS_ONLY_A_LOOPBACK = (
+    "set interfaces lo0 unit 0 family inet address 192.0.2.1/32\n"
+)
+
+#: An EOS port-channel with two members.
+_EOS_PORT_CHANNEL = """hostname sw
+!
+interface Port-Channel1
+   description uplink
+   switchport mode trunk
+!
+interface Ethernet1
+   channel-group 1 mode active
+!
+interface Ethernet2
+   channel-group 1 mode active
+!
+end
+"""
+
+
+#: An IOS-XE config whose VLAN interface and loopback have the same
+#: names on EOS, beside two ports that have others.
+_IOS_WITH_AN_SVI = """hostname sw
+!
+vlan 10
+ name users
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+!
+interface GigabitEthernet1/0/2
+ switchport mode access
+ switchport access vlan 10
+!
+interface Vlan10
+ ip address 10.10.0.1 255.255.255.0
+!
+interface Loopback0
+ ip address 10.255.0.1 255.255.255.255
+!
+end
+"""
+
+
+def _tid(name: str) -> str:
+    return f'[data-testid="{name}"]'
+
+
+def _open_modal_on(page: Page, base: str, source: str, target: str, raw: str) -> None:
+    mp = MigratePage(page)
+    page.goto(base + "/migrate")
+    mp.source_select.wait_for(state="visible", timeout=5_000)
+    mp.pick_source(source)
+    mp.pick_target(target)
+    mp.fill_raw(raw)
+    mp.submit_and_wait()
+    page.locator(_tid("migrate-rename-open-btn")).click()
+    expect(page.locator(_tid("migrate-rename-modal"))).to_be_visible()
+
+
+def _apply(page: Page) -> dict:
+    """Click Apply; return the body of the plan request it sent, once
+    the answer is back."""
+    with (
+        page.expect_request("**/api/v1/migration/plan") as request,
+        page.expect_response("**/api/v1/migration/plan"),
+    ):
+        page.locator(_tid("migrate-rename-apply-btn")).click()
+    expect(page.locator(_tid("migrate-rename-status"))).to_contain_text("Applied", timeout=5_000)
+    return json.loads(request.value.post_data or "{}")
+
+
+def _sections(page: Page) -> list[str]:
+    """The sections of the ports table, in the order they are drawn."""
+    return page.locator(_tid("migrate-rename-sections") + " > details").evaluate_all(
+        "els => els.map(e => e.getAttribute('data-testid'))"
+    )
+
+
+def _unfold(page: Page, kind: str) -> None:
+    """Open the section of *kind* the way an operator does, if it is
+    folded: a section with nothing to attend to starts that way
+    unless it is the first, and every new job folds it again."""
+    section = page.locator(_tid(f"migrate-rename-section-{kind}"))
+    if not section.evaluate("el => el.open"):
+        page.locator(_tid(f"migrate-rename-section-summary-{kind}")).click()
+    expect(section).to_have_attribute("open", "")
+
+
+class TestRenameModalNamesThatAreNoPort:
+    """The table drew a row for a name the job renamed, for one a
+    warning quoted, and for each hardware port.  A job from a vendor
+    to itself renames no name and warns about none, so a LAG, a
+    loopback or a VLAN interface had no row there, and could be
+    renamed or dropped only by a request written by hand.  The job
+    lists those names now, and each that nothing else gave a row
+    has one, in a section of its own after the ports."""
+
+    @pytest.mark.parametrize(
+        ("codec", "raw", "name", "new_name", "line"),
+        [
+            ("aruba_aoss", _AOSS_ONE_LAG, "trk1", "trk7", "trunk 51-52 trk7 lacp"),
+            ("juniper_junos", _JUNOS_WITH_A_LOOPBACK, "lo0", "lo1",
+             "set interfaces lo1 unit 0 family inet address 192.0.2.1/32"),
+            ("arista_eos", _EOS_PORT_CHANNEL, "Port-Channel1", "Port-Channel7",
+             "channel-group 7 mode active"),
+        ],
+        ids=["aruba_aoss", "juniper_junos", "arista_eos"],
+    )
+    def test_it_has_one_row_and_apply_renames_it(
+        self, page: Page, live_server_url: str,
+        codec: str, raw: str, name: str, new_name: str, line: str,
+    ):
+        _open_modal_on(page, live_server_url, codec, codec, raw)
+        expect(page.locator(_tid(f"migrate-rename-row-{name}"))).to_have_count(1)
+        # In the section for such names, which is drawn after the ports.
+        section = page.locator(_tid("migrate-rename-section-other"))
+        row = section.locator(_tid(f"migrate-rename-row-{name}"))
+        expect(row).to_have_count(1)
+        drawn = _sections(page)
+        assert drawn[0] == "migrate-rename-section-physical"
+        assert drawn[-1] == "migrate-rename-section-other", drawn
+        # It is folded while a section above it has rows; an operator opens it.
+        expect(section).not_to_have_attribute("open", "")
+        _unfold(page, "other")
+        expect(row).to_be_visible()
+        expect(page.locator(_tid(f"migrate-rename-auto-{name}"))).to_have_text("(unchanged)")
+        # The controls every row has, typed into as a person types.
+        override = page.locator(_tid(f"migrate-rename-override-{name}"))
+        override.click()
+        override.press_sequentially(new_name)
+        expect(override).to_have_value(new_name)
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
+        body = _apply(page)
+        assert body["port_rename_map"] == {name: new_name}
+        expect(page.locator(_tid("migrate-output"))).to_contain_text(line)
+        # Still one row: the job now lists the name as renamed, and it
+        # is not drawn a second time for being in the other list too.
+        expect(page.locator(_tid(f"migrate-rename-row-{name}"))).to_have_count(1)
+        expect(page.locator(_tid("migrate-rename-section-other"))).to_have_count(0)
+
+    def test_it_can_be_dropped_and_kept_again(self, page: Page, live_server_url: str):
+        """The link beside the field goes through its three states on
+        such a row as on any other."""
+        _open_modal_on(page, live_server_url, "aruba_aoss", "aruba_aoss", _AOSS_ONE_LAG)
+        _unfold(page, "other")
+        link = page.locator(_tid("migrate-rename-drop-trk1"))
+        expect(link).to_have_text("drop")
+        link.click()
+        expect(link).to_have_text("un-drop")
+        assert _apply(page)["port_rename_map"] == {"trk1": None}
+        output = page.locator(_tid("migrate-output"))
+        expect(output).not_to_contain_text("trunk 51-52")
+        # The job no longer has the LAG, and the row is still there to
+        # take it back by.  Un-dropped, it shows what the job on
+        # screen did with the name, and offers to keep it.
+        _unfold(page, "other")
+        expect(link).to_have_text("un-drop")
+        link.click()
+        expect(link).to_have_text("keep verbatim")
+        link.click()
+        assert _apply(page)["port_rename_map"] == {"trk1": "trk1"}
+        expect(output).to_contain_text("trunk 51-52 trk1 lacp")
+
+    def test_one_loopback_is_enough_to_open_it(
+        self, page: Page, live_server_url: str,
+    ):
+        """The button needed a rename, a warning, a VLAN, a user, a
+        community or a hardware port.  A name that is none of them
+        is enough: it has a row to rename it by."""
+        mp = MigratePage(page)
+        page.goto(live_server_url + "/migrate")
+        mp.source_select.wait_for(state="visible", timeout=5_000)
+        mp.pick_source("juniper_junos")
+        mp.pick_target("juniper_junos")
+        mp.fill_raw(_JUNOS_ONLY_A_LOOPBACK)
+        mp.submit_and_wait()
+        button = page.locator(_tid("migrate-rename-open-btn"))
+        expect(button).to_be_visible()
+        button.click()
+        # The only section there is, so it is open.
+        assert _sections(page) == ["migrate-rename-section-other"]
+        expect(page.locator(_tid("migrate-rename-row-lo0"))).to_be_visible()
+        expect(page.locator(_tid("migrate-rename-table-empty"))).to_be_hidden()
+        expect(page.locator(_tid("migrate-rename-rail-ports-count"))).to_have_text("1")
+
+    @pytest.mark.parametrize("target", ["juniper_junos", "cisco_iosxe_cli", "arista_eos"])
+    def test_a_name_with_a_row_gets_no_second(
+        self, page: Page, live_server_url: str, target: str,
+    ):
+        """There the job renames the LAG, which gives it its row among
+        the link aggregations.  It is in the list of names that are
+        no port as well, and is not drawn again for that."""
+        _open_modal_on(page, live_server_url, "aruba_aoss", target, _AOSS_ONE_LAG)
+        expect(page.locator(_tid("migrate-rename-row-trk1"))).to_have_count(1)
+        expect(
+            page.locator(_tid("migrate-rename-section-lag")).locator(_tid("migrate-rename-row-trk1"))
+        ).to_have_count(1)
+        expect(page.locator(_tid("migrate-rename-section-other"))).to_have_count(0)
+        # The rail counts the rows drawn: fifty-two ports and the LAG.
+        expect(page.locator(_tid("migrate-rename-rail-ports-count"))).to_have_text("53")
+
+    def test_an_entry_on_its_name_holds_apply(self, page: Page, live_server_url: str):
+        """The LAG keeps its name, which another row may not also
+        take -- as for a port that keeps its name.  The summary
+        counts the two rows, Apply is held and says why, and the
+        section the LAG's row is in opens by itself."""
+        _open_modal_on(page, live_server_url, "aruba_aoss", "aruba_aoss", _AOSS_ONE_LAG)
+        apply = page.locator(_tid("migrate-rename-apply-btn"))
+        expect(apply).to_be_enabled()
+        override = page.locator(_tid("migrate-rename-override-5"))
+        override.click()
+        override.press_sequentially("trk1")
+        expect(page.locator(_tid("migrate-rename-summary"))).to_contain_text("2 collisions")
+        expect(apply).to_be_disabled()
+        expect(page.locator(_tid("migrate-rename-apply-why"))).to_contain_text(
+            "two rows end on one target name (trk1)"
+        )
+        # Leaving the field redraws the table: both rows are marked.
+        override.press("Tab")
+        for name in ("5", "trk1"):
+            expect(page.locator(_tid(f"migrate-rename-row-{name}"))).to_have_class(
+                re.compile(r"\bhas-collision\b")
+            )
+        expect(page.locator(_tid("migrate-rename-section-other"))).to_have_attribute("open", "")
+        expect(page.locator(_tid("migrate-rename-row-trk1"))).to_be_visible()
+
+    def test_a_warning_quoting_one_is_on_its_row(
+        self, page: Page, live_server_url: str,
+    ):
+        """Junos to OPNsense: the unit ``lo0.2`` is put on ``lo0``,
+        which is the loopback's name there too, and the job warns
+        that two names share it.  The name the warning quotes is
+        where a rename ENDS, and such a name is taken for a target's
+        and given no row -- unless the job says it is a source name,
+        which for a loopback only the list of names that are no
+        port does."""
+        raw = _JUNOS_WITH_A_LOOPBACK + "set interfaces lo0 unit 2 family inet address 192.0.2.2/32\n"
+        _open_modal_on(page, live_server_url, "juniper_junos", "opnsense", raw)
+        row = page.locator(_tid("migrate-rename-row-lo0"))
+        expect(row).to_have_count(1)
+        expect(row).to_have_class(re.compile(r"\bhas-warning\b"))
+        expect(page.locator(_tid("migrate-rename-row-lo0.2"))).to_have_count(1)
+
+    def test_the_rail_counts_its_row(self, page: Page, live_server_url: str):
+        _open_modal_on(page, live_server_url, "aruba_aoss", "aruba_aoss", _AOSS_ONE_LAG)
+        expect(page.locator(_tid("migrate-rename-rail-ports-count"))).to_have_text("53")
+        expect(
+            page.locator(_tid("migrate-rename-section-summary-other"))
+        ).to_contain_text("Other names in the config")
+
+    def test_kept_across_vendors_it_has_a_row(
+        self, page: Page, live_server_url: str,
+    ):
+        """IOS-XE onto EOS renames the two ports and leaves
+        ``Vlan10`` and ``Loopback0`` as they are: the same names on
+        both platforms.  A name the job did not rename is in no
+        list of renames and no warning quotes it -- on this job as
+        on one from a vendor to itself.  So here too it has its row
+        from the job's list of the names that are no port, in the
+        section after the ports, whatever else the job renamed."""
+        _open_modal_on(
+            page, live_server_url, "cisco_iosxe_cli", "arista_eos", _IOS_WITH_AN_SVI,
+        )
+        # The job did rename something: a port's row shows where it went.
+        expect(
+            page.locator(_tid("migrate-rename-auto-GigabitEthernet1/0/1"))
+        ).to_have_text("Ethernet1")
+        section = page.locator(_tid("migrate-rename-section-other"))
+        for name in ("Vlan10", "Loopback0"):
+            expect(page.locator(_tid(f"migrate-rename-row-{name}"))).to_have_count(1)
+            expect(section.locator(_tid(f"migrate-rename-row-{name}"))).to_have_count(1)
+        assert _sections(page) == [
+            "migrate-rename-section-physical", "migrate-rename-section-other",
+        ]
+        expect(page.locator(_tid("migrate-rename-rail-ports-count"))).to_have_text("4")
+        _unfold(page, "other")
+        expect(page.locator(_tid("migrate-rename-row-Vlan10"))).to_be_visible()
+        expect(page.locator(_tid("migrate-rename-auto-Vlan10"))).to_have_text("(unchanged)")
+        # And the row does what a row does.
+        override = page.locator(_tid("migrate-rename-override-Loopback0"))
+        override.click()
+        override.press_sequentially("Loopback7")
+        assert _apply(page)["port_rename_map"] == {"Loopback0": "Loopback7"}
+        output = page.locator(_tid("migrate-output"))
+        expect(output).to_contain_text("interface Loopback7")
+        expect(output).not_to_contain_text("interface Loopback0")
+
+    @pytest.mark.parametrize("how", ["dropped", "renamed away"])
+    def test_a_name_that_went_frees_its_name(
+        self, page: Page, live_server_url: str, how: str,
+    ):
+        """A name holds its own name while it keeps it.  One the
+        operator has dropped, or sent elsewhere, holds it no longer:
+        another row may take the name, no collision is counted, and
+        Apply sends both entries."""
+        _open_modal_on(page, live_server_url, "aruba_aoss", "aruba_aoss", _AOSS_ONE_LAG)
+        _unfold(page, "other")
+        if how == "dropped":
+            page.locator(_tid("migrate-rename-drop-trk1")).click()
+            expect(page.locator(_tid("migrate-rename-drop-trk1"))).to_have_text("un-drop")
+            sent = {"trk1": None, "5": "trk1"}
+        else:
+            lag = page.locator(_tid("migrate-rename-override-trk1"))
+            lag.click()
+            lag.press_sequentially("trk7")
+            lag.press("Tab")
+            sent = {"trk1": "trk7", "5": "trk1"}
+        override = page.locator(_tid("migrate-rename-override-5"))
+        override.click()
+        override.press_sequentially("trk1")
+        expect(override).to_have_value("trk1")
+        summary = page.locator(_tid("migrate-rename-summary"))
+        expect(summary).to_contain_text("override")
+        expect(summary).not_to_contain_text("collision")
+        expect(page.locator(_tid("migrate-rename-apply-why"))).to_be_hidden()
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
+        # Leaving the field redraws the table: no row is marked.
+        override.press("Tab")
+        expect(page.locator(_tid("migrate-rename-row-5"))).to_have_class(
+            re.compile(r"\bhas-override\b")
+        )
+        expect(page.locator(".has-collision")).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-collision-5"))).to_have_count(0)
+        assert _apply(page)["port_rename_map"] == sent
+
+    def test_a_fusion_nobody_typed_holds_nothing(
+        self, page: Page, live_server_url: str,
+    ):
+        """Junos to OPNsense once more: the translator itself puts
+        ``lo0.2`` on ``lo0``, which keeps its name.  That is the job
+        as it came back, and its row carries the warning.  It is not
+        counted as a collision, though a name that keeps its name is
+        tallied: only against an entry of the operator's own, or
+        Apply would be held before anything was typed, and every
+        other edit with it."""
+        raw = _JUNOS_WITH_A_LOOPBACK + "set interfaces lo0 unit 2 family inet address 192.0.2.2/32\n"
+        _open_modal_on(page, live_server_url, "juniper_junos", "opnsense", raw)
+        expect(page.locator(_tid("migrate-rename-auto-lo0.2"))).to_have_text("lo0")
+        summary = page.locator(_tid("migrate-rename-summary"))
+        expect(summary).to_contain_text("auto")
+        expect(summary).not_to_contain_text("collision")
+        expect(page.locator(_tid("migrate-rename-apply-why"))).to_be_hidden()
+        expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
 
 
 class TestRenameModalModuleDropdown:

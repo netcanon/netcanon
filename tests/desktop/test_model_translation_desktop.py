@@ -214,6 +214,84 @@ class TestModelTranslationServedByEmbeddedServer:
         ):
             assert function in migrate_page, function
 
+    def test_other_names_and_a_unit_with_no_tag(self, tmp_path: Path) -> None:
+        """Two things a job says, through the embedded server: the
+        names of the config that are no hardware port, which the
+        page draws a row for, and a sub-interface that moved with
+        its port and took no tag with it.  And the page the desktop
+        window shows reads the first and has a section for it."""
+        app = create_app(_settings(tmp_path))
+        port = _free_port()
+        lag = (
+            "; JL260A Configuration Editor; Created on release #WC.16.07.0002\n"
+            'hostname "sw"\ntrunk 51-52 trk1 lacp\n'
+            "vlan 1\n   untagged 1-50\n   tagged Trk1\n   exit\n"
+        )
+        unit = "\n".join([
+            "!Version ArubaOS-CX FL.10.10.1010", "hostname r1", "!",
+            "interface 1/1/1", "    no shutdown", "    routing",
+            "interface 1/1/1.54", "    no shutdown", "    encapsulation dot1q 300",
+            "    ip address 10.54.0.1/24", "",
+        ])
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=FakeCollector(output="! noop\n"),
+        ):
+            server = ServerThread(app, port=port, log_level="critical")
+            server.start()
+            try:
+                server.wait_ready(timeout=10.0)
+                migrate_page = _get_text(port, "/migrate")
+                same = _post(port, "/api/v1/migration/plan", {
+                    "source": "aruba_aoss", "target": "aruba_aoss", "raw_text": lag,
+                })
+                renamed = _post(port, "/api/v1/migration/plan", {
+                    "source": "aruba_aoss", "target": "aruba_aoss", "raw_text": lag,
+                    "port_rename_map": {"trk1": "trk7"},
+                })
+                moved = _post(port, "/api/v1/migration/plan", {
+                    "source": "aruba_aoscx", "target": "arista_eos", "raw_text": unit,
+                    "source_profile": "aruba_aoscx/6300M-48G-PoE4-SFP56",
+                    "target_profile": "arista_eos/DCS-7050SX-64",
+                })
+                other_case = _post(port, "/api/v1/migration/plan", {
+                    "source": "cisco_iosxe_cli", "target": "arista_eos",
+                    "raw_text": "\n".join([
+                        "!", "version 17.9", "hostname r1", "!",
+                        "interface GigabitEthernet1/0/1", " description PARENT", "!",
+                        "interface gigabitethernet1/0/1.54", " encapsulation dot1Q 54",
+                        " ip address 10.54.0.1 255.255.255.0", "!", "end", "",
+                    ]),
+                    "source_profile": "cisco_iosxe/C9300-24P",
+                    "target_profile": "arista_eos/DCS-7050SX-64",
+                })
+            finally:
+                server.stop()
+                server.join(timeout=5.0)
+
+        assert same["port_renames"] == {} and same["source_other_names"] == ["trk1"]
+        assert renamed["port_renames"] == {"trk1": "trk7"}
+        assert "trunk 51-52 trk7 lacp" in renamed["rendered"]
+
+        plan = moved["port_mapping_plan"]
+        assert plan["untagged_units"] == {"1/1/1.54": "Ethernet1.54"}
+        assert plan["unresolved_ports"] == ["1/1/1.54"] and moved["status"] == "partial"
+
+        # A unit typed in another letter case than its port moved
+        # with it too; the plan does not vouch for it, and says so
+        # in a field the page reads for the row's text.
+        plan = other_case["port_mapping_plan"]
+        assert plan["unvouched_units"] == {"gigabitethernet1/0/1.54": "Ethernet1.54"}
+        assert plan["unresolved_ports"] == ["gigabitethernet1/0/1.54"]
+        assert other_case["status"] == "partial"
+
+        for needed in (
+            "_lastJob.source_other_names", "'Other names in the config'",
+            "hasOtherNames", "plan.untagged_units", "plan.unvouched_units",
+            "'moved with its port to '",
+        ):
+            assert needed in migrate_page, needed
+
     def test_a_stack_on_both_sides(self, tmp_path: Path) -> None:
         """Two members declared for the source AND for the target,
         through the embedded server: the members pair in the order
