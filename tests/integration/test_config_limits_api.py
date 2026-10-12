@@ -53,7 +53,6 @@ The mechanism itself is tested in ``tests/unit/migration/test_limits.py``.
 from __future__ import annotations
 
 import asyncio
-import inspect
 import io
 import json
 import logging
@@ -69,14 +68,12 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, get_type_hints
+from typing import Any
 
 import pytest
-from fastapi import FastAPI, Request, UploadFile
+from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
-from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
-from pydantic import BaseModel
 
 from netcanon.config import Settings
 from netcanon.main import create_app
@@ -444,15 +441,53 @@ TAKES_CONFIG_TEXT: dict[str, dict[str, Any]] = {
 }
 
 
-def _takes_config_text(route: APIRoute) -> bool:
-    """A handler takes config text when a parameter of it is an upload,
-    or a request body with a ``raw_text`` field."""
-    for annotation in get_type_hints(route.endpoint).values():
-        if annotation is UploadFile:
+_METHODS = ("get", "post", "put", "patch", "delete")
+
+
+def _what_each_takes(app: FastAPI) -> dict[str, set[str]]:
+    """Every path the application documents, with the methods by which
+    it takes config text: a request body with a ``raw_text`` field, or
+    an uploaded file.
+
+    Read from the application's own account of itself, its OpenAPI
+    document, and not from its route table: how a framework holds its
+    routes is its own business and changes between its releases.  A
+    walk of ``app.routes`` for ``APIRoute`` found every handler on one
+    release and none on the next, where the table holds one entry a
+    router -- and a rule that finds no handler passes.
+    """
+    document = app.openapi()
+    named = document.get("components", {}).get("schemas", {})
+
+    def schema(node: dict[str, Any]) -> dict[str, Any]:
+        while "$ref" in node:
+            node = named[node["$ref"].rsplit("/", 1)[1]]
+        return node
+
+    def is_a_file(node: dict[str, Any]) -> bool:
+        node = schema(node)
+        if node.get("format") == "binary" or "contentMediaType" in node:
             return True
-        if inspect.isclass(annotation) and issubclass(annotation, BaseModel) and "raw_text" in annotation.model_fields:
-            return True
-    return False
+        return any(is_a_file(part) for part in node.get("anyOf", []))
+
+    def takes(operation: dict[str, Any]) -> bool:
+        for kind, content in operation.get("requestBody", {}).get("content", {}).items():
+            fields = schema(content.get("schema", {})).get("properties", {})
+            if "raw_text" in fields:
+                return True
+            if kind.startswith("multipart/") and any(is_a_file(field) for field in fields.values()):
+                return True
+        return False
+
+    return {
+        path: {method.upper() for method in _METHODS if method in item and takes(item[method])}
+        for path, item in document["paths"].items()
+    }
+
+
+def _config_text_routes(app: FastAPI) -> list[str]:
+    """The paths whose handler takes config text, by any method."""
+    return sorted(path for path, methods in _what_each_takes(app).items() if methods)
 
 
 class TestEveryHandlerWorksInsideAScope:
@@ -464,10 +499,7 @@ class TestEveryHandlerWorksInsideAScope:
     def test_each_opens_a_scope_of_the_servers(
         self, small_client: TestClient, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        routes = sorted(
-            route.path for route in small_client.app.routes
-            if isinstance(route, APIRoute) and _takes_config_text(route)
-        )
+        routes = _config_text_routes(small_client.app)
         assert routes == sorted(TAKES_CONFIG_TEXT), (
             "the handlers that take config text are not the ones this test sends a request to"
         )
@@ -522,14 +554,14 @@ class TestEveryHandlerWorksInsideAScope:
     def test_the_handlers_are_found_by_what_they_take(self, small_client: TestClient) -> None:
         """The inventory endpoint takes a declaration and no text; a
         stored config's views parse nothing."""
-        takes = {
-            route.path: _takes_config_text(route)
-            for route in small_client.app.routes if isinstance(route, APIRoute)
-        }
+        takes = {path: bool(methods) for path, methods in _what_each_takes(small_client.app).items()}
         assert takes["/api/v1/migration/inventory"] is False
         assert takes["/api/v1/migration/adapters"] is False
         assert takes["/api/v1/sanitize"] is True and takes["/api/v1/migration/detect"] is True
         assert sum(takes.values()) == len(TAKES_CONFIG_TEXT)
+        # And the walk sees the application at all: a rule that finds
+        # no handler passes, which is how this one was once blind.
+        assert len(takes) > len(TAKES_CONFIG_TEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -722,10 +754,7 @@ class TestOneAtATimeUnderSmall:
         handler added tomorrow is asked too.  Each in the shape its
         other refusals have; never an unhandled error (a 500), never
         ``parse failed``."""
-        routes = sorted(
-            route.path for route in small_client.app.routes
-            if isinstance(route, APIRoute) and _takes_config_text(route)
-        )
+        routes = _config_text_routes(small_client.app)
         assert routes == sorted(TAKES_CONFIG_TEXT)
         # A fifth of a second stands for the twenty: only the number in the sentence differs.
         monkeypatch.setitem(L.PROFILES, "small", replace(L.SMALL, seconds=0.2))
@@ -1330,10 +1359,6 @@ def _alone(coroutine: Any) -> Any:
     return value
 
 
-def _config_text_routes(app: FastAPI) -> list[str]:
-    return sorted(route.path for route in app.routes if isinstance(route, APIRoute) and _takes_config_text(route))
-
-
 def _plain_scope(path: str, method: str = "POST") -> dict[str, Any]:
     return {
         "type": "http", "asgi": {"version": "3.0", "spec_version": "2.3"}, "http_version": "1.1",
@@ -1364,10 +1389,7 @@ class TestAPlaceBeforeTheBodyIsRead:
         not counted has its body read before anything limits it."""
         from netcanon.api.routes import _migration_helpers as helpers
 
-        found = {
-            route.path: set(route.methods) for route in small_client.app.routes
-            if isinstance(route, APIRoute) and _takes_config_text(route)
-        }
+        found = {path: methods for path, methods in _what_each_takes(small_client.app).items() if methods}
         assert set(found) == set(helpers.READS_CONFIG_TEXT) == set(TAKES_CONFIG_TEXT)
         assert all(methods == {"POST"} for methods in found.values()), found
         for path in found:
