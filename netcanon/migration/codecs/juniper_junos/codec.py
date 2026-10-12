@@ -68,7 +68,7 @@ from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
-from .parse import parse_intent
+from .parse import _looks_like_blockform, drop_session_lines, read_intent
 from .render import render_intent
 
 
@@ -433,15 +433,22 @@ class JunosCodec(CodecBase):
     def parse(self, raw: str) -> CanonicalIntent:
         from ..._tier3_detection import detect_tier3_sections_junos
 
-        intent = parse_intent(raw)
+        intent, as_read = read_intent(raw)
         # Surface Tier-3 `set` lines the parser drops (`set firewall`,
         # `set security policies`, `set policy-options`, `set
         # class-of-service`).  Notification-only.  Ahead of them, the
         # statements the parser left out because the source had them
         # deactivated: in the source, and not translated.
+        #
+        # The detector's patterns begin ``set ``, so it is handed the
+        # set-form the parser read and not the text as it came: given
+        # a hierarchical config it found nothing, and the list of what
+        # was not translated was empty for a firewall's whole policy.
+        # That text is also without the lines of a deactivated
+        # statement, which has its row already.
         intent.dropped_tier3_sections = [
             *intent.dropped_tier3_sections,
-            *detect_tier3_sections_junos(raw),
+            *detect_tier3_sections_junos(as_read),
         ]
         return intent
 
@@ -472,14 +479,25 @@ class JunosCodec(CodecBase):
           * ``set interfaces <media>-<fpc>/<pic>/<port>`` —
             Junos-specific port naming.
           * The hierarchical form of ``show configuration``: its
-            ``## Last commit:`` line, or two of ``version X;``,
+            ``## Last commit:`` line with a second sign of Junos
+            beside it (a ``set`` line; or a line that ends in ``{``
+            and one that ends in ``;``, which is what the parser
+            asks of the hierarchical form), or two of ``version X;``,
             ``system {`` and ``host-name X;``.  One of the two has
             to end in ``;`` — VyOS writes ``system {`` as well, and
             ends no statement with one.
+
+        The lines of a terminal session are dropped first, as the
+        parser drops them: a ``{master:0}`` line above the prompt is
+        not the first brace of a JSON document.
         """
+        raw_prefix = drop_session_lines(raw_prefix)
         # XML / JSON shape — shared helper tolerates leading shell-echo
         # / banner framing so real captures don't bypass the guard.
-        if detect_input_shape(raw_prefix) is not None:
+        # Asked after the form, as the parser asks: a group's wildcard
+        # (``<ge-0/0/*> {``) in the first lines of a hierarchical
+        # config is no XML element, and the parser reads that config.
+        if detect_input_shape(raw_prefix) is not None and not _looks_like_blockform(raw_prefix):
             return None
         # RANCID / oxidized collection header — the Junos comment char is
         # ``#`` (with or without a following space).  A definitive vendor
@@ -522,14 +540,29 @@ class JunosCodec(CodecBase):
         # The hierarchical form.  It was read by ``parse`` and known
         # to no probe, so a pasted ``show configuration`` was offered
         # no codec at all.
-        if re.search(r"^## Last commit: ", raw_prefix, re.MULTILINE):
+        #
+        # The last-commit line is a comment, and by itself says only
+        # that somebody wrote it: a page of prose that quotes the
+        # line, or another vendor's config stamped with it, is not a
+        # Junos config.  It counts beside a second sign.
+        if re.search(r"^## Last commit: ", raw_prefix, re.MULTILINE) and (
+            re.search(r"^set ", raw_prefix, re.MULTILINE)
+            or (
+                re.search(r"\{[ \t\r]*$", raw_prefix, re.MULTILINE)
+                and re.search(r";[ \t\r]*$", raw_prefix, re.MULTILINE)
+            )
+        ):
             return (92, "Junos '## Last commit' line of show configuration")
+        # A line may end in a carriage return: ``$`` does not stand
+        # before one.
         ended = 0
-        if re.search(r"^version [^\s;]+;[ \t]*$", raw_prefix, re.MULTILINE):
+        if re.search(
+            r'^version (?:"[^"\n]{1,80}"|[^\s;"]+);[ \t\r]*(?:#[^\n]*)?$', raw_prefix, re.MULTILINE,
+        ):
             ended += 1
-        if re.search(r"^[ \t]+host-name [^\s;]+;[ \t]*$", raw_prefix, re.MULTILINE):
+        if re.search(r"^[ \t]+host-name [^\s;]+;[ \t\r]*$", raw_prefix, re.MULTILINE):
             ended += 1
-        opened = bool(re.search(r"^system \{[ \t]*$", raw_prefix, re.MULTILINE))
+        opened = bool(re.search(r"^system \{[ \t\r]*$", raw_prefix, re.MULTILINE))
         if ended and ended + opened >= 2:
             return (86, "Junos hierarchical (block-form) statements")
         return None

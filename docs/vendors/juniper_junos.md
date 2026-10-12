@@ -9,9 +9,10 @@ does for you, this is the page.
   **Certification: certified.**  Bidirectional.
 
 The codec works against `show configuration | display set` output
-across Junos majors from 15.1 through 25.4, and against the
-hierarchical output of `show configuration` as the device prints
-it.  Fixtures cover QFX,
+across Junos majors from 15.1 through 25.4, and reads the
+hierarchical output of `show configuration` too — what of it is
+read, and what is not, is under *Common gotchas* below.  Fixtures
+cover QFX,
 EX, and vMX-style platforms; the set-form grammar is consistent
 across Junos platform families, so SRX / MX would parse + render
 through the same pipeline (insofar as the surfaces overlap with
@@ -220,16 +221,50 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   ethernet-switching ...` only) used to be dropped on render until
   the placeholder-line fix landed; now preserved with empty unit
   attributes.
-- **Set-form and hierarchical** — both are read, and detection
-  offers the Junos codec for either.  The hierarchical form is
-  read as the device prints it: its `## Last commit:` line, the
-  `version` statement ahead of the first block, `## SECRET-DATA`
-  after a secret, and the `protect:` and `replace:` tags ahead of
-  a statement.  (Before, a capture that began with its `version`
-  line was read as an empty config, and a `## SECRET-DATA` marker
-  put every block after it one level out.)  Every committed capture is
-  set-form, so the hierarchical reader is held by built configs
-  only — a real `show configuration` capture is welcome.
+- **Set-form and hierarchical** — both are read, detection offers
+  the Junos codec for either, and both list the same Tier-3
+  sections.  Of the hierarchical form, read:
+  - what a device prints around its statements: the `## Last
+    commit:` line, the `version` statement ahead of the first
+    block, `## SECRET-DATA` after a secret, `##` warnings and the
+    blocks of `display inheritance` and `display detail`,
+    annotations (`/* */` above a statement, or `#`), `{ /* OMITTED
+    */ }`, the `{ ... }` of `display max-depth` (what it elides is
+    not in the text), a block with nothing in it;
+  - the tags ahead of a statement: `inactive:` and `protect:`,
+    which a device prints, and the operators of a load file, which
+    no device prints — `replace:`, `active:` and `unprotect:` are
+    taken off, and a statement under `delete:` is left out and
+    listed as `delete: <path>`;
+  - a capture as it leaves a terminal: the `{master:0}` line, the
+    prompt with or without the command, `[edit]`, a pager's
+    `---(more)---`, a Markdown fence, a byte-order mark, carriage
+    returns.
+
+  A comment begins only where a word could (`/* */`) or a
+  statement could (`#`): `member ge-0/*/*;` and a group's `<*/*>`
+  are words.  A `}` that closes nothing, a block left open and a
+  `/*` opened after the first block and never closed are refused,
+  each with a sentence.  (A `/*` left open ahead of the first
+  block is not: the text is then not taken for this form.)  A
+  secret the viewer was not shown (`encrypted-password /*
+  SECRET-DATA */;`) is the same in both forms — the placeholder is
+  the value, as `display set` prints it.  (Left out as a comment,
+  it made a user with no credential at all.)
+
+  **Not read:** the wildcards of an interface-range `member`
+  (`ge-0/0/*`) and of a group (`<*>`) are not expanded — each
+  becomes an interface of that name, and what the range or the
+  group holds is not given to the ports it means; a `member-range`
+  is not read at all, so nothing is made of it;
+  `apply-groups "${node}"` (an SRX cluster) is not resolved, so
+  what is under `node0` / `node1` is not read.  Both are the same
+  in set-form.
+
+  Every committed capture is set-form, so the hierarchical reader
+  is held by built configs — each beside its set form typed by
+  hand — and by public captures that were read and not committed.
+  A real `show configuration` capture is welcome.
 - **Deactivated statements are not translated.**  `deactivate
   <path>` in set-form and `inactive:` in the hierarchical form
   mark a statement the device holds and does not run.  It, and
@@ -238,6 +273,28 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   lines were read as if in force, and an interface the source had
   switched off came out configured on the target.)  A Junos to
   Junos job does not write it back as inactive either.
+  - The row names the statement and no secret: the path is cut
+    after a word that names one (`inactive: snmp community ...`),
+    and a leaf is named by its first word, as `display set` names
+    one — so a deactivated `unit 0;` is listed as `... unit`.
+  - What an applied group or an interface-range gives to a
+    deactivated path is left out with it, and a group with nothing
+    left is not applied.  No Juniper page was found that says what
+    a device does there; batfish, an independent reader, prunes
+    deactivated paths again after inheritance, and this follows it.
+  - `activate <path>` further down takes a `deactivate` back (a
+    typed script; no device prints one).  `delete <path>` is not
+    read.
+  - A `deactivate` that no `set` line is under is not listed.
+  - **Not handled:** a reference to a deactivated statement from
+    one that is in force.  An OSPF `interface` line for a
+    deactivated port is still there to be read.  A port that a
+    `routing-instances` statement still names comes back as a bare
+    interface in that instance.  The member ports of a LAG whose
+    own interface (`ae0`) is deactivated still say `802.3ad ae0`,
+    and the LAG is made from them without the LACP mode or the
+    `disable` it had: a target is given a static bundle that is
+    up.
 
 ## See also
 

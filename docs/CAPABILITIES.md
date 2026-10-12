@@ -556,9 +556,25 @@ One kind of row is not a section to apply by hand.  A Junos
 statement the source had **deactivated** (`deactivate <path>` in
 set-form, `inactive:` in the hierarchical form) is not in force on
 the device, so it is left out of the translation and listed here as
-`inactive: <path>`; the banner then says so in a sentence of its
-own.  A same-vendor Junos job does not write the statement back as
-inactive: it is gone from the output, and the row is the record.
+`inactive: <path>`; a statement under a load file's `delete:` is
+listed as `delete: <path>`.  The banner counts only the sections,
+says in a sentence of its own what the other rows are, and is
+headed "Statements the source held and did not run" when it holds
+nothing else.  A same-vendor Junos job does not write the statement
+back as inactive: it is gone from the output, and the row is the
+record.
+
+Such a row names the statement and never a secret.  Its path is cut
+after the first word that names one (a word with `community`,
+`password`, `secret`, `key`, `psk` or `authentication` in it) and
+the cut is marked: `inactive: snmp community ...`.  A deactivated
+leaf is named by its first word, without its value.  A row for a
+section is the stanza header as the config has it.
+
+A job whose only rows are of this kind, and which recognised
+nothing else, is `partial`: a statement is named whether or not
+anything under it would have been read, so the row is not a sign
+that the text was a config.
 
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):
@@ -566,7 +582,7 @@ Per-vendor detection patterns
 | Source codec | Patterns matched (excerpt) |
 |---|---|
 | `cisco_iosxe_cli` / `arista_eos` / `aruba_aoss` (IOS-style CLI heuristic) | `ip access-list extended/standard <name>`, `ipv6 access-list <name>`, numbered `access-list N permit/deny`, `ip nat inside/outside/pool`, `class-map`, `policy-map`, `route-map <name>`, `crypto isakmp/ipsec/map/pki`, `zone-pair security` |
-| `juniper_junos` (set form) | `set firewall [family X] filter <name>`, `set security {policies\|nat\|ike\|ipsec\|zones\|address-book\|flow\|screen\|alg\|utm\|application-tracking\|forwarding-options}`, `set policy-options {policy-statement\|prefix-list\|community} <name>`, `set class-of-service` |
+| `juniper_junos` (set form, and the hierarchical form as it is read: converted to set form first) | `set firewall [family X] filter <name>`, `set security {policies\|nat\|ike\|ipsec\|zones\|address-book\|flow\|screen\|alg\|utm\|application-tracking\|forwarding-options}`, `set policy-options {policy-statement\|prefix-list\|community} <name>`, `set class-of-service` |
 | `fortigate_cli` | `config firewall {policy\|policy6\|vip\|vip6\|central-snat-map\|address\|addrgrp\|service\|shaper}`, `config vpn {ipsec\|ssl}`, `config {webfilter\|antivirus\|ips\|dlp\|application}`, `config router {policy\|route-map}` |
 | `mikrotik_routeros` | `/ip firewall {filter\|nat\|mangle\|raw\|address-list}`, `/ipv6 firewall …`, `/queue`, `/ip ipsec`, `/routing {filter\|bgp\|ospf}` |
 | `opnsense` | XML elements: `<filter>`, `<nat>`, `<ipsec>`, `<openvpn>`, `<wireguard>`, `<shaper>`, `<load_balancer>`, `<captiveportal>` |

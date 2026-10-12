@@ -377,7 +377,10 @@ the policy locally:
   `parse()` calls the matching detector and stamps the result onto
   `CanonicalIntent.dropped_tier3_sections` so the migrate page can
   surface the silent-drop in a "Detected in source but not translated"
-  banner.  Output is NOTIFICATION-ONLY — never read by render or any
+  banner.  (Junos: the detector is given the set-form the parser
+  read, not the text as it came; and `left_out_rows` makes the rows
+  for statements the parser read and left out, which
+  `is_left_out_row` tells from a section.)  Output is NOTIFICATION-ONLY — never read by render or any
   transform.  Patterns target stanzas the canonical schema doesn't
   model (firewall, NAT, QoS, route-maps, crypto/IPsec, OPNsense filter
   / NAT / VPN XML); supported stanzas are deliberately excluded so the

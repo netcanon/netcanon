@@ -1897,6 +1897,9 @@
    * detected stanza header with one entry per row carrying
    * data-testid="migrate-tier3-section-N".  When empty, the banner is
    * hidden.  Notification only — these stanzas are NOT translated.
+   * A row that begins "inactive: " or "delete: " names a statement
+   * the parser left out on purpose; it is listed, and not counted
+   * among the sections.
    */
   function renderTier3Banner(job) {
     if (!tier3Banner) return;
@@ -1906,31 +1909,42 @@
       tier3Banner.innerHTML = '';
       return;
     }
-    // A statement the source had deactivated is in this list too
-    // (the Junos parser leaves it out and says so).  It is not a
-    // section to apply by hand, and the banner says that as well.
-    var inactive = sections.some(function(label) {
-      return String(label).indexOf('inactive: ') === 0;
-    });
+    // A statement the parser read and left out is in this list too
+    // (the Junos parser: one the source had deactivated, or one a
+    // load file marks for deletion; _tier3_detection.left_out_row
+    // makes the row).  It is not a section to apply by hand, so it
+    // is not counted as one, and the banner says what it is.
+    var leftOut = sections.filter(function(label) {
+      label = String(label);
+      return label.indexOf('inactive: ') === 0 || label.indexOf('delete: ') === 0;
+    }).length;
+    var tier3 = sections.length - leftOut;
     var rows = sections.map(function(label, idx) {
       return '<li data-testid="migrate-tier3-section-' + idx + '">'
            + '<code>' + escapeHtml(label) + '</code></li>';
     }).join('');
     tier3Banner.style.display = '';
     tier3Banner.innerHTML =
-      '<div><strong>&#9888; Tier-3 sections detected in source</strong></div>'
+      '<div><strong>&#9888; '
+      + (tier3 ? 'Tier-3 sections detected in source'
+               : 'Statements the source held and did not run')
+      + '</strong></div>'
       + '<div style="margin-top:.25rem;font-size:.82rem">'
-      + 'The source config contains '
-      + '<strong data-testid="migrate-tier3-count">' + sections.length + '</strong>'
-      + ' section(s) this tool does not translate '
-      + '(firewall rules, NAT, QoS, route-maps, IPsec, etc.).  '
-      + 'These will NOT appear in the rendered output.  '
-      + 'Operator must apply them manually on the target device.'
-      + (inactive
-          ? '  <span data-testid="migrate-tier3-inactive-note">A line that '
+      + (tier3
+          ? 'The source config contains '
+            + '<strong data-testid="migrate-tier3-count">' + tier3 + '</strong>'
+            + ' section(s) this tool does not translate '
+            + '(firewall rules, NAT, QoS, route-maps, IPsec, etc.).  '
+            + 'These will NOT appear in the rendered output.  '
+            + 'Operator must apply them manually on the target device.  '
+          : '')
+      + (leftOut
+          ? '<span data-testid="migrate-tier3-inactive-note">A line that '
             + 'begins <code>inactive:</code> is a statement the source had '
-            + 'deactivated: it was not in force there, and is left out here '
-            + 'for that reason.</span>'
+            + 'deactivated, and one that begins <code>delete:</code> is a '
+            + 'statement a load file marks for deletion: it was not in '
+            + 'force there, and is left out here for that reason.  It is '
+            + 'not something to apply by hand.</span>'
           : '')
       + '</div>'
       + '<ul style="margin-top:.4rem">' + rows + '</ul>';

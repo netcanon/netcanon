@@ -697,6 +697,30 @@ tests use these exclusively — never CSS classes or element structure.  See
   defect it is for, in the same module, and has to fail — and so is
   the wrapper, once per assertion, because a check that is never
   CALLED passes every test too.
+- **Never** translate a statement the source device holds and does not
+  run, and never read a form of a platform's config you do not parse as
+  an empty config.  Junos prints `inactive:` ahead of a deactivated
+  statement (`deactivate <path>` in set form), and the parser read both
+  as configuration: a deactivated BGP neighbour, firewall term or port
+  came out live on the target, in a job that said `completed`.  And a
+  `show configuration` pasted as the device prints it (braces, where the
+  parser's own form is `display set`) was read as nothing at all on
+  every public capture tried — an empty config and a bare scaffold for
+  output, or a refusal — while detection offered no codec.
+  A statement that is not in force is LEFT OUT AND SAID: one row in
+  `dropped_tier3_sections`, which shows the path and never a value (a
+  row is painted on a page and returned to every client, and a path is
+  keyed by its secret often enough), in a list that is bounded.  Such a
+  row is not a sign that the parser recognised the text
+  (`is_left_out_row`): a config that is all deactivated is not
+  `completed`.  What it took to get wrong twice: a form is not read
+  until every wrapping a terminal puts around it is (a prompt, a pager
+  line, a byte-order mark, carriage returns), and a comment begins only
+  where the grammar lets one begin — `member ge-0/*/*;` holds no
+  comment.  Each form a parser reads is held beside the other, typed by
+  hand, so that neither is the oracle for itself:
+  `tests/unit/migration/codecs/juniper_junos/test_two_forms_one_tree.py`
+  and `test_statements_left_out.py`.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

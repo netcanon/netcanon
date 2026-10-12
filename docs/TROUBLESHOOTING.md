@@ -33,9 +33,33 @@ DSL) and Batfish (network analysis).
 A row that begins `inactive:` is different: it is a Junos statement
 the source had deactivated (`deactivate interfaces ge-0/0/2`, or
 `inactive: ge-0/0/2 {` in the hierarchical form).  The device was
-not running it, so it is not translated.  **Action:** none, unless
-you meant to bring it back into force on the target — then add it
-there by hand.
+not running it, so it is not translated, and the banner does not
+count it among the sections to apply by hand.  (A row that begins
+`delete:` is a statement a load file marks for deletion, and is
+treated the same.)  **Action:** none, unless you meant to bring it
+back into force on the target — then add it there by hand.  Two
+things to look at when the row is an interface: whether a
+`routing-instances` statement or a LAG member still names it — what
+names a deactivated statement is still read, see
+[`vendors/juniper_junos.md`](vendors/juniper_junos.md) — and
+whether the output has what you expected of the group or the
+interface-range that would have filled it: under a deactivated path
+that is left out too.
+
+A job that is `partial` with "No source constructs were recognized"
+and rows that all begin `inactive:` read nothing else: every
+statement it understood was deactivated in the source, or the text
+is not a Junos config.
+
+**A pasted Junos `show configuration` came out empty or was
+refused.**  Read are the hierarchical form as a device prints it and
+the lines of the session around it (the prompt, `{master:0}`,
+`[edit]`, a pager's prompt).  Refused, with the reason in the
+error: a `}` that closes nothing, a block that is never closed, a
+`/*` comment opened after the first block and never closed — a
+capture that was cut off.  If
+the text begins with anything else that is not configuration, take
+it off, or use `show configuration | display set`.
 
 ### B. The unsupported-paths panel
 

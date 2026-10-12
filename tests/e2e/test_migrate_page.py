@@ -618,6 +618,12 @@ class TestADeactivatedStatement:
         )
         expect(mig.output).to_contain_text("10.0.0.1")
         expect(mig.output).not_to_contain_text("10.0.2.1")
+        # Nothing here is a section to apply by hand, and the banner
+        # does not say there is one.
+        banner = page.locator('[data-testid="migrate-tier3-banner"]')
+        expect(banner).to_contain_text("Statements the source held and did not run")
+        expect(banner).not_to_contain_text("Operator must apply them manually")
+        expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_count(0)
 
     def test_a_config_with_none_has_no_such_sentence(
         self, page: Page, base_url: str
@@ -638,3 +644,91 @@ class TestADeactivatedStatement:
         mig.submit_and_wait()
         expect(page.locator('[data-testid="migrate-tier3-banner"]')).to_be_visible()
         expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_have_count(0)
+
+    def _translate(self, page: Page, text: str) -> MigratePage:
+        page.goto("/migrate")
+        mig = MigratePage(page)
+        page.wait_for_function(
+            """() => document.querySelector(
+                '[data-testid="migrate-source-select"]'
+            ).options.length > 0"""
+        )
+        mig.pick_source("juniper_junos")
+        mig.pick_target("arista_eos")
+        mig.fill_raw(text)
+        mig.submit_and_wait()
+        return mig
+
+    def test_sections_are_counted_and_it_is_not(
+        self, page: Page, base_url: str
+    ):
+        """Both kinds of row in one banner.  The count is of the
+        sections to apply by hand; the sentence is there for the
+        other row."""
+        self._translate(
+            page,
+            _JUNOS_DEACTIVATED + "set firewall family inet filter F term 1 then accept\n",
+        )
+        banner = page.locator('[data-testid="migrate-tier3-banner"]')
+        expect(banner).to_contain_text("Tier-3 sections detected in source")
+        expect(banner).to_contain_text("Operator must apply them manually")
+        expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_text("1")
+        expect(page.locator('[data-testid="migrate-tier3-section-0"]')).to_have_text(
+            "inactive: interfaces ge-0/0/2 (deactivated in the source; not translated)"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-section-1"]')).to_have_text(
+            "set firewall family inet filter F"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-section-2"]')).to_have_count(0)
+        expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_contain_text(
+            "not something to apply by hand"
+        )
+
+    def test_a_capture_pasted_with_its_prompt(self, page: Page, base_url: str):
+        """As it leaves a terminal: the prompt and the command, what
+        the device printed, the prompt again.  It was read as nothing;
+        and the hierarchical form had no row for its filter."""
+        mig = self._translate(page, "\n".join([
+            "{master:0}",
+            "admin@r1> show configuration",
+            "## Last commit: 2024-01-01 00:00:00 UTC by admin",
+            "version 21.4R3.15;",
+            "system {", "    host-name r1;", "}",
+            "interfaces {",
+            "    ge-0/0/1 {", "        unit 0 {", "            family inet {",
+            "                address 10.0.0.1/24;", "            }", "        }", "    }",
+            "    inactive: ge-0/0/2 {", "        unit 0 {", "            family inet {",
+            "                address 10.0.2.1/24;", "            }", "        }", "    }",
+            "}",
+            "firewall {", "    family inet {", "        filter F {", "            term 1 {",
+            "                then accept;", "            }", "        }", "    }", "}",
+            "", "{master:0}", "admin@r1> ", "",
+        ]))
+        expect(mig.output).to_contain_text("hostname r1")
+        expect(mig.output).to_contain_text("10.0.0.1")
+        expect(mig.output).not_to_contain_text("10.0.2.1")
+        expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_text("1")
+        expect(page.locator('[data-testid="migrate-tier3-section-0"]')).to_have_text(
+            "inactive: interfaces ge-0/0/2 (deactivated in the source; not translated)"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-section-1"]')).to_have_text(
+            "set firewall family inet filter F"
+        )
+
+    def test_a_statement_a_load_file_deletes(self, page: Page, base_url: str):
+        mig = self._translate(page, "\n".join([
+            "system {", "    host-name r1;", "}",
+            "interfaces {",
+            "    ge-0/0/1 {", "        mtu 9000;", "    }",
+            "    delete: ge-0/0/2 {", "        mtu 1500;", "    }",
+            "}", "",
+        ]))
+        expect(mig.output).to_contain_text("Ethernet1")
+        expect(mig.output).not_to_contain_text("Ethernet2")
+        expect(page.locator('[data-testid="migrate-tier3-section-0"]')).to_have_text(
+            "delete: interfaces ge-0/0/2 (marked for deletion in a load file; not translated)"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_contain_text(
+            "a load file marks for deletion"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_count(0)

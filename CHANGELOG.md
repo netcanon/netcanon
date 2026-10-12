@@ -71,27 +71,95 @@ timestamp if your timezone matters for an audit.
   limit in front of a server that takes text from people it does not
   trust.
 
+- **A Junos text with comments that are never closed cost the square of
+  its lines.**  Comments were cut out of hierarchical text by a pattern,
+  run over every Junos text before its form was known; from each `/*`
+  it read on for the `*/`, to the end of the text when there was none.
+  8,000 set-form lines that each hold a `/*` (a third of a megabyte)
+  took seven seconds, sixteen times what a quarter as many took.
+  Comments are now known in the tokeniser's own walk, where a token can
+  begin, and set-form is known for set-form by its first statement.  The
+  search in `tests/unit/test_untrusted_text_cost.py` had not built that
+  text — it writes a run after one opener, not the opener many times —
+  and has one for it now.
+- **One long word in a Junos line cost its square.**  The words of a
+  `set` line were split by Python's `shlex`, which builds a word by
+  adding a character at a time to a string it keeps, and so copies the
+  word for every character of it.  A word of 400,000 characters — a
+  description, a login message, in quotes or not, in either form — took
+  over a second to split, and one of 1.6 MB about three minutes.  The
+  words are now read in time that fits the line, by a splitter that is
+  held to `shlex`'s own answers: every short line there is over the
+  characters that matter, and longer lines at random, are split both
+  ways and compared.  Parsing the committed Junos captures takes under
+  a third of the time it did, and none of them reads differently.
+- **Junos SNMPv3 users cost the square of their number.**  Each `set
+  snmp v3` line found its user by reading every user so far: 32,000
+  `security-to-group` lines took fifteen seconds.  The user is found by
+  name now.  `tools/stanza_cost_search.py` had not reported it — at the
+  sizes it reads, the time the lines took to split hid the growth — and
+  with that time gone it also reports, for Junos, the cost SECURITY.md
+  already lists as known and not mended: many addresses on one unit.
+
 ### Fixed
 
-- **A Junos config is read as the device prints it.**  The
-  hierarchical output of `show configuration` begins `## Last
-  commit: ...` and `version 21.4R3.15;`, and marks its secrets
-  `## SECRET-DATA`.  The parser read the hierarchical form only if
-  it began with a block: with the `version` line first the text was
-  taken for set-form, where no line of it is a statement, and the
-  config was read as empty — a job that rendered nothing and gave
-  no reason.  A `## SECRET-DATA` marker was read as words of a
-  statement (`set system login user admin authentication ##
-  SECRET-DATA`), and that put every block after it one level out:
-  in a small config the next user was written outside `login` and
-  lost, and the `snmp` block was not read at all.  And no probe
-  knew the hierarchical form, so
-  detection offered no codec for it.  `#` comments are skipped now,
-  statements of the top level may come before the first block, the
-  `protect:` and `replace:` tags are not taken for names (an
-  interface was named `replace:`), and detection offers Junos.
-  Detection is unchanged for every config file on disk; no
-  committed capture is hierarchical, so nothing in the corpus moves.
+- **A hierarchical Junos config is read as a device prints it, and as
+  it leaves a terminal.**  The hierarchical output of `show
+  configuration` begins `## Last commit: ...` and `version
+  21.4R3.15;`, and marks its secrets `## SECRET-DATA`.  The parser
+  read the hierarchical form only if it began with a block: with the
+  `version` line first the text was taken for set-form, where no line
+  of it is a statement, and the config was read as empty — a job that
+  rendered nothing and gave no reason.  A `## SECRET-DATA` marker was
+  read as words of a statement (`set system login user admin
+  authentication ## SECRET-DATA`), and that put every block after it
+  one level out: in a small config the next user was written outside
+  `login` and lost, and the `snmp` block was not read at all.  No
+  probe knew the form, so detection offered no codec for it.  And the
+  list of what was not translated was empty for it: the Tier-3
+  detector was handed the text as it came, and its patterns begin
+  `set`, so a firewall's filters, NAT and policies were dropped with
+  no row to say so.
+
+  Read now: comments — `#` where a statement can begin, `/* */` where
+  a word can, and nowhere else (`member ge-0/*/*;` and a group's
+  `<*/*>` were cut as comments, with every block up to the next
+  `*/`); statements ahead of the first block; the lines of the
+  session a capture was copied from (`{master:0}`, the prompt with or
+  without its command, `[edit]`, a pager's `---(more)---`), a
+  Markdown fence, a byte-order mark, carriage returns; the tags a
+  device prints (`inactive:`, `protect:`) and the operators of a load
+  file, which no device prints (`replace:`, `active:`, `unprotect:`;
+  a statement under `delete:` is left out and listed); a block with
+  nothing in it; what `display max-depth` elides.  Both forms list
+  the same Tier-3 sections.  A `}` that closes nothing, and a `/*`
+  opened after the first block and never closed, are refused with a
+  sentence, where the read used to end there in silence, and a
+  missing `;` before a `}` no longer closes two blocks.  (A `/*`
+  left open ahead of the first block is not refused: the text is
+  then not taken for the hierarchical form at all.)  The rows for
+  statements left out are bounded: statements that read alike share
+  a row that counts them, and past two hundred rows one last row
+  counts the rest.  Detection offers Junos for the form: its
+  last-commit line counts beside a second sign of Junos (by itself
+  the line is a comment, and a page of prose that quotes it is not
+  claimed), and so do two of `version X;`, `system {` and `host-name
+  X;`.
+
+  Measured on 18 public `show configuration` captures as they were
+  fetched, none of them committed: before, none was read (17 came out
+  as an empty config, one was refused, and detection offered a codec
+  for none); now each gives the tree its `display set` form gives.
+  0 of 2,998 digests of the committed captures differ from before,
+  and detection is unchanged for every file under `tests/fixtures`.
+
+  Not read: the wildcards of an interface-range `member` and of a
+  group (`<*>`) are not expanded — each is an interface of that
+  name, in both forms; a `member-range` is not read at all, so the
+  ports it names get nothing of the range; and `apply-groups
+  "${node}"` is not resolved.  Every committed capture is set-form:
+  the hierarchical reader is held by built configs, each beside its
+  set form typed by hand.
 - **A deactivated Junos statement is not translated as if it were in
   force.**  `deactivate interfaces ge-0/0/2` (`inactive: ge-0/0/2 {`
   in the hierarchical form) marks a statement the device holds and
@@ -100,12 +168,26 @@ timestamp if your timezone matters for an audit.
   off came out with its addresses on the target, in a job that said
   nothing; in the hierarchical form it became an interface named
   `inactive:`.  The statement and everything under it is now left
-  out and listed in the Tier-3 banner as `inactive: <path>`, with a
-  sentence saying it is not something to apply by hand.  **If a
-  Junos config with deactivated statements was translated with
-  release 0.7.7 or earlier, check the output for what the source
-  had switched off.**  A Junos to Junos job does not write the
-  statement back as inactive: it is gone from the output.
+  out and listed with what was not translated, as `inactive:
+  <path>`; the banner says in a sentence that such a row is not
+  something to apply by hand, and does not count it among the
+  sections that are.  The row names the statement and never a
+  secret: a path is cut after the word that names one (`inactive:
+  snmp community ...`), and a leaf is named without its value.  What
+  an applied group or an interface-range would give to a deactivated
+  path is left out with it — no Juniper page was found that says so
+  in as many words; batfish reads it this way — and a group whose
+  every line was left out is no longer applied.  A text whose only
+  rows are of this kind is not taken for a recognised config: the
+  job is `partial` and says why.  **If a Junos config with
+  deactivated statements was translated with release 0.7.7 or
+  earlier, check the output for what the source had switched off.**
+  A Junos to Junos job does not write the statement back as
+  inactive: it is gone from the output.  Not handled: a reference to
+  a deactivated statement from one that is in force — an OSPF
+  interface line; a port a routing instance still names; the member
+  ports of a LAG whose own interface is deactivated, which still
+  make the LAG, as a static bundle with none of its own settings.
 
 - **An AOS-S LAG is one name, not two.**  The device writes a LAG
   `trk1` where it is defined and `Trk1` where a VLAN lists it or an
