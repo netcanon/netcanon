@@ -583,6 +583,29 @@ class TestEveryExpanderCountsFirst:
         assert "conversion failed" not in job.error
         assert job.error.startswith("refused: reading the config as juniper_junos would make ")
 
+    def test_a_words_refusal_quotes_no_value(self) -> None:
+        """The sentence says where the statement is and nothing a
+        statement holds.  It quoted the last four words: a hash, and
+        the community string its block is keyed by -- in a sentence
+        an operator is asked to paste into a bug report."""
+        leaves = "".join(
+            f'        encrypted-password "$6$fake$notARealHash{n}";\n' for n in range(400)
+        )
+        lists = "".join(
+            f"        clients{n} [ 192.0.2.{n % 250} 198.51.100.{n % 250} ];\n" for n in range(400)
+        )
+        for body in (leaves, lists):
+            text = (
+                "system {\n    host-name T;\n}\nsnmp {\n    community fakeCommunity {\n" + body + "    }\n}\n"
+            )
+            exc = _refused("juniper_junos", text, TINY)
+            assert exc.kind == "words" and exc.where == "snmp community"
+            job = _plan("juniper_junos", "arista_eos", text, TINY)
+            said = str(exc) + (job.error or "") + str(job.refusal)
+            assert "(at: snmp community)" in str(exc) or "the last one read: snmp community)" in str(exc)
+            for held in ("fakeCommunity", "notARealHash", "192.0.2.", "encrypted-password", "clients"):
+                assert held not in said, held
+
     def test_a_block_form_list_is_counted_in_words(self) -> None:
         path = " ".join(f"w{n}" for n in range(100))
         text = "system {\n    host-name T;\n}\n" + path + " {\n    key [ " + " ".join(

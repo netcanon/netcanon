@@ -1086,6 +1086,15 @@ def _blockform_to_setform(raw: str) -> str:
     path_stack: list[str] = []
     pos = 0
 
+    def where(words: list[str]) -> str:
+        """What a refusal quotes of the statement *words* under the
+        path being read: the section it is in, by its first two
+        words.  Never more: a later word can be a value -- a hash,
+        or a community string that is the key of its block -- and
+        the sentence of a refusal is shown to the operator, who is
+        asked to paste it into a bug report."""
+        return " ".join((path_stack + words)[:2])
+
     def emit_leaf(words: list[str]) -> None:
         if not words:
             return
@@ -1111,7 +1120,7 @@ def _blockform_to_setform(raw: str) -> str:
                 charge(
                     "words",
                     len(values) * (len(path_stack) + len(prefix) + 1 + len(trailing)),
-                    " ".join((path_stack + prefix)[-4:]),
+                    where(prefix),
                 )
                 for v in values:
                     out_lines.append(
@@ -1121,7 +1130,7 @@ def _blockform_to_setform(raw: str) -> str:
             # Empty list or bracket-first (no leaf key) — fall through to
             # verbatim emission rather than silently dropping the line.
         # The whole path is written again for every leaf under it.
-        charge("words", len(path_stack) + len(words), " ".join((path_stack + words)[-4:]))
+        charge("words", len(path_stack) + len(words), where(words))
         line = "set " + " ".join(path_stack + words)
         out_lines.append(line)
 
