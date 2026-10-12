@@ -174,11 +174,18 @@ Full rules and limitations in the sanitiser's module docstring at
   config: send it again.)  The sentence names what was large and the limit — see
   [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) "The job says
   `refused:`".  If the refusal is the bug you are reporting, paste the
-  sentence: it quotes one range or one port name from the config and
+  sentence: it quotes one range, one port name or the name of one
+  statement from the config -- never a statement's value -- and
   nothing else.
 - **Banner / comment text not redacted.**  These aren't in the
   canonical model.  Most are parse-and-ignored.  If your config has
   sensitive banner text, hand-edit it after sanitising.
+- **A deactivated Junos statement is not in the output.**  What the
+  source holds under `deactivate` (`inactive:` in the hierarchical
+  form) is left out by the parser, so the sanitised config does not
+  have it, and nothing in it says it was there.  If the bug is about
+  such a statement, say so in the report and write the statement out
+  by hand, with its values changed.
 - **FQDN host targets redacted; unmodelled host references not.**  The
   modelled host fields (NTP / syslog / SNMP-trap / RADIUS targets) now
   redact an FQDN to a stable `host-N.example.test` placeholder so the org

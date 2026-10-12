@@ -308,7 +308,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: lossy
     reason: >
-      Drifts to `[]` on both cells that carry trunk membership, same single
+      Drifts to `[]` on all 3 cells that carry trunk membership, same single
       mechanism as `vlans[].untagged_ports` and NOT independent evidence for
       it — the two are one loss counted on two keys.  Trunk allowed-lists and
       native VLANs disappear with the switchport block; on the Catalyst 9300

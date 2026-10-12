@@ -1,6 +1,7 @@
   /* ── Rename-modal mapping table renderer ─────────────────────────────
    * Builds the per-kind expandable sections from _lastJob.port_renames
-   * + _lastJob.warnings + _lastJob.source_ports, with user overrides
+   * + _lastJob.warnings + _lastJob.source_ports +
+   * _lastJob.source_other_names, with user overrides
    * layered on top (via _renameUserMap).  When the job carries a port
    * plan (both devices were declared), the plan's rows come first:
    * every pairing with the position that decided it, and every name
@@ -28,6 +29,15 @@
    *   currentTargetDevice()  — device-models.js: the target's ports,
    *                            from a profile or a family model
    *   currentPortPlan(), portPlanRowMeta(plan) — device-models.js
+   *   jobNamesNotSettled()   — device-models.js: what a job with no
+   *                            plan says of its own port names
+   *
+   * And two this file gives the summary (rename-panel.js):
+   *
+   *   portRowAsSent(name)    — the row's entry is the one the job on
+   *                            screen was made with
+   *   jobFusedRows()         — the rows the job says were written as
+   *                            one interface, while they are as sent
    *   renderRenamePreview()
    *   renderRenameSummary()
    *
@@ -38,19 +48,33 @@
    * markup (tests/unit/test_device_picker_partial.py holds that), so
    * no such string can be read as HTML and none needs escaping.
    *
-   * The table is rebuilt whole on every change.  Four things make
+   * The table is rebuilt whole on every change.  Five things make
    * that bearable: the element that had the focus has it again
-   * afterwards (found by its test id, with its caret); a section the
-   * operator opened stays open; a row's list of target ports is
-   * filled when the list is first used, not for every row on every
-   * rebuild -- two stacks of eight are four hundred rows of four
-   * hundred choices each; and a rebuild nobody asked for by acting on
-   * the table -- a text field left, a device that finished compiling
-   * -- waits until no mouse button is down (rebuildRenameTableSoon).
+   * afterwards (found by its test id, with its caret, and with the
+   * text as it stood in the field); a section the operator opened
+   * stays open; a row's list of target ports is filled when the list
+   * is first used, not for every row on every rebuild -- two stacks
+   * of eight are four hundred rows of four hundred choices each; a
+   * rebuild nobody asked for by acting on the table -- a text field
+   * left, a device that finished compiling -- waits until no mouse
+   * button is down (rebuildRenameTableSoon); and a choice made by
+   * typing a port's name on a closed list is rebuilt for when the
+   * typing has stopped.
+   *
+   * The tables of the other four panes are rebuilt by the same
+   * clock: their fields ask for it when they are left
+   * (rebuildRenamePaneSoon), and their renderers keep the focus with
+   * renameFocusUnder / renameFocusBack.
    * ────────────────────────────────────────────────────────────────── */
 
+  // When a key that types a name last went to a closed list of target
+  // ports, and the rebuild that waits for the typing to stop.
+  var _renameListKeyAt = 0;
+  var _renameListTimer = null;
   var _renameTableDue = false;
   var _renamePointerDown = false;
+  // The other panes' tables that are due a rebuild: their renderers.
+  var _renamePanesDue = [];
 
   /** Rebuild the table at a moment when doing so cannot take an
    *  element out from under the operator.
@@ -66,11 +90,64 @@
     setTimeout(_rebuildRenameTableIfDue, 0);
   }
 
+  /** The same for the table of another pane (*render* is its
+   *  renderer): typing in one of its fields changes the map, and
+   *  the table is rebuilt when the field is left. */
+  function rebuildRenamePaneSoon(render) {
+    if (_renamePanesDue.indexOf(render) === -1) _renamePanesDue.push(render);
+    setTimeout(_rebuildRenameTableIfDue, 0);
+  }
+
+  function _renameRebuildsDue() {
+    return _renameTableDue || _renamePanesDue.length > 0;
+  }
+
   function _rebuildRenameTableIfDue() {
-    if (!_renameTableDue || _renamePointerDown) return;
-    renderRenameTable();
+    if (!_renameRebuildsDue() || _renamePointerDown) return;
+    if (_renameTableDue) renderRenameTable();
+    var panes = _renamePanesDue;
+    _renamePanesDue = [];
+    panes.forEach(function(render) { render(); });
     renderRenamePreview();
     renderRenameSummary();
+    if (panes.length && typeof renderRenameRailCounts === 'function') renderRenameRailCounts();
+  }
+
+  /** What has the focus under *root*, for giving it back after a
+   *  rebuild that replaces every element there: the control's test
+   *  id, and its caret where it has one. */
+  function renameFocusUnder(root) {
+    var active = document.activeElement;
+    if (!active || !root.contains(active)) return null;
+    var kept = { testid: active.getAttribute('data-testid'), caret: null };
+    if (active.tagName === 'INPUT') {
+      try { kept.caret = [active.selectionStart, active.selectionEnd]; } catch (_) { kept.caret = null; }
+    }
+    return kept.testid ? kept : null;
+  }
+
+  // A link that is gone once it is pressed ("keep this name", the
+  // second "drop") would leave the focus nowhere, and the next Tab
+  // would start from the top of the page.  The focus goes to the
+  // link that is left beside where it was: the row's own, which
+  // after the second "drop" is the one that undoes it.
+  function renameFocusRowLink(source) {
+    var sectionsEl = document.getElementById('mig-rename-sections');
+    if (!sectionsEl) return;
+    var active = document.activeElement;
+    if (active && active !== document.body && sectionsEl.contains(active)) return;
+    var beside = _byTestId(sectionsEl, 'migrate-rename-drop-' + source);
+    if (beside && !beside.disabled && typeof beside.focus === 'function') beside.focus();
+  }
+
+  function renameFocusBack(root, kept) {
+    if (!kept) return;
+    var again = _byTestId(root, kept.testid);
+    if (!again || again.disabled) return;
+    again.focus();
+    if (kept.caret && kept.caret[0] !== null) {
+      try { again.setSelectionRange(kept.caret[0], kept.caret[1]); } catch (_) { /* no caret */ }
+    }
   }
 
   document.addEventListener('pointerdown', function() {
@@ -80,7 +157,7 @@
     document.addEventListener(type, function() {
       _renamePointerDown = false;
       // After the click this release completes has been delivered.
-      if (_renameTableDue) setTimeout(_rebuildRenameTableIfDue, 0);
+      if (_renameRebuildsDue()) setTimeout(_rebuildRenameTableIfDue, 0);
     }, true);
   });
   // A release the page never sees -- a list the browser draws outside
@@ -95,13 +172,55 @@
       if (!_renamePointerDown) return;
       if (type === 'pointermove' && e.buttons !== 0) return;
       _renamePointerDown = false;
-      if (_renameTableDue) setTimeout(_rebuildRenameTableIfDue, 0);
+      if (_renameRebuildsDue()) setTimeout(_rebuildRenameTableIfDue, 0);
     }, true);
   });
   window.addEventListener('blur', function() {
     _renamePointerDown = false;
-    if (_renameTableDue) setTimeout(_rebuildRenameTableIfDue, 0);
+    if (_renameRebuildsDue()) setTimeout(_rebuildRenameTableIfDue, 0);
   });
+
+  /** True while the entry of the row for *name* is the one the job
+   *  on screen was made with: nothing typed, chosen or cleared for
+   *  it in the modal since.  The job's account of a name stands for
+   *  exactly that long; a row changed since is the operator's, and
+   *  the next Apply says what became of it. */
+  function portRowAsSent(name) {
+    var sent = (_lastJobBody && _lastJobBody.port_rename_map) || {};
+    var had = Object.prototype.hasOwnProperty.call(sent, name)
+      ? sent[name] : undefined;
+    return _renameUserMap[name] === had;
+  }
+
+  /** The rows the job itself says were written as one interface,
+   *  with no devices declared for it: source name to the name of the
+   *  output it shares (``on``) and the names it shares it with
+   *  (``others``).  Only names whose rows are as sent, and only
+   *  where two of a group still are.  Empty under a port plan, which
+   *  has an account of its own.
+   *
+   *  The job compares names as the two platforms do, which a
+   *  comparison of strings here is not: ``Trk1`` and ``trk1`` are
+   *  one name on a target with no letter case, and unit 0 of an
+   *  interface beside the interface (a Junos ``lo0.0``) is that
+   *  interface, not a second one on its name. */
+  function jobFusedRows() {
+    var rows = Object.create(null);
+    var plan = (typeof currentPortPlan === 'function') ? currentPortPlan() : null;
+    if (plan || typeof jobNamesNotSettled !== 'function') return rows;
+    var fused = jobNamesNotSettled().fused;
+    Object.keys(fused).forEach(function(shared) {
+      var names = (fused[shared] || []).filter(portRowAsSent);
+      if (names.length < 2) return;
+      names.forEach(function(name) {
+        rows[name] = {
+          on: shared,
+          others: names.filter(function(other) { return other !== name; }),
+        };
+      });
+    });
+    return rows;
+  }
 
   /** The element with *testid* under *root*, or null.  Test ids hold
    *  interface names, which may hold anything; compared as text, not
@@ -128,8 +247,12 @@
     var focusId = (active && sectionsEl.contains(active))
       ? active.getAttribute('data-testid') : null;
     var caret = null;
+    // The text as it stands in the field: the map holds it trimmed,
+    // and a name can have a space in it that is being typed now.
+    var typed = null;
     if (focusId && active.tagName === 'INPUT') {
       try { caret = [active.selectionStart, active.selectionEnd]; } catch (_) { caret = null; }
+      typed = active.value;
     }
     sectionsEl.textContent = '';
 
@@ -219,6 +342,7 @@
     var knownSources = new Set(Object.keys(applied));
     ((_lastJob && _lastJob.port_drops) || []).forEach(function(n) { knownSources.add(n); });
     ((_lastJob && _lastJob.source_ports) || []).forEach(function(n) { knownSources.add(n); });
+    ((_lastJob && _lastJob.source_other_names) || []).forEach(function(n) { knownSources.add(n); });
     Object.keys(planMeta).forEach(function(n) { knownSources.add(n); });
     var targetNames = new Set();
     Object.keys(applied).forEach(function(src) {
@@ -258,11 +382,26 @@
 
     // Every hardware port the config uses that nothing above gave a
     // row: its name goes through unchanged.  A same-vendor
-    // translation usually renames nothing, and the table then listed
-    // only the names a warning quoted -- or none at all.
+    // translation renames nothing unless an entry or a declared
+    // device says so, and the table then listed only the names a
+    // warning quoted -- or none at all.
     ((_lastJob && _lastJob.source_ports) || []).forEach(function(src) {
       if (rowOf[src]) return;
       addRow(src, _guessKind(src), '', '').plain = true;
+    });
+
+    // And every other name the config uses where a port name goes
+    // -- a LAG, a VLAN interface, a loopback, a tunnel -- that
+    // nothing above gave a row.  Between two configs of one vendor
+    // no such name is renamed and no warning quotes one, so the
+    // table had no row for it, and it could be renamed or dropped
+    // only by a request written by hand.  They are not ports of any
+    // device and what kind each is cannot be told from its name
+    // (``ae0``, ``fortilink``), so they have a section of their own,
+    // after the others.
+    ((_lastJob && _lastJob.source_other_names) || []).forEach(function(src) {
+      if (rowOf[src]) return;
+      addRow(src, 'other', '', '').plain = true;
     });
 
     // Without a plan the rows are in the order the job named them,
@@ -322,6 +461,38 @@
         targetHits[effective].push(row.source);
       });
     });
+
+    // What the job itself says of its names, when no devices were
+    // declared for it: which source names ended on one name of the
+    // output (compared as the two platforms compare names, which a
+    // string comparison here is not), which were dropped undecided,
+    // and which were left under their source name.  The job's
+    // account of a name stands for as long as the row's entry is
+    // the one the job was made with (portRowAsSent).
+    var jobOpen = (!plan && typeof jobNamesNotSettled === 'function')
+      ? jobNamesNotSettled() : { fused: {}, dropped: [], left: [] };
+    var jobFused = jobFusedRows();
+    var jobLeft = new Set(jobOpen.left);
+
+    /** The other rows that end on the target *effective* with the
+     *  row for *source*, when that is a collision; else null.
+     *
+     *  Under a port plan every such group is one, as it always was.
+     *  With no plan the job has an account of its own, and it is the
+     *  authority for the rows it was made with: where every row of
+     *  the group is as sent, the job has looked at exactly these
+     *  names, and the ones it wrote as one interface are in
+     *  ``jobFused`` -- a Junos ``lo0.0`` beside ``lo0`` is not among
+     *  them, and marking the pair held Apply on a job the server
+     *  called completed until one of the two was renamed or dropped.
+     *  A group with a row changed in the modal since is in no job
+     *  yet: two rows given one name in the fields collide here. */
+    function collidesWith(source, effective) {
+      var hits = effective ? targetHits[effective] : null;
+      if (!hits || hits.length < 2) return null;
+      if (!plan && hits.every(portRowAsSent)) return null;
+      return hits.filter(function(other) { return other !== source; });
+    }
 
     // Profile-driven dropdown options.  If a profile is selected,
     // dropdown lists the profile's known port ids, filtered by kind.
@@ -420,11 +591,14 @@
       var warnCount = rows.filter(function(r) { return r.warning; }).length;
       var collisionCount = rows.filter(function(r) {
         var effective = _renameUserMap[r.source] || r.auto;
-        return effective && targetHits[effective] && targetHits[effective].length > 1;
+        return !!collidesWith(r.source, effective) || !!jobFused[r.source];
       }).length;
 
-      // Names the port plan left for the operator to decide.
-      var undecided = planActive ? (plan.unresolved_ports || []) : [];
+      // Names the port plan left for the operator to decide -- or,
+      // with no plan, the names the job says were dropped undecided
+      // or left under their source name.
+      var undecided = planActive ? (plan.unresolved_ports || [])
+        : jobOpen.dropped.concat(jobOpen.left);
       var decisionCount = rows.filter(function(r) {
         return undecided.indexOf(r.source) !== -1
           && _renameUserMap[r.source] === undefined;
@@ -464,8 +638,11 @@
       if (decisionCount) {
         var decisionChip = document.createElement('span');
         decisionChip.className = 'count warn-count';
+        // Not ``migrate-rename-decision-count-<kind>``: a row's mark is
+        // ``migrate-rename-decision-<its port>``, and a port can be
+        // named ``count-mgmt``.
         decisionChip.setAttribute('data-testid',
-          'migrate-rename-decision-count-' + kind);
+          'migrate-rename-section-decisions-' + kind);
         decisionChip.textContent = decisionCount + ' need'
           + (decisionCount === 1 ? 's' : '') + ' a decision';
         summary.appendChild(decisionChip);
@@ -504,8 +681,17 @@
         var isDropped = isUserDropped || isAutoDropped;
         var effective = isDropped ? null : (userVal || row.auto);
         var hasOverride = userVal !== undefined && !isUserDropped;
-        var hasCollision = !isDropped && effective && targetHits[effective]
-                           && targetHits[effective].length > 1;
+        var sharedWith = isDropped ? null : collidesWith(row.source, effective);
+        var sharesTarget = !!sharedWith;
+        // By the job's own account: the rows it wrote as one
+        // interface, whether or not their targets are one string
+        // here (``Trk1`` and ``trk1`` on a target with no letter
+        // case).
+        var fusedByJob = (!isDropped && !sharesTarget) ? jobFused[row.source] : null;
+        var hasCollision = sharesTarget || !!fusedByJob;
+        // The job left this name as the source config has it: the
+        // translator could not read it as any kind of port.
+        var isLeft = jobLeft.has(row.source);
         if (row.warning) tr.classList.add('has-warning');
         if (hasCollision) tr.classList.add('has-collision');
         if (hasOverride) tr.classList.add('has-override');
@@ -549,10 +735,15 @@
           // stacks, any port between two switches of one model -- it
           // is still a pairing, and the name is shown as one.
           autoCell = cell(row.auto, '', autoId);
+        } else if (isLeft) {
+          // Not "(unchanged)": nobody decided it should stand.
+          autoCell = cell('(left under its source name)', 'mig-rename-no-auto', autoId);
         } else if (row.plain && row.auto === row.source && !isAutoDropped) {
           autoCell = cell('(unchanged)', 'mig-rename-no-auto', autoId);
         } else if (isAutoDropped) {
           autoCell = cell('(auto-dropped — won\'t render)', 'mig-rename-no-auto', autoId);
+        } else if (row.auto === row.source && userVal === row.source) {
+          autoCell = cell('(kept as it is, by your own entry)', 'mig-rename-no-auto', autoId);
         } else if (row.auto === row.source) {
           autoCell = cell('(no mapping — needs override)', 'mig-rename-no-auto', autoId);
         } else {
@@ -592,7 +783,7 @@
           // dim-italic cell.
           blank.textContent = isAutoDropped
             ? '(auto-dropped)'
-            : '(auto: ' + row.auto + ')';
+            : (isLeft ? '(left under its source name)' : '(auto: ' + row.auto + ')');
           sel.appendChild(blank);
           // Orphaned user-override: if the user set an override
           // under a PREVIOUS target device and then changed the
@@ -612,12 +803,15 @@
             customOpt.selected = true;
             sel.appendChild(customOpt);
           }
-          // "Keep verbatim" — only shown when the row is auto-dropped;
-          // a no-op rename that beats the server's auto-drop.
-          if (isAutoDropped) {
+          // "Keep verbatim" — shown when the row is auto-dropped (a
+          // no-op rename that beats the server's auto-drop), and on a
+          // row left under its source name, where it is the operator
+          // saying that the name is right on the target as it is.
+          if (isAutoDropped || isLeft) {
             var keepOpt = document.createElement('option');
             keepOpt.value = '__KEEP__';
-            keepOpt.textContent = 'Keep verbatim (' + row.source + ')';
+            keepOpt.textContent = (isLeft ? 'Keep this name (' : 'Keep verbatim (')
+              + row.source + ')';
             if (userVal === row.source) keepOpt.selected = true;
             sel.appendChild(keepOpt);
           }
@@ -659,6 +853,17 @@
           sel.addEventListener('focus', fillPorts);
           sel.addEventListener('pointerdown', fillPorts);
           sel.addEventListener('mousedown', fillPorts);
+          sel.addEventListener('keydown', function(e) {
+            if (e.key && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              _renameListKeyAt = Date.now();
+            }
+          });
+          sel.addEventListener('blur', function() {
+            if (_renameListTimer === null) return;
+            clearTimeout(_renameListTimer);
+            _renameListTimer = null;
+            rebuildRenameTableSoon();
+          });
           sel.addEventListener('change', function() {
             // A row changed by hand is the operator's own decision.
             delete _planAccepted[row.source];
@@ -672,6 +877,21 @@
             } else {
               delete _renameUserMap[row.source];
             }
+            if (Date.now() - _renameListKeyAt < 1000) {
+              // Chosen by typing the port's name on the closed list.
+              // Each key is a choice; rebuilt at each, the list was
+              // a new one and the name began again -- ``47`` typed
+              // chose port 7.  The table is rebuilt when the typing
+              // has stopped, or the list is left.
+              renderRenamePreview();
+              renderRenameSummary();
+              clearTimeout(_renameListTimer);
+              _renameListTimer = setTimeout(function() {
+                _renameListTimer = null;
+                rebuildRenameTableSoon();
+              }, 1100);
+              return;
+            }
             renderRenameTable();
             renderRenamePreview();
             renderRenameSummary();
@@ -684,8 +904,8 @@
           // the user could keep by leaving the field blank) or whether
           // an override is effectively required (no auto was produced).
           inp.placeholder = row.auto === row.source
-            ? ((row.plain || meta) ? 'Type a target name'
-                                   : 'Type target name (required)')
+            ? ((row.plain || meta || isLeft) ? 'Type a target name'
+                                             : 'Type target name (required)')
             : 'auto: ' + row.auto;
           inp.value = isDropped ? '' : (_renameUserMap[row.source] || '');
           inp.disabled = isDropped;
@@ -714,7 +934,8 @@
           //     user_map[src] = src, a no-op rename that beats the
           //     auto-drop so the interface is rendered with its
           //     original name).
-          var dropLink = document.createElement('span');
+          var dropLink = document.createElement('button');
+          dropLink.type = 'button';
           dropLink.className = 'mig-rename-drop-link';
           if (isUserDropped) {
             dropLink.textContent = 'un-drop';
@@ -740,6 +961,55 @@
             renderRenameSummary();
           });
           overrideCell.appendChild(dropLink);
+          if (isLeft && userVal === undefined) {
+            // The name may be right on the target as it stands (an
+            // interface another vendor calls the same).  Keeping it
+            // is an entry that names it with itself: the operator's
+            // decision, where until now nobody had made one.
+            // A button, as "drop" beside it is: Tab reaches it,
+            // and Enter and Space press it.
+            var keepLink = document.createElement('button');
+            keepLink.type = 'button';
+            keepLink.className = 'mig-rename-drop-link';
+            keepLink.textContent = 'keep this name';
+            keepLink.title = 'Say that this name is right on the target as it is';
+            keepLink.setAttribute('data-testid',
+              'migrate-rename-keep-' + row.source);
+            keepLink.addEventListener('click', function() {
+              // (No accepted record to clear: this link is drawn only
+              // on a row with no entry, and a row loses its record
+              // with its entry.)
+              _renameUserMap[row.source] = row.source;
+              renderRenameTable();
+              renderRenamePreview();
+              renderRenameSummary();
+              renameFocusRowLink(row.source);
+            });
+            overrideCell.appendChild(keepLink);
+          }
+          if (isAutoDropped) {
+            // The server dropped it; "drop" makes that the operator's
+            // own decision, which is what a job that is partial for a
+            // dropped port asks for.  (A list of target ports has its
+            // "Drop" entry for the same.)
+            var ackLink = document.createElement('button');
+            ackLink.type = 'button';
+            ackLink.className = 'mig-rename-drop-link';
+            ackLink.textContent = 'drop';
+            ackLink.title = 'Say that this name is to be dropped';
+            ackLink.setAttribute('data-testid',
+              'migrate-rename-ack-drop-' + row.source);
+            ackLink.addEventListener('click', function() {
+              // (As for "keep this name": no accepted record can be
+              // on a row that has no entry.)
+              _renameUserMap[row.source] = null;
+              renderRenameTable();
+              renderRenamePreview();
+              renderRenameSummary();
+              renameFocusRowLink(row.source);
+            });
+            overrideCell.appendChild(ackLink);
+          }
         }
         tr.appendChild(overrideCell);
 
@@ -769,13 +1039,17 @@
         var warnCell = document.createElement('td');
         if (needsDecision && !hasCollision) {
           warnCell.appendChild(mark('mig-rename-decision-icon', '?',
-            'Needs your decision: give it a target port, or drop it',
+            isLeft
+              ? 'Left under its source name: give it a target, keep it if '
+                + 'it is right on the target, or drop it'
+              : 'Needs your decision: give it a target port, or drop it',
             'migrate-rename-decision-' + row.source));
         } else if (hasCollision) {
           warnCell.appendChild(mark('mig-rename-collision-icon', '⛔',
-            'Collides with: ' + targetHits[effective].filter(function(s) {
-              return s !== row.source;
-            }).join(', '),
+            fusedByJob
+              ? 'Written as one interface (' + fusedByJob.on + ') with: '
+                + fusedByJob.others.join(', ')
+              : 'Collides with: ' + sharedWith.join(', '),
             'migrate-rename-collision-' + row.source));
         } else if (blocking.length) {
           warnCell.appendChild(mark('mig-rename-collision-icon', '⛔',
@@ -805,7 +1079,7 @@
         var offChip = document.createElement('span');
         offChip.className = 'count warn-count';
         offChip.setAttribute('data-testid',
-          'migrate-rename-offprofile-count-' + kind);
+          'migrate-rename-section-offprofile-' + kind);
         offChip.textContent = offCount + ' not on profile';
         summary.appendChild(offChip);
         section.open = true;
@@ -819,6 +1093,9 @@
       var again = _byTestId(sectionsEl, focusId);
       if (again && typeof again.focus === 'function') {
         again.focus();
+        if (typed !== null && again.tagName === 'INPUT' && again.value === typed.trim()) {
+          again.value = typed;
+        }
         if (caret && again.tagName === 'INPUT') {
           try { again.setSelectionRange(caret[0], caret[1]); } catch (_) { /* not a text field */ }
         }

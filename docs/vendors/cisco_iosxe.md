@@ -30,7 +30,16 @@ Two codecs ship for the IOS-XE family:
   > interface list before trusting the earlier output.  Management
   > interfaces (`Management1` / `mgmt0` / `mgmt`) are still dropped, as
   > they are for `cisco_iosxe_cli` — that is reported in the job's
-  > warnings, not silent.
+  > warnings, not silent, and in its status: with no devices declared
+  > the job is `partial` and lists each in `unresolved_ports` until a
+  > `port_rename_map` entry gives the port a name or confirms the drop.
+  > So is a tunnel or a `VirtualPortGroup` onto a target with no form
+  > for one.  And a port whose name the codec does not read — the
+  > one-number ports of a virtual router, `GigabitEthernet1` — is left
+  > under that name on every target and listed in `untranslated_ports`:
+  > give it the name it is to have.  (Not between the CLI codec and
+  > the NETCONF one: they are one platform, and the name is IOS-XE's
+  > own on both.)
 
 For 95% of operators wanting to translate IOS-XE configs to other
 vendors (or vice versa), use `cisco_iosxe_cli`.
@@ -213,6 +222,46 @@ Provenance + per-fixture detail in
 
 ## Common gotchas
 
+- **Renaming or dropping `Vlan<N>` in the rename modal is not
+  always shown by the output** (CLI codec).  A translation from
+  IOS-XE to IOS-XE lists each VLAN interface under *Other names in
+  the config*.  For some the output writes `interface Vlan<id>`
+  from the VLAN itself: renamed, the interface is then written under
+  the new name and the old one again; dropped, it comes back.  The
+  job records the entry and says nothing.  Read the output after
+  such an entry; renumbering or dropping the VLAN on the VLANs pane
+  takes its interface with it.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
+- **A trunk's allowed list means what it says.**  A trunk with no
+  `switchport trunk allowed vlan` line is read as a trunk of EVERY
+  VLAN — the IOS-XE default — and reaches another vendor as that
+  (`vlan members all`, `vlan trunk allowed all`).  `switchport trunk
+  allowed vlan none`, and a list emptied by `remove` or `except`, is
+  a trunk of NO VLAN.  `add` and `remove` on an interface's first
+  allowed line start from every VLAN, as they do on the switch, and
+  an interface whose stanza is met twice has ONE list: `add 30` in a
+  second stanza is added to the list the first one stated, and a
+  second stanza that says `switchport mode trunk` and states no list
+  is a trunk of that same list.  As a target:
+  every VLAN is written as a trunk with no allowed line, which is
+  what the device prints for its default (never the ids, which are
+  one line of some 19,000 characters); no VLAN is `switchport trunk
+  allowed vlan none`; any other list is written as it stands.  A list
+  kept on a port that is not a trunk comes back as it was, `all` for
+  every id — but **`none` on such a port is dropped**: there an empty
+  list and no list are one value, and no line is written.  A port in
+  a dynamic mode that states `switchport trunk allowed vlan none`
+  comes back with no allowed line, and carries every VLAN if it
+  negotiates a trunk.  A port that says `switchport mode trunk` and
+  takes its list from `source template`, which is not read, is a
+  trunk of every VLAN.  Release 0.7.7 and earlier had one value, an
+  empty list,
+  for a trunk that allows no VLAN and for one that states no list: a
+  `none` trunk came out here as a trunk of every VLAN, and a trunk
+  with no list reached Junos, OS10 and AOS-S carrying none — check
+  trunks translated that way.  Not established from Cisco's pages: what
+  `show running-config` prints for `none`.  The vendors' own
+  sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
 - **No `terminal length 0`.**  Netcanon uses `--More--`
   space-injection for paging.  This is a hard rule (see
   [`../../AGENTS.md`](../../AGENTS.md)) — don't try to bypass.

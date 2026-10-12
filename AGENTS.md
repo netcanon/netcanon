@@ -162,22 +162,23 @@ mapping below is concrete; audit every applicable row before you run
 | A new interactive HTML element (button, input, link, row, `<select>`, `<option>` inside a form) | `tests/testid_reference.md` — document the new `data-testid` in the appropriate page section.  **Self-check:** run `grep -r 'data-testid="<new-id>"' tests/testid_reference.md` before committing; if it returns nothing, you haven't done the update. |
 | A new Jinja partial (`templates/_partials/<name>.js`) | The file-level comment block in the parent template (e.g. `migrate.html`'s "Contents map" comment) **and** the "Template organisation" section of `ARCHITECTURE.md` if the partial introduces a new pattern |
 | A new file under `netcanon/templates/` with a non-`.html` extension OR in a new subdirectory not covered by the existing globs | `pyproject.toml` `[tool.setuptools.package-data]` — extend the `netcanon = [...]` list with a glob covering the new pattern (e.g. `templates/_partials/*.js`, `templates/_components/*.svg`).  Editable installs (`pip install -e`) hide this because they import from the source tree directly; production wheels do not.  Missing template files in the wheel result in `jinja2.exceptions.TemplateNotFound` 500-on-render at runtime — the bug that broke v0.1.0-rc1 / rc2.  The CI `docker-build-smoke` job catches dashboard-rendering regressions of this class but only for the dashboard page; if your new pattern only affects a different page, also add a smoke-test step that visits that page. |
-| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class.  Set `ports_keep_a_factory_name = True` ONLY if its parser records a factory name beside a port's own; every other codec leaves it to the base class (`test_the_flag_is_what_the_captures_show` in `tests/unit/migration/test_port_name_universe.py` fails for a codec whose captures and flag disagree) |
+| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class.  Set `ports_keep_a_factory_name = True` ONLY if its parser records a factory name beside a port's own; every other codec leaves it to the base class (`test_the_flag_is_what_the_captures_show` in `tests/unit/migration/test_port_name_universe.py` fails for a codec whose captures and flag disagree).  And say what a trunk that states no allowed list carries on the platform: a row in `TRUNK_THAT_STATES_NO_LIST` (`netcanon/migration/codecs/_helpers.py`), which the parser fills an unstated list from — through `TrunksByName`, which keeps what an interface states by its name, so that a stanza met twice is one interface and only a port that SAYS it is a trunk is given the default — or — if the platform has no allowed list, or the parser reads none — the codec's name and the reason in `NO_ALLOWED_LIST` in `tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py`.  `test_each_codec_is_in_the_table_or_named` fails for a public codec that is in neither (see the Hard Rule on "not stated") |
+| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class.  Set `ports_keep_a_factory_name = True` ONLY if its parser records a factory name beside a port's own; every other codec leaves it to the base class (`test_the_flag_is_what_the_captures_show` in `tests/unit/migration/test_port_name_universe.py` fails for a codec whose captures and flag disagree).  A codec that declares the `vendor_id` of another is one PLATFORM with it: a name the port translator leaves between the two is taken for the platform's own and holds no job.  `test_which_codecs_are_one_platform` in `tests/unit/migration/test_run_plan_checked_names.py` pins the pairs and fails for a new one until it is added there |
 | A new module inside an existing codec (e.g. `port_names.py`, `vlan_heuristics.py`, `_svi_absorption.py`) | `netcanon/migration/codecs/README.md` "Module layout" section if the pattern is worth propagating to other codecs |
 | A new target-profile YAML under `netcanon/definitions/library/target_profiles/` | (1) Per-profile unit test in `tests/unit/migration/test_target_profile_shipped.py` asserting exact port-name list + count (regression guard against copy-paste mistakes).  (2) Provenance per [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) §4: `deployment_state` whenever `stacking` is set, `evidence` + `evidence_ref`, and the key added to the pinned set for its grade in `tests/unit/migration/test_target_profile_evidence.py` — `CAPTURE_MODEL_MARKER` (with a line only a capture of that model contains), `EXPECTED_VENDOR_DOC_GRADED`, or `KNOWN_DOUBTFUL`.  The sets are compared for equality with what the YAMLs declare, so a graded profile that skips this fails CI |
 | A new or changed model-family YAML under `netcanon/definitions/library/model_families/` (a family, a model, a mode, a module) | Per [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md): (1) the hand-typed `(access names, uplink names)` entry for every model × mode × module combination in `EXPECTED_INVENTORIES` in `tests/unit/migration/test_device_models_shipped.py` — the test fails for any shipped combination that is not pinned; (2) each part number in `EXPECTED_PART_NUMBERS`, and a part graded `inferred` in `KNOWN_INFERRED_PARTS`, in the same file; (3) a `captures:` claim if a committed capture of that exact model exists AND names every port of it, mirrored whole in `EXPECTED_CLAIMS` and listed in `PROVEN_CAPTURE_CLAIMS` in `netcanon/migration/device_models.py` — a claim not in that list grants nothing (never grade a part `capture`; the schema refuses it); (4) the pair in `PROFILE_AGREES_WITH` if a flat target profile describes the same device.  Port groups go in port-NUMBER order, not left-to-right on the faceplate.  Write every `ref` so it stands on its own — it is served to API clients, who cannot read a legend in a YAML comment |
 | A new deployment detector in `_detectors()` (`netcanon/migration/deployment_detect.py`), or a change to one | The detector lives beside the vendor's codec (`deployment_detect.py`) and reads what a config STATES — part numbers, member ids, modules — never a model inferred from port names.  It reads text nobody vouches for: anchor every pattern to a line, bound what it takes, apply none to a fragment another matched unless that fragment is itself bounded, and say in the notes what was left out or chosen — a few member numbers and a count, never every one.  A detection with no members puts the REASON first in its notes: a proposal with no deployment shows its first note as why.  Name the vendor's codec in `_CODEC_OF` in `tests/unit/migration/test_deployment_detect.py` — the tests that walk every detector (the cross-check against that vendor's capture claims, the text made to be slow, the factory-name guard) fail until it is there.  Tests in that module over every stanza form the vendor documents and over the committed captures; the "what the lines do not prove" notes; no MAC or serial in the evidence lines.  `docs/CAPABILITIES.md` § G names the vendors detection reads; `SECURITY.md` "Input Validation — Device Declarations" lists the detector's file |
 | A new naming rule in `_naming_rules()` (`netcanon/migration/device_models.py`), or a change to one | The rule itself lives beside the vendor's codec; give it the set of roles it can name (a role it cannot name is refused at load).  Tests against the vendor's own printed examples, including one whose member number is not 1, in `tests/unit/migration/test_device_models.py`; `ARCHITECTURE.md` "Device models and inventories" if the rule introduces a new idea (a lane, a per-group prefix) |
-| A new place that turns a token into many entries (a range, a keyword for "every", a product of two lists), or a new loop over config lines, in any module under `netcanon/migration/` | Charge it before the entries are made (`limits.charge`) and put the loop through `limits.ticked` -- the Hard Rule on counting has the three parts.  A `range(...)`, a slice of `VLAN_IDS` or a `vlan_id_run(...)` under `codecs/` goes in `RUNS_OF_ENTRIES` in `tests/unit/migration/test_limits.py` with its answer; a text that is refused BEFORE it is made goes in that module's `WIDE` (for a VLAN id list) or gets a test beside the others; `netcanon/migration/codecs/README.md` "Adding a codec" step 4 |
+| A new place that turns a token into many entries (a range, a keyword for "every", a platform default that stands for a list, a product of two lists), or a new loop over config lines, in any module under `netcanon/migration/` | Charge it before the entries are made (`limits.charge`) and put the loop through `limits.ticked` -- the Hard Rule on counting has the three parts.  A `range(...)`, a slice of `VLAN_IDS` or a `vlan_id_run(...)` under `codecs/` goes in `RUNS_OF_ENTRIES` in `tests/unit/migration/test_limits.py` with its answer; a text that is refused BEFORE it is made goes in that module's `WIDE` (for a VLAN id list) or gets a test beside the others; `netcanon/migration/codecs/README.md` "Adding a codec" step 4 |
 | A new limit, a changed number, or a new kind in `netcanon/migration/limits.py` | The tables in [`SECURITY.md`](SECURITY.md) "Input Validation — Config Text" and [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) § H (`tests/unit/test_limits_docs_truth.py` fails until they agree); [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) "The job says `refused:`" for a new kind; `Refusal.limit` in `netcanon/models/migration.py`; and for `small`, a measurement in a container shaped like a demo instance, recorded in [`docs/demo-plan/07-budget.md`](docs/demo-plan/07-budget.md) |
 | A new handler that takes config text (a `raw_text` body field, an upload) | Open the SERVER's scope with the server's setting and the request's answer (`with server_scope(request_limits(request), answer=request_answer(request)):`) -- it takes the request's turn where the limits say how many work at once -- and answer a `LimitExceeded` in words, the one raised where the scope is opened included (the request did not get a turn: `refusal_as_http`, or the job `run_translation` makes); add the path to `READS_CONFIG_TEXT` in `_migration_helpers.py` -- a request is counted by its method and path when its headers arrive, before its body is read, and a handler that is not there has every body read first -- and to `TAKES_CONFIG_TEXT` in `tests/integration/test_config_limits_api.py`, which finds such handlers by what they take and fails until the new one is there, is counted at its arrival, takes its turn and answers "busy" in words.  A handler that returns a job returns `job_answer(job, response)`, never the job |
-| A new job-running migration handler in `netcanon/api/routes/migration.py` | Dispatch through `_migration_helpers.run_translation`, never the pipeline directly, and add the path to the parametrised endpoint tests in `tests/integration/test_migration_models_api.py` (`test_every_plan_endpoint_renders_the_same_port_names`, `test_the_operators_port_map_applies_on_every_plan_endpoint`, `test_acknowledged_drops_clear_partial_on_every_plan_endpoint`) — otherwise the same request body renders different port names, or stays `partial` after the operator has decided every port, depending on which endpoint it is posted to.  The first of those alone cannot see it: it posts no port map |
+| A new job-running migration handler in `netcanon/api/routes/migration.py` | Dispatch through `_migration_helpers.run_translation`, never the pipeline directly, and add the path to the parametrised endpoint tests in `tests/integration/test_migration_models_api.py` (`test_every_plan_endpoint_renders_the_same_port_names`, `test_the_operators_port_map_applies_on_every_plan_endpoint`, `test_acknowledged_drops_clear_partial_on_every_plan_endpoint`, and — by adding it to `_PLAN_PATHS` — the tests of a request that declares no devices: `TestPortNamesWithNoDevices`, `TestABlankTarget`, `TestForceOnEveryPlanEndpoint`) — otherwise the same request body renders different port names, or stays `partial` after the operator has decided every port, depending on which endpoint it is posted to.  The first of those alone cannot see it: it posts no port map.  A handler passes its own category map and nothing for ports: `run_translation` takes the port map from the body on every endpoint, since an entry there is what settles a job that is `partial` for its port names.  A blank target in that map is refused where the request is read (`MigrationPlanRequest`), so a new endpoint that takes another body has to refuse it too |
 | A target-profile gains `modules:` (migrates to module-variant shape) | Add its `{vendor}/{model}` key to the canonical allowlist at `tests/fixtures/module_variants.py`.  Both the unit-tier and integration-tier tests import from there; a CI-guard (`test_module_variant_allowlist_shared_with_integration_tier`) enforces the single-source invariant so no manual sync is required. |
-| A new canonical field on `CanonicalIntent` / `CanonicalInterface` / etc. | `docs/adding-a-canonical-field.md` — the MTU wire-through is the reference worked example |
+| A new canonical field on `CanonicalIntent` / `CanonicalInterface` / etc. | `docs/adding-a-canonical-field.md` — the MTU wire-through is the reference worked example.  A field that holds a PORT NAME also goes in `_swept_names` (see the Hard Rule on port names), and — where the config only REFERS to an interface there, as a route does — in `_only_referred_to` in `netcanon/migration/canonical/port_names.py`: left out, a name the translator cannot read in that field holds the job, which is the safe side |
 | A new route, endpoint, or public function in a module whose top-of-file docstring enumerates contents (e.g. `netcanon/api/routes/migration.py`, `netcanon/services/migration_pipeline.py`) | The module docstring itself — if it lists endpoints / phases / public surface, your addition changes that list.  "Phase 2 *will* add …" comments become lies the instant Phase 2 lands.  Module docstrings that describe *intent* rather than *inventory* are unaffected. |
 | A new hard rule / cross-cutting invariant surfaced by a bug | This file (`AGENTS.md`) — add to the "Hard Rules (Never Break)" section with a one-line rationale pointing at the failure mode |
 | A codec is promoted to `best_effort` or `certified` | `tests/fixtures/real/RESULTS.md` — update the coverage matrix and certification decision; ARCHITECTURE.md's cert paragraph intentionally defers to RESULTS.md as source of truth |
-| A new real-capture fixture under `tests/fixtures/real/<vendor>/` | (1) `tests/fixtures/real/NOTICE.md` — provenance + attribution row; (2) `tests/fixtures/real/RESULTS.md` — per-codec coverage matrix row + Summary table count refresh; (3) `tests/fixtures/real/WANTED.md` — "Current corpus snapshot" count if the new fixture changes it; (4) `docs/vendors/<vendor>.md` — fixtures-section enumeration (if the new fixture exercises a notable grammar surface — e.g. a new VRRP form, a new EVPN type, the first MSI-build example).  The 2026-05-21 docs-audit caught 5 fixtures landed in NOTICE/RESULTS without propagating to vendor pages, surfacing this gap; this row was extended to close it. |
+| A new real-capture fixture under `tests/fixtures/real/<vendor>/` | (1) `tests/fixtures/real/NOTICE.md` — provenance + attribution row; (2) `tests/fixtures/real/RESULTS.md` — per-codec coverage matrix row + Summary table count refresh; (3) `tests/fixtures/real/WANTED.md` — "Current corpus snapshot" count if the new fixture changes it; (4) `docs/vendors/<vendor>.md` — fixtures-section enumeration (if the new fixture exercises a notable grammar surface — e.g. a new VRRP form, a new EVPN type, the first MSI-build example); (5) the pinned table `_MOVES` in `tests/unit/migration/test_run_plan_checked_names.py` when a job of the new capture, onto any codec, is `partial` for its port names where the validation report alone would have passed it, and `_STANDS` beside it when the translator leaves a name of the capture that is not listed because it is the target's own — the test fails with the numbers it found; for `_STANDS`, read the line of the output the name is on before changing the table.  Item (4) is here because fixtures have landed in NOTICE/RESULTS without reaching their vendor page. |
 | A new pytest marker in `pyproject.toml` (`[tool.pytest.ini_options] markers = [...]`) or a new conftest fixture that meaningfully changes how a whole test tier runs | `tests/README.md` — the markers table and/or the "How to run" section.  Markers without doc entries are invisible to contributors running `pytest -m <name>`. |
 | A file-tree listing or "contents map" in any doc (`ARCHITECTURE.md` partial inventories, `definitions.html` header comment, sub-README directory trees) | Either update the listing in the same commit as the new file, OR convert the listing to a pointer ("see `netcanon/templates/_partials/` for the current set").  Exhaustive inventories that enumerate every file become a maintenance tax — prefer one-line pointers unless the enumeration carries load-bearing explanation. |
 | A fourth or subsequent commit shipping pieces of the *same* new conceptual subsystem (e.g. target profiles, module variants, per-pane overrides, cross-mesh validation) | `ARCHITECTURE.md` — at the Nth commit of a thematic series, ask: "does the architecture doc have a section describing this concept, or only the piecemeal mechanics?"  If the concept is absent, add a short section in that same commit.  N is a judgement call but 3-5 commits is the rough threshold. |
@@ -512,11 +513,24 @@ tests use these exclusively — never CSS classes or element structure.  See
   finished parse (`census`, at the boundary every `parse` crosses)
   holds a tree whose expander nobody found to the same limits, after
   the fact; a test tells the two apart, and fails a parser that is
-  refused only there.
+  refused only there.  What stands for many entries is not always a
+  token.  A trunk that states NO allowed list is the 4,094 ids on
+  four platforms, from a stanza of two lines: it is charged as `all`
+  is, where its list is made (`unstated_trunk_list`), and so are the
+  copy a first `add` or `remove` starts from and the list each
+  record of a stanza met again is given (`TrunksByName`).  When a
+  value is given a meaning that is thousands of entries, look for
+  every place that now MAKES them: the rule that reads the source
+  finds a new `range(...)`, not a copy of a list that has grown.
   (2) **a loop over lines goes through `ticked(...)`** (a `while`
   calls `tick()`), in every module that reads config text.  A thread
   cannot be stopped from outside; only work that looks at the clock
-  stops.
+  stops.  A text that is not read a line at a time is walked all the
+  same: hierarchical Junos is cut into tokens a character at a time,
+  and whoever takes the tokens takes them through `ticked(...)` --
+  the rule that reads the source knows a loop over lines, and does
+  not know that walk, so it has a test of its own
+  (`TestJunosAsPrinted`).
   (3) **a broad `except` on the way names `LimitExceeded` first.**  The
   handler round the Junos block-form conversion turned a refusal into
   advice to run `display set`; the per-probe net in detection would
@@ -753,6 +767,152 @@ tests use these exclusively — never CSS classes or element structure.  See
   for every list (a member list and a next hop are not cut at the
   same characters), and give its oracle another way to look (the
   text).
+  **And a job from a codec to itself changes no name unless an entry
+  says so.**  The translator asks the source codec to classify a
+  name and the target codec to write it, and that round trip is not
+  the identity on several codecs' own names (AOS-S, IOS-XE CLI,
+  OS10, FortiOS, Junos and VyOS, over the committed inputs; the
+  guard below keeps that list).  A Junos config translated
+  to Junos came back with `fxp0` as `em0` and with the tagged unit
+  `ge-0/0/1.54` on `ge-0/0/1`, its `vlan-id` gone; FortiOS `dmz` came
+  back `dmz1`; a Catalyst's management port and every OS10 breakout
+  lane were dropped — all on committed captures, on the commonest
+  request there is (no port map at all), in jobs that said
+  `completed`.  Every guard compared one output of the translator
+  with another, and a loss common to both cancels: the experiment
+  below pins each port to its own name first, which is an entry.  A
+  name nobody mapped stands between two configs of one codec, and a
+  sub-interface goes where its port goes with its unit — no
+  classifier keeps one.  Compare the translator's output with
+  something it had no hand in: the bare pipeline's output for every
+  committed input, and each sub-interface found in the output by its
+  address, from every grammar that names one onto every codec.
+  Guarded by
+  `tests/unit/migration/test_units_follow_their_port.py`.
+  **And a name that moves does not carry what is not in the name.**
+  A sub-interface's 802.1Q tag is a field of the tree, and some
+  parsers read none (AOS-CX, OS10): sent after its port, such a
+  unit was an interface with no VLAN on a target that would have
+  carried the tag, in a job that said `completed` — where the
+  stranded name it replaced had at least been said.  There is no
+  tag for the validation report to list, so the translator says it
+  (one warning a unit) and, with devices declared, the unit is not
+  counted as having followed (`untagged_units`) and the job is
+  `partial`.  When a rule starts to move a name, ask what the name
+  stood for that the rule does not move, and what said so before.
+  **And ask what reads the name where it lands.**  A unit sent after
+  its port arrives as `<port>.<unit>`, which the FortiOS and VyOS
+  renderers make a VLAN id of.  A pasted config can write more digits
+  after a dot than an integer is converted from.  A translator that
+  makes a number of the unit, to ask whether it is 0, fails the job
+  on every target; and with no conversion of its own the same name
+  still fails the job in those two renderers.  A unit is read as text, and
+  across vendors one of more than ten digits (`UNIT_MAX_DIGITS`) is
+  not sent after its port: no longer run of digits reaches another
+  vendor's renderer by this rule.
+  **And a warning is not a status.**  Every check above was built
+  where devices are declared.  With none, what the translator found
+  reached the job as warning lines and the status was the validation
+  report's alone: two source names on one name of the output, a name
+  dropped because the target has none for it, or a name the
+  translator could not read written into another vendor's config as
+  the source has it, in a job that said `completed` — more than a
+  third of the jobs that said so over the committed captures, each
+  onto each codec with no port map (the guard below pins the count,
+  by source codec and reason).  `run_plan_with_checked_names` reads
+  the finished run for all three and makes such a job `partial`,
+  with the names as fields (`fused_ports`, `unresolved_ports`,
+  `untranslated_ports`), and every plan endpoint reaches it through
+  `run_translation`.  What it took.  The
+  condition is over EVERY name the translator rewrites: with no
+  pairing to protect, the model path's reason for looking only at a
+  clash that has a hardware port in it does not apply, and the two
+  loopbacks of two routing instances on one loopback are in no
+  port's clash.  What shares a name is not always two interfaces —
+  Junos refers to `lo0` as `lo0.0` — and what tells them apart is
+  the tree that was RENDERED (how many interfaces it holds under the
+  name), not the shape of the names: a VyOS `vif 0` is unit 0 with a
+  stanza of its own.  **"Hardware port" was a narrowing too**: the
+  first version listed a dropped name only where it was a hardware
+  port, and a FortiGate hardware switch that holds the LAN address —
+  an aggregate, to its classifier — was dropped in a job that said
+  `completed`, past a test oracle that asked the same classifier
+  which interfaces were ports.  A loopback, a tunnel or a hardware
+  switch is as lost as a port, and the oracle asks after every
+  interface that has an address.  **And what the translator does not
+  say as data, nothing can hold a job for**: a name it could not
+  classify stayed in the tree under its source name with a warning
+  line and nothing else.  `PortRenameResult.untranslated` says it —
+  for a name the config CONFIGURES something under; one it only
+  refers to (a route to `Null0`, a VXLAN source address) is listed
+  apart, since what those places hold is not always an interface,
+  and a job is not held for every route to nowhere.  A canonical
+  field that holds a port name is a place the config configures one
+  unless `_only_referred_to` is told otherwise: the reading that
+  reports more.  An entry decides such a name: another name, `None`,
+  or the name ITSELF.  **And "left as it was" is not "under a
+  foreign name"**: listing every name the classifier could not read
+  made every AOS-S config with a VLAN address `partial` on every
+  target — the three whose own name for that interface is exactly
+  the `Vlan<id>` that was left included — and listed
+  `GigabitEthernet1` between the two codecs of IOS-XE.  A status
+  that is raised over a right output teaches its reader to click
+  through it.  A name the translator left is not listed between two
+  codecs of one platform (one `vendor_id`), nor where the target
+  itself WRITES that very name for the kind of thing the source
+  parser read from context (`_the_targets_own`).  "The target
+  reads it" was not enough to ask: OS10 reads `Vlan10` and prints
+  `vlan10`, OPNsense reads any `<name>.<n>`, and on FortiOS or
+  RouterOS every string reads.  Nor is a hardware port ever
+  vouched for by a name, nor a name from a platform where names are
+  free text (a RouterOS `vlan100` may carry VLAN 20).  How many
+  names are not listed is pinned by pair of codecs (`_STANDS`): a
+  number that moves there is a name that left the list, and its
+  line of the output is read before the table is changed.  **A
+  status an entry cannot clear is a trap**:
+  four of the per-pane endpoints set a posted port map aside, so a
+  job that was `partial` there for its names could not be settled
+  there, and every plan endpoint applies the body's port map now.
+  **So is a status that something short of an entry clears**:
+  `{"mgmt0": ""}` was an entry, so it cleared `partial`, and was a
+  name, so it wrote an interface with none.  A value is a name or
+  `None` (`names_a_target`), and the API refuses a blank one — and
+  blank is what DRAWS nothing, not what `strip()` empties: a
+  zero-width space passed that, and wrote an interface whose name
+  nobody can see.
+  **And advice is a claim about another path**: the sentence ended
+  "or declare both devices", and for two loopbacks on one loopback
+  the path with devices says `completed` for the same output.  Offer
+  a way out only where it settles what is listed (`_names_message`
+  asks whether a hardware port is among it).  **And advice is
+  mended wherever it is given**: with the sentence corrected, the
+  strip of the rename modal still ended "Choose the target device
+  to pair ports by position" beside one chosen device, whatever
+  was listed — the same claim, made by other code.  It now says
+  there that the pairing settles none of the names when none is a
+  hardware port; and an offer needs something to choose from, so no
+  pair is offered for a vendor nobody has described a device of.
+  The page obeys the
+  same authority: with no plan on the job, rows that are as the job
+  was made collide only where the job lists them (`jobFusedRows`),
+  or Apply is held on a job the server called `completed` until the
+  operator breaks something to free it.
+  The guard does not ask the function it guards, nor take its list
+  of names: it reads the rendered output back with the target's
+  parser and finds interfaces BY ADDRESS — no interface of a
+  `completed` job carries the addresses of two source interfaces,
+  and no interface that has an address is missing — and reads the
+  translator's own warnings for a name the source config configures
+  that was left under a foreign name, over every committed capture
+  onto every codec.  Which names left are the target's own it
+  decides for itself, from the text of the output and a table typed
+  by hand (`_OPENS_A_VLAN_INTERFACE`), not by asking the codec the
+  question the pipeline asks it.  It counts how often it was asked,
+  since a loop that reads
+  nothing back passes; and it is itself handed a job with each
+  defect.  It sees what an address shows and no more; two access
+  ports on one name are the condition's own tests'.
+  Guarded by `tests/unit/migration/test_run_plan_checked_names.py`.
   A list of places written by reading the tree cannot show that it is
   complete, and a test that walks the same list agrees with it.  So
   completeness is also checked by experiment:
@@ -828,6 +988,132 @@ tests use these exclusively — never CSS classes or element structure.  See
   AOS-CX, IOS-XE, EOS and NX-OS.  That module pins which targets
   (`WRITES_NOTHING_AS_EVERYTHING`); the change that mends it empties
   the pin.
+- **Never** translate a statement the source device holds and does not
+  run, and never read a form of a platform's config you do not parse as
+  an empty config.  Junos prints `inactive:` ahead of a deactivated
+  statement (`deactivate <path>` in set form), and the parser read both
+  as configuration: a deactivated BGP neighbour, firewall term or port
+  came out live on the target, in a job that said `completed`.  And a
+  `show configuration` pasted as the device prints it (braces, where the
+  parser's own form is `display set`) was read as nothing at all on
+  every public capture tried — an empty config and a bare scaffold for
+  output, or a refusal — while detection offered no codec.
+  A statement that is not in force is LEFT OUT AND SAID: one row in
+  `dropped_tier3_sections`, which shows the path and never a value (a
+  row is painted on a page and returned to every client, and a path is
+  keyed by its secret often enough), in a list that is bounded.  Such a
+  row is not a sign that the parser recognised the text
+  (`is_left_out_row`): a config that is all deactivated is not
+  `completed`.  What it took to get wrong twice: a form is not read
+  until every wrapping a terminal puts around it is (a prompt, a pager
+  line, a byte-order mark, carriage returns), and a comment begins only
+  where the grammar lets one begin — `member ge-0/*/*;` holds no
+  comment.  Each form a parser reads is held beside the other, typed by
+  hand, so that neither is the oracle for itself:
+  `tests/unit/migration/codecs/juniper_junos/test_two_forms_one_tree.py`
+  and `test_statements_left_out.py`.
+  parser can read its own word for "all" as something a check of ids
+  does not see (AOS-CX read it as an empty list).  The same class was
+  open one step on — an EMPTY list written as every VLAN on four
+  targets — and that module pinned which.  It is mended, the pin is
+  gone, and the assertion that no target does it stays there; what
+  made it is the next rule.
+- **Never** let one value stand for "not stated".  The canonical tree
+  had ONE value, an empty list, for three statements: a trunk that
+  allows no VLAN (`switchport trunk allowed vlan none`, a list a
+  `remove` emptied, an OS10 or Junos trunk with no list, a list the
+  operator emptied by dropping its VLANs), a trunk that states no
+  list (every VLAN on IOS-XE, NX-OS and EOS), and AOS-CX's own `vlan
+  trunk allowed all`.  Each renderer then picked one reading for all
+  three.  Failure mode: a trunk that carried one VLAN came out as a
+  trunk for every VLAN on four targets (IOS-XE, NX-OS, EOS, AOS-CX),
+  and a trunk for every VLAN — a vPC peer link — came out carrying
+  none on the other three, in jobs that said `completed` and reported
+  nothing.  What a platform does with a statement that is not there
+  is a fact about the SOURCE, and only its parser knows it.  So the
+  parser resolves "not stated" to what its platform does — from one
+  table, `TRUNK_THAT_STATES_NO_LIST` in
+  `netcanon/migration/codecs/_helpers.py` — the tree holds what is
+  meant (on a trunk `[]` is no VLAN, every id is every VLAN, any other
+  list is the list), and a renderer writes its target's form for
+  each: its word for none, its word or its default for every VLAN.
+  Where the target has no form, the cell is a pinned, documented
+  limitation, never a silent pick, and the output says so where there
+  is a line to say it beside: AOS-CX cannot be told "none" and OS10
+  cannot be told "all", and each writes a `! review:` line in the
+  stanza.  AOS-S cannot be told "and any VLAN made later" either,
+  and has no such line: a trunk of every VLAN is tagged in each VLAN
+  the output declares and nothing in the output says more was meant
+  (its vendor page does).  And a limitation says what IS written as
+  well as what is not: the AOS-CX stanza for "none" is a switched
+  port with no `vlan` line, which is something on the switch, and
+  what that is has to be said, or said to be unknown.  A
+  marker for "not stated" carried to the renderer is the same defect
+  with a flag on it: every reader of the value has to remember to
+  ask.  **The blind spot that hid it:** a guard that reads the output
+  with the TARGET's parser reads the target's default.  That parser
+  read its own "no allowed line", and AOS-CX its own `all`, as the
+  same empty list the source had, so every wrong cell agreed with
+  itself and passed.  Whatever a default can spell is read as TEXT,
+  by a reader the test owns for each target's grammar, beside the
+  parser.  And a pass that EDITS the
+  value has to know what it means: a list of every id is the
+  statement "every VLAN", which a VLAN drop or renumber leaves as it
+  is (rewritten id by id, a trunk that said `all` came out as
+  `1-99,101-4094`, and so would every trunk of a config that states
+  no list, for one edit), and a list a drop empties is "none", which
+  the job says in a warning.  The same holds for a reader that
+  took "has a list" to mean "carries something": a default trunk has
+  a list now, and is in the list of every VLAN there is, so where one
+  port is chosen for a VLAN a trunk that NAMES it is looked for before
+  a trunk of every VLAN.  Three corollaries, each found after the
+  rule was built.  (1) **What is stated is stated by the INTERFACE,
+  not by a stanza.**  Four parsers make a record a stanza, and
+  resolved "no allowed line" a stanza: a trunk of VLAN 10 whose
+  stanza was met again with only its mode line got a second record of
+  the platform's default — every VLAN, or from OS10 none.  Keep what
+  an interface states by its NAME (`TrunksByName` in
+  `codecs/_helpers.py`), and resolve "not stated" when the whole
+  config has been read.  The name is the one the config WRITES, the
+  stanza's header line, not the one the parser reads from it: two
+  parsers read `interface port-channel 1` and `interface
+  port-channel 2` as one name, and keyed by that name a trunk with
+  no list of its own would be given its neighbour's.  (2) **A default is given to what the config
+  STATES, never to what the parser inferred.**  The NX-OS and EOS
+  parsers take a port for a trunk from a trunk line with no
+  `switchport mode trunk`; filling "every VLAN" into a trunk the
+  parser guessed turned a guess about the mode into every VLAN on
+  every target.  Such a trunk keeps what its lines name, or nothing:
+  when a default has to rest on an inference, choose the reading that
+  carries fewer.  (3) **A value that now holds thousands of entries
+  is read once.**  A list of every id costs 4,094 comparisons to
+  recognise; asked of every port again for every VLAN, it was half a
+  minute for a config of a thousand trunks and a thousand VLAN
+  interfaces, and no cost test rendered.  Ask once a port, and time
+  the render (`TestARenderFitsTheTrunksItIsGiven`).  And it is
+  COUNTED where it is made, before it is made: a default trunk is
+  two lines of text and 35 KB of tree (the rule on counting;
+  `TestATrunkThatStatesNoList` in `tests/unit/migration/test_limits.py`).
+  And a reader
+  that counts what a value "references" has to skip the statement
+  that names nothing in particular: every id of a default trunk
+  counted as a reference, and a VLAN map entry for a VLAN the config
+  does not have was no longer reported.  Guarded by
+  `tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py` —
+  every public codec as a target; sources that say none, nothing and
+  all in their own grammar, with what each means written out by hand
+  and compared with the table; the output read as text and with the
+  parser; the gaps that remain as named sets compared for EQUALITY
+  with what is measured, so closing one fails until its pin is taken
+  out; a stanza met twice and a trunk line with no mode line, from
+  each parser of the table; and a public codec is in the table or is
+  named with its reason — and by
+  `test_a_vlan_drop_and_a_trunks_list.py` and
+  `test_the_trunk_that_names_a_vlan.py`.  Still open, and in the
+  CHANGELOG's known limitations: whether a trunk's list holds its
+  native VLAN is one more thing the tree does not state, and the
+  platforms differ; and on a port that is NOT a trunk an empty list
+  is still two statements, `none` and no list at all.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

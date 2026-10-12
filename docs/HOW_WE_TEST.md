@@ -181,6 +181,103 @@ hand beside it.  And it runs twice: without devices declared, where
 a port's hardware identity must stand still, and with the device
 declared on both sides, where it must follow.
 
+**A name nobody mapped is compared with an output the translator
+had no hand in.**  Both experiments above compare one output of the
+translator with another — a moved run with an unmoved one — so a
+name the translator changes in BOTH cancels out, and the unmoved run
+pins every port to its own name, which is an entry and keeps the
+translator's own guess from running at all.  That is how a job from
+a vendor to itself could rename and drop ports, and put a
+sub-interface on its parent, past every guard.
+`test_units_follow_their_port.py` reads the rendered output of jobs
+run with an empty port map, as the page and `POST /plan` run them.
+Between two configs of one codec — every committed capture and
+kitchen sink — the output must be the bare pipeline's (parse and
+render, no translator), as text and parsed again.  Across vendors —
+each grammar that names a sub-interface `<port>.<unit>`, onto every
+codec — each sub-interface is found in the output by its address,
+and has to be on an interface of its own, named after what its port
+became; where its 802.1Q tag cannot be read back, the job must not
+say `completed`.  Where the unit is not in the output at all —
+dropped with a port the target has no name for — the validation
+report has nothing to list, and the job, run as `POST /plan` runs
+it, must be `partial` and name the port and its units (the next
+paragraph is about that status).  One thing is pinned as it is: a
+tag the source parser does not read (AOS-CX, OS10) between two
+configs of that vendor is lost there as on every path, with nothing
+in the job to say so, and the pin keeps the documents which say so
+true.  The same module keeps the list of the codecs whose own
+names do not come back from their classifier and formatter, which
+is the reason a same-vendor job no longer asks them.
+**What a default can spell is read as text.**  Most checks of an
+output read it back with the target's own parser.  That is blind to
+one thing: a parser reads its own default.  A trunk with no allowed
+line is every VLAN on some platforms and none on others, and for a
+long time the tree had one value for both — so a trunk that allowed no
+VLAN was written as a trunk with no allowed line, which the target's
+parser read back as the same value the source had, and every wrong
+output agreed with itself.  `test_a_trunk_says_none_nothing_or_all.py`
+therefore reads the output twice: with the target's parser, and as
+TEXT, with a reader written in the test for each target's grammar
+(a trunk stanza with no allowed line is every VLAN on some targets
+and none on another; the ids spelled out are not the platform's form
+for every VLAN).  Every public codec is a target; the sources say
+none, nothing and all in their own grammar; and what each statement
+means is written out in the test by hand and compared with the table
+the parsers read, so that a correction is made in both places on
+purpose.  The gaps the code does not close are named sets in the
+module, compared for equality with what is measured: the change that
+closes one fails there until its pin is taken out.  The readers are
+handed each form they must tell apart, and a new codec fails the
+module until it says what a trunk with no list carries on its
+platform.
+
+**A status is checked against the output, not against the warning
+that should have moved it.**  With no devices declared, a job in
+which two source names ended on one name, a name was dropped because
+the target has none for it, or a name the translator could not read
+was left as the source config has it, said so in a warning and said
+`completed`.  It is `partial` now, and
+`test_run_plan_checked_names.py` holds that three ways.  The
+condition is tested branch by branch on small configs: two ports, a
+port and a logical name, two logical names, a dropped port, a
+dropped tunnel and a dropped hardware switch, a name left as it was
+and each entry that decides one (a name, the name itself, `null`), a
+name left that is the target's own (and each thing that makes it
+not: another kind, a hardware port, another spelling, a platform of
+free-text names on either side), a
+Junos reference to unit 0 of an interface (one interface, not two)
+beside a VyOS `vif 0` (two), a source whose names have letter case.
+Every committed capture is then run onto every codec with no port
+map, and the number of jobs that move from `completed` to `partial`
+is pinned by source codec and by reason; no job may move any other
+way, none between two configs of one codec may list a name, and
+nothing of a job but its status, its sentence and the three fields
+that carry the names may differ from what the pipeline returned
+before.  And for every job that is still `completed`, the rendered
+output is read back with the target's own parser and its interfaces
+are found **by their addresses**, which the translator never
+touches: none may carry the addresses of two source interfaces, and
+no interface of the source that has an address — a port, a
+loopback, a hardware switch — may be missing; and the translator's
+own warnings may name no interface of the source left under a
+foreign name.  Whether a name that was left is the target's own,
+the read-back decides from the text of the output and a table
+typed by hand — the line each target opens a VLAN's interface
+with — and over every job, `completed` or not, a name the job does
+not list has to pass that reading; how many do is pinned by pair
+of codecs, so a name that leaves the list shows as a number that
+moved.
+That read-back asks nothing of the function it guards and does not
+take its list of names — a guard that groups the names the engine
+hands it shares the engine's blind spot, and one that asks the
+source classifier which interfaces are ports shares the
+classifier's.  It is itself handed a job with each defect, and has
+to complain; and it counts how often it was asked, so that a loop
+which reads no job back cannot pass.  What it can see is what an
+address shows: two access ports on one name, with no address on
+either, are outside it, and are the condition's own tests'.
+
 **What it costs to read a config is searched for, not listed.**  A
 config is whatever was pasted, and code can take time that grows with
 the square of a run in it.  `test_untrusted_text_cost.py` keeps no list

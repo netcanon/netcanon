@@ -45,6 +45,7 @@ from ..._radius_secrets import (
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalVlan
+from ...canonical.transforms import is_every_vlan
 from .._helpers import same_vendor_version
 from ..base import RenderError
 from .parse import (
@@ -907,7 +908,13 @@ def _identify_vlan_parent(tree: CanonicalIntent) -> str | None:
          interfaces (those have their own sections).
       2. From the rest, picking interfaces that look like an L3
          port (non-empty ``ipv4_addresses`` / ``ipv6_addresses``)
-         OR an L2 trunk (non-empty ``trunk_allowed_vlans``).
+         OR an L2 trunk (non-empty ``trunk_allowed_vlans``).  A
+         trunk that NAMES its VLANs is looked for before a trunk of
+         EVERY VLAN: one of those is a candidate only when no trunk
+         names a VLAN.  (A trunk that states no allowed list is a
+         trunk of every VLAN on four platforms.  Counted beside the
+         one port that lists the VLANs, a vPC peer link makes two
+         candidates of a switch that has one anchor.)
       3. Returning the unique candidate's ``name`` if and only if
          exactly ONE candidate exists.
 
@@ -925,6 +932,10 @@ def _identify_vlan_parent(tree: CanonicalIntent) -> str | None:
     required at the call site.
     """
     candidates: list[str] = []
+    # Trunks of every VLAN that have no address: candidates only if
+    # no trunk names a VLAN.
+    of_every_vlan: list[str] = []
+    a_trunk_names_a_vlan = False
     for iface in tree.interfaces:
         if _looks_like_vlan_iface(iface.name):
             continue
@@ -947,8 +958,15 @@ def _identify_vlan_parent(tree: CanonicalIntent) -> str | None:
             continue
         has_l3 = bool(iface.ipv4_addresses) or bool(iface.ipv6_addresses)
         has_trunk = bool(iface.trunk_allowed_vlans)
-        if has_l3 or has_trunk:
+        every = has_trunk and is_every_vlan(iface.trunk_allowed_vlans)
+        if has_trunk and not every:
+            a_trunk_names_a_vlan = True
+        if every and not has_l3:
+            of_every_vlan.append(iface.name)
+        elif has_l3 or has_trunk:
             candidates.append(iface.name)
+    if not a_trunk_names_a_vlan:
+        candidates.extend(of_every_vlan)
     if len(candidates) == 1:
         return candidates[0]
     return None

@@ -75,10 +75,17 @@ from ...canonical.intent import (
     CanonicalLAG,
 )
 from ...limits import ticked
-from .._helpers import _prefix_to_mask, charge_id_lines
+from .._helpers import (
+    TRUNK_ALL,
+    _prefix_to_mask,
+    charge_id_lines,
+    switchport_trunk_allowed_value,
+    trunk_list_says,
+)
 from ..base import RenderError
 
-#: The line that carries a port's allowed list, up to its first id.
+#: The line that carries a port's allowed list, up to its first id
+#: (or the word that stands for the list: ``none``, ``all``).
 _ALLOWED_VLAN_LEAD = " switchport trunk allowed vlan "
 
 
@@ -115,10 +122,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # renders where the ``Vlan<N>`` interface is already present.
     synth_svis = synthesize_svis_from_vlan_l3(tree)
 
-    # Every id of every allowed list is written out below: counted
-    # here, before the first character.
+    # An allowed list is written out below id by id (a trunk of
+    # every VLAN has no line, and one of no VLAN the word): the
+    # lines are counted here, before the first character.
     charge_id_lines(
-        [*tree.interfaces, *synth_svis], _ALLOWED_VLAN_LEAD, trunks_only=False,
+        [*tree.interfaces, *synth_svis], _ALLOWED_VLAN_LEAD,
+        codec="cisco_iosxe_cli", trunks_only=False,
     )
 
     out: list[str] = []
@@ -476,10 +485,28 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f" switchport trunk native vlan "
                 f"{iface.trunk_native_vlan}"
             )
-        if iface.trunk_allowed_vlans:
-            vlan_list = ",".join(
-                str(v) for v in iface.trunk_allowed_vlans
+        if iface.switchport_mode == "trunk":
+            # On a trunk the list means what it says.  No VLAN is
+            # ``none``.  Every VLAN is no line at all: it is the
+            # default, it is what the device prints, and the ids
+            # spelled out are one line of some 19,000 characters.
+            # Any other list is written as it stands.
+            vlan_list = switchport_trunk_allowed_value(
+                "cisco_iosxe_cli", iface.trunk_allowed_vlans,
+                coalesce=False,
             )
+            if vlan_list is not None:
+                body.append(f"{_ALLOWED_VLAN_LEAD}{vlan_list}")
+        elif iface.trunk_allowed_vlans:
+            # A list stated on a port that is not a trunk (see the
+            # comment above the mode line): kept for the day the mode
+            # is flipped.  Every id is the word for it there.
+            if trunk_list_says(iface.trunk_allowed_vlans) == TRUNK_ALL:
+                vlan_list = "all"
+            else:
+                vlan_list = ",".join(
+                    str(v) for v in iface.trunk_allowed_vlans
+                )
             body.append(f"{_ALLOWED_VLAN_LEAD}{vlan_list}")
         if iface.mtu is not None:
             body.append(f" mtu {iface.mtu}")

@@ -1,8 +1,10 @@
 """What one request may make, and for how long.
 
 A config is whatever was pasted, and a few bytes of it can stand for a
-great deal: a range is thousands of entries, ``all`` is 4,094, and two
-honest counts multiply.  The length of the text therefore bounds neither
+great deal: a range is thousands of entries, ``all`` is 4,094 -- and so
+is a trunk that states no allowed list, on the platforms where such a
+trunk carries every VLAN -- and two honest counts multiply.  The length
+of the text therefore bounds neither
 the memory a request takes nor its time.  This module COUNTS what a
 request makes, at the places where a few bytes become many entries, and
 refuses -- in words an operator can act on -- past a limit.  It also

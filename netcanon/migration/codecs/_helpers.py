@@ -21,14 +21,15 @@ from __future__ import annotations
 import ipaddress
 import re
 from bisect import bisect_left
-from collections.abc import Callable, Hashable, Iterable
+from collections.abc import Callable, Hashable, Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+from ..canonical.transforms import is_every_vlan
 from ..limits import charge
 from .base import ParseError, RenderError
 
 if TYPE_CHECKING:
-    from ..canonical.intent import CanonicalIntent
+    from ..canonical.intent import CanonicalIntent, CanonicalInterface
 
 _K = TypeVar("_K", bound=Hashable)
 _T = TypeVar("_T")
@@ -190,6 +191,18 @@ def address_key(address: object) -> tuple:
 #: still four million ids from a kilobyte of ``2-4000`` tokens.
 VLAN_IDS: tuple[int, ...] = tuple(range(4095))
 
+#: Every VLAN id, 1-4094, as one tuple of those ints: what a trunk
+#: that carries every VLAN has for a list, before anyone has asked
+#: for a list of it.  ``add`` and ``remove`` on the first allowed
+#: line of such a trunk start from a copy, which is counted.
+EVERY_VLAN_ID: tuple[int, ...] = VLAN_IDS[1:]
+
+#: What a refusal says was counted, for the ids no character of the
+#: config stands for (a refusal quotes eighty characters, so the
+#: words come first and the name after).
+_NO_LIST_IS_EVERY_VLAN = "a trunk with no allowed list, which is every VLAN"
+_STANZA_MET_AGAIN = "the allowed list of a stanza that is met again"
+
 
 def vlan_id_run(low: int, high: int) -> list[int]:
     """The VLAN ids *low* to *high*, both included, as a new list
@@ -202,6 +215,132 @@ def vlan_id_run(low: int, high: int) -> list[int]:
     wrote, which a refusal quotes.
     """
     return list(VLAN_IDS[low:high + 1])
+
+
+#: What a trunk's allowed list says (:func:`trunk_list_says`).  On a
+#: trunk the list means what it says: an empty list is NO VLAN, a list
+#: of every id (1-4094) is EVERY VLAN, and any other list is the list.
+#: There is no value for "not stated".
+TRUNK_NONE = "none"
+TRUNK_ALL = "all"
+TRUNK_SOME = "some"
+
+#: What a trunk carries when its config states NO allowed list, by
+#: codec: the platform's own default.  The ONE place this is written.
+#: A parser fills an unstated list from it, for a port that says it
+#: is a trunk (:class:`TrunksByName`, which asks
+#: :func:`unstated_trunk_list`), and the ``switchport`` renderers
+#: write no allowed line for the list that is their platform's
+#: default, which is what the device prints
+#: (:func:`switchport_trunk_allowed_value`).
+#:
+#: * IOS-XE, EOS, NX-OS: every VLAN.  A trunk with no ``switchport
+#:   trunk allowed vlan`` line carries all of them.  (NX-OS keeps a
+#:   block of ids for itself, 3968-4047 unless it is moved; the list
+#:   is the 4,094 ids all the same, because only that list makes a
+#:   renderer write its form for every VLAN.)
+#: * AOS-CX: every VLAN.  Defining a native VLAN makes the switch
+#:   run ``vlan trunk allowed all`` itself.
+#: * OS10: none.  A trunk carries untagged traffic on its access
+#:   VLAN and no tagged VLAN until an allowed line names one.
+#: * Junos: none.  A trunk is a member of the VLANs its ``vlan
+#:   members`` name.
+#:
+#: The vendors' own sentences, with their sources, are in
+#: ``docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md``.
+#:
+#: A codec whose parser can make a trunk is here, or it is named with
+#: its reason among the codecs that have no allowed list, in
+#: ``tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py``; the
+#: test fails for a public codec that is in neither.  (AOS-S is one of
+#: those: a port is a trunk there only by being tagged in a VLAN.)
+TRUNK_THAT_STATES_NO_LIST: dict[str, str] = {
+    "arista_eos": TRUNK_ALL,
+    "aruba_aoscx": TRUNK_ALL,
+    "cisco_iosxe_cli": TRUNK_ALL,
+    "cisco_nxos": TRUNK_ALL,
+    "dell_os10": TRUNK_NONE,
+    "juniper_junos": TRUNK_NONE,
+}
+
+
+def unstated_trunk_list(codec: str, where: str = "") -> list[int]:
+    """The allowed list of a trunk of *codec* that states none.
+
+    Every id where the platform's trunk carries every VLAN by default,
+    no id where it carries none (:data:`TRUNK_THAT_STATES_NO_LIST`).
+    A new list each call; its entries are the shared ints of
+    :data:`VLAN_IDS`.
+
+    Every id is 4,094 entries that no character of the config stands
+    for: a stanza of two lines makes them, and a config can hold as
+    many such stanzas as it likes.  They are counted like the word
+    ``all``, BEFORE the list is made, so that a config of many
+    default trunks is refused at the limit on VLAN ids and not when
+    its lists are already held.
+
+    Args:
+        codec: A codec of the table.
+        where: The trunk, as the config names it, for a refusal
+            to say which was the last one counted.
+
+    Raises:
+        KeyError: *codec* is not in the table.
+        LimitExceeded: With this list the config names more VLAN
+            ids than the limits allow.
+    """
+    if TRUNK_THAT_STATES_NO_LIST[codec] == TRUNK_ALL:
+        charge(
+            "vlan_ids", 4094,
+            f"{_NO_LIST_IS_EVERY_VLAN}: {where}" if where else _NO_LIST_IS_EVERY_VLAN,
+        )
+        return vlan_id_run(1, 4094)
+    return []
+
+
+def trunk_list_says(allowed: Sequence[int]) -> str:
+    """What a trunk's allowed list says: :data:`TRUNK_NONE` for an
+    empty list, :data:`TRUNK_ALL` for a list of every id, 1-4094
+    (:func:`...canonical.transforms.is_every_vlan`), and
+    :data:`TRUNK_SOME` for any other."""
+    if not allowed:
+        return TRUNK_NONE
+    if is_every_vlan(allowed):
+        return TRUNK_ALL
+    return TRUNK_SOME
+
+
+def switchport_trunk_allowed_value(
+    codec: str, allowed: Sequence[int], *, coalesce: bool,
+) -> str | None:
+    """What follows ``switchport trunk allowed vlan`` for a TRUNK on
+    *codec* (IOS-XE, EOS, NX-OS, OS10), or ``None`` for no line.
+
+    No line for the list that is the platform's own for a trunk with
+    no line (:data:`TRUNK_THAT_STATES_NO_LIST`): the device prints
+    none, and a default trunk comes back as it went.  So every VLAN is
+    no line on IOS-XE, EOS and NX-OS -- never the 4,094 ids, which is
+    one line of some 19,000 characters, and never ``1-4094``, which
+    names ids NX-OS keeps for itself -- and no VLAN is no line on
+    OS10.
+
+    ``none`` for no VLAN where the platform's trunk carries every
+    VLAN by default.  The list otherwise: as ranges with *coalesce*,
+    as the ids in their order without.  (OS10 has no word for every
+    VLAN; that list is written there as the range, and its renderer
+    says so beside it.)
+
+    Raises:
+        KeyError: *codec* is not in the table.
+    """
+    says = trunk_list_says(allowed)
+    if says == TRUNK_THAT_STATES_NO_LIST[codec]:
+        return None
+    if says == TRUNK_NONE:
+        return "none"
+    if coalesce:
+        return _coalesce_vlan_ids(sorted(set(allowed)))
+    return ",".join(str(vid) for vid in allowed)
 
 
 def same_vendor_version(
@@ -382,10 +521,11 @@ _TRUNK_ALLOWED_KEYWORDS = frozenset(
 
 
 def merge_trunk_allowed(
-    existing: list[int],
+    existing: list[int] | None,
     remainder: str,
     *,
     parse_ids: Callable[[str], list[int]] = _parse_vlan_list,
+    unstated: Sequence[int] = (),
 ) -> list[int]:
     """Apply one ``switchport trunk allowed vlan`` *remainder* to *existing*.
 
@@ -413,6 +553,36 @@ def merge_trunk_allowed(
     only the keyword forms — which no prior code handled — change
     behaviour.  ``add``/``remove`` preserve *existing* order and append /
     drop in place.
+
+    *existing* is ``None`` while the interface has stated no allowed
+    line yet (:class:`TrunksByName` keeps what it has stated, across
+    its stanzas).  ``add`` and ``remove`` then start from *unstated*, the
+    platform's list for a trunk that states none
+    (:func:`unstated_trunk_list`), because that is the list the device
+    edits: on a platform whose trunk carries every VLAN, ``remove 10``
+    on a port with no earlier line is every VLAN but 10 (it was read
+    as no VLAN), and ``add 30`` is still every VLAN (it was read as
+    VLAN 30 alone).
+
+    Args:
+        existing: The list the interface has stated so far, or
+            ``None`` if it has stated none.
+        remainder: What follows ``switchport trunk allowed vlan``.
+        parse_ids: Reads a comma/hyphen id list.
+        unstated: The list ``add`` and ``remove`` start from when
+            *existing* is ``None``.  Empty by default, which is the
+            list of a platform whose trunk carries no VLAN until one
+            is named.
+
+    Returns:
+        The interface's list after this line.  Always a list: a line
+        was stated.
+
+    Raises:
+        LimitExceeded: The ids this line makes -- a range, ``all``,
+            ``except``, or the copy of *unstated* that a first
+            ``add`` or ``remove`` starts from -- pass the limit on
+            VLAN ids.  Counted before they are made.
     """
     tokens = remainder.split(None, 1)
     keyword = tokens[0].lower() if tokens else ""
@@ -432,7 +602,18 @@ def merge_trunk_allowed(
             "vlan_ids", 4094 - len(blocked.intersection(VLAN_IDS[1:])), remainder,
         )
         return [vid for vid in VLAN_IDS[1:] if vid not in blocked]
-    base = list(existing)
+    if existing is None:
+        if unstated:
+            # The platform's own list, which no character of this
+            # line stands for: counted before it is copied.
+            charge(
+                "vlan_ids", len(unstated),
+                f"{keyword} on a trunk with no earlier list, which starts "
+                "from every VLAN",
+            )
+        base = list(unstated)
+    else:
+        base = list(existing)
     if keyword == "add":
         # (#11) ``vid not in base`` is an O(len(base)) list scan per id;
         # a config with K× ``allowed vlan add 1-4094`` lines drove the
@@ -446,6 +627,254 @@ def merge_trunk_allowed(
     # keyword == "remove"
     drop = set(ids)
     return [vid for vid in base if vid not in drop]
+
+
+class TrunksByName:
+    """What the interfaces of ONE config state about their trunks, kept
+    by the interface's NAME as the config writes it.
+
+    A config can hold the stanza of one interface more than once -- a
+    pasted change, a template that sets the mode in one place and the
+    list in another -- and the device applies every line under the
+    name, in the order it meets them, to ONE interface.  Whether an
+    interface states an allowed list, and whether it says it is a
+    trunk, are facts about the interface and not about a stanza.  Two
+    parsers keep one record a name; four make a record a stanza.
+    Resolved a stanza, a trunk of VLAN 10 whose stanza was met again
+    with only its mode line came out with a second record of the
+    platform's list -- every VLAN, or from OS10 none -- and ``allowed
+    vlan add 30`` in a second stanza was added to that list and not
+    to the interface's own.
+
+    The parser says what it meets (:meth:`allowed_line` or
+    :meth:`allowed_is`, :meth:`mode_line` or :meth:`says_trunk`), says
+    when it has made a record (:meth:`made`), and asks for the lists
+    when the config has been read (:meth:`settle`).  Each of those
+    takes a KEY that says which interface is meant.  For a parser
+    that reads stanzas the key is :meth:`key` of the stanza's header
+    line, and not the name it gives the record: two of these parsers
+    read ``interface port-channel 1`` and ``interface port-channel 2``
+    as one name, ``port-channel``, and those are two interfaces.  (A
+    parser that keeps one record a name has nothing better than that
+    name.)  Each record is then given its interface's list:
+
+    * An interface that states an allowed line has what its lines
+      come to, each applied in the order it is met, whichever stanza
+      it is in.  A record whose stanza states one has that list as it
+      stood when the record was made (its stanza had ended).  A TRUNK
+      whose own stanza states none has it too -- as it stood then,
+      or, where the interface had stated none yet, as the interface
+      is left with it.
+    * A trunk whose interface states none, in any stanza, has the
+      platform's list (:data:`TRUNK_THAT_STATES_NO_LIST`) -- where
+      the interface SAYS it is a trunk.  Two parsers take a port for
+      a trunk from a trunk line alone (NX-OS and EOS: ``switchport
+      trunk native vlan N`` and no ``switchport mode trunk``, on
+      platforms whose port is an access port until it is told
+      otherwise and keeps such a line without acting on it).  A trunk
+      the parser inferred is given nothing from the platform's list:
+      the empty list where it states none, and an ``add`` or a
+      ``remove`` on its first allowed line starts from nothing.  That
+      is fewer VLANs than a trunk would carry, and never more.
+    * A port that is not a trunk has the list its own stanza states
+      (IOS-XE keeps one on such a port), and none otherwise.
+
+    What this makes from few bytes is counted before it is made, as
+    VLAN ids (:func:`...limits.charge`).  The platform's list is
+    4,094 ids for a trunk whose stanza is two lines
+    (:func:`unstated_trunk_list`), and for the first ``add`` or
+    ``remove`` of an interface (:func:`merge_trunk_allowed`).  And a
+    stanza that is met again is a record of its own with a list of
+    its own: the interface's list copied for it (:meth:`settle`), or
+    made anew by an ``add`` or a ``remove`` while the list it
+    started from stays with the record of the earlier stanza
+    (:meth:`allowed_line`).  A list a line states outright is
+    counted where its ranges are read, and once: the ids of a line
+    are read one time, whatever is made of them.
+
+    Args:
+        codec: A codec of :data:`TRUNK_THAT_STATES_NO_LIST`.
+        parse_ids: Reads a comma/hyphen id list, for
+            :func:`merge_trunk_allowed`.
+
+    Raises:
+        KeyError: *codec* is not in the table.
+    """
+
+    def __init__(
+        self,
+        codec: str,
+        *,
+        parse_ids: Callable[[str], list[int]] = _parse_vlan_list,
+    ) -> None:
+        self._codec = codec
+        self._parse_ids = parse_ids
+        # What ``add`` and ``remove`` start from on an interface's
+        # first allowed line: the platform's list.
+        self._platform: tuple[int, ...] = (
+            EVERY_VLAN_ID if TRUNK_THAT_STATES_NO_LIST[codec] == TRUNK_ALL
+            else ()
+        )
+        self._allowed: dict[str, list[int]] = {}
+        # The same lines applied to an empty list, kept only for an
+        # interface whose every allowed line so far is an ``add`` or
+        # a ``remove``: the one case in which the platform's list is
+        # part of what the lines come to.
+        self._from_nothing: dict[str, list[int]] = {}
+        self._said_trunk: set[str] = set()
+        # The interfaces that have stated an allowed line since a
+        # record of them was last made: in the stanza being read.
+        self._in_this_stanza: set[str] = set()
+        # Each record made: its interface's key, whether its own
+        # stanza stated an allowed line, and the interface's two
+        # lists as they stood then (``None`` twice: none stated yet).
+        self._made: list[tuple[
+            CanonicalInterface, str, bool, list[int] | None, list[int] | None,
+        ]] = []
+
+    @staticmethod
+    def key(header: str) -> str:
+        """The key of the interface a stanza's *header* line names:
+        the line with its white space taken out, in lower case.
+
+        ``interface Vlan 10``, ``interface vlan10`` and the same line
+        met again are one interface; ``interface port-channel 1`` and
+        ``interface port-channel 2`` are two.
+        """
+        return "".join(header.split()).lower()
+
+    def says_trunk(self, key: str) -> None:
+        """Interface *key* states that it is a trunk (``switchport
+        mode trunk``; on AOS-CX a ``vlan trunk`` line, which is how a
+        trunk is stated there)."""
+        self._said_trunk.add(key)
+
+    def mode_line(self, key: str, mode: str) -> None:
+        """Interface *key* states ``switchport mode <mode>``, in lower
+        case: :meth:`says_trunk` where the mode is ``trunk``, and
+        nothing for any other."""
+        if mode == "trunk":
+            self._said_trunk.add(key)
+
+    def allowed_is(self, key: str, allowed: list[int]) -> list[int]:
+        """Interface *key* states its list outright, as *allowed*
+        (which is kept, not copied).  Returns it."""
+        self._allowed[key] = allowed
+        self._from_nothing.pop(key, None)
+        self._in_this_stanza.add(key)
+        return allowed
+
+    def allowed_line(self, key: str, remainder: str) -> list[int]:
+        """Apply one ``switchport trunk allowed vlan <remainder>`` line
+        of interface *key* (:func:`merge_trunk_allowed`) to the list
+        the interface has stated so far, in this stanza or an earlier
+        one.
+
+        Returns:
+            The interface's list after the line.  It is not changed
+            afterwards: the next line makes a new one.
+
+        Raises:
+            LimitExceeded: What the line makes passes the limit on
+                VLAN ids.
+        """
+        before = self._allowed.get(key)
+        word = remainder.split(None, 1)[0].lower() if remainder.strip() else ""
+        relative = word in ("add", "remove")
+        # ``add`` and ``remove`` copy the list they start from.
+        # Within a stanza the list a line started from is let go
+        # when the line has been applied.  A list stated in an
+        # EARLIER stanza is not: it stays with the record made of
+        # that stanza, and this line makes another beside it -- so
+        # a stanza of two lines, met again and again, is its
+        # interface's whole list each time.  Counted first.
+        again = relative and key not in self._in_this_stanza
+        said = f"{_STANZA_MET_AGAIN}: {remainder.strip()}"
+        if again and before:
+            charge("vlan_ids", len(before), said)
+        # The ids of the line are read ONCE, for both lists below.
+        # Read twice a range is counted twice, and the number a
+        # refusal prints is then more than the config names.
+        read: dict[str, list[int]] = {}
+
+        def ids_of(text: str) -> list[int]:
+            if text not in read:
+                read[text] = self._parse_ids(text)
+            return read[text]
+
+        after = self._allowed[key] = merge_trunk_allowed(
+            before, remainder, parse_ids=ids_of, unstated=self._platform,
+        )
+        self._in_this_stanza.add(key)
+        if self._platform:
+            if relative and (before is None or key in self._from_nothing):
+                started = self._from_nothing.get(key)
+                if again and started:
+                    charge("vlan_ids", len(started), said)
+                self._from_nothing[key] = merge_trunk_allowed(
+                    started, remainder, parse_ids=ids_of,
+                )
+            else:
+                self._from_nothing.pop(key, None)
+        return after
+
+    def made(self, key: str, iface: CanonicalInterface) -> CanonicalInterface:
+        """A record of interface *key* has been made: every line of
+        its stanza has been handed over.  Returns *iface*.
+
+        A parser that keeps one record a name calls this for each
+        when the config has been read.
+        """
+        allowed = self._allowed.get(key)
+        self._made.append((
+            iface, key, key in self._in_this_stanza,
+            allowed, self._from_nothing.get(key, allowed),
+        ))
+        self._in_this_stanza.discard(key)
+        return iface
+
+    def settle(self) -> None:
+        """Give each record handed to :meth:`made` the allowed list of
+        its interface (the class docstring says which).  Called once,
+        when every stanza has been read: a later stanza can state the
+        list of an interface, or say that it is a trunk, after a
+        record of it was made.
+
+        No two records are given the same list object.  A list made
+        here -- the platform's, for a trunk that states none, or a
+        copy for the record of a stanza that is met again -- is
+        counted before it is made.
+
+        Raises:
+            LimitExceeded: The lists pass the limit on VLAN ids.
+        """
+        handed: set[int] = set()
+        for iface, key, in_its_stanza, allowed, from_nothing in self._made:
+            if iface.switchport_mode != "trunk":
+                # No trunk: the list its own stanza states, if any.
+                if not in_its_stanza or allowed is None:
+                    continue
+            else:
+                if allowed is None:
+                    # Nothing stated when the record was made: what
+                    # the interface states by the end, if anything.
+                    allowed = self._allowed.get(key)
+                    from_nothing = self._from_nothing.get(key, allowed)
+                if key not in self._said_trunk:
+                    # A trunk the parser inferred: nothing of the
+                    # platform's list.
+                    allowed = [] if from_nothing is None else from_nothing
+                elif allowed is None:
+                    allowed = unstated_trunk_list(self._codec, iface.name)
+            if id(allowed) in handed:
+                if allowed:
+                    charge(
+                        "vlan_ids", len(allowed),
+                        f"{_STANZA_MET_AGAIN}: {iface.name}",
+                    )
+                allowed = list(allowed)
+            handed.add(id(allowed))
+            iface.trunk_allowed_vlans = allowed
 
 
 def joined_ids_length(ids: list[int]) -> int:
@@ -469,10 +898,10 @@ def joined_ids_length(ids: list[int]) -> int:
 
 
 def charge_id_lines(
-    interfaces: Iterable[Any], lead: str, *, trunks_only: bool,
+    interfaces: Iterable[Any], lead: str, *, codec: str, trunks_only: bool,
 ) -> None:
-    """Count the lines that write a port's allowed-VLAN list id by id,
-    BEFORE a renderer writes any of them.
+    """Count the lines that carry a port's allowed-VLAN list, BEFORE a
+    renderer writes any of them.
 
     IOS-XE and EOS take the list as ``lead`` and every id, so a tree
     whose lists hold four million ids is nineteen megabytes of those
@@ -481,22 +910,42 @@ def charge_id_lines(
     the length of those lines and nothing else, so it is never more
     than the output is.
 
+    A list means what it says, and the count follows what is then
+    written (:func:`switchport_trunk_allowed_value`).  On a TRUNK the
+    list that is the platform's own for a trunk with no line -- every
+    VLAN, for both of these -- is no line, and nothing is counted
+    for that port; no VLAN is the line that says ``none``; any other
+    list is its ids.  On a port that is not a trunk a list is
+    written by IOS-XE alone, and every id is the word ``all`` there.
+
     Args:
         interfaces: The interfaces the renderer is about to write.
         lead: The line up to the first id, as the renderer writes it.
+        codec: The renderer's codec, a key of
+            :data:`TRUNK_THAT_STATES_NO_LIST`.
         trunks_only: The renderer writes the line for a port in trunk
             mode only (EOS); otherwise for any port with a list.
 
     Raises:
         LimitExceeded: Those lines alone are longer than the output
             may be (:mod:`netcanon.migration.limits`).
+        KeyError: *codec* is not in the table.
     """
+    unwritten = TRUNK_THAT_STATES_NO_LIST[codec]
     total = ports = 0
     for iface in interfaces:
         ids = iface.trunk_allowed_vlans
-        if ids and (not trunks_only or iface.switchport_mode == "trunk"):
-            total += len(lead) + joined_ids_length(ids) + 1
-            ports += 1
+        if iface.switchport_mode == "trunk":
+            says = trunk_list_says(ids)
+            if says == unwritten:
+                continue
+            value = len("none") if says == TRUNK_NONE else joined_ids_length(ids)
+        elif trunks_only or not ids:
+            continue
+        else:
+            value = len("all") if is_every_vlan(ids) else joined_ids_length(ids)
+        total += len(lead) + value + 1
+        ports += 1
     if ports:
         charge(
             "text", total,

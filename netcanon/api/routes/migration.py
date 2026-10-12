@@ -128,10 +128,20 @@ arrived inside the time a request may take is answered 408.
 
 Where an entry above says a handler "dispatches to
 run_plan_with_overrides" with only its own map engaged, that is the
-path of a request that does not declare its devices.  One that does
-goes to ``run_plan_with_models`` with the same category map and with
-the body's own ``port_rename_map``, which is then the operator's edits
-to the pairing — on every endpoint, the per-pane ones included.
+path of a request that does not declare its devices, reached through
+``run_plan_with_checked_names``: the same pipeline, and then a look at
+the finished run for port names left unsettled (two source names on
+one name of the output; a name dropped with no entry saying so; a
+name the translator could not read, left as the source config has
+it), which make the job ``partial`` and are listed on
+``MigrationJob.fused_ports``, ``.unresolved_ports`` and
+``.untranslated_ports``.  A request that declares its devices goes to
+``run_plan_with_models`` with the same category map.  Either way the
+body's own ``port_rename_map`` is applied — on every endpoint, the
+per-pane ones included: it is what settles such a job, so no URL sets
+it aside.  A blank target in that map is refused with a 422 on every
+one of them (``MigrationPlanRequest``): a value is a name, or
+``null`` to drop.
 
 The job-running POST endpoints accept the same
 :class:`MigrationPlanRequest` body (input mode is raw_text XOR
@@ -377,10 +387,9 @@ def plan_migration(
       faithfully consume the tree); the input was non-empty yet
       parsed to an empty configuration (0 recognized paths,
       banner-only render — the source vendor most likely doesn't
-      match the input); or, when the body declares both devices, the
-      port mapping needs a decision (see below).  Review before
-      deploying; an automation gate should treat ``partial`` as a
-      non-success.
+      match the input); or the port names are not settled (see the
+      next two paragraphs).  Review before deploying; an automation
+      gate should treat ``partial`` as a non-success.
     * ``failed``   — a stage raised; ``job.error`` has the summary.
       One kind of failure is not a fault: ``job.refusal`` is set, and
       ``job.error`` begins ``refused:``, when the config asks for more
@@ -391,6 +400,26 @@ def plan_migration(
       this one did not get a turn in the time it may take: nothing
       of the config was read, and the same request can be sent
       again.
+
+    **Port names, with no devices declared.**  Every name is
+    translated by its shape, and the finished run is then read for
+    what that left unsettled: a name of the output that more than
+    one source name ended on (``fused_ports``: the config of two
+    interfaces is written as one); a name that was dropped because
+    the target has no name for it -- a hardware port, or a logical
+    name such as a loopback, a tunnel or a hardware switch
+    (``unresolved_ports``); and a name the translator could not read
+    as any kind of port, which is left as the source config has it
+    (``untranslated_ports``).  The job is ``partial`` while any of
+    the three is not empty.  An entry in ``port_rename_map`` settles
+    a name: a name of its own for all but one of the names that
+    share one; for a dropped name a target name, or ``null`` to say
+    it is to be dropped; for a name left as it was the name it is to
+    have -- its own, where that is right on the target -- or
+    ``null``.  Two entries that point at one name are reported like
+    any other two, and a blank target is a 422.  Declaring both
+    devices decides the hardware ports among these names and no
+    others.
 
     **Declared devices.**  When the body says which device the config
     came from and which it is going to (``source_deployment`` or
@@ -424,21 +453,17 @@ def plan_migration(
         # SNMP overrides posted in the same body.
         job = run_translation(
             request, body, source, target, raw_text,
-            # Default to {} (auto port-name translation ENGAGED) whenever the
-            # caller didn't pass an explicit port_rename_map — matching the
-            # bare-request else branch and the v0.3.2 auto-translate-by-default
-            # contract.  Passing None here DISENGAGES the translator entirely
-            # (see run_plan_with_overrides: `if port_rename_map is not None`),
+            # The port map is run_translation's to pass: the body's own,
+            # or {} (auto port-name translation ENGAGED) when the caller
+            # sent none -- the v0.3.2 auto-translate-by-default contract.
+            # None would DISENGAGE the translator entirely (see
+            # run_plan_with_overrides: `if port_rename_map is not None`),
             # so a request carrying only a non-port override (e.g. a
-            # vlan_rename_map) would otherwise silently render verbatim
-            # source-vendor interface names — the API-1 trap from the
-            # 2026-07-03 review.  target_profile no longer gates this: auto
-            # translation is the default for every non-port-map request.
-            port_rename_map=(
-                body.port_rename_map
-                if body.port_rename_map is not None
-                else {}
-            ),
+            # vlan_rename_map) would silently render verbatim
+            # source-vendor interface names: the VLAN ids renumbered,
+            # and every port still called what the source calls it.
+            # target_profile does not gate this: auto translation is
+            # the default for every non-port-map request.
             vlan_rename_map=body.vlan_rename_map,
             local_user_rename_map=body.local_user_rename_map,
             snmp_community_rename_map=body.snmp_community_rename_map,
@@ -450,11 +475,11 @@ def plan_migration(
         # auto port-name heuristic so a plain translation renders
         # native target-vendor interface names (GigabitEthernet1/0/1
         # -> ge-1/0/1) rather than leaving source-vendor names
-        # verbatim.  port_rename_map={} = auto-only; the other per-pane
-        # categories stay disengaged (None) so a bare request only
-        # rewrites port names.
+        # verbatim.  run_translation passes port_rename_map={} for it
+        # (auto-only); the other per-pane categories stay disengaged
+        # (None) so a bare request only rewrites port names.
         job = run_translation(
-            request, body, source, target, raw_text, port_rename_map={}, force=body.force,
+            request, body, source, target, raw_text, force=body.force,
         )
     logger.info(
         "Migration plan %s: %s -> %s = %s",
@@ -512,10 +537,10 @@ def plan_migration_ports(
     raw_text = resolve_input_text(body, storage)
     # Always engage the rename-aware pipeline from this endpoint —
     # hitting /plan/ports signals clear intent even when the map is
-    # empty ({} = "auto-heuristic only, please").
+    # empty ({} = "auto-heuristic only, please").  run_translation
+    # passes the body's port map, as it does for every handler.
     job = run_translation(
         request, body, source, target, raw_text,
-        port_rename_map=body.port_rename_map or {},
         force=body.force,
     )
     logger.info(
@@ -570,24 +595,23 @@ def plan_migration_vlans(
     ``/plan/vlans`` applies the VLAN category only.  Use
     ``POST /plan`` for multi-category overrides in a single call.
 
-    A request that declares both devices is the exception to the
-    last paragraph: its ports are paired by position here as on
-    ``/plan``, and its ``port_rename_map`` is read as the operator's
-    edits to that pairing (see
-    :func:`._migration_helpers.run_translation`).
+    One map is the exception to the last paragraph: the body's
+    ``port_rename_map`` is applied here as on ``/plan``, whether or
+    not devices are declared.  The job's status depends on it -- a
+    port the translator dropped, or two names it put on one, hold
+    the job ``partial`` until an entry decides them -- so it cannot
+    be set aside by the URL (see
+    :func:`._migration_helpers.run_translation`).  With both devices
+    declared the ports are paired by position here too, and the map
+    is the operator's edits to that pairing.
     """
     source = resolve_adapter_or_422(body.source, side="source")
     target = resolve_adapter_or_422(body.target, side="target")
     raw_text = resolve_input_text(body, storage)
     job = run_translation(
         request, body, source, target, raw_text,
-        # (#16) Engage auto port-name translation like /plan's default path;
-        # {} is auto-only (an explicit port map on this VLAN pane stays
-        # ignored) — without it the render leaks invalid source-vendor
-        # interface names that /plan translates.
-        # Not so when the body declares both devices: run_translation then
-        # takes the body's own port map, as edits to the positional pairing.
-        port_rename_map={},
+        # Port names: run_translation applies the body's own port map
+        # on every endpoint (none posted: every name by its shape).
         vlan_rename_map=body.vlan_rename_map or {},
         force=body.force,
     )
@@ -648,22 +672,23 @@ def plan_migration_local_users(
     Use ``POST /plan`` for multi-category overrides in a single
     call.
 
-    A request that declares both devices is the exception to the
-    last paragraph: its ports are paired by position here as on
-    ``/plan``, and its ``port_rename_map`` is read as the operator's
-    edits to that pairing (see
-    :func:`._migration_helpers.run_translation`).
+    One map is the exception to the last paragraph: the body's
+    ``port_rename_map`` is applied here as on ``/plan``, whether or
+    not devices are declared.  The job's status depends on it -- a
+    port the translator dropped, or two names it put on one, hold
+    the job ``partial`` until an entry decides them -- so it cannot
+    be set aside by the URL (see
+    :func:`._migration_helpers.run_translation`).  With both devices
+    declared the ports are paired by position here too, and the map
+    is the operator's edits to that pairing.
     """
     source = resolve_adapter_or_422(body.source, side="source")
     target = resolve_adapter_or_422(body.target, side="target")
     raw_text = resolve_input_text(body, storage)
     job = run_translation(
         request, body, source, target, raw_text,
-        # (#16) Engage auto port-name translation like /plan; {} is auto-only
-        # (an explicit port map on this pane stays ignored).
-        # Not so when the body declares both devices: run_translation then
-        # takes the body's own port map, as edits to the positional pairing.
-        port_rename_map={},
+        # Port names: run_translation applies the body's own port map
+        # on every endpoint (none posted: every name by its shape).
         local_user_rename_map=body.local_user_rename_map or {},
         force=body.force,
     )
@@ -725,22 +750,23 @@ def plan_migration_snmp(
     ``/plan/snmp`` applies the SNMP category only.  Use
     ``POST /plan`` for multi-category overrides in a single call.
 
-    A request that declares both devices is the exception to the
-    last paragraph: its ports are paired by position here as on
-    ``/plan``, and its ``port_rename_map`` is read as the operator's
-    edits to that pairing (see
-    :func:`._migration_helpers.run_translation`).
+    One map is the exception to the last paragraph: the body's
+    ``port_rename_map`` is applied here as on ``/plan``, whether or
+    not devices are declared.  The job's status depends on it -- a
+    port the translator dropped, or two names it put on one, hold
+    the job ``partial`` until an entry decides them -- so it cannot
+    be set aside by the URL (see
+    :func:`._migration_helpers.run_translation`).  With both devices
+    declared the ports are paired by position here too, and the map
+    is the operator's edits to that pairing.
     """
     source = resolve_adapter_or_422(body.source, side="source")
     target = resolve_adapter_or_422(body.target, side="target")
     raw_text = resolve_input_text(body, storage)
     job = run_translation(
         request, body, source, target, raw_text,
-        # (#16) Engage auto port-name translation like /plan; {} is auto-only
-        # (an explicit port map on this pane stays ignored).
-        # Not so when the body declares both devices: run_translation then
-        # takes the body's own port map, as edits to the positional pairing.
-        port_rename_map={},
+        # Port names: run_translation applies the body's own port map
+        # on every endpoint (none posted: every name by its shape).
         snmp_community_rename_map=body.snmp_community_rename_map or {},
         force=body.force,
     )
@@ -802,22 +828,23 @@ def plan_migration_snmpv3(
     Ignores other override maps if the body carries them — hitting
     ``/plan/snmpv3`` applies the SNMPv3-user category only.
 
-    A request that declares both devices is the exception to the
-    last paragraph: its ports are paired by position here as on
-    ``/plan``, and its ``port_rename_map`` is read as the operator's
-    edits to that pairing (see
-    :func:`._migration_helpers.run_translation`).
+    One map is the exception to the last paragraph: the body's
+    ``port_rename_map`` is applied here as on ``/plan``, whether or
+    not devices are declared.  The job's status depends on it -- a
+    port the translator dropped, or two names it put on one, hold
+    the job ``partial`` until an entry decides them -- so it cannot
+    be set aside by the URL (see
+    :func:`._migration_helpers.run_translation`).  With both devices
+    declared the ports are paired by position here too, and the map
+    is the operator's edits to that pairing.
     """
     source = resolve_adapter_or_422(body.source, side="source")
     target = resolve_adapter_or_422(body.target, side="target")
     raw_text = resolve_input_text(body, storage)
     job = run_translation(
         request, body, source, target, raw_text,
-        # (#16) Engage auto port-name translation like /plan; {} is auto-only
-        # (an explicit port map on this pane stays ignored).
-        # Not so when the body declares both devices: run_translation then
-        # takes the body's own port map, as edits to the positional pairing.
-        port_rename_map={},
+        # Port names: run_translation applies the body's own port map
+        # on every endpoint (none posted: every name by its shape).
         snmpv3_user_rename_map=body.snmpv3_user_rename_map or {},
         force=body.force,
     )

@@ -155,6 +155,28 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
 
 ## Common gotchas
 
+- **VLAN interfaces, bridges and names of your own, onto another
+  vendor** — the port translator reads the names RouterOS gives a
+  port or a bond (`ether2`, `sfp-sfpplus1`, `bonding1`).  A VLAN
+  interface, a named bridge or a port an operator named (`vlan10`,
+  `bridge-lan`, `eth3_vlan1`) it does not read, and leaves under
+  that name on the target.  With no
+  devices declared such a job is `partial` and lists each in
+  `untranslated_ports` until an entry of `port_rename_map` gives it
+  the target's name — also where the name happens to read as one
+  of the target's (`vlan100` onto OS10): a RouterOS name is
+  whatever was typed, and `vlan100` may carry VLAN 20.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
+- **Renaming or dropping a VLAN interface in the rename modal is
+  not shown by the output.**  A translation from RouterOS to
+  RouterOS lists each under *Other names in the config*.  RouterOS
+  output writes a VLAN interface from the VLAN itself: renamed, the
+  interface is written under the new name — with the number in that
+  name as its `vlan-id` — and the old one again; dropped, it comes
+  back; and one with a name of its own (`clustervlan100`) can come
+  back as `vlan<id>`.  The job records the entry and says nothing.
+  Edit the output.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 - **Renamed ports** — operators commonly rename `ether2` to
   meaningful names like "Access Point" or "PROD - PVE3"; the
   parser captures both `name` and `default-name`, and the renderer

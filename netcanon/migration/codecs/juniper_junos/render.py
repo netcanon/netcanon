@@ -85,7 +85,10 @@ from ..._usm_keys import (
     user_usm_kind,
 )
 from ...canonical.intent import CanonicalIntent
-from ...canonical.transforms import TRUNK_ALLOWED_SPECIFICITY_BOUND
+from ...canonical.transforms import (
+    TRUNK_ALLOWED_SPECIFICITY_BOUND,
+    is_every_vlan,
+)
 from ...limits import charge
 from ..base import RenderError
 
@@ -686,19 +689,18 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # on the trunk.  Junos takes ids and ranges of ids as
             # members beside names, so such a list is written as
             # it stands.
-            #
-            # 0 and 4095 are not VLAN ids, and no parser here makes
-            # them; a tree built by hand could.
-            allowed = [
-                vid for vid in iface.trunk_allowed_vlans
-                if vid in _EVERY_VLAN_ID
-            ]
-            if set(allowed) == _EVERY_VLAN_ID:
+            if is_every_vlan(iface.trunk_allowed_vlans):
                 out.append(
                     f"set interfaces {name} unit 0 family "
                     f"ethernet-switching vlan members all"
                 )
             else:
+                # 0 and 4095 are not VLAN ids, and no parser here
+                # makes them; a tree built by hand could.
+                allowed = [
+                    vid for vid in iface.trunk_allowed_vlans
+                    if vid in _VLAN_IDS
+                ]
                 member_lines: list[str] = []
                 for first, last in _runs_of_ids(allowed):
                     run = range(first, last + 1)
@@ -1325,7 +1327,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 continue
             for tokens in body:
                 # Re-quote tokens containing whitespace or shell-
-                # special chars so the re-parser (shlex-based)
+                # special chars so the re-parser (shell-word rules)
                 # re-tokenises to the same token list.
                 quoted = " ".join(
                     _quote_if_needed(t) for t in tokens
@@ -1457,8 +1459,10 @@ def _emit_vrrp_groups_for_address(
             )
 
 
-#: What `vlan members all` stands for: every VLAN id there is.
-_EVERY_VLAN_ID = frozenset(range(1, 4095))
+#: The ids that are VLAN ids.  (Whether a list of them is every VLAN,
+#: which is what `vlan members all` stands for, is asked of
+#: ``is_every_vlan``, as every renderer asks it.)
+_VLAN_IDS = frozenset(range(1, 4095))
 
 #: The longest run of consecutive VLANs a trunk names one by one.  It
 #: is the width up to which a list is read as a specific statement

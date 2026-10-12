@@ -34,6 +34,7 @@
     var sectionsEl = document.getElementById('mig-rename-vlans-sections');
     var emptyEl = document.getElementById('mig-rename-vlans-empty');
     if (!sectionsEl) return;
+    var focusKept = renameFocusUnder(sectionsEl);
     sectionsEl.innerHTML = '';
 
     var sourceVlans = (_lastJob && _lastJob.source_vlans) || [];
@@ -43,7 +44,7 @@
     }
     if (emptyEl) emptyEl.style.display = 'none';
 
-    var appliedRenames = (_lastJob && _lastJob.vlan_renames) || {};
+    var appliedRenames = _nameMap(_lastJob && _lastJob.vlan_renames);
     var autoDroppedSet = new Set((_lastJob && _lastJob.vlan_drops) || []);
 
     // Build collision set from the combined "auto renames + user
@@ -51,7 +52,7 @@
     // is probably intentional (the orchestrator merges on the
     // server), but the UI still surfaces the collision so the
     // operator knows it's happening.
-    var targetHits = {};
+    var targetHits = Object.create(null);
     sourceVlans.forEach(function(src) {
       var userVal = _renameVlanUserMap[src];
       if (userVal === null) return;                // dropped
@@ -131,37 +132,61 @@
       // blank so the placeholder carries the auto-target hint.  Never
       // pre-fill with the auto target — an empty field means
       // "accept the auto default".
+      // A number that is no VLAN id is not sent, and the field goes on
+      // showing it, marked: left showing ``4095`` over a map that
+      // still held ``409``, the screen said one id and Apply sent
+      // another.
+      var refused = (!isDropped && _renameVlanRefused[src] !== undefined)
+        ? _renameVlanRefused[src] : null;
       inp.value = isDropped
         ? ''
-        : ((userVal !== undefined && userVal !== null)
-            ? String(userVal) : '');
+        : (refused !== null ? refused
+            : ((userVal !== undefined && userVal !== null) ? String(userVal) : ''));
       inp.disabled = isDropped;
       inp.setAttribute('data-testid',
         'migrate-rename-vlan-override-' + src);
+      var markRefused = function(is) {
+        if (is) {
+          inp.setAttribute('aria-invalid', 'true');
+          inp.title = 'Not a VLAN id (1-4094): nothing is sent for VLAN ' + src;
+        } else {
+          inp.removeAttribute('aria-invalid');
+          inp.title = '';
+        }
+      };
+      markRefused(refused !== null);
+      // Typing changes the map, the preview and the counts.  The table
+      // is rebuilt when the field is left, not on every key: a rebuild
+      // replaces the field being typed in, which then held one
+      // character and no focus.
       inp.addEventListener('input', function() {
         var raw = inp.value.trim();
-        if (!raw) {
+        var bad = inp.validity && inp.validity.badInput;
+        var n = /^[0-9]+$/.test(raw) ? parseInt(raw, 10) : NaN;
+        if (!raw && !bad) {
           delete _renameVlanUserMap[src];
+          delete _renameVlanRefused[src];
+        } else if (isNaN(n) || n < 1 || n > 4094) {
+          delete _renameVlanUserMap[src];
+          _renameVlanRefused[src] = raw;
         } else {
-          var n = parseInt(raw, 10);
-          if (isNaN(n) || n < 1 || n > 4094) {
-            // Invalid input — leave the previous state in place
-            // rather than store a bad value.  UI hints at the valid
-            // range via min/max attributes on the input.
-            return;
-          }
           _renameVlanUserMap[src] = n;
+          delete _renameVlanRefused[src];
         }
-        renderVlanRenameTable();
+        markRefused(_renameVlanRefused[src] !== undefined);
         renderRenamePreview();
         renderRenameSummary();
         renderRenameRailCounts();
+      });
+      inp.addEventListener('change', function() {
+        rebuildRenamePaneSoon(renderVlanRenameTable);
       });
       overrideCell.appendChild(inp);
 
       // Drop / un-drop link.  Same three-state logic as the port
       // table (drop / un-drop / keep-verbatim beats auto-drop).
-      var dropLink = document.createElement('span');
+      var dropLink = document.createElement('button');
+      dropLink.type = 'button';
       dropLink.className = 'mig-rename-drop-link';
       if (isUserDropped) {
         dropLink.textContent = 'un-drop';
@@ -173,6 +198,7 @@
       dropLink.setAttribute('data-testid',
         'migrate-rename-vlan-drop-' + src);
       dropLink.addEventListener('click', function() {
+        delete _renameVlanRefused[src];
         if (isUserDropped) {
           delete _renameVlanUserMap[src];
         } else if (isAutoDropped) {
@@ -204,4 +230,5 @@
     });
     table.appendChild(tbody);
     sectionsEl.appendChild(table);
+    renameFocusBack(sectionsEl, focusKept);
   }

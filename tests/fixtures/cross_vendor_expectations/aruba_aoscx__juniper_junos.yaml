@@ -306,7 +306,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: lossy
     reason: >
-      Drifts on 4 cells and survives on 1, same mechanism as
+      Drifts on all 7 cells, same mechanism as
       `vlans[].untagged_ports`.  Trunk membership on a physical port survives
       (`kitchen_sink.cfg` VLAN 10 keeps tagged `1/1/4`); trunk membership
       expressed through a LAG does not (`CORE-ROUTING` loses tagged

@@ -552,13 +552,37 @@ stanza headers.  The migrate page renders these as a warning banner:
 > rendered output.  Operator must apply them manually on the target
 > device.
 
+One kind of row is not a section to apply by hand.  A Junos
+statement the source had **deactivated** (`deactivate <path>` in
+set-form, `inactive:` in the hierarchical form) is not in force on
+the device, so it is left out of the translation and listed here as
+`inactive: <path>`; a statement under a load file's `delete:` is
+listed as `delete: <path>`.  The banner counts only the sections,
+says in a sentence of its own what the other rows are, and is
+headed "Statements the source held and did not run" when it holds
+nothing else.  A same-vendor Junos job does not write the statement
+back as inactive: it is gone from the output, and the row is the
+record.
+
+Such a row names the statement and never a secret.  Its path is cut
+after the first word that names one (a word with `community`,
+`password`, `secret`, `key`, `psk` or `authentication` in it) and
+the cut is marked: `inactive: snmp community ...`.  A deactivated
+leaf is named by its first word, without its value.  A row for a
+section is the stanza header as the config has it.
+
+A job whose only rows are of this kind, and which recognised
+nothing else, is `partial`: a statement is named whether or not
+anything under it would have been read, so the row is not a sign
+that the text was a config.
+
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):
 
 | Source codec | Patterns matched (excerpt) |
 |---|---|
 | `cisco_iosxe_cli` / `arista_eos` / `aruba_aoss` (IOS-style CLI heuristic) | `ip access-list extended/standard <name>`, `ipv6 access-list <name>`, numbered `access-list N permit/deny`, `ip nat inside/outside/pool`, `class-map`, `policy-map`, `route-map <name>`, `crypto isakmp/ipsec/map/pki`, `zone-pair security` |
-| `juniper_junos` (set form) | `set firewall [family X] filter <name>`, `set security {policies\|nat\|ike\|ipsec\|zones\|address-book\|flow\|screen\|alg\|utm\|application-tracking\|forwarding-options}`, `set policy-options {policy-statement\|prefix-list\|community} <name>`, `set class-of-service` |
+| `juniper_junos` (set form, and the hierarchical form as it is read: converted to set form first) | `set firewall [family X] filter <name>`, `set security {policies\|nat\|ike\|ipsec\|zones\|address-book\|flow\|screen\|alg\|utm\|application-tracking\|forwarding-options}`, `set policy-options {policy-statement\|prefix-list\|community} <name>`, `set class-of-service` |
 | `fortigate_cli` | `config firewall {policy\|policy6\|vip\|vip6\|central-snat-map\|address\|addrgrp\|service\|shaper}`, `config vpn {ipsec\|ssl}`, `config {webfilter\|antivirus\|ips\|dlp\|application}`, `config router {policy\|route-map}` |
 | `mikrotik_routeros` | `/ip firewall {filter\|nat\|mangle\|raw\|address-list}`, `/ipv6 firewall …`, `/queue`, `/ip ipsec`, `/routing {filter\|bgp\|ospf}` |
 | `opnsense` | XML elements: `<filter>`, `<nat>`, `<ipsec>`, `<openvpn>`, `<wireguard>`, `<shaper>`, `<load_balancer>`, `<captiveportal>` |
@@ -744,6 +768,236 @@ fields.  The migrate page reflects this in the status banner and
 Job status reaches `failed` only when a stage actually raises;
 validation alone never fails the job.
 
+A job can be `partial` with a clean validation report: for its port
+names.  Section D1 says when, for a request that declares no devices;
+section G, for one that declares both.
+
+### D1. Port names that are not settled (`fused_ports` / `unresolved_ports` / `untranslated_ports`)
+
+A warning is not a status.  Unless you declare both devices (section
+G), every port name is translated by the shape of the name, and
+three things that translation can do to a name are a loss the
+capability matrix has no path for:
+
+* **Two source names end on one name of the output**, so the config
+  of two interfaces is written as one.  Aruba AOS-S `1/1` and the
+  uplink-module port `1/A1` are both `Ethernet1` on EOS; VyOS `eth0`
+  and `eth1` are both `port1` on FortiOS, which numbers from 1; Junos
+  `ae0` and `ae1` are both `Port-channel1` on IOS-XE; a Junos
+  per-instance loopback `lo0.2` is put on `Loopback0` beside `lo0`.
+  Any two names count — a LAG or a loopback as much as a port —
+  and they are compared as each platform tells interfaces apart
+  (`Trk1` and `trk1` are one port on AOS-S; `DMZ` and `dmz` are two
+  interfaces on FortiOS).
+* **A name is dropped** because the target has no name for it.  A
+  hardware port — a management port onto a platform with no form
+  for one, a breakout lane, a port whose shape the target's names
+  cannot take — and a logical name just the same: a loopback or a
+  tunnel the target has no form for, a FortiGate hardware switch
+  (`internal`) that holds the LAN address.  What was configured on
+  it is not in the output.  A sub-interface that went with its port
+  is listed with it.
+* **A name is left as the source config has it**, because the
+  translator could not read it as any kind of port (`could not
+  classify port name ...; left verbatim`).  Whatever the output has
+  of it is under a name of the source vendor: an IOS
+  `GigabitEthernet1` (the one-number ports of a virtual router) in a
+  Junos config, an OPNsense `igc0`, a RouterOS interface an operator
+  named, the `VlanN` interface an AOS-S VLAN's address is carried
+  on where the target calls that interface something else.  Nobody
+  chose that name for the target.  A name the translator left that
+  is no foreign name on the target is not listed — see "What is
+  not counted" below.
+
+Such a job is `partial`, not `completed`.  `job.error` says "Port
+names are not settled: ..." — after the sentence it already had,
+if the validation report made it `partial` as well — and the names
+are on the job as data:
+
+* **`fused_ports`** — each shared name of the output, with the
+  source names that ended on it;
+* **`unresolved_ports`** — the names that were dropped and that no
+  entry of your `port_rename_map` names (`source_ports` says which
+  of them are hardware ports);
+* **`untranslated_ports`** — the names left as the source has them
+  that are a foreign name on the target and that no entry names.
+
+Nothing else about the job moves: the output is the one it always
+rendered, and the warning lines (`port_rename: multiple source ports
+map to ...`, `... target OOBM model differs ...`, `... could not
+classify port name ...`) are the ones it always carried.
+
+**To settle it**, decide each name with an entry of `port_rename_map`
+(the Ports pane of the rename modal, or the API):
+
+* two names on one name — give all but one of them a name of its
+  own, or `null` to drop it;
+* a dropped name — a target name, or `null`, which is you saying
+  it is to go.  An entry that drops a port decides its
+  sub-interfaces with it;
+* a name left as it was — the name it is to have on the target, or
+  `null` to drop it.  Where the name is right on the target as it
+  stands (a RouterOS interface you named `WAN`, onto FortiOS, where
+  a name is yours to choose), give it ITSELF: `{"WAN": "WAN"}` is
+  you saying so.
+
+A value is a name or `null`.  A blank one — `""`, only white
+space, or only characters that draw nothing (control and format
+characters: a zero-width space, a NUL, a byte-order mark) — is
+refused with a 422 on every plan endpoint: it is not a way to
+drop, and taken as a name it wrote an interface with no name
+anyone can see.
+Two entries of your own that point at one name are reported like any
+other two.
+
+**Declaring both devices settles the hardware ports among these
+names, and no others.**  Ports are then paired by position, each
+with a port of its own, and the job reports through
+`port_mapping_plan` (section G) — the job's three fields are empty
+on such a job, so that one fact has one account.  A pair of devices
+decides nothing about two loopbacks on one loopback, a tunnel that
+was dropped or a VLAN interface left under its source name: with
+both devices declared the output has them the same, and the job is
+not held for them.  So the job's sentence offers the devices only
+where a hardware port is among what it lists, and says so where
+they would decide only some of it.  (The sentence does not know
+which vendors have a device described: it makes the offer for an
+NX-OS source too, for which none ships.  The rename modal does
+know, and does not.)
+
+The same body gives the same status and the same fields on `/plan`
+and on every per-pane endpoint, and every one of them applies the
+body's `port_rename_map`.  (`/plan/vlans`, `/plan/local_users`,
+`/plan/snmp` and `/plan/snmpv3` used to set a posted port map aside
+unless devices were declared.)
+
+**In the browser** the status banner of the migrate page shows the
+sentence.  The rename modal says above its table how many names
+share one, how many were dropped and how many were left under their
+source name.  Rows the job wrote as one interface carry the
+collision mark (⛔); a dropped row and a row left under its source
+name carry the mark of a row that needs a decision (?), counted on
+their section.
+
+* Two rows written as one: give one of them another target, or drop
+  it.
+* A dropped row: **drop** beside *keep verbatim* is the decision
+  that it is to go, and **Accept the drops** records it for all of
+  them; with a target device chosen the row's list has a *Drop*
+  entry.
+* A row left under its source name says so where its auto name
+  would be, and has the name field, **keep this name** — the entry
+  that names it with itself — and **drop**; with a target device
+  chosen its list has *Keep this name*.  No one button does this
+  for several rows: whether a name is right on the target is said
+  of one name at a time.
+
+The strip sends you to the device pickers only for what they
+settle.  With nothing chosen it offers both devices where a
+hardware port is among the names and each vendor has a device to
+choose.  With one device chosen and no hardware port among the
+names, it says that choosing the other pairs hardware ports by
+position and settles none of the names above — it used to end
+"Choose the target device to pair ports by position" whatever
+was listed.  Where the target vendor has no device described, it
+says so and does not tell you to choose one.
+
+Then Apply.  Apply is held for rows the job lists as written as one
+interface, and for two rows you give one name in the fields before
+Apply — nothing has judged those yet.  Two rows that show one auto
+name and that the job does not list (a Junos `lo0.0` beside `lo0`)
+are one interface, and hold nothing.
+
+What is not counted:
+
+* A Junos reference to unit 0 of an interface (`lo0.0` where the
+  interface is `lo0`) is that interface, and no second one.  A config
+  that gives unit 0 a stanza of its own beside its port (a VyOS `vif
+  0`) has written two interfaces, and they are counted.
+* A VLAN interface on a target that writes it from its VLAN (AOS-S)
+  keeps its name by design: it is neither dropped nor left for want
+  of a name, and shares it with nothing.
+* Between two configs of one vendor nothing is listed unless an
+  entry of yours caused it: no name is classified there, and each
+  stands.
+* **A name the translator left that is no foreign name where it
+  lands.**  Between two codecs of one platform — IOS-XE as CLI
+  text and over NETCONF — a name the CLI classifier does not read
+  (`GigabitEthernet1`) is still a name of IOS-XE, and none is
+  listed.  Across platforms a name is not listed where the target
+  itself writes exactly that name for the kind of thing the source
+  config says it is.  The kinds are the logical ones a parser reads
+  from the config around a name: a VLAN's interface, a loopback, an
+  aggregate, a tunnel.  The case that occurs: the `Vlan<id>`
+  interface an AOS-S VLAN's address is carried on is `interface
+  Vlan10` on EOS, IOS-XE and NX-OS, and such a job is not held for
+  it.  The rule is narrow on purpose:
+  - never a hardware port — which port of another device a port
+    is, is what a declared device answers (an IOS `Ethernet0` is
+    listed onto EOS, though EOS reads the name);
+  - never onto FortiOS or RouterOS, where any string is a name
+    and a port under a foreign one is a port no line finds; and
+    never from them, where a name is whatever was typed (a
+    RouterOS interface called `vlan100` may carry VLAN 20);
+  - never a name that says which port it is on (`agg1.100`);
+  - only the spelling the target writes itself: OS10 reads
+    `Vlan10` and prints `vlan10`, so an AOS-S VLAN's interface is
+    still listed there.
+
+  The translator's `could not classify port name ...; left
+  verbatim` warning names every name it left, listed or not.
+
+What still says `completed`, and is yours to check:
+
+* **A name the config only refers to.**  A name in a static route, a
+  DHCP pool, a tracking entry or a VXLAN source that the translator
+  cannot read is left as it is, with the same `could not classify`
+  warning, and holds no job: what those places hold is not always
+  an interface (a route to `Null0`, the keyword `dhcp`, a zone, a
+  source address).  `ip route 10.50.0.0 255.255.0.0 Null0` onto
+  RouterOS is `gateway=Null0`, in a job that can be `completed`.
+  Read a finished job's warnings for that line.
+* **A port with VLAN membership and no stanza of its own** — every
+  access port of an AOS-S config that only lists it under `vlan` —
+  is in no line of the output on AOS-CX, IOS-XR, NX-OS and OS10, in
+  a job that can be `completed`: those renderers write a port from
+  its interface stanza, and it has none.  (EOS, IOS-XE CLI and
+  Junos write it.)  `port_renames` still lists the port, under a
+  name the output does not have; and a job that is `partial` for
+  two such ports on one name names a port the output does not have
+  either.  Compare the port count of the output with the source.
+* **A Junos next hop that names a unit keeps the old name across
+  vendors.**  `next-hop ge-0/0/0.0` onto EOS is `ip route
+  10.9.0.0/16 ge-0/0/0.0`, beside a `ge-0/0/0` that became
+  `Ethernet0` (so too onto AOS-CX, IOS-XE CLI, IOS-XR, NX-OS, OS10,
+  RouterOS and VyOS).  With devices declared the plan lists the
+  route (`stale_next_hops`); without, nothing does.
+* **Two spellings the target reads as one name.**  IOS-XE onto Junos
+  with `{"GigabitEthernet1/0/2": "ge-1/0/1.0"}` puts both addresses
+  under `ge-1/0/1 unit 0`, which Junos reads as one interface; an
+  EOS entry `"Ethernet 1"` beside `Ethernet1` likewise.  Names are
+  compared by letter case and surrounding space, not as the device
+  would expand them.
+* **One AOS-S port written in two letter cases, sent apart.**
+  `interface 1/A1` and `untagged 1/a1` with an entry for `1/A1`
+  only: one port's config on two targets.  The warning says the two
+  "do not end together"; give every spelling the same entry.
+* **RouterOS as the target.**  With no devices declared, an entry
+  that names a port `bridge1`, `vlan5` or a word of your own
+  (`WAN`) can leave the port found by no line, or by the new name
+  (`set [ find name=WAN ]`), in a job that can be `completed`.
+  Section G: only a declared target device can say which hardware a
+  RouterOS port is.
+* **With both devices chosen in the modal**, the strip no longer
+  says which names were not settled, and the job Apply then makes
+  holds only for hardware ports (section G): a VLAN interface left
+  under its source name is in the output the same, in a job that
+  can be `completed`.  Decide such names before you pair.
+* **A name the output has no line for.**  A name left as the source
+  has it is listed whether or not the target's renderer wrote
+  anything for it (a bare Junos `irb`): keeping it then keeps
+  nothing.  Look for the name in the output before you keep it.
+
 ### D2. Scope advisories (target-platform notices)
 
 Separate from the severity ladder above, and deliberately so: that ladder
@@ -826,6 +1080,97 @@ row's dropdown, or set them all at once through the API's
 `port_rename_map` — or declare both devices, which is what section G
 is for.
 
+Two things that translation by shape does not do:
+
+* Between two configs of the **same vendor** it changes no port
+  name.  A name you did not map stays as it is written — a job from
+  a vendor to itself with no entries returns the config's own
+  interface names.  Map a port in the Ports pane or with
+  `port_rename_map`; to move between two models of one vendor,
+  declare both devices (section G).
+* A **sub-interface** is not named from the shape of its own name.
+  `<port>.<unit>` goes where its port goes, with its unit: a Junos
+  `ge-0/0/1.54` onto EOS is `Ethernet1.54` with its `encapsulation
+  dot1q`, an IOS-XE `GigabitEthernet0/0/1.54` onto Junos is `unit 54`
+  of `ge-0/0/1` with its `vlan-id`.  It is dropped with a port that
+  is dropped (listed in `port_drops`, with a warning), and follows a
+  `port_rename_map` entry that moves or drops its port.  Its 802.1Q
+  tag is not part of its name: where none was read for it from the
+  source, the unit is written without one and a warning says so
+  (`... went with its port to 'Ethernet1.54' with no 802.1Q tag
+  ...`).  Section G lists what is not followed.
+
+Neither held up to 0.7.7 — a same-vendor job renamed and dropped
+ports nobody had mapped, and a sub-interface was written onto its
+parent port or left under its source name — in jobs that said
+`completed`.  Translate again a config that was translated with it;
+[`../CHANGELOG.md`](../CHANGELOG.md) says what to look for.
+
+And three things it does do are said in the job's status, not only
+in its warnings: it can put two names on one name, it drops a name
+the target has none for, and it leaves a name it cannot read as the
+source config has it.  Each makes the job `partial` until you decide
+the names — section D1.
+
+**Every name has a row.**  The Ports pane has one row for each name
+the config uses where a port name goes.  A name the translation
+renamed or warned about is under its kind (link aggregations, VLAN
+SVIs, loopbacks, ...), and so is every hardware port; every other
+name that is no port — a LAG, a VLAN interface, a loopback or a
+tunnel the job left as it was — is under *Other names in the
+config*, the last section.  A translation from a vendor to itself
+renames none of them and warns about none, so that section is
+where you rename or drop one.  On the API the two lists are
+`source_ports` and
+`source_other_names` of every plan response, with or without
+devices declared: together they are the names the config uses where
+a port name goes.  A `port_rename_map` key outside both has an
+effect in two cases: a port the config names only through a
+sub-interface of it (an entry for `GigabitEthernet0/0/1` moves or
+drops `GigabitEthernet0/0/1.54` where the config has no stanza for
+the port), and, where the source platform's names have no letter
+case, another spelling of a name in the lists.
+`source_other_names` also holds what
+a config writes where an interface name goes without naming one —
+a route to `Null0`, a VTEP source given as an address.
+
+**A rename or a drop entered on a row of *Other names in the
+config* is recorded, and the output does not always show it.**  The
+job lists the entry in `port_renames` or `port_drops` and warns
+about nothing.  Whether the output shows it depends on whether the
+target writes that interface by that name, and for these it does
+not:
+
+* a **VLAN interface on AOS-S** (`Vlan10`).  AOS-S writes a VLAN's
+  address in the `vlan` stanza, by the VLAN's id: renamed or
+  dropped, the output is the same to the byte;
+* a **VLAN interface on OS10, EOS and RouterOS** (`vlan100`,
+  `Vlan100`), and some on IOS-XE (CLI).  The target writes one for a
+  VLAN from the VLAN itself: renamed, the output has an interface of
+  the new name and the old one again; dropped, the old one is still
+  written.  On RouterOS the renamed one also takes its VLAN id from
+  its new name (`vlan100` renamed `vlan97` is written
+  `vlan-id=97`), and one with a name of its own (`clustervlan100`)
+  can come back as `vlan<id>`;
+* a **loopback that is a VXLAN source** (EOS, NX-OS).  A rename is
+  shown.  Dropped, its stanza goes and the VXLAN source line
+  still names it;
+* **Junos `irb`**, the bare name a config lists beside its
+  `irb.<unit>` interfaces: neither is shown, and the units stay
+  under `irb`.
+
+Over the committed inputs, each onto its own vendor, every other
+row of that section did what it said: a LAG, a tunnel, a loopback
+that is no VXLAN source, a VLAN interface on AOS-CX, NX-OS, Junos
+(`irb.<unit>`) and OPNsense.  The API has always answered the same
+request the same way; what is new is that the page offers it.  After such
+an entry, read the output: where the old name is still in it, take
+the entry back.  A VLAN interface is written from its VLAN, so
+renumber or drop the VLAN instead (the VLANs pane,
+`vlan_rename_map`) — on EOS, IOS-XE and AOS-S that moves the
+interface with it — and make any other such change in the output by
+hand.
+
 ### G. Model-to-model port mapping
 
 Tell netcanon which device the config came from and which one it is
@@ -856,7 +1201,10 @@ Ports pane choose the *Source device* and the *Target device*.
   its own: the config uses port names the device does not have (it
   says how many, and the first few), or the config names no port, so
   nothing could be checked against it.  Where no device could be
-  read, the line says why.
+  read, the line says why.  While the config is being read the line
+  says so; a server that has not answered in twenty seconds is given
+  up on, the line says that, and the config is asked about again the
+  next time the modal opens.
 * The line under the source device, and under a target chosen from a
   model family, says what you declared, how many ports that is and
   the first and last name, and how well the names are established.  A
@@ -869,8 +1217,10 @@ Ports pane choose the *Source device* and the *Target device*.
   not have — turns the line red and says why, in the server's words.
   It is still sent with Apply, which the server then refuses: the
   output is left as it was, and the footer of the modal says *Not
-  applied* with the server's reason until the next Apply (or *Accept
-  as shown*, or *Reset all*).  A line that
+  applied* with the server's reason until you change something in
+  the modal or the footer has its next thing to say (the footer's
+  line is about the last thing done: an edit clears it, looking at
+  another pane does not).  A line that
   says the device *could not be checked* is not a refusal: the preview
   did not arrive, and Apply sends the device for the server to compile
   itself.
@@ -914,6 +1264,24 @@ Ports pane choose the *Source device* and the *Target device*.
   is redrawn from the new job; an Apply still out for the old one is
   given up.  An Apply the server does not answer in two minutes is
   given up too, and says so.
+* Where a vendor has model families, the target model list has the
+  family models first and the vendor's flat profiles after them,
+  under "Profiles — one fixed port list": a switch can be in both,
+  under the same words.
+* The modal can be worked from the keyboard.  Tab stops at every
+  control it shows, a row's "drop" included, and Esc closes it and
+  gives the focus back to the button that opened it.  On a closed
+  list of target ports, typing a port's name chooses that port.
+* Your own entries — in the ports pane and in the VLAN, user and
+  SNMP panes — are kept in the browser by source codec, target
+  codec and the config's host name, and put back when the modal
+  opens on such a config again; the footer says so.  Two configs can
+  share a host name: an entry kept for a name the config on the page
+  has no row for is left out, the footer says how many were, and
+  they stay kept for the config that has the name.  In
+  the VLAN pane a number that is no VLAN id (1 to 4094) is not an
+  entry: nothing is sent for that VLAN while the field holds it,
+  and the field has a red edge.
 
 **Through the API** the same steps are:
 
@@ -1034,7 +1402,8 @@ confirm, never applied by itself, and it tells you how far to trust it:
   port names the config uses that the proposed device does not have.
   One cause is a module the config does not state; another is a partial
   paste.  `missing_ports` holds the first few hundred and
-  `missing_port_count` the whole number.  `consistent` is `true` when
+  `missing_port_count` the whole number; a name longer than 128
+  characters is cut to that, ending `…`.  `consistent` is `true` when
   none is missing, `false` when some are, and `null` when there was
   nothing to check: nothing was proposed, the text could not be
   parsed, or it names no port (only its top was pasted).  `null` is
@@ -1065,7 +1434,11 @@ rendered, and its `applied` says whether a pairing was made.  If the
 plan is `null`, nothing was paired — check the spelling of the field
 names, because the plan request ignores top-level fields it does not
 know (a misspelt `source_deployment` beside a `target_profile` is
-simply not seen).
+simply not seen).  Whatever was declared, the response lists the
+names the source config uses where a port name goes:
+`source_ports`, its hardware ports, and `source_other_names`,
+every other one — a LAG, a VLAN interface, a loopback.  A
+`port_rename_map` entry is keyed by a name from either.
 
 What you get back, on the job's `port_mapping_plan`:
 
@@ -1115,10 +1488,37 @@ What you get back, on the job's `port_mapping_plan`:
   of a `port_rename_map` entry.  An entry keyed by the port's factory
   name is taken for it.
 * **`sub_interfaces`** — sub-interface names (`ge-0/0/0.54`) that
-  followed their parent port, with the name each was given (`null`
-  when the parent was dropped).  This is done between two configs of
-  the same codec only; across vendors a sub-interface stays in
-  `off_inventory`.
+  followed their parent port, with the name each was given — the
+  parent's name on the target with the unit after it — or `null`
+  when the parent was dropped and the sub-interface with it.  Between
+  two configs of the same codec and across vendors alike.  Where the
+  target's capability matrix lists the 802.1Q tag of a routed
+  sub-interface as unsupported, the interface is still written under
+  that name, without the tag: the job is `partial` and the validation
+  details list the tag.
+* **`untagged_units`** — sub-interface names that went with their
+  parent port across vendors although no 802.1Q tag was read for
+  them from the source, each with the name it has in the output.
+  The tag is not in the name, so the output has an interface of
+  that name and no VLAN for it — and no tag for the validation
+  details to list.  Such a unit is not in `sub_interfaces`: it stays
+  in `off_inventory` and in `unresolved_ports`, so the job is
+  `partial` until your `port_rename_map` names it.  A unit gets
+  here from a source platform whose parser reads no tag for a
+  sub-interface (AOS-CX, OS10), from a stanza whose tag line the
+  parser did not read (an IOS config pasted without its
+  indentation), and from a config that states none.
+* **`unvouched_units`** — sub-interface names that went where their
+  port went, tag and all, and that the plan does not count as having
+  followed, each with the name it has in the output.  The plan takes
+  a name for a unit of a port only where the name spells the port as
+  the config does, so two kinds are here: a unit typed in another
+  letter case than its port (`gigabitethernet1/0/1.54` under
+  `GigabitEthernet1/0/1`, where names have no letter case) and a
+  unit of a unit (`ge-0/0/1.54.2`).  Each stays in `off_inventory`
+  and in `unresolved_ports`, so the job is `partial` until your
+  `port_rename_map` names it; a line of the plan says which, and
+  where each went.
 * **`displaced`** — names nobody decided that the name-shape
   translator would have put on a name another interface ends on, or
   on a port of the target: a name from either group above, or a
@@ -1146,7 +1546,10 @@ What you get back, on the job's `port_mapping_plan`:
   names can end up with two source ports on it without appearing in
   `fused`.  Use the names `POST /inventory` prints.  Between two
   configs of one codec a unit of a listed port (`ge-0/0/7.54`) is not
-  off-target.  On a RouterOS target a NAME you give a port is not
+  off-target; across vendors it is not for an entry whose SOURCE
+  name is a sub-interface (`GigabitEthernet1/0/1.54` given
+  `Ethernet1.54`), which is where netcanon itself puts a unit.  On a
+  RouterOS target a NAME you give a port is not
   listed here while the port's hardware has a place, or while the
   port is in `unbound_ports`; the plan says in a line of its own what
   became of the entry.
@@ -1215,9 +1618,13 @@ What you get back, on the job's `port_mapping_plan`:
   keep the names it uses — on a RouterOS target an entry that gives
   each such port its old name (`{"ether3": "ether3"}`) leaves the
   route right, since a name does not decide a port's hardware there.
-* **`ignored_overrides`** — entries in your `port_rename_map` whose
-  target was blank, for a name the config uses.  A blank target is
-  ignored: it decides nothing.
+* **`ignored_overrides`** — entries of a `port_rename_map` whose
+  target was blank (empty, white space, or only characters that
+  draw nothing), for a name the config uses.  A blank target
+  decides nothing.  Through the HTTP API you will not see one: a
+  blank target is refused with a 422 before any job is run (send
+  `null` to drop).  A caller of the pipeline in Python that passes
+  one has it set aside and listed here.
 * **`emptied_lags`**, **`shrunk_lags`**, **`lost_routes`**,
   **`lost_dhcp_pools`**, **`lost_tracking`**, **`lost_vtep_sources`**
   — what a dropped port took with it.  A LAG loses a dropped member;
@@ -1291,9 +1698,6 @@ nothing, as before.
   a factory-default target those ports remain untagged members of
   VLAN 1 unless another VLAN claims them untagged.  Check VLAN 1 on
   the result.
-* A same-vendor AOS-S run warns `could not classify port name
-  'Vlan<N>'` once for each routed VLAN.  The name is left as it is,
-  which is correct.
 * A Catalyst config lists the interfaces of every network module the
   chassis could take, whichever one is fitted, plus an
   application-hosting port.  Declared with one module, the other
@@ -1382,14 +1786,63 @@ nothing, as before.
   displaced where that name is a port of the target and listed in
   `landed_off_target` where it is not; either way the job is
   `partial` until you decide them.
-* A **sub-interface** follows its parent port only between two
-  configs of the same codec.  Across vendors
-  (`GigabitEthernet1/0/1.100` onto Junos, a Junos unit onto AOS-S) it
-  does **not** move with its port: it is reported, and where the
-  name-shape translator cannot give it a name of its own it is
-  dropped.  A unit of a LAG or a loopback (`ae0.100`, `lo0.5`) is not
-  a unit of a port and goes by name shape as before — on Junos that
-  folds several loopback units onto `lo0`.
+* A **sub-interface** follows its parent port, with its unit, and
+  is dropped with a port that is dropped — between two configs of
+  the same codec and across vendors (`GigabitEthernet1/0/1.100` onto
+  Junos is `unit 100` of the port its own port was paired with).
+  What the target makes of `<its port>.<unit>` is the target's: a
+  platform with no routed sub-interface still gets an interface of
+  that name, without the tag (a Junos unit onto AOS-S is `1.54`,
+  which is no name of an AOS-S port — there a tagged routed
+  interface is a VLAN), in a job that is `partial` because the
+  validation details list the tag.  Map such a unit by hand.  Two
+  cases to look for.  A unit with **no tag read from the source** (a
+  platform whose parser reads none — AOS-CX, OS10 — a line the
+  parser did not read, or a config
+  that states none) leaves the validation nothing to list, on any
+  target: the unit is written under `<port>.<unit>` with no VLAN.
+  It is recorded in `untagged_units`, the job is `partial` until
+  you name it, and a line of the plan says which units; without
+  devices declared a warning says the same of each, and the job's
+  status does not move for it (section D1 says what it moves for
+  there).  Between two configs of ONE
+  vendor none of that is said — and a tag the parser does not read
+  (AOS-CX, OS10) is lost there as well, as it is on every path,
+  with nothing in the job to report it.
+  And **VyOS and FortiOS take the VLAN id from the number in the
+  name** (`vif <unit>`, `set vlanid <unit>`): a source unit whose
+  number is not its tag — IOS `GigabitEthernet0/0/1.54` with
+  `encapsulation dot1Q 300` — comes out tagged 54, in a `partial`
+  job.  Check the VLAN id of every sub-interface on those two.
+
+  Not followed across vendors: a unit of a **loopback** or of a
+  **management port** (a Junos `lo0.5` is put on the target's
+  loopback beside `lo0`, and the job warns that two names share
+  it) — a management port by its name (EOS `Management1.5`) or by
+  what its config says of it (the Catalyst port in `Mgmt-vrf`,
+  whose name reads as any other port's); a unit of a port the
+  source codec's classifier does not know
+  (a channelized Junos `xe-0/0/6:2.10`), which stays under its
+  source name; a reference to Junos unit 0 (`ge-0/0/1.0`), which is
+  the port itself on every other platform, and an interface
+  numbered 0 (a hand-written `interface Gi0/0/1.0`, or `.00`), which
+  stays under its source name; a name that ends in more than ten
+  digits, which no platform numbers a sub-interface with and which
+  stays under its source name too; and a VLAN
+  interface that
+  is only NAMED like a unit (FortiOS `port1.55`, RouterOS
+  `ether1.55`), which is a name of its own.  Between two configs of
+  one codec each of these keeps its name, and a unit of a LAG or a
+  loopback (`ae0.100`, `lo0.5`) follows an entry for its LAG or
+  loopback.  Where names have no letter case a unit typed in
+  another case than its port (`gigabitethernet0/0/1.54`) is still
+  that port's unit.  With devices declared that one is not counted
+  as having followed, and neither is a unit of a unit
+  (`ge-0/0/1.54.2`): each is listed as a name the declared device
+  does not have, and asks for a decision.  The plan says of each
+  that it moved with its port, where to, and why it does not vouch
+  for it (`unvouched_units`, a line of the plan, and the unit's row
+  in the rename modal).  Name the unit in the port map, or drop it.
 * netcanon does not know whether a model has an out-of-band
   management port.  A source management port with no management port
   in the target model is therefore always left for you to decide,
@@ -1414,10 +1867,14 @@ nothing, as before.
   has no warning for it; with a 2930F fabric or a 2930M stack
   declared from a model family, the plan's `caveats` say so.
 * An AOS-S config defines a LAG as `trk1` and lists it in a VLAN as
-  `Trk1`.  That is one LAG and one name, `trk1`, in `port_renames`,
-  in the rename modal and as a key of a rename map; a key in another
-  letter case (`Trk1`) reaches it too, with or without devices
-  declared.  A HARDWARE port typed in two letter cases (`A1` in one
+  `Trk1`.  That is one LAG and one name, `trk1`, as a key of a rename
+  map — a key in another letter case (`Trk1`) reaches it too, with
+  or without devices declared — in `source_other_names`, and in the
+  rename modal, where it has one row.  Onto another vendor it has
+  its one entry in `port_renames` too.  Between two AOS-S configs
+  the LAG is not renamed, so it has none there, and its row is
+  under *Other names in the config*.
+  A HARDWARE port typed in two letter cases (`A1` in one
   VLAN, `a1` in another, which no device prints) is still two names:
   an entry for one leaves the other as it was, and the job says so
   (`... are one name on aruba_aoss, written in more than one letter
@@ -1516,7 +1973,7 @@ a job too, since there is no job to make of a request nobody read:
 
 | Limit | What is counted | `small` | `standard` | `large` |
 |---|---|---:|---:|---:|
-| `vlan_ids` | VLAN ids that lists and ranges name (`2-4000`, `all`, `except 7`) | 1,048,576 | 16,777,216 | 67,108,864 |
+| `vlan_ids` | VLAN ids that lists and ranges name (`2-4000`, `all`, `except 7`); the 4,094 of a trunk that states no allowed list, where that is every VLAN (IOS-XE, NX-OS, EOS, AOS-CX) | 1,048,576 | 16,777,216 | 67,108,864 |
 | `memberships` | one port in one VLAN's port list, or in one LAG | 50,000 | 1,000,000 | 4,000,000 |
 | `ports` | different ports that port ranges name; ports that only a VLAN's or a LAG's list names | 2,048 | 8,192 | 32,768 |
 | `interfaces` | interface records, wherever one is made | 2,500 | 50,000 | 200,000 |
@@ -1573,6 +2030,14 @@ the `small` limits.
   display set` is not converted, and is not counted in words.
 * Under `small` (the demo): a switch with more than 256 ports that each
   state `all`, or more than 50,000 memberships.
+* **A trunk with no allowed line counts as one that states `all`** on
+  IOS-XE, NX-OS, EOS and AOS-CX, where such a trunk carries every VLAN
+  (on AOS-CX: a `vlan trunk native` line and no `vlan trunk allowed`).
+  A chassis whose every port is a trunk with no list is counted port by
+  port like one that writes `all` on each, and the sentence names the
+  last such trunk: "... the last one read: a trunk with no allowed list,
+  which is every VLAN: GigabitEthernet1/0/257".  On Dell OS10 and Junos
+  such a trunk carries no VLAN and counts as nothing.
 
 **What the limits do not bound** — requests in flight under every set
 but `small`, how many connections a client opens and leaves open, the
@@ -1655,19 +2120,75 @@ matter; the matrix is honest about both.
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP
   pools surface as a comment block, not as `dhcp-server pool`
   syntax.
-* **A trunk that allows no VLAN comes out allowing every VLAN on
-  four targets.**  The canonical tree has one value, an empty
-  list, for a trunk that allows nothing (`switchport trunk allowed
-  vlan none`, a list emptied by `remove`, a trunk whose VLANs were
-  all dropped), for a trunk that states no list, and for AOS-CX's
-  own `vlan trunk allowed all`.  Each renderer picks a reading:
-  `aruba_aoscx` writes `vlan trunk allowed all`; `cisco_iosxe_cli`,
-  `arista_eos` and `cisco_nxos` write a trunk with no allowed line,
-  which is every VLAN there; `juniper_junos`, `aruba_aoss` and
-  `dell_os10` write a trunk that carries none — which is wrong the
-  other way for a Cisco trunk that states no list.  The job reports
-  nothing.  A known defect, not a design: check any trunk whose
-  list is empty or absent on either side.
+* **A trunk's allowed list means what it says.**  On a trunk an
+  empty list is NO VLAN, a list of every id (1-4094) is EVERY VLAN,
+  and any other list is the list.  A trunk that states no allowed
+  list is read as what its platform does with one: every VLAN on
+  `cisco_iosxe_cli`, `cisco_nxos`, `arista_eos` and `aruba_aoscx`;
+  no VLAN on `dell_os10` and `juniper_junos`.  Each target writes
+  its own form: `switchport trunk allowed vlan none` and, for every
+  VLAN, a trunk with no allowed line on IOS-XE, NX-OS and EOS;
+  `vlan trunk allowed all` on AOS-CX; `vlan members all`, or no
+  members, on Junos; no allowed line for no VLAN on OS10; the VLANs
+  that tag the port on AOS-S.  Release 0.7.7 and earlier had one
+  value, an empty list, for all three statements, and a trunk that
+  allowed no VLAN came out allowing every VLAN on four targets:
+  check any trunk translated then whose list is empty or absent on
+  either side.  These limits remain, each written in the output or
+  here:
+  * **AOS-CX cannot be told "no VLAN".**  A trunk with no allowed
+    VLAN carries every VLAN there.  For a source trunk that allows
+    none, neither `vlan trunk` line is written and a `! review:`
+    line in the stanza says what the source said.  The job does not
+    report it: list the VLANs the port is to carry, or shut it down.
+    What is written is a switched port with no `vlan` line, taken
+    here to be an access port in VLAN 1 by the switch's default;
+    that default is not established here from a vendor's page.
+  * **OS10 cannot be told "every VLAN".**  It has no word for it,
+    its VLAN ids end at 4093, and a VLAN must exist before a port
+    is put in it.  A trunk of every VLAN is written `switchport
+    trunk allowed vlan 1-4094` under a `! review:` line: replace
+    the range with the VLANs the switch has.  A list that is not
+    every VLAN is written as it stands with no such line, though it
+    can name an id past 4093 (`2-4094`) or a VLAN the output does
+    not declare.
+  * **AOS-S cannot be told "and any VLAN made later".**  A trunk of
+    every VLAN is tagged in each VLAN the output declares, and
+    nothing in the output marks that more was meant.
+  * **`none` on a port that is not `switchport mode trunk` is
+    dropped.**  On such a port an empty list and no list are one
+    value, and no line is written for it, same vendor included.  An
+    IOS-XE port in a dynamic mode that states `switchport trunk
+    allowed vlan none` comes back with no allowed line, and carries
+    every VLAN if it negotiates a trunk.  A VLAN drop that empties
+    the list kept on such a port gives no line and no warning.
+  * **A trunk line with no `switchport mode trunk` line is read as a
+    trunk** by `cisco_nxos` and `arista_eos`, though a port of
+    either platform is an access port until it is told otherwise.
+    Such a port is a trunk of the VLANs its lines name, or of no
+    VLAN — never of every VLAN: the platform's default is given only
+    to a port that says it is a trunk.
+  * **A trunk whose list is stated where the parser does not read it
+    is a trunk of every VLAN:** a port-channel member that states
+    the mode and leaves the list to its port-channel, and a port
+    that takes its list from `inherit port-profile` (NX-OS) or
+    `source template` (IOS-XE).  Check `vlan members all`, OS10's
+    `1-4094` and AOS-S tags on such a port.
+  * **A stanza met twice is one interface for its allowed list
+    only.**  Its allowed lines are applied to one list, in order;
+    each stanza is still written, with the mode it states.
+  * **Whether a trunk's list holds its native VLAN differs by
+    platform, and the canonical tree does not say which.**  On
+    AOS-CX the native VLAN is carried only if the allowed list
+    names it; on OS10 and AOS-S the untagged VLAN is outside the
+    list by grammar.  It errs both ways: an AOS-CX trunk whose
+    native VLAN is not in its list reaches OS10 and AOS-S carrying
+    that VLAN untagged (more than the source), and an OS10 trunk's
+    untagged VLAN is not in the list written for AOS-CX, IOS-XE,
+    NX-OS or EOS (an OS10 trunk with an untagged VLAN and no tagged
+    one is written as a trunk that allows none, with the native
+    line beside it).  Check the native VLAN of any trunk translated
+    between those families.
 * **A VLAN known only to an "allow-everything" trunk is not
   translated.**  On the six port-centric codecs (`cisco_iosxe_cli`,
   `arista_eos`, `cisco_nxos`, `juniper_junos`, `aruba_aoscx`,

@@ -589,11 +589,11 @@ class _Work:
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from netcanon.api.routes import _migration_helpers as helpers
 
-        self.real = helpers.run_plan_with_overrides
+        self.real = helpers.run_plan_with_checked_names
         self.began, self.let_go = threading.Event(), threading.Event()
         self.calls = self.inside = self.most = 0
         self._lock = threading.Lock()
-        monkeypatch.setattr(helpers, "run_plan_with_overrides", self)
+        monkeypatch.setattr(helpers, "run_plan_with_checked_names", self)
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         with self._lock:
@@ -824,17 +824,17 @@ class TestOneAtATimeUnderSmall:
             )
             assert resp.status_code == status and L.in_flight() == (0, 0), (vendor, resp.text[:200])
         # A fault nobody expected, from below every handler's own net.
-        real = helpers.run_plan_with_overrides
+        real = helpers.run_plan_with_checked_names
 
         def broken(*args: Any, **kwargs: Any) -> Any:
             assert L.in_flight() == (1, 0)
             raise RuntimeError("a fault in the work")
 
-        monkeypatch.setattr(helpers, "run_plan_with_overrides", broken)
+        monkeypatch.setattr(helpers, "run_plan_with_checked_names", broken)
         with pytest.raises(RuntimeError, match="a fault in the work"):
             small_client.post("/api/v1/migration/plan", json=_PLAN)
         assert L.in_flight() == (0, 0)
-        monkeypatch.setattr(helpers, "run_plan_with_overrides", real)
+        monkeypatch.setattr(helpers, "run_plan_with_checked_names", real)
         # The next request has the place, and does not wait for anyone.
         monkeypatch.setitem(L.PROFILES, "small", replace(L.SMALL, seconds=0.2))
         assert small_client.post("/api/v1/migration/plan", json=_PLAN).json()["status"] == "completed"
@@ -1131,7 +1131,7 @@ class TestTheDemosProofByBehaviour:
         commands, expected = _proof(15)
         assert expected == ["True ['partial', 'partial', 'partial']"]
 
-        real = helpers.run_plan_with_overrides
+        real = helpers.run_plan_with_checked_names
         lock = threading.Lock()
         seen = {"inside": 0, "most": 0, "calls": 0}
 
@@ -1158,7 +1158,7 @@ class TestTheDemosProofByBehaviour:
         monkeypatch.setenv("IP", "instance")
         monkeypatch.setenv("KEY", "the-key")
         monkeypatch.setattr(urllib.request, "urlopen", through_the_app)
-        monkeypatch.setattr(helpers, "run_plan_with_overrides", counted)
+        monkeypatch.setattr(helpers, "run_plan_with_checked_names", counted)
         exec(compile(commands, "deploy/VERIFY.md proof 15", "exec"), {})
         assert capsys.readouterr().out.splitlines() == expected
         assert (seen["calls"], seen["most"]) == (3, 1), "three at once were not worked on one at a time"
@@ -1176,7 +1176,7 @@ class TestTheDemosProofByBehaviour:
 
         commands, expected = _proof(16)
         assert expected == ["3 17 0 True"]
-        real = helpers.run_plan_with_overrides
+        real = helpers.run_plan_with_checked_names
         lock = threading.Lock()
         seen = {"inside": 0, "most": 0, "calls": 0}
 
@@ -1207,7 +1207,7 @@ class TestTheDemosProofByBehaviour:
         monkeypatch.setenv("IP", "instance")
         monkeypatch.setenv("KEY", "the-key")
         monkeypatch.setattr(urllib.request, "urlopen", through_the_app)
-        monkeypatch.setattr(helpers, "run_plan_with_overrides", counted)
+        monkeypatch.setattr(helpers, "run_plan_with_checked_names", counted)
         exec(compile(commands, "deploy/VERIFY.md proof 16", "exec"), {})
         assert capsys.readouterr().out.splitlines() == expected
         assert (seen["calls"], seen["most"]) == (3, 1), "twenty at once: three are worked on, one at a time"
@@ -1637,7 +1637,7 @@ class TestAnAnswerNobodyReads:
     #: reports each membership: nine megabytes of answer, which no
     #: socket buffer of a loopback connection takes whole.
     LARGE = json.dumps({"source": "cisco_nxos", "target": "opnsense", "raw_text": trunk_all(100, 480)}).encode()
-    LENGTH = 9_136_354
+    LENGTH = 9_138_696
 
     @staticmethod
     def _client_that_does_not_read(port: int) -> socket.socket:
@@ -1683,7 +1683,7 @@ class TestAnAnswerNobodyReads:
         assert len(lines) == 1, lines
         said = re.fullmatch(
             r"an answer from /api/v1/migration/plan had not gone out when its request's 4 seconds \(small "
-            r"limits\) were up, and was abandoned: (\d+) of 9,136,354 bytes had been handed to the client; the "
+            r"limits\) were up, and was abandoned: (\d+) of 9,138,696 bytes had been handed to the client; the "
             r"rest was let go and the connection closed", lines[0],
         )
         assert said, lines[0]
@@ -2050,7 +2050,7 @@ class TestOutOfTimeAfterAWaitIsBusy:
                 return real(*args, **kwargs)
             return work
 
-        monkeypatch.setattr(helpers, "run_plan_with_overrides", late(helpers.run_plan_with_overrides))
+        monkeypatch.setattr(helpers, "run_plan_with_checked_names", late(helpers.run_plan_with_checked_names))
         monkeypatch.setattr(sanitize_route, "sanitize_text", late(sanitize_route.sanitize_text))
         monkeypatch.setattr(migration_route, "detect_codec", late(migration_route.detect_codec, looks=True))
         monkeypatch.setattr(migration_route, "propose_deployment", late(migration_route.propose_deployment))

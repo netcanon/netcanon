@@ -388,13 +388,27 @@ server has already loaded; it never supplies a port name, a count or a path.
   maps) must be text that can be written back.  A job echoes those names,
   and one holding a lone surrogate could not be serialised: it is refused
   with a 422 that echoes the map, never the pasted config.
+- A target in `port_rename_map` is a name or `null`.  A blank one (empty,
+  only white space, or only control and format characters — a NUL, a
+  zero-width space, a byte-order mark: anything with no character
+  that is drawn) is refused with a 422 on every plan endpoint,
+  with devices declared or not: taken as a name it was written into the
+  generated config as an interface with no name, and — an entry being
+  what settles a name a job is held for — it would have cleared that
+  hold without deciding anything.  The refusal's message names the
+  keys, cut short, and at most five of them.  (The `input` member of
+  that 422 is the map as it was sent: a field's refusal carries the
+  field's value and nothing else of the body, so never the pasted
+  config.)
 - An operator's `port_rename_map` target is read as the declared target
   device spells its ports where another letter case cannot be another
   interface on the target platform (it has no case, or it names every
   interface itself), and
-  a blank target is ignored.  So a target that differs from a port only in
-  case or surrounding space cannot be passed off as another port, and a
-  blank cannot be passed off as a decision.  An abbreviation the device
+  a blank target that reaches the pipeline without passing the request
+  model (a caller in Python) is set aside.  So a target that differs
+  from a port only in case or surrounding space cannot be passed off as
+  another port, and a blank cannot be passed off as a decision.  An
+  abbreviation the device
   would accept (`Gi1/0/1`) can: it is not recognised as the port, and is
   reported as a target the model does not list rather than as two ports
   on one.
@@ -461,7 +475,12 @@ number is not read, and a note counts such member lines, module lines and
 The evidence, the list of missing ports and the notes are capped
 (`MAX_EVIDENCE_LINES`, `MAX_MISSING_PORTS`, `MAX_NOTES`, `MAX_NOTE_LENGTH`), a
 list that was cut says so (`missing_port_count`, or a note), and
-a note spells out a few member numbers and counts the rest.  A detector that
+a note spells out a few member numbers and counts the rest.  A port name the
+answer repeats is the config's own text and has no length of its own: each is
+cut to `MAX_PORT_NAME_SHOWN` characters in `missing_ports`, and shorter still
+in the note that names the first few, which is written after the detector's
+notes were capped and stays within `MAX_NOTE_LENGTH` whatever a port is called
+(`tests/unit/migration/test_deployment_detect.py`).  A detector that
 raises is answered the same way, and the log line carries the exception's type
 only; so is a parser that refuses the text.
 
@@ -532,6 +551,48 @@ Five shapes did, and were mended:
 The same shapes in the shipped device definitions — probe patterns, which
 the collectors apply to what a device printed, and prompt patterns — were
 mended with them.
+
+One more was found afterwards, in code that search had passed.  The Junos
+parser cut comments out of hierarchical text with a pattern (`/\*.*?\*/`),
+and ran it over every Junos text before the form of the text was known.
+From each `/*` the pattern read on for the `*/`, and with none in the text
+it read to the end every time: 8,000 set-form lines that each hold a `/*`
+(a third of a megabyte) took seven seconds, sixteen times what a quarter as
+many took.  Comments are now recognised in the tokeniser's own walk over
+the characters, only where a token can begin, and a set-form text is known
+for set-form by its first statement.  The search builds, for a pattern, a
+run after what the pattern needs first; it does not write what the pattern
+needs first many times over, which is this text.  A text for this one is
+pinned in the test module.
+
+And one that was no pattern and not this project's code: the words of a
+Junos `set` line were split by the standard library's `shlex`, which adds a
+character at a time to a string it keeps on itself, and so copies a word for
+every character of it.  One word of 400,000 characters in a line took over a
+second, one of 1.6 MB about three minutes.  The search times runs of white
+space inside a capture's lines, not one long word.  The Junos parser splits
+its lines itself now, in time that fits the line, and its splitter is
+compared with `shlex` on every short line and on random longer ones
+(`tests/unit/migration/codecs/juniper_junos/test_set_line_words.py`); two
+texts are pinned for it.
+
+With the splitting out of the way the stanza search read the Junos parser
+again and reported what it had been too slow to see: each `set snmp v3`
+line found its user by reading every user so far (32,000
+`security-to-group` lines, fifteen seconds).  The user is found by name
+now, and a text is pinned.  The search also reported, for Junos, units of
+the first kind in the list below — many addresses on one unit.  That is
+mended there, and with both changes the search reports no unit for Junos.
+
+The same parser now also drops, before it judges the form, the lines of
+the terminal session a capture was copied from (a prompt, `{master:0}`,
+`[edit]`, a pager's prompt, a Markdown fence): one pattern over the whole
+text, each alternative anchored to a line that begins with a character
+that is not white space, bounded in what it takes, and with one way only to
+reach the end of the line.  A `deactivate` line's path is held as the path
+alone — a line is walked along the paths once, with nothing kept for each
+word of each path — and a row that names a statement left out is cut after
+the first word that names a secret.
 
 Results are unchanged on every config in the repository and the development
 corpora: detection, every codec's probe and every codec's parsed tree were
@@ -615,9 +676,11 @@ measured and left by the changes above, and are closed now: what a config
 expands to, and the product of two kinds of stanza that grow together.  A
 third is closed in part: time.
 
-A range is a few bytes that parse to thousands of entries, `all` is 4,094,
-and two honest counts multiply, so the size of a request bounds neither the
-memory it takes nor its time.  The product therefore COUNTS what a request
+A range is a few bytes that parse to thousands of entries, `all` is 4,094
+-- and so, on IOS-XE, NX-OS, EOS and AOS-CX, is a trunk that states no
+allowed list at all, which carries every VLAN there -- and two honest counts
+multiply, so the size of a request bounds neither the memory it takes nor
+its time.  The product therefore COUNTS what a request
 makes (`netcanon/migration/limits.py`): at each place where a few bytes
 become many entries, before the entries are made; once more on every
 finished parse, whoever made what it holds; and the length of every output.
@@ -628,7 +691,7 @@ VLANs" against a device.
 
 | Limit | What is counted | `small` | `standard` | `large` |
 |---|---|---:|---:|---:|
-| `vlan_ids` | VLAN ids that lists and ranges name (`2-4000`, `all`, `except 7`) | 1,048,576 | 16,777,216 | 67,108,864 |
+| `vlan_ids` | VLAN ids that lists and ranges name (`2-4000`, `all`, `except 7`); the 4,094 of a trunk that states no allowed list, where that is every VLAN (IOS-XE, NX-OS, EOS, AOS-CX) | 1,048,576 | 16,777,216 | 67,108,864 |
 | `memberships` | one port in one VLAN's port list, or in one LAG | 50,000 | 1,000,000 | 4,000,000 |
 | `ports` | different ports that port ranges name; ports that only a VLAN's or a LAG's list names | 2,048 | 8,192 | 32,768 |
 | `interfaces` | interface records, wherever one is made | 2,500 | 50,000 | 200,000 |
@@ -673,7 +736,22 @@ What the texts measured above do now:
 * 1,000 trunks that allow every VLAN and 1,000 declared VLANs (118 KB): a
   million memberships, which is the `standard` limit exactly.  One trunk
   more is refused before the first membership is stamped: the product is
-  known as soon as the two counts are.
+  known as soon as the two counts are.  (A trunk allows every VLAN by
+  saying `all`, or, where a trunk carries every VLAN by default, by
+  stating no allowed line at all.)
+* 10,000 IOS-XE trunks that state no allowed list (0.6 MB): each carries
+  every VLAN there, and the tree says so with the 4,094 ids, some 35 KB a
+  trunk.  It is counted as the word `all` is, before its list is made --
+  the stanza is two lines, and no character of it stands for the ids.
+  Made, the 10,000 are 362 MB of tree.  Under `standard` the 4,099th is
+  refused, in half a second, at 159 MB; under `small` a config of such
+  trunks is refused at the 257th.  So is what the same parsers make
+  beside it: the every-VLAN list a first `add` or `remove` starts from,
+  and the list of its own that each record of a stanza met again is
+  given.  Reading such trunks grows with their number and no faster, and
+  so does writing them: a renderer that chooses a port for each VLAN
+  asks what a trunk's list says once a port, not once a port for every
+  VLAN.
 * A Junos `interface-range` is counted before its addresses are copied onto
   its members.
 
@@ -682,7 +760,9 @@ does not bound memory**: 50,000 interface stanzas of one line each are 0.9
 MB of text and 240 MB of request, so an interface is counted where it is
 made.  Block-form Junos writes the whole path again for every statement
 under it (a 5,000-word path over 790 statements, 43 KB, was 295 MB and five
-seconds): counted in words.  A VyOS set line becomes nested blocks, each
+seconds): counted in words -- the `deactivate` line written for a statement
+marked `inactive:`, and the line that stands for an empty block, with the
+rest.  A VyOS set line becomes nested blocks, each
 indented once more, so what a line becomes grows with the square of its
 depth: counted in characters; and a set line nested more than 64 levels deep
 is a parse failure, where past about a thousand it was an unexpected error.

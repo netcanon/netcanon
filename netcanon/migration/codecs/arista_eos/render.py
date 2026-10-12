@@ -52,7 +52,7 @@ from ..._usm_keys import (
     user_usm_kind,
 )
 from ...canonical.intent import CanonicalIntent
-from .._helpers import charge_id_lines
+from .._helpers import charge_id_lines, switchport_trunk_allowed_value
 from ..base import RenderError
 
 # Arista-local emit-form vocabulary: maps the algorithm tokens
@@ -158,7 +158,8 @@ def _normalise_lag_name_to_arista(name: str) -> str | None:
     return None
 
 
-#: The line that carries a trunk's allowed list, up to its first id.
+#: The line that carries a trunk's allowed list, up to its first id
+#: (or the word ``none``).
 _ALLOWED_VLAN_LEAD = "   switchport trunk allowed vlan "
 
 
@@ -199,10 +200,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # same-vendor renders (the Vlan<N> interface is already present).
     synth_svis = synthesize_svis_from_vlan_l3(tree)
 
-    # Every id of every trunk's allowed list is written out below:
-    # counted here, before the first character.
+    # A trunk's allowed list is written out below id by id (every
+    # VLAN is no line, and no VLAN the word): the lines are counted
+    # here, before the first character.
     charge_id_lines(
-        [*tree.interfaces, *synth_svis], _ALLOWED_VLAN_LEAD, trunks_only=True,
+        [*tree.interfaces, *synth_svis], _ALLOWED_VLAN_LEAD,
+        codec="arista_eos", trunks_only=True,
     )
 
     out: list[str] = []
@@ -672,8 +675,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append(
                     f"   switchport trunk native vlan {iface.trunk_native_vlan}"
                 )
-            if iface.trunk_allowed_vlans:
-                vlist = ",".join(str(v) for v in iface.trunk_allowed_vlans)
+            # The list means what it says.  No VLAN is ``none``.
+            # Every VLAN is no line at all: it is the default, and
+            # EOS's own form for it is the absence of the statement.
+            # Any other list is written as it stands.
+            vlist = switchport_trunk_allowed_value(
+                "arista_eos", iface.trunk_allowed_vlans, coalesce=False,
+            )
+            if vlist is not None:
                 out.append(f"{_ALLOWED_VLAN_LEAD}{vlist}")
         for addr in iface.ipv4_addresses:
             # Wave C VARP: addresses with a populated

@@ -199,11 +199,11 @@ class _Work:
     def __init__(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from netcanon.api.routes import _migration_helpers as helpers
 
-        self.real = helpers.run_plan_with_overrides
+        self.real = helpers.run_plan_with_checked_names
         self.began, self.let_go = threading.Event(), threading.Event()
         self.calls = self.inside = self.most = 0
         self._lock = threading.Lock()
-        monkeypatch.setattr(helpers, "run_plan_with_overrides", self)
+        monkeypatch.setattr(helpers, "run_plan_with_checked_names", self)
 
     def __call__(self, *args, **kwargs):
         with self._lock:

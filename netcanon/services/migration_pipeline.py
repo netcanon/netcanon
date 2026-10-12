@@ -35,6 +35,18 @@ before any rename engages.
     enumerations for the UI's rename modal via the capture-first
     transform (see below).
 
+  * :func:`run_plan_with_checked_names` — :func:`run_plan_with_overrides`,
+    and then a look at what the port translator made of the names
+    in the finished run.  A job in which two source names ended on
+    one name of the output, a name was dropped with no entry of the
+    map saying so, or a name the translator could not read was left
+    as the source config has it where that is a foreign name on
+    the target, is ``partial``, and says which on
+    ``MigrationJob.fused_ports``, ``.unresolved_ports`` and
+    ``.untranslated_ports``.  What every plan endpoint runs when
+    the request declares no devices.  Its signature is not one of
+    the three frozen ones.
+
   * :func:`run_plan_with_models` — the model-aware entry.  Takes the
     port inventory of the source device and of the target device,
     pairs the ports the config uses by POSITION, and forwards the
@@ -93,6 +105,12 @@ enumerations and stashes them onto the :class:`MigrationJob` as:
   * ``source_ports`` — hardware port names as parsed, including
     ports no rename touches (``port_renames`` records only names
     that changed).
+  * ``source_other_names`` — every other name the config uses
+    where a port name goes: a LAG, a VLAN interface, a loopback,
+    a tunnel, and a reference that names no interface at all.
+    With ``source_ports`` it is every name the port translator
+    rewrites, so a rename modal can draw a row for a name that
+    no rename changed and no warning quotes.
 
 These fields are populated even when no overrides are engaged
 because the Tier-3 rename modal needs to enumerate every entity the
@@ -122,10 +140,11 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from ..migration._tier3_detection import is_left_out_row
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
 from ..migration.limits import LimitExceeded
 from ..models.migration import (
@@ -180,7 +199,13 @@ def _input_not_recognized(raw_text: str, tree: Any, job: MigrationJob) -> bool:
         a firewall-only ruleset) already carries its own honest "detected
         in source but not translated" signal via
         ``dropped_tier3_sections``, so it is a *recognized* (if
-        untranslatable) input, not a rejection.
+        untranslatable) input, not a rejection.  A row that names a
+        statement the parser LEFT OUT (``inactive: ...``, see
+        ``_tier3_detection.is_left_out_row``) is not such a section: the
+        Junos parser names a deactivated path whether or not any handler
+        would have read a line under it, so ``hello world`` / ``set foo
+        bar`` / ``deactivate foo`` had a row and was ``completed`` with
+        nothing in it.
 
     Mirrors the UI's ``isEmptyCompleted`` zero-path test, plus the Tier-3
     exemption so the backend signal is at least as precise as the banner.
@@ -199,7 +224,7 @@ def _input_not_recognized(raw_text: str, tree: Any, job: MigrationJob) -> bool:
         return False
     if not (raw_text or "").strip():
         return False
-    if job.dropped_tier3_sections:
+    if not all(is_left_out_row(label) for label in job.dropped_tier3_sections):
         return False
     report = job.validation
     if report is None:
@@ -413,6 +438,15 @@ def run_plan(
                 "does not match the input format — treat this as a failed "
                 "translation, not a clean result."
             )
+            if job.dropped_tier3_sections:
+                # Every row names statements that were left out.  The
+                # rows are not counted here: one row may stand for
+                # several statements, and the last for all the rest.
+                job.error += (
+                    " All that was read is statements the source held "
+                    "and did not run; they are listed, and nothing else "
+                    "was recognized."
+                )
         else:
             job.status = MigrationJobStatus.completed
 
@@ -447,8 +481,13 @@ def run_plan_with_overrides(  # noqa: C901
     Shared engine for every per-pane override surface (ports, VLANs,
     local_users, snmp_community, snmpv3_user — all shipped).  Each
     per-pane API endpoint in :mod:`netcanon.api.routes.migration`
-    calls this function with only its category's override map
-    populated; the other categories' params default to None (no-op).
+    reaches this function with its category's override map and the
+    request's port map populated; the other categories' params
+    default to None (no-op).  It is reached through
+    :func:`run_plan_with_checked_names`, or :func:`run_plan_with_models`
+    when the request declares both devices: this function's own
+    status says nothing of what the port translator did, and those
+    two read the finished run for it.
 
     Current category support:
       * ``port_rename_map`` — see
@@ -473,11 +512,14 @@ def run_plan_with_overrides(  # noqa: C901
     AHEAD of any caller-supplied transforms so overrides are the
     first thing that happens to the parsed tree.
 
-    Frozen-signatures rule: NEW function (signature free to grow);
-    :func:`run_plan` and :func:`run_plan_with_rename` remain
-    unchanged.  Adding a new override category in a later commit is
-    a same-function signature extension (optional param with default
-    None) — backwards compatible.
+    Frozen-signatures rule: this signature is one of the three the
+    freeze guard pins
+    (``tests/unit/migration/test_pipeline_signature_freeze.py``),
+    with :func:`run_plan` and :func:`run_plan_with_rename`.  A new
+    override category is one more optional parameter with default
+    None — backwards compatible for every caller, and a deliberate
+    edit of that guard in the same change.  Any other behaviour goes
+    on a new function.
 
     Args:
         source: Source codec.
@@ -557,6 +599,9 @@ def run_plan_with_overrides(  # noqa: C901
             references, whether or not any rename touched them, as
             far as the source codec can tell a port from a logical
             interface (see ``collect_hardware_port_names``).
+          * ``source_other_names`` — the names
+            ``collect_port_names`` finds that ``source_ports`` does
+            not hold, in first-seen order.
     """
     # Lazy imports to avoid circular dependency at module import time
     # (these modules import CodecBase; this module imports CodecBase).
@@ -567,6 +612,7 @@ def run_plan_with_overrides(  # noqa: C901
     from ..migration.canonical.port_names import (
         build_port_rename_transform,
         collect_hardware_port_names,
+        collect_port_names,
     )
     from ..migration.canonical.snmp_names import (
         build_snmp_community_rename_transform,
@@ -625,6 +671,7 @@ def run_plan_with_overrides(  # noqa: C901
         "snmp_community": "",
         "snmpv3_user_names": [],
         "ports": [],
+        "other_names": [],
     }
 
     def _capture_source_shape(tree: Any) -> Any:
@@ -666,6 +713,14 @@ def run_plan_with_overrides(  # noqa: C901
                 tree, classify=getattr(source, "classify_port_name", None),
                 fold=not getattr(source, "port_names_case_sensitive", False),
             )
+            # And every other name the translator rewrites: between
+            # two configs of one codec no rename changes one and no
+            # warning quotes one, so nothing else on the job says
+            # the config has it.
+            hardware = set(captured["ports"])
+            captured["other_names"] = [
+                name for name in collect_port_names(tree) if name not in hardware
+            ]
         return tree
 
     override_transforms.append(_capture_source_shape)
@@ -750,6 +805,9 @@ def run_plan_with_overrides(  # noqa: C901
             job.warnings.extend(rename_result.warnings)
         if rename_result.dropped:
             job.port_drops = list(rename_result.dropped)
+        # Not a field of the job: whichever entry reads the finished
+        # run decides what a name left as it was means for the status.
+        job._untranslated = list(rename_result.untranslated)
 
     if vlan_result is not None:
         if vlan_result.applied:
@@ -792,6 +850,7 @@ def run_plan_with_overrides(  # noqa: C901
     job.source_snmpv3_users = list(captured.get("snmpv3_user_names", []))
     job.source_hostname = captured.get("hostname", "") or ""
     job.source_ports = list(captured.get("ports", []))
+    job.source_other_names = list(captured.get("other_names", []))
 
     # Post-run DEBUG summary — mirrors the per-category outcome
     # fields the UI will read.  Useful for post-hoc debugging when
@@ -868,6 +927,546 @@ def run_plan_with_rename(
     )
 
 
+def _shared_final_names(
+    job: MigrationJob,
+    rendered: Mapping[str, int],
+    fold_source: bool,
+    fold_target: bool,
+) -> dict[str, list[str]]:
+    """Names of the output that more than one source name ended on,
+    each with those names, read from the finished run.
+
+    Every name the port translator rewrites is looked at, logical
+    ones included: with no device declared there is no pairing whose
+    ports alone need protecting, and two loopbacks on one loopback
+    are two interfaces written as one just the same.  Names are
+    compared as each platform compares them
+    (:func:`~netcanon.migration.port_mapping.fused_targets`).
+
+    One thing that shares a name is not a second interface.  Junos
+    refers to an interface with its unit, so a line names ``lo0.0``
+    where the interface is configured as ``lo0``; the two are one
+    interface, and end on one name on every target.  A name that is
+    unit 0 of another name of its group is therefore left out of the
+    group -- but never so far that the group has fewer names than the
+    tree that was rendered has interfaces under the shared name: a
+    config that gives unit 0 a stanza of its own beside its port (a
+    VyOS ``vif 0``) has written two interfaces, and they are counted.
+    A unit other than 0 is always counted: ``lo0.2`` is the loopback
+    of a routing instance, and on ``Loopback0`` beside ``lo0`` it is
+    two interfaces in one.
+
+    Nothing else is set aside, and nothing else needs to be.  A VLAN
+    interface on a target that writes one from its VLAN (AOS-S) keeps
+    its own name in the tree and shares it with nothing; a name the
+    translator dropped reached no name at all.
+
+    Args:
+        job: The finished run.
+        rendered: For each interface name of the tree that was
+            rendered, compared as the target compares names, how many
+            interfaces the tree holds under it.
+        fold_source: Source names compare without regard to case.
+        fold_target: Target names do.
+    """
+    from ..migration.canonical.port_names import split_unit
+    from ..migration.port_mapping import fused_targets, name_key
+
+    shared: dict[str, list[str]] = {}
+    groups = fused_targets(
+        [*job.source_ports, *job.source_other_names],
+        job.port_renames, job.port_drops,
+        fold_source=fold_source, fold_target=fold_target,
+    )
+    for final, sources in groups.items():
+        present = {name_key(name, fold_source) for name in sources}
+        # Names beyond the interfaces the output has under this name:
+        # only so many can be a second way of writing one of them.
+        spare = len(sources) - rendered.get(name_key(final, fold_target), 0)
+        counted: list[str] = []
+        for name in sources:
+            split = split_unit(name)
+            if (
+                spare > 0 and split is not None and not split[1].strip("0")
+                and name_key(split[0], fold_source) in present
+            ):
+                spare -= 1
+                continue
+            counted.append(name)
+        if len(counted) > 1:
+            shared[final] = counted
+    return shared
+
+
+def _undecided_drops(
+    job: MigrationJob,
+    port_rename_map: Mapping[str, str | None],
+    fold_source: bool,
+) -> list[str]:
+    """Names the finished run dropped that no entry of the
+    operator's map decided, in the order the job lists them.
+
+    The translator drops a name the target has no name for -- a
+    breakout lane, a management port on a platform with none, and
+    just the same a loopback, a tunnel or a FortiGate hardware
+    switch -- and a unit with the port it is a unit of.  A logical
+    name counts as a port does: what was configured on it is not in
+    the output, and a hardware switch that holds the LAN address is
+    as much of a loss as any port.  An entry for a name -- a target,
+    or ``None`` -- is the operator deciding it.  So is an entry that
+    drops a port, for the units of that port: they go where it goes,
+    and it went by their word.  A key in another letter case is
+    taken for the name the config uses, by the rule the translator
+    itself applies
+    (:func:`~netcanon.migration.canonical.port_names.key_by_the_configs_spelling`),
+    and an entry with a blank target is none, as it is none to the
+    translator
+    (:func:`~netcanon.migration.canonical.port_names.names_a_target`).
+
+    What a target absorbs is not here, because it was not dropped: a
+    VLAN interface on a target that writes one from its VLAN stanza
+    keeps its name in the tree, and its address is in the output.
+    """
+    from ..migration.canonical.port_names import (
+        key_by_the_configs_spelling,
+        names_a_target,
+        split_unit,
+    )
+    from ..migration.port_mapping import name_key
+
+    decided: dict[str, str | None] = {
+        key: value for key, value in port_rename_map.items()
+        if isinstance(key, str) and key.strip() and names_a_target(value)
+    }
+    if fold_source:
+        key_by_the_configs_spelling(
+            decided, [*job.source_ports, *job.source_other_names],
+        )
+    dropped_by_entry = {
+        name_key(key, fold_source) for key, value in decided.items() if value is None
+    }
+
+    def went_with_its_port(name: str) -> bool:
+        split = split_unit(name)
+        return split is not None and name_key(split[0], fold_source) in dropped_by_entry
+
+    return [
+        name for name in job.port_drops
+        if name not in decided and not went_with_its_port(name)
+    ]
+
+
+#: What a parser read an interface to BE, where the config says so
+#: itself and the thing is no hardware port: a VLAN's address, a
+#: loopback, an aggregate, a tunnel.  Keyed by the canonical
+#: ``interface_type``, valued by the kind a classifier gives a name
+#: of that sort.  A hardware port is deliberately not here: which
+#: port of another device a port is, is what a declared device
+#: answers, and no reading of a name does.
+_KIND_BY_TYPE: dict[str, str] = {
+    "ianaift:l3ipvlan": "svi",
+    "ianaift:softwareLoopback": "loopback",
+    "ianaift:ieee8023adLag": "lag",
+    "ianaift:tunnel": "tunnel",
+}
+
+
+def _kind_read(iface: Any) -> str:
+    """The kind the source parser read *iface* to be from the config
+    around it, or ``""``: the role it marked from context
+    (``CanonicalInterface.kind``) before the type it gave."""
+    return getattr(iface, "kind", "") or _KIND_BY_TYPE.get(
+        getattr(iface, "interface_type", ""), "",
+    )
+
+
+def _one_platform(source: CodecBase, target: CodecBase) -> bool:
+    """*source* and *target* are codecs of ONE platform: two wire
+    formats of one operating system (IOS-XE as CLI text and over
+    NETCONF).  Each codec declares its platform as
+    ``capabilities.vendor_id`` -- the ``id`` of a file under
+    ``netcanon/migration/vendors/`` -- and two that declare the same
+    one write the same interface names."""
+    ours = getattr(getattr(source, "capabilities", None), "vendor_id", "")
+    theirs = getattr(getattr(target, "capabilities", None), "vendor_id", "")
+    return bool(ours) and ours == theirs
+
+
+def _the_targets_own(
+    name: str, kinds: Iterable[str], source: CodecBase, target: CodecBase,
+) -> bool:
+    """*name* was left as the source config has it, and is all the
+    same the name the target itself writes for what the source config
+    says it is.
+
+    An AOS-S VLAN's address is carried on an interface its parser
+    names ``Vlan20``.  The AOS-S classifier does not read that name,
+    so the translator leaves it -- and on EOS, IOS-XE and NX-OS
+    ``interface Vlan20`` is exactly what that interface is called.
+    Nothing is under a foreign name there, and there is nothing for
+    an operator to settle.
+
+    All of these have to hold:
+
+    * neither platform lets an operator choose interface names as
+      free text (``port_names_case_sensitive``).  On such a TARGET
+      any string "reads", and a port under a foreign name is a port
+      no line finds.  On such a SOURCE the name is whatever was
+      typed: a RouterOS VLAN interface called ``vlan100`` may carry
+      VLAN 20, and on a target where ``vlan100`` IS the interface of
+      VLAN 100 its address would be on the wrong one;
+    * the tree that was rendered holds the name as one kind of thing,
+      read by the source parser from the config around it (*kinds*,
+      :func:`_kind_read`), and that kind is one of
+      :data:`_KIND_BY_TYPE` -- never a hardware port;
+    * the name is not a unit of another name (``<port>.<unit>``): it
+      says which port it is on, and what that port is called on the
+      target is not this name's to vouch for;
+    * the target's classifier reads the name as that same kind; and
+    * the target's formatter writes that identity back as the very
+      same text.  A classifier is lenient about what it reads
+      (``vlan20`` on a platform that prints ``Vlan20``); only the
+      spelling the target writes itself is known to be its own.
+
+    Args:
+        name: A name the translator reported it left as it was.
+        kinds: What the rendered tree's interfaces of that exact name
+            were read to be.
+        source: Source codec.
+        target: Target codec.
+    """
+    from ..migration.canonical.port_names import split_unit
+
+    if source.port_names_case_sensitive or target.port_names_case_sensitive:
+        return False
+    read = set(kinds)
+    if len(read) != 1 or not read.issubset(_KIND_BY_TYPE.values()):
+        return False
+    if split_unit(name) is not None:
+        return False
+    try:
+        ident = target.classify_port_name(name)
+        if ident is None or ident.kind not in read:
+            return False
+        return target.format_port_identity(ident) == name
+    except Exception:
+        # A per-vendor classifier or formatter, on a string from a
+        # pasted config.  "Could not read it" is "not its own".
+        return False
+
+
+def _left_under_a_source_name(
+    untranslated: Iterable[str],
+    kinds: Mapping[str, Iterable[str]],
+    source: CodecBase,
+    target: CodecBase,
+) -> list[str]:
+    """Of the names the translator left as the source config has
+    them, the ones that are a SOURCE vendor's name on the target, in
+    the translator's order.
+
+    The translator reports every name it could not classify; what
+    that means for the job is decided here.  Between two codecs of
+    one platform (:func:`_one_platform`) such a name is the
+    platform's own and none is listed.  Across platforms a name the
+    target writes itself for the same kind of thing
+    (:func:`_the_targets_own`) is not listed either.  Everything
+    else is.
+    """
+    if _one_platform(source, target):
+        return []
+    return [
+        name for name in untranslated
+        if not _the_targets_own(name, kinds.get(name, ()), source, target)
+    ]
+
+
+def _names_message(
+    fused: Mapping[str, list[str]],
+    dropped: list[str],
+    untranslated: list[str],
+    hardware: Iterable[str] = (),
+) -> str:
+    """The sentence a job's ``error`` carries when the port translator
+    left names unsettled and no devices were declared, or ``""``.
+
+    Each kind in words of its own, counted, and then what settles
+    it; which names is on the job as data (``fused_ports``,
+    ``unresolved_ports``, ``untranslated_ports``).
+
+    Declaring both devices is offered only where it would settle
+    something that is listed.  The pairing is of hardware ports: it
+    gives each a port of its own, and does nothing for two loopbacks
+    on one loopback or a tunnel the target has no form for -- a job
+    with both devices declared renders those the same and does not
+    hold for them, so sending an operator there for them would be
+    sending them to a status that says less.  Where some of what is
+    listed is a hardware port and some is not, the sentence says
+    which the devices decide.
+
+    Args:
+        fused: ``MigrationJob.fused_ports``.
+        dropped: ``MigrationJob.unresolved_ports``.
+        untranslated: ``MigrationJob.untranslated_ports``.
+        hardware: ``MigrationJob.source_ports`` -- which of the
+            names are hardware ports.
+    """
+    ports = set(hardware)
+    said: list[str] = []
+    settled_by: list[str] = []
+    if fused:
+        said.append(
+            f"{len(fused)} name(s) in the output received more than one "
+            f"source name, so the config of two interfaces is written as one."
+        )
+        settled_by.append(
+            "a name of its own, or null, for all but one of the names "
+            "that share one"
+        )
+    dropped_ports = [name for name in dropped if name in ports]
+    dropped_others = [name for name in dropped if name not in ports]
+    if dropped_ports:
+        said.append(
+            f"{len(dropped_ports)} port(s) the target has no name for were "
+            f"dropped from the output."
+        )
+    if dropped_others:
+        said.append(
+            f"{len(dropped_others)} other name(s) the target has no form for "
+            f"(such as a loopback, a tunnel or a hardware switch) were "
+            f"dropped from the output."
+        )
+    if dropped:
+        settled_by.append(
+            "a target name for a dropped name, or null to say it is to go"
+        )
+    if untranslated:
+        # "Whatever the output has of them": a renderer may write no
+        # line for such a name at all, and the sentence is not to say
+        # of the output what is only true of the tree.
+        said.append(
+            f"{len(untranslated)} name(s) could not be read as any kind of "
+            f"port: whatever the output has of them is under the name the "
+            f"source config has for them, which the target may not accept."
+        )
+        settled_by.append(
+            "for a name left as it was, the name it is to have on the "
+            "target (its own, if that is right there) or null"
+        )
+    if not said:
+        return ""
+    said.append(
+        "An entry in port_rename_map settles each: " + "; ".join(settled_by) + "."
+    )
+    # What a pair of declared devices would decide, and what it would not.
+    for_devices = (
+        any(ports.intersection(names) for names in fused.values())
+        or bool(dropped_ports)
+        or bool(ports.intersection(untranslated))
+    )
+    beyond_devices = (
+        any(not ports.intersection(names) for names in fused.values())
+        or bool(dropped_others)
+        or any(name not in ports for name in untranslated)
+    )
+    if for_devices and beyond_devices:
+        said.append(
+            "Declaring both devices pairs the hardware ports among these by "
+            "position; the names that are not hardware ports need an entry "
+            "either way."
+        )
+    elif for_devices:
+        said.append("Or declare both devices, to pair ports by position.")
+    return "Port names are not settled: " + " ".join(said)
+
+
+def run_plan_with_checked_names(
+    source: CodecBase,
+    target: CodecBase,
+    raw_text: str,
+    port_rename_map: dict[str, str | None] | None = None,
+    vlan_rename_map: dict[int, int | None] | None = None,
+    local_user_rename_map: dict[str, str | None] | None = None,
+    snmp_community_rename_map: dict[str, str | None] | None = None,
+    snmpv3_user_rename_map: dict[str, str | None] | None = None,
+    transforms: list[TransformCallable] | None = None,
+    transform_specs: list[TransformSpec] | None = None,
+    force: bool = False,
+) -> MigrationJob:
+    """:func:`run_plan_with_overrides`, and then a look at what the
+    port translator made of the names, read from the finished run.
+
+    A warning is not a status.  The translator says in a warning line
+    that two source names ended on one name, that it dropped a name
+    the target has none for, or that it could not read a name and
+    left it as it was, and :func:`run_plan_with_overrides` leaves the
+    status to the validation report alone: such a job said
+    ``completed``.  Here the status asks what became of every name
+    the translator had to place, with no devices declared:
+
+    * **two source names on one name of the output** -- any two, a
+      LAG or a loopback as much as a port, whoever decided it: an
+      entry of *port_rename_map* that sends two names to one name on
+      purpose is reported as well, since two interfaces are one
+      either way.  Unit 0 of an interface beside the interface is
+      one interface and is not counted
+      (:func:`_shared_final_names`);
+    * **a name the translator dropped** that no entry of
+      *port_rename_map* names: a hardware port, or a logical name --
+      a loopback, a tunnel, a hardware switch -- the target has no
+      form for (:func:`_undecided_drops`); or
+    * **a name the translator could not read**, and so left under
+      the name the source config has for it
+      (``PortRenameResult.untranslated``).  Nobody chose that name
+      for the target, and whatever the output has of it is under a
+      name of the source vendor.  No entry names such a name: one
+      that has an entry never reaches the classifier.  Not every
+      name the translator left is one of these
+      (:func:`_left_under_a_source_name`): between two codecs of
+      one platform the name is the platform's own, and a name the
+      target itself writes for the same kind of thing -- the
+      ``Vlan20`` an AOS-S VLAN's address is carried on, on a target
+      whose VLAN interfaces are called that -- is under no foreign
+      name.  The translator's warning line is there all the same.
+
+    Such a job is ``partial``, ``job.error`` says so, and the names
+    are on the job as data: ``fused_ports``, ``unresolved_ports``
+    and ``untranslated_ports``.  A job already ``partial`` for
+    another reason has the sentence appended.  It is settled by
+    entries of *port_rename_map*: a name of its own for one of two
+    names that share one; for a dropped name a target name or
+    ``None``, which is the operator saying it is to go; and for a
+    name left as it was the name it is to have -- the name ITSELF,
+    where it is right on the target as it stands -- or ``None``.  A
+    blank target is not an entry
+    (:func:`~netcanon.migration.canonical.port_names.names_a_target`).
+
+    What a target absorbs by design holds nothing: a VLAN interface
+    on a target that writes one from its VLAN stanza is neither
+    dropped nor left for want of a name.  Nor does anything between
+    two configs of one codec that an entry did not cause: no name is
+    classified there, and each stands.
+
+    With both devices declared :func:`run_plan_with_models` asks a
+    question of its own, about hardware ports, and this one is not
+    asked there.
+
+    Nothing is renamed or dropped here.  The output is the one
+    :func:`run_plan_with_overrides` rendered, and every other field
+    of the job is as that function left it.
+
+    With ``port_rename_map=None`` the translator does not run, no
+    name changes, and nothing is asked: the job is that function's,
+    untouched.  So is a job that did not render.
+
+    New function, per the frozen-signatures rule: the three older
+    entries are unchanged.
+
+    Args:
+        source: Source codec.
+        target: Target codec.
+        raw_text: Source-vendor config text.
+        port_rename_map: As :func:`run_plan_with_overrides`; an entry
+            is also the operator deciding that name.
+        vlan_rename_map: As :func:`run_plan_with_overrides`.
+        local_user_rename_map: As :func:`run_plan_with_overrides`.
+        snmp_community_rename_map: As :func:`run_plan_with_overrides`.
+        snmpv3_user_rename_map: As :func:`run_plan_with_overrides`.
+        transforms: Applied after every override transform.
+        transform_specs: Serialisable transform record.
+        force: Skip the cross-device-class guard.
+
+    Returns:
+        The :class:`MigrationJob` of :func:`run_plan_with_overrides`,
+        with ``fused_ports``, ``unresolved_ports`` and
+        ``untranslated_ports`` filled, and its status and ``error``
+        changed as above, where the run left port names unsettled.
+    """
+    from ..migration.port_mapping import name_key
+
+    if port_rename_map is None:
+        return run_plan_with_overrides(
+            source=source,
+            target=target,
+            raw_text=raw_text,
+            port_rename_map=None,
+            vlan_rename_map=vlan_rename_map,
+            local_user_rename_map=local_user_rename_map,
+            snmp_community_rename_map=snmp_community_rename_map,
+            snmpv3_user_rename_map=snmpv3_user_rename_map,
+            transforms=transforms,
+            transform_specs=transform_specs,
+            force=force,
+        )
+
+    # Whether letter case is part of a name is a fact about each
+    # platform, and each codec states it.  Read, not defaulted.
+    fold_source = not source.port_names_case_sensitive
+    fold_target = not target.port_names_case_sensitive
+    # The interfaces of the tree that is rendered, by name: what the
+    # output has under a name, as against what was sent there.
+    rendered: Counter[str] = Counter()
+    # ... and what the source parser read each to be, by the name as
+    # written: a name left as it was is under that name here.
+    kinds: dict[str, set[str]] = {}
+
+    def count_interfaces(tree: Any) -> Any:
+        rendered.clear()
+        kinds.clear()
+        for iface in getattr(tree, "interfaces", None) or []:
+            name = getattr(iface, "name", None)
+            if isinstance(name, str):
+                rendered[name_key(name, fold_target)] += 1
+                kinds.setdefault(name, set()).add(_kind_read(iface))
+        return tree
+
+    job = run_plan_with_overrides(
+        source=source,
+        target=target,
+        raw_text=raw_text,
+        port_rename_map=port_rename_map,
+        vlan_rename_map=vlan_rename_map,
+        local_user_rename_map=local_user_rename_map,
+        snmp_community_rename_map=snmp_community_rename_map,
+        snmpv3_user_rename_map=snmpv3_user_rename_map,
+        # Last, so that what is counted is the tree handed to the
+        # renderer.
+        transforms=[*(transforms or []), count_interfaces],
+        transform_specs=transform_specs,
+        force=force,
+    )
+    if job.rendered is None:
+        return job
+
+    fused = _shared_final_names(job, rendered, fold_source, fold_target)
+    dropped = _undecided_drops(job, port_rename_map, fold_source)
+    # The translator lists a name only where no entry decided it.
+    # Of those, the ones that are a foreign name on this target.
+    untranslated = _left_under_a_source_name(
+        job._untranslated, kinds, source, target,
+    )
+    message = _names_message(fused, dropped, untranslated, job.source_ports)
+    if not message:
+        return job
+    job.fused_ports = fused
+    job.unresolved_ports = dropped
+    job.untranslated_ports = untranslated
+    if job.status == MigrationJobStatus.completed:
+        job.status = MigrationJobStatus.partial
+        job.error = message
+    elif job.status == MigrationJobStatus.partial:
+        # Already partial for another reason (validation, usually).
+        # Say this as well rather than leave it to the warnings.
+        job.error = f"{job.error} {message}" if job.error else message
+    logger.debug(
+        "run_plan_with_checked_names %s: %s → %s fused=%d unresolved=%d "
+        "untranslated=%d",
+        job.id[:8], source.name, target.name, len(fused), len(dropped),
+        len(untranslated),
+    )
+    return job
+
+
 def _sub_interface_followers(
     plan: MappingPlan,
     operator_map: dict[str, str | None],
@@ -879,10 +1478,13 @@ def _sub_interface_followers(
     Between two configs of the same codec the unit suffix means the
     same thing on both sides, so where the parent goes the
     sub-interface goes too — and where the parent is dropped, so is
-    it.  Left to the name-shape translator instead, a classifier that
-    folds a unit into its port (Junos) would send it onto the port
-    itself, and one that does not recognise it (IOS-XE) would leave it
-    behind under the old name.
+    it.  The translator sends a unit after a port an entry moved by a
+    rule of its own (``translate_port_names``); the entry is written
+    here as well so that the plan can say which names followed
+    (``sub_interfaces``) from what was decided, before any run.
+    Across vendors there is no entry to write beforehand -- the name
+    a unit takes is the translator's -- and what followed is read
+    from the finished run (:func:`_units_that_followed`).
 
     The parent's target is the operator's when they named the parent,
     else the name the pairing gives it on the target (*names*) —
@@ -915,6 +1517,58 @@ def _sub_interface_followers(
             continue
         followers[name] = f"{target}.{unit}" if target else None
     return followers
+
+
+def _units_that_followed(
+    plan: MappingPlan,
+    operator_map: dict[str, str | None],
+    names: dict[str, str | None],
+    job: MigrationJob,
+) -> dict[str, str | None]:
+    """Sub-interfaces the translator sent after their port, across
+    vendors, read from the finished run.
+
+    Between two configs of one codec :func:`_sub_interface_followers`
+    writes an entry for each beforehand.  Across vendors the
+    translator makes a unit follow its port by its own rule
+    (``translate_port_names``), and which ones went is a fact about
+    the run: a name it read as something else (a RouterOS VLAN
+    interface named ``ether1.55``) did not.
+
+    Args:
+        plan: The pairing; its off-inventory names are the candidates.
+        operator_map: The operator's own entries, as applied.  A unit
+            they named is theirs, and has not "followed".
+        names: Source port to its name on the target, as given to
+            the run.
+        job: The finished run.
+
+    Returns:
+        Each unit that is where its port is, with the name it has
+        there -- or ``None`` where it went with a dropped port.
+        Whether the unit took an 802.1Q tag with it is not asked
+        here; the caller sets one that did not apart
+        (``MappingPlan.untagged_units``).
+    """
+    from ..migration.canonical.port_names import split_unit
+
+    gone = set(job.port_drops)
+    followed: dict[str, str | None] = {}
+    for name in plan.off_inventory:
+        split = split_unit(name)
+        if split is None or name in operator_map:
+            continue
+        port, unit = split
+        if port not in operator_map and port not in names:
+            continue
+        if name in gone:
+            if port in gone:
+                followed[name] = None
+            continue
+        where = f"{job.port_renames.get(port, port)}.{unit}"
+        if job.port_renames.get(name, name) == where:
+            followed[name] = where
+    return followed
 
 
 def _undecided_clashes(
@@ -1173,9 +1827,13 @@ def _read_operator_map(
     An entry whose target is blank, or is neither text nor ``None``,
     decides nothing and is set aside: passed on, a blank would render a
     port with no name and a non-text value would replace the pairing's
-    entry with nothing.  (The API's model refuses the second; a direct
-    caller can send it.)
+    entry with nothing.  Blank is what the translator calls blank
+    (:func:`~netcanon.migration.canonical.port_names.names_a_target`):
+    a target that draws nothing, such as a zero-width space, as much
+    as an empty one.  (The API's model refuses both; a direct caller
+    can send either.)
     """
+    from ..migration.canonical.port_names import names_a_target
     from ..migration.port_mapping import name_key
 
     spelt: dict[str, list[str]] = {}
@@ -1188,10 +1846,10 @@ def _read_operator_map(
         if value is None:
             operator_map[key] = None
             continue
-        text = value.strip() if isinstance(value, str) else ""
-        if not text:
+        if not isinstance(value, str) or not names_a_target(value):
             ignored.append(key)
             continue
+        text = value.strip()
         same = spelt.get(name_key(text), [])
         operator_map[key] = same[0] if len(same) == 1 else text
     return operator_map, ignored
@@ -1688,15 +2346,30 @@ def run_plan_with_models(
       dropped from the output and listed in ``job.port_drops`` — never
       left under its old name, which on a same-vendor pair could be
       the name another port was just mapped to;
-    * between two configs of the same codec, a sub-interface
-      (``ge-0/0/0.54``) follows its parent port.
+    * a sub-interface (``ge-0/0/0.54``) follows its parent port, and
+      is dropped with it: between two configs of the same codec by an
+      entry made here, across vendors by the translator's own rule
+      for a unit, read back from the run.  Either way it is recorded
+      in ``port_mapping_plan.sub_interfaces`` -- unless, across
+      vendors, the parsed source holds no 802.1Q tag for it (its
+      platform's parser reads none, or did not read the line, or
+      the config states none).
+      The output then has an interface of that name with no tag,
+      which nothing else in the job would say: the unit is recorded
+      in ``untagged_units`` instead and still asks for a decision.
+      So does a unit the plan does not take for a unit of its port
+      (typed in another letter case than the port, or a unit of a
+      unit): the run shows it went where its port went, and it is
+      recorded in ``unvouched_units``.
 
     What it leaves to the name-shape translator, and then checks:
 
     * an unplaced management port, a name the config uses that is not
       a port of the declared source (off-inventory), and every logical
-      name — a LAG, an SVI, a loopback.  What the translator makes of
-      such a name can be a port the pairing gave to something else —
+      name — a LAG, an SVI, a loopback.  Between two configs of one
+      codec the translator leaves such a name as it is written;
+      across vendors it gives it the target's form.  Either can be a
+      port the pairing gave to something else —
       the same fusion, by another door.  So the finished run is
       inspected, over EVERY name the config references and not only
       the hardware ones: where two names ended on one target, or a
@@ -1783,7 +2456,8 @@ def run_plan_with_models(
     status and has the same sentence appended to ``job.error``.  The
     detail is on the plan as fields — ``unresolved_ports``,
     ``displaced``, ``fused``, ``off_target``, ``landed_off_target``,
-    ``stale_next_hops``, ``unbound_ports``, ``sub_interfaces``, and what a dropped port
+    ``stale_next_hops``, ``unbound_ports``, ``sub_interfaces``,
+    ``untagged_units``, ``unvouched_units``, and what a dropped port
     took with it (``emptied_lags``, ``shrunk_lags``, ``lost_routes``,
     ``lost_dhcp_pools``, ``lost_tracking``, ``lost_vtep_sources``) —
     so no client has to read it out of prose.
@@ -1983,6 +2657,23 @@ def run_plan_with_models(
         positions.update({p.source: None for p in plan.unplaced})
         stale = _stale_next_hops(tree, job, same_codec, positions)
 
+    untagged: dict[str, str] = {}
+    if plan.applied and not same_codec:
+        # Read from the run, after any displacement: what the plan
+        # says of a unit is what happened to it.
+        tagged = {
+            iface.name for iface in tree.interfaces if iface.dot1q_vlan is not None
+        }
+        for name, where in _units_that_followed(plan, operator_map, merged, job).items():
+            if where is None or name in tagged:
+                followers[name] = where
+            else:
+                # It went with its port, and the tree holds no 802.1Q
+                # tag to go with it: the output has an interface of
+                # that name and nothing that says which VLAN it is.
+                # It stays among the names that need a decision.
+                untagged[name] = where
+
     dropped, taken = _taken_with_dropped_ports(tree, job.port_drops)
 
     # Where the binder put a port is what the TREE says; whether a line
@@ -2017,6 +2708,7 @@ def run_plan_with_models(
             name: where for name, where in followers.items()
             if name not in operator_map
         },
+        untagged_units=untagged,
         ignored_overrides=ignored,
         **taken,
         management_forms=forms,

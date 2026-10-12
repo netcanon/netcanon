@@ -55,7 +55,13 @@ import pytest
 from netcanon.migration import limits as L
 from netcanon.migration.canonical.intent import CanonicalIntent, CanonicalInterface, CanonicalVlan
 from netcanon.migration.canonical.transforms import project_switchport_to_vlan, project_vlan_to_switchport
-from netcanon.migration.codecs._helpers import joined_ids_length
+from netcanon.migration.codecs._helpers import (
+    TRUNK_ALL,
+    TRUNK_THAT_STATES_NO_LIST,
+    joined_ids_length,
+    unstated_trunk_list,
+)
+from netcanon.migration.codecs.juniper_junos import parse as junos_parse
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.migration.fixture_dirs import DIR_TO_CODEC_NAME
 from netcanon.models.migration import Refusal
@@ -128,6 +134,29 @@ def nxos_trunks(count: int, allowed: str, declared: int) -> str:
         out += [f"interface Ethernet{port // 48 + 1}/{port % 48 + 1}", "  switchport",
                 "  switchport mode trunk", f"  switchport trunk allowed vlan {allowed}"]
     return "\n".join(out) + "\n"
+
+
+#: codec -> (a trunk that states no allowed list, a declared VLAN), as
+#: that platform writes them.  On each of these such a trunk carries
+#: every VLAN.
+DEFAULT_TRUNK: dict[str, tuple[str, str]] = {
+    "cisco_iosxe_cli": ("interface GigabitEthernet1/0/{n}\n switchport mode trunk\n!\n",
+                        "vlan {vid}\n name V{vid}\n!\n"),
+    "cisco_nxos": ("interface Ethernet{slot}/{port}\n  switchport\n  switchport mode trunk\n",
+                   "vlan {vid}\n  name V{vid}\n"),
+    "arista_eos": ("interface Ethernet{n}\n   switchport mode trunk\n!\n", "vlan {vid}\n   name V{vid}\n!\n"),
+    "aruba_aoscx": ("interface 1/1/{n}\n    no routing\n    vlan trunk native 1\n",
+                    "vlan {vid}\n    name V{vid}\n"),
+}
+
+
+def default_trunks(codec: str, count: int, declared: int = 0) -> str:
+    """*count* trunks of *codec* that state no allowed list, and
+    *declared* VLANs: some 55 bytes a trunk."""
+    trunk, vlan = DEFAULT_TRUNK[codec]
+    return "hostname T\n" + "".join(vlan.format(vid=vid) for vid in range(2, 2 + declared)) + "".join(
+        trunk.format(n=n, slot=(n - 1) // 48 + 1, port=(n - 1) % 48 + 1) for n in range(1, count + 1)
+    )
 
 
 def iosxe_stanzas(count: int) -> str:
@@ -428,20 +457,27 @@ WIDE: dict[str, list[str]] = {
         "interface Gi1/0/{n}\n switchport mode trunk\n switchport trunk allowed vlan except 7\n!\n",
         "interface Gi1/0/{n}\n switchport mode trunk\n switchport trunk allowed vlan 10\n"
         " switchport trunk allowed vlan add 100-3000\n!\n",
+        # No allowed line at all: every VLAN, on this platform and the three below.
+        "interface Gi1/0/{n}\n switchport mode trunk\n!\n",
+        "interface Gi1/0/{n}\n switchport mode trunk\n switchport trunk allowed vlan remove 7\n!\n",
     ],
     "cisco_nxos": [
         "interface Ethernet1/{n}\n  switchport\n  switchport mode trunk\n  switchport trunk allowed vlan 1-4093\n",
         "vlan 1-4094\n",
+        "interface Ethernet1/{n}\n  switchport\n  switchport mode trunk\n",
     ],
     "arista_eos": [
         "interface Ethernet{n}\n   switchport mode trunk\n   switchport trunk allowed vlan 2-4000\n!\n",
         "interface Ethernet{n}\n   switchport mode trunk\n   switchport trunk allowed vlan all\n!\n",
+        "interface Ethernet{n}\n   switchport mode trunk\n!\n",
     ],
     "dell_os10": [
         "interface ethernet1/1/{n}\n switchport mode trunk\n switchport trunk allowed vlan 2-4000\n!\n",
     ],
     "aruba_aoscx": [
         "interface 1/1/{n}\n    no routing\n    vlan trunk native 1\n    vlan trunk allowed 2-4000\n",
+        "interface 1/1/{n}\n    no routing\n    vlan trunk native 1\n    vlan trunk allowed all\n",
+        "interface 1/1/{n}\n    no routing\n    vlan trunk native 1\n",
     ],
     "juniper_junos": [
         "set interfaces xe-0/0/{n} unit 0 family ethernet-switching interface-mode trunk\n"
@@ -599,10 +635,13 @@ class TestEveryExpanderCountsFirst:
                 "system {\n    host-name T;\n}\nsnmp {\n    community fakeCommunity {\n" + body + "    }\n}\n"
             )
             exc = _refused("juniper_junos", text, TINY)
-            assert exc.kind == "words" and exc.where == "snmp community"
+            assert exc.kind == "words"
+            # The place is the section, and stops at the word that names
+            # a secret: the string the block is keyed by is not shown.
+            assert exc.where.startswith("snmp community") and "fakeCommunity" not in exc.where
             job = _plan("juniper_junos", "arista_eos", text, TINY)
             said = str(exc) + (job.error or "") + str(job.refusal)
-            assert "(at: snmp community)" in str(exc) or "the last one read: snmp community)" in str(exc)
+            assert "snmp community" in str(exc)
             for held in ("fakeCommunity", "notARealHash", "192.0.2.", "encrypted-password", "clients"):
                 assert held not in said, held
 
@@ -627,6 +666,287 @@ class TestEveryExpanderCountsFirst:
         assert job.error.startswith("parse failed: vyos: a set line is nested 1200 levels deep")
         deep = "set system host-name T\nset " + " ".join(f"a{level}" for level in range(64)) + "\n"
         assert _plan("vyos", "vyos", deep).status.value != "failed"
+
+
+class TestATrunkThatStatesNoList:
+    """On IOS-XE, NX-OS, EOS and AOS-CX a trunk with no allowed line
+    carries every VLAN, and the tree says so with the 4,094 ids: a
+    stanza of two lines makes them.  It is counted as the word
+    ``all`` is -- before the list is made -- wherever such a list is
+    made: for the trunk itself, for the ``add`` or ``remove`` that
+    starts from it, and for the record of a stanza that is met again.
+    The count of the finished tree would refuse these texts too, when
+    the memory was already spent."""
+
+    def test_these_are_the_platforms_it_is_true_of(self) -> None:
+        every = {codec for codec, says in TRUNK_THAT_STATES_NO_LIST.items() if says == TRUNK_ALL}
+        assert set(DEFAULT_TRUNK) == every
+        for codec in set(TRUNK_THAT_STATES_NO_LIST) - every:
+            with L.limits_scope(UNCOUNTED):
+                assert _charges("vlan_ids", lambda codec=codec: unstated_trunk_list(codec, "x")) == []
+
+    @pytest.mark.parametrize("codec", sorted(DEFAULT_TRUNK))
+    def test_each_is_counted_as_every_vlan_once(self, codec: str) -> None:
+        with L.limits_scope(UNCOUNTED):
+            trees: list[CanonicalIntent] = []
+            charged = _charges("vlan_ids", lambda: trees.append(get_codec(codec).parse(default_trunks(codec, 3))))
+        assert charged == [4094, 4094, 4094]
+        assert [len(port.trunk_allowed_vlans) for port in trees[0].interfaces] == [4094, 4094, 4094]
+
+    @pytest.mark.parametrize("codec", sorted(DEFAULT_TRUNK))
+    def test_the_number_a_refusal_prints_is_the_count(self, codec: str) -> None:
+        """Five such trunks are 20,470 ids and are read under a limit
+        of exactly that; the sixth is refused, for six times 4,094,
+        counted over six -- and before its list was made."""
+        exact = replace(TINY, vlan_ids=5 * 4094)
+        with L.limits_scope(exact):
+            tree = get_codec(codec).parse(default_trunks(codec, 5))
+        assert sum(len(port.trunk_allowed_vlans) for port in tree.interfaces) == 5 * 4094
+        exc = _refused(codec, default_trunks(codec, 6), exact)
+        assert (exc.kind, exc.asked, exc.cap, exc.lists, exc.exact) == ("vlan_ids", 6 * 4094, 5 * 4094, 6, False)
+        assert str(exc).startswith(
+            f"reading the config as {codec} would make 24,564 or more VLAN ids that the config's lists and "
+            "ranges name; the limit is 20,470 (counted over 6 lists and ranges; the last one read: a trunk "
+            "with no allowed list, which is every VLAN: "
+        )
+
+    @pytest.mark.parametrize("codec", sorted(DEFAULT_TRUNK))
+    def test_many_are_refused_before_their_lists_are_made(self, codec: str) -> None:
+        """Two thousand default trunks are some 110 KB of text and 65
+        MB of lists.  Under the demo's limits the 257th is refused:
+        what is held on the way is the 2,000 interfaces and 256
+        lists, a fifth of what making them all holds."""
+        text = default_trunks(codec, 2_000)
+        assert len(text) < 130_000
+        jobs: list = []
+        held = _peak(lambda: jobs.append(_plan(codec, "juniper_junos", text, "small")))
+        job = jobs[0]
+        assert job.status.value == "failed" and job.rendered is None and job.validation is None
+        assert job.refusal is not None, job.error
+        assert (job.refusal.limit, job.refusal.exact, job.refusal.profile) == ("vlan_ids", False, "small")
+        assert (job.refusal.asked, job.refusal.cap) == (257 * 4094, L.SMALL.vlan_ids)
+        assert job.error.startswith(
+            f"refused: reading the config as {codec} would make 1,052,158 or more VLAN ids that the "
+            "config's lists and ranges name; the limit is 1,048,576 (counted over 257 lists and ranges; "
+            "the last one read: a trunk with no allowed list, which is every VLAN: "
+        )
+        assert "the one the public demo uses" in job.error
+        assert held < 20_000_000, f"{held:,} bytes were held on the way to the refusal"
+        with L.limits_scope(UNCOUNTED):
+            made = _peak(lambda: get_codec(codec).parse(text))
+        assert made > 50_000_000, "making every list was expected to hold tens of megabytes"
+
+    @pytest.mark.parametrize("codec", sorted(DEFAULT_TRUNK))
+    def test_a_thousand_translate_under_standard(self, codec: str) -> None:
+        """A thousand default trunks are four million ids, a quarter
+        of what ``standard`` allows: read, and written as each target
+        writes every VLAN, exactly as with no limit at all."""
+        text = default_trunks(codec, 1_000, declared=10)
+        for target in (codec, "juniper_junos", "arista_eos"):
+            limited, free = _plan(codec, target, text, "standard"), _plan(codec, target, text, L.UNLIMITED)
+            assert limited.refusal is None and free.refusal is None, limited.error
+            assert limited.status == free.status and limited.status.value != "failed", limited.error
+            assert limited.rendered == free.rendered and limited.warnings == free.warnings
+        junos = _plan(codec, "juniper_junos", text, "standard").rendered
+        assert junos.count(" vlan members all\n") == 1_000
+        # ...and how many the two shipped sets take is what the documents say.
+        assert L.SMALL.vlan_ids // 4094 == 256 and L.STANDARD.vlan_ids // 4094 == 4_098
+
+    def test_a_first_add_or_remove_starts_from_every_vlan(self) -> None:
+        """``remove 10`` on a trunk with no earlier line is every VLAN
+        but 10: the 4,094 it starts from are a copy of the platform's
+        list, made from one short line.  The ids the line itself names
+        are read once, though two lists are made of them."""
+        stanza = (
+            "hostname T\ninterface GigabitEthernet1/0/1\n switchport mode trunk\n"
+            " switchport trunk allowed vlan {}\n!\n"
+        )
+        trees: list[CanonicalIntent] = []
+
+        def read(line: str) -> None:
+            trees.append(get_codec("cisco_iosxe_cli").parse(stanza.format(line)))
+
+        for line, charged, held in (("remove 10", [4094], 4093), ("add 30", [4094], 4094),
+                                    ("add 100-3000", [2901, 4094], 4094), ("remove 100-3000", [2901, 4094], 1193)):
+            with L.limits_scope(UNCOUNTED):
+                seen = _charges("vlan_ids", lambda line=line: read(line))
+            assert seen == charged, line
+            assert [len(port.trunk_allowed_vlans) for port in trees[-1].interfaces] == [held], line
+        exc = _refused("cisco_iosxe_cli", stanza.format("remove 10"), replace(TINY, vlan_ids=4_000))
+        assert (exc.kind, exc.asked, exc.exact) == ("vlan_ids", 4094, False)
+        assert "(at: remove on a trunk with no earlier list, which starts from every VLAN)" in str(exc)
+        # Where a trunk carries no VLAN until one is named, nothing is started from.
+        os10 = "hostname T\ninterface ethernet1/1/1\n switchport mode trunk\n switchport trunk allowed vlan add 30\n!\n"
+        with L.limits_scope(UNCOUNTED):
+            assert _charges("vlan_ids", lambda: get_codec("dell_os10").parse(os10)) == []
+
+    @pytest.mark.parametrize(("again", "each", "said"), [
+        (" switchport mode trunk\n", "a copy for the record of the stanza", "GigabitEthernet1/0/1"),
+        (" switchport trunk allowed vlan add 5\n", "the list the line starts from", "add 5"),
+        (" switchport mode trunk\n switchport trunk allowed vlan remove 7\n", "the list the line starts from",
+         "remove 7"),
+    ])
+    def test_a_stanza_met_again_is_counted_again(self, again: str, each: str, said: str) -> None:
+        """A parser that makes a record a stanza gives each record a
+        list of its own.  The stanza of a trunk of every VLAN, met
+        again with two short lines, is 4,094 ids more each time."""
+        first = "interface GigabitEthernet1/0/1\n switchport mode trunk\n switchport trunk allowed vlan 1-4094\n!\n"
+        text = "hostname T\n" + first + ("interface GigabitEthernet1/0/1\n" + again + "!\n") * 4
+        with L.limits_scope(UNCOUNTED):
+            trees: list[CanonicalIntent] = []
+            charged = _charges("vlan_ids", lambda: trees.append(get_codec("cisco_iosxe_cli").parse(text)))
+        lists = [port.trunk_allowed_vlans for port in trees[0].interfaces]
+        assert len(lists) == 5 and len({id(ids) for ids in lists}) == 5, each
+        assert sum(charged) >= sum(len(ids) for ids in lists) > 4 * 4000, each
+        assert len(charged) == 5 and charged[0] == 4094
+        exc = _refused("cisco_iosxe_cli", text, TINY)
+        assert (exc.kind, exc.exact, exc.lists) == ("vlan_ids", False, 2)
+        assert f"the last one read: the allowed list of a stanza that is met again: {said})" in str(exc)
+
+    def test_one_record_a_name_copies_nothing(self) -> None:
+        """EOS keeps one record a name: its stanza met again adds to
+        the one list, and nothing is counted but what the lines name."""
+        text = (
+            "hostname T\ninterface Ethernet1\n   switchport mode trunk\n   switchport trunk allowed vlan 1-4094\n!\n"
+            + "interface Ethernet1\n   switchport trunk allowed vlan remove 7\n!\n" * 4
+        )
+        with L.limits_scope(UNCOUNTED):
+            trees: list[CanonicalIntent] = []
+            charged = _charges("vlan_ids", lambda: trees.append(get_codec("arista_eos").parse(text)))
+        assert charged == [4094]
+        assert [len(port.trunk_allowed_vlans) for port in trees[0].interfaces] == [4093]
+
+    def test_aoscx_says_all_in_a_word(self) -> None:
+        text = "hostname T\n" + "".join(
+            f"interface 1/1/{n}\n    no routing\n    vlan trunk native 1\n    vlan trunk allowed all\n" for n in (1, 2)
+        )
+        with L.limits_scope(UNCOUNTED):
+            assert _charges("vlan_ids", lambda: get_codec("aruba_aoscx").parse(text)) == [4094, 4094]
+        exc = _refused("aruba_aoscx", text, TINY)
+        assert (exc.kind, exc.asked, exc.exact) == ("vlan_ids", 2 * 4094, False)
+        assert "the last one read: vlan trunk allowed all)" in str(exc)
+
+
+#: Hierarchical Junos with every kind of statement the converter writes
+#: a set command for: a leaf, one that is not in force, a tagged one, a
+#: block that is not in force, an empty block, a block whose content is
+#: not shown, and a bracketed list that is not in force.
+_JUNOS_AS_PRINTED = (
+    "system {\n    host-name T;\n}\n"
+    "w0 w1 w2 {\n"
+    "    inactive: leaf0 v0;\n"
+    "    leaf1 v1;\n"
+    "    empty-block {\n    }\n"
+    "    protect: leaf2 v2;\n"
+    "    inactive: sub {\n        leaf3 v3;\n    }\n"
+    "    family inet { ... }\n"
+    "    inactive: key [ a b c ];\n"
+    "}\n"
+)
+
+
+class TestJunosAsPrinted:
+    """A hierarchical Junos config is walked into tokens and written out
+    as set commands.  The walk looks at the deadline, and every command
+    written is counted in words before it is written -- the
+    ``deactivate`` line of a statement that is not in force and the
+    line that stands for an empty block with the rest."""
+
+    def test_what_is_counted_is_what_is_then_written(self) -> None:
+        charged: list[int] = []
+        lines: list[str] = []
+        with L.limits_scope(UNCOUNTED), L.metered("parse", "juniper_junos"):
+            charged += _charges("words", lambda: lines.extend(junos_parse._blockform_convert(_JUNOS_AS_PRINTED)[0]))
+        assert [line.split()[0] for line in lines].count("deactivate") == 3
+        assert "set w0 w1 w2 empty-block" in lines and "set w0 w1 w2 family inet" in lines
+        # A command's words are its path and its value: not the verb.
+        assert sum(charged) == sum(len(line.split()) - 1 for line in lines) == 61
+        assert len(charged) == len(lines) - 2  # the three values of the list are one count
+
+    def test_statements_not_in_force_are_counted_too(self) -> None:
+        """Thirty statements marked ``inactive:`` under a path of a
+        hundred words are thirty ``deactivate`` lines and thirty set
+        lines, each with the whole path: refused before they are
+        written, as the same statements in force are."""
+        path = " ".join(f"w{n}" for n in range(100))
+        text = "system {\n    host-name T;\n}\n" + path + " {\n" + "".join(
+            f"    inactive: leaf{n} v{n};\n" for n in range(30)
+        ) + "}\n"
+        with L.limits_scope(UNCOUNTED):
+            charged = _charges("words", lambda: get_codec("juniper_junos").parse(text))
+        assert charged == [3] + [102] * 60
+        exc = _refused("juniper_junos", text, TINY)
+        assert (exc.kind, exc.exact, exc.stage) == ("words", False, "parse")
+        assert exc.asked == 3 + 20 * 102 and exc.asked > TINY.words
+        # Stopped at a ``deactivate`` line, the statement is quoted by its
+        # name: what follows a leaf's first word is a value.
+        exc = _refused("juniper_junos", text, replace(TINY, words=3 + 18 * 102))
+        assert (exc.kind, exc.exact, exc.asked) == ("words", False, 3 + 19 * 102)
+        assert "(counted over 20 statements; the last one read: w97 w98 w99 leaf9)" in str(exc)
+        empty = "system {\n    host-name T;\n}\n" + "".join(path + f" b{n} {{\n}}\n" for n in range(30))
+        exc = _refused("juniper_junos", empty, TINY)
+        assert (exc.kind, exc.exact, exc.asked) == ("words", False, 3 + 20 * 101)
+
+    @pytest.mark.parametrize("statement", [
+        "encrypted-password \"$6$fake$hash\";",
+        "inactive: encrypted-password \"$6$fake$hash\";",
+        "ssh-rsa \"ssh-rsa AAAAfakekey\";",
+        "key [ fakekey1 fakekey2 ];",
+    ])
+    def test_a_refusal_quotes_a_name_and_no_value(self, statement: str) -> None:
+        """The sentence of a refusal is shown, and pasted into a bug
+        report.  Stopped at a statement that holds a secret, it
+        names the statement: no word of its value, and no word
+        after one that names a secret."""
+        text = (
+            "system {\n    host-name T;\n    login {\n        user alice {\n"
+            "            authentication {\n                " + statement + "\n"
+            "            }\n        }\n    }\n}\n"
+        )
+        exc = _refused("juniper_junos", text, replace(TINY, words=3))
+        assert (exc.kind, exc.exact) == ("words", False)
+        assert "(counted over 2 statements; the last one read: login user alice authentication)" in str(exc)
+        assert "fake" not in str(exc) and "fake" not in str(exc.as_dict())
+        # Where no word names a secret, a leaf is quoted by its first word.
+        exc = _refused("juniper_junos", "system {\n    host-name secret-value;\n}\n", replace(TINY, words=2))
+        assert "(at: system host-name)" in str(exc)
+        # ...and a bracketed list by the word ahead of the bracket.
+        listed = "system {\n    name-server [ 192.0.2.53 192.0.2.54 ];\n}\n"
+        exc = _refused("juniper_junos", listed, replace(TINY, words=2))
+        assert exc.asked == 6 and "(at: system name-server)" in str(exc)
+
+    def test_every_token_goes_past_the_clock(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No loop over lines reads this form: the text is walked a
+        character at a time into tokens, by the judge of its form and
+        by the converter.  Each token of both walks is a step that
+        looks."""
+        steps = [0]
+        real = L._ticking
+
+        def counting(items, clock):
+            for item in real(items, clock):
+                steps[0] += 1
+                yield item
+
+        monkeypatch.setattr(L, "_ticking", counting)
+        text = "version 21.4R3.15;\n" * 300 + junos_blocks(3, 400)
+        with L.limits_scope(UNCOUNTED), L.metered("parse", "juniper_junos"):
+            assert junos_parse._looks_like_blockform(text)
+            judged = steps[0]
+            tokens = junos_parse._tokenise_blockform(text)
+        # The form is judged on the 300 statements ahead of the first
+        # block: three tokens and the end of a line, each.
+        assert judged >= 300 * 4
+        assert steps[0] - judged == len(tokens) > 2_000
+
+    def test_the_walk_stops_at_the_deadline(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        text = "version 21.4R3.15;\n" * 300 + junos_blocks(3, 400)
+        for walk in (junos_parse._looks_like_blockform, junos_parse._tokenise_blockform):
+            monkeypatch.setattr(L, "time", _Clock())
+            with L.limits_scope(replace(L.UNLIMITED, name="brief", seconds=10.0)), \
+                    L.metered("parse", "juniper_junos"), pytest.raises(L.LimitExceeded) as caught:
+                walk(text)
+            assert (caught.value.kind, caught.value.stage) == ("seconds", "parse"), walk.__name__
 
 
 # ---------------------------------------------------------------------------
@@ -852,6 +1172,20 @@ class TestTheRenderersCountFirst:
         length of the lines that carry a list -- and so never more
         than the output."""
         texts = [("built", "cisco_nxos", nxos_trunks(30, "2-4000", 4)), ("built", "arista_eos", eos_trunks(9, "all"))]
+        # A list means what it says: a trunk of every VLAN is no line, a
+        # trunk of no VLAN the word for it, and on a port that is not a
+        # trunk IOS-XE writes every id as its word.
+        texts += [
+            ("every", "cisco_iosxe_cli", default_trunks("cisco_iosxe_cli", 7)),
+            ("none", "juniper_junos", "set system host-name T\n" + "".join(
+                f"set interfaces xe-0/0/{n} unit 0 family ethernet-switching interface-mode trunk\n" for n in range(5)
+            )),
+            ("not a trunk", "cisco_iosxe_cli", "hostname T\n" + "".join(
+                f"interface Gi1/0/{n}\n switchport mode access\n switchport trunk allowed vlan {ids}\n!\n"
+                for n, ids in enumerate(("all", "10,20", "none"))
+            )),
+        ]
+        words: dict[str, list[str]] = {}
         for folder in ("cisco_iosxe", "cisco_nxos", "arista_eos", "aruba_aoss", "aruba_aoscx", "junos"):
             for path in sorted((FIXTURES / "real" / folder).glob("*")):
                 if path.is_file() and path.suffix not in (".md", ".json", ".yaml"):
@@ -868,7 +1202,11 @@ class TestTheRenderersCountFirst:
             assert sum(charged) == sum(len(line) + 1 for line in lines), label
             assert len(charged) == (1 if lines else 0), label
             seen_lists += len(lines)
+            words[label] = [line[len(_ID_LINE[target]):] for line in lines]
         assert seen_lists > 100, "the captures held too few lists for this to mean anything"
+        # The built texts wrote what they were built to write.
+        assert words["every"] == [] and words["none"] == ["none"] * 5
+        assert words["not a trunk"] == (["all", "10,20"] if target == "cisco_iosxe_cli" else [])
 
     @pytest.mark.parametrize("target", sorted(_ID_LINE))
     def test_wide_lists_are_refused_before_a_character(self, target: str) -> None:
@@ -1458,20 +1796,22 @@ def _loops_that_do_not_look(source: str, rel: str = "") -> list[str]:
 #: anything else says what bounds the run.
 RUNS_OF_ENTRIES: dict[tuple[str, str, str], str] = {
     ("_helpers.py", "<module>", "range(4095)"): "the shared tuple itself: 4,095 ints, made once",
+    ("_helpers.py", "<module>", "VLAN_IDS[1:]"):
+        "every VLAN id as one tuple, made once; a list copied from it is counted where it is copied",
     ("_helpers.py", "_entry", "range(entry[2], len(items))"): "walks a list that exists",
     ("_helpers.py", "vlan_id_run", "VLAN_IDS[low:high + 1]"):
         "the expander every caller of it is in this table for",
     ("_helpers.py", "_normalise_mac_to_colon_hex", "range(0, 12, 2)"): "six",
     ("_helpers.py", "_parse_vlan_list", "VLAN_IDS[lo_i:hi_i + 1]"): "charged",
+    ("_helpers.py", "unstated_trunk_list", "vlan_id_run(1, 4094)"): "charged",
     ("_helpers.py", "merge_trunk_allowed", "vlan_id_run(1, 4094)"): "charged",
     ("_helpers.py", "merge_trunk_allowed", "VLAN_IDS[1:]"): "charged",
     ("arista_eos/parse.py", "_expand_vlan_list", "VLAN_IDS[a_i:b_i + 1]"): "charged",
+    ("aruba_aoscx/parse.py", "_on_line", "vlan_id_run(1, 4094)"): "charged",
     ("aruba_aoss/parse.py", "_expand_port_range", "range(num_lo, num_hi + 1)"): "charged",
     ("fortigate_cli/parse.py", "_apply_system_dhcp_server", "range(1, 4)"): "three",
     ("juniper_junos/parse.py", "_resolve_vlan_member_to_vids", "vlan_id_run(lo, hi)"): "charged",
-    ("juniper_junos/parse.py", "parse_intent", "vlan_id_run(1, 4094)"): "charged",
-    ("juniper_junos/parse.py", "parse_block", "range(push_count)"):
-        "pops the words one statement pushed; the words are what is charged",
+    ("juniper_junos/parse.py", "read_intent", "vlan_id_run(1, 4094)"): "charged",
     ("juniper_junos/render.py", "<module>", "range(1, 4095)"): "a set of every VLAN id, made once",
     ("juniper_junos/render.py", "render_intent", "range(first, last + 1)"): "charged",
 }
@@ -1524,6 +1864,8 @@ BROAD_HANDLERS = {
     ("netcanon/migration/target_profiles.py", "*"): "loads the target profiles at start",
     ("netcanon/services/migration_pipeline.py", "reads_as_a_port"): "wraps one classifier call on one name",
     ("netcanon/services/migration_pipeline.py", "_management_form"): "wraps one classifier call on one name",
+    ("netcanon/services/migration_pipeline.py", "_the_targets_own"):
+        "wraps one classifier call and one formatter call on one name",
 }
 _ROOTS_OF_BROAD_HANDLERS = [
     PACKAGE / "migration", PACKAGE / "services" / "migration_pipeline.py",
@@ -1607,7 +1949,7 @@ class TestReadingTheCode:
         )
         uncounted = [key for key, answer in RUNS_OF_ENTRIES.items() if answer == "charged" and not found[key]]
         assert not uncounted, f"said to be charged, in a function that counts nothing: {uncounted}"
-        assert sum(1 for answer in RUNS_OF_ENTRIES.values() if answer == "charged") >= 8
+        assert sum(1 for answer in RUNS_OF_ENTRIES.values() if answer == "charged") >= 10
 
     def test_no_broad_handler_swallows_a_refusal(self) -> None:
         files = [

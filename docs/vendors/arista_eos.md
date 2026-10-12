@@ -178,6 +178,31 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
 
 ## Common gotchas
 
+- **A trunk's allowed list means what it says.**  A trunk with no
+  `switchport trunk allowed vlan` line is read as a trunk of EVERY
+  VLAN — the EOS default, which EOS states by the absence of the
+  line — and reaches another vendor as that.  `switchport trunk
+  allowed vlan none`, and a list emptied by `remove` or `except`, is
+  a trunk of NO VLAN.  `add` and `remove` on an interface's first
+  allowed line start from every VLAN.  As a target: every VLAN is
+  written as
+  a trunk with no allowed line (never the ids, which are one line of
+  some 19,000 characters); no VLAN is `switchport trunk allowed vlan
+  none`; any other list is written as it stands.  Release 0.7.7 and
+  earlier had one value, an empty list, for a trunk that allows no
+  VLAN and for one that states no list: a `none` trunk came out here
+  as a trunk of every VLAN, and a trunk with no list reached Junos,
+  OS10 and AOS-S carrying none — check trunks translated that way.
+  A port with a `switchport trunk` line and no `switchport mode
+  trunk` line is read as a trunk — even after `switchport mode
+  access` — though an EOS port is an access port until it is told
+  otherwise and keeps a trunk line without acting on it.  That is an
+  older fault of the parser.  Such a port is given nothing from the
+  default: it is a trunk of the VLANs its lines name, or of NO VLAN
+  (`switchport trunk native vlan 999` alone comes back with
+  `switchport trunk allowed vlan none`), never of every VLAN.  The
+  vendors' own sentences are in the
+  [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
 - **MLAG is NOT translated** — corrected 2026-09-24; this entry
   previously claimed the parser "round-trips the peer-link mapping",
   which was wrong in both halves.  There is no MLAG or peer record on
@@ -202,6 +227,17 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   in Wave 10β-B.
 - **`service routing protocols model multi-agent`** — preserved as
   raw section; not in canonical model.
+- **Renaming or dropping `Vlan<N>` in the rename modal is not shown
+  by the output.**  A translation from EOS to EOS lists each VLAN
+  interface under *Other names in the config*.  EOS output writes
+  `interface Vlan<id>` from the VLAN itself: renamed, the interface
+  is written under the new name and the old one again; dropped, it
+  comes back.  And a loopback that is the VXLAN source can be
+  renamed there, but dropped it is still named by `vxlan
+  source-interface`.  The job records each entry and says nothing.
+  Renumber or drop the VLAN on the VLANs pane, which takes its
+  interface with it.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 
 ## See also
 

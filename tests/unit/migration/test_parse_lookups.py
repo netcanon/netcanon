@@ -1073,22 +1073,29 @@ class TestListsOfOneRecord:
 
 
 def _parent_by_walking(vlan: Any, intent: CanonicalIntent, default: str) -> str:
-    """The OPNsense renderer's search for a VLAN's parent as it was:
-    every interface for every LAG, and again for every member."""
-    for lag in intent.lags:
-        for iface in intent.interfaces:
-            if iface.name == lag.name and vlan.id in iface.trunk_allowed_vlans:
-                return lag.name
-        for member in lag.members:
-            for iface in intent.interfaces:
-                if iface.name == member and vlan.id in iface.trunk_allowed_vlans:
-                    return lag.name
+    """The OPNsense renderer's search for a VLAN's parent, walked:
+    every interface for every LAG, and again for every member, then
+    the plain interfaces -- once for a trunk that names the VLAN, and
+    once more for a trunk of every VLAN."""
     members = {member for lag in intent.lags for member in lag.members}
-    for iface in intent.interfaces:
-        if iface.name.lower().startswith("vlan") or iface.name in members:
-            continue
-        if vlan.id in iface.trunk_allowed_vlans:
-            return iface.name
+    for of_every_vlan in (False, True):
+        def carries(iface: Any, wide: bool = of_every_vlan) -> bool:
+            every = set(range(1, 4095)) <= set(iface.trunk_allowed_vlans)
+            return every is wide and vlan.id in iface.trunk_allowed_vlans
+
+        for lag in intent.lags:
+            for iface in intent.interfaces:
+                if iface.name == lag.name and carries(iface):
+                    return lag.name
+            for member in lag.members:
+                for iface in intent.interfaces:
+                    if iface.name == member and carries(iface):
+                        return lag.name
+        for iface in intent.interfaces:
+            if iface.name.lower().startswith("vlan") or iface.name in members:
+                continue
+            if carries(iface):
+                return iface.name
     return default
 
 

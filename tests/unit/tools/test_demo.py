@@ -48,6 +48,73 @@ class TestDemoModule:
         assert "OUTPUT" in out
         assert "FAILED" not in out
 
+    #: What the plan endpoints call each scenario, the names they
+    #: list as left under their source name, and the names the
+    #: translator itself says it could not read and left.  The demo
+    #: runs the rename-aware pipeline and takes its status; the
+    #: endpoints run the same and then read the run for port names
+    #: it left unsettled.
+    _SERVED = {
+        "cisco__junos": ("completed", [], []),
+        "fortigate__mikrotik": ("completed", [], []),
+        # An AOS-S VLAN's address is carried on an interface its
+        # parser names ``VlanN``, which its classifier does not read:
+        # the translator leaves it and says so.  On EOS that is what
+        # the interface is called, so no name is listed.
+        "aruba__arista": ("completed", [], ["Vlan10", "Vlan20"]),
+        # FreeBSD driver names, which no classifier reads and Junos
+        # does not have.
+        "opnsense__junos": ("partial", ["igc0", "igc1"], ["igc0", "igc1"]),
+    }
+
+    def test_every_scenario_is_pinned(self):
+        assert set(self._SERVED) == set(SCENARIOS)
+
+    @pytest.mark.parametrize("pair", sorted(SCENARIOS))
+    def test_what_the_api_calls_each(self, pair, capsys):
+        """One output, two statuses where a name was left under a
+        name the target does not have: the demo lists every name
+        the translator left under its advisories and goes on, the
+        endpoints hold the job until an entry of the port map
+        decides each that is a foreign name there.  No scenario has
+        two names on one name or a name dropped.  The two
+        landing-page pairs are ``completed`` on both, and so is
+        ``aruba__arista``, whose two names are EOS's own."""
+        from netcanon.migration.codecs.registry import get_codec
+        from netcanon.models.migration import MigrationJobStatus
+        from netcanon.services.migration_pipeline import (
+            run_plan_with_checked_names,
+            run_plan_with_rename,
+        )
+
+        scenario = SCENARIOS[pair]
+        status, listed, left = self._SERVED[pair]
+        source = get_codec(scenario.source_codec)
+        target = get_codec(scenario.target_codec)
+        shown = run_plan_with_rename(source, target, scenario.source_text, port_rename_map={})
+        served = run_plan_with_checked_names(
+            source, target, scenario.source_text, port_rename_map={},
+        )
+        assert shown.status == MigrationJobStatus.completed
+        assert served.rendered == shown.rendered
+        assert (served.fused_ports, served.unresolved_ports) == ({}, [])
+        assert served.untranslated_ports == listed
+        assert served.status.value == status
+        assert (status == "partial") is bool(listed)
+        # What the translator left -- all the endpoints can hold a
+        # job for -- the demo prints.
+        assert demo_main(["--pair", pair]) == 0
+        out = capsys.readouterr().out
+        for name in left:
+            assert f"could not classify port name {name!r}; left verbatim" in out
+        # And keeping each name as it is, is what settles it there.
+        kept = run_plan_with_checked_names(
+            source, target, scenario.source_text,
+            port_rename_map={name: name for name in listed},
+        )
+        assert kept.status == MigrationJobStatus.completed
+        assert kept.rendered == shown.rendered
+
     def test_partial_job_exits_nonzero(self, capsys, monkeypatch):
         """API-5 (2026-07-03 review): the demo keyed success off the enum's
         repr suffix (``endswith('failed')``), so a *partial* job printed the

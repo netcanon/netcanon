@@ -32,8 +32,9 @@ Public surface:
   ``None`` when the request does not declare its source device.
 * :func:`run_translation` — the one place every job-running handler
   dispatches from: model-aware when the request declares both
-  devices, the ordinary rename-aware pipeline otherwise.  It opens the
-  server's scope for the request, and so takes the request's turn
+  devices, the rename-aware pipeline and its check of the finished
+  run otherwise, with the body's own port map either way.  It opens
+  the server's scope for the request, and so takes the request's turn
   where the limits say how many work at once.
 * :func:`request_limits` — the name of the limits this server is set
   to; every handler that hands config text to a parser opens
@@ -117,8 +118,8 @@ from ...models.migration import (
     Refusal,
 )
 from ...services.migration_pipeline import (
+    run_plan_with_checked_names,
     run_plan_with_models,
-    run_plan_with_overrides,
 )
 from ...storage.base import BaseConfigStore
 
@@ -1042,26 +1043,37 @@ def run_translation(
 
     Every job-running handler dispatches through here, so the same
     body posted to ``/plan`` or to a per-pane endpoint renders the same
-    port names.  *overrides* are that handler's own
-    ``run_plan_with_overrides`` keyword arguments (its category maps
-    and ``force``), passed through unchanged when the request does
-    not declare its devices.
+    port names and comes back with the same status.  *overrides* are
+    that handler's own category maps and ``force``, passed through
+    unchanged.
 
-    When it does, they go to
-    :func:`~netcanon.services.migration_pipeline.run_plan_with_models`
-    instead, with one substitution: ``port_rename_map`` is taken from
-    the BODY, whatever the handler passed.  Four of the per-pane
-    handlers pass ``{}`` there ("translate by name shape, and ignore
-    a port map posted to this pane"), which is right for a guess and
-    wrong for a pairing: the pairing is itself a port map, so the
-    operator's edits to it — the drops they have acknowledged
-    included — must not depend on which URL the body is posted to.
+    The port map is not a handler's to pass: it is taken from the
+    BODY, on every endpoint, and an absent one is read as ``{}``
+    (translate every name by its shape).  A job's status depends on
+    what was decided about its ports.  With both devices declared
+    the positional pairing is itself a port map the operator edits;
+    with none declared a port the translator dropped, or two names
+    it put on one, hold the job ``partial`` until an entry decides
+    them.  A decision -- an acknowledged drop included -- must not be
+    lost to the URL the body is posted to.  The four category panes
+    used to pass ``{}`` and set a posted port map aside; that left a
+    job on those panes with no way to be settled.
+
+    A request that declares both devices goes to
+    :func:`~netcanon.services.migration_pipeline.run_plan_with_models`,
+    which pairs ports by position and checks its own finished run.
+    One that declares none goes to
+    :func:`~netcanon.services.migration_pipeline.run_plan_with_checked_names`:
+    the rename-aware pipeline, and then the same question asked of
+    a run made by name shape.
 
     Either way the work runs inside ONE scope of the server's: the
     limits this server is set to, and one deadline for every parse and
     render the request makes (with both devices declared the source is
     parsed two or three times and the output is read back).  A config
-    past a limit comes back as a ``failed`` job with ``refusal`` set.
+    past a limit comes back as a ``failed`` job with ``refusal`` set;
+    nothing is asked about the port names of a job that did not
+    render.
 
     Where the limits say how many requests work at once, the request
     waits for its turn here, inside that deadline, and holds it until
@@ -1076,12 +1088,14 @@ def run_translation(
     answers it 503, its body unread.)
     """
     inventories = resolve_port_inventories(request, body, source, target)
+    overrides["port_rename_map"] = dict(body.port_rename_map or {})
     try:
         with server_scope(request_limits(request), answer=request_answer(request)):
             if inventories is None:
-                return run_plan_with_overrides(source, target, raw_text, **overrides)
+                return run_plan_with_checked_names(
+                    source, target, raw_text, **overrides,
+                )
             source_inventory, target_inventory = inventories
-            overrides["port_rename_map"] = dict(body.port_rename_map or {})
             return run_plan_with_models(
                 source, target, raw_text, source_inventory, target_inventory,
                 **overrides,

@@ -281,12 +281,59 @@ and tracked in
 [`../vendor-research/dell_os10/30-codec-plan.md`](../vendor-research/dell_os10/30-codec-plan.md)
 §9.
 
+⚠️ **A routed sub-interface loses its tag.**  A stanza named
+`interface ethernet1/1/1.54` is read as an interface of that name; its
+`encapsulation dot1q` line is not read (OS10 routed sub-interfaces are
+not modelled).  Onto another vendor it goes where its port goes
+(`Ethernet1.54`) with no VLAN — or, on VyOS and FortiOS, with 54 as
+its VLAN id, whatever the line said.  The job warns for each such
+unit, and with both devices declared lists it in `untagged_units` and
+stays `partial` until you name it.  Set the tag on the target by hand.
+**Onto OS10 itself the tag is lost the same way and nothing says so**:
+the output has `interface ethernet1/1/1.54` with its address and no
+`encapsulation dot1q`, in a job that is `completed` with no warning.
+Compare the sub-interfaces of an OS10 to OS10 output with the source.
+
+⚠️ **Renaming or dropping `vlan<N>` in the rename modal is not shown
+by the output.**  A translation from OS10 to OS10 lists each VLAN
+interface under *Other names in the config*.  OS10 output writes
+`interface vlan<id>` from the VLAN itself: renamed, the interface is
+written under the new name and the old one again; dropped, it is
+written all the same.  The job records the entry and says nothing.
+Edit the output.  See
+[`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
+
 ⚠️ **A user whose password hash we can't model is dropped, loudly.**
 The renderer refuses to re-emit a credential it cannot prove is safe to
 reuse, leaving a `review:` comment naming the user instead of a
 `username` line.  A config whose secrets were scrubbed by some other
 tool will therefore render with no users at all — that is the gate
 working, not a parser fault.
+
+⚠️ **OS10 cannot be told "every VLAN".**  An OS10 trunk with no
+`switchport trunk allowed vlan` line carries untagged traffic on its
+access VLAN and no tagged VLAN, and is read so: a trunk of NO VLAN.
+As a target that is written the same way, with no allowed line.  But
+OS10 has no word for every VLAN, its VLAN ids end at 4093, and a VLAN
+must exist before a port is put in it.  A trunk of EVERY VLAN — a
+Cisco or Arista trunk that states no list, an AOS-CX `vlan trunk
+allowed all`, a Junos `vlan members all` — is written `switchport
+trunk allowed vlan 1-4094`, as it always was, under a `! review:`
+line that says so: replace the range with the VLANs the switch has.
+A list that is NOT every VLAN is written as it stands, with no such
+line, though it can have the same faults: `2-4094` names an id OS10
+does not have, and any list can name a VLAN the output does not
+declare, which OS10 wants made before a port is put in it.
+Release 0.7.7 and earlier had one value, an empty list, for a trunk
+that allows no VLAN and for one that states no list: an OS10 trunk
+with no tagged VLAN came out as a trunk of every VLAN on IOS-XE,
+NX-OS, EOS and AOS-CX, and a Cisco trunk with no list reached OS10
+with no allowed line — check trunks translated that way.  The
+untagged (access) VLAN of an OS10 trunk is never in its allowed list,
+and is not added to the list written for another vendor: a trunk with
+an untagged VLAN and no tagged one is written there as a trunk that
+allows none, with the native line beside it.  The vendors' own
+sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
 
 ## Two things that would have been silent bugs
 

@@ -9,7 +9,10 @@ does for you, this is the page.
   **Certification: certified.**  Bidirectional.
 
 The codec works against `show configuration | display set` output
-across Junos majors from 15.1 through 25.4.  Fixtures cover QFX,
+across Junos majors from 15.1 through 25.4, and reads the
+hierarchical output of `show configuration` too — what of it is
+read, and what is not, is under *Common gotchas* below.  Fixtures
+cover QFX,
 EX, and vMX-style platforms; the set-form grammar is consistent
 across Junos platform families, so SRX / MX would parse + render
 through the same pipeline (insofar as the surfaces overlap with
@@ -193,7 +196,9 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
 - **Block-form input is counted in the set commands it becomes.**  A
   block-form config is converted to set commands before it is read,
   and the whole path is written again for every statement under it, so
-  a deep hierarchy with many statements is many times its own size.
+  a deep hierarchy with many statements is many times its own size
+  (a statement marked `inactive:` is two commands, its `set` line and
+  a `deactivate` line, and both are counted).
   The server's config size limit counts it in words (`words`), and a
   config past it is `refused:` with advice that is also the cure:
   paste `show configuration | display set`, which is not converted and
@@ -213,9 +218,22 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   members` line of any trunk translated that way.  Not verified on
   a device: that a switch commits a member range most of whose ids
   have no VLAN — run `commit check` on the output before relying on
-  it.  Two exceptions, both older and open: a trunk that states no
-  list (every VLAN, on Cisco and Arista) and an AOS-CX `vlan trunk
-  allowed all` reach Junos as a trunk with **no** members.
+  it.  A Junos trunk with no `vlan members` is read as a trunk of NO
+  VLAN, and reaches IOS-XE, NX-OS and EOS as `switchport trunk
+  allowed vlan none` (release 0.7.7 and earlier wrote it there as a
+  trunk with no allowed line, which is every VLAN).  The other way: a
+  Cisco or Arista trunk that states no list, and an AOS-CX `vlan
+  trunk allowed all`, are every VLAN and are written `vlan members
+  all` (those releases wrote them with **no** members).  So is a
+  source port that states the trunk mode and keeps its list where it
+  is not read — a port-channel member that leaves the list to its
+  port-channel, a port that takes it from `inherit port-profile` or
+  `source template`: check `vlan members all` on a port whose source
+  stanza has no allowed line.  Not
+  established from Juniper's pages: the sentence that says what a
+  trunk with no members carries; it is read as none from the page
+  for `members` and the one for `native-vlan-id`.  The vendors' own
+  sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
 - **A VLAN named `all`, or named like another VLAN's number or
   like a range (`50` for VLAN 100, `200-330`)** is written as
   `VLAN-<id>`, with a `# review:` line saying so: in a member list
@@ -228,6 +246,27 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   with both devices declared (in the Interface rename modal or on
   the API) the route is then listed
   (`stale_next_hops`) and the job is `partial`.
+- **Units.**  A tagged unit (`set interfaces ge-0/0/1 unit 54
+  vlan-id 54`) is an interface of its own here, `ge-0/0/1.54`.
+  Between two Junos configs it keeps its name, and follows a
+  `port_rename_map` entry for its port (`ge-0/0/7.54`).  Onto another
+  vendor it goes where its port goes, with its unit and its tag
+  (`Ethernet1.54`, `encapsulation dot1q vlan 54`).  A unit of `lo0`
+  (`lo0.2`, a per-instance loopback) has no counterpart on another
+  platform: it is put on the target's loopback beside `lo0` and the
+  job warns that two names share it — map it by hand.  With no
+  devices declared such a job is `partial` until the unit has a
+  loopback of its own, and lists the pair in `fused_ports`; a mere
+  reference to unit 0 (`lo0.0`) is the loopback itself and is not
+  counted.  Names the port translator does not read — a bare `irb`,
+  `vme`, `st0` and its units, a channelized `xe-0/0/6:2` — are left
+  as they are on the target, and such a job lists them in
+  `untranslated_ports` until each has an entry.  ⚠️ Up to
+  0.7.7 a unit was written ONTO its port, also in a translation from
+  Junos to Junos, where `fxp0` and `me0` also came back as `em0`;
+  translate such a config again.  `vlan-tagging` on the parent port
+  is not read and not written: add it to an output that has tagged
+  units.
 - **Declaring a Junos device** — every interface name is the system's
   and is lower-case, so an override typed in another case
   (`GE-0/0/2`) is read as the port `ge-0/0/2`, not as a second
@@ -241,6 +280,13 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   doesn't descend into `set groups ...` content.  When migrating
   TO Junos from a non-Junos source, configs come out flat (no
   apply-groups inheritance).
+- **Renaming or dropping the bare `irb` in the rename modal does
+  nothing to its units.**  A translation from Junos to Junos lists
+  `irb` under *Other names in the config* beside each `irb.<unit>`.
+  An entry on an `irb.<unit>` row is shown by the output; one on
+  the bare `irb` is recorded by the job and the units stay under
+  `irb`.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 - **Root authentication** (`set system root-authentication
   encrypted-password`) is parse-and-ignore — root auth is
   distinct from user accounts and not in the canonical
@@ -249,9 +295,80 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   ethernet-switching ...` only) used to be dropped on render until
   the placeholder-line fix landed; now preserved with empty unit
   attributes.
-- **Set-form vs hierarchical** — Netcanon parses `set`-form only.
-  If your captured config is in hierarchical form (curly-brace
-  nesting), pipe through `display set` first.
+- **Set-form and hierarchical** — both are read, detection offers
+  the Junos codec for either, and both list the same Tier-3
+  sections.  Of the hierarchical form, read:
+  - what a device prints around its statements: the `## Last
+    commit:` line, the `version` statement ahead of the first
+    block, `## SECRET-DATA` after a secret, `##` warnings and the
+    blocks of `display inheritance` and `display detail`,
+    annotations (`/* */` above a statement, or `#`), `{ /* OMITTED
+    */ }`, the `{ ... }` of `display max-depth` (what it elides is
+    not in the text), a block with nothing in it;
+  - the tags ahead of a statement: `inactive:` and `protect:`,
+    which a device prints, and the operators of a load file, which
+    no device prints — `replace:`, `active:` and `unprotect:` are
+    taken off, and a statement under `delete:` is left out and
+    listed as `delete: <path>`;
+  - a capture as it leaves a terminal: the `{master:0}` line, the
+    prompt with or without the command, `[edit]`, a pager's
+    `---(more)---`, a Markdown fence, a byte-order mark, carriage
+    returns.
+
+  A comment begins only where a word could (`/* */`) or a
+  statement could (`#`): `member ge-0/*/*;` and a group's `<*/*>`
+  are words.  A `}` that closes nothing, a block left open and a
+  `/*` opened after the first block and never closed are refused,
+  each with a sentence.  (A `/*` left open ahead of the first
+  block is not: the text is then not taken for this form.)  A
+  secret the viewer was not shown (`encrypted-password /*
+  SECRET-DATA */;`) is the same in both forms — the placeholder is
+  the value, as `display set` prints it.  (Left out as a comment,
+  it made a user with no credential at all.)
+
+  **Not read:** the wildcards of an interface-range `member`
+  (`ge-0/0/*`) and of a group (`<*>`) are not expanded — each
+  becomes an interface of that name, and what the range or the
+  group holds is not given to the ports it means; a `member-range`
+  is not read at all, so nothing is made of it;
+  `apply-groups "${node}"` (an SRX cluster) is not resolved, so
+  what is under `node0` / `node1` is not read.  Both are the same
+  in set-form.
+
+  Every committed capture is set-form, so the hierarchical reader
+  is held by built configs — each beside its set form typed by
+  hand — and by public captures that were read and not committed.
+  A real `show configuration` capture is welcome.
+- **Deactivated statements are not translated.**  `deactivate
+  <path>` in set-form and `inactive:` in the hierarchical form
+  mark a statement the device holds and does not run.  It, and
+  everything under it, is left out of the translation and listed
+  in the Tier-3 banner as `inactive: <path>`.  (Before, its `set`
+  lines were read as if in force, and an interface the source had
+  switched off came out configured on the target.)  A Junos to
+  Junos job does not write it back as inactive either.
+  - The row names the statement and no secret: the path is cut
+    after a word that names one (`inactive: snmp community ...`),
+    and a leaf is named by its first word, as `display set` names
+    one — so a deactivated `unit 0;` is listed as `... unit`.
+  - What an applied group or an interface-range gives to a
+    deactivated path is left out with it, and a group with nothing
+    left is not applied.  No Juniper page was found that says what
+    a device does there; batfish, an independent reader, prunes
+    deactivated paths again after inheritance, and this follows it.
+  - `activate <path>` further down takes a `deactivate` back (a
+    typed script; no device prints one).  `delete <path>` is not
+    read.
+  - A `deactivate` that no `set` line is under is not listed.
+  - **Not handled:** a reference to a deactivated statement from
+    one that is in force.  An OSPF `interface` line for a
+    deactivated port is still there to be read.  A port that a
+    `routing-instances` statement still names comes back as a bare
+    interface in that instance.  The member ports of a LAG whose
+    own interface (`ae0`) is deactivated still say `802.3ad ae0`,
+    and the LAG is made from them without the LACP mode or the
+    `disable` it had: a target is given a static bundle that is
+    up.
 
 ## See also
 

@@ -197,6 +197,17 @@ and 100E physical hardware.
 
 ## Common gotchas
 
+- **Names no other vendor has** — a hardware switch (`internal`,
+  `lan`) and the SSL-VPN pseudo-interface (`ssl.root`) have no form
+  on another vendor and are dropped, with whatever address they
+  hold; `naf.root`, `l2t.root` and an interface with a name of your
+  own are not read by the port translator and are left under that
+  name.  With no devices declared the job is `partial` for each —
+  `unresolved_ports` for the dropped, `untranslated_ports` for the
+  ones left — until an entry of `port_rename_map` decides it: a
+  name on the target, or `null`.  A hardware switch that holds the
+  LAN address wants a name (a VLAN interface, usually), not a drop.
+  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
 - **`ENC <base64>` encrypted secrets** — round-trip through the
   canonical `hashed_password` field with format-preservation; never
   decoded to plaintext.
@@ -204,13 +215,16 @@ and 100E physical hardware.
   declared (in the Interface rename modal or on the API), a correctly
   declared FortiGate is still
   `partial`: pseudo-interfaces the codec does not classify come back
-  as off-inventory, and the stock `fortilink` aggregate — which the
-  ordinary translation gives a port-shaped name — is dropped and
+  as off-inventory, and — onto another vendor's device — the stock
+  `fortilink` aggregate, which the ordinary translation gives a
+  port-shaped name there, is dropped and
   reported (`displaced`) where that name is a port of the target, and
   listed (`landed_off_target`) where it is not.  A VLAN interface the
   codec reads as a physical port, or as a management port (`MGMT`),
   is treated the same way.  Name such
-  an interface in `port_rename_map` to decide it.
+  an interface in `port_rename_map` to decide it.  Between two
+  FortiGates such a name is not read at all: `fortilink`, `DMZ` and
+  `MGMT` stay as they are written.
   FortiOS interface names are an operator's free text and are kept
   apart by case: `DMZ` beside a port `dmz` is its own interface.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.

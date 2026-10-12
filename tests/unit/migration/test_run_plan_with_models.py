@@ -41,6 +41,7 @@ from netcanon.migration.device_models import (
     inventory_from_profile,
     load_model_families_dir,
 )
+from netcanon.migration.fixture_dirs import DIR_TO_CODEC_NAME
 from netcanon.migration.port_mapping import plan_port_mapping
 from netcanon.migration.target_profiles import TargetProfile, load_profiles_dir
 from netcanon.models.migration import MigrationJob, MigrationJobStatus
@@ -1693,6 +1694,80 @@ class TestSourcePortsAreCaptured:
         assert len(collect_hardware_port_names(tree)) == 52
 
 
+class TestTheOtherNamesAreCapturedToo:
+    """``source_other_names``: what the translator rewrites that is
+    no hardware port.  Between two configs of one codec no rename
+    changes such a name and no warning quotes it, and the job said
+    nothing of it at all -- so the rename modal had no row for a
+    LAG."""
+
+    def test_a_lag_and_a_routed_vlan_on_aoss(self) -> None:
+        """In the order the config first uses them, as the sweep
+        meets them: the routed VLAN has an interface record, the
+        LAG is named by a VLAN's list."""
+        text = _CONFIG_WITH_A_TRUNK + "vlan 20\n   ip address 10.20.0.1 255.255.255.0\n   exit\n"
+        job = run_plan_with_overrides(AOSS, AOSS, text, port_rename_map={})
+        assert job.port_renames == {} and job.warnings == []
+        assert job.source_other_names == ["Vlan20", "trk1"]
+        assert not set(job.source_other_names) & set(job.source_ports)
+
+    def test_an_entry_keyed_by_one_renames_it(self) -> None:
+        """Which is what a row for it is for."""
+        job = run_plan_with_overrides(
+            AOSS, AOSS, _CONFIG_WITH_A_TRUNK, port_rename_map={"trk1": "trk7"},
+        )
+        assert job.port_renames == {"trk1": "trk7"}
+        assert "trunk 51-52 trk7 lacp" in job.rendered and "tagged Trk7" in job.rendered
+        # The names are the SOURCE's, whatever was done with them.
+        assert job.source_other_names == ["trk1"]
+
+    def test_the_list_is_the_sources_own(self) -> None:
+        junos = get_codec("juniper_junos")
+        plain = run_plan_with_overrides(AOSS, AOSS, _CONFIG_WITH_A_TRUNK, port_rename_map={})
+        other = run_plan_with_overrides(AOSS, junos, _CONFIG_WITH_A_TRUNK, port_rename_map={})
+        declared = run_plan_with_models(
+            AOSS, AOSS, _CONFIG_WITH_A_TRUNK, SOURCE_2930F_48G, TARGET_2930M_48G,
+        )
+        assert plain.source_other_names == ["trk1"]
+        assert other.source_other_names == declared.source_other_names == ["trk1"]
+
+    def test_the_bare_pipeline_captures_neither(self) -> None:
+        job = migration_pipeline.run_plan(AOSS, AOSS, _CONFIG_WITH_A_TRUNK)
+        assert job.source_ports == [] and job.source_other_names == []
+
+    def test_a_reference_to_no_interface_is_one(self) -> None:
+        """The translator sweeps a VTEP source without asking what it
+        holds, so an address there is a name it rewrites."""
+        aoscx = get_codec("aruba_aoscx")
+        raw = (
+            REPO_ROOT / "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg"
+        ).read_text(encoding="utf-8")
+        job = run_plan_with_overrides(aoscx, aoscx, raw, port_rename_map={})
+        assert "192.168.100.1" in job.source_other_names
+        assert "192.168.100.1" not in job.source_ports
+
+    def test_the_two_lists_are_every_name(self) -> None:
+        """Each name the translator rewrites is in exactly one of
+        them, in the order the config first uses it."""
+        checked = 0
+        for directory in sorted((REPO_ROOT / "tests/fixtures/real").iterdir()):
+            name = DIR_TO_CODEC_NAME.get(directory.name)
+            if name is None or not directory.is_dir():
+                continue
+            codec = get_codec(name)
+            for path in sorted(directory.iterdir()):
+                if path.suffix.lower() not in {".txt", ".cfg", ".xml", ".conf", ".rsc", ".set"}:
+                    continue
+                text = path.read_text(encoding="utf-8")
+                job = run_plan_with_overrides(codec, codec, text, port_rename_map={})
+                every = collect_port_names(codec.parse(text))
+                hardware = set(job.source_ports)
+                assert job.source_other_names == [n for n in every if n not in hardware], path.name
+                assert sorted([*job.source_ports, *job.source_other_names]) == sorted(every), path.name
+                checked += len(job.source_other_names)
+        assert checked > 200
+
+
 # ---------------------------------------------------------------------------
 # Names the plan does not decide
 # ---------------------------------------------------------------------------
@@ -2494,14 +2569,59 @@ _JUNOS_UNITS = (
 ).read_text(encoding="utf-8")
 
 
+#: An IOS-XE sub-interface whose stanza states no ``encapsulation``.
+_IOS_UNIT_WITH_NO_TAG = "\n".join([
+    "!", "version 17.9", "hostname r1", "!",
+    "interface GigabitEthernet1/0/1", " description PARENT", "!",
+    "interface GigabitEthernet1/0/1.54", " ip address 10.54.0.1 255.255.255.0", "!",
+    "interface GigabitEthernet1/0/2", " description OTHER", "!", "end", "",
+])
+
+#: An AOS-CX sub-interface.  The config states its tag; the AOS-CX
+#: parser reads none.
+_AOSCX_UNIT = "\n".join([
+    "!Version ArubaOS-CX FL.10.10.1010", "hostname r1", "!",
+    "interface 1/1/1", "    no shutdown", "    routing", "    description PARENT",
+    "interface 1/1/1.54", "    no shutdown", "    encapsulation dot1q 300",
+    "    ip address 10.54.0.1/24",
+    "interface 1/1/2", "    no shutdown", "    routing", "    ip address 10.2.0.1/24", "",
+])
+
+#: An IOS-XE unit typed in another letter case than its port, tagged.
+_IOS_UNIT_IN_ANOTHER_CASE = "\n".join([
+    "!", "version 17.9", "hostname r1", "!",
+    "interface GigabitEthernet1/0/1", " description PARENT", "!",
+    "interface gigabitethernet1/0/1.54", " encapsulation dot1Q 54",
+    " ip address 10.54.0.1 255.255.255.0", "!",
+    "interface GigabitEthernet1/0/2", " description OTHER", "!", "end", "",
+])
+
+#: A unit of a unit: a name no running-config prints.
+_JUNOS_UNIT_OF_A_UNIT = "\n".join([
+    "set system host-name r1",
+    "set interfaces ge-0/0/1 unit 54 vlan-id 54",
+    "set interfaces ge-0/0/1 unit 54 family inet address 10.54.0.1/24",
+    "set interfaces ge-0/0/1.54 unit 2 family inet address 10.54.2.1/24",
+    "set interfaces ge-0/0/2 unit 0 family inet address 10.2.0.1/24",
+    "",
+])
+
+
+#: Where each unit of that capture is on an Arista 7050SX-64, back
+#: to its name in the capture.
+_JUNOS_UNIT_OF = {
+    "Ethernet1.54": "ge-0/0/0.54", "Ethernet1.55": "ge-0/0/0.55",
+    "Ethernet2.54": "ge-0/0/1.54", "Ethernet2.55": "ge-0/0/1.55",
+}
+
+
 class TestSubInterfaces:
     """``ge-0/0/0.54`` is a port of no inventory; its parent is."""
 
     def test_between_two_configs_of_one_codec_a_unit_follows_its_port(self) -> None:
-        """The Junos classifier folds a unit into its port, so the
-        name-shape path sends ``ge-0/0/0.54`` and ``ge-0/0/0.55`` both
-        onto ``ge-0/0/0``.  With the same model declared on both sides
-        each keeps its own name, and so its VLAN id."""
+        """With the same model declared on both sides each unit keeps
+        its own name, and so its VLAN id, and the plan says it followed
+        a port that stayed where it was."""
         junos = get_codec("juniper_junos")
         device = _profile("juniper_junos/EX4300-48T")
         job = run_plan_with_models(junos, junos, _JUNOS_UNITS, device, device)
@@ -2555,28 +2675,369 @@ class TestSubInterfaces:
         assert sorted(plan.sub_interfaces) == ["ge-0/0/0.55", "ge-0/0/1.54", "ge-0/0/1.55"]
         assert "ge-0/0/0.54" not in plan.unresolved_ports
 
-    def test_across_codecs_a_unit_does_not_follow(self) -> None:
-        """Junos to AOS-S: there is no unit suffix to carry over, so
-        the units are left to the name-shape translator -- which
-        gives all four one and the same name.  Three are dropped,
-        in a line that says they are sub-interfaces; none ends on a
-        name another interface holds (the wrapper checks that), and
-        every one of them still needs a decision."""
-        units = ["ge-0/0/0.54", "ge-0/0/0.55", "ge-0/0/1.54", "ge-0/0/1.55"]
+    def test_across_codecs_a_unit_follows_too(self) -> None:
+        """Junos to EOS.  Each unit is a sub-interface of the port
+        its own port was PAIRED with, tagged as it was -- not of the
+        port the shape of its parent's name gives (``Ethernet0``), and
+        not on the parent itself, where the Junos classifier puts a
+        unit.  The plan says where each went; none needs a decision."""
+        junos, eos = get_codec("juniper_junos"), get_codec("arista_eos")
+        job = run_plan_with_models(
+            junos, eos, _JUNOS_UNITS,
+            _profile("juniper_junos/EX4300-48T"), _profile("arista_eos/DCS-7050SX-64"),
+        )
+        plan = job.port_mapping_plan
+        paired = {pairing.source: pairing.target for pairing in plan.used_pairings}
+        assert (paired["ge-0/0/0"], paired["ge-0/0/1"]) == ("Ethernet1", "Ethernet2")
+        assert plan.sub_interfaces == {
+            "ge-0/0/0.54": "Ethernet1.54", "ge-0/0/0.55": "Ethernet1.55",
+            "ge-0/0/1.54": "Ethernet2.54", "ge-0/0/1.55": "Ethernet2.55",
+        }
+        assert plan.displaced == [] and job.port_drops == []
+        assert not [name for name in plan.off_inventory if "." in name]
+        assert not [name for name in plan.unresolved_ports if "." in name]
+        tags = {iface.name: iface.dot1q_vlan for iface in eos.parse(job.rendered).interfaces}
+        for where in plan.sub_interfaces.values():
+            assert job.port_renames[_JUNOS_UNIT_OF[where]] == where
+            assert tags[where] == int(where.rpartition(".")[2])
+
+    def test_across_codecs_it_goes_with_its_port(self) -> None:
+        junos, eos = get_codec("juniper_junos"), get_codec("arista_eos")
+        job = run_plan_with_models(
+            junos, eos, _JUNOS_UNITS,
+            _profile("juniper_junos/EX4300-48T"), _profile("arista_eos/DCS-7050SX-64"),
+            port_rename_map={"ge-0/0/1": None},
+        )
+        plan = job.port_mapping_plan
+        assert plan.sub_interfaces == {
+            "ge-0/0/0.54": "Ethernet1.54", "ge-0/0/0.55": "Ethernet1.55",
+            "ge-0/0/1.54": None, "ge-0/0/1.55": None,
+        }
+        assert {"ge-0/0/1", "ge-0/0/1.54", "ge-0/0/1.55"} <= set(job.port_drops)
+        assert any(
+            "2 sub-interface name(s) were DROPPED with the port they belong to" in w
+            for w in job.warnings
+        )
+
+    def test_across_codecs_its_own_entry_wins(self) -> None:
+        """As between two configs of one codec: a unit the operator
+        named is theirs, and is not reported as having followed."""
+        junos, eos = get_codec("juniper_junos"), get_codec("arista_eos")
+        job = run_plan_with_models(
+            junos, eos, _JUNOS_UNITS,
+            _profile("juniper_junos/EX4300-48T"), _profile("arista_eos/DCS-7050SX-64"),
+            port_rename_map={"ge-0/0/0.54": "Ethernet9.54", "ge-0/0/1": "Ethernet7"},
+        )
+        plan = job.port_mapping_plan
+        assert job.port_renames["ge-0/0/0.54"] == "Ethernet9.54"
+        assert plan.sub_interfaces == {
+            "ge-0/0/0.55": "Ethernet1.55",
+            "ge-0/0/1.54": "Ethernet7.54", "ge-0/0/1.55": "Ethernet7.55",
+        }
+        assert "ge-0/0/0.54" not in plan.unresolved_ports
+
+    def test_onto_a_target_with_no_units(self) -> None:
+        """Junos to AOS-S.  The units follow all the same, to
+        ``1.54`` -- which is no name of an AOS-S port: the platform
+        writes a tagged routed interface as a VLAN.  The plan says
+        where each went, and the job is not complete: the validation
+        report lists the tag AOS-S cannot carry.  (The units used to
+        be given one and the same name, and three of them dropped.)"""
         job = run_plan_with_models(
             get_codec("juniper_junos"), AOSS, _JUNOS_UNITS,
             _profile("juniper_junos/EX4300-48T"),
             _device("standalone", {"model": "JL260A"}),
         )
         plan = job.port_mapping_plan
-        assert plan.sub_interfaces == {}
-        assert len(set(units) & set(plan.displaced)) == 3
-        assert set(units) <= set(plan.unresolved_ports)
-        assert any(
-            "3 sub-interface name(s) could not be given a name of their own" in w
-            for w in job.warnings
-        )
+        assert plan.sub_interfaces == {
+            "ge-0/0/0.54": "1.54", "ge-0/0/0.55": "1.55",
+            "ge-0/0/1.54": "2.54", "ge-0/0/1.55": "2.55",
+        }
+        assert plan.displaced == [] and job.port_drops == []
+        assert "/interfaces/interface/dot1q-vlan" in {
+            entry.path for entry in job.validation.unsupported_paths
+        }
         assert job.status == MigrationJobStatus.partial
+
+    def test_a_unit_with_no_tag_needs_a_decision(self) -> None:
+        """An IOS-XE unit whose stanza states no ``encapsulation``,
+        onto AOS-S.  It goes where its port goes like any unit, and
+        the tree holds no tag to go with it: the output has
+        ``interface 1.54`` and nothing that says which VLAN it is.
+        There is no tag for the validation report to list either,
+        so counted as having followed it left the job ``completed``
+        with nothing said.  It is recorded apart, stays among the
+        names that need a decision, and has a line of its own --
+        not the line for a unit that did NOT move, which it did."""
+        ios = get_codec("cisco_iosxe_cli")
+        unit = "GigabitEthernet1/0/1.54"
+        tags = [i.dot1q_vlan for i in ios.parse(_IOS_UNIT_WITH_NO_TAG).interfaces]
+        assert tags == [None, None, None]
+        job = run_plan_with_models(
+            ios, AOSS, _IOS_UNIT_WITH_NO_TAG, _profile("cisco_iosxe/C9300-24P"),
+            _device("standalone", {"model": "JL260A"}),
+        )
+        plan = job.port_mapping_plan
+        assert job.port_renames[unit] == "1.54" and "interface 1.54" in job.rendered
+        assert plan.untagged_units == {unit: "1.54"} and plan.sub_interfaces == {}
+        assert plan.off_inventory == [unit] and plan.unresolved_ports == [unit]
+        assert job.status == MigrationJobStatus.partial
+        (line,) = [w for w in plan.warnings if "sub-interface" in w]
+        assert "1 sub-interface name(s) moved with their port" in line
+        assert f"({unit} -> 1.54)" in line and "no 802.1Q tag was read" in line
+        assert "did NOT move" not in line and "'" not in line
+        assert line in job.warnings
+
+    @pytest.mark.parametrize("answer", ["1.54", None])
+    def test_naming_such_a_unit_is_the_decision(self, answer) -> None:
+        ios = get_codec("cisco_iosxe_cli")
+        job = run_plan_with_models(
+            ios, AOSS, _IOS_UNIT_WITH_NO_TAG, _profile("cisco_iosxe/C9300-24P"),
+            _device("standalone", {"model": "JL260A"}),
+            port_rename_map={"GigabitEthernet1/0/1.54": answer},
+        )
+        plan = job.port_mapping_plan
+        assert plan.untagged_units == {} and plan.unresolved_ports == []
+        assert not [w for w in job.warnings if "802.1Q" in w]
+        assert job.status == MigrationJobStatus.completed
+        # And that is the end of it.  The plan's line says to name
+        # the unit; a unit of a port the target lists is where the
+        # plan itself puts one, so the entry is not then reported
+        # as a name the target device does not list.
+        assert plan.off_target == []
+        assert not [w for w in plan.warnings if "override target(s)" in w]
+
+    def test_a_unit_named_off_the_target_is_said(self) -> None:
+        """The entry is still read: a unit of a port the target does
+        NOT list is off-target, and so is a PORT put on a unit of
+        one across vendors, where a unit means another thing."""
+        ios, eos = get_codec("cisco_iosxe_cli"), get_codec("arista_eos")
+        devices = (_profile("cisco_iosxe/C9300-24P"), _profile("arista_eos/DCS-7050SX-64"))
+        job = run_plan_with_models(
+            ios, eos, _IOS_UNIT_WITH_NO_TAG, *devices,
+            port_rename_map={"GigabitEthernet1/0/1.54": "Ethernet999.54"},
+        )
+        assert job.port_mapping_plan.off_target == ["Ethernet999.54"]
+        job = run_plan_with_models(
+            ios, eos, _IOS_UNIT_WITH_NO_TAG, *devices,
+            port_rename_map={"GigabitEthernet1/0/2": "Ethernet7.54"},
+        )
+        assert job.port_mapping_plan.off_target == ["Ethernet7.54"]
+        job = run_plan_with_models(
+            ios, eos, _IOS_UNIT_WITH_NO_TAG, *devices,
+            port_rename_map={"GigabitEthernet1/0/1.54": "Ethernet7.300"},
+        )
+        assert job.port_mapping_plan.off_target == []
+
+    def test_moving_its_port_is_not_the_decision(self) -> None:
+        """The operator moves the PORT of a unit that has no tag.
+        The unit goes there with it, still with none: an entry for
+        the port says nothing of the unit's VLAN.  So the unit asks
+        for a decision as before, under the name it has now."""
+        ios, eos = get_codec("cisco_iosxe_cli"), get_codec("arista_eos")
+        unit = "GigabitEthernet1/0/1.54"
+        job = run_plan_with_models(
+            ios, eos, _IOS_UNIT_WITH_NO_TAG, _profile("cisco_iosxe/C9300-24P"),
+            _profile("arista_eos/DCS-7050SX-64"),
+            port_rename_map={"GigabitEthernet1/0/1": "Ethernet9"},
+        )
+        plan = job.port_mapping_plan
+        assert job.port_renames[unit] == "Ethernet9.54"
+        assert plan.untagged_units == {unit: "Ethernet9.54"} and plan.sub_interfaces == {}
+        assert plan.unresolved_ports == [unit]
+        assert job.status == MigrationJobStatus.partial
+        (line,) = [w for w in plan.warnings if "sub-interface" in w]
+        assert f"({unit} -> Ethernet9.54)" in line
+
+    @pytest.mark.parametrize(
+        ("target", "profile", "where"),
+        [
+            ("arista_eos", "arista_eos/DCS-7050SX-64", "Ethernet1.54"),
+            ("cisco_iosxe_cli", "cisco_iosxe/C9300-48P", "GigabitEthernet1/0/1.54"),
+        ],
+    )
+    def test_one_in_another_case_is_said_to_move(
+        self, target: str, profile: str, where: str,
+    ) -> None:
+        """IOS names have no letter case, so
+        ``gigabitethernet1/0/1.54`` is a unit of
+        ``GigabitEthernet1/0/1`` and goes where that port goes,
+        with its tag.  The plan reads a unit's port by the name the
+        config gives the port and does not count this one as
+        having followed; it asks for a decision.  Listed among the
+        names "left to name-shape translation -- check the source
+        model" it would be told neither what happened to it nor
+        what is wrong with it.  The plan says what happened, and
+        why it does not vouch for it."""
+        ios = get_codec("cisco_iosxe_cli")
+        unit = "gigabitethernet1/0/1.54"
+        job = run_plan_with_models(
+            ios, get_codec(target), _IOS_UNIT_IN_ANOTHER_CASE,
+            _profile("cisco_iosxe/C9300-24P"), _profile(profile),
+        )
+        plan = job.port_mapping_plan
+        assert job.port_renames[unit] == where
+        assert plan.unvouched_units == {unit: where}
+        assert plan.sub_interfaces == {} and plan.untagged_units == {}
+        assert plan.off_inventory == [unit] and plan.unresolved_ports == [unit]
+        assert job.status == MigrationJobStatus.partial
+        (line,) = [w for w in plan.warnings if "sub-interface" in w]
+        assert line.startswith(
+            f"port mapping: 1 sub-interface name(s) moved with their port "
+            f"({unit} -> {where}), but the plan does not vouch for where they went: "
+        )
+        assert "another letter case than their port" in line
+        assert line.endswith("check each, then name it in the port map, or drop it")
+        assert "'" not in line and line in job.warnings
+        assert not [w for w in plan.warnings if "name-shape translation" in w]
+
+    def test_naming_that_one_ends_it_too(self) -> None:
+        ios, eos = get_codec("cisco_iosxe_cli"), get_codec("arista_eos")
+        job = run_plan_with_models(
+            ios, eos, _IOS_UNIT_IN_ANOTHER_CASE,
+            _profile("cisco_iosxe/C9300-24P"), _profile("arista_eos/DCS-7050SX-64"),
+            port_rename_map={"gigabitethernet1/0/1.54": "Ethernet1.54"},
+        )
+        plan = job.port_mapping_plan
+        assert plan.unvouched_units == {} and plan.unresolved_ports == []
+        assert plan.off_target == []
+        assert not [w for w in plan.warnings if "sub-interface" in w or "override" in w]
+        assert job.status == MigrationJobStatus.completed
+
+    def test_a_parser_that_reads_no_tag(self) -> None:
+        """Not only a config that states none.  AOS-CX states the tag
+        and its parser reads none, so EVERY AOS-CX sub-interface is
+        such a unit -- onto a target that has tagged sub-interfaces
+        as much as onto one that has not."""
+        aoscx, eos = get_codec("aruba_aoscx"), get_codec("arista_eos")
+        tags = {i.name: i.dot1q_vlan for i in aoscx.parse(_AOSCX_UNIT).interfaces}
+        assert "encapsulation dot1q 300" in _AOSCX_UNIT and tags["1/1/1.54"] is None, (
+            "the AOS-CX parser reads a sub-interface's tag now: this is no "
+            "longer a config with a unit that has none"
+        )
+        job = run_plan_with_models(
+            aoscx, eos, _AOSCX_UNIT, _profile("aruba_aoscx/6300M-48G-PoE4-SFP56"),
+            _profile("arista_eos/DCS-7050SX-64"),
+        )
+        plan = job.port_mapping_plan
+        assert plan.untagged_units == {"1/1/1.54": "Ethernet1.54"}
+        assert plan.sub_interfaces == {} and plan.unresolved_ports == ["1/1/1.54"]
+        assert job.status == MigrationJobStatus.partial
+        (written,) = [i for i in eos.parse(job.rendered).interfaces if i.name == "Ethernet1.54"]
+        assert written.dot1q_vlan is None
+        assert [a.ip for a in written.ipv4_addresses] == ["10.54.0.1"]
+
+    def test_one_codec_both_sides_asks_nothing(self) -> None:
+        """One grammar on both sides: a unit is written as the tree
+        holds it.  The same two units have followed, and nothing is
+        asked.  (Not because the AOS-CX one has its tag in the
+        output.  Its parser read none, so the tag is lost on this
+        path as on every other, and here nothing says so.)"""
+        ios, aoscx = get_codec("cisco_iosxe_cli"), get_codec("aruba_aoscx")
+        for codec, text, source, target, unit in (
+            (ios, _IOS_UNIT_WITH_NO_TAG, "cisco_iosxe/C9300-24P", "cisco_iosxe/C9300-48P",
+             "GigabitEthernet1/0/1.54"),
+            (aoscx, _AOSCX_UNIT, "aruba_aoscx/6300M-48G-PoE4-SFP56",
+             "aruba_aoscx/6300M-48G-PoE4-SFP56", "1/1/1.54"),
+        ):
+            job = run_plan_with_models(codec, codec, text, _profile(source), _profile(target))
+            plan = job.port_mapping_plan
+            assert plan.sub_interfaces == {unit: unit} and plan.untagged_units == {}
+            assert plan.unresolved_ports == []
+            assert job.status == MigrationJobStatus.completed
+
+    def test_dropped_with_its_port_is_only_that(self) -> None:
+        aoscx, eos = get_codec("aruba_aoscx"), get_codec("arista_eos")
+        job = run_plan_with_models(
+            aoscx, eos, _AOSCX_UNIT, _profile("aruba_aoscx/6300M-48G-PoE4-SFP56"),
+            _profile("arista_eos/DCS-7050SX-64"), port_rename_map={"1/1/1": None},
+        )
+        plan = job.port_mapping_plan
+        assert plan.sub_interfaces == {"1/1/1.54": None} and plan.untagged_units == {}
+        assert job.port_drops == ["1/1/1", "1/1/1.54"]
+        assert job.status == MigrationJobStatus.completed
+
+    @pytest.mark.parametrize(
+        ("target", "profile"),
+        [("juniper_junos", "juniper_junos/EX4300-48T"), ("arista_eos", "arista_eos/DCS-7050SX-64")],
+    )
+    def test_a_unit_of_a_unit_is_not_vouched_for(self, target: str, profile: str) -> None:
+        """``ge-0/0/1.54 unit 2`` is a name no running-config prints,
+        and the rule for a unit is for one level.  Whatever becomes
+        of it, the plan does not vouch for it: it stays a name the
+        declared device does not have and asks for a decision,
+        between two configs of one codec and across vendors alike.
+        It is in neither list of units -- it has no tag, and is not
+        said to have moved without one.  The unit it is written
+        under has followed."""
+        junos = get_codec("juniper_junos")
+        job = run_plan_with_models(
+            junos, get_codec(target), _JUNOS_UNIT_OF_A_UNIT,
+            _profile("juniper_junos/EX4300-48T"), _profile(profile),
+        )
+        plan = job.port_mapping_plan
+        assert list(plan.sub_interfaces) == ["ge-0/0/1.54"] and plan.untagged_units == {}
+        assert plan.off_inventory == ["ge-0/0/1.54.2"]
+        assert plan.unresolved_ports == ["ge-0/0/1.54.2"]
+        assert job.status == MigrationJobStatus.partial
+        # It went where the unit it is written under went, and the
+        # plan says that of it -- not that it was left to the shape
+        # of its name.
+        where = plan.sub_interfaces["ge-0/0/1.54"] + ".2"
+        assert job.port_renames.get("ge-0/0/1.54.2", "ge-0/0/1.54.2") == where
+        assert plan.unvouched_units == {"ge-0/0/1.54.2": where}
+        (line,) = [w for w in plan.warnings if "moved with their port" in w]
+        assert f"(ge-0/0/1.54.2 -> {where})" in line and "units of a unit" in line
+        assert not [w for w in plan.warnings if "name-shape translation" in w]
+
+    def test_no_pairing_says_nothing_of_units(self) -> None:
+        """With no pairing every name went by its shape, units among
+        them.  Such a plan lists no name as off-inventory, so it has
+        no unit to call followed or untagged -- which is also why
+        reading the run for them is asked only of a plan that was
+        applied: there is nothing to read it for."""
+        junos, eos = get_codec("juniper_junos"), get_codec("arista_eos")
+        empty = inventory_from_profile(TargetProfile(vendor="juniper_junos", model="Generic"))
+        # Not through the wrapper: no pairing is made, so it has
+        # nothing to check.
+        job = migration_pipeline.run_plan_with_models(
+            junos, eos, _JUNOS_UNITS, empty, _profile("arista_eos/DCS-7050SX-64"),
+        )
+        plan = job.port_mapping_plan
+        assert not plan.applied and plan.off_inventory == []
+        assert plan.sub_interfaces == {} and plan.untagged_units == {}
+        assert plan.unvouched_units == {}
+        assert job.port_renames["ge-0/0/0.54"] == job.port_renames["ge-0/0/0"] + ".54"
+
+    @pytest.mark.parametrize(
+        ("off_inventory", "operator", "names", "renames", "drops", "expected"),
+        [
+            # Where its port went, with its unit.
+            (["p1.5"], {}, {"p1": "q7"}, {"p1": "q7", "p1.5": "q7.5"}, [], {"p1.5": "q7.5"}),
+            # A port that kept its name: its unit is still where it is.
+            (["p1.5"], {}, {"p1": "p1"}, {}, [], {"p1.5": "p1.5"}),
+            # Gone with a port that is gone.
+            (["p1.5"], {}, {"p1": None}, {}, ["p1", "p1.5"], {"p1.5": None}),
+            # Gone while its port is not: it did not follow anything.
+            (["p1.5"], {}, {"p1": "q7"}, {"p1": "q7"}, ["p1.5"], {}),
+            # A unit the operator named is theirs, wherever they sent
+            # it -- to where its port went, too.
+            (["p1.5"], {"p1.5": "q7.5"}, {"p1": "q7", "p1.5": "q7.5"}, {"p1": "q7", "p1.5": "q7.5"}, [], {}),
+            # Read as something else and sent elsewhere (a VLAN
+            # interface a codec names after its port).
+            (["p1.5"], {}, {"p1": "q7"}, {"p1": "q7", "p1.5": "Vlan5"}, [], {}),
+            # A unit of a name nobody decided.
+            (["p9.5"], {}, {"p1": "q7"}, {"p9": "q9", "p9.5": "q9.5"}, [], {}),
+            # A name with a dot in it is not a unit.
+            (["p1.backup"], {}, {"p1": "q7"}, {"p1": "q7"}, [], {}),
+        ],
+    )
+    def test_what_followed_is_read_from_the_run(
+        self, off_inventory, operator, names, renames, drops, expected,
+    ) -> None:
+        plan = SimpleNamespace(off_inventory=off_inventory)
+        job = SimpleNamespace(port_renames=renames, port_drops=drops)
+        assert migration_pipeline._units_that_followed(plan, operator, names, job) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -2603,10 +3064,11 @@ class TestAnOverrideAsItIsTyped:
         assert job.port_renames["50"] == "1/A1"
         assert job.status == MigrationJobStatus.partial
 
-    @pytest.mark.parametrize("blank", ["", "   "])
+    @pytest.mark.parametrize("blank", ["", "   ", "\u200b", "\x00", " \ufeff"])
     def test_a_blank_target_decides_nothing(self, blank: str) -> None:
         """An HTML form posts ``""`` for a field nobody touched.  That
-        must not clear a drop, and must not render a port with no name."""
+        must not clear a drop, and must not render a port with no name
+        -- nor may a target that draws nothing, a zero-width space."""
         job = run_plan_with_models(
             AOSS, AOSS, CAPTURE_2930F, SOURCE_2930F_48G, TARGET_2930M_24G,
             port_rename_map={"25": blank, **dict.fromkeys(_bare(26, 23))},
@@ -2617,6 +3079,7 @@ class TestAnOverrideAsItIsTyped:
         assert "25" in job.port_drops and "25" not in plan.overridden
         assert job.status == MigrationJobStatus.partial
         assert "untagged ," not in job.rendered and ",," not in job.rendered
+        assert not set("\u200b\x00\ufeff").intersection(job.rendered)
 
     def test_an_entry_for_a_port_the_config_does_not_have(self) -> None:
         job = run_plan_with_models(
@@ -3639,12 +4102,38 @@ class TestALogicalNameOnAPortTheTargetLacks:
             "(DMZ -> GigabitEthernet0/1)" in w for w in job.warnings
         )
 
-    def test_between_two_devices_of_one_model_as_well(self) -> None:
+    @pytest.mark.parametrize(
+        ("codec", "profile", "landed"),
+        [
+            ("juniper_junos", "juniper_junos/QFX5120-48Y", "ge-0/0/1"),
+            ("opnsense", "opnsense/VirtIO-4port", "igb1"),
+        ],
+    )
+    def test_whatever_form_the_target_gives(self, codec: str, profile: str, landed: str) -> None:
+        """A QFX5120 has no ``ge-`` port and a VirtIO guest no ``igb``."""
+        job = run_plan_with_models(
+            get_codec("fortigate_cli"), get_codec(codec), _FORTIGATE_CASE,
+            _profile("fortigate/100E"), _profile(profile), free_text=("DMZ",),
+        )
+        plan = job.port_mapping_plan
+        assert landed not in _profile(profile).names()
+        assert plan.landed_off_target == {"DMZ": landed}
+        assert plan.unresolved_ports == ["DMZ"]
+        assert job.status == MigrationJobStatus.partial
+
+    def test_between_two_fortigates_it_stays(self) -> None:
+        """A job from a codec to itself puts no name to the
+        classifier.  ``DMZ`` is an operator's name for a VLAN
+        interface and stays; it was read as a port and written
+        ``dmz1``, a port a 100E does not have."""
         fortigate = get_codec("fortigate_cli")
         same = _profile("fortigate/100E")
         job = run_plan_with_models(fortigate, fortigate, _FORTIGATE_CASE, same, same)
-        assert job.port_mapping_plan.landed_off_target == {"DMZ": "dmz1"}
-        assert job.status == MigrationJobStatus.partial
+        plan = job.port_mapping_plan
+        assert job.port_renames == {} and job.port_drops == []
+        assert plan.landed_off_target == {} and plan.unresolved_ports == []
+        assert 'edit "DMZ"' in job.rendered and "dmz1" not in job.rendered
+        assert job.status == MigrationJobStatus.completed
 
     def test_the_operator_deciding_it_clears_it(self) -> None:
         job = run_plan_with_models(
@@ -4377,13 +4866,28 @@ class TestAManagementShapedLanding:
         assert job.status == MigrationJobStatus.partial
 
     def test_where_the_target_has_that_port_it_is_displaced_instead(self) -> None:
-        fortigate = get_codec("fortigate_cli")
-        same = _profile("fortigate/100E")
+        """An Arista 7050SX has the ``Management1`` the name is given."""
+        eos = _profile("arista_eos/DCS-7050SX-64")
         job = run_plan_with_models(
-            fortigate, fortigate, _FORTIGATE_MGMT_VLAN, same, same, free_text=("MGMT",),
+            get_codec("fortigate_cli"), get_codec("arista_eos"), _FORTIGATE_MGMT_VLAN,
+            _profile("fortigate/100E"), eos, free_text=("MGMT",),
         )
         plan = job.port_mapping_plan
+        assert "Management1" in eos.names()
         assert plan.displaced == ["MGMT"] and plan.landed_off_target == {}
+        assert job.port_drops == ["MGMT"] and "10.90.0.1" not in job.rendered
+
+    def test_between_two_fortigates_neither(self) -> None:
+        """The name is not read at all, and ``MGMT`` stays the VLAN
+        interface it is.  It was read as the management port, given
+        the ``mgmt`` of the 100E, and dropped for taking it."""
+        fortigate = get_codec("fortigate_cli")
+        same = _profile("fortigate/100E")
+        job = run_plan_with_models(fortigate, fortigate, _FORTIGATE_MGMT_VLAN, same, same)
+        plan = job.port_mapping_plan
+        assert plan.displaced == [] and plan.landed_off_target == {}
+        assert job.port_drops == [] and 'edit "MGMT"' in job.rendered
+        assert job.status == MigrationJobStatus.completed
 
     def test_each_kind_of_port_counts_and_case_is_the_targets(self) -> None:
         junos, fortigate = get_codec("juniper_junos"), get_codec("fortigate_cli")
@@ -4488,23 +4992,43 @@ class TestMoreNextHops:
 
 
 class TestALandingAfterADisplacement:
-    def test_it_is_read_from_the_run_that_was_kept(self) -> None:
-        """Two logical names nobody decided: one would take a port of
-        the target and is displaced, which costs a second run; the
-        other is on a port the target lacks, and must still be listed."""
+    def test_it_is_read_from_the_run_that_was_kept(self, monkeypatch) -> None:
+        """Two logical names nobody decided, onto an EX4300.  The
+        aggregate ``fortilink`` is read as a port and would take
+        ``ge-0/0/1``, a port of the target: it is displaced, which
+        costs a second run.  ``MGMT`` is on ``em1``, a port the target
+        lacks, and must still be listed.
+
+        In this job the list comes out the same from either run: the
+        name displaced in the first is dropped in the second, and a
+        dropped name is left out of the list wherever it was read.
+        So which run was read is not told from the list.  It is told
+        from what the reader was handed -- once, and the job whose
+        drops name ``fortilink``."""
+        handed: list[list[str]] = []
+        real = migration_pipeline._unlisted_landings
+
+        def spy(every, used, merged, job, *rest):
+            handed.append(list(job.port_drops))
+            return real(every, used, merged, job, *rest)
+
+        monkeypatch.setattr(migration_pipeline, "_unlisted_landings", spy)
         fortigate = get_codec("fortigate_cli")
         text = _FORTIGATE_MGMT_VLAN.replace(
             "end\n",
             '    edit "fortilink"\n        set ip 10.255.1.1 255.255.255.0\n'
             "        set type aggregate\n    next\nend\n",
         )
+        target = _profile("juniper_junos/EX4300-48T")
         job = run_plan_with_models(
-            fortigate, fortigate, text, _profile("fortigate/100E"), _profile("fortigate/100E"),
+            fortigate, get_codec("juniper_junos"), text, _profile("fortigate/100E"), target,
             free_text=("MGMT",),
         )
         plan = job.port_mapping_plan
-        assert plan.displaced == ["MGMT"]
-        assert plan.landed_off_target == {"fortilink": "fortilink1"}
+        assert "ge-0/0/1" in target.names() and "em1" not in target.names()
+        assert plan.displaced == ["fortilink"]
+        assert plan.landed_off_target == {"MGMT": "em1"}
+        assert "fortilink" in job.port_drops and handed == [job.port_drops]
 
 
 class TestWhoKeepsANameNobodyDecided:

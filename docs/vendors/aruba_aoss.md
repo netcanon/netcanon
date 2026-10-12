@@ -30,8 +30,10 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 - Static routes (incl. `ip default-gateway` form)
 - LAGs (`trk<N>` reconciled with cross-vendor `Port-channel<N>`).  The
   device writes a LAG `trk1` on its `trunk` line and `Trk1` everywhere
-  else; it is one name here, `trk1`, in the rename modal and as a key
-  of a rename map (`Trk1` reaches it too).  A second `trunk` line for
+  else; it is one name here, `trk1`, as a key of a rename map (`Trk1`
+  reaches it too) and as its one row in the rename modal.  A
+  translation from AOS-S to AOS-S does not rename it; its row is
+  then under *Other names in the config*.  A second `trunk` line for
   a LAG adds its ports to the first, and a second `interface` stanza
   for an interface goes on with the first (an address it states
   again is kept once)
@@ -173,6 +175,24 @@ pipeline — they just aren't pinned by a fixture yet").
 
 ## Common gotchas
 
+- **Renaming or dropping `Vlan<N>` in the rename modal changes
+  nothing.**  A translation from AOS-S to AOS-S lists each VLAN's
+  routed interface under *Other names in the config*.  AOS-S writes
+  a VLAN's address in the `vlan` stanza, by the VLAN's id, so an
+  entry on that row is recorded by the job (`port_renames`,
+  `port_drops`) and the output is the same to the byte.  Renumber or
+  drop the VLAN itself, on the VLANs pane.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
+- **AOS-S has no allowed list.**  A port carries the VLANs that name
+  it (`tagged`, `untagged`), so there is no trunk that states none.
+  As a target: a trunk of every VLAN from another vendor — a Cisco or
+  Arista trunk that states no list, an AOS-CX `vlan trunk allowed
+  all`, a Junos `vlan members all` — is tagged in each VLAN the
+  output declares (AOS-S cannot say "and any VLAN made later", and
+  nothing in the output marks that more was meant: tag the port in a
+  VLAN you add afterwards), and a trunk of no VLAN is tagged in none.
+  Release 0.7.7 and earlier
+  tagged a Cisco trunk with no list, and an AOS-CX `all`, in nothing.
 - **A port range that names ports the switch does not have is
   refused.**  `tagged 1-1001` is 1,001 ports to everything downstream.
   One range is read up to 1,025 ports; the DIFFERENT ports that ranges
@@ -205,7 +225,25 @@ pipeline — they just aren't pinned by a fixture yet").
   never looked at).  Netcanon does not repair it automatically —
   there is no correct target port to invent.  Supply an explicit
   `port_rename_map` entry per uplink port, e.g.
-  `{"1/A1": "xe-1/1/1"}`, to place them somewhere distinct.
+  `{"1/A1": "xe-1/1/1"}`, to place them somewhere distinct.  Until
+  you do, a job with no devices declared is `partial`, not
+  `completed`, and lists each shared name with its two ports in
+  `fused_ports` (see [CAPABILITIES.md](../CAPABILITIES.md) section
+  D1); declaring both devices pairs each uplink with an uplink.
+- **A VLAN's address onto another vendor** — AOS-S writes a VLAN's
+  address in the `vlan` stanza, and the codec carries it on an
+  interface it names `Vlan<id>`.  The port translator does not read
+  that name, so it is left as it is on every target: `interface
+  Vlan10`.  On EOS, IOS-XE and NX-OS that is what the interface is
+  called, and the job is not held for it.  On Junos (`set
+  interfaces Vlan10 ...`), AOS-CX, IOS-XR, VyOS, OPNsense, FortiOS
+  and RouterOS it is not, and OS10 prints the name as `vlan10`:
+  onto those, with no devices declared, the job is `partial` and
+  lists each in `untranslated_ports` until you give it the
+  target's own name (`{"Vlan10": "irb.10"}` for Junos), or — if
+  you know the target takes it — keep it (`{"Vlan10": "Vlan10"}`,
+  or *keep this name* on its row).  See
+  [CAPABILITIES.md](../CAPABILITIES.md) section D1.
 - **Moving between AOS-S models** — an AOS-S port's name depends on
   the model, its uplink module and whether stacking or VSF is on, and
   a same-vendor translation does not rename ports by itself.  Declare

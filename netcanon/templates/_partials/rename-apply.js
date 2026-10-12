@@ -13,12 +13,12 @@
    *   renderResult, renderRenameTable, renderRenamePreview,
    *   renderRenameSummary                     (migrate.html / partials)
    *   applyDeviceDeclarations, devicesSettled, _devicesKey,
-   *   currentPortPlan, deviceTargetPicked,
+   *   _devicePairProblem, currentPortPlan, deviceTargetPicked,
    *   forgetAcceptedDecisions                  (device-models.js)
    *   currentRenameProfileKey, currentRenameModuleSku,
    *   populateRenameModelDropdown,
    *   populateRenameModuleDropdown            (migrate.html inline)
-   *   setRenameStatus, _renameApplyAbort,
+   *   setRenameStatus, _plainMap, _renameApplyAbort,
    *   _RENAME_APPLY_TIMEOUT_MS                 (migrate.html inline)
    *   showToast                                (base.html global)
    * ────────────────────────────────────────────────────────────────── */
@@ -41,6 +41,10 @@
     var gone = function() { return _lastJobBody !== baseBody; };
     // True once the answer has become the job on the page.
     var adopted = false;
+    // Apply pressed from the keyboard: the button is disabled while
+    // the request is out, which drops the focus to the page, and
+    // the next Tab then started from the top of it.
+    var hadFocus = document.activeElement === applyBtn;
     _renameApplying = true;
     applyBtn.disabled = true;
     applyBtn.textContent = 'Applying…';
@@ -54,8 +58,13 @@
       if (gone()) return;
       // Decisions "Accept as shown" recorded were a verdict on the
       // pairing on screen.  With other devices declared they are not
-      // sent on: a port that had no place may have one now.
-      if (_devicePlanKey !== _devicesKey() && forgetAcceptedDecisions()) {
+      // sent on: a port that had no place may have one now.  Drops
+      // accepted on a job made with no devices are a verdict on the
+      // translation by name shape, and stand for as long as that is
+      // what Apply asks for: they are forgotten when a pair goes out.
+      var otherDevices = currentPortPlan()
+        ? _devicePlanKey !== _devicesKey() : !_devicePairProblem();
+      if (otherDevices && forgetAcceptedDecisions()) {
         renderRenameTable();
       }
       var body = JSON.parse(JSON.stringify(baseBody));
@@ -63,7 +72,7 @@
       // ``__proto__``, and assigning that key to an ordinary object
       // sets its prototype and makes no entry -- the row showed an
       // override that was never sent.
-      body.port_rename_map = Object.fromEntries(Object.entries(_renameUserMap));
+      body.port_rename_map = _plainMap(_renameUserMap);
       // The body is a clone of the last request.  A per-pane map is
       // added below only when the operator touched that pane, so one
       // that was sent before and has since been cleared (Reset all)
@@ -81,13 +90,13 @@
       if (typeof _renameVlanUserMap === 'object'
           && _renameVlanUserMap
           && Object.keys(_renameVlanUserMap).length > 0) {
-        body.vlan_rename_map = Object.assign({}, _renameVlanUserMap);
+        body.vlan_rename_map = _plainMap(_renameVlanUserMap);
       }
       // Local-users category — same gate-on-non-empty pattern.
       if (typeof _renameLocalUserMap === 'object'
           && _renameLocalUserMap
           && Object.keys(_renameLocalUserMap).length > 0) {
-        body.local_user_rename_map = Object.assign({}, _renameLocalUserMap);
+        body.local_user_rename_map = _plainMap(_renameLocalUserMap);
       }
       // SNMP-community category — scalar but the wire contract uses
       // the same dict shape.  Only send when the operator actually
@@ -96,9 +105,7 @@
       if (typeof _renameSnmpCommunityMap === 'object'
           && _renameSnmpCommunityMap
           && Object.keys(_renameSnmpCommunityMap).length > 0) {
-        body.snmp_community_rename_map = Object.assign(
-          {}, _renameSnmpCommunityMap,
-        );
+        body.snmp_community_rename_map = _plainMap(_renameSnmpCommunityMap);
       }
       // SNMPv3 USM user-rename category — fifth per-pane surface.
       // Same gate-on-non-empty pattern; auth / priv / group / engine_id
@@ -107,9 +114,7 @@
       if (typeof _renameSnmpV3UserMap === 'object'
           && _renameSnmpV3UserMap
           && Object.keys(_renameSnmpV3UserMap).length > 0) {
-        body.snmpv3_user_rename_map = Object.assign(
-          {}, _renameSnmpV3UserMap,
-        );
+        body.snmpv3_user_rename_map = _plainMap(_renameSnmpV3UserMap);
       }
       // The devices: a target profile whenever one is chosen (with its
       // module only when the profile has modules), and the source and
@@ -225,6 +230,10 @@
       } else if (outcome === 'blocked') {
         setRenameStatus('Applied. The mapping reports something that has to be '
           + 'put right — see above.');
+      } else if (outcome === 'unsettled') {
+        // No devices declared, and the job still has two names on
+        // one or a port dropped undecided.
+        setRenameStatus('Applied. Port names are still not settled — see above.');
       } else if (undecided) {
         setRenameStatus('Applied. ' + undecided + ' port name'
           + (undecided === 1 ? '' : 's') + ' still need'
@@ -249,6 +258,10 @@
       // Whether Apply is available is the summary's to say, not this
       // function's: enabling it here would undo a hold.
       renderRenameSummary();
+      if (hadFocus && !applyBtn.disabled
+          && (document.activeElement === document.body || !document.activeElement)) {
+        applyBtn.focus();
+      }
     }
   };
 

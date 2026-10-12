@@ -325,11 +325,11 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: lossy
     reason: >
-      Drifts on 4 cells and survives on 1, same mechanism as
+      Drifts on all 7 cells, same mechanism as
       `vlans[].untagged_ports` — trunk membership survives for physical ports
-      and collapses for LAG members (`["lag 101", "lag 102"] -> ["lag"]` on
-      `aoscx_dcn_arch4_core1_1.cfg`, VLAN 4000).  The cell that survives is the
-      one whose trunk lists contain no LAG.
+      and collapses for LAG members (`["lag 1", "lag 2", "lag 256"] -> ["lag"]`
+      on `aoscx_dcn_arch4_core1_1.cfg`, VLAN 101).  No cell survives: each has
+      a LAG among its trunk members.
     references: [aoscx-iosxecli-surface]
 
   "vlans[].description":

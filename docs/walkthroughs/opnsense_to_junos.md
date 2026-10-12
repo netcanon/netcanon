@@ -86,7 +86,12 @@ verify:
 - [ ] **Interface-name mapping**: OPNsense's `igc0` / `igc1` (NIC
       driver names) map to Junos's `ge-0/0/0` / `xe-0/0/0` etc.  The
       port-rename mesh handles common cases; verify your specific
-      hardware's enumeration.
+      hardware's enumeration.  It does not read `igc`: the demo's
+      output has `set interfaces igc0 ...`, and lists both names
+      under its advisories.  Through the migrate page or the API the
+      same job is `partial` until each has an entry in
+      `port_rename_map` (`{"igc0": "ge-0/0/0", "igc1": "ge-0/0/1"}`)
+      — see [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
 - [ ] **WAN interface mode**: OPNsense's `<ipaddr>dhcp</ipaddr>` →
       Junos's `set interfaces ... unit 0 family inet dhcp`.  If you
       use track-interface / IPv6 prefix delegation, those parse-and-

@@ -57,7 +57,14 @@ from ...canonical.intent import (
     CanonicalVxlan,
 )
 from ...limits import charge, ticked
-from .._helpers import VLAN_IDS, GrowingIndex, Uniques, _mask_to_prefix, merge_trunk_allowed
+from .._helpers import (
+    VLAN_IDS,
+    GrowingIndex,
+    TrunksByName,
+    Uniques,
+    _mask_to_prefix,
+    merge_trunk_allowed,
+)
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
 from ..base import ParseError
@@ -837,6 +844,11 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     # round-trips instead of defaulting to "active" (audit bb47f21 T0-1).
     lag_modes: dict[int, str] = {}
     once = Uniques()
+    # What each interface states about its trunk, by its name (this
+    # parser keeps one record a name).  A trunk that states no list
+    # gets its platform's once the scan is over -- where the
+    # interface says it is a trunk.
+    trunks = TrunksByName("arista_eos", parse_ids=_expand_vlan_list)
     # GAP-EVPN-2: switch-level VXLAN settings are captured inside
     # ``interface Vxlan1`` but apply globally to every CanonicalVxlan
     # record produced from that stanza.  Stash them as parse-time
@@ -938,10 +950,22 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
         if current_iface is not None:
             _apply_iface_subcommand(
                 current_iface, stripped, lag_members, lag_modes, intent,
-                vxlan_state, once,
+                vxlan_state, once, trunks,
             )
         elif current_vlan is not None and stripped.startswith("name "):
             current_vlan.name = stripped.split(None, 1)[1].strip()
+
+    # A trunk with no allowed line carries what the platform's trunk
+    # carries by default -- every VLAN on EOS -- and the list says so.
+    # An empty list is a trunk that allows NO VLAN (``switchport trunk
+    # allowed vlan none``, or a ``remove`` that left nothing).  A port
+    # this parser took for a trunk from a trunk line alone, with no
+    # ``switchport mode trunk``, is given nothing from the platform's
+    # list: EOS keeps such a line on an access port without acting on
+    # it.
+    for iface in iface_by_name.values():
+        trunks.made(iface.name, iface)
+    trunks.settle()
 
     # GAP-EVPN-2 post-pass: stamp every CanonicalVxlan record we
     # produced with the switch-level source-interface + udp-port we
@@ -1158,6 +1182,7 @@ def _apply_iface_subcommand(  # noqa: C901
     intent: CanonicalIntent,
     vxlan_state: dict[str, Any] | None = None,
     once: Uniques | None = None,
+    trunks: TrunksByName | None = None,
 ) -> None:
     """Apply one indented sub-command to *iface*.
 
@@ -1165,6 +1190,14 @@ def _apply_iface_subcommand(  # noqa: C901
     has it (:class:`.._helpers.Uniques`); the stanza reader hands in
     the one it made for the parse.  A caller that has none may leave
     it out.
+
+    ``trunks`` is told what the interface states about its trunk --
+    each ``switchport trunk allowed vlan`` line, and ``switchport mode
+    trunk`` -- so that the stanza reader can tell a trunk that states
+    no list (every VLAN on EOS) from one that states an empty one,
+    and a port that says it is a trunk from one taken for a trunk
+    (:class:`.._helpers.TrunksByName`).  A caller that has none may
+    leave it out; the interface's list is then taken as stated.
     """
     if line == "shutdown":
         iface.enabled = False
@@ -1378,9 +1411,12 @@ def _apply_iface_subcommand(  # noqa: C901
         # so a lingering access_vlan would silently drop on round-trip.
         iface.access_vlan = None
         tail = line.split(None, 4)[-1]
-        iface.trunk_allowed_vlans = merge_trunk_allowed(
-            iface.trunk_allowed_vlans, tail, parse_ids=_expand_vlan_list
-        )
+        if trunks is None:
+            iface.trunk_allowed_vlans = merge_trunk_allowed(
+                iface.trunk_allowed_vlans, tail, parse_ids=_expand_vlan_list,
+            )
+        else:
+            iface.trunk_allowed_vlans = trunks.allowed_line(iface.name, tail)
         return
     if line.startswith("switchport trunk native vlan "):
         # Phase 4b Wave 7c-C: ``switchport trunk native vlan <N>``.
@@ -1398,6 +1434,8 @@ def _apply_iface_subcommand(  # noqa: C901
         return
     if line == "switchport mode trunk":
         iface.switchport_mode = "trunk"
+        if trunks is not None:
+            trunks.says_trunk(iface.name)
         # Trunk ports carry no access VLAN — clear a stale access_vlan
         # (see the ``switchport trunk allowed vlan`` handler above).
         iface.access_vlan = None

@@ -126,6 +126,9 @@ def _sentences() -> dict[str, list[str]]:
     trunk = small.vlan_ids // 3999 + 1
     worst = (small.vlan_ids // every, small.memberships // (small.vlan_ids // every))
     ordinal = {9: "ninth"}[ninth]
+    # A trunk that states no allowed list is every VLAN on four
+    # platforms, and is counted as the 4,094 ids it is.
+    unlisted = (small.vlan_ids // 4094, standard.vlan_ids // 4094)
     return {
         "docs/CAPABILITIES.md": [
             f"`vlan_ids`: {_number(standard.vlan_ids // every)} ports that each allow every VLAN.",
@@ -138,6 +141,8 @@ def _sentences() -> dict[str, list[str]]:
         "SECURITY.md": [
             f"refused at the {ordinal} range",
             f"Under `small` it is refused at the {trunk}rd trunk.",
+            f"Under `standard` the {_number(unlisted[1] + 1)}th is refused",
+            f"under `small` a config of such trunks is refused at the {unlisted[0] + 1}th",
             "a million memberships, which is the `standard` limit exactly",
             "Under `small` the largest answer is 38 MB, for the text that reaches every limit at once",
             f"its {_number(small.memberships)} memberships are 9.5 MB of that",
@@ -206,6 +211,25 @@ class TestTheWords:
         sentence = " ".join(f"refused: {caught.value}".split())
         assert sentence in _flat("docs/CAPABILITIES.md")
         assert "8009-9009" in sentence and "9,009 or more" in sentence
+
+    def test_a_trunk_with_no_list_is_quoted_as_the_code_says_it(self) -> None:
+        """A trunk that states no allowed list is counted as every
+        VLAN where that is what it carries.  What the documents
+        quote of that refusal is produced here and looked for
+        there, and so is the trunk it is said to stop at."""
+        text = "hostname T\n" + "".join(
+            f"interface GigabitEthernet1/0/{n}\n switchport mode trunk\n!\n" for n in range(1, 301)
+        )
+        with L.limits_scope("small"), pytest.raises(L.LimitExceeded) as caught:
+            get_codec("cisco_iosxe_cli").parse(text)
+        assert (caught.value.kind, caught.value.lists) == ("vlan_ids", L.SMALL.vlan_ids // 4094 + 1)
+        quoted = "the last one read: a trunk with no allowed list, which is every VLAN: GigabitEthernet1/0/257"
+        assert quoted in str(caught.value)
+        assert quoted in _flat("docs/CAPABILITIES.md")
+        assert "the last one read: a trunk with no allowed list, which is every VLAN: ..." in _flat(
+            "docs/TROUBLESHOOTING.md")
+        for rel in TABLES:
+            assert "the 4,094 of a trunk that states no allowed list, where that is every VLAN" in _flat(rel), rel
 
     def test_what_each_surface_is_told_is_documented(self) -> None:
         server = L.how_to_raise(L.STANDARD, "ports")

@@ -10,8 +10,10 @@ whose text had a contrast of 2.7:1.
 
 So a background is read here from a screenshot of the element, and a
 token is turned into a colour by painting it on the same ground and
-reading that.  Screenshots are decoded with the standard library: the
-browser tier installs no imaging package.
+reading that.  A bar down an element's edge and a ring round it are
+shadows, and are read the same way: a shadow no pixels wide has a
+computed colour too.  Screenshots are decoded with the standard
+library: the browser tier installs no imaging package.
 
 Also here: the two helpers for the rename table's override lists,
 whose target-port options are filled when a list is first used.
@@ -19,9 +21,11 @@ whose target-port options are filled when a list is first used.
 
 from __future__ import annotations
 
+import math
 import struct
 import zlib
 from collections import Counter
+from collections.abc import Iterable
 
 from playwright.sync_api import Locator, Page
 
@@ -100,7 +104,13 @@ def shot(locator: Locator) -> bytes:
     view first, the window is at its top (so the page's coordinates
     are the viewport's, whichever the capture means), two frames are
     let pass, and the viewport is captured, cut to the box."""
-    box = locator.evaluate(
+    return locator.page.screenshot(clip=_box_in_view(locator))
+
+
+def _box_in_view(locator: Locator) -> dict[str, float]:
+    """*locator*'s box in the viewport, once it has been brought into
+    view the way :func:`shot` describes."""
+    return locator.evaluate(
         """async (el) => {
             el.scrollIntoView({block: 'nearest', inline: 'nearest', behavior: 'instant'});
             window.scrollTo(0, 0);
@@ -109,7 +119,26 @@ def shot(locator: Locator) -> bytes:
             return {x: r.left, y: r.top, width: r.width, height: r.height};
         }"""
     )
-    return locator.page.screenshot(clip=box)
+
+
+def _snapped(locator: Locator, around: int = 0) -> tuple[int, int, list[RGB]]:
+    """Width, height and pixels of *locator*'s box as it is painted,
+    with *around* more pixels on every side.  A box is laid out in
+    fractions of a pixel and painted on whole ones, each edge rounded
+    to the nearest: cut at the fraction, its first column could be
+    its neighbour's last."""
+    box = _box_in_view(locator)
+    left, top = math.floor(box["x"] + 0.5), math.floor(box["y"] + 0.5)
+    right = math.floor(box["x"] + box["width"] + 0.5)
+    bottom = math.floor(box["y"] + box["height"] + 0.5)
+    return png_pixels(locator.page.screenshot(clip={
+        "x": left - around, "y": top - around,
+        "width": right - left + 2 * around, "height": bottom - top + 2 * around,
+    }))
+
+
+def _commonest(pixels: Iterable[RGB]) -> RGB:
+    return Counter(pixels).most_common(1)[0][0]
 
 
 def painted_background(locator: Locator) -> RGB:
@@ -117,7 +146,33 @@ def painted_background(locator: Locator) -> RGB:
     pixel of a screenshot of its box.  Text and an outline cover the
     smaller part of any element this is used on."""
     _width, _height, pixels = png_pixels(shot(locator))
-    return Counter(pixels).most_common(1)[0][0]
+    return _commonest(pixels)
+
+
+def painted_bar(locator: Locator) -> RGB | None:
+    """The colour of the bar painted down *locator*'s leading edge, or
+    None where there is none: its first column of pixels, unless that
+    is the colour of the rest of it.  Not the computed ``box-shadow``,
+    which has a colour whether or not it has a width."""
+    width, height, pixels = _snapped(locator)
+    edge = _commonest(pixels[row * width] for row in range(height))
+    return None if alike(edge, _commonest(pixels)) else edge
+
+
+def painted_ring(locator: Locator, reach: int = 3) -> RGB | None:
+    """The colour of the ring painted round *locator*, outside its
+    box, or None where there is none: the column of pixels beside its
+    leading edge, unless the columns out to *reach* pixels are all
+    that colour -- which is then the ground the element stands on.
+    Read it with the focus elsewhere: a focus outline is drawn out
+    there too."""
+    width, height, pixels = _snapped(locator, around=reach)
+    columns = [
+        _commonest(pixels[row * width + at] for row in range(height))
+        for at in range(reach)
+    ]
+    beside = columns[-1]
+    return None if all(alike(column, beside) for column in columns) else beside
 
 
 def painted_token(page: Page, ground: str, token: str) -> RGB:
@@ -136,7 +191,10 @@ def painted_token(page: Page, ground: str, token: str) -> RGB:
     try:
         return painted_background(page.locator("#painted-token-probe"))
     finally:
-        page.evaluate("document.getElementById('painted-token-probe').remove()")
+        # The ground may have been redrawn meanwhile and the probe
+        # with it: then there is nothing to take out, and whatever
+        # failed above is what the test should say.
+        page.evaluate("document.getElementById('painted-token-probe')?.remove()")
 
 
 def ink(locator: Locator) -> RGB:

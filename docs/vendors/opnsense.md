@@ -200,6 +200,15 @@ Provenance in
 
 ## Common gotchas
 
+- **Driver names onto another vendor** — an OPNsense interface is
+  named for its FreeBSD driver, and the port translator reads some
+  drivers' names (`igb0`, `ix1`, `em0`) and not others (`igc0`).
+  One it does not read is left as it is on the target (`set
+  interfaces igc0 ...` in a Junos config), and with no devices
+  declared the job is `partial` and lists it in
+  `untranslated_ports` until an entry of `port_rename_map` gives it
+  a name.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
 - **Declaring an OPNsense device** — BSD device names are the
   system's and are lower-case, so with both devices declared on the
   API or in the Interface rename modal an override typed in another

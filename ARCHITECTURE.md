@@ -278,7 +278,63 @@ stages stay frozen.  See the module docstring.
 inventory of the source device and of the target device, pairs the
 ports the config uses by position, and forwards the resulting rename
 map to the frozen `run_plan_with_overrides`.  See "Device models and
-inventories" below.
+inventories" below.  `run_plan_with_checked_names` is another, for a
+request that declares no devices: `run_plan_with_overrides`, and then
+a look at what the port translator made of the names in the finished
+run.
+
+**What decides a job's status.**  A job that rendered is `completed`
+unless one of three things makes it `partial`; each adds its sentence
+to `job.error` after any the job already has.
+
+1. *The validation report* (`run_plan`): a block-level unsupported or
+   lossy path.
+2. *An input that parsed to nothing* (`run_plan`): non-trivial text
+   that yields an empty tree is a wrong source vendor, not a clean
+   result.
+3. *The port names.*  A warning is not a status.  The port translator
+   says in a warning line that two source names ended on one name of
+   the output, that it dropped a name the target has none for, or
+   that it could not read a name and left it as the source config
+   has it; none of those is a loss the capability matrix has a path
+   for.  With both devices declared `run_plan_with_models` checks its
+   own finished run, for the hardware ports, and records the outcome
+   on `port_mapping_plan`.  With none declared
+   `run_plan_with_checked_names` asks what became of every name in a
+   run made by name shape — logical ones included, since there is
+   no pairing whose ports alone need protecting — and puts the names
+   on the job (`fused_ports`, `unresolved_ports`,
+   `untranslated_ports`).  The third list starts from the
+   translator's own: it says as data which names it left
+   (`PortRenameResult.untranslated`), and keeps apart a name the
+   config only refers to — a route to `Null0`, a VXLAN source
+   address — which holds no job.  Of the names it left, the job
+   lists those that are a FOREIGN name on the target.  A name is
+   not one between two codecs of one platform (one `vendor_id`:
+   IOS-XE as CLI text and over NETCONF), nor where the target
+   itself writes that very name for the kind of thing the source
+   parser read it to be — a VLAN's interface, a loopback, an
+   aggregate, a tunnel; never a hardware port, and never to or
+   from a platform whose names are free text.  The AOS-S parser
+   names the interface of a VLAN's address `Vlan20`, its
+   classifier does not read that name, and `interface Vlan20` is
+   what EOS, IOS-XE and NX-OS call it: nothing is listed there.
+   What shares a name is not always two interfaces: Junos refers to
+   `lo0` as `lo0.0`.  Unit 0 beside its interface is told from a
+   second interface of that name by the tree that was rendered (how
+   many interfaces it holds under the name), not by the shape of the
+   two names.
+
+On either path an entry of `port_rename_map` is the operator deciding
+a name, so `run_translation` hands the body's own port map to
+whichever entry it dispatches to, on every plan endpoint: a status an
+entry cannot clear from the URL it was posted to is a trap.  An entry
+is a name or `null`; a blank target is neither — nor is one that
+draws nothing, such as a zero-width space — and the request model
+refuses it.  The job's sentence offers a pair of declared devices
+only where a hardware port is among what it lists: for logical names
+the path with devices holds nothing, and would call the same output
+`completed`.
 
 ---
 
@@ -290,7 +346,8 @@ and the refusal when either is passed.
 
 **The idea.**  A config is whatever was pasted, and a few bytes of it
 can stand for a great deal: `2-4000` is thousands of VLAN ids, `all` is
-every one, every trunk that allows every VLAN is a member of every VLAN, and an
+every one (and so, on four platforms, is a trunk that states no list),
+every trunk that allows every VLAN is a member of every VLAN, and an
 interface stanza is one line.  So the size of a text bounds neither the
 memory a request takes nor its time, and a cap on the text is not a cap
 on the work.  The limits are therefore on what is MADE.
@@ -407,7 +464,12 @@ for the schema.
 **Where the counts are charged.**  Before the entries are made, at each
 place a token expands (`charge`): the VLAN id-list readers
 (`_helpers._parse_vlan_list`, `merge_trunk_allowed`, the Arista and
-Junos readers of their own); the AOS-S port range (memberships, then
+Junos readers of their own); the list of a trunk that states none,
+where its platform's trunk carries every VLAN -- no token stands for
+those 4,094 ids, so they are charged where the list is made
+(`_helpers.unstated_trunk_list`), and so are the copy a first `add` or
+`remove` starts from and the list each record of a stanza met again
+is given (`TrunksByName`); the AOS-S port range (memberships, then
 the different ports ranges have named); the switchport projection,
 which knows the whole product after its first pass and before its
 first stamp; the Junos `interface-range` fold; block-form Junos, in
@@ -493,10 +555,13 @@ RADIUS) has:
    `POST /api/v1/migration/plan/vlans`,
    `POST /api/v1/migration/plan/local_users`,
    `POST /api/v1/migration/plan/snmp`,
-   `POST /api/v1/migration/plan/snmpv3` — that accepts only
-   its category's override map and delegates to
+   `POST /api/v1/migration/plan/snmpv3` — that applies its
+   category's override map and delegates to
    `run_plan_with_overrides` with the other categories' maps
-   defaulted to `None`.
+   defaulted to `None`.  The port map is the exception: every
+   plan endpoint applies the one the body carries, because a
+   job's status depends on what was decided about its ports
+   (see "What decides a job's status" above).
 3. **A rail button + category pane** in the modal UI.  Panes are
    mutually exclusive (one visible at a time); the preview on
    the right stays cross-category.
@@ -533,6 +598,65 @@ class fit the same recipe; the map shape is uniformly
 * `{src: tgt, ...}` — engage with explicit per-entry overrides.
   Values may include `None` to drop.
 
+**Two kinds of name the port heuristic never reads.**  The port
+orchestrator's auto-heuristic is `source.classify_port_name` →
+`target.format_port_identity`, and `translate_port_names` keeps two
+kinds of name away from it:
+
+* *Between two configs of one codec a name nobody mapped stands.*
+  It is a name of that platform by construction, and the round trip
+  is not the identity on several codecs' own names — Junos reads
+  `fxp0` and writes `em0`, FortiOS reads `dmz` and writes `dmz1`, the
+  OS10 formatter has no form for its own breakout lanes; AOS-S,
+  IOS-XE CLI and VyOS are the others on the committed inputs, and on
+  the rest it is the identity there — so a job from a
+  codec to itself renamed and dropped ports nobody had named, and
+  said `completed`.  With an empty port map the output of such a job
+  is the bare pipeline's.
+* *A sub-interface goes where its port goes, with its unit*
+  (`<port>.<unit>` becomes `<what the port became>.<unit>`), and is
+  dropped with a port that is dropped.  `PortIdentity` has no place
+  for a unit, so a classifier either reads the name as the port
+  (Junos, VyOS: two interfaces on one name) or does not know it (IOS,
+  EOS, NX-OS, IOS-XR: the name stays in the other vendor's config).
+  The rule names no vendor.  A name is a unit of `<port>` when the
+  source classifier does not read it as a thing of its own (it calls
+  it `unknown`, or gives it the port's own kind), the parser did not
+  type it as a VLAN interface, and — across vendors — it is an
+  interface of the tree, not numbered 0, whose port is a physical
+  port, a breakout lane or a LAG.  A unit is read as text and never
+  converted, and across vendors it is a number of at most ten
+  digits: a name that ends in a longer run is left to the
+  classifier, so that no renderer which makes a number of the unit
+  (FortiOS, VyOS) is handed one.  What the port IS decides that,
+  not only its name: a port its parser marked as the management
+  port from context (the IOS-XE `Mgmt-vrf` port,
+  `CanonicalInterface.kind`) carries no sub-interface another
+  platform has.  Between two configs of one codec a unit stands
+  like any other name, and moves only when an entry moves or drops
+  its port.  Where the source platform's names have no letter case
+  the port of a unit is found as the config — else a key of the map
+  — spells it, so `gigabitethernet0/0/1.54` is a unit of
+  `GigabitEthernet0/0/1`.  What the target makes of
+  `<its port>.<unit>` is its renderer's: where it has no tagged
+  sub-interface its capability matrix says so, and the job is
+  `partial` when the tree holds a tag for the validation report to
+  list.  The tag is a field (`dot1q_vlan`), not part of the name: a
+  unit that went with its port across vendors and has none in the
+  tree — the AOS-CX and OS10 parsers read none — is written without
+  one, and the translator says so in a warning of its own.  Between
+  two configs of one codec it says nothing, and such a tag is lost
+  there as on every path: a job from AOS-CX to AOS-CX writes the
+  sub-interface without it, as parse and render alone do, and
+  nothing reports it.
+
+`tests/unit/migration/test_units_follow_their_port.py` holds both by
+reading the rendered output against something the translator had no
+hand in: the bare pipeline's output for every committed capture and
+kitchen sink, and — from each source grammar that names a
+sub-interface, onto every codec — each sub-interface found in the
+output by its address.
+
 **Cross-category ordering:** port rename runs BEFORE VLAN rename
 in `run_plan_with_overrides` so port-name rewrites don't race
 with VLAN-ID references changing underneath them.  Current order
@@ -557,12 +681,17 @@ once version-targeted rendering grows an operator-facing surface).
 
 **Source-shape capture:** `run_plan_with_overrides` injects a
 capture-first transform that populates `MigrationJob.source_vlans`,
-`source_local_users`, `source_snmp_community`, `source_ports` and
+`source_local_users`, `source_snmp_community`, `source_ports`,
+`source_other_names` and
 `source_hostname` from the post-parse, pre-transform tree.  This
 is load-bearing for the VLAN / local-users / SNMP panes (they
 have no "auto-rewritten" rows to fall back on if the operator
 hasn't already sent overrides) and for the localStorage key
-(hostname).
+(hostname).  The ports pane needs it for the same reason since a
+name nobody mapped stands: between two configs of one codec no
+rename and no warning names a LAG or a loopback, so the two lists
+— the hardware ports, and every other name the translator
+rewrites — are where their rows come from.
 
 **Target-codec compatibility banners:** each codec exposes
 `unsupported_rename_categories: frozenset[str]` listing per-pane
@@ -685,8 +814,41 @@ canonical model carries L2 membership both ways: per-iface
 `tagged_ports`/`untagged_ports`.  Codecs whose parse populates only
 one direction call `project_switchport_to_vlan(intent)` (or the
 inverse `project_vlan_to_switchport`) as a post-pass for round-trip
-stability.  The forward helper guards the Junos `vlan members all`
-sentinel (`range(1,4095)`) to avoid synthesising 4094 phantom VLANs.
+stability.  The forward helper guards the list of every id
+(`range(1,4095)`: Junos `vlan members all`, AOS-CX `vlan trunk allowed
+all`, a Cisco or Arista trunk that states no list) to avoid
+synthesising 4094 phantom VLANs: such a trunk goes onto the VLANs
+already declared.
+
+**What a trunk's allowed list says**
+(`TRUNK_THAT_STATES_NO_LIST` in `netcanon/migration/codecs/_helpers.py`;
+`is_every_vlan` in `netcanon/migration/canonical/transforms.py`).  The
+tree has no value for "not stated".  On a trunk
+`trunk_allowed_vlans == []` is NO VLAN, a list of every id (1-4094) is
+EVERY VLAN, and any other list is the list.  What a trunk carries when
+its config has no allowed line is a fact about the source platform —
+every VLAN on IOS-XE, NX-OS, EOS and AOS-CX; none on OS10 and Junos —
+so the parser, which knows its platform, puts it in the list, from
+the one table.  It does so for an INTERFACE, when the whole config
+has been read (`TrunksByName` in the same module): a stanza met twice
+is one interface whose allowed lines are applied to one list, and
+the platform's list is given only to a port that says it is a trunk,
+not to one the parser took for a trunk from a trunk line alone.  A
+renderer writes its target's form for each of the
+three statements, and no allowed line where the list is the target's
+own default (what the device prints, and what makes a default trunk
+come back as it went).  Where a target has no form, the output carries
+a review line and the cell is a documented limitation: AOS-CX cannot
+be told "no VLAN", OS10 cannot be told "every VLAN".  (AOS-S cannot be
+told "and any VLAN made later", and has no line to carry a note: its
+vendor page says so.)  The readers of
+the list follow the same rule: the VLAN rename pass leaves "every
+VLAN" as it is and warns when a drop empties a trunk, and the
+renderers that hang a VLAN on one parent (OPNsense, RouterOS,
+FortiOS) look for a trunk that names it before a trunk of every
+VLAN.  Whether the list holds the native
+VLAN is not yet one convention; each parser puts what its platform's
+text lists.
 
 **What makes a switchport VLAN real** (the phantom-VLAN prune,
 `transforms.switchport_declared_vlan_ids`).  Left to itself the
@@ -729,7 +891,11 @@ canonical surface, so codec parsers silently skip them.  Each parser
 calls its per-vendor `detect_tier3_sections_<vendor>(raw)` before
 returning, populating `CanonicalIntent.dropped_tier3_sections` with
 human-readable labels that the migrate page surfaces as a "Detected in
-source but not translated" banner.  Output-only — a notification
+source but not translated" banner.  (The Junos codec hands its
+detector the set-form the parser read, since the patterns begin
+`set `, and puts ahead of the sections a bounded list of rows for
+the statements the parser read and left out — `inactive: ...` for
+one the source had deactivated.)  Output-only — a notification
 surface, never fed to the renderer or any transform — so the
 deliberate drop is surfaced honestly (the silent-drop-honesty
 discipline `docs/METHODOLOGY.md` treats as flagship).
@@ -981,7 +1147,8 @@ deployed: an Aruba 2930F port is `24` standalone and `1/24` as a VSF
 member; a 2930M's first uplink is `A1` with stacking disabled, `1/A1`
 with it enabled, and does not exist with the bay empty.  The
 name-shape translator (`canonical/port_names.py`) is not told the
-model, so on a same-vendor pair it can only be the identity, and it
+model, so on a same-vendor pair it is the identity — a name nobody
+mapped stands as written — and it
 could never know that port `49` of one switch is `1/A1` of another.
 
 **The approach: translate positions, not names.**  Each end of a
@@ -993,8 +1160,9 @@ the pairing is an ordinary `port_rename_map`, which the translator
 already applies ahead of its own guess.  The translator is shared with
 every translation, so what this feature needs from it is kept small
 and applies to all of them: a name the target cannot express is
-stripped before anything is renamed, and a route's next hop that is
-the name of an interface follows that interface.  Everything that
+stripped before anything is renamed, a route's next hop that is
+the name of an interface follows that interface, and a sub-interface
+goes where its port goes.  Everything that
 depends on knowing the target device is done by the caller that knows
 it.
 
@@ -1053,14 +1221,35 @@ out-of-band management is the `oobm` context, not a numbered port).
   another role, and never left out of the map: left to the name-shape
   translator it would keep its old name on a same-vendor pair, which
   can be the very name another port was just mapped to.
-* Between two configs of the **same codec**, a sub-interface
-  (`ge-0/0/0.54`) follows its parent port: the unit suffix means the
-  same thing on both sides.  Across codecs it does not, and the name
-  is left to the name-shape translator like any other the inventory
-  does not list.
+* A sub-interface (`ge-0/0/0.54`) follows its parent port, and is
+  dropped with it.  Between two configs of the **same codec** the
+  pipeline writes the entry beforehand: the unit suffix means the
+  same thing on both sides.  Across codecs the translator's own rule
+  for a unit sends it after the port it was PAIRED with
+  (`Ethernet1.54`), and the pipeline reads what followed from the
+  finished run.  Both are recorded in `sub_interfaces`, and neither
+  asks for a decision — with one exception, across codecs: a unit
+  the parsed source holds no 802.1Q tag for.  It went with its port
+  like the rest, the output has an interface of that name with no
+  VLAN, and nothing else in the job would say so (there is no tag
+  for the validation report to list).  It is recorded in
+  `untagged_units` instead, stays off-inventory and unresolved,
+  and has a line of its own.  A second exception, on either path: a
+  unit the plan does not take for a unit of its port — typed in
+  another letter case than the port, or a unit of a unit.  The
+  finished run shows it went where its port went; the plan records
+  that (`unvouched_units`) so that its line and the page's row say
+  what happened, and leaves it off-inventory and unresolved.  An
+  operator's entry that names a sub-interface onto a unit of a port
+  the target lists is where the plan itself would put one, and is
+  not reported as off-target.  A target with no sub-interfaces still
+  gets an interface of that name (`1.54` on AOS-S), which is not a
+  name of the device; where the source holds a tag the validation
+  report lists it as one the target cannot carry.
 * Some names are left to the name-shape translator — the ordinary
   port translation, which derives a target name from the shape of
-  the source name without knowing either model.  An unplaced
+  the source name without knowing either model (and, between two
+  configs of one codec, derives nothing: the name stands).  An unplaced
   *management* port, because the translator knows what each target
   does with out-of-band management (AOS-S has an `oobm` block, not a
   management interface).  A name the config uses that is not a port
@@ -1113,7 +1302,9 @@ out-of-band management is the `oobm` context, not a numbered port).
   listed.  `unresolved_ports`, `displaced`, `fused`, `off_target`,
   `target_hardware`, `source_hardware`, `unbound_ports`,
   `landed_off_target`, `stale_next_hops`,
-  `sub_interfaces`, `emptied_lags`, `shrunk_lags`, `lost_routes`,
+  `sub_interfaces`, `untagged_units`, `unvouched_units`,
+  `emptied_lags`, `shrunk_lags`,
+  `lost_routes`,
   `lost_dhcp_pools`, `lost_tracking` and `lost_vtep_sources` are
   stored fields, so a client reads the outcome as data.  `pairings` and
   `rename_map` stay the pairing as it was made, before the
@@ -1363,8 +1554,9 @@ its own is refused.
 combination of a model is compiled when its family loads, and that
 product is capped), breakout lanes, ports a stack consumes as links,
 ports that belong to a stack rather than a member, literal
-non-systematic names, a sub-interface following its parent port
-across codecs, and whether a model has an out-of-band management
+non-systematic names, the form a tagged routed sub-interface takes
+on a target that has none (it is written `<port>.<unit>` and its tag
+is reported), and whether a model has an out-of-band management
 port at all (a kept management port therefore always needs the
 operator's decision).
 

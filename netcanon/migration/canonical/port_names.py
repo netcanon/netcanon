@@ -35,6 +35,13 @@ This module defines the **vendor-agnostic bridge**:
    operator's entries with a pairing's.  Beside it,
    :func:`single_spellings` - the names a config writes exactly
    one way, which are the only ones another spelling can mean.
+7. :func:`split_unit`, :data:`UNIT_PARENT_KINDS` and
+   :data:`UNIT_MAX_DIGITS` — what the name of a sub-interface is (a
+   name, and the number after its last dot), which kinds of port
+   carry one, and how long a unit can be and still be sent after
+   its port onto another vendor.  The translator sends
+   such a name after its port, and ``run_plan_with_models`` reads
+   back which ones went.
 
 What the sweep does NOT rewrite is a port's FACTORY name
 (``interfaces[].default_name``, RouterOS).  That field is the port's
@@ -44,6 +51,19 @@ with this factory name and call it that".  Whether an entry instead
 MOVES the config onto other hardware can only be told from a
 declared target device, so it is decided where one is declared
 (:func:`~netcanon.services.migration_pipeline.run_plan_with_models`).
+
+**Two names the classifier is never asked about.**  Between two
+configs of ONE codec a name nobody mapped keeps its name: it is valid
+there by construction, and a classify / format round trip is not the
+identity on several codecs' own names (Junos reads ``ge-0/0/1.54``
+and ``fxp0`` and writes ``ge-0/0/1`` and ``em0``; AOS-S, IOS-XE CLI,
+OS10, FortiOS and VyOS each have names that do not come back).  And
+a sub-interface
+(``<port>.<unit>``) goes where its port goes, with its unit: no
+classifier keeps the unit -- :class:`PortIdentity` has no place for one
+-- so left to them it lands ON its port (Junos, VyOS) or stays behind
+under its source name (IOS, EOS, NX-OS, IOS-XR).  See
+:func:`translate_port_names`.
 
 **Modular boundary:** each codec knows ONLY its own vendor's naming
 convention.  Cisco's codec classifies ``Gi1/0/24`` → ``PortIdentity``
@@ -59,6 +79,8 @@ implementing the two methods; zero edits here.
 from __future__ import annotations
 
 import logging
+import unicodedata
+from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator
 from typing import TYPE_CHECKING, Literal, TypeVar
 
@@ -217,7 +239,8 @@ class PortIdentity(BaseModel):
     #: port IS a real port) — this flag only drives the advisory, never
     #: the rename or drop.  Vendor-agnostic: any codec whose classifier
     #: can detect hw-switch membership may set it; today only FortiGate
-    #: does.  Same-vendor round-trip preserves the name, so no advisory.
+    #: does.  Between two configs of one codec the name stands, so no
+    #: advisory.
     hw_switch_member: bool = False
 
     #: Verbatim source name — used as fallback when the target codec
@@ -265,6 +288,48 @@ class PortRenameResult(BaseModel):
     rather than mapped (e.g. Cisco ``AppGigabitEthernet1/0/1``
     app-hosting bridge, loopbacks where the target has no loopback
     concept, unused physical ports)."""
+
+    untranslated: list[str] = Field(default_factory=list)
+    """Source names that are still in the tree under the name the
+    source config has for them because the translator had no name to
+    give them, in the order they were met.  Across vendors only: a
+    name the source codec's classifier could not read as any kind of
+    interface (the "could not classify ... left verbatim" warning),
+    and -- with ``strip_unmappable=False`` -- a name the target has
+    no form for, which is otherwise dropped and listed in
+    :attr:`dropped`.
+
+    Said as data because a warning line is not something a caller
+    can act on: such a name is a source vendor's name written into
+    another vendor's config, and nobody decided that.  So a name is
+    never here by a decision or by a rule: not one an entry of the
+    map names (to another name, to ITSELF -- which is how an operator
+    says the name is right on the target -- or with ``None``), not a
+    name between two configs of one codec (it stands there, valid by
+    construction), and not a VLAN interface a target writes from its
+    VLAN stanza.
+
+    These are names the config CONFIGURES something under: an
+    interface, a LAG, a member of a LAG, a port in a VLAN's lists.
+    One it only refers to is in :attr:`untranslated_references`.
+
+    Every such name is here, whether or not it happens to be a
+    good name on the target as it stands: that is not the
+    translator's to judge.  The entry that reads the finished run
+    (:func:`~netcanon.services.migration_pipeline.run_plan_with_checked_names`)
+    decides which of them hold a job."""
+
+    untranslated_references: list[str] = Field(default_factory=list)
+    """As :attr:`untranslated`, for a name the tree holds only where
+    it REFERS to an interface: a static route's or a DHCP pool's
+    interface, a VRRP track entry, a VXLAN source.  What those
+    places hold is not always an interface -- a route to ``Null0``
+    or to the keyword ``dhcp``, a pool keyed by a zone name, a track
+    object number, a source ADDRESS -- and nothing says such a name
+    is one: the classifier, which alone could, did not read it.
+    Kept apart so that a caller can hold a job for a port left under
+    another vendor's name without holding one for every route to
+    ``Null0``."""
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +392,27 @@ def _swept_names(intent: CanonicalIntent) -> Iterator[str]:
     for vx in intent.vxlan_vnis:
         if vx.source_interface:
             yield vx.source_interface
+
+
+def _only_referred_to(intent: CanonicalIntent) -> set[str]:
+    """The names *intent* holds only where it REFERS to an interface:
+    a static route's or a DHCP pool's interface, a VRRP track entry,
+    a VXLAN source -- and in no other place the sweep visits.
+
+    Counted, not listed from the other side: a name is one of these
+    when every place :func:`_swept_names` finds it is one of the four
+    named here.  So a field added to the sweep later counts as a
+    place the config CONFIGURES a name, until this function is told
+    otherwise -- the reading that reports more, not less."""
+    referred: Counter[str] = Counter()
+    for iface in intent.interfaces:
+        for grp in iface.vrrp_groups:
+            referred.update(grp.track_interfaces)
+    referred.update(r.interface for r in intent.static_routes if r.interface)
+    referred.update(p.interface for p in intent.dhcp_servers if p.interface)
+    referred.update(v.source_interface for v in intent.vxlan_vnis if v.source_interface)
+    swept = Counter(_swept_names(intent))
+    return {name for name, times in referred.items() if swept[name] == times}
 
 
 def rewrite_port_names(
@@ -591,6 +677,63 @@ def collect_hardware_port_names(
 # ---------------------------------------------------------------------------
 
 
+#: Kinds of port that carry sub-interfaces: a physical port, one lane
+#: of a breakout, an aggregate.  A unit of a loopback or of a
+#: management port is not a sub-interface of anything another platform
+#: has, and across vendors is left to the classifier.  The kind is the
+#: port's own: what its parser read of it from context
+#: (``CanonicalInterface.kind``) before what its name reads as.
+UNIT_PARENT_KINDS: frozenset[str] = frozenset({"physical", "breakout", "lag"})
+
+
+#: The most digits of a unit that is sent after its port ACROSS
+#: VENDORS: as many as a 32-bit number has, and no grammar read here
+#: numbers a sub-interface past that.  A name that ends in a longer
+#: run of digits is no sub-interface another platform has, and is
+#: left to the classifier.  The bound is what keeps such a name out
+#: of another vendor's renderer: sent after its port it arrives as
+#: ``<port>.<digits>``, which FortiOS and VyOS make a VLAN id of,
+#: and a pasted config can write more digits than an integer is
+#: converted from.  Between two configs of one codec there is no
+#: bound: the name is the same on both sides, and its own renderer
+#: is handed nothing it was not handed already.
+UNIT_MAX_DIGITS = 10
+
+
+def split_unit(name: str) -> tuple[str, str] | None:
+    """``("ge-0/0/1", "54")`` for ``ge-0/0/1.54``: a name and the
+    numeric unit after its last dot.  ``None`` for any other name --
+    ``ether1.backup`` is a name with a dot in it, not a unit of
+    ``ether1``.  The unit is given as it is written: a caller that
+    asks anything of it reads it as text."""
+    port, dot, unit = name.rpartition(".")
+    if dot and port and unit.isascii() and unit.isdigit():
+        return port, unit
+    return None
+
+
+def _is_drawn(char: str) -> bool:
+    """*char* is neither white space nor a control or format
+    character (Unicode ``Cc`` and ``Cf``: a NUL, a zero-width space,
+    a byte-order mark, a word joiner)."""
+    return not char.isspace() and unicodedata.category(char) not in ("Cc", "Cf")
+
+
+def names_a_target(value: object) -> bool:
+    """*value* is something an entry of a port map may say: a target
+    name, or ``None`` for a port that is to go.  A blank string is
+    neither -- and blank is a string that DRAWS nothing: an empty
+    one, one of white space, and one made only of control or format
+    characters.  ``"\\u200b"`` is not empty and not white space, and
+    taken as a name it wrote an interface whose name nobody can see.
+    A name has at least one character that is none of those
+    (:func:`_is_drawn`).  The rule exists once, here: the
+    translator sets such an entry aside, the request model refuses
+    it, and a caller that asks whether an entry DECIDED a name asks
+    this."""
+    return value is None or (isinstance(value, str) and any(map(_is_drawn, value)))
+
+
 def single_spellings(names: Iterable[str]) -> dict[str, str]:
     """Folded name -> its spelling, for each name written exactly one
     way among *names*.  A name written in two letter cases is left
@@ -648,7 +791,10 @@ def translate_port_names(  # noqa: C901
     (:func:`key_by_the_configs_spelling`): only when the config writes
     the name one way and that spelling has no entry of its own.  A
     key that is a second spelling of a name with an entry is reported
-    and ignored, unless the two entries say the same thing.
+    and ignored, unless the two entries say the same thing.  A value
+    is a target name or ``None``: an entry whose target is blank is
+    set aside with a warning (:func:`names_a_target`), and the name
+    is treated as one with no entry.
 
     Priority for each name:
         1. If *rename_map* contains an entry for the source name with
@@ -660,10 +806,84 @@ def translate_port_names(  # noqa: C901
         2. If *rename_map* contains an entry with a string value, use
            that as the target name verbatim.  (Tier 2 hybrid: user
            override wins over auto.)
-        3. Else run ``source_codec.classify_port_name(name)`` →
+        3. Else, a sub-interface goes where its port goes, with its
+           unit: ``<port>.<unit>`` becomes ``<what the port became>.<unit>``,
+           and is dropped (and listed in ``dropped``) where the port is
+           dropped.  A name counts as a unit of ``<port>`` when the
+           source classifier does not read the dotted name as a thing
+           of its own -- it calls it ``unknown``, or gives it the kind
+           it gives the port, which is the unit thrown away -- and
+
+             * between two configs of one codec: the operator's map
+               moved or dropped the port (otherwise rule 4 applies and
+               the name stands);
+             * across vendors: the name is an interface of the tree,
+               one the source parser did not type as a VLAN interface
+               (FortiOS names those freely), and the port is a physical
+               port, a breakout lane or a LAG
+               (:data:`UNIT_PARENT_KINDS`) -- by what the port IS:
+               one its parser marked as the management port from
+               context (the IOS-XE ``Mgmt-vrf`` port, whose name
+               reads as any other port's) carries none.  A unit
+               named only as a reference (Junos ``lo0.0``,
+               ``ge-0/0/1.0``) is left to the classifier, which
+               folds it onto its port -- right for a unit 0, which
+               is the interface itself everywhere else.  So is an
+               INTERFACE numbered 0 (a hand-written ``interface
+               Gi0/0/1.0``, or ``.00``; no running-config prints
+               one): sent after its port it would be written as that
+               port's own unit 0 on Junos, two interfaces in one.
+
+           Across vendors a unit is a number of at most ten
+           digits (:data:`UNIT_MAX_DIGITS`).  A name that ends in a
+           longer run of digits is left to the classifier like any
+           name it does not know.  Between two configs of one codec
+           it follows an entry for its port whatever its length:
+           the name is the same on both sides.
+
+           The port need have no line of its own.  An entry for a
+           port the config names only through a unit of it (a pasted
+           ``interface Gi0/0/1.54`` with no stanza for the port) moves
+           or drops that unit, and is not reported as naming a port
+           the config does not have.
+
+           Where the source platform's names have no letter case, a
+           unit spelt in another case than its port (``interface
+           gigabitethernet0/0/1.54`` under ``interface
+           GigabitEthernet0/0/1``) is a unit of that port: the part
+           before the unit is read as the config spells that name
+           -- or, for a port the config does not name, as a key of
+           the map does -- where exactly one does.
+
+           The rule is for one level, ``<port>.<unit>``.  A unit of
+           a unit (``ge-0/0/1.54.2``, which no running-config
+           prints) is read as a unit of the dotted name before its
+           last dot, and nothing is promised about where it ends.
+
+           The unit's 802.1Q tag is not in its name: it travels in
+           the tree (``dot1q_vlan``).  Across vendors, a unit that
+           went with its port and has no tag there is written
+           without one, and a warning says so.  The tree has none
+           where the platform's parser reads none for a
+           sub-interface (AOS-CX, OS10), where it did not read the
+           line that states it (an IOS stanza pasted without its
+           indentation), and where the config states none.
+
+           What the target makes of ``<its port>.<unit>`` is the
+           target's renderer's business; where it has no tagged
+           sub-interface its capability matrix says so and the job is
+           ``partial``.
+        4. Else, between two configs of ONE codec, the name stands.
+           It is a valid name there by construction, and nothing but a
+           declared device could justify another.
+        5. Else run ``source_codec.classify_port_name(name)`` →
            ``target_codec.format_port_identity(ident)`` and use the
-           target's native formatting.
-        4. If the auto-path returns ``None`` (target has no equivalent
+           target's native formatting.  A name the classifier does
+           not know stays as it is, with a warning, and the result
+           says so as data: ``untranslated`` where the config
+           configures something under the name, and
+           ``untranslated_references`` where it only refers to it.
+        6. If the auto-path returns ``None`` (target has no equivalent
            for this kind — e.g. Aruba AOS-S can't express
            ``Loopback0``) the behaviour depends on *strip_unmappable*:
 
@@ -683,7 +903,7 @@ def translate_port_names(  # noqa: C901
                deleting data.
 
         SVI + target-absorbs-SVI is a special case that short-
-        circuits before (4): no warning, no drop, name stays verbatim
+        circuits before (6): no warning, no drop, name stays verbatim
         (target's VLAN-stanza render path handles the L3 data).
 
     Port-name references are rewritten uniformly across ALL places
@@ -719,7 +939,8 @@ def translate_port_names(  # noqa: C901
 
     Mutates *intent* in place.
 
-    Returns a :class:`PortRenameResult` summarising what changed.
+    Returns a :class:`PortRenameResult` summarising what changed, what
+    was dropped, and what was left as the source config has it.
     """
     # Non-CanonicalIntent trees have no port-name structure to
     # rewrite — the legacy mock adapter and any future back-compat
@@ -768,6 +989,21 @@ def translate_port_names(  # noqa: C901
             )
             del user_map[key]
 
+    # A blank TARGET is no name, and neither is one that draws
+    # nothing (a zero-width space).  Taken as one it was written into
+    # the output -- ``interface `` with nothing after it -- and, being
+    # an entry, counted as the operator's decision about the port.  A
+    # value is a name or ``None``; the HTTP API refuses a blank one
+    # outright (``MigrationPlanRequest``), and a caller that reaches
+    # this function another way has the entry set aside and said.
+    for key in [k for k, v in user_map.items() if not names_a_target(v)]:
+        warnings.append(
+            f"port_rename: the entry for {key!r} has no target name (it "
+            f"is empty or blank); entry skipped — to drop the port, map "
+            f"it to null"
+        )
+        del user_map[key]
+
     # A key in another letter case.  On a platform whose names have no
     # case, an operator who writes ``Trk1`` means the port the config
     # calls ``trk1`` (the device itself prints it both ways): the entry
@@ -798,6 +1034,11 @@ def translate_port_names(  # noqa: C901
     # its own before the sweep, and these are stripped then, while every name
     # is still in source form (see below).
     auto_dropped: set[str] = set()
+    # Names left as they were for want of a name to give them, in the
+    # order they were met.  ``memo`` keeps each to one mention.  Keys
+    # of a dict and not a list: a unit asks whether its port is among
+    # them, and a pasted config can hold as many of either as it likes.
+    untranslated: dict[str, None] = {}
 
     # Per-interface kind overrides — populated by source codecs that
     # detect logical role (mgmt, etc.) from CONTEXT rather than from
@@ -815,6 +1056,98 @@ def translate_port_names(  # noqa: C901
         for iface in intent.interfaces
         if getattr(iface, "kind", "")
     }
+
+    same_codec = source_codec.name == target_codec.name
+    # Ports a unit was sent after.  The config may name such a port
+    # nowhere but in the unit (a pasted ``interface Gi0/0/1.54`` with
+    # no stanza for its port), and an entry for it was still acted on.
+    unit_parents: set[str] = set()
+    # Interface names as the config wrote them, before anything is
+    # stripped or rewritten.  Across vendors only a name that IS an
+    # interface is taken for a sub-interface: a reference to a unit the
+    # config gives no interface (Junos ``lo0.0``) is not one.
+    records: frozenset[str] = frozenset(iface.name for iface in intent.interfaces)
+    # Interfaces the source parser typed as a VLAN interface.  Where an
+    # operator names those freely (FortiOS ``port1.55``) the dot is part
+    # of a name, and the name is left to the classifier as before.
+    vlan_interfaces: frozenset[str] = frozenset(
+        iface.name for iface in intent.interfaces
+        if iface.interface_type in ("ianaift:l3ipvlan", "ianaift:l2vlan")
+    )
+    # Interfaces the tree holds an 802.1Q tag for.  The tag of a
+    # sub-interface is not in its name, so one that is not here is
+    # written without a tag wherever it goes.
+    tagged: frozenset[str] = frozenset(
+        iface.name for iface in intent.interfaces if iface.dot1q_vlan is not None
+    )
+
+    def kind_of(name: str) -> str:
+        try:
+            ident = source_codec.classify_port_name(name)
+        except Exception:
+            # One of the per-vendor classifiers, on an arbitrary string
+            # from a pasted config.  "Could not read it" is ``unknown``.
+            return "unknown"
+        return ident.kind if ident is not None else "unknown"
+
+    def follows_its_port(name: str, port: str) -> bool:
+        """*name* is ``<port>.<unit>`` and goes where *port* goes."""
+        port_kind = kind_of(port)
+        # RouterOS and OPNsense read ``ether1.55`` as a VLAN interface
+        # that is NAMED after its parent: a thing of its own, with a
+        # form of its own on every target.  So does the FortiOS parser,
+        # by the interface's type.
+        if name in vlan_interfaces or kind_of(name) not in ("unknown", port_kind):
+            return False
+        if same_codec:
+            # The unit means the same thing on both sides.  It moves
+            # only when its port was moved or dropped by an entry.
+            return port in str_map or port in user_dropped
+        unit = name.rpartition(".")[2]
+        if not unit.strip("0"):
+            # Unit 0 is the interface itself on every platform that
+            # has one.  An interface NUMBERED 0 beside its port (a
+            # hand-written ``Gi0/0/1.0``) sent after the port would
+            # be written as the port's own unit 0 on Junos: two
+            # interfaces in one.  Left to the classifier.  The unit
+            # is read as text -- 0 is what is left of ``0`` or ``00``
+            # once its zeros are taken off -- and never made a
+            # number: a pasted config can write more digits after
+            # the dot than an integer is converted from, and the
+            # conversion failed the whole job.
+            return False
+        if len(unit) > UNIT_MAX_DIGITS:
+            # No sub-interface of any platform, and a name two of
+            # the target renderers would make a number of.  Left to
+            # the classifier, as it was.
+            return False
+        # What the port IS decides whether it carries sub-interfaces,
+        # and a parser that read a port's role from context (the
+        # IOS-XE ``Mgmt-vrf`` port) knows it better than the name.
+        port_kind = kind_overrides.get(port) or port_kind
+        return name in records and port_kind in UNIT_PARENT_KINDS
+
+    def port_and_unit(name: str) -> tuple[str, str] | None:
+        """*name* as a port and a unit of it, or ``None``.  On a
+        platform whose names have no letter case the port is given
+        as the config spells it when the unit spells it another
+        way: ``interface gigabitethernet0/0/1.54`` is a unit of the
+        port the config calls ``GigabitEthernet0/0/1``, and goes
+        where that port goes.  A port the config does not name --
+        it is there only through its unit -- is given as a key of
+        the map spells it.  Each only where exactly one such
+        spelling exists, and a spelling the config uses itself is
+        never laid over by another."""
+        split = split_unit(name)
+        if split is None:
+            return split
+        port, unit = split
+        # Both tables are empty where the platform's names have letter
+        # case: another spelling is another name there.
+        if port not in present_names:
+            fold = port.casefold()
+            port = one_way.get(fold) or mapped_one_way.get(fold) or port
+        return port, unit
 
     def resolve(name: str) -> str:
         # Idempotent + cached: resolving the same input twice returns
@@ -834,12 +1167,68 @@ def translate_port_names(  # noqa: C901
             if out != name:
                 applied[name] = out
             return out
+        # A sub-interface goes where its port goes.  No classifier
+        # keeps a unit: asked, it either folds the name onto the port
+        # itself (two interfaces on one name) or does not know it (the
+        # sub-interface stays behind under its source name).
+        split = port_and_unit(name)
+        if split is not None and follows_its_port(name, split[0]):
+            port, unit = split
+            where = resolve(port)
+            unit_parents.add(port)
+            if port not in present_names:
+                # The port itself is named nowhere in the config, so
+                # no rename of it "happened".
+                applied.pop(port, None)
+            if port in user_dropped or port in auto_dropped:
+                warnings.append(
+                    f"port_rename: {name!r} is a unit of {port!r}, which "
+                    f"is not in the output; dropped with it"
+                )
+                auto_dropped.add(name)
+                memo[name] = name
+                return name
+            out = f"{where}.{unit}"
+            memo[name] = out
+            if out != name:
+                applied[name] = out
+            if port in untranslated:
+                # Its port was left as the source config has it (only
+                # with ``strip_unmappable=False``: otherwise such a
+                # port is dropped, and the unit with it).  The unit
+                # went where the port went, which is nowhere.
+                untranslated[name] = None
+            if not same_codec and name not in tagged:
+                # Its name says which port it is on; its tag is a
+                # field, and there is none.  Not said between two
+                # configs of one codec, where a unit is written as
+                # the tree holds it and nothing was to be carried
+                # across.  That is no promise about the tag: one
+                # the parser does not read (AOS-CX, OS10) is lost on
+                # every path, that one included -- the bare pipeline
+                # loses it too -- and nothing reports it there.
+                warnings.append(
+                    f"port_rename: {name!r} went with its port to {out!r} "
+                    f"with no 802.1Q tag: none was read for it from the "
+                    f"source config, so the output carries no tag of the "
+                    f"source config for it — look its VLAN id up in the "
+                    f"source and set it on the target"
+                )
+            return out
+        if same_codec:
+            # One grammar on both sides: the name is already a name of
+            # the target.  Asking the classifier and the formatter to
+            # reproduce it is how ``fxp0`` became ``em0`` and
+            # ``ge-0/0/1.54`` became ``ge-0/0/1``.
+            memo[name] = name
+            return name
         ident = source_codec.classify_port_name(name)
         if ident is None or ident.kind == "unknown":
             warnings.append(
                 f"{source_codec.name}: could not classify port name "
                 f"{name!r}; left verbatim"
             )
+            untranslated[name] = None
             memo[name] = name
             return name
         # Apply CanonicalInterface.kind override — used when the source
@@ -921,6 +1310,8 @@ def translate_port_names(  # noqa: C901
             # name``) or the Tier 3 UI's "keep verbatim" link.
             if strip_unmappable:
                 auto_dropped.add(name)
+            else:
+                untranslated[name] = None
             memo[name] = name
             return name
         # A structurally-clean rename can STILL drop a source-side
@@ -930,11 +1321,12 @@ def translate_port_names(  # noqa: C901
         # lost even though the rename "succeeded".  This is the
         # success-branch analogue of the ``hw_aggregate`` warning above
         # (which fires for the bare ``internal`` / ``lan`` aggregate).
-        # Same-vendor round-trip reproduces the name losslessly, so
-        # gate on a cross-vendor pair to avoid spurious noise.  The
+        # Between two configs of one codec the name stood before any
+        # classifier was asked, so only a cross-vendor pair reaches
+        # here; the condition says so where the advisory is made.  The
         # rename is still applied + recorded; the advisory rides
         # alongside it (the operator needs both).
-        if ident.hw_switch_member and source_codec.name != target_codec.name:
+        if ident.hw_switch_member and not same_codec:
             warnings.append(
                 f"{target_codec.name}: {source_codec.name} port {name!r} is "
                 f"a hardware-switch (L2 fabric) member; the mapping to {out!r} "
@@ -953,6 +1345,15 @@ def translate_port_names(  # noqa: C901
     # over-reporting those absent names as "dropped" (mirrors local_user /
     # snmpv3 honesty).
     present_names: set[str] = set(collect_port_names(intent))
+    # Names the config only refers to (a route's interface, a pool's,
+    # a track entry, a VXLAN source), read while every name is still
+    # in source form.  One of these left as it was is reported apart.
+    referred_only: set[str] = _only_referred_to(intent)
+    # The names the config, and the map, each write exactly one way,
+    # by their folded spelling: on a platform without letter case,
+    # the only names another spelling can mean.
+    one_way = single_spellings(present_names) if one_case else {}
+    mapped_one_way = single_spellings(user_map) if one_case else {}
 
     # (#6) Strip operator-requested drops BEFORE the rename sweep so a rename
     # TARGET that reuses a dropped SOURCE name isn't itself deleted afterwards.
@@ -975,9 +1376,7 @@ def translate_port_names(  # noqa: C901
     # matter — memoisation keeps us idempotent.  ``default_name`` is not
     # touched: see the docstring.  A unit suffix on a next hop means the
     # same thing on both sides only between two configs of one codec.
-    rewrite_port_names(
-        intent, resolve, units=source_codec.name == target_codec.name,
-    )
+    rewrite_port_names(intent, resolve, units=same_codec)
 
     # (#17) Detect rename TARGET collisions: two+ source ports resolving to the
     # same final interface/LAG name render duplicate stanzas (same-vendor) or
@@ -1057,8 +1456,10 @@ def translate_port_names(  # noqa: C901
     # Whether two FINAL names are one place is the target's rule, as it
     # is two blocks below: on a target with no letter case ``Trk1`` and
     # ``trk1`` are one port, and a source port sent to either is on it.
-    # Grouped by the exact string, ``{"5": "trk1"}`` put port 5 on the
-    # LAG the translator itself writes ``Trk1``, with nothing said.
+    # Grouped by the exact string, ``{"5": "Trk1"}`` put port 5 on the
+    # LAG an AOS-S config calls ``trk1`` -- and, from another vendor,
+    # ``{"5": "trk1"}`` on the LAG the AOS-S formatter writes ``Trk1``
+    # -- with nothing said.
     fold_final = not target_codec.port_names_case_sensitive
     fused: dict[str, set[str]] = {}
     written: dict[str, set[str]] = {}
@@ -1137,9 +1538,10 @@ def translate_port_names(  # noqa: C901
     # A key that is a second spelling of a name which has an entry is
     # not a port that "does not exist": say what it is, and say nothing
     # where the two entries agree.
-    one_way = single_spellings(present_names) if one_case else {}
     for key in user_map:
-        if key in present_names:
+        if key in present_names or key in unit_parents:
+            # Present, or named only through a unit that went where
+            # the entry sent its port: either way it was not ignored.
             continue
         other = one_way.get(key.casefold())
         if other is not None and other in user_map:
@@ -1190,6 +1592,15 @@ def translate_port_names(  # noqa: C901
         applied=applied,
         warnings=warnings,
         dropped=reported_dropped,
+        # As with the drops: only a name the config has.  A port named
+        # nowhere but through a unit of it was resolved too.
+        untranslated=[
+            name for name in untranslated
+            if name in present_names and name not in referred_only
+        ],
+        untranslated_references=[
+            name for name in untranslated if name in referred_only
+        ],
     )
 
 
@@ -1339,6 +1750,15 @@ def build_port_rename_transform(
             if name not in seen:
                 result.dropped.append(name)
                 seen.add(name)
+        for kept, more in (
+            (result.untranslated, outcome.untranslated),
+            (result.untranslated_references, outcome.untranslated_references),
+        ):
+            seen = set(kept)
+            for name in more:
+                if name not in seen:
+                    kept.append(name)
+                    seen.add(name)
         return intent
 
     return transform, result

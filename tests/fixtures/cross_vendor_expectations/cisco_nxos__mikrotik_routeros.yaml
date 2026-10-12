@@ -305,7 +305,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: unsupported
     reason: >
-      Tagged membership empties on 8 records
+      Tagged membership empties on 18 records
       (`['Ethernet1/1', 'Ethernet1/2', 'port-channel1']` -> `[]`).  Matrix:
       "RouterOS binds a VLAN interface to a single parent; multi-port tagged
       membership (switchport's VLAN-centric twin) is dropped on render."

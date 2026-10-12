@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 from .port_inventory import DeploymentSpec, MappingPlan
 
@@ -442,7 +442,10 @@ class MigrationJob(BaseModel):
             before render — :class:`CanonicalVlan` entry removed,
             ``access_vlan`` detached, ``trunk_allowed_vlans``
             entries removed, ``trunk_native_vlan`` / ``voice_vlan``
-            cleared on affected interfaces.
+            cleared on affected interfaces.  A trunk left with no
+            entry allows no VLAN and is rendered so, with a warning
+            in :attr:`warnings`; a list of every id (every VLAN) is
+            left as it is.
         source_vlans: Source-tree VLAN IDs captured post-parse, pre-
             transform.  Lets the Tier-3 rename modal's VLAN pane
             enumerate every VLAN the operator could rewrite or drop —
@@ -520,6 +523,52 @@ class MigrationJob(BaseModel):
             Populated by :func:`run_plan_with_overrides` via the
             capture transform.  Empty list when source config had
             v1/v2c only.
+        source_ports: Hardware port names the source config
+            references, in first-seen order, captured post-parse
+            and pre-transform -- whether or not a rename touched
+            them (:attr:`port_renames` holds only names that
+            changed).  See the field's own comment for what counts
+            as a hardware port.
+        source_other_names: Every other name the source config
+            uses in a place the port translator rewrites, in
+            first-seen order: a LAG, a VLAN interface, a loopback,
+            a tunnel, and a reference that names no interface (a
+            route to ``Null0``, a VTEP source address).  With
+            ``source_ports`` it is the names the config uses where
+            a port name goes.  A ``port_rename_map`` key outside
+            both has an effect in two cases: a port the config
+            names only through a sub-interface of it, whose entry
+            moves or drops that unit; and, where the source
+            platform's names have no letter case, another spelling
+            of a name in the lists.  Lets the rename
+            modal's ports pane draw a row for a name that no
+            rename changed and no warning quotes -- which, between
+            two configs of one codec, is all of them.  Populated
+            by :func:`run_plan_with_overrides` via the capture
+            transform.
+        fused_ports: Names of the output that more than one source
+            name ended on, each with those source names, on a job
+            whose request declared no devices.  The job is
+            ``partial`` while it is not empty.  Empty when devices
+            were declared: ``port_mapping_plan.fused`` says it there.
+        unresolved_ports: Names of the source config that were
+            dropped from the output because the target has no name
+            for them -- a hardware port, or a logical name such as a
+            loopback or a tunnel -- and that no entry of
+            ``port_rename_map`` names, on a job whose request
+            declared no devices.  The job is ``partial`` while it is
+            not empty.  Empty when devices were declared:
+            ``port_mapping_plan.unresolved_ports`` says it there.
+        untranslated_ports: Names of the source config that the port
+            translator could not read as any kind of port and left
+            under the name the source config has for them, that
+            are a foreign name on the target, and that no entry of
+            ``port_rename_map`` names, on a job whose request
+            declared no devices.  Not a name the target itself
+            writes for the same kind of thing (the ``Vlan20`` of an
+            AOS-S VLAN's address, on EOS), and none between two
+            codecs of one platform.  The job is ``partial`` while
+            it is not empty.  Empty when devices were declared.
         dropped_tier3_sections: Tier-3 stanza headers detected in
             the source bytes that the codec parser deliberately
             drops (firewall rules, NAT, QoS, route-maps, IPsec,
@@ -528,6 +577,11 @@ class MigrationJob(BaseModel):
             parse so the migrate page can render a "Detected in
             source but not translated" banner.  Notification surface
             only — never read by any render-side code or transform.
+            A parser may also list a statement it read and left out
+            on purpose (a Junos statement the source had
+            deactivated): a row that begins ``inactive: `` or
+            ``delete: `` is one, and is not a section
+            (``_tier3_detection.is_left_out_row``).
             See also ``scope_advisories``, which reports the TARGET
             platform rather than the source.
             Populated by every codec's ``parse()``; see
@@ -593,7 +647,9 @@ class MigrationJob(BaseModel):
     #: ``CanonicalVlan`` entry removed, ``access_vlan``
     #: detached, ``trunk_allowed_vlans`` entries removed,
     #: ``trunk_native_vlan`` / ``voice_vlan`` cleared on affected
-    #: interfaces.
+    #: interfaces.  A trunk left with no entry allows no VLAN and is
+    #: rendered so, with a warning; a list of every id (every VLAN)
+    #: is left as it is.
     vlan_drops: list[int] = Field(default_factory=list)
 
     #: Source-tree VLAN IDs captured post-parse, pre-transform.
@@ -705,11 +761,162 @@ class MigrationJob(BaseModel):
     #: ``port_mapping_plan.pairings`` lists it.)
     #:
     #: :attr:`port_renames` holds only names that CHANGED, so on a
-    #: same-vendor translation it is usually empty.  The rename
+    #: translation from a codec to itself it is empty unless an entry
+    #: of ``port_rename_map``, or a declared device, moved one.  The rename
     #: modal's ports pane lists every name here that nothing else gave
     #: a row, and its capacity banner counts them.  Populated by
     #: :func:`run_plan_with_overrides` via the capture transform.
     source_ports: list[str] = Field(default_factory=list)
+
+    #: Every other name the source config uses in a place the port
+    #: translator rewrites, in first-seen order: what
+    #: ``collect_port_names`` finds that :attr:`source_ports` does
+    #: not hold.  A LAG, a VLAN interface, a loopback, a tunnel, a
+    #: bridge -- and a reference that names no interface at all: a
+    #: static route to ``Null0`` or to the keyword ``dhcp``, a DHCP
+    #: pool keyed by a zone name, a VRRP track OBJECT number, a VTEP
+    #: source address.  The translator sweeps those fields without
+    #: asking what they hold, so an entry of ``port_rename_map``
+    #: keyed by any name here is recorded, and applied where the
+    #: name is an interface the target writes by that name.  Where
+    #: it is not, the job lists the entry in :attr:`port_renames`
+    #: or :attr:`port_drops` and the output does not show it: a
+    #: VLAN interface on a target that writes one from the VLAN
+    #: (AOS-S by the VLAN's id; OS10, EOS, IOS-XE CLI and RouterOS
+    #: beside the renamed one), a dropped loopback that a VXLAN
+    #: source line still names, the bare Junos ``irb``.
+    #:
+    #: Between two configs of one codec a name nobody mapped stands:
+    #: no rename changes it and no warning quotes it, so without
+    #: this field nothing on the job says the config has a LAG at
+    #: all.  The rename modal's ports pane draws a row, in a section
+    #: of its own, for every name here that nothing else gave one.
+    #: The capacity banner does not count them: they are not ports
+    #: of any device.  Populated by :func:`run_plan_with_overrides`
+    #: via the capture transform; empty on a bare :func:`run_plan`.
+    source_other_names: list[str] = Field(default_factory=list)
+
+    #: Names of the output that more than one source name ended on,
+    #: each with those names, where the request declared no devices
+    #: (:func:`run_plan_with_checked_names`).  Read from the finished
+    #: run over every name the port translator rewrites -- a LAG or a
+    #: loopback as much as a port -- and compared as the two platforms
+    #: compare names.  Whoever decided the names: two entries of
+    #: ``port_rename_map`` that point at one name are here as well.
+    #: Unit 0 of an interface beside the interface (a Junos reference
+    #: to ``lo0.0`` where the interface is ``lo0``) is one interface
+    #: and is not listed.  Named and shaped as
+    #: :attr:`MappingPlan.fused` is, which carries the same fact when
+    #: devices are declared -- by that path's own, narrower rule, so
+    #: this field is left empty there and not filled with a second
+    #: account that could differ from the first.
+    fused_ports: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description=(
+            "Names of the output that more than one source name ended on, "
+            "each with those source names: the config of two interfaces is "
+            "written as one.  Filled when the request declared no devices; "
+            "the job is partial while it is not empty.  To settle one, give "
+            "all but one of its source names a name of their own in "
+            "port_rename_map, or null to drop them.  Declaring both devices "
+            "settles a name only where a hardware port (source_ports) is "
+            "among its source names: two loopbacks on one loopback are not "
+            "told apart by a device.  Empty when both devices were declared: "
+            "port_mapping_plan.fused says it there.  A name is whatever text "
+            "the config has where a port name goes: escape it before showing "
+            "it."
+        ),
+    )
+
+    #: Names of the source config that the port translator dropped
+    #: -- the target has no name for them -- and that no entry of
+    #: ``port_rename_map`` names, where the request declared no
+    #: devices (:func:`run_plan_with_checked_names`), in the order
+    #: :attr:`port_drops` lists them.  A hardware port (a management
+    #: port on a platform with none, a breakout lane) and a logical
+    #: name alike (a loopback, a tunnel, a FortiGate hardware switch
+    #: that holds the LAN address): :attr:`source_ports` says which
+    #: are hardware ports.  A unit dropped with its port is listed
+    #: with it, unless an entry dropped the port.  Not here: a VLAN
+    #: interface a target writes from its VLAN stanza, which is not
+    #: dropped at all.  Named as :attr:`MappingPlan.unresolved_ports`
+    #: is, which holds the names that need a decision when devices
+    #: are declared; left empty there for the reason given at
+    #: :attr:`fused_ports`.
+    unresolved_ports: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Names of the source config that were dropped from the output "
+            "because the target has no name for them, and that no entry of "
+            "port_rename_map names: a hardware port, or a logical name such "
+            "as a loopback, a tunnel or a hardware switch (source_ports says "
+            "which are hardware ports).  Filled when the request declared no "
+            "devices; the job is partial while it is not empty.  To settle "
+            "one, give it an entry in port_rename_map: a target name, or "
+            "null to say it is to be dropped.  Empty when both devices were "
+            "declared: port_mapping_plan.unresolved_ports says it there.  "
+            "Escape a name before showing it."
+        ),
+    )
+
+    #: Names of the source config that the port translator could not
+    #: read as any kind of port and so left under the name the source
+    #: config has for them (its "could not classify ... left verbatim"
+    #: warning), and that no entry of ``port_rename_map`` names, where
+    #: the request declared no devices
+    #: (:func:`run_plan_with_checked_names`), in the order the
+    #: translator met them.  A source vendor's name in another
+    #: vendor's config: an IOS ``GigabitEthernet1``, an OPNsense
+    #: ``igc0``, a RouterOS interface an operator named -- and a name
+    #: that is no interface at all where the config has it in a place
+    #: a port name goes (a route to ``Null0``).  Kept apart from
+    #: :attr:`unresolved_ports` because what to do differs: a dropped
+    #: name is not in the output, and this one is, under a name
+    #: nobody chose for the target.  An entry for the name settles it:
+    #: another name, ``None``, or the name ITSELF, which is how an
+    #: operator says it is right as it is.  Never filled between two
+    #: configs of one codec, where no name is classified.
+    #:
+    #: Not every name the translator left is listed.  Between two
+    #: codecs of one platform (IOS-XE as CLI text and over NETCONF)
+    #: a name is the platform's own.  And across platforms a name is
+    #: not listed where the target itself writes that very name for
+    #: the kind of thing the source config says it is -- a VLAN's
+    #: interface, a loopback, an aggregate, a tunnel; never a
+    #: hardware port, and never to or from a platform whose
+    #: interface names are free text.  The ``Vlan20`` an AOS-S
+    #: VLAN's address is carried on is ``interface Vlan20`` on EOS,
+    #: IOS-XE and NX-OS: nothing is under a foreign name there.  The
+    #: translator's warning line names every name it left, listed
+    #: here or not.
+    untranslated_ports: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Names of the source config that the port translator could not "
+            "read as any kind of port, that are therefore left under the "
+            "name the source config has for them, and that no entry of "
+            "port_rename_map names.  Whatever the output has of such a name "
+            "is under a name of the source vendor.  A name the translator "
+            "left is not listed where it is no foreign name: between two "
+            "codecs of one platform, and where the target itself writes "
+            "that very name for the same kind of logical interface (the "
+            "Vlan20 of an AOS-S VLAN's address, on EOS, IOS-XE or NX-OS).  "
+            "A hardware port is always listed.  Filled when the request "
+            "declared no devices and the two codecs differ; the job is "
+            "partial while it is not empty.  To settle one, give it an "
+            "entry in port_rename_map: the name it is to have on the target "
+            "-- its own name, if that is right there -- or null to drop it.  "
+            "Empty when both devices were declared.  Escape a name before "
+            "showing it."
+        ),
+    )
+
+    #: What the port translator reported leaving under its source
+    #: name (``PortRenameResult.untranslated``), handed from
+    #: :func:`run_plan_with_overrides` to whichever entry reads the
+    #: finished run.  Not a field: it is not serialised and not in
+    #: the schema.  :attr:`untranslated_ports` is what a client reads.
+    _untranslated: list[str] = PrivateAttr(default_factory=list)
 
     #: The positional port pairing made when the request declared both
     #: device models (:func:`run_plan_with_models`): every pair, every
@@ -731,7 +938,10 @@ class MigrationJob(BaseModel):
     #: translated" banner.  Notification surface only — never read by
     #: any render-side code or transform.  Populated by every codec's
     #: ``parse()``; see :mod:`netcanon.migration._tier3_detection` for
-    #: the per-vendor detectors.
+    #: the per-vendor detectors -- and for the rows that are not
+    #: sections: a statement a parser read and left out on purpose is
+    #: listed here too (``inactive: <path> ...``), and a client that
+    #: counts sections tells the two apart with ``is_left_out_row``.
     dropped_tier3_sections: list[str] = Field(default_factory=list)
 
     #: Scope notices about the TARGET platform, as opposed to
@@ -818,6 +1028,24 @@ class MigrationPlanRequest(BaseModel):
       app-hosting bridge, loopbacks that can't be ported, unused
       physical ports).
     * key NOT in map — run the auto-heuristic (classify + format).
+
+    A value is a name or ``None``.  A blank one -- ``""``, only
+    white space, or only characters that draw nothing (control and
+    format characters, such as a zero-width space) -- is refused
+    with a 422: it is not a way to drop a port, and taken as a name
+    it wrote an interface with no name anyone can see.
+
+    Every plan endpoint applies this map, the per-pane ones included,
+    and an entry is also the operator DECIDING that name.  With no
+    devices declared a job is ``partial`` while two source names end
+    on one name of the output (:attr:`MigrationJob.fused_ports`), a
+    name the translator dropped has no entry
+    (:attr:`MigrationJob.unresolved_ports`), or a name it could not
+    read was left as the source config has it, where that is no
+    name of the target's
+    (:attr:`MigrationJob.untranslated_ports`).  A name of its own
+    settles each -- for a name left as it was, that may be the name
+    itself -- and so does ``None`` for one that is to go.
     """
 
     target_profile: str | None = None
@@ -1017,6 +1245,41 @@ class MigrationPlanRequest(BaseModel):
                     raise ValueError(
                         "a name in a rename map must be valid Unicode text"
                     ) from None
+        return value
+
+    @field_validator("port_rename_map")
+    @classmethod
+    def _a_target_is_a_name_or_null(cls, value: Any) -> Any:
+        """A blank target is no name and no decision.  ``{"mgmt0":
+        ""}`` was written into the output as an interface with no
+        name, and -- being an entry -- cleared the ``partial`` a
+        dropped port holds a job in.  So was a target that draws
+        nothing: a zero-width space, a NUL, a byte-order mark
+        (:func:`~netcanon.migration.canonical.port_names.names_a_target`,
+        the one rule the translator applies too).  Refused here,
+        where every plan endpoint reads the map, with what to send
+        instead.  Runs after :meth:`_names_are_text`, so a key that
+        cannot be written back is reported as that; the error names
+        the keys, which the check above has shown can be.  It names
+        a few of them and cuts each short: the message is not to
+        grow with what was sent."""
+        # Imported here: that package loads this module.
+        from ..migration.canonical.port_names import names_a_target
+
+        blank = sorted(
+            key for key, name in (value or {}).items()
+            if isinstance(name, str) and not names_a_target(name)
+        )
+        if blank:
+            # A few keys, each cut short: enough to find the entry.
+            listed = ", ".join(
+                repr(key if len(key) <= 60 else key[:57] + "...") for key in blank[:5]
+            )
+            more = f" and {len(blank) - 5} more" if len(blank) > 5 else ""
+            raise ValueError(
+                f"a target name in port_rename_map must not be blank "
+                f"({listed}{more}): give the port a name, or null to drop it"
+            )
         return value
 
     # Which declarations may be combined is checked where they are

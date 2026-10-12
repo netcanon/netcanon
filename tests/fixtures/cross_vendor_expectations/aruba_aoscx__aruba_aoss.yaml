@@ -300,9 +300,8 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: good
     note: >
-      Preserved on all 5 cells that populate it (2 cells carry no trunk
-      membership at all).  Same mechanism and the same `lag N` / `trkN` caveat as
-      `vlans[].untagged_ports`.
+      Preserved on all 7 cells.  Same mechanism and the same `lag N` / `trkN`
+      caveat as `vlans[].untagged_ports`.
     references: [aoscx-aoss-surface]
 
   "vlans[].description":

@@ -51,6 +51,7 @@ from ..._user_secrets import (
     is_migratable,
 )
 from ...canonical.intent import CanonicalIntent
+from ...canonical.transforms import is_every_vlan
 from ..base import RenderError
 
 # ---------------------------------------------------------------------------
@@ -624,8 +625,9 @@ def _vlan_parent_default(intent: CanonicalIntent) -> str:
     return "lan"
 
 
-def _vlan_carriers(intent: CanonicalIntent) -> tuple[dict[int, str], dict[int, str]]:
-    """For every VLAN, the LAG and the plain interface that carry it.
+def _vlan_carriers(intent: CanonicalIntent) -> dict[int, str]:
+    """For every VLAN something carries, the LAG or the plain
+    interface that is its parent.
 
     What :func:`_vlan_parent_for` looked for by walking every interface
     for every LAG, and again for every member of it, for every VLAN:
@@ -634,13 +636,26 @@ def _vlan_carriers(intent: CanonicalIntent) -> tuple[dict[int, str], dict[int, s
     instead, in the same order, so that the first LAG or interface
     that carries a VLAN is still the one found.
 
+    A trunk that NAMES the VLAN is looked for before a trunk of EVERY
+    VLAN (:func:`...canonical.transforms.is_every_vlan`).  A trunk
+    that states no allowed list is a trunk of every VLAN on four
+    platforms, and such a trunk is in the list of every VLAN there
+    is: found first, a vPC peer link is the parent of each VLAN its
+    switch has, ahead of the port-channel that lists them.
+
     Returns:
-        ``(by_lag, by_interface)``.  ``by_lag`` gives, for the id of a
-        VLAN of the tree, the first LAG in the order of
-        ``intent.lags`` whose own interface, or one of whose members,
-        allows it on its trunk.  ``by_interface`` gives the first
-        interface, in the order of ``intent.interfaces``, that allows
-        it and is neither VLAN-named nor a member of a LAG.
+        For the id of a VLAN of the tree, the name of the first of
+        these that there is:
+
+        1. the first LAG, in the order of ``intent.lags``, whose own
+           interface or one of whose members names it on its trunk;
+        2. the first interface, in the order of ``intent.interfaces``,
+           that names it and is neither VLAN-named nor a member of a
+           LAG;
+        3. the first LAG a trunk of every VLAN belongs to;
+        4. the first such interface that is a trunk of every VLAN.
+
+        A VLAN nothing carries is not in it.
     """
     # Only the ids that will be asked about: a trunk that allows every
     # VLAN lists 4,094, and the tree declares a handful.
@@ -648,26 +663,44 @@ def _vlan_carriers(intent: CanonicalIntent) -> tuple[dict[int, str], dict[int, s
     named: dict[str, list[Any]] = {}
     for iface in intent.interfaces:
         named.setdefault(iface.name, []).append(iface)
-    by_lag: dict[int, str] = {}
     lag_members: set[str] = set()
     for lag in intent.lags:
         lag_members.update(lag.members)
+    # Each interface that allows something, once, with what it is the
+    # parent as (a LAG for the LAG's own interface and its members) and
+    # whether its list is every VLAN: LAGs first, in their order, then
+    # the plain interfaces in theirs.
+    carriers: list[tuple[str, Any, bool]] = []
+    for lag in intent.lags:
         for name in (lag.name, *lag.members):
             for iface in named.get(name, ()):
-                for vid in wanted.intersection(iface.trunk_allowed_vlans):
-                    by_lag.setdefault(vid, lag.name)
-    by_interface: dict[int, str] = {}
+                if iface.trunk_allowed_vlans:
+                    carriers.append(
+                        (lag.name, iface, is_every_vlan(iface.trunk_allowed_vlans))
+                    )
     for iface in intent.interfaces:
         if iface.name.lower().startswith("vlan") or iface.name in lag_members:
             continue
-        for vid in wanted.intersection(iface.trunk_allowed_vlans):
-            by_interface.setdefault(vid, iface.name)
-    return by_lag, by_interface
+        if iface.trunk_allowed_vlans:
+            carriers.append(
+                (iface.name, iface, is_every_vlan(iface.trunk_allowed_vlans))
+            )
+    parent: dict[int, str] = {}
+    # Two rounds over that one order: the trunks that name their
+    # VLANs, then the trunks of every VLAN.  Within a round a LAG is
+    # still found before a plain interface.
+    for every in (False, True):
+        for name, iface, is_every in carriers:
+            if is_every is not every:
+                continue
+            for vid in wanted.intersection(iface.trunk_allowed_vlans):
+                parent.setdefault(vid, name)
+    return parent
 
 
 def _vlan_parent_for(
     vlan: Any,
-    carriers: tuple[dict[int, str], dict[int, str]],
+    carriers: dict[int, str],
     default: str,
 ) -> str:
     """Resolve the parent physical / lagg interface for a single VLAN.
@@ -675,12 +708,15 @@ def _vlan_parent_for(
     Lookup order:
 
     1. A LAG whose ``trunk_allowed_vlans`` (declared on its members or
-       on the LAG-named interface) contains ``vlan.id`` — this is the
+       on the LAG-named interface) names ``vlan.id`` — this is the
        most common cross-vendor binding when the source codec emits
        VLANs on a port-channel trunk.
     2. A physical / non-VLAN interface whose ``trunk_allowed_vlans``
-       contains ``vlan.id``.
-    3. The deterministic ``default`` (first lagg / first physical /
+       names ``vlan.id``.
+    3. A LAG, then a physical / non-VLAN interface, whose trunk is a
+       trunk of every VLAN.  It carries this one too, and is a better
+       parent than a port chosen without looking.
+    4. The deterministic ``default`` (first lagg / first physical /
        ``"lan"``) returned by :func:`_vlan_parent_default`.
 
     The lookup intentionally does NOT consult the VLAN's own SVI L3
@@ -697,11 +733,7 @@ def _vlan_parent_for(
     Returns:
         The name of the parent interface.
     """
-    by_lag, by_interface = carriers
-    parent = by_lag.get(vlan.id)
-    if parent is None:
-        parent = by_interface.get(vlan.id)
-    return default if parent is None else parent
+    return carriers.get(vlan.id, default)
 
 
 def _zone_tag_for(name: str) -> str:
