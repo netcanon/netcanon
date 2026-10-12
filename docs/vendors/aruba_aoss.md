@@ -173,6 +173,16 @@ pipeline — they just aren't pinned by a fixture yet").
 
 ## Common gotchas
 
+- **AOS-S has no allowed list.**  A port carries the VLANs that name
+  it (`tagged`, `untagged`), so there is no trunk that states none.
+  As a target: a trunk of every VLAN from another vendor — a Cisco or
+  Arista trunk that states no list, an AOS-CX `vlan trunk allowed
+  all`, a Junos `vlan members all` — is tagged in each VLAN the
+  output declares (AOS-S cannot say "and any VLAN made later", and
+  nothing in the output marks that more was meant: tag the port in a
+  VLAN you add afterwards), and a trunk of no VLAN is tagged in none.
+  Release 0.7.7 and earlier
+  tagged a Cisco trunk with no list, and an AOS-CX `all`, in nothing.
 - **`include-credentials` mode** affects how hashes appear in
   running-config — Netcanon parses + preserves both forms.
 - **Banner format + positional port lists** — the codec correctly

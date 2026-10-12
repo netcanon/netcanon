@@ -83,6 +83,18 @@ URLs rot.  When a future contributor finds a 404, the workflow is:
 Don't delete the old markdown — it's the dated snapshot we authored
 the per-field assessment against.
 
+## Facts that are about a platform, not a pair
+
+A few facts hold for every pair a platform is in.  They are written
+once, in the pair's file where they bite hardest, and pointed to from
+here:
+
+- **What a trunk that states no allowed list carries**, platform by
+  platform, with each vendor's sentence and its source:
+  [`cisco_iosxe_cli_to_juniper_junos/vlans.md`](cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
+  It backs `TRUNK_THAT_STATES_NO_LIST` in
+  `netcanon/migration/codecs/_helpers.py`.
+
 ## See also
 
 - [`tests/fixtures/cross_vendor_expectations/README.md`](../../tests/fixtures/cross_vendor_expectations/README.md)

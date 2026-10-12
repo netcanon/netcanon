@@ -68,7 +68,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
-from .._helpers import GrowingIndex, Uniques, vlan_id_run
+from .._helpers import GrowingIndex, Uniques, unstated_trunk_list, vlan_id_run
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -574,6 +574,16 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     for name, state in iface_state.items():
         names_list = state.get("l2_vlan_member_names")
         if not names_list:
+            # A trunk that states no ``vlan members``: what the
+            # platform's trunk carries by default, which on Junos is
+            # no VLAN.
+            unstated = iface_by_name.get(name)
+            if (
+                unstated is not None
+                and unstated.switchport_mode == "trunk"
+                and not unstated.trunk_allowed_vlans
+            ):
+                unstated.trunk_allowed_vlans = unstated_trunk_list("juniper_junos")
             continue
         iface = iface_by_name.get(name)
         if iface is None:

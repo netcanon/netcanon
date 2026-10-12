@@ -416,13 +416,14 @@ def test_switchport_trunk(codec: ArubaAOSCXCodec) -> None:
     assert sorted(port.trunk_allowed_vlans) == [10, 20]
 
 
-def test_trunk_allowed_all_is_empty_list(codec: ArubaAOSCXCodec) -> None:
-    """`vlan trunk allowed all` maps to an empty allowed-list (which the
-    render re-emits as `all`)."""
+def test_trunk_allowed_all_is_every_id(codec: ArubaAOSCXCodec) -> None:
+    """`vlan trunk allowed all` is every id, 1-4094 (which the render
+    writes back as `all`).  An empty list is a trunk that allows no
+    VLAN, and AOS-CX has no text for one."""
     intent = codec.parse(_SAMPLE)
     lag = next(i for i in intent.interfaces if i.name == "lag 1")
     assert lag.switchport_mode == "trunk"
-    assert lag.trunk_allowed_vlans == []
+    assert lag.trunk_allowed_vlans == list(range(1, 4095))
 
 
 # ---------------------------------------------------------------------------

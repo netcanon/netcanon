@@ -288,6 +288,31 @@ reuse, leaving a `review:` comment naming the user instead of a
 tool will therefore render with no users at all — that is the gate
 working, not a parser fault.
 
+⚠️ **OS10 cannot be told "every VLAN".**  An OS10 trunk with no
+`switchport trunk allowed vlan` line carries untagged traffic on its
+access VLAN and no tagged VLAN, and is read so: a trunk of NO VLAN.
+As a target that is written the same way, with no allowed line.  But
+OS10 has no word for every VLAN, its VLAN ids end at 4093, and a VLAN
+must exist before a port is put in it.  A trunk of EVERY VLAN — a
+Cisco or Arista trunk that states no list, an AOS-CX `vlan trunk
+allowed all`, a Junos `vlan members all` — is written `switchport
+trunk allowed vlan 1-4094`, as it always was, under a `! review:`
+line that says so: replace the range with the VLANs the switch has.
+A list that is NOT every VLAN is written as it stands, with no such
+line, though it can have the same faults: `2-4094` names an id OS10
+does not have, and any list can name a VLAN the output does not
+declare, which OS10 wants made before a port is put in it.
+Release 0.7.7 and earlier had one value, an empty list, for a trunk
+that allows no VLAN and for one that states no list: an OS10 trunk
+with no tagged VLAN came out as a trunk of every VLAN on IOS-XE,
+NX-OS, EOS and AOS-CX, and a Cisco trunk with no list reached OS10
+with no allowed line — check trunks translated that way.  The
+untagged (access) VLAN of an OS10 trunk is never in its allowed list,
+and is not added to the list written for another vendor: a trunk with
+an untagged VLAN and no tagged one is written there as a trunk that
+allows none, with the native line beside it.  The vendors' own
+sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
+
 ## Two things that would have been silent bugs
 
 Recorded here because they change how you should read a migration report:

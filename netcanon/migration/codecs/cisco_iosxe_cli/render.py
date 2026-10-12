@@ -74,7 +74,12 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
 )
-from .._helpers import _prefix_to_mask
+from .._helpers import (
+    TRUNK_ALL,
+    _prefix_to_mask,
+    switchport_trunk_allowed_value,
+    trunk_list_says,
+)
 from ..base import RenderError
 
 
@@ -466,10 +471,30 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f" switchport trunk native vlan "
                 f"{iface.trunk_native_vlan}"
             )
-        if iface.trunk_allowed_vlans:
-            vlan_list = ",".join(
-                str(v) for v in iface.trunk_allowed_vlans
+        if iface.switchport_mode == "trunk":
+            # On a trunk the list means what it says.  No VLAN is
+            # ``none``.  Every VLAN is no line at all: it is the
+            # default, it is what the device prints, and the ids
+            # spelled out are one line of some 19,000 characters.
+            # Any other list is written as it stands.
+            vlan_list = switchport_trunk_allowed_value(
+                "cisco_iosxe_cli", iface.trunk_allowed_vlans,
+                coalesce=False,
             )
+            if vlan_list is not None:
+                body.append(
+                    f" switchport trunk allowed vlan {vlan_list}"
+                )
+        elif iface.trunk_allowed_vlans:
+            # A list stated on a port that is not a trunk (see the
+            # comment above the mode line): kept for the day the mode
+            # is flipped.  Every id is the word for it there.
+            if trunk_list_says(iface.trunk_allowed_vlans) == TRUNK_ALL:
+                vlan_list = "all"
+            else:
+                vlan_list = ",".join(
+                    str(v) for v in iface.trunk_allowed_vlans
+                )
             body.append(
                 f" switchport trunk allowed vlan {vlan_list}"
             )

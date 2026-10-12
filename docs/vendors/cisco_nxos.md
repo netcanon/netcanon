@@ -184,6 +184,32 @@ source are the highest-value contributions — see
 
 ## Common gotchas
 
+- **A trunk's allowed list means what it says.**  A trunk with no
+  `switchport trunk allowed vlan` line — a vPC peer link, usually —
+  is read as a trunk of EVERY VLAN, the NX-OS default, and reaches
+  another vendor as that.  `switchport trunk allowed vlan none`, and
+  a list emptied by `remove` or `except`, is a trunk of NO VLAN.
+  `add` and `remove` on an interface's first allowed line start from
+  every VLAN, and an interface whose stanza is met twice has ONE
+  list.  As a target: every VLAN is written as a trunk with no
+  allowed line, never as `1-4094` — NX-OS keeps a block of ids for
+  itself (3968-4047 unless it is moved) and does not take them in a
+  list; no VLAN is `switchport trunk allowed vlan none`; any other
+  list is written as ranges.  Release 0.7.7 and earlier had one
+  value, an empty list, for a trunk that allows no VLAN and for one
+  that states no list: a `none` trunk came out here as a trunk of
+  every VLAN, and a peer link reached Junos, OS10 and AOS-S carrying
+  none — check trunks translated that way.  A port with a
+  `switchport trunk` line and no `switchport mode trunk` line is read
+  as a trunk, though an NX-OS port is an access port until it is told
+  otherwise.  That is an older fault of the parser.  Such a port is
+  given nothing from the default: it is a trunk of the VLANs its
+  lines name, or of NO VLAN, never of every VLAN.  A port that says
+  `switchport mode trunk` and takes its list from `inherit
+  port-profile`, which is not read, is a trunk of every VLAN; so is a
+  port-channel member that states the mode and leaves the list to its
+  port-channel.  The vendors' own sentences are in the
+  [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
 - **HSRP is the FHRP, not VRRP.**  Cross-vendor VRRP / CARP groups
   render as `hsrp` blocks; same-vendor HSRP round-trips cleanly.
 - **`nve1` is the VTEP, not a routed port.**  The codec intercepts

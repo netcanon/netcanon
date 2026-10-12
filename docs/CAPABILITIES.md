@@ -1512,19 +1512,75 @@ matter; the matrix is honest about both.
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP
   pools surface as a comment block, not as `dhcp-server pool`
   syntax.
-* **A trunk that allows no VLAN comes out allowing every VLAN on
-  four targets.**  The canonical tree has one value, an empty
-  list, for a trunk that allows nothing (`switchport trunk allowed
-  vlan none`, a list emptied by `remove`, a trunk whose VLANs were
-  all dropped), for a trunk that states no list, and for AOS-CX's
-  own `vlan trunk allowed all`.  Each renderer picks a reading:
-  `aruba_aoscx` writes `vlan trunk allowed all`; `cisco_iosxe_cli`,
-  `arista_eos` and `cisco_nxos` write a trunk with no allowed line,
-  which is every VLAN there; `juniper_junos`, `aruba_aoss` and
-  `dell_os10` write a trunk that carries none — which is wrong the
-  other way for a Cisco trunk that states no list.  The job reports
-  nothing.  A known defect, not a design: check any trunk whose
-  list is empty or absent on either side.
+* **A trunk's allowed list means what it says.**  On a trunk an
+  empty list is NO VLAN, a list of every id (1-4094) is EVERY VLAN,
+  and any other list is the list.  A trunk that states no allowed
+  list is read as what its platform does with one: every VLAN on
+  `cisco_iosxe_cli`, `cisco_nxos`, `arista_eos` and `aruba_aoscx`;
+  no VLAN on `dell_os10` and `juniper_junos`.  Each target writes
+  its own form: `switchport trunk allowed vlan none` and, for every
+  VLAN, a trunk with no allowed line on IOS-XE, NX-OS and EOS;
+  `vlan trunk allowed all` on AOS-CX; `vlan members all`, or no
+  members, on Junos; no allowed line for no VLAN on OS10; the VLANs
+  that tag the port on AOS-S.  Release 0.7.7 and earlier had one
+  value, an empty list, for all three statements, and a trunk that
+  allowed no VLAN came out allowing every VLAN on four targets:
+  check any trunk translated then whose list is empty or absent on
+  either side.  These limits remain, each written in the output or
+  here:
+  * **AOS-CX cannot be told "no VLAN".**  A trunk with no allowed
+    VLAN carries every VLAN there.  For a source trunk that allows
+    none, neither `vlan trunk` line is written and a `! review:`
+    line in the stanza says what the source said.  The job does not
+    report it: list the VLANs the port is to carry, or shut it down.
+    What is written is a switched port with no `vlan` line, taken
+    here to be an access port in VLAN 1 by the switch's default;
+    that default is not established here from a vendor's page.
+  * **OS10 cannot be told "every VLAN".**  It has no word for it,
+    its VLAN ids end at 4093, and a VLAN must exist before a port
+    is put in it.  A trunk of every VLAN is written `switchport
+    trunk allowed vlan 1-4094` under a `! review:` line: replace
+    the range with the VLANs the switch has.  A list that is not
+    every VLAN is written as it stands with no such line, though it
+    can name an id past 4093 (`2-4094`) or a VLAN the output does
+    not declare.
+  * **AOS-S cannot be told "and any VLAN made later".**  A trunk of
+    every VLAN is tagged in each VLAN the output declares, and
+    nothing in the output marks that more was meant.
+  * **`none` on a port that is not `switchport mode trunk` is
+    dropped.**  On such a port an empty list and no list are one
+    value, and no line is written for it, same vendor included.  An
+    IOS-XE port in a dynamic mode that states `switchport trunk
+    allowed vlan none` comes back with no allowed line, and carries
+    every VLAN if it negotiates a trunk.  A VLAN drop that empties
+    the list kept on such a port gives no line and no warning.
+  * **A trunk line with no `switchport mode trunk` line is read as a
+    trunk** by `cisco_nxos` and `arista_eos`, though a port of
+    either platform is an access port until it is told otherwise.
+    Such a port is a trunk of the VLANs its lines name, or of no
+    VLAN — never of every VLAN: the platform's default is given only
+    to a port that says it is a trunk.
+  * **A trunk whose list is stated where the parser does not read it
+    is a trunk of every VLAN:** a port-channel member that states
+    the mode and leaves the list to its port-channel, and a port
+    that takes its list from `inherit port-profile` (NX-OS) or
+    `source template` (IOS-XE).  Check `vlan members all`, OS10's
+    `1-4094` and AOS-S tags on such a port.
+  * **A stanza met twice is one interface for its allowed list
+    only.**  Its allowed lines are applied to one list, in order;
+    each stanza is still written, with the mode it states.
+  * **Whether a trunk's list holds its native VLAN differs by
+    platform, and the canonical tree does not say which.**  On
+    AOS-CX the native VLAN is carried only if the allowed list
+    names it; on OS10 and AOS-S the untagged VLAN is outside the
+    list by grammar.  It errs both ways: an AOS-CX trunk whose
+    native VLAN is not in its list reaches OS10 and AOS-S carrying
+    that VLAN untagged (more than the source), and an OS10 trunk's
+    untagged VLAN is not in the list written for AOS-CX, IOS-XE,
+    NX-OS or EOS (an OS10 trunk with an untagged VLAN and no tagged
+    one is written as a trunk that allows none, with the native
+    line beside it).  Check the native VLAN of any trunk translated
+    between those families.
 * **A VLAN known only to an "allow-everything" trunk is not
   translated.**  On the six port-centric codecs (`cisco_iosxe_cli`,
   `arista_eos`, `cisco_nxos`, `juniper_junos`, `aruba_aoscx`,

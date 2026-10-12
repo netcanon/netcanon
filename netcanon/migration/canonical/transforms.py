@@ -65,6 +65,7 @@ Internal helper:
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 
 from .intent import CanonicalIntent, CanonicalInterface, CanonicalVlan
@@ -283,6 +284,7 @@ def switchport_declared_vlan_ids(intent: CanonicalIntent) -> set[int]:
 # "all" for the first only.)
 _TRUNK_ALL_RANGE_FULL = frozenset(range(1, 4095))
 _TRUNK_ALL_RANGE_OPERATIONAL = frozenset(range(2, 4095))
+_EVERY_ID_IN_ORDER = list(range(1, 4095))
 
 
 def _every_id(allowed: list[int]) -> frozenset[int] | None:
@@ -301,6 +303,31 @@ def _every_id(allowed: list[int]) -> frozenset[int] | None:
     if ids == _TRUNK_ALL_RANGE_OPERATIONAL:
         return _TRUNK_ALL_RANGE_OPERATIONAL
     return None
+
+
+def is_every_vlan(allowed: Sequence[int]) -> bool:
+    """Whether a trunk's allowed list says EVERY VLAN: it holds every
+    id there is, 1-4094.
+
+    On a trunk the list means what it says.  An empty list is no
+    VLAN.  A list of every id is every VLAN -- the ones the device has
+    and any it is given later, which is what the platforms that have a
+    word for it mean by the word.  Any other list is the list.  There
+    is no value for "not stated": the parser knows its platform and
+    puts what the platform does with a trunk that states no list
+    (``TRUNK_THAT_STATES_NO_LIST`` in ``codecs/_helpers.py``).
+
+    The order of the list and an id written twice do not matter.  A
+    list too short to hold every id is not made into a set to find
+    that out, and neither is the list as every parser writes it, the
+    ids in their order: this is asked of every trunk a renderer
+    writes, and a config can have such a trunk on every port.
+    """
+    if len(allowed) < len(_TRUNK_ALL_RANGE_FULL):
+        return False
+    if allowed == _EVERY_ID_IN_ORDER:
+        return True
+    return _TRUNK_ALL_RANGE_FULL.issubset(allowed)
 
 
 def _listed(allowed: list[int], keep: AbstractSet[int] | None) -> list[int]:

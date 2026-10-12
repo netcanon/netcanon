@@ -498,8 +498,41 @@ canonical model carries L2 membership both ways: per-iface
 `tagged_ports`/`untagged_ports`.  Codecs whose parse populates only
 one direction call `project_switchport_to_vlan(intent)` (or the
 inverse `project_vlan_to_switchport`) as a post-pass for round-trip
-stability.  The forward helper guards the Junos `vlan members all`
-sentinel (`range(1,4095)`) to avoid synthesising 4094 phantom VLANs.
+stability.  The forward helper guards the list of every id
+(`range(1,4095)`: Junos `vlan members all`, AOS-CX `vlan trunk allowed
+all`, a Cisco or Arista trunk that states no list) to avoid
+synthesising 4094 phantom VLANs: such a trunk goes onto the VLANs
+already declared.
+
+**What a trunk's allowed list says**
+(`TRUNK_THAT_STATES_NO_LIST` in `netcanon/migration/codecs/_helpers.py`;
+`is_every_vlan` in `netcanon/migration/canonical/transforms.py`).  The
+tree has no value for "not stated".  On a trunk
+`trunk_allowed_vlans == []` is NO VLAN, a list of every id (1-4094) is
+EVERY VLAN, and any other list is the list.  What a trunk carries when
+its config has no allowed line is a fact about the source platform —
+every VLAN on IOS-XE, NX-OS, EOS and AOS-CX; none on OS10 and Junos —
+so the parser, which knows its platform, puts it in the list, from
+the one table.  It does so for an INTERFACE, when the whole config
+has been read (`TrunksByName` in the same module): a stanza met twice
+is one interface whose allowed lines are applied to one list, and
+the platform's list is given only to a port that says it is a trunk,
+not to one the parser took for a trunk from a trunk line alone.  A
+renderer writes its target's form for each of the
+three statements, and no allowed line where the list is the target's
+own default (what the device prints, and what makes a default trunk
+come back as it went).  Where a target has no form, the output carries
+a review line and the cell is a documented limitation: AOS-CX cannot
+be told "no VLAN", OS10 cannot be told "every VLAN".  (AOS-S cannot be
+told "and any VLAN made later", and has no line to carry a note: its
+vendor page says so.)  The readers of
+the list follow the same rule: the VLAN rename pass leaves "every
+VLAN" as it is and warns when a drop empties a trunk, and the
+renderers that hang a VLAN on one parent (OPNsense, RouterOS,
+FortiOS) look for a trunk that names it before a trunk of every
+VLAN.  Whether the list holds the native
+VLAN is not yet one convention; each parser puts what its platform's
+text lists.
 
 **What makes a switchport VLAN real** (the phantom-VLAN prune,
 `transforms.switchport_declared_vlan_ids`).  Left to itself the

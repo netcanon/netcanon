@@ -61,12 +61,12 @@ from ...canonical.intent import (
     CanonicalVxlan,
 )
 from .._helpers import (
+    TrunksByName,
     Uniques,
     _is_link_local_v6,
     _mask_to_prefix,
     _normalise_mac_to_colon_hex,
     address_key,
-    merge_trunk_allowed,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -907,6 +907,11 @@ def _parse_vxlan(raw: str) -> tuple[list[CanonicalVxlan], dict[str, int]]:
 
 def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     """Extract interface stanzas from IOS config text."""
+    # What each interface states about its trunk, by the name its
+    # header writes: a stanza can be met twice, and the list is the
+    # interface's.
+    trunks = TrunksByName("cisco_iosxe_cli")
+
     def _open(m: re.Match[str]) -> dict[str, Any] | None:
         iface_name = m.group(1)
         # VTEP (``interface nve1``) is a VXLAN-EVPN overlay container, not a
@@ -920,6 +925,9 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             return None
         return {
             "name": iface_name,
+            # Which interface the stanza is of, for ``trunks``: its header
+            # line, not the name read from it.
+            "trunk_key": trunks.key(m.string),
             "description": "",
             "enabled": True,
             "type": _infer_type(iface_name),
@@ -927,7 +935,12 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             "switchport_mode": None,
             "access_vlan": None,
             "voice_vlan": None,
-            "trunk_allowed": [],
+            # ``None`` until an allowed line is read in THIS stanza,
+            # then the interface's list so far: what tells an access
+            # port from a port with trunk lines when the stanza is
+            # built.  The record's own list is the interface's, given
+            # when every stanza has been read (``trunks.settle``).
+            "trunk_allowed": None,
             "trunk_native": None,
             "lag_member_of": None,
             "mtu": None,
@@ -1071,6 +1084,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
         sm = _SWITCHPORT_MODE_RE.match(line)
         if sm:
             current["switchport_mode"] = sm.group(1).lower()
+            trunks.mode_line(current["trunk_key"], current["switchport_mode"])
             return
 
         am = _SWITCHPORT_ACCESS_RE.match(line)
@@ -1085,8 +1099,8 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
 
         tm = _SWITCHPORT_TRUNK_ALLOWED_RE.match(line)
         if tm:
-            current["trunk_allowed"] = merge_trunk_allowed(
-                current["trunk_allowed"], tm.group(1).strip()
+            current["trunk_allowed"] = trunks.allowed_line(
+                current["trunk_key"], tm.group(1).strip(),
             )
             return
 
@@ -1152,14 +1166,23 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     # the former hand-rolled rule verbatim (a column-0 `!` or any
     # non-indented line closes the stanza).  Behaviour-identical to the
     # previous loop.
-    return scan_stanzas(
+    interfaces = scan_stanzas(
         raw.splitlines(),
         is_header=_IFACE_RE.match,
         open_scratch=_open,
         on_line=_on_line,
-        build=_build_canonical_interface,
+        build=lambda scratch: trunks.made(
+            scratch["trunk_key"], _build_canonical_interface(scratch),
+        ),
         is_terminator=lambda line: line.startswith("!") or (line and not line[0].isspace()),
     )
+    # A trunk with no allowed line carries what the platform's trunk
+    # carries by default -- every VLAN on IOS-XE -- and the list says
+    # so.  An empty list is a trunk that allows NO VLAN (``switchport
+    # trunk allowed vlan none``, or a ``remove`` that left nothing).
+    # A port that is not a trunk and states no list has none to keep.
+    trunks.settle()
+    return interfaces
 
 
 def _dispatch_vrrp_line(line: str, current: dict[str, Any]) -> bool:
@@ -1269,6 +1292,11 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
     operator is free to write ``fabric forwarding mode anycast-gateway``
     either before OR after ``ip address X``; the per-interface flag
     decouples the two.
+
+    The record is made with no allowed list.  That list is the
+    interface's, which another stanza of the same name can state, and
+    :func:`_parse_interfaces` gives it when every stanza has been
+    read (:class:`.._helpers.TrunksByName`).
     """
     # IPv4 addresses — apply SD-Access anycast-gateway flag last so
     # ordering on the wire doesn't matter.  Per IOS-XE SD-Access
@@ -1348,7 +1376,6 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         access_vlan=raw.get("access_vlan"),
         dot1q_vlan=raw.get("dot1q_vlan"),  # GAP 7: routed-subif 802.1Q tag
         voice_vlan=raw.get("voice_vlan"),
-        trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),
         mtu=raw.get("mtu"),

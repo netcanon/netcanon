@@ -617,9 +617,19 @@ and its values out of order.
   target that writes every id.  That cost is linear in what was asked for; a
   real config of that size costs the same.  (A range of unbounded span is
   refused where one was found: AOS-S clamps a single port range at 1,024
-  names.)
+  names.)  On IOS-XE, NX-OS, EOS and AOS-CX a trunk that states NO allowed
+  list expands as well: it carries every VLAN there, and the tree says so
+  with the 4,094 ids, some 35 KB a trunk.  10,000 such trunks on IOS-XE
+  (0.6 MB) are 364 MB of tree, and cost what 10,000 trunks that state
+  `1-4094` (1 MB) cost, to read and to translate (measured onto Junos at
+  that size, and onto every target at a tenth of it); they were read as
+  empty lists, 32 MB.  Reading them still grows with their number and no
+  faster, and so does writing them: a renderer that chooses a port for
+  each VLAN asks what a trunk's list says once a port, not once a port for
+  every VLAN.
 * **Two kinds of stanza that grow together.**  A switch config with N
-  interfaces that carry `switchport trunk allowed vlan all` and M declared
+  interfaces that carry `switchport trunk allowed vlan all` (or, where a
+  trunk carries every VLAN by default, no allowed line at all) and M declared
   VLANs is N times M memberships once it is parsed: every such trunk is a
   member of every VLAN, and the tree lists them VLAN by VLAN.  Those
   memberships are real, and are made.  A thousand of each (118 KB) is a

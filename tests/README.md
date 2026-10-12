@@ -106,7 +106,9 @@ fails until it is mended (`Uniques`, or a set kept beside the list) or
 entered in that module's `LOOKED_THROUGH` with the bound that makes it
 harmless.  And `tests/unit/migration/test_projection_makes_what_is_kept.py`
 counts memory, in bytes, with `tracemalloc`: what a VLAN id on a port
-and a port on a VLAN may cost while a config is parsed.  Those
+and a port on a VLAN may cost while a config is parsed, and what a
+trunk that states no allowed list — every VLAN, on some platforms —
+costs in the tree that is kept.  Those
 ceilings are several times what is measured, so one that fails means
 an entry has come to cost several times what it did.
 

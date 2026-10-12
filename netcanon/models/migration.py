@@ -396,7 +396,10 @@ class MigrationJob(BaseModel):
             before render — :class:`CanonicalVlan` entry removed,
             ``access_vlan`` detached, ``trunk_allowed_vlans``
             entries removed, ``trunk_native_vlan`` / ``voice_vlan``
-            cleared on affected interfaces.
+            cleared on affected interfaces.  A trunk left with no
+            entry allows no VLAN and is rendered so, with a warning
+            in :attr:`warnings`; a list of every id (every VLAN) is
+            left as it is.
         source_vlans: Source-tree VLAN IDs captured post-parse, pre-
             transform.  Lets the Tier-3 rename modal's VLAN pane
             enumerate every VLAN the operator could rewrite or drop —
@@ -541,7 +544,9 @@ class MigrationJob(BaseModel):
     #: ``CanonicalVlan`` entry removed, ``access_vlan``
     #: detached, ``trunk_allowed_vlans`` entries removed,
     #: ``trunk_native_vlan`` / ``voice_vlan`` cleared on affected
-    #: interfaces.
+    #: interfaces.  A trunk left with no entry allows no VLAN and is
+    #: rendered so, with a warning; a list of every id (every VLAN)
+    #: is left as it is.
     vlan_drops: list[int] = Field(default_factory=list)
 
     #: Source-tree VLAN IDs captured post-parse, pre-transform.

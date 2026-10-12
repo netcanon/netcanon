@@ -114,6 +114,120 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A trunk that allows no VLAN no longer comes out allowing every
+  VLAN, and a trunk of every VLAN no longer comes out carrying
+  none.**  The canonical tree had one value, an empty list, for three
+  statements: a trunk that allows no VLAN (`switchport trunk allowed
+  vlan none`, a list emptied by `remove` or `except`, a Dell OS10 or
+  Junos trunk that lists nothing, a trunk whose VLANs were all dropped
+  in the rename modal), a trunk that states no list (every VLAN on
+  IOS-XE, NX-OS and EOS), and AOS-CX's own `vlan trunk allowed all`.
+  Each renderer picked one reading for all three.  IOS-XE, NX-OS and
+  EOS wrote the empty list as a trunk with no allowed line, and
+  AOS-CX as `vlan trunk allowed all`: every VLAN, for a trunk that
+  carried none.  Junos, OS10 and AOS-S wrote it as a trunk that
+  carries none: for a Cisco uplink that carried everything.  The job
+  said `completed` and reported nothing, and a test that read the
+  output back with the target's parser saw nothing either, because
+  that parser read its own default as the same empty list.  In the
+  committed captures: two Dell peer links that carry one untagged
+  VLAN came out as trunks of every VLAN on four targets, and 23
+  trunks of every VLAN — two vPC peer links and their members among
+  them — reached Junos, OS10 and AOS-S carrying nothing.
+  A list now means what it says.  On a trunk an empty list is NO
+  VLAN, a list of every id (1-4094) is EVERY VLAN, and any other list
+  is the list.  The parser, which knows its platform, puts what a
+  trunk with no allowed list carries there, from one table: every
+  VLAN on IOS-XE, NX-OS, EOS and AOS-CX; none on OS10 and Junos
+  (each vendor's sentence, with its source, is in
+  `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md`).
+  `add` and `remove` on an interface's first allowed line start from
+  that list, as they do on the device (`remove 10` on a Cisco trunk
+  with no earlier line was read as no VLAN, and is every VLAN but 10).
+  What an interface states is kept by its NAME — the one its header
+  line writes — so a stanza that is met twice is one interface: a
+  trunk of VLAN 10 whose stanza appears again with only its mode line
+  is a trunk of VLAN 10 both times, and `add 30` in a second stanza
+  is added to the interface's own list.
+  And the platform's list is given only where the interface SAYS it
+  is a trunk: the NX-OS and EOS parsers take a port for a trunk from a
+  trunk line alone, and a trunk taken that way gets nothing from the
+  default (Known limitations, below).
+  Each renderer writes its target's form: IOS-XE, NX-OS and EOS write
+  `switchport trunk allowed vlan none` for no VLAN and no allowed line
+  for every VLAN — they wrote the 4,094 ids on one line of some
+  19,000 characters, or `1-4094`, which names ids NX-OS keeps for
+  itself — AOS-CX writes `vlan trunk allowed all` for every VLAN and
+  for no other list, and Junos, OS10 and AOS-S write what they did.
+  **If a config was translated with release 0.7.7 or earlier, check
+  every trunk whose allowed list is empty or absent on either side.**
+  Every committed capture comes back through its own codec byte for
+  byte as it did (230 outputs, and 474 over the development
+  captures).  Same-vendor texts that no capture holds do change, two
+  of them
+  each to what the device prints: `switchport trunk allowed vlan all`
+  (or `1-4094`) comes back from IOS-XE, NX-OS and EOS as a trunk with
+  no allowed line, and an AOS-CX `vlan trunk native <N>` with no
+  allowed line comes back with `vlan trunk allowed all` beside it (as
+  does `vlan trunk allowed 1-4094`).  A third changes to something
+  the source did not print: an NX-OS or EOS port with a trunk line
+  and no `switchport mode trunk`, which was and is written back as a
+  trunk, now has `switchport trunk allowed vlan none` under it (Known
+  limitations).  Of the 1,495 outputs every
+  capture makes onto every codec, 57 change, none of them onto its
+  own; no job changes status and, with no VLAN map given, no job's
+  warnings change.  What else moves with it:
+  - *The VLAN pane.*  A trunk that allowed only VLANs you dropped is
+    written as a trunk of no VLAN — it was every VLAN on four targets
+    — and the job says so: `vlan_rename: interface
+    'GigabitEthernet1/0/1' is a trunk that allowed only VLAN 100
+    which was dropped — the trunk now allows no VLAN`.  A trunk of
+    every VLAN is left as it is by a drop or a renumber: a trunk that
+    said `all` came out as `1-99,101-4094` when VLAN 100 was dropped
+    or given another id.  And it is no reference to any one VLAN: a
+    map entry for a VLAN the config does not have is still reported
+    (`VLAN 555 is present nowhere in the parsed config ... entry
+    ignored`), whatever trunks of every VLAN the config holds.
+  - *The validation report* names
+    `/interfaces/interface/trunk-allowed-vlans` for a trunk that
+    states no list, where the target drops it.  It was not walked:
+    the list was empty.
+  - *The VLAN parent on OPNsense, RouterOS and FortiOS*, which have
+    no trunks and hang a VLAN on one port.  Each looks through the
+    source's trunks for one that carries the VLAN, and a trunk that
+    states no list carries every VLAN now.  A trunk that NAMES the
+    VLAN is looked for before a trunk of every VLAN, so an output is
+    as it was wherever a trunk names the VLAN.  Four committed
+    outputs change, all onto OPNsense.  In three, VLANs that no trunk
+    names move from a parent chosen without looking to the LAG that
+    carries every VLAN (two AOS-CX captures, and the vPC peer link of
+    an NX-OS one).  In the fourth, a Junos QFX, VLANs move from a LAG
+    that says `vlan members all` to the port that names them.
+  - *What it costs.*  A trunk that states no list is 4,094 ids in the
+    tree on those four platforms, which is what a trunk that states
+    `1-4094` already cost: some 35 KB a trunk.  A thousand of them
+    (60 KB of text) are 36 MB of tree where they were 3; ten thousand
+    (0.6 MB) are 364 MB, the figure for ten thousand that state
+    `1-4094`, and take what those take: a second to read, and under
+    four to translate to Junos (the stated list took seven, until
+    the Junos renderer asked the shared reading of "every VLAN").
+    Reading them still grows with their number and no faster.  Such
+    trunks beside as many VLAN interfaces are a product — N trunks in
+    each of M VLANs — as they are with the list stated.  A thousand
+    of each takes one to two seconds onto OPNsense, RouterOS and
+    FortiOS, which is what the stated list took, or less: just over
+    a second onto FortiOS, where it took more than four, because that
+    renderer scored every port again for every VLAN interface and now
+    scores them once a render.  SECURITY.md has both under what a
+    config expands to.
+  New tests render a trunk that says none, nothing and all — in each
+  source's own grammar — onto every codec, and read the output as
+  text with a reader of their own as well as with the target's parser
+  (`tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py`);
+  a stanza met twice and a trunk line with no mode line are among
+  them; and a public codec that makes trunks fails there until it
+  says what a trunk with no list carries on its platform.
+
 - **A trunk that leaves a VLAN out does not get it back on Junos.**
   The Junos renderer wrote any trunk list of 4,000 VLAN ids or more
   as `vlan members all`, which on Junos is every VLAN the switch has
@@ -727,19 +841,92 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
-- **A trunk that allows no VLAN comes out allowing every VLAN on four
-  targets.**  `switchport trunk allowed vlan none`, a list emptied by
-  `remove` or `except`, a Junos trunk with no members, and a trunk
-  whose only VLANs were dropped in the rename modal are all one value
-  in the canonical tree — an empty list — and so is a trunk that
-  states no list, and AOS-CX's own `vlan trunk allowed all`.  AOS-CX
-  writes the empty list as `vlan trunk allowed all`; IOS-XE, EOS and
-  NX-OS write a trunk with no allowed line, which on those platforms
-  is every VLAN.  The job says `completed`.  Older than this release;
-  found while mending the Junos `all` above, pinned by a test, and
-  not mended yet.  The other direction is in the same value: a Cisco
-  trunk that states no list, or an AOS-CX `all`, is a Junos trunk
-  with no members.  Check any trunk whose list is empty or absent.
+- **Dell OS10 cannot be told "every VLAN".**  It has no word for it,
+  its VLAN ids end at 4093, and a VLAN must exist before a port is put
+  in it.  A trunk of every VLAN is written `switchport trunk allowed
+  vlan 1-4094`, as it always was, now under a `! review:` line that
+  says so — and for more trunks than before, since a Cisco, Arista or
+  AOS-CX trunk that states no list is every VLAN (28 trunks of the
+  committed captures, where it was 5).  The line has to be replaced
+  with the VLANs the switch has.  The job does not report it.  Pinned
+  by a test, and not mended yet.  A list that is NOT every VLAN is
+  written as it stands with no such line, and can have the same two
+  faults: `2-4094` names an id OS10 does not have, and a list can
+  name VLANs the output does not declare, which OS10 wants made
+  first.  In the outputs the committed captures make, two lines are
+  `2-4094` and 39 name a VLAN the output has no `interface vlan` for
+  (those two among them).  Older than this release, and unchanged.
+- **Aruba AOS-CX cannot be told "no VLAN".**  A trunk left with no
+  allowed VLAN carries every VLAN there, so a trunk that allows none
+  has no AOS-CX form.  Neither `vlan trunk` line is written, and a
+  `! review:` line in the stanza says what the source said and names
+  its native VLAN: list the VLANs the port is to carry, or shut it
+  down.  The job does not report it.  What IS written is a switched
+  port (`no routing`) with no `vlan` line.  That is taken here to be
+  an access port in VLAN 1, by the platform's default — one untagged
+  VLAN more than the source's none, on a port that is up — but that
+  default is not established here from a vendor's page or from a
+  switch.
+- **Whether a trunk's allowed list holds its native VLAN differs by
+  platform, and the canonical tree does not yet say which.**  On
+  AOS-CX the native VLAN is carried only if the list names it; on
+  OS10 and AOS-S the untagged VLAN is outside the list by grammar.
+  It errs both ways.  *More:* an AOS-CX trunk whose native VLAN is
+  not in its list — untagged traffic dropped, by HPE's own sentence —
+  reaches OS10 and AOS-S carrying that VLAN untagged.  *Fewer:* an
+  OS10 trunk's untagged VLAN is not in the list written for AOS-CX,
+  IOS-XE, NX-OS or EOS; the two Dell peer links named above, which
+  carry an untagged VLAN and no tagged one, are written as trunks
+  that allow none with the native line beside them.  That is safer
+  than the trunk of every VLAN they were given before, and not yet
+  right.  Check the native VLAN of any trunk translated between those
+  families.
+- **A port with a trunk line and no `switchport mode trunk` line is
+  read as a trunk** by the NX-OS and EOS parsers (a `switchport trunk
+  native vlan` line alone, say; on EOS even after `switchport mode
+  access`), though a port of either platform is an access port until
+  it is told otherwise, and EOS keeps a trunk line on an access port
+  without acting on it.  That reading is older than this release and
+  is not mended here.  What is new is that such a port gets nothing
+  from the platform's default: its list is what its lines name, or
+  empty, so it is written as a trunk of NO VLAN (`switchport trunk
+  allowed vlan none`, a Junos trunk with no members) — fewer VLANs
+  than a trunk carries, never more, and still a trunk where the
+  switch has an access port.  A port that says `switchport mode
+  trunk` anywhere under its name is not affected.  No committed
+  capture has one; pinned by a test.
+- **`switchport trunk allowed vlan none` on a port that is not
+  `switchport mode trunk` is dropped**, same vendor included.  On
+  such a port the canonical tree has one value, an empty list, for
+  `none` and for no list at all, and no line is written for it.  An
+  IOS-XE port in a dynamic mode that states `none` comes back as a
+  stanza with no allowed line; if it negotiates a trunk, it carries
+  every VLAN.  A VLAN drop that empties the list kept on such a port
+  writes no line and gives no warning either: the warning is for
+  trunks.  Older than this release; pinned by a test.
+- **A trunk whose list is stated where the parser does not read it is
+  a trunk of every VLAN.**  A Cisco, Arista or AOS-CX port that
+  states the trunk mode and no allowed list is every VLAN, which is
+  right for a port that stands by itself.  Two hand-written shapes
+  put the list elsewhere: a LAG member that says `switchport mode
+  trunk` and leaves the list to its port-channel, and a port that
+  takes its list from `inherit port-profile` (NX-OS) or `source
+  template` (IOS-XE), neither of which is read.  Such a port reaches
+  Junos as `vlan members all`, OS10 as `1-4094` under its review
+  line, and AOS-S tagged in every VLAN the output declares, where
+  release 0.7.7 wrote it with none.  No committed capture has either
+  shape.
+- **A stanza met twice is one interface for its allowed list only.**
+  Its lines are applied to one list, in order.  Everything else is
+  still read a stanza at a time, and each stanza is written: two
+  stanzas that each state a list outright are both written, so a
+  target whose lines add up (Junos `vlan members`, AOS-S `tagged`)
+  carries both lists where the switch carries the second; and an
+  IOS-XE stanza that states no mode is a record with no mode, so an
+  `add` in it is not written on NX-OS, OS10, AOS-CX or AOS-S, which
+  write a list for a trunk alone.  Both are older than this release.
+  Where the parser makes two records of the name, the job warns of
+  duplicate stanzas.
 - **Selecting a profile in the rename modal still does not change
   auto-translated names.**  The translator derives a target name from the
   shape of the source name (Cisco `GigabitEthernet1/0/1` becomes AOS-S

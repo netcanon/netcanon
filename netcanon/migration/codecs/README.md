@@ -283,10 +283,42 @@ for the reference pattern).
    new `netcanon/migration/codecs/<vendor>/` directory.
 2. **Write `parse()`** against synthetic fixtures in `tests/unit/migration/test_<vendor>.py`.
    Start from the canonical fields your vendor actually has; don't try
-   to model everything.
+   to model everything.  **If the platform has trunks, a parser that
+   makes one states its allowed list.**  The canonical tree has no
+   value for "not stated": on a trunk `trunk_allowed_vlans == []` is NO
+   VLAN.  Find what the platform's trunk carries when its config has
+   no allowed list, in the vendor's own documentation; add the codec's
+   row to `TRUNK_THAT_STATES_NO_LIST` (`_helpers.py`, below) and the
+   vendor's sentence to the table in
+   `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md`;
+   and hand what each interface states to a `TrunksByName("<codec>")`
+   (below), which gives every record its list when the config has
+   been read.  Do not resolve "no allowed line" a stanza: a stanza
+   can be met twice, and the list is the interface's.  And tell it
+   only what the config STATES — `says_trunk` for a port that says it
+   is a trunk, not for one the parser takes for a trunk from another
+   line: the platform's default is not given to a guess.
+   Read the platform's own words for all and none as what they say
+   (`all` is `vlan_id_run(1, 4094)`).
 3. **Write `render()`** against the same synthetic fixtures, driving
    toward round-trip stability (`parse(render(parse(raw))) == parse(raw)`
-   at the canonical level).
+   at the canonical level).  **A trunk's list is one of three
+   statements, and each gets the target's own form:** no VLAN (an
+   empty list), every VLAN (every id, 1-4094: `trunk_list_says` /
+   `is_every_vlan`), or the list.  Write no allowed line for the list
+   that is the platform's own default for a trunk — that is what the
+   device prints, and what makes a default trunk come back as it went
+   — and never the platform's word for "everything" for any other
+   list.  Where the platform has no form for one of the three, write
+   a `! review:` line in the stanza that says so; do not pick the
+   nearest thing in silence.
+   `tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py`
+   fails for a public codec that is neither in the table nor named,
+   with its reason, in that module's `NO_ALLOWED_LIST`; and a codec
+   that starts to write a trunk's VLANs fails
+   `test_a_vlan_left_out_stays_out.py` until it is listed there, and
+   then the first module until it has a reader for the new target's
+   text.
 4. **Write `probe()`** using 2-3 discriminating structural markers
    unique to your vendor's wire format.  A probe — and everything
    `parse` does — reads whatever was pasted, so its cost has to fit the
@@ -400,8 +432,10 @@ the policy locally:
   round-trip stability.  Currently called by `arista_eos`,
   `aruba_aoscx`, `aruba_aoss`, `cisco_iosxe_cli`, `cisco_nxos`,
   `dell_os10`, `juniper_junos`.  Helper
-  internally guards the Junos `vlan members all` sentinel
-  (`range(1,4095)`) to avoid synthesising 4094 phantom CanonicalVlans.
+  internally guards the list of every id (`range(1,4095)`: Junos
+  `vlan members all`, AOS-CX `vlan trunk allowed all`, a Cisco or
+  Arista trunk that states no list) to avoid synthesising 4094 phantom
+  CanonicalVlans: such a trunk goes onto the VLANs already declared.
   Left to itself it synthesises a VLAN for every VID a switchport
   mentions, so every caller that prunes hands it the set it keeps:
   `project_switchport_to_vlan(intent, keep=<the set below>)`.  With
@@ -509,6 +543,63 @@ the policy locally:
   new int an id as well — a config can state a wide range on every
   port it has.  Used by `_parse_vlan_list` and `merge_trunk_allowed`
   here and by the Arista and Junos parsers' own expanders.
+
+* **`netcanon/migration/codecs/_helpers.py::TRUNK_THAT_STATES_NO_LIST`**
+  — what a trunk carries when its config states NO allowed list, by
+  codec: every VLAN on `arista_eos`, `aruba_aoscx`, `cisco_iosxe_cli`
+  and `cisco_nxos`; none on `dell_os10` and `juniper_junos`.  The ONE
+  place a platform's default is written; the vendors' sentences
+  behind each row are in
+  `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md`.
+  On a trunk a list means what it says — `[]` is no VLAN, every id is
+  every VLAN — so "not stated" is resolved where the platform is
+  known, by the parser, and nowhere else.  Its readers, all in
+  `_helpers.py`:
+  * **`TrunksByName(codec)`** — what the interfaces of one config
+    state about their trunks, kept by the interface's NAME as the
+    config writes it: each allowed line (`allowed_line`, or
+    `allowed_is` where a line states the list outright), and that the
+    port says it is a trunk (`mode_line` / `says_trunk`).  The parser
+    hands it every record it makes (`made`) and calls `settle()` when
+    the config has been read; each record then has its interface's
+    list.  The key a stanza parser gives is `TrunksByName.key(<header
+    line>)`, NOT the name it gives the record: two parsers read
+    `interface port-channel 1` and `interface port-channel 2` as the
+    one name `port-channel`, and those are two interfaces.  A stanza met
+    twice is one interface; a trunk that states no list has the
+    platform's only where the interface says it is a trunk, and a
+    trunk the parser inferred from a trunk line has nothing of it.
+    Callers: `grep -rn "TrunksByName(" netcanon/migration/codecs`
+    (the five parsers of the table with the `switchport` or `vlan
+    trunk` grammar; `juniper_junos` keeps its members by name itself).
+  * **`unstated_trunk_list(codec)`** — the list of a trunk with no
+    allowed line: every id or none, a new list each call.  Asked by
+    `TrunksByName` and by the Junos parser.
+  * **`merge_trunk_allowed(existing, remainder, unstated=...)`** — one
+    `switchport trunk allowed vlan` line applied to the interface's
+    list.  `existing=None` while the interface has stated no line,
+    and the platform's list as `unstated`: `add` and `remove` then
+    start from it, as they do on the device.  `TrunksByName` calls
+    it; a parser does not need to.
+  * **`trunk_list_says(allowed)`** — `TRUNK_NONE`, `TRUNK_ALL` or
+    `TRUNK_SOME`; it asks
+    **`canonical/transforms.py::is_every_vlan(allowed)`**, the one
+    reading of "every VLAN" that a renderer or a pass asks: the VLAN
+    rename pass, the Junos renderer, and the renderers that choose
+    one parent for a VLAN (`opnsense`, `mikrotik_routeros`,
+    `fortigate_cli`) use it as well.  (One reader beside it is not
+    the same question: `_every_id` in the same module, for
+    `project_switchport_to_vlan`, tells TWO lists apart that are not
+    expanded into a VLAN record an id — every id, and every id but 1
+    — and takes neither for a list that also holds a number that is
+    no VLAN id, so that the parse still refuses it.)
+  * **`switchport_trunk_allowed_value(codec, allowed, coalesce=...)`**
+    — what follows `switchport trunk allowed vlan` on a trunk, or
+    `None` for no line.  Used by the renderers of `arista_eos`,
+    `cisco_iosxe_cli`, `cisco_nxos` and `dell_os10`, which ask the
+    table what "no line" means on their platform.  (`aruba_aoscx` and
+    `juniper_junos` have grammars of their own and call
+    `trunk_list_says` / `is_every_vlan`.)
 
 * **LAG-name helpers (location note)** — two LAG-name helpers exist
   but are NOT shared cross-codec utilities and do NOT live in

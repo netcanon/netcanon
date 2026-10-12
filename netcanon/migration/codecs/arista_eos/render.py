@@ -52,6 +52,7 @@ from ..._usm_keys import (
     user_usm_kind,
 )
 from ...canonical.intent import CanonicalIntent
+from .._helpers import switchport_trunk_allowed_value
 from ..base import RenderError
 
 # Arista-local emit-form vocabulary: maps the algorithm tokens
@@ -661,8 +662,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append(
                     f"   switchport trunk native vlan {iface.trunk_native_vlan}"
                 )
-            if iface.trunk_allowed_vlans:
-                vlist = ",".join(str(v) for v in iface.trunk_allowed_vlans)
+            # The list means what it says.  No VLAN is ``none``.
+            # Every VLAN is no line at all: it is the default, and
+            # EOS's own form for it is the absence of the statement.
+            # Any other list is written as it stands.
+            vlist = switchport_trunk_allowed_value(
+                "arista_eos", iface.trunk_allowed_vlans, coalesce=False,
+            )
+            if vlist is not None:
                 out.append(
                     f"   switchport trunk allowed vlan {vlist}"
                 )

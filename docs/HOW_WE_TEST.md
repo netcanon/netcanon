@@ -181,6 +181,29 @@ hand beside it.  And it runs twice: without devices declared, where
 a port's hardware identity must stand still, and with the device
 declared on both sides, where it must follow.
 
+**What a default can spell is read as text.**  Most checks of an
+output read it back with the target's own parser.  That is blind to
+one thing: a parser reads its own default.  A trunk with no allowed
+line is every VLAN on some platforms and none on others, and for a
+long time the tree had one value for both — so a trunk that allowed no
+VLAN was written as a trunk with no allowed line, which the target's
+parser read back as the same value the source had, and every wrong
+output agreed with itself.  `test_a_trunk_says_none_nothing_or_all.py`
+therefore reads the output twice: with the target's parser, and as
+TEXT, with a reader written in the test for each target's grammar
+(a trunk stanza with no allowed line is every VLAN on some targets
+and none on another; the ids spelled out are not the platform's form
+for every VLAN).  Every public codec is a target; the sources say
+none, nothing and all in their own grammar; and what each statement
+means is written out in the test by hand and compared with the table
+the parsers read, so that a correction is made in both places on
+purpose.  The gaps the code does not close are named sets in the
+module, compared for equality with what is measured: the change that
+closes one fails there until its pin is taken out.  The readers are
+handed each form they must tell apart, and a new codec fails the
+module until it says what a trunk with no list carries on its
+platform.
+
 **What it costs to read a config is searched for, not listed.**  A
 config is whatever was pasted, and code can take time that grows with
 the square of a run in it.  `test_untrusted_text_cost.py` keeps no list
