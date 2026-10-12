@@ -1274,23 +1274,43 @@ class TestWhatThePlanSaysBeyondPairs:
     def test_a_logical_name_on_a_port_the_target_lacks_needs_a_decision(
         self, page: Page, live_server_url: str,
     ) -> None:
-        """A FortiGate's stock aggregate is given a port-shaped name
-        (``fortilink1``) the declared FortiGate does not have.  It is
-        kept, said, and asks for a decision."""
+        """A FortiGate's stock aggregate is read as a port, and onto a
+        QFX5120 it is given a port-shaped name (``ge-0/0/1``) that
+        switch does not have.  It is kept, said, and asks for a
+        decision."""
         mp = _translate(
-            page, live_server_url, "fortigate_cli", "fortigate_cli",
+            page, live_server_url, "fortigate_cli", "juniper_junos",
             _FORTIGATE_WITH_AN_AGGREGATE,
         )
-        _declare(page, "100E", "100E")
+        _declare(page, "100E", "QFX5120-48Y")
         _apply(page)
         expect(_plan(page)).to_have_attribute("data-state", "warn")
         expect(page.locator(_tid("migrate-rename-plan-landed"))).to_contain_text(
             "1 on a port the target does not have"
         )
         expect(page.locator(_tid("migrate-rename-plan-state-fortilink"))).to_contain_text(
-            "given the port name fortilink1, which the target device does not have"
+            "given the port name ge-0/0/1, which the target device does not have"
         )
         expect(page.locator(_tid("migrate-rename-row-fortilink"))).to_have_class(
             re.compile(r"\bneeds-decision\b")
         )
         expect(mp.status_summary).to_contain_text("partial")
+
+    def test_between_two_fortigates_it_stays(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """From a FortiGate to a FortiGate no name is read at all:
+        the aggregate stays ``fortilink``, and nothing asks for a
+        decision.  (It was read as a port there too, and written
+        ``fortilink1``.)"""
+        mp = _translate(
+            page, live_server_url, "fortigate_cli", "fortigate_cli",
+            _FORTIGATE_WITH_AN_AGGREGATE,
+        )
+        _declare(page, "100E", "100E")
+        _apply(page)
+        expect(_plan(page)).to_have_attribute("data-state", "ok")
+        expect(page.locator(_tid("migrate-rename-plan-landed"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-plan-pending"))).to_have_count(0)
+        expect(mp.output).to_contain_text('edit "fortilink"')
+        expect(mp.output).not_to_contain_text("fortilink1")

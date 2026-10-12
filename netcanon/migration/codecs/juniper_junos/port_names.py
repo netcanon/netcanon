@@ -26,6 +26,19 @@ Strategy:
     ``ae<N>`` → kind=``lag``.  ``lo0`` → kind=``loopback``.
     ``irb.<N>`` → kind=``svi`` with the trailing integer as index.
 
+    A unit is read and not kept: ``ge-0/0/1.54`` classifies exactly
+    as ``ge-0/0/1`` does (a ``PortIdentity`` has no place for a unit)
+    and the formatter writes none; it also writes ``em<N>`` for every
+    management prefix.  So ``format(classify(name))`` is not the
+    identity on Junos's own names, and the translator
+    (``canonical.port_names.translate_port_names``) does not put them
+    to this pair: between two Junos configs a name nobody mapped
+    stands as written, and across vendors a unit of a port or of an
+    ``ae`` goes where its port goes, with its unit.  What still
+    reaches the classifier with a unit on it is a reference to unit 0
+    (``lo0.0``, ``ge-0/0/1.0`` -- the interface itself on every other
+    platform) and a unit of a loopback.
+
     Cross-vendor mesh limitations: Junos's FPC/PIC/port isn't
     structurally equivalent to Cisco's stack/module/port or Arista's
     flat port.  The identity bridge stores all three indices

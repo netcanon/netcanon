@@ -1013,6 +1013,142 @@ class TestEveryPlacedPortIsFoundByItsHardware:
 
 
 # ---------------------------------------------------------------------------
+# Names that are no hardware port, and a unit that moved with no tag
+# ---------------------------------------------------------------------------
+
+_PLAN_PATHS = [
+    "/plan", "/plan/ports", "/plan/vlans", "/plan/local_users",
+    "/plan/snmp", "/plan/snmpv3", "/render",
+]
+
+#: An AOS-S LAG, named ``trk1`` where it is defined and ``Trk1`` in a
+#: VLAN's list.
+_AOSS_WITH_A_LAG = """; JL260A Configuration Editor; Created on release #WC.16.07.0002
+hostname "sw"
+trunk 51-52 trk1 lacp
+vlan 1
+   name "DEFAULT_VLAN"
+   untagged 1-50
+   tagged Trk1
+   exit
+"""
+
+#: An AOS-CX sub-interface.  The config states its tag; the AOS-CX
+#: parser reads none.
+_AOSCX_UNIT = "\n".join([
+    "!Version ArubaOS-CX FL.10.10.1010", "hostname r1", "!",
+    "interface 1/1/1", "    no shutdown", "    routing", "    description PARENT",
+    "interface 1/1/1.54", "    no shutdown", "    encapsulation dot1q 300",
+    "    ip address 10.54.0.1/24",
+    "interface 1/1/2", "    no shutdown", "    routing", "    ip address 10.2.0.1/24", "",
+])
+
+
+class TestNamesThatAreNoHardwarePort:
+    """``source_other_names`` beside ``source_ports``.  A job from a
+    vendor to itself renames no LAG and warns about none, so nothing
+    else in its answer says the config has one."""
+
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    @pytest.mark.parametrize("declared", [False, True], ids=["no devices", "devices declared"])
+    def test_every_plan_endpoint_returns_them(
+        self, client: TestClient, path: str, declared: bool,
+    ) -> None:
+        body = {"source": "aruba_aoss", "target": "aruba_aoss", "raw_text": _AOSS_WITH_A_LAG}
+        if declared:
+            body |= {"source_deployment": SOURCE_2930F, "target_deployment": TARGET_2930M}
+        job = client.post(f"/api/v1/migration{path}", json=body).json()
+        assert job["source_other_names"] == ["trk1"], path
+        assert "trk1" not in job["source_ports"] and len(job["source_ports"]) == 52, path
+        assert "trk1" not in job["port_renames"], path
+
+    @pytest.mark.parametrize("path", ["/plan", "/plan/ports", "/render"])
+    def test_an_entry_keyed_by_one_renames_it(self, client: TestClient, path: str) -> None:
+        """What a client lists the names for."""
+        job = client.post(f"/api/v1/migration{path}", json={
+            "source": "aruba_aoss", "target": "aruba_aoss", "raw_text": _AOSS_WITH_A_LAG,
+            "port_rename_map": {"trk1": "trk7"},
+        }).json()
+        assert job["port_renames"] == {"trk1": "trk7"}, path
+        assert "trunk 51-52 trk7 lacp" in job["rendered"], path
+        assert job["source_other_names"] == ["trk1"], path
+
+
+class TestAUnitThatMovedWithNoTag:
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_it_is_on_the_plan_on_every_endpoint(
+        self, client: TestClient, path: str,
+    ) -> None:
+        resp = client.post(f"/api/v1/migration{path}", json={
+            "source": "aruba_aoscx", "target": "arista_eos", "raw_text": _AOSCX_UNIT,
+            "source_profile": "aruba_aoscx/6300M-48G-PoE4-SFP56",
+            "target_profile": "arista_eos/DCS-7050SX-64",
+        })
+        job = resp.json()
+        plan = job["port_mapping_plan"]
+        assert plan["untagged_units"] == {"1/1/1.54": "Ethernet1.54"}, path
+        assert plan["sub_interfaces"] == {} and plan["unresolved_ports"] == ["1/1/1.54"], path
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
+        assert [w for w in job["warnings"] if "moved with their port" in w], path
+
+    def test_without_devices_one_warning_says_it(self, client: TestClient) -> None:
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "aruba_aoscx", "target": "arista_eos", "raw_text": _AOSCX_UNIT,
+        }).json()
+        assert job["port_mapping_plan"] is None
+        (line,) = [w for w in job["warnings"] if "802.1Q" in w]
+        assert line.startswith("port_rename: '1/1/1.54' went with its port to 'Ethernet1.54'")
+
+
+#: An IOS-XE unit typed in another letter case than its port.
+_IOS_UNIT_IN_ANOTHER_CASE = "\n".join([
+    "!", "version 17.9", "hostname r1", "!",
+    "interface GigabitEthernet1/0/1", " description PARENT", "!",
+    "interface gigabitethernet1/0/1.54", " encapsulation dot1Q 54",
+    " ip address 10.54.0.1 255.255.255.0", "!", "end", "",
+])
+
+
+class TestAUnitThePlanDoesNotVouchFor:
+    """It moved with its port, and the plan says so in a field and
+    in a line -- on every endpoint that runs a job."""
+
+    _BODY = {
+        "source": "cisco_iosxe_cli", "target": "arista_eos",
+        "raw_text": _IOS_UNIT_IN_ANOTHER_CASE,
+        "source_profile": "cisco_iosxe/C9300-24P",
+        "target_profile": "arista_eos/DCS-7050SX-64",
+    }
+
+    @pytest.mark.parametrize("path", _PLAN_PATHS)
+    def test_it_is_on_the_plan_on_every_endpoint(
+        self, client: TestClient, path: str,
+    ) -> None:
+        resp = client.post(f"/api/v1/migration{path}", json=self._BODY)
+        job = resp.json()
+        plan = job["port_mapping_plan"]
+        unit = "gigabitethernet1/0/1.54"
+        assert plan["unvouched_units"] == {unit: "Ethernet1.54"}, path
+        assert plan["untagged_units"] == {} and plan["sub_interfaces"] == {}, path
+        assert plan["unresolved_ports"] == [unit], path
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
+        (line,) = [w for w in job["warnings"] if "moved with their port" in w]
+        assert "the plan does not vouch for where they went" in line, path
+
+    def test_naming_it_ends_it(self, client: TestClient) -> None:
+        """The line says to name the unit in the port map.  Doing so
+        leaves nothing to decide and raises no other line."""
+        resp = client.post("/api/v1/migration/plan", json={
+            **self._BODY,
+            "port_rename_map": {"gigabitethernet1/0/1.54": "Ethernet1.54"},
+        })
+        plan = resp.json()["port_mapping_plan"]
+        assert plan["unvouched_units"] == {} and plan["unresolved_ports"] == []
+        assert plan["off_target"] == []
+        assert resp.headers["X-Netcanon-Job-Status"] == "completed"
+
+
+# ---------------------------------------------------------------------------
 # A stack on both sides
 # ---------------------------------------------------------------------------
 

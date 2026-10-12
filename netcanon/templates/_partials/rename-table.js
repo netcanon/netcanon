@@ -1,6 +1,7 @@
   /* ── Rename-modal mapping table renderer ─────────────────────────────
    * Builds the per-kind expandable sections from _lastJob.port_renames
-   * + _lastJob.warnings + _lastJob.source_ports, with user overrides
+   * + _lastJob.warnings + _lastJob.source_ports +
+   * _lastJob.source_other_names, with user overrides
    * layered on top (via _renameUserMap).  When the job carries a port
    * plan (both devices were declared), the plan's rows come first:
    * every pairing with the position that decided it, and every name
@@ -219,6 +220,7 @@
     var knownSources = new Set(Object.keys(applied));
     ((_lastJob && _lastJob.port_drops) || []).forEach(function(n) { knownSources.add(n); });
     ((_lastJob && _lastJob.source_ports) || []).forEach(function(n) { knownSources.add(n); });
+    ((_lastJob && _lastJob.source_other_names) || []).forEach(function(n) { knownSources.add(n); });
     Object.keys(planMeta).forEach(function(n) { knownSources.add(n); });
     var targetNames = new Set();
     Object.keys(applied).forEach(function(src) {
@@ -258,11 +260,26 @@
 
     // Every hardware port the config uses that nothing above gave a
     // row: its name goes through unchanged.  A same-vendor
-    // translation usually renames nothing, and the table then listed
-    // only the names a warning quoted -- or none at all.
+    // translation renames nothing unless an entry or a declared
+    // device says so, and the table then listed only the names a
+    // warning quoted -- or none at all.
     ((_lastJob && _lastJob.source_ports) || []).forEach(function(src) {
       if (rowOf[src]) return;
       addRow(src, _guessKind(src), '', '').plain = true;
+    });
+
+    // And every other name the config uses where a port name goes
+    // -- a LAG, a VLAN interface, a loopback, a tunnel -- that
+    // nothing above gave a row.  Between two configs of one vendor
+    // no such name is renamed and no warning quotes one, so the
+    // table had no row for it, and it could be renamed or dropped
+    // only by a request written by hand.  They are not ports of any
+    // device and what kind each is cannot be told from its name
+    // (``ae0``, ``fortilink``), so they have a section of their own,
+    // after the others.
+    ((_lastJob && _lastJob.source_other_names) || []).forEach(function(src) {
+      if (rowOf[src]) return;
+      addRow(src, 'other', '', '').plain = true;
     });
 
     // Without a plan the rows are in the order the job named them,

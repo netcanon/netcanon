@@ -181,6 +181,34 @@ hand beside it.  And it runs twice: without devices declared, where
 a port's hardware identity must stand still, and with the device
 declared on both sides, where it must follow.
 
+**A name nobody mapped is compared with an output the translator
+had no hand in.**  Both experiments above compare one output of the
+translator with another — a moved run with an unmoved one — so a
+name the translator changes in BOTH cancels out, and the unmoved run
+pins every port to its own name, which is an entry and keeps the
+translator's own guess from running at all.  That is how a job from
+a vendor to itself could rename and drop ports, and put a
+sub-interface on its parent, past every guard.
+`test_units_follow_their_port.py` reads the rendered output of jobs
+run with an empty port map, as the page and `POST /plan` run them.
+Between two configs of one codec — every committed capture and
+kitchen sink — the output must be the bare pipeline's (parse and
+render, no translator), as text and parsed again.  Across vendors —
+each grammar that names a sub-interface `<port>.<unit>`, onto every
+codec — each sub-interface is found in the output by its address,
+and has to be on an interface of its own, named after what its port
+became; where its 802.1Q tag cannot be read back, the job must not
+say `completed`.  One pair is pinned as it is today: units dropped
+with a port the target has no name for, in a job that still says
+`completed` — a job that drops ports says so in its lists and not
+in its status, with or without units, and that is a change of its
+own.  So is a tag the source parser does not read (AOS-CX, OS10)
+between two configs of that vendor: lost there as on every path,
+with nothing in the job to say so, and pinned as it is so that the
+documents which say so stay true.  The same module keeps the list of the codecs whose own
+names do not come back from their classifier and formatter, which
+is the reason a same-vendor job no longer asks them.
+
 **What it costs to read a config is searched for, not listed.**  A
 config is whatever was pasted, and code can take time that grows with
 the square of a run in it.  `test_untrusted_text_cost.py` keeps no list

@@ -155,6 +155,16 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
 
 ## Common gotchas
 
+- **Renaming or dropping a VLAN interface in the rename modal is
+  not shown by the output.**  A translation from RouterOS to
+  RouterOS lists each under *Other names in the config*.  RouterOS
+  output writes a VLAN interface from the VLAN itself: renamed, the
+  interface is written under the new name — with the number in that
+  name as its `vlan-id` — and the old one again; dropped, it comes
+  back; and one with a name of its own (`clustervlan100`) can come
+  back as `vlan<id>`.  The job records the entry and says nothing.
+  Edit the output.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 - **Renamed ports** — operators commonly rename `ether2` to
   meaningful names like "Access Point" or "PROD - PVE3"; the
   parser captures both `name` and `default-name`, and the renderer

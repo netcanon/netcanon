@@ -73,6 +73,159 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A translation changed port names nobody had mapped, and put a
+  sub-interface on its parent port or left it behind.**  Every job
+  runs the port translator on each name no rename-map entry decides
+  (an absent `port_rename_map` is read as `{}`): the source codec
+  classifies the name and the target codec writes what it was told.
+
+  *Between two configs of one vendor* that round trip is not the
+  identity on several codecs' own names (AOS-S, IOS-XE CLI, OS10,
+  FortiOS, Junos and VyOS, over the committed inputs), so a job
+  that said `completed`
+  came back with names changed and ports missing.  Of the 112
+  committed captures and kitchen sinks, 20 did: Junos `fxp0` and
+  `me0` as `em0`; FortiOS `dmz`, `modem` and `fortilink` as `dmz1`,
+  `modem1` and `fortilink1`; IOS `Ethernet0/0` as `FastEthernet0/0`;
+  a Catalyst's `Mgmt-vrf` port and every Dell OS10 breakout lane
+  (`ethernet1/1/1:1`) **dropped**; a Junos tagged unit `ge-0/0/1.54`
+  written onto `ge-0/0/1` — `unit 54` and its `vlan-id` gone, its
+  address on unit 0 — and every per-instance loopback unit `lo0.N`
+  onto `lo0`, one unit that several routing instances then claimed;
+  both `vif`s of a VyOS port gone with their addresses.  Now a name
+  nobody mapped **stands**: with no entry, the output of such a job
+  is the output of parse and render alone.
+
+  *Across vendors* no classifier keeps a unit.  A Junos or VyOS
+  sub-interface was written under its PORT's name (`interface
+  Ethernet1` twice, the tag on the second), and an IOS-XE, EOS, NX-OS
+  or IOS-XR one stayed in the other vendor's config under its own
+  (`set interfaces GigabitEthernet0/0/1.54 unit 0 ...`).  Now a
+  sub-interface **goes where its port goes, with its unit**:
+  `ge-0/0/1.54` is `Ethernet1.54` with its `encapsulation dot1q`,
+  and `GigabitEthernet0/0/1.54` is `ge-0/0/1` `unit 54` with its
+  `vlan-id`.  It is dropped with a port that is dropped (listed in
+  `port_drops`, with a warning each), and it follows an entry of a
+  rename map that moves or drops its port — it stayed on the port's
+  old name, or brought a dropped port back.  That holds for a unit
+  typed in another letter case than its port (`interface
+  gigabitethernet0/0/1.54` under `interface GigabitEthernet0/0/1`)
+  where the source platform's names have no case.  With both devices
+  declared it follows the port it was PAIRED with across vendors too,
+  and `port_mapping_plan.sub_interfaces` says where each went; there
+  the units of a port were given one name between them and all but
+  one dropped.
+
+  A unit's 802.1Q tag is not in its name: it travels in the parsed
+  tree.  A unit that went with its port and has none there — the
+  AOS-CX and OS10 parsers read no tag for a sub-interface, an IOS
+  stanza pasted without its indentation is read as empty, and a
+  config may state none — is written as an interface with no VLAN,
+  on a target that would have carried the tag, and there is no tag
+  for the validation report to list.  The job says it: one warning
+  for each such unit (`... went with its port to 'Ethernet1.54'
+  with no 802.1Q tag ...`), and with both devices declared the unit
+  is recorded in `port_mapping_plan.untagged_units` instead of
+  `sub_interfaces`, stays among the names that need a decision, and
+  the job is `partial` until an entry names it.
+
+  With both devices declared two more kinds of unit go where their
+  port goes and are not counted as having followed: one typed in
+  another letter case than its port, and a unit of a unit
+  (`ge-0/0/1.54.2`).  The plan takes a name for a unit of a port
+  only where the name spells the port as the config does.  It
+  records each in `port_mapping_plan.unvouched_units` with the name
+  it has in the output, says in a line that it moved with its port
+  and why the plan does not vouch for it, and holds the job
+  `partial` until an entry names it.  In the rename modal the row
+  of such a unit, and of one that went without a tag, says the
+  same, and a row an entry of yours decided says that.  An entry
+  that names a sub-interface onto a unit of a port the target lists
+  (`Ethernet1.54`) is not reported as a target the device does not
+  list: that is where the plan's own line says to put it.
+
+  **Re-check a config translated with 0.7.7 or earlier**, and
+  translate it again, if either holds:
+
+  - source and target were the same vendor.  Compare the interface
+    names of the output with the input's.  Each difference above was
+    listed in the job's `port_renames` or `port_drops`, which a
+    client that read only `status` did not see;
+  - the source had sub-interfaces (`<port>.<unit>`, a Junos `unit N`
+    other than 0, a VyOS `vif`) and the target was another vendor.
+    Look for two stanzas of one interface, a missing `encapsulation
+    dot1q` or `vlan-id`, and an interface under the source vendor's
+    name.
+
+  What is as it was.  A unit of a **loopback** across vendors is
+  still put on the target's loopback beside `lo0`, with the warning
+  that two names share it.  Three kinds of unit are not sent after
+  their port across vendors and are left to the source classifier,
+  as they were — which leaves a name it does not know under its
+  source name, with a warning: a unit of a **management port** —
+  one its name says is one (EOS `Management1.5`), and one its parser
+  marks from context (the Catalyst port in `Mgmt-vrf`); a unit of a
+  port the source classifier does not know (a channelized Junos
+  `xe-0/0/6:2.10`); and an interface **numbered 0** (a hand-written
+  `interface Gi0/0/1.0`, or `.00`), which would be the port's own
+  unit 0 on Junos.  Nor is a name that ends in more than ten
+  digits sent after its port across vendors — no grammar read here
+  numbers a sub-interface that high, and FortiOS and VyOS make a
+  VLAN id of the number — so it is left as it was, like any name
+  the classifier does not know.  A target with no routed sub-interface (AOS-S, AOS-CX,
+  OS10, RouterOS, OPNsense, IOS-XE over NETCONF) gets an interface
+  named `<port>.<unit>` without the tag; where the parsed source
+  holds a tag the validation report lists it and the job is
+  `partial`.  A job whose ports the translator drops still
+  says `completed`; a unit now goes with such a port where it stayed
+  behind (NX-OS sub-interfaces onto AOS-S, which has no name for
+  `Ethernet1/1`).  And Junos `vlan-tagging` on the parent port is
+  read and written on no path.
+
+  One more thing to check on an output with sub-interfaces.  VyOS
+  and FortiOS take the VLAN id from the NUMBER in the interface's
+  name (`vif <unit>`, `set vlanid <unit>`), so a source unit whose
+  number is not its tag — IOS `GigabitEthernet0/0/1.54` with
+  `encapsulation dot1Q 300` — comes out tagged 54; both list the tag
+  as unsupported, so the job is `partial`.  From a source whose
+  parser reads no tag the same number is written, and it is the
+  warning above that says so.
+
+  **A job now lists the names that are no hardware port.**  A LAG, a
+  VLAN interface, a loopback or a tunnel had a row in the rename
+  modal only when the job renamed it — between two configs of one
+  vendor that was a rename in letter case (`trk1` to `Trk1`) — or a
+  "could not classify" warning quoted it.  A job from a vendor to
+  itself does neither now, so such a name would have had no row
+  and could have been renamed only through the API.  Every job
+  carries `source_other_names` beside `source_ports`: the names the
+  port translator rewrites that are not hardware ports.  The modal
+  draws a row for each that nothing else gave one, in a section of
+  its own ("Other names in the config") after the ports, with the
+  field and the drop / keep link every row has; a config that is
+  one loopback opens the modal.
+
+  No codec is touched: every parsed tree and every bare render of
+  the committed fixtures is unchanged, and so are the cross-mesh
+  results.  Of 1,443 plan jobs over those fixtures (each onto each
+  codec, an empty map) 126 differ in a name or the output and 36
+  more in their warnings alone; of 2,522 replayed on the real
+  captures with port maps built from each capture's own names (its
+  ports rotated, two ports given names of the operator's own, one
+  port dropped) 183 and 65.  In every one the code as it was, given
+  one explicit entry per name that ended elsewhere, produces the
+  same names and the same output, and every such name is a unit or
+  a same-vendor name nobody mapped; no job's status changes, and
+  the four demo scenarios are byte-identical.  (Every job also
+  carries the new `source_other_names`, which is left out of that
+  comparison and checked on each for what it should hold.)  New:
+  `tests/unit/migration/test_units_follow_their_port.py`, which
+  compares the translator's output with something it had no hand in
+  — the bare pipeline's output for every committed input, and each
+  sub-interface found in the output by its address, from each of
+  the six grammars that name one onto every codec.  The guards that
+  were there compared one output of the translator with another.
+
 - **An AOS-S LAG is one name, not two.**  The device writes a LAG
   `trk1` where it is defined and `Trk1` where a VLAN lists it or an
   `interface Trk1` stanza configures it, and both spellings were kept.
@@ -122,9 +275,11 @@ timestamp if your timezone matters for an audit.
   are reported, all of them (`multiple source ports map to 'Trk1'
   (also written 'trk1': one port on aruba_aoss)`), and written as
   one stanza.  They were grouped by the exact
-  string: an entry that named the LAG as the config spells it
-  (`{"5": "trk1"}`), where the translator writes it `Trk1`, put a
-  port on the LAG in a job that said nothing.
+  string: an entry that named the LAG as the device prints it in a
+  VLAN's list (`{"5": "Trk1"}`), where the config's own name for it
+  is `trk1` — or, from another vendor, as `trk1`, where the AOS-S
+  formatter writes `Trk1` — put a port on the LAG in a job that said
+  nothing.
 
 - **Target profiles that named ports the device does not have.**  A port
   id picked from a target profile in the rename modal is written verbatim
@@ -351,11 +506,12 @@ timestamp if your timezone matters for an audit.
     each side leaves the table and the Apply button where they were.
   - A target device belongs to the target codec it was chosen for; a
     translation to another codec starts with none.
-  - A same-vendor translation (Aruba to Aruba, say) usually renames no
-    port by itself, and the table listed only the names a rename or a
+  - A same-vendor translation (Aruba to Aruba, say) renames no name
+    by itself, and the table listed only the names a rename or a
     warning mentioned — none at all for a clean config, which read
     "No port names recognised in the translated output".  It now also
-    lists every hardware port the config uses.
+    lists every hardware port the config uses, and after them the
+    names that are no port (a LAG, a VLAN interface, a loopback).
 - **Model-to-model port mapping (API).**  Declare the device a config
   came from and the device it is going to, and ports are paired by
   *position* instead of being guessed from the shape of their names.  A
@@ -682,15 +838,50 @@ timestamp if your timezone matters for an audit.
   ports of the declared source", and the job is `partial` although the
   model is right.  Not yet distinguishable from a wrongly declared
   model.
-- **Across vendors a sub-interface does not follow its parent port.**
-  With devices declared, `GigabitEthernet1/0/1` moves by position and
-  `GigabitEthernet1/0/1.100` is reported and left to the ordinary
-  translation — which leaves a name it does not recognise under its
-  old name (IOS-XE) and drops one it would fold into its port
-  (Junos).  Some firewall pseudo-interfaces the source codec does not
-  classify are reported as off-inventory in the same way, and a
+- **Some sub-interfaces do not follow their port across vendors.**
+  A unit of a management port, a unit of a port the source codec's
+  classifier does not know (a channelized Junos `xe-0/0/6:2.10`), a
+  unit of a loopback and an interface numbered 0 are left to the
+  ordinary translation, which leaves a name it does not recognise
+  under its source name and puts a Junos unit of a loopback or of a
+  management port on that port itself.  With devices declared a
+  unit that stayed behind is reported ("did NOT move with their
+  port"), and one that would have landed on a port is dropped and
+  reported; either way the job is `partial`.  A loopback's unit is
+  said only in the warning that two names share the loopback.  A unit
+  that did follow is written without an 802.1Q tag where none was
+  read for it — every AOS-CX and OS10 sub-interface, whose parsers
+  read none: a warning says so, and with devices declared it is held
+  for a decision (`untagged_units`).  Between two AOS-CX configs,
+  or two OS10 configs, the same tag is lost — as it is on every
+  path, and as it was — and there nothing in the job says so.  A
+  target with no routed
+  sub-interface gets an interface named `<port>.<unit>`.  Some
+  firewall pseudo-interfaces the source codec does not
+  classify are reported as off-inventory, and onto another vendor a
   FortiGate's stock `fortilink` aggregate is reported as displaced or
   as a logical name on a port the target does not list.
+- **A rename or a drop entered on a row of "Other names in the
+  config" is recorded by the job and not always shown by the
+  output.**  The job lists the entry in `port_renames` or
+  `port_drops` and warns about nothing; the output shows it only
+  where the target writes that interface by that name.  With every
+  such name of the committed inputs renamed and dropped in turn,
+  each config onto its own vendor, the output showed both for 343
+  of 497.  Not shown: a VLAN interface on AOS-S (the output does
+  not change by a byte: AOS-S writes a VLAN's address in the `vlan`
+  stanza, by its id); a VLAN interface on OS10, EOS and RouterOS,
+  and some on IOS-XE CLI (the target writes one from the VLAN
+  itself, so a renamed one is written under both names and a
+  dropped one comes back; on RouterOS the renamed one also takes
+  its VLAN id from its new name); a dropped loopback that a VXLAN
+  source line still names (EOS, NX-OS); and the bare Junos `irb`.
+  This is not new to the API, which answered the same request the
+  same way before; the rows are new.  Read the output after such an
+  entry.  To move or remove a VLAN interface, renumber or drop its
+  VLAN (the VLANs pane, `vlan_rename_map`), which takes the
+  interface with it on EOS, IOS-XE and AOS-S; make any other such
+  change in the output by hand.
 - **A next hop that is not exactly an interface's name is not
   followed.**  A RouterOS route with several gateways
   (`gateway=ether1,ether2`) or a routing-table suffix, and — across
@@ -737,9 +928,7 @@ timestamp if your timezone matters for an audit.
 - **Only port names are translated between models.**  An AOS-S config
   that removes ports from VLAN 1 with `no untagged` does not get that
   line back, so on a factory-default target those ports stay untagged
-  members of VLAN 1 unless another VLAN claims them.  A same-vendor
-  AOS-S run also warns `could not classify port name 'Vlan<N>'` for
-  each routed VLAN; the name is left as it is, which is correct.
+  members of VLAN 1 unless another VLAN claims them.
 - **PoE on the 2930M Smart Rate module (JL081A) is not modelled.**  Its
   ports are powered in a PoE chassis and not in a JL319A / JL321A; they
   are listed without PoE, and the inventory says so.

@@ -13,7 +13,7 @@ by concern and listed alphabetically within each section.
 - **Capture-first transform** — load-bearing pattern in
   `run_plan_with_overrides` that populates `source_vlans`,
   `source_local_users`, `source_snmp_community`, `source_snmpv3_users`,
-  `source_ports` and `source_hostname` BEFORE any rename engages, so UI panes can
+  `source_ports`, `source_other_names` and `source_hostname` BEFORE any rename engages, so UI panes can
   enumerate source entities even when the user has not yet supplied a
   rename map.
 - **Frozen pipeline signatures** — Hard Rule. The parameter shapes of
@@ -164,7 +164,9 @@ by concern and listed alphabetically within each section.
   name derived from the shape of the source name
   (`GigabitEthernet1/0/1` becomes `1/1`), without knowing either
   device model. What positional port mapping replaces for the ports
-  it can pair, and what still handles every other name.
+  it can pair, and what still handles every other name. Between two
+  configs of one vendor it changes no name, and it does not read a
+  sub-interface: `<port>.<unit>` goes where its port goes.
 - **Deployment proposal** — a deployment read out of a config's own
   statement of its hardware (part number, modules, stacking), resolved
   against the model families and checked against the port names the

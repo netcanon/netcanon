@@ -204,13 +204,16 @@ and 100E physical hardware.
   declared (in the Interface rename modal or on the API), a correctly
   declared FortiGate is still
   `partial`: pseudo-interfaces the codec does not classify come back
-  as off-inventory, and the stock `fortilink` aggregate — which the
-  ordinary translation gives a port-shaped name — is dropped and
+  as off-inventory, and — onto another vendor's device — the stock
+  `fortilink` aggregate, which the ordinary translation gives a
+  port-shaped name there, is dropped and
   reported (`displaced`) where that name is a port of the target, and
   listed (`landed_off_target`) where it is not.  A VLAN interface the
   codec reads as a physical port, or as a management port (`MGMT`),
   is treated the same way.  Name such
-  an interface in `port_rename_map` to decide it.
+  an interface in `port_rename_map` to decide it.  Between two
+  FortiGates such a name is not read at all: `fortilink`, `DMZ` and
+  `MGMT` stay as they are written.
   FortiOS interface names are an operator's free text and are kept
   apart by case: `DMZ` beside a port `dmz` is its own interface.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.

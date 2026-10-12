@@ -1583,16 +1583,45 @@
         order: order,
       };
     });
+    // A unit that moved with its port is not a name that was
+    // "translated by name": the row says what happened to it, and
+    // why the plan does not vouch for it all the same.  The plan
+    // holds both kinds as fields, each with where the unit ended.
+    // Neither is a name the operator's own entry put where it is
+    // -- which is what naming such a unit, as the plan asks, makes
+    // of it.
+    var untagged = plan.untagged_units || {};
+    var unvouched = plan.unvouched_units || {};
+    var decided = _planDecided(plan);
     (plan.off_inventory || []).forEach(function(name) {
       order += 1;
       var to = own(renames, name);
-      var outcome = dropped.has(name) ? 'dropped'
-        : ((typeof to === 'string' && to && to !== name)
-            ? 'translated by name to ' + to : 'left as it is');
+      var mine = decided.has(name);
+      var text;
+      if (dropped.has(name)) {
+        text = 'not a port of the declared source device — dropped'
+          + (mine ? ' by your own entry' : '');
+      } else if (mine) {
+        text = 'not a port of the declared source device — '
+          + ((typeof to === 'string' && to && to !== name)
+              ? 'sent to ' + to + ' by your own entry'
+              : 'kept as it is by your own entry');
+      } else if (typeof own(untagged, name) === 'string') {
+        text = 'moved with its port to ' + own(untagged, name)
+          + ', with no 802.1Q tag — the plan does not vouch for it:'
+          + ' no tag was read for it from the source config';
+      } else if (typeof own(unvouched, name) === 'string') {
+        text = 'moved with its port to ' + own(unvouched, name)
+          + ' — the plan does not vouch for it: it is spelt in another'
+          + ' letter case than its port, or is a unit of a unit';
+      } else {
+        text = 'not a port of the declared source device — '
+          + ((typeof to === 'string' && to && to !== name)
+              ? 'translated by name to ' + to : 'left as it is');
+      }
       meta[name] = {
         state: 'off-inventory', role: '', kind: '', auto: '',
-        text: 'not a port of the declared source device — ' + outcome,
-        why: '', flags: [], order: order,
+        text: text, why: '', flags: [], order: order,
       };
     });
     Object.keys(plan.sub_interfaces || {}).forEach(function(name) {

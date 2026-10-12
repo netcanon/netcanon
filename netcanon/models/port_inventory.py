@@ -633,11 +633,59 @@ class MappingPlan(BaseModel):
 
     sub_interfaces: dict[str, str | None] = Field(default_factory=dict)
     """Sub-interface names (``ge-0/0/0.54``) that followed their
-    parent port: source name to the name it was given, or ``None``
-    when the parent was dropped and the sub-interface with it.  Made
-    only between two configs of the SAME codec, where the unit
-    suffix means the same thing on both sides; across codecs a
-    sub-interface stays in :attr:`off_inventory`."""
+    parent port: source name to the name it was given (the parent's
+    name on the target with the unit after it), or ``None`` when the
+    parent was dropped and the sub-interface with it.  Between two
+    configs of the same codec and across vendors alike.  A unit
+    that did NOT go with its port stays in :attr:`off_inventory`:
+    across vendors, a unit of a management port, of a port the
+    source codec's classifier does not know (a channelized Junos
+    port), or numbered 0; on either path, a unit of a unit and a
+    unit typed in another letter case than its port, which the
+    plan does not vouch for wherever they ended
+    (:attr:`unvouched_units` holds those that moved).  So does one
+    that went with its port and took no tag
+    with it (:attr:`untagged_units`).  Whether the target HAS
+    sub-interfaces is not decided here: where it has none the name
+    is still written, and the validation report lists the 802.1Q
+    tag it cannot carry."""
+
+    untagged_units: dict[str, str] = Field(default_factory=dict)
+    """Sub-interface names that went with their parent port
+    across vendors although the parsed source holds no 802.1Q tag
+    for them: source name to the name it has in the output.  The
+    tag of a sub-interface is not in its name, so the output has
+    an interface of that name and no tag from the source -- because
+    the source platform's parser reads none for a sub-interface
+    (AOS-CX, OS10), because it did not read the line that states
+    one, or because the config states none.  Nothing
+    else in the job says so (there is no tag for the validation
+    report to list), so such a unit is not in
+    :attr:`sub_interfaces`: it stays in :attr:`off_inventory` and
+    in :attr:`unresolved_ports` until the operator's map names it.
+    Never filled between two configs of one codec: there a unit
+    moves with whatever the tree holds for it and nothing is
+    asked.  (That is not a promise about the tag.  Where the
+    source platform's parser reads none -- AOS-CX, OS10 -- the
+    tree holds none on any path, a job from that platform to
+    itself included, and nothing in such a job says so.)"""
+
+    unvouched_units: dict[str, str] = Field(default_factory=dict)
+    """Sub-interface names the finished run shows went where the
+    name before their last dot went, and that the plan all the same
+    does not count as having followed: source name to the name it
+    has in the output.  The plan takes ``<port>.<unit>`` for a unit
+    of a port only where the part before the dot is the port as the
+    config spells it.  So a unit typed in another letter case than
+    its port (on a platform whose names have no letter case) is
+    here, and so is a unit of a unit (``ge-0/0/1.54.2``, written
+    under a unit that followed).  Each stays in
+    :attr:`off_inventory` and in :attr:`unresolved_ports` until the
+    operator's map names it.  Kept as a field so that the plan's
+    line and a client's row can say what happened to such a name --
+    it moved with its port -- and not that it was translated by
+    the shape of its name.  A unit that went without a tag is in
+    :attr:`untagged_units` and not here."""
 
     displaced: list[str] = Field(default_factory=list)
     """Names nobody decided — an off-inventory name, an unplaced
@@ -676,7 +724,10 @@ class MappingPlan(BaseModel):
     is listed here, and can share that port with the source port
     paired to it without appearing in :attr:`fused`.  Between two
     configs of one codec a unit of a listed port
-    (``ge-0/0/7.54``) is not off-target.  On a RouterOS target an
+    (``ge-0/0/7.54``) is not off-target; across vendors it is not
+    for an entry whose source name is itself a sub-interface, since
+    a unit of a listed port is where the translator puts a unit and
+    where the plan's lines say to name one.  On a RouterOS target an
     entry whose target is not a port NAMES the port; while the
     port's hardware has a place (:attr:`target_hardware`), or the
     port is in :attr:`unbound_ports`, that entry is not listed here,

@@ -202,6 +202,17 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   in Wave 10β-B.
 - **`service routing protocols model multi-agent`** — preserved as
   raw section; not in canonical model.
+- **Renaming or dropping `Vlan<N>` in the rename modal is not shown
+  by the output.**  A translation from EOS to EOS lists each VLAN
+  interface under *Other names in the config*.  EOS output writes
+  `interface Vlan<id>` from the VLAN itself: renamed, the interface
+  is written under the new name and the old one again; dropped, it
+  comes back.  And a loopback that is the VXLAN source can be
+  renamed there, but dropped it is still named by `vxlan
+  source-interface`.  The job records each entry and says nothing.
+  Renumber or drop the VLAN on the VLANs pane, which takes its
+  interface with it.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 
 ## See also
 

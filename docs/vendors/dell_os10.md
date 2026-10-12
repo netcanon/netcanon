@@ -281,6 +281,28 @@ and tracked in
 [`../vendor-research/dell_os10/30-codec-plan.md`](../vendor-research/dell_os10/30-codec-plan.md)
 §9.
 
+⚠️ **A routed sub-interface loses its tag.**  A stanza named
+`interface ethernet1/1/1.54` is read as an interface of that name; its
+`encapsulation dot1q` line is not read (OS10 routed sub-interfaces are
+not modelled).  Onto another vendor it goes where its port goes
+(`Ethernet1.54`) with no VLAN — or, on VyOS and FortiOS, with 54 as
+its VLAN id, whatever the line said.  The job warns for each such
+unit, and with both devices declared lists it in `untagged_units` and
+stays `partial` until you name it.  Set the tag on the target by hand.
+**Onto OS10 itself the tag is lost the same way and nothing says so**:
+the output has `interface ethernet1/1/1.54` with its address and no
+`encapsulation dot1q`, in a job that is `completed` with no warning.
+Compare the sub-interfaces of an OS10 to OS10 output with the source.
+
+⚠️ **Renaming or dropping `vlan<N>` in the rename modal is not shown
+by the output.**  A translation from OS10 to OS10 lists each VLAN
+interface under *Other names in the config*.  OS10 output writes
+`interface vlan<id>` from the VLAN itself: renamed, the interface is
+written under the new name and the old one again; dropped, it is
+written all the same.  The job records the entry and says nothing.
+Edit the output.  See
+[`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
+
 ⚠️ **A user whose password hash we can't model is dropped, loudly.**
 The renderer refuses to re-emit a credential it cannot prove is safe to
 reuse, leaving a `review:` comment naming the user instead of a

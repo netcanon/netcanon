@@ -1103,12 +1103,140 @@ class TestSettlePlan:
         for name in ("Te9/9/9", "192.168.100.1", "ssl.root"):
             assert name in wrong and name not in sub
 
+    def test_a_unit_with_no_tag_has_its_line(self):
+        """It DID move with its port, so the line for a unit that did
+        not would be false of it, and it is no sign of a wrong model
+        either.  It stays off-inventory and asks for a decision."""
+        source = _inventory((0, "access", ["Gi1/0/1", "Gi1/0/2"]))
+        target = _inventory((0, "access", ["Ethernet1", "Ethernet2"]))
+        used = ["Gi1/0/1", "Gi1/0/1.54", "Gi1/0/2.7", "Te9/9/9"]
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, renames={"Gi1/0/1.54": "Ethernet1.54"},
+                 untagged_units={"Gi1/0/1.54": "Ethernet1.54"})
+        assert plan.untagged_units == {"Gi1/0/1.54": "Ethernet1.54"}
+        assert plan.sub_interfaces == {} and "Gi1/0/1.54" in plan.off_inventory
+        assert plan.unresolved_ports == ["Gi1/0/1.54", "Gi1/0/2.7", "Te9/9/9"]
+        (moved,) = [w for w in plan.warnings if "moved with their port" in w]
+        assert "1 sub-interface name(s) moved with their port" in moved
+        assert "(Gi1/0/1.54 -> Ethernet1.54)" in moved
+        assert "no 802.1Q tag was read for them from the source config" in moved
+        (stayed,) = [w for w in plan.warnings if "did NOT move with their port" in w]
+        assert "(Gi1/0/2.7)" in stayed
+        (wrong,) = [w for w in plan.warnings if "check the source model" in w]
+        assert "(Te9/9/9)" in wrong
+
+    def test_one_that_was_named_or_went_is_not(self):
+        source = _inventory((0, "access", ["Gi1/0/1"]))
+        target = _inventory((0, "access", ["Ethernet1"]))
+        used = ["Gi1/0/1", "Gi1/0/1.54"]
+        untagged = {"Gi1/0/1.54": "Ethernet1.54"}
+
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, untagged_units=untagged,
+                 operator={"Gi1/0/1.54": "Ethernet1.54"})
+        assert plan.untagged_units == {} and plan.unresolved_ports == []
+        assert not [w for w in plan.warnings if "sub-interface" in w]
+
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, untagged_units=untagged, drops=["Gi1/0/1.54"])
+        assert plan.untagged_units == {}
+        assert not [w for w in plan.warnings if "moved with their port" in w]
+
+        # One recorded as having followed is not also one of these.
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, untagged_units=untagged,
+                 sub_interfaces={"Gi1/0/1.54": "Ethernet1.54"})
+        assert plan.untagged_units == {} and plan.warnings == []
+
+    def test_a_unit_the_plan_does_not_vouch_for(self):
+        """A unit spelt in another letter case than its port, and a
+        unit of a unit.  Each DID move with its port.  Among the
+        names "left to name-shape translation -- check the source
+        model" they would be told neither what happened to them nor
+        what is wrong with them.  They have a line that says both,
+        and still ask for a decision.  A name that only LOOKS like one
+        -- a unit of a name the device does not have -- keeps the
+        other line."""
+        source = _inventory((0, "access", ["Gi1/0/1", "Gi1/0/2", "bob's"]))
+        target = _inventory((0, "access", ["Ethernet1", "Ethernet2", "Ethernet3"]))
+        used = [
+            "Gi1/0/1", "gi1/0/1.54", "Gi1/0/2", "Gi1/0/2.7", "Gi1/0/2.7.3",
+            "bob's", "BOB'S.9", "Te9/9/9", "te9/9/9.5",
+        ]
+        plan = plan_port_mapping(source, target, used)
+        _settled(
+            plan, used, target=target,
+            renames={
+                "gi1/0/1.54": "Ethernet1.54", "Gi1/0/2.7": "Ethernet2.7",
+                "Gi1/0/2.7.3": "Ethernet2.7.3", "BOB'S.9": "Ethernet3.9",
+                "te9/9/9.5": "Ethernet9.5",
+            },
+            sub_interfaces={"Gi1/0/2.7": "Ethernet2.7"},
+        )
+        assert plan.unvouched_units == {
+            "BOB'S.9": "Ethernet3.9", "Gi1/0/2.7.3": "Ethernet2.7.3",
+            "gi1/0/1.54": "Ethernet1.54",
+        }
+        assert plan.unresolved_ports == [
+            "BOB'S.9", "Gi1/0/2.7.3", "Te9/9/9", "gi1/0/1.54", "te9/9/9.5",
+        ]
+        (moved,) = [w for w in plan.warnings if "moved with their port" in w]
+        assert moved.startswith(
+            "port mapping: 3 sub-interface name(s) moved with their port "
+            "(BOB\u2019S.9 -> Ethernet3.9; Gi1/0/2.7.3 -> Ethernet2.7.3; "
+            "gi1/0/1.54 -> Ethernet1.54), but the plan does not vouch for "
+            "where they went: "
+        )
+        assert moved.endswith("check each, then name it in the port map, or drop it")
+        assert "'" not in moved
+        (wrong,) = [w for w in plan.warnings if "check the source model" in w]
+        assert "2 port name(s)" in wrong and "(Te9/9/9, te9/9/9.5)" in wrong
+        assert not [w for w in plan.warnings if "did NOT move" in w]
+
+    def test_it_is_read_from_where_each_ended(self):
+        """Not from the shape of the name.  A unit that ended
+        anywhere but ``<where its port ended>.<unit>`` did not move
+        with its port; where names have letter case another spelling
+        is another name; and one the operator named, or that went,
+        is theirs or gone."""
+        source = _inventory((0, "access", ["Gi1/0/1"]))
+        target = _inventory((0, "access", ["Ethernet1"]))
+        used = ["Gi1/0/1", "gi1/0/1.54"]
+
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, renames={"gi1/0/1.54": "Vlan54"})
+        assert plan.unvouched_units == {}
+        (line,) = [w for w in plan.warnings if "sub-interface" in w or "port name(s)" in w]
+        assert "left to name-shape translation" in line
+
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, renames={"gi1/0/1.54": "Ethernet1.54"},
+                 fold_source=False)
+        assert plan.unvouched_units == {}
+
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, operator={"gi1/0/1.54": "Ethernet1.54"})
+        assert plan.unvouched_units == {} and plan.unresolved_ports == []
+        assert plan.off_target == [] and plan.warnings == []
+
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, drops=["gi1/0/1.54"])
+        assert plan.unvouched_units == {}
+
+        # One that went with no tag has that line, and only that one.
+        plan = plan_port_mapping(source, target, used)
+        _settled(plan, used, target=target, renames={"gi1/0/1.54": "Ethernet1.54"},
+                 untagged_units={"gi1/0/1.54": "Ethernet1.54"})
+        assert plan.unvouched_units == {}
+        (line,) = [w for w in plan.warnings if "moved with their port" in w]
+        assert "no 802.1Q tag was read" in line
+
     def test_a_displaced_sub_interface_has_a_line_of_its_own(self):
-        """Across codecs a sub-interface is left to the name-shape
-        translator.  A classifier that folds the unit into the port
-        (Junos) sends it onto its own parent, or onto its sibling
-        units, so it is dropped -- and the line says it is a
-        sub-interface, not "a name nobody decided"."""
+        """A unit the translator does not send after its port -- a
+        unit of a management port, across vendors -- is read by its
+        classifier, which can put it onto its own parent.  It is then
+        dropped, and the line says it is a sub-interface, not "a name
+        nobody decided"."""
         source = _inventory((0, "access", ["ge-0/0/0"]))
         target = _inventory((0, "access", ["1/1"]))
         used = ["ge-0/0/0", "ge-0/0/0.54"]
@@ -1148,15 +1276,17 @@ class TestNoWarningCanBeReadAsATableRow:
             member_ids=[1, 2],
         )
         one = _inventory((0, "access", ["x1"]), member_ids=[4])
-        used = ["1/1", "2/1", "mgmt0", "A1", "1/1.5", "49.7"]
+        used = ["1/1", "2/1", "mgmt0", "A1", "1/1.5", "49.7", "2/1.9", "2/1.3", "2/1.3.6"]
         plan = plan_port_mapping(two, one, used)
         _settled(
             plan, used, target=one,
             operator={"1/1": "9/9", "nope": "8/8", "49.7": "6/6"},
             drops=["A1", "mgmt0"], displaced=["A1", "1/1.5"],
+            renames={"2/1.3.6": "x1.3.6"},
             emptied_lags=["Trk1"], shrunk_lags=["Trk2"], lost_routes=["0.0.0.0/0"],
             lost_dhcp_pools=["10.0.0.0/24"], ignored_overrides=["2/1"],
-            sub_interfaces={"49.7": None},
+            sub_interfaces={"49.7": None, "2/1.3": "x1.3"},
+            untagged_units={"2/1.9": "x1.9"},
             lost_tracking=["Vlan10"], lost_vtep_sources=["Loopback0"],
             landed_off_target={"DMZ": "9/1"}, stale_next_hops=["10.9.0.0/16"],
             target_hardware={"1/1": "x1", "49.7": "zz", "nope": "x1"}, unbound=["nope"],
@@ -1173,6 +1303,8 @@ class TestNoWarningCanBeReadAsATableRow:
             "nobody decided",
             "could not be given a name of their own",
             "were DROPPED with the port they belong to",
+            "moved with their port, but no 802.1Q tag was read",
+            "but the plan does not vouch for where they went",
             "override target(s) are not names",
             "had no usable target",
             "lost a VRRP track entry",
@@ -1582,18 +1714,30 @@ class TestWhatElseARunCanLeave:
 
     def test_a_unit_of_a_port_of_the_target_is_a_name_of_the_target(self):
         """...between two configs of one codec, where a unit suffix
-        means the same thing on both sides."""
+        means the same thing on both sides.  Across vendors it is
+        one for a source name that is itself a sub-interface: a unit
+        of a port the target lists is where the translator puts a
+        unit, and where the plan's lines say to name one -- an
+        entry that did so used to be reported as off-target."""
         junos = _inventory((0, "access", ["ge-0/0/0", "ge-0/0/7"]))
         used = ["ge-0/0/0", "ge-0/0/0.54"]
         for units, expected in ((True, []), (False, ["ge-0/0/7.54"])):
             plan = plan_port_mapping(junos, junos, used)
             _settled(
-                plan, used, operator={"ge-0/0/0.54": "ge-0/0/7.54"}, target=junos, units=units,
+                plan, used, operator={"ge-0/0/0": "ge-0/0/7.54"}, target=junos, units=units,
             )
             assert plan.off_target == expected
-        plan = plan_port_mapping(junos, junos, used)
-        _settled(plan, used, operator={"ge-0/0/0.54": "ge-0/0/9.54"}, target=junos, units=True)
-        assert plan.off_target == ["ge-0/0/9.54"]
+        for units in (True, False):
+            plan = plan_port_mapping(junos, junos, used)
+            _settled(
+                plan, used, operator={"ge-0/0/0.54": "ge-0/0/7.54"}, target=junos, units=units,
+            )
+            assert plan.off_target == []
+            plan = plan_port_mapping(junos, junos, used)
+            _settled(
+                plan, used, operator={"ge-0/0/0.54": "ge-0/0/9.54"}, target=junos, units=units,
+            )
+            assert plan.off_target == ["ge-0/0/9.54"]
 
 
 # ---------------------------------------------------------------------------
