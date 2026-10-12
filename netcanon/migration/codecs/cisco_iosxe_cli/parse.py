@@ -61,9 +61,11 @@ from ...canonical.intent import (
     CanonicalVxlan,
 )
 from .._helpers import (
+    Uniques,
     _is_link_local_v6,
     _mask_to_prefix,
     _normalise_mac_to_colon_hex,
+    address_key,
     merge_trunk_allowed,
 )
 from .._input_shape import detect_input_shape
@@ -663,7 +665,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
     legitimate_vlan_ids = (
         {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
-    project_switchport_to_vlan(intent)
+    project_switchport_to_vlan(intent, keep=legitimate_vlan_ids)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
     # Parse-end summary: lets ops answer "did parse succeed?" from
@@ -1429,6 +1431,7 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
     existing_by_id: dict[int, CanonicalVlan] = {
         v.id: v for v in intent.vlans
     }
+    once = Uniques()
     for iface in intent.interfaces:
         m = _SVI_NAME_RE.match(iface.name)
         if not m:
@@ -1449,8 +1452,7 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
         # Merge SVI IPs into existing VLAN record.  De-dupe in case
         # the same IP was declared both places.
         for addr in iface.ipv4_addresses:
-            if addr not in existing.ipv4_addresses:
-                existing.ipv4_addresses.append(addr)
+            once.add(existing.ipv4_addresses, addr, address_key)
 
 
 def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
@@ -1474,6 +1476,7 @@ def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
     """
     # Scan: for each `interface X` stanza, note its channel-group (if any).
     members_by_lag: dict[str, list[str]] = {}
+    once = Uniques()
     mode_by_lag: dict[str, str] = {}
     declared_lag_names: set[str] = set()
 
@@ -1510,8 +1513,7 @@ def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
             # of mode changes or as test-config variants.  Dedupe so the
             # member list has one entry per physical port.
             members = members_by_lag.setdefault(lag_name, [])
-            if current_iface not in members:
-                members.append(current_iface)
+            once.add(members, current_iface)
             # First member's mode wins.
             mode_by_lag.setdefault(lag_name, canonical_mode)
 

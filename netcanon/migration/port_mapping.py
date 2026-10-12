@@ -623,7 +623,13 @@ def settle_plan(
             )
             for where, sources in by_hardware.items():
                 listed = plan.fused.setdefault(where, [])
-                listed.extend(name for name in sources if name not in listed)
+                # Looked for in a set, kept in the list: a rename map
+                # can send every name of a config to one port.
+                have = set(listed)
+                for name in sources:
+                    if name not in have:
+                        have.add(name)
+                        listed.append(name)
 
         def listed_by_target(name: str) -> bool:
             if name_key(name, fold_target) in on_target:
@@ -846,7 +852,8 @@ def describe_plan(
         n for n in plan.off_inventory if n not in seen and n not in displaced
     ]
     children = [n for n in stray if is_child(n)]
-    others = [n for n in stray if n not in children]
+    of_a_port = set(children)
+    others = [n for n in stray if n not in of_a_port]
     if others:
         lost = sum(1 for n in others if n in gone)
         outcome = "they were left to name-shape translation"

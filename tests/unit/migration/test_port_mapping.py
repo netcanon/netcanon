@@ -1520,6 +1520,20 @@ class TestWhereTheHardwareIs:
         assert plan.fused == {"sfp2": ["ether1", "core-a"]}
         assert not plan.is_clean
 
+    def test_hardware_joins_a_clash_of_names(self):
+        """Two ports were sent to the NAME ``sfp2``, and two more are
+        looked up by that hardware under names of their own.  One
+        clash, with each port in it once: those that share the name
+        first, then the others, as the config has them."""
+        used = ["ether1", "ether2"]
+        plan = plan_port_mapping(self.SOURCE, self.TARGET, used)
+        _settled(
+            plan, [*used, "stray", "other"],
+            operator={"ether1": "sfp2", "stray": "kept", "other": "kept2"}, target=self.TARGET,
+            target_hardware={"stray": "sfp2", "other": "sfp2"},
+        )
+        assert plan.fused == {"sfp2": ["ether1", "ether2", "stray", "other"]}
+
     def test_a_dropped_ports_hardware_is_nowhere(self):
         plan = self._plan()
         _settled(

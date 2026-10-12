@@ -63,13 +63,54 @@ timestamp if your timezone matters for an audit.
   a capture with a run put into it (`tests/unit/test_untrusted_text_cost.py`).
   The last shape has a search of its own, run by hand
   (`tools/stanza_cost_search.py`), and a pinned text for each handler it
-  found.  It is a search, not a proof, and two things are known and not
-  mended: a list of one record that a line adds to after reading it
-  (32,000 addresses on one Junos unit take 8 seconds), and what a config
-  expands to (a thousand trunks that each allow VLANs 2-4000 are 86 KB
-  and over 3 GB) — see SECURITY.md.  Put a request timeout and a memory
+  found.  It is a search, not a proof; the two things it left known and
+  not mended are the next entry's.  Put a request timeout and a memory
   limit in front of a server that takes text from people it does not
   trust.
+
+- **A small config could still take seconds, or hundreds of megabytes,
+  to read.**  Three more shapes, none of which changes an output.
+  *A list of one record that a line adds to after looking for its value
+  there* — the addresses of one interface, the members of one LAG, the
+  route targets of one VRF — cost the square of the lines the record was
+  given: 32,000 addresses on one Junos IRB unit (2 MB) took 12 seconds,
+  8,000 secondary addresses on one AOS-CX SVI (0.3 MB) 28, 32,000
+  RouterOS NTP servers 24, and 640 lines in one AOS-S VLAN (13 KB) 4.
+  Each is about a second or less; the look is by key (`Uniques`, in
+  `netcanon/migration/codecs/_helpers.py`), in every parser that had it.
+  *A scan of another list for every item*, after the parse: rendering
+  400 VLANs, port-channels and member ports to OPNsense took 12 seconds
+  and takes 0.06; the port-name translator's collision warning, the
+  model-aware plan's account of dropped ports, the NX-OS route-target
+  lines and the VyOS SNMPv3 users each build an index once.  And *what
+  the switchport projection made and dropped*: for a trunk whose list is
+  wide it made a VLAN record and a membership for every id, and the six
+  port-centric codecs dropped all but the declared ones on their next
+  line.  50 Arista trunks that allow `2-4000` (5 KB) took 0.4 seconds and
+  180 MB to parse, and take 0.01 seconds and 1 MB; 48 NX-OS trunks that
+  state `1-99,101-4094`, translated to Junos, 0.4 seconds and 176 MB,
+  now 0.04 and 1.  The projection takes the set its caller keeps
+  (`project_switchport_to_vlan(intent, keep=...)`) and makes nothing
+  else; an id that is not a VLAN id in a wide list (`1-200,5000`) still
+  fails the parse, as it did.  Lists of VLAN ids are built from one
+  shared tuple of ints (8 bytes an id on a port, where it was 38), and a
+  membership costs 45 bytes while it is stamped, where it cost 800: a
+  thousand trunks that carry every VLAN on a thousand declared VLANs
+  (118 KB), translated to AOS-S, are 0.7 seconds and 72 MB, where 500 of
+  each were 0.7 seconds and 293 MB.  Nothing moved: every committed
+  capture parses, renders bare and translates onto all thirteen codecs
+  to the same digests as before, the cross-mesh results and the
+  reconciliation are unchanged, and the projection is compared in the
+  suite with the one it replaces, on built switches, with and without
+  the set.  New tests pin a text for each place
+  (`tests/unit/test_untrusted_text_cost.py`), read the source for a list
+  that is looked through before it is added to, and count what a VLAN id
+  and a membership cost in bytes
+  (`tests/unit/migration/test_projection_makes_what_is_kept.py`).
+  Still open, and named in SECURITY.md: what a config expands to (800
+  ranges on one AOS-S line are 800,000 names and 295 MB), the product of
+  two honest counts, and that there is no limit on the time or the
+  memory a request takes.
 
 ### Fixed
 

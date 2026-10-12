@@ -469,11 +469,18 @@ tests use these exclusively — never CSS classes or element structure.  See
   Not reached: a pattern assembled at call time from parts that are not
   literals and not kept; a handler no capture has a line for; work that
   needs two kinds of stanza to grow together; a shape nobody thought to
-  build.  Known and NOT mended (SECURITY.md has the measurements): a
-  list of ONE record that a line adds to after reading it (`if pair not
-  in entry["ipv4"]: entry["ipv4"].append(pair)` — the addresses of one
-  interface, the members of one LAG, the route targets of one VRF), and
-  what a config EXPANDS to (`1-4094` is seven bytes).  When you find a
+  build.  A sixth shape was known when that list was written, and is
+  mended: a list of ONE record that a line adds to after reading it
+  (`if pair not in entry["ipv4"]: entry["ipv4"].append(pair)` — the
+  addresses of one interface, the members of one LAG, the route targets
+  of one VRF).  No index of the records helps, there being one; use
+  `Uniques` (beside `GrowingIndex`), or keep a set beside the list.  The
+  test module reads the source for that idiom, and a new one fails
+  until it is mended or listed there with the bound that makes it
+  harmless.  Known and NOT mended (SECURITY.md has the measurements):
+  what a config EXPANDS to (`1-4094` is seven bytes), the product of
+  two kinds of stanza that grow together, and that nothing limits the
+  time or the memory a request takes.  When you find a
   shape the search missed, add it to the search in the same change as
   the fix.  A pattern that is slow and safe (it reads only data the
   server ships) goes in that module's `KNOWN_SLOW` with the reason; an
