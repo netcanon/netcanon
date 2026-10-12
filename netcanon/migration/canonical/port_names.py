@@ -1035,8 +1035,10 @@ def translate_port_names(  # noqa: C901
     # is still in source form (see below).
     auto_dropped: set[str] = set()
     # Names left as they were for want of a name to give them, in the
-    # order they were met.  ``memo`` keeps each to one mention.
-    untranslated: list[str] = []
+    # order they were met.  ``memo`` keeps each to one mention.  Keys
+    # of a dict and not a list: a unit asks whether its port is among
+    # them, and a pasted config can hold as many of either as it likes.
+    untranslated: dict[str, None] = {}
 
     # Per-interface kind overrides — populated by source codecs that
     # detect logical role (mgmt, etc.) from CONTEXT rather than from
@@ -1195,7 +1197,7 @@ def translate_port_names(  # noqa: C901
                 # with ``strip_unmappable=False``: otherwise such a
                 # port is dropped, and the unit with it).  The unit
                 # went where the port went, which is nowhere.
-                untranslated.append(name)
+                untranslated[name] = None
             if not same_codec and name not in tagged:
                 # Its name says which port it is on; its tag is a
                 # field, and there is none.  Not said between two
@@ -1226,7 +1228,7 @@ def translate_port_names(  # noqa: C901
                 f"{source_codec.name}: could not classify port name "
                 f"{name!r}; left verbatim"
             )
-            untranslated.append(name)
+            untranslated[name] = None
             memo[name] = name
             return name
         # Apply CanonicalInterface.kind override — used when the source
@@ -1309,7 +1311,7 @@ def translate_port_names(  # noqa: C901
             if strip_unmappable:
                 auto_dropped.add(name)
             else:
-                untranslated.append(name)
+                untranslated[name] = None
             memo[name] = name
             return name
         # A structurally-clean rename can STILL drop a source-side
