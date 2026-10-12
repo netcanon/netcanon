@@ -25,6 +25,7 @@ is identical.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -62,6 +63,16 @@ def main(argv: list[str] | None = None) -> int:
             "Source codec name (e.g. cisco_iosxe_cli, fortigate_cli, "
             "juniper_junos, arista_eos, aruba_aoss, mikrotik_routeros, "
             "opnsense, cisco_iosxe)"
+        ),
+    )
+    s.add_argument(
+        "--limits",
+        choices=("small", "standard", "large", "unlimited"),
+        help=(
+            "How much the config may expand to and how long the run may "
+            "take (default: NETCANON_CONFIG_LIMITS, else standard).  A "
+            "config past a limit is refused with exit status 2 and a "
+            "sentence that names what was large and the limit."
         ),
     )
     s.add_argument(
@@ -131,6 +142,7 @@ def _cmd_sanitize(args: argparse.Namespace) -> int:
     # Lazy import — keeps `netcanon --help` fast and avoids loading
     # the migration codec graph for non-sanitize subcommands.
     from .migration.codecs.base import ParseError, RenderError
+    from .migration.limits import PROFILES, LimitExceeded, limits_scope
     from .tools.sanitize import sanitize_text
 
     try:
@@ -139,12 +151,26 @@ def _cmd_sanitize(args: argparse.Namespace) -> int:
         print(f"error: cannot read {args.input!r}: {e}", file=sys.stderr)
         return 2
 
-    try:
-        result = sanitize_text(
-            raw,
-            args.source_vendor,
-            dry_run=args.dry_run,
+    limits = args.limits or os.environ.get("NETCANON_CONFIG_LIMITS")
+    if limits and limits.strip().lower() not in PROFILES:
+        # Said, and not read as "no limit": the standard limits apply.
+        print(
+            f"warning: NETCANON_CONFIG_LIMITS={limits!r} is not one of "
+            f"{', '.join(PROFILES)}; using standard",
+            file=sys.stderr,
         )
+    try:
+        with limits_scope(limits, surface="cli"):
+            result = sanitize_text(
+                raw,
+                args.source_vendor,
+                dry_run=args.dry_run,
+            )
+    except LimitExceeded as e:
+        # Read, and more than the limits in force allow: not a config
+        # that failed to parse.
+        print(f"error: refused: {e}", file=sys.stderr)
+        return 2
     except ValueError as e:
         # Unknown source_vendor
         print(f"error: {e}", file=sys.stderr)

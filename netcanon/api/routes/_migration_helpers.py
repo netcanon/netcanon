@@ -32,7 +32,11 @@ Public surface:
   ``None`` when the request does not declare its source device.
 * :func:`run_translation` — the one place every job-running handler
   dispatches from: model-aware when the request declares both
-  devices, the ordinary rename-aware pipeline otherwise.
+  devices, the ordinary rename-aware pipeline otherwise.  It opens the
+  limits scope of the request.
+* :func:`request_limits` — the name of the limits this server is set
+  to; every handler that hands config text to a parser opens its
+  scope with it.
 
 Routes orchestrate; these helpers compute.  None of these touch the
 frozen pipeline-stage signatures in
@@ -65,6 +69,7 @@ from ...migration.device_models import (
     compile_deployment,
     inventory_from_profile,
 )
+from ...migration.limits import limits_scope
 from ...migration.target_profiles import TargetProfile
 from ...models.migration import CodecInfo, MigrationJob, MigrationPlanRequest
 from ...services.migration_pipeline import (
@@ -398,6 +403,18 @@ def resolve_port_inventories(
     )
 
 
+def request_limits(request: Request) -> str | None:
+    """The name of the limits this server is set to
+    (``Settings.config_limits``), for :func:`~netcanon.migration.
+    limits.limits_scope`.
+
+    ``None`` — which that function reads as the standard limits —
+    under a bare-app fixture that skips the lifespan.
+    """
+    settings = getattr(request.app.state, "settings", None)
+    return getattr(settings, "config_limits", None)
+
+
 def run_translation(
     request: Request,
     body: MigrationPlanRequest,
@@ -424,13 +441,20 @@ def run_translation(
     wrong for a pairing: the pairing is itself a port map, so the
     operator's edits to it — the drops they have acknowledged
     included — must not depend on which URL the body is posted to.
+
+    Either way the work runs inside ONE limits scope: the limits this
+    server is set to, and one deadline for every parse and render the
+    request makes (with both devices declared the source is parsed
+    two or three times and the output is read back).  A config past a
+    limit comes back as a ``failed`` job with ``refusal`` set.
     """
     inventories = resolve_port_inventories(request, body, source, target)
-    if inventories is None:
-        return run_plan_with_overrides(source, target, raw_text, **overrides)
-    source_inventory, target_inventory = inventories
-    overrides["port_rename_map"] = dict(body.port_rename_map or {})
-    return run_plan_with_models(
-        source, target, raw_text, source_inventory, target_inventory,
-        **overrides,
-    )
+    with limits_scope(request_limits(request)):
+        if inventories is None:
+            return run_plan_with_overrides(source, target, raw_text, **overrides)
+        source_inventory, target_inventory = inventories
+        overrides["port_rename_map"] = dict(body.port_rename_map or {})
+        return run_plan_with_models(
+            source, target, raw_text, source_inventory, target_inventory,
+            **overrides,
+        )

@@ -343,6 +343,45 @@ class MigrationJobStatus(str, Enum):
     failed = "failed"
 
 
+class Refusal(BaseModel):
+    """Why a job was refused: the config asks for more than the server's
+    limits allow, or the request ran out of time
+    (:mod:`netcanon.migration.limits`).
+
+    The job is ``failed`` and its ``error`` says the same in words.  A
+    client that has to tell "too large for this server" from "could
+    not be read" reads this, not the words.
+
+    Attributes:
+        limit: Which limit: ``vlan_ids``, ``memberships``, ``ports``,
+            ``interfaces``, ``copies``, ``words``, ``text`` or
+            ``seconds``.
+        what: That limit in words.
+        asked: How many the config asked for when counting stopped;
+            for ``seconds``, how long the request had run.
+        exact: Whether ``asked`` is the whole number.  ``False`` for a
+            count made before the entries were: at least this many.
+        cap: The limit.
+        stage: ``parse`` or ``render``; ``""`` outside both.
+        codec: The codec whose stage it was.
+        profile: The name of the limits in force (``standard``, ...).
+        how_to_raise: What allows more, for the reader of this job.
+    """
+
+    limit: Literal[
+        "vlan_ids", "memberships", "ports", "interfaces", "copies", "words",
+        "text", "seconds",
+    ]
+    what: str
+    asked: int | float
+    exact: bool
+    cap: int | float
+    stage: Literal["parse", "render", ""] = ""
+    codec: str = ""
+    profile: str = ""
+    how_to_raise: str = ""
+
+
 class MigrationJob(BaseModel):
     """An in-progress or completed migration.
 
@@ -501,6 +540,12 @@ class MigrationJob(BaseModel):
     validation: ValidationReport | None = None
     rendered: str | None = None
     error: str | None = None
+
+    #: Set when the job was REFUSED: the config asks for more than this
+    #: server's limits allow, or the request ran out of time.  ``status``
+    #: is then ``failed`` and ``error`` begins ``refused:``.  ``None`` on
+    #: every other job.
+    refusal: Refusal | None = None
 
     #: Non-fatal advisories from the pipeline.  Populated by
     #: ``run_plan_with_rename`` when the cross-vendor port-name

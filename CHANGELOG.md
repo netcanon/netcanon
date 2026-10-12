@@ -107,10 +107,89 @@ timestamp if your timezone matters for an audit.
   that is looked through before it is added to, and count what a VLAN id
   and a membership cost in bytes
   (`tests/unit/migration/test_projection_makes_what_is_kept.py`).
-  Still open, and named in SECURITY.md: what a config expands to (800
-  ranges on one AOS-S line are 800,000 names and 295 MB), the product of
-  two honest counts, and that there is no limit on the time or the
-  memory a request takes.
+  What that left -- what a config expands to (800 ranges on one AOS-S
+  line are 800,000 names and 295 MB), the product of two honest counts,
+  and no limit on the time or the memory a request takes -- is the next
+  entry's.
+
+- **What a config makes is counted, and a request has a time limit.**
+  A range is a few bytes that parse to thousands of entries, `all` is
+  4,094, and every trunk that allows every VLAN is a member of every
+  VLAN, so neither the size of a request nor the cap on its text bounded
+  the memory it took: one AOS-S line of 800 port ranges (11 KB) was 295
+  MB to parse, and 50,000 interface stanzas of one line each (0.9 MB)
+  were 240 MB.  The product now counts what a request makes, at each
+  place a few bytes become many entries and BEFORE the entries are made,
+  again on every finished parse, and the length of every output
+  (`netcanon/migration/limits.py`): VLAN ids that lists and ranges name,
+  port memberships, ports that only a range or a list names, interfaces,
+  what a Junos `interface-range` copies onto its members, the words
+  block-form Junos is written out as, and characters of output.  Past a
+  limit the request is **refused in a sentence** that names what was
+  large, how large, and the limit: the AOS-S line at its ninth range, in
+  a hundredth of a second and under two megabytes; a thousand trunks
+  that carry every VLAN on a thousand VLANs is the default limit
+  exactly, and one trunk more is refused before the first membership is
+  stamped.  A request also has one **deadline**, which every parser
+  looks at in every loop over the lines of a config.  What this does not
+  bound is said in SECURITY.md and is not small: requests in flight, the
+  size of an answer (188 MB at the default limits, to a target that
+  reports every membership as unsupported), records no limit counts
+  (static routes, addresses), and a renderer, which the deadline does
+  not stop -- a request whose time runs out in one comes back as any
+  other.  So the advice stands: a server that takes text from people it
+  does not trust wants a memory limit that stops the worker, and a limit
+  on requests in flight, in front of it.  Nothing within the limits
+  moved: every committed capture parses, renders and translates onto all
+  thirteen codecs as before.  An ordinary translation costs three to
+  five per cent more (the counts, and the loops that look at the clock);
+  reading a config alone costs nothing that could be measured.
+
+### Added
+
+- **`NETCANON_CONFIG_LIMITS`** -- `standard` (the default), `large`,
+  `unlimited`, or `small` -- chooses how much one config may expand to
+  and how long one request may take.  One setting with a name on both
+  platforms: the environment variable for the server, the Docker image
+  and pip; **Preferences... -> Config size limit** in the desktop
+  application (`DesktopPreferences.config_limits`); `netcanon sanitize
+  --limits` on the command line.  A value that is none of the four
+  stops the server at startup, and the server logs the limits in force
+  when it starts.  The numbers are in `docs/CAPABILITIES.md` § H, and a
+  test holds every number a document prints to the code's.
+- **A refusal is a result on every surface.**  The seven endpoints that
+  return a job answer 200 with a `failed` job whose `error` begins
+  `refused:` and whose new `refusal` field carries the limit, how many
+  were asked for and the limit's number -- with both devices declared
+  too.  `POST /api/v1/sanitize` answers 413; `detect-deployment` still
+  proposes the device and says in a note why it did not check the
+  proposal against the port names; the command line exits 2.  The
+  migrate page paints the sentence in its red banner and does not
+  follow it with "Did you mean another vendor?", which is for a config
+  that could not be read; the sanitise page keeps the sentence on the
+  page (`sanitize-refusal`), where other failures are a toast that is
+  gone in four seconds.  What a refusal quotes from the config goes to
+  the client and never to a log.
+
+### Changed
+
+- **The public demo runs `small`** (`NETCANON_CONFIG_LIMITS` in the
+  instance environment), sized in a container with an instance's own
+  limits: the request built to reach every limit at once is translated
+  with the instance at 205 MB of its 256, and the three texts that took
+  hundreds of megabytes are refused in milliseconds.  Under `small` a
+  refusal says whose limit it is and what a Netcanon you run yourself
+  allows; it names no setting.  Two large requests at once can still end
+  the instance they were sent to -- the sanitise page sends two -- and
+  `docs/demo-plan/07-budget.md` says so.  `deploy/VERIFY.md` proof 14
+  shows by behaviour that a running image has the limits: one built
+  before them ignores the variable and says nothing.
+- **A VyOS set line nested more than 64 levels deep is a parse
+  failure.**  Past about a thousand levels it was an unexpected error
+  (the walk that writes the nested blocks ran out of stack).  A real
+  path is a dozen words.
+- **`netcanon sanitize`** takes `--limits`, and refuses a config past
+  them with exit status 2.
 
 ### Fixed
 

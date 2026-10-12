@@ -47,6 +47,7 @@ INSTANCE_SPEC = dict(
         "NETCANON_PORT":       str(INSTANCE_PORT),       # = 8000
         "NETCANON_LOG_LEVEL":  "warning",               # bodies never logged — see note
         "NETCANON_FERNET_KEY": "<per-instance random>",  # RAM-only; no key file
+        "NETCANON_CONFIG_LIMITS": "small",              # what one paste may expand to — see note
     },
     log_config   = {"type": "none"},              # I2: Docker captures no stdout
 )
@@ -75,6 +76,17 @@ Notes:
   `$NETCANON_DATA_DIR/.fernet_key` is **never written**. The key lives only in
   the instance's RAM and dies with it — the claim is "no key file is created,"
   not merely "the file is in tmpfs."
+- **`NETCANON_CONFIG_LIMITS=small` sizes a paste to the container.**  A few
+  bytes of a config can stand for millions of entries, so the 2 MB body cap
+  does not bound what an instance is asked to hold.  netcanon counts what a
+  config makes and refuses past a limit, in a sentence; `small` is the set of
+  limits measured to fit this container ([07](07-budget.md#sizing)).  Without
+  the key an instance runs the product's default limits, which are sized for a
+  server.  **An image built before the limits existed ignores the key and
+  says nothing**: `deploy/VERIFY.md` proof 14 shows, by behaviour, that the
+  running image has them.  What `small` does not do: two large requests at
+  once can still end the instance they were sent to
+  ([07](07-budget.md#sizing)).
 - **`NETCANON_LOG_LEVEL=warning` is safe.** netcanon never logs request bodies
   at **any** level; only parsed config *fragments* appear at `debug`. `warning`
   excludes even those, so no payload can reach a log line regardless of driver.

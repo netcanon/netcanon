@@ -480,16 +480,20 @@ the caps; no MAC-shaped string anywhere in a proposal) and
 **Files:** `netcanon/migration/_tier3_detection.py`, every codec's
 `codec.py` (`probe`), `parse.py` and `render.py` under
 `netcanon/migration/codecs/`, `netcanon/services/migration_detect.py`,
-the probe and prompt patterns under `netcanon/definitions/library/`
+the probe and prompt patterns under `netcanon/definitions/library/`,
+`netcanon/migration/limits.py`
 
 A config is whatever was pasted.  `POST /api/v1/migration/detect`, `/plan`,
 the per-pane plan endpoints and `POST /api/v1/sanitize` hand it to code
 written for real configs.  The pasted text is capped in length (10,000,000
 characters on a plan request); the cap bounds the size of the text, and
-neither the time nor the memory that reading it takes, because code
-can take time that grows with the square of the text.  The server is one
-process and a pattern at work does not let its other threads run, so one such
-request delays every other.  There is no time limit on a request.
+neither the time nor the memory that reading it takes: code can take time
+that grows with the square of the text, and a few bytes of it can stand for
+thousands of entries.  The server is one process and a pattern at work does
+not let its other threads run, so one such request delays every other.
+What a request may make is counted and limited, and a parse that runs past
+the request's deadline is stopped; both are described at the end of this
+section, with what they do not cover.
 
 Five shapes did, and were mended:
 
@@ -605,42 +609,136 @@ and its values out of order.
   of its place in the list where it cost 38; and a membership costs some 45
   bytes while it is stamped, where it cost 800.
 
-**Known, and not mended:**
+**What a request may make, and for how long.**  Two more things were
+measured and left by the changes above, and are closed now: what a config
+expands to, and the product of two kinds of stanza that grow together.  A
+third is closed in part: time.
 
-* **What a config expands to.**  A range is a few bytes that parse to
-  thousands of entries, so the size of a request does not bound the memory it
-  takes.  It costs less than it did, and nothing limits it.  One AOS-S line
-  of 800 ranges of 1,001 ports (11 KB) is 800,000 names: three to four seconds
-  and 295 MB.  1,000 Arista trunks that each allow VLANs 2-4000 (89 KB) are
-  four million ids on the ports: a sixth of a second and 32 MB to parse,
-  where it was over 3 GB — and 19 MB of output and 92 MB when translated to a
-  target that writes every id.  That cost is linear in what was asked for; a
-  real config of that size costs the same.  (A range of unbounded span is
-  refused where one was found: AOS-S clamps a single port range at 1,024
-  names.)
-* **Two kinds of stanza that grow together.**  A switch config with N
-  interfaces that carry `switchport trunk allowed vlan all` and M declared
-  VLANs is N times M memberships once it is parsed: every such trunk is a
-  member of every VLAN, and the tree lists them VLAN by VLAN.  Those
-  memberships are real, and are made.  A thousand of each (118 KB) is a
-  million of them: two thirds of a second and 72 MB when translated to
-  AOS-S, where it was three seconds and a gigabyte.  Nothing in that text is
-  a range; the cost is the product of two honest counts, and nothing limits
-  either.  A Junos `interface-range` is the same shape: every address of the
-  range is copied to every member.  Reachable wherever a switch config is
-  parsed.
-* **There is no time limit on a request**, and none on the memory one takes.
-  What is mended above is what was found; the next shape is stopped by
-  nothing.
+A range is a few bytes that parse to thousands of entries, `all` is 4,094,
+and two honest counts multiply, so the size of a request bounds neither the
+memory it takes nor its time.  The product therefore COUNTS what a request
+makes (`netcanon/migration/limits.py`): at each place where a few bytes
+become many entries, before the entries are made; once more on every
+finished parse, whoever made what it holds; and the length of every output.
+Past a limit the request is refused, in a sentence that names what was
+large, how large, and the limit.  What is counted is entries and characters,
+never bytes of memory: an operator can check "1,000 trunk ports x 1,000
+VLANs" against a device.
 
-A deployment that takes text from people it does not trust should put a
-request timeout and a memory limit in front of the application - one that
-stops the WORKER, since a request handler here is a thread and a thread
-cannot be stopped: a limit that only frees the caller leaves the parse
-running, and every other request waiting for it.  That advice
-is not only for texts built to be slow: what a config expands to, and the
-product of its trunks and its VLANs, are reachable with a config that is
-merely large.
+| Limit | What is counted | `small` | `standard` | `large` |
+|---|---|---:|---:|---:|
+| `vlan_ids` | VLAN ids that lists and ranges name (`2-4000`, `all`, `except 7`) | 1,048,576 | 16,777,216 | 67,108,864 |
+| `memberships` | one port in one VLAN's port list, or in one LAG | 50,000 | 1,000,000 | 4,000,000 |
+| `ports` | different ports that port ranges name; ports that only a VLAN's or a LAG's list names | 2,048 | 8,192 | 32,768 |
+| `interfaces` | interface records, wherever one is made | 2,500 | 50,000 | 200,000 |
+| `copies` | entries a Junos `interface-range` copies onto its members | 10,000 | 100,000 | 400,000 |
+| `words` | words of set commands written out from block-form Junos | 250,000 | 4,000,000 | 16,000,000 |
+| `text` | characters of an output; of the nested blocks VyOS set lines are written out as | 8,000,000 | 64,000,000 | 256,000,000 |
+| `seconds` | the time one request may take | 20 | 120 | 600 |
+
+One setting chooses the column, by name: `NETCANON_CONFIG_LIMITS` for the
+server, the Docker image and pip; **Preferences... -> Config size limit**
+in the desktop application; `--limits` on the command line.  The default is
+`standard` on both platforms.  `unlimited` is no limit and no deadline.  A
+value that is none of the four stops the server at startup: it is not read
+as "no limit".  Work that asks for no limits -- a tool, a test, a caller
+added next year -- runs under `standard`.
+
+A refusal is a result and not a fault.  The endpoints that return a job
+answer 200 with a `failed` job whose `error` begins `refused:` and whose
+`refusal` carries the same as data (never `parse failed`, which the migrate
+page reads as "the wrong vendor?"); the sanitiser answers 413, as it does
+for an upload over its byte cap; `detect-deployment` still proposes the
+device and says in a note why the proposal was not checked against the port
+names; the command line exits 2.  What a refusal quotes from the config --
+the range that passed the limit, a port name -- goes to the client and never
+to a log: the log line has the name of the limit and the counts.
+
+What the texts measured above do now:
+
+* One AOS-S line of 800 ranges of 1,001 ports (11 KB): refused at the ninth
+  range, in a hundredth of a second and under two megabytes.  It was 295 MB
+  to parse.
+* 1,000 Arista trunks that each allow VLANs 2-4000 (89 KB): read under
+  `standard` (32 MB of ids); written id by id it is 19 MB of output, which
+  is counted from the lengths of the lists before a character of it is
+  written.  Under `small` it is refused at the 263rd trunk.
+* 1,000 trunks that allow every VLAN and 1,000 declared VLANs (118 KB): a
+  million memberships, which is the `standard` limit exactly.  One trunk
+  more is refused before the first membership is stamped: the product is
+  known as soon as the two counts are.
+* A Junos `interface-range` is counted before its addresses are copied onto
+  its members.
+
+Counting found more of the same, each bounded now.  **The cap on the text
+does not bound memory**: 50,000 interface stanzas of one line each are 0.9
+MB of text and 240 MB of request, so an interface is counted where it is
+made.  Block-form Junos writes the whole path again for every statement
+under it (a 5,000-word path over 790 statements, 43 KB, was 295 MB and five
+seconds): counted in words.  A VyOS set line becomes nested blocks, each
+indented once more, so what a line becomes grows with the square of its
+depth: counted in characters; and a set line nested more than 64 levels deep
+is a parse failure, where past about a thousand it was an unexpected error.
+
+**Time.**  A request has one deadline, and every parser looks at it: in
+every loop over the lines of a config, in the projection's passes, at every
+count, and when a stage starts -- a request that is out of time does not
+begin another parse or another render.  Past it the request is refused like
+any other, with `seconds` as the limit.
+
+**What the deadline does not stop.**  A handler here is a thread, and a
+thread cannot be stopped from outside; only work that looks at the clock
+stops.  A renderer does not look.  Neither does a transform between the
+stages, the walk that builds the validation report, the encoding of the
+answer, or one long call into C (a pattern at work, a sort, the XML parser
+reading a whole document).  A request whose time runs out in one of those is
+not interrupted.  If that was its last stage, **the job comes back as any
+other job does** -- `completed` or `partial`, with no word about the limit.
+What bounds a renderer is the counts: it writes a tree that passed them.
+
+**Not bounded, stated once:**
+
+* **Requests in flight.**  Every limit is for one request.  Several at once
+  multiply all of the above, and nothing counts them.  The sanitise page
+  itself sends two requests at once, the audit and the output.
+* **The size of an answer.**  A job's validation report has a path for
+  every membership, so a million memberships translated to a target that
+  reports each as unsupported are an answer of 188 MB under `standard`, and
+  50,000 are 38 MB under `small`.
+* **Records that no limit counts**: static routes, addresses, users, DHCP
+  pools.  They are bounded by the cap on the text and by nothing else.  Two
+  megabytes of static routes cost 65 to 95 MB to translate, by target, and
+  about 100 MB to sanitise.
+* **A renderer, a transform or one call into C that runs long**, as above.
+* **Linux.**  The megabytes in this section are a Windows process's, except
+  where a container is named.
+
+**The public demo** runs `small`, in a container of 256 MiB and half a CPU
+for each visitor, behind a proxy that takes a body of two megabytes and
+waits 30 seconds.  Measured in such a container
+([`docs/demo-plan/07-budget.md`](docs/demo-plan/07-budget.md)): the text
+built to reach every limit at once is translated in two seconds with the
+instance at 205 MB, and sanitised with it at 240 MB.  Two such requests at
+once end the instance, as one paste did before; a visitor can end their own
+sandbox and cannot reach another's.
+
+A deployment that takes text from people it does not trust should still put
+a request timeout and a memory limit in front of the application - one that
+stops the WORKER, since a limit that only frees the caller leaves the work
+running - and a limit on requests in flight.  The limits here bound what one
+request can ask for; they are not a wall round the process.
+
+The control is three kinds of test (`tests/unit/migration/test_limits.py`,
+`tests/integration/test_config_limits_api.py`).  Each limit has a text
+under it that is translated as it is with no limit at all, and one over it
+that is refused before what it asks for is made.  Completeness is checked
+by experiment -- every codec's parse stops at a deadline it has passed,
+every line of every committed capture is walked by a loop that looks at the
+clock, a tree whose entries nothing counted is still refused -- and by
+reading the code: every loop over the lines of a config, every `range(...)`
+in a module under `codecs/`, every broad exception handler on the way.
+`tests/unit/test_limits_docs_truth.py` holds the numbers in this document
+to the code's.
 
 ---
 
@@ -1012,6 +1110,9 @@ constrains the *application* (the container).
 | Banner / comment text not sanitised | Operator-submitted bug reports may leak banner content | Documented | Sanitiser is canonical-model-driven; banner text is parse-and-ignored.  See `BUG_REPORTING.md`; hand-redact banners before submission. |
 | DNS-name in an UNMODELLED host region | An FQDN inside a Tier-3 / banner / comment region the canonical model doesn't type as a host passes through verbatim | Documented (narrowed) | The modelled host fields (NTP / syslog / SNMP-trap / RADIUS) now redact an FQDN target to `host-N.example.test`; only hosts the model can't see (Tier-3 / banner text, itself parse-and-ignored) remain.  Hand-redact those before submission. |
 | Backup artifacts (`configs/`) stored plaintext | Fetched device configs contain device secrets (`$9$`/type-7/`$6$`, SNMP/RADIUS/IKE) written verbatim | Yes (deliberate) | A backup must be the real, complete, diffable config; recommended at-rest control is an OS-encrypted volume (covers `configs/` + the key in one layer; offline-threat only).  See "Credential Storage → Backup artifacts" |
+| Translation requests in flight are not limited | Every config limit is for one request; several large ones at once multiply the memory, and nothing counts them (the backup engine has such a limit; the translator has none) | Accepted | A deployment that takes text from people it does not trust puts a limit on requests in flight, and a memory limit that stops the worker, in front of the application.  See "Input Validation — Config Text" |
+| A renderer is not stopped by the request's deadline | The deadline is looked at by parsers.  A request whose time runs out in a renderer, a transform or one call into C runs to its end, and its job reads as any other | Accepted | A thread cannot be stopped from outside.  What bounds a renderer is the counts on the tree it is handed.  See "Input Validation — Config Text" |
+| The size of an answer, and records no limit counts | A job's validation report grows with the memberships it reports (188 MB at the `standard` limit, to a target that reports each as unsupported); static routes and addresses are bounded only by the cap on the text | Documented | See "Input Validation — Config Text" |
 | Backup-engine resource exhaustion (many concurrent jobs) | The per-job worker pool caps a *single* job at `MAX_BACKUP_CONCURRENCY` (10), but several schedules firing together — or a schedule firing during a manual run — each spin up their own pool, so the total SSH/NETCONF session count was unbounded (N jobs x per-job cap), able to exhaust threads / file descriptors on the backup host | No (mitigated) | A process-wide `BoundedSemaphore` (`netcanon/services/backup_runner.py`) caps the *sum* of in-flight device collections across all concurrent jobs at `MAX_GLOBAL_BACKUP_CONCURRENCY` (defaults to the per-job cap, so single-job behaviour is unchanged); an over-limit worker blocks (back-pressure) until a slot frees, never failing.  Raise via `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`.  The 500-device per-request cap + opt-in egress allow-list bound the surface further.  (blind audit `3ec11f3`, r7) |
 
 ---
@@ -1029,6 +1130,9 @@ This file must be updated when any of the following change:
 - A new redaction category lands in `netcanon/tools/sanitize.py`
 - A new supply-chain integrity control ships (signature, attestation,
   lock manifest, etc.)
+- A config limit changes, a new kind is counted, or something the limits
+  do not bound is closed (`netcanon/migration/limits.py`; "Input
+  Validation — Config Text")
 
 ---
 

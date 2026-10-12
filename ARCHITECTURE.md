@@ -282,6 +282,97 @@ inventories" below.
 
 ---
 
+## Config limits (what one request may make, and for how long)
+
+**Where:** `netcanon/migration/limits.py`
+**What:** counts of what a request makes, a deadline for the request,
+and the refusal when either is passed.
+
+**The idea.**  A config is whatever was pasted, and a few bytes of it
+can stand for a great deal: `2-4000` is thousands of VLAN ids, `all` is
+every one, every trunk that allows every VLAN is a member of every VLAN, and an
+interface stanza is one line.  So the size of a text bounds neither the
+memory a request takes nor its time, and a cap on the text is not a cap
+on the work.  The limits are therefore on what is MADE.
+
+**Why counts and not bytes.**  An operator can check "1,000 trunk ports
+x 1,000 VLANs" against a device; nobody can check a megabyte, and a
+megabyte is a different number on Linux, on Windows and after the next
+pydantic release.  And several counts, because one entry is not one
+price: a VLAN id on a port costs a pointer, a membership hundreds of
+bytes by the time a target has reported on it, an interface
+thousands.  The kinds are in `limits.KINDS`; the numbers, in four named
+sets (`small`, `standard`, `large`, `unlimited`), are in
+[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) § H.
+
+**Three objects, and no signature that carries them.**
+
+* a *scope* (`limits_scope`) says which set applies and holds the
+  request's deadline.  An entry point opens it: the request path in
+  `_migration_helpers.run_translation`, the sanitiser's route on its
+  worker thread, detection, the command line.  Work that opens none runs
+  under `standard`, so a caller nobody thought about is still bounded.
+* a *meter* (`metered`) holds the running counts of ONE stage.
+  `CodecBase.__init_subclass__` already wrapped every codec's `parse`
+  (to turn a model's validation error into a `ParseError`); the same
+  wrapper opens a meter round every `parse` and every `render`.  No
+  codec is handed anything, and no frozen pipeline signature changes.
+* `LimitExceeded` is what a count or the clock raises.  Every entry
+  point turns it into an answer in words (below).
+
+Both are context variables: a request's handler runs on a worker
+thread, and its counts and its limits are that thread's.
+
+**Where the counts are charged.**  Before the entries are made, at each
+place a token expands (`charge`): the VLAN id-list readers
+(`_helpers._parse_vlan_list`, `merge_trunk_allowed`, the Arista and
+Junos readers of their own); the AOS-S port range (memberships, then
+the different ports ranges have named); the switchport projection,
+which knows the whole product after its first pass and before its
+first stamp; the Junos `interface-range` fold; block-form Junos, in
+words, since the path is written again for every statement; VyOS set
+lines, in the characters of the nested blocks they become; the
+renderers that write every id of a list (IOS-XE and EOS add up the
+lengths of the lists before they write a character; Junos counts each
+port's lines).  An interface is counted where it is made -- in the
+model, the one place every parser and every renderer passes.  Then,
+with no list of places at all: the finished tree of every parse is
+counted at the boundary (`census`), and so is the length of every
+output.  The early counts refuse before the memory is spent; the late
+ones need nobody to have found the place.
+
+Counts belong to one stage, because they are a property of the config:
+the same text is refused or accepted whichever endpoint it is posted
+to and however often that endpoint parses it.
+
+**The deadline** belongs to the request.  It is looked at in every
+loop over the lines of a config (`ticked`, `tick`), in the
+projection's passes, at every charge, and when a stage starts.
+A thread cannot be stopped from outside, so only work that looks stops:
+a renderer does not, and a request whose time runs out in one is not
+interrupted ([`SECURITY.md`](SECURITY.md) has what follows from that).
+
+**A refusal is a result.**  `run_plan` has one clause for it: the job
+is `failed`, `error` begins `refused:`, `refusal` (a `Refusal` model)
+says the same as data, and the validation report is dropped -- the
+answer to "too large" is small.  The sanitiser answers 413,
+`detect-deployment` adds a note to a proposal it still makes, the
+command line exits 2.  The sentence names what was large, how large
+and the limit, and then what allows more for whoever reads it
+(`how_to_raise`): the environment variable and the Preferences dialog
+on a server, the option on the command line, and under `small` --
+which is the public demo's -- no setting at all.
+
+**Guards** (`tests/unit/migration/test_limits.py`): each limit has a
+text under it and a text over it; every codec's parse is stopped at a
+deadline it has passed; and three rules are read from the source, each
+with a table a new case fails until it is in -- every loop over a
+config's lines looks at the deadline, every `range(...)` under
+`codecs/` has an answer, and no broad handler stands between an
+expander and its caller without naming the refusal.
+
+---
+
 ## Per-pane overrides (Tier-3 rename modal)
 
 **Where:** `run_plan_with_overrides` in

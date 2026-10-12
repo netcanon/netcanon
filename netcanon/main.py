@@ -267,6 +267,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             len(_app.state.definitions),
             len([s for s in _app.state.schedules.values() if s.enabled]),
         )
+        from .migration.limits import describe, resolve
+        logger.info(
+            "Config limits in force: %s",
+            describe(resolve(settings.config_limits)),
+        )
 
         # Surface an insecure SSH host-key posture once at startup so
         # 'auto_add' (the back-compat default) is a conscious choice, not

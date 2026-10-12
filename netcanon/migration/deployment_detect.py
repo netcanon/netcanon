@@ -69,6 +69,7 @@ from .device_models import (
     FamilyDef,
     compile_deployment,
 )
+from .limits import LimitExceeded
 
 if TYPE_CHECKING:
     from .codecs.base import CodecBase
@@ -192,9 +193,12 @@ def propose_deployment(
         ``missing_port_count`` is the whole number); ``consistent`` is
         ``True`` when there are none, and ``None`` when there was
         nothing to check: nothing was proposed, the config could not
-        be parsed, or it names no port.  Never raises on any text: a
-        detector that does is answered with a note, and so is a parser
-        that refuses the text.
+        be parsed, it asks for more than the limits in force allow, or
+        it names no port.  Never raises on any text: a detector that
+        does is answered with a note, and so is a parser that refuses
+        the text -- a refusal for size or time with a note that says
+        what was large and the limit
+        (:mod:`netcanon.migration.limits`).
     """
     vendor = codec.capabilities.vendor_id
     proposal = DeploymentProposal(vendor=vendor)
@@ -207,6 +211,13 @@ def propose_deployment(
         return proposal
     try:
         detected = detector(raw_text)
+    except LimitExceeded as exc:
+        # Out of time is not "could not be read".
+        proposal.notes.append(
+            f"The hardware lines were not read: {exc}  Declare the device "
+            f"yourself."
+        )
+        return proposal
     except Exception as exc:
         # The text is whatever was pasted.  A detector that cannot read
         # it has read nothing; that is an answer, not a server error.
@@ -350,6 +361,13 @@ def propose_deployment(
 
     try:
         tree = codec.parse(raw_text)
+    except LimitExceeded as exc:
+        # Too large is not unreadable: say which, and the limit.
+        proposal.notes.append(
+            f"The proposal was not checked against the port names the "
+            f"config uses: {exc}"
+        )
+        return proposal
     except Exception:
         tree = None
     if not isinstance(tree, CanonicalIntent):

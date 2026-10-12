@@ -173,6 +173,13 @@ pipeline — they just aren't pinned by a fixture yet").
 
 ## Common gotchas
 
+- **A port range that names ports the switch does not have is
+  refused.**  `tagged 1-1001` is 1,001 ports to everything downstream.
+  One range is read up to 1,025 ports; the DIFFERENT ports that ranges
+  name, and the ports that only a VLAN's or a LAG's list names, are
+  held to the server's config size limit (`ports`), and the job says
+  `refused:` with the range that passed it.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § H.
 - **`include-credentials` mode** affects how hashes appear in
   running-config — Netcanon parses + preserves both forms.
 - **Banner format + positional port lists** — the codec correctly

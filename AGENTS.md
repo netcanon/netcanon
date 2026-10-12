@@ -89,7 +89,8 @@ cross-platform equivalents:
   **View** button (`config-view-link`) which renders the file in the browser.
 - **Preferences dialog** (`netcanon_desktop/preferences_dialog.py`) — operator-
   configurable paths (configs / definitions / data dir), embedded-server port,
-  and toggles.  Persisted to `%APPDATA%\Netcanon\preferences.json`.  Equivalent
+  the config size limit (the twin of `NETCANON_CONFIG_LIMITS`), and toggles.
+  Persisted to `%APPDATA%\Netcanon\preferences.json`.  Equivalent
   to the web platform's `NETCANON_*` env-var / `.env` configuration surface;
   desktop operators have no shell-level knob, so the dialog is the equivalent
   affordance.  PySide6 widgets carry `setObjectName()` IDs following the
@@ -164,6 +165,9 @@ mapping below is concrete; audit every applicable row before you run
 | A new or changed model-family YAML under `netcanon/definitions/library/model_families/` (a family, a model, a mode, a module) | Per [`docs/adding-a-device-model.md`](docs/adding-a-device-model.md): (1) the hand-typed `(access names, uplink names)` entry for every model × mode × module combination in `EXPECTED_INVENTORIES` in `tests/unit/migration/test_device_models_shipped.py` — the test fails for any shipped combination that is not pinned; (2) each part number in `EXPECTED_PART_NUMBERS`, and a part graded `inferred` in `KNOWN_INFERRED_PARTS`, in the same file; (3) a `captures:` claim if a committed capture of that exact model exists AND names every port of it, mirrored whole in `EXPECTED_CLAIMS` and listed in `PROVEN_CAPTURE_CLAIMS` in `netcanon/migration/device_models.py` — a claim not in that list grants nothing (never grade a part `capture`; the schema refuses it); (4) the pair in `PROFILE_AGREES_WITH` if a flat target profile describes the same device.  Port groups go in port-NUMBER order, not left-to-right on the faceplate.  Write every `ref` so it stands on its own — it is served to API clients, who cannot read a legend in a YAML comment |
 | A new deployment detector in `_detectors()` (`netcanon/migration/deployment_detect.py`), or a change to one | The detector lives beside the vendor's codec (`deployment_detect.py`) and reads what a config STATES — part numbers, member ids, modules — never a model inferred from port names.  It reads text nobody vouches for: anchor every pattern to a line, bound what it takes, apply none to a fragment another matched unless that fragment is itself bounded, and say in the notes what was left out or chosen — a few member numbers and a count, never every one.  A detection with no members puts the REASON first in its notes: a proposal with no deployment shows its first note as why.  Name the vendor's codec in `_CODEC_OF` in `tests/unit/migration/test_deployment_detect.py` — the tests that walk every detector (the cross-check against that vendor's capture claims, the text made to be slow, the factory-name guard) fail until it is there.  Tests in that module over every stanza form the vendor documents and over the committed captures; the "what the lines do not prove" notes; no MAC or serial in the evidence lines.  `docs/CAPABILITIES.md` § G names the vendors detection reads; `SECURITY.md` "Input Validation — Device Declarations" lists the detector's file |
 | A new naming rule in `_naming_rules()` (`netcanon/migration/device_models.py`), or a change to one | The rule itself lives beside the vendor's codec; give it the set of roles it can name (a role it cannot name is refused at load).  Tests against the vendor's own printed examples, including one whose member number is not 1, in `tests/unit/migration/test_device_models.py`; `ARCHITECTURE.md` "Device models and inventories" if the rule introduces a new idea (a lane, a per-group prefix) |
+| A new place that turns a token into many entries (a range, a keyword for "every", a product of two lists), or a new loop over config lines, in any module under `netcanon/migration/` | Charge it before the entries are made (`limits.charge`) and put the loop through `limits.ticked` -- the Hard Rule on counting has the three parts.  A `range(...)`, a slice of `VLAN_IDS` or a `vlan_id_run(...)` under `codecs/` goes in `RUNS_OF_ENTRIES` in `tests/unit/migration/test_limits.py` with its answer; a text that is refused BEFORE it is made goes in that module's `WIDE` (for a VLAN id list) or gets a test beside the others; `netcanon/migration/codecs/README.md` "Adding a codec" step 4 |
+| A new limit, a changed number, or a new kind in `netcanon/migration/limits.py` | The tables in [`SECURITY.md`](SECURITY.md) "Input Validation — Config Text" and [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) § H (`tests/unit/test_limits_docs_truth.py` fails until they agree); [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) "The job says `refused:`" for a new kind; `Refusal.limit` in `netcanon/models/migration.py`; and for `small`, a measurement in a container shaped like a demo instance, recorded in [`docs/demo-plan/07-budget.md`](docs/demo-plan/07-budget.md) |
+| A new handler that takes config text (a `raw_text` body field, an upload) | Open the limits scope with the server's setting (`with limits_scope(request_limits(request)):`) and answer a `LimitExceeded` in words; add the path to `TAKES_CONFIG_TEXT` in `tests/integration/test_config_limits_api.py`, which finds such handlers by what they take and fails until the new one is there |
 | A new job-running migration handler in `netcanon/api/routes/migration.py` | Dispatch through `_migration_helpers.run_translation`, never the pipeline directly, and add the path to the parametrised endpoint tests in `tests/integration/test_migration_models_api.py` (`test_every_plan_endpoint_renders_the_same_port_names`, `test_the_operators_port_map_applies_on_every_plan_endpoint`, `test_acknowledged_drops_clear_partial_on_every_plan_endpoint`) — otherwise the same request body renders different port names, or stays `partial` after the operator has decided every port, depending on which endpoint it is posted to.  The first of those alone cannot see it: it posts no port map |
 | A target-profile gains `modules:` (migrates to module-variant shape) | Add its `{vendor}/{model}` key to the canonical allowlist at `tests/fixtures/module_variants.py`.  Both the unit-tier and integration-tier tests import from there; a CI-guard (`test_module_variant_allowlist_shared_with_integration_tier`) enforces the single-source invariant so no manual sync is required. |
 | A new canonical field on `CanonicalIntent` / `CanonicalInterface` / etc. | `docs/adding-a-canonical-field.md` — the MTU wire-through is the reference worked example |
@@ -477,10 +481,10 @@ tests use these exclusively — never CSS classes or element structure.  See
   `Uniques` (beside `GrowingIndex`), or keep a set beside the list.  The
   test module reads the source for that idiom, and a new one fails
   until it is mended or listed there with the bound that makes it
-  harmless.  Known and NOT mended (SECURITY.md has the measurements):
-  what a config EXPANDS to (`1-4094` is seven bytes), the product of
-  two kinds of stanza that grow together, and that nothing limits the
-  time or the memory a request takes.  When you find a
+  harmless.  None of this is about what a config EXPANDS to (`1-4094`
+  is seven bytes) or the product of two kinds of stanza that grow
+  together: those are counted and limited, by the rule after this
+  one.  When you find a
   shape the search missed, add it to the search in the same change as
   the fix.  A pattern that is slow and safe (it reads only data the
   server ships) goes in that module's `KNOWN_SLOW` with the reason; an
@@ -489,6 +493,55 @@ tests use these exclusively — never CSS classes or element structure.  See
   of single patterns are pinned in
   `tests/unit/migration/test_redos_hardening.py` and
   `test_parse_quadratic_scan_perf.py`.
+- **Never** turn a few bytes of a config into many entries without
+  counting them first, never loop over a config's lines without looking
+  at the deadline, and never catch broadly between the two and their
+  caller.  A range is thousands of entries, `all` is 4,094, two honest
+  counts multiply, and an interface stanza is one line: the size of a
+  text bounds neither the memory a request takes nor its time.  One
+  AOS-S line of 800 port ranges (11 KB) was 295 MB to parse; 1,000
+  trunks that allow `2-4000` were gigabytes; 50,000 one-line interface
+  stanzas (0.9 MB) were 240 MB.  `netcanon/migration/limits.py` counts
+  what a request makes and refuses past a limit, in a sentence:
+  (1) **an expander charges before it makes** -- `charge("vlan_ids",
+  high - low + 1, token)` on the line before the list -- so that the
+  refusal comes before the memory is spent.  The count of every
+  finished parse (`census`, at the boundary every `parse` crosses)
+  holds a tree whose expander nobody found to the same limits, after
+  the fact; a test tells the two apart, and fails a parser that is
+  refused only there.
+  (2) **a loop over lines goes through `ticked(...)`** (a `while`
+  calls `tick()`), in every module that reads config text.  A thread
+  cannot be stopped from outside; only work that looks at the clock
+  stops.
+  (3) **a broad `except` on the way names `LimitExceeded` first.**  The
+  handler round the Junos block-form conversion turned a refusal into
+  advice to run `display set`; the per-probe net in detection would
+  turn "out of time" into "no codec knows this text".
+  And a refusal is a RESULT, with the same care a translation gets: a
+  `failed` job whose `error` begins `refused:` (never `parse failed`,
+  which the migrate page answers with "did you mean another vendor?")
+  and whose `refusal` says the same as data; HTTP 413 from the
+  sanitiser; a note from `detect-deployment`; exit 2 from the command
+  line.  It names what was large, how large, and the limit, and under
+  the public demo's limits it names no setting, because a visitor
+  cannot change one.  What a refusal quotes from the config goes to
+  the client and NEVER to a log.  Every handler that takes config text
+  opens the scope with the server's own setting
+  (`_migration_helpers.request_limits`): work that opens none runs
+  under `standard`, which on the demo is several times what an
+  instance holds.  The deadline does not stop a renderer; SECURITY.md
+  says so, and a test pins that the document says no more than the
+  code does.  Guarded by `tests/unit/migration/test_limits.py` (each
+  limit; every codec's parse stopped at a deadline it has passed;
+  the three rules above read from the source, each with a table a new
+  case fails until it is in) and
+  `tests/integration/test_config_limits_api.py` (every handler that
+  takes text, found by what it takes).  A number changes in
+  `limits.py`, in the documents and with the measurement that says
+  why: `tests/unit/test_limits_docs_truth.py` holds the three together,
+  and `small` was sized in a container shaped like a demo instance
+  (`docs/demo-plan/07-budget.md`).
 - **Never** express a CI tool version as a RANGE and call it pinned, and
   never repeat that version in a second file.  CI installs fresh on every
   run and pip resolves to the newest match, so a range silently adopts

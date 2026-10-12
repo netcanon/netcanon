@@ -74,8 +74,12 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
 )
-from .._helpers import _prefix_to_mask
+from ...limits import ticked
+from .._helpers import _prefix_to_mask, charge_id_lines
 from ..base import RenderError
+
+#: The line that carries a port's allowed list, up to its first id.
+_ALLOWED_VLAN_LEAD = " switchport trunk allowed vlan "
 
 
 def render_intent(tree: Any) -> str:  # noqa: C901
@@ -110,6 +114,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # appended to the possibly-reused intent); empty for same-vendor
     # renders where the ``Vlan<N>`` interface is already present.
     synth_svis = synthesize_svis_from_vlan_l3(tree)
+
+    # Every id of every allowed list is written out below: counted
+    # here, before the first character.
+    charge_id_lines(
+        [*tree.interfaces, *synth_svis], _ALLOWED_VLAN_LEAD, trunks_only=False,
+    )
 
     out: list[str] = []
 
@@ -470,9 +480,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             vlan_list = ",".join(
                 str(v) for v in iface.trunk_allowed_vlans
             )
-            body.append(
-                f" switchport trunk allowed vlan {vlan_list}"
-            )
+            body.append(f"{_ALLOWED_VLAN_LEAD}{vlan_list}")
         if iface.mtu is not None:
             body.append(f" mtu {iface.mtu}")
         # LAG-membership marker.  Mode normalisation: canonical
@@ -828,7 +836,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # see what didn't auto-translate.  Skipped if empty.
     for name, body in tree.raw_sections.items():
         out.append(f"! raw_section: {name}")
-        for ln in body.splitlines():
+        for ln in ticked(body.splitlines()):
             out.append(ln)
         out.append("!")
 

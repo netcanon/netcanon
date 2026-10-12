@@ -140,6 +140,7 @@ document:
 | `definitions_dir` | Override the YAML device-definitions directory |
 | `data_dir` | Override the data root for `jobs/` / `schedules/` / `devices/` |
 | `port` | Embedded server TCP port (1024–65535; restart required) |
+| `config_limits` | How much one config may expand to and how long one translation may take: `standard` (default), `large` or `unlimited` in the dialog (**Config size limit**; restart required).  The desktop twin of the web platform's `NETCANON_CONFIG_LIMITS`; the numbers are in [`docs/CAPABILITIES.md`](../docs/CAPABILITIES.md) § H |
 | `open_in_editor` | Enable the "Open in editor" UI surface |
 | `open_browser_on_start` | Reserved — currently no-op, kept forward-compatible |
 

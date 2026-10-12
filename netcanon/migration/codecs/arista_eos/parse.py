@@ -56,6 +56,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
+from ...limits import charge, ticked
 from .._helpers import VLAN_IDS, GrowingIndex, Uniques, _mask_to_prefix, merge_trunk_allowed
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -862,7 +863,7 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     current_vlan: CanonicalVlan | None = None
 
     lines = raw.splitlines()
-    for raw_line in lines:
+    for raw_line in ticked(lines):
         line = raw_line.rstrip()
         stripped = line.strip()
         if not stripped or stripped.startswith("!"):
@@ -1016,7 +1017,7 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:
     # one line per VRF or VLAN cost the square of them.
     instances = GrowingIndex(lambda: intent.routing_instances, lambda ri: ri.name)
     vlans_by_id = GrowingIndex(lambda: intent.vlans, lambda vlan: vlan.id)
-    for raw_line in raw.splitlines():
+    for raw_line in ticked(raw.splitlines()):
         stripped = raw_line.strip()
         # Blank line: end of file / section.
         if not stripped:
@@ -1687,6 +1688,7 @@ def _expand_vlan_list(spec: str) -> list[int]:
             # span cannot OOM the process (valid sub-range preserved).
             a_i, b_i = max(1, a_i), min(4094, b_i)
             if a_i <= b_i:
+                charge("vlan_ids", b_i - a_i + 1, chunk)
                 out.extend(VLAN_IDS[a_i:b_i + 1])
         else:
             try:

@@ -208,6 +208,26 @@ timed only whole lines and short units, passed, and missed three of
 the four shapes it now builds — so a slow path it does not reach is to
 be expected, and the shape that reaches it is added when it is found.
 
+**What a config may make is limited, and the limits are tested three
+ways.**  A range is a few bytes that stand for thousands of entries, so
+the product counts what a request makes and refuses past a limit
+(`netcanon/migration/limits.py`).  `test_limits.py` first tests each
+limit: a text under it is translated exactly as with no limit at all,
+and a text over it is refused BEFORE what it asks for is made — the
+refusal says whether the count came before or after, and the bytes
+held on the way are counted.  Then completeness, by experiment: every
+codec's parse is run past a deadline and has to stop (time there
+passes only when the clock is looked at, so nothing depends on a
+machine's speed); every line of every committed capture has to be
+walked by a loop that looks at the clock; a tree whose entries nothing
+counted is still refused.  Then by reading the source, each rule with
+a table that a new case fails until it is in: every loop over a
+config's lines, every `range(...)` in a module under `codecs/`, every
+broad exception handler on the way.  A separate test holds every limit
+a document prints to the code's (`test_limits_docs_truth.py`).  What
+none of this shows: that the numbers are right for a device nobody
+here has a capture of.
+
 ### Layer 2: Integration tests
 
 `pytest tests/integration` — HTTP API surface via FastAPI

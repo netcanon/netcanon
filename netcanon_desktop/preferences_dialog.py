@@ -3,8 +3,9 @@ Preferences dialog — operator-facing UI for editing
 ``DesktopPreferences``.
 
 Surfaces the operator's three path overrides (configs / definitions /
-data root), the embedded server port, the open-in-editor toggle, and
-two convenience buttons (Open Configs Folder / Save / Cancel).
+data root), the embedded server port, the config size limit, the
+open-in-editor toggle, and two convenience buttons (Open Configs Folder
+/ Save / Cancel).
 
 The dialog NEVER restarts the embedded server itself.  All changes
 are persisted to ``preferences.json`` via ``DesktopPreferences.save``;
@@ -28,6 +29,28 @@ from pathlib import Path
 from netcanon_desktop.preferences import DesktopPreferences
 
 logger = logging.getLogger(__name__)
+
+#: The config size limits the dialog offers, in the order it lists
+#: them, and what it calls each.  ``small`` is the public demo's: it is
+#: listed only when it is what the preferences file already holds, so
+#: that opening the dialog and saving never changes it unasked.
+LIMITS_OFFERED: tuple[str, ...] = ("standard", "large", "unlimited")
+LIMITS_LABELS: dict[str, str] = {
+    "small": "Small (the public demo's)",
+    "standard": "Standard",
+    "large": "Large (four times Standard)",
+    "unlimited": "Unlimited (no limit and no time limit)",
+}
+
+
+def limits_choices(stored: str) -> list[str]:
+    """The limits the dialog lists for a preferences file that holds
+    *stored*: the three it offers, and *stored* itself if it is not
+    one of them."""
+    choices = list(LIMITS_OFFERED)
+    if stored not in choices:
+        choices.insert(0, stored)
+    return choices
 
 
 class PreferencesDialog:
@@ -68,6 +91,8 @@ class PreferencesDialog:
         self._definitions_edit = None
         self._data_edit = None
         self._port_spin = None
+        self._limits_combo = None
+        self._limits_choices: list[str] = []
         self._open_in_editor_check = None
         self._open_browser_check = None
 
@@ -84,6 +109,7 @@ class PreferencesDialog:
         """
         from PySide6.QtWidgets import (
             QCheckBox,
+            QComboBox,
             QDialog,
             QDialogButtonBox,
             QFormLayout,
@@ -147,6 +173,28 @@ class PreferencesDialog:
         port_spin.setValue(self._prefs.port)
         form.addRow(QLabel("Port (restart required):"), port_spin)
         self._port_spin = port_spin
+
+        # ---- Config size limit ----
+        # What one config may expand to, and how long one translation
+        # may take.  A config past the limit is refused in a sentence
+        # that names what was large and the limit; this is where an
+        # operator who has such a config allows more.
+        limits_combo = QComboBox()
+        limits_combo.setObjectName("pref-dialog-config-limits-select")
+        self._limits_choices = limits_choices(self._prefs.config_limits)
+        for value in self._limits_choices:
+            limits_combo.addItem(LIMITS_LABELS.get(value, value))
+        limits_combo.setCurrentIndex(
+            self._limits_choices.index(self._prefs.config_limits)
+        )
+        limits_combo.setToolTip(
+            "How much one config may expand to (a range of VLANs or ports "
+            "is a few characters that stand for thousands of entries) and "
+            "how long one translation may take.  A config past the limit "
+            "is refused, and the refusal says what was large."
+        )
+        form.addRow(QLabel("Config size limit (restart required):"), limits_combo)
+        self._limits_combo = limits_combo
 
         # ---- Toggles ----
         open_in_editor_check = QCheckBox("Enable 'Open in editor' button")
@@ -267,6 +315,7 @@ class PreferencesDialog:
                 definitions_dir=self._path_from(self._definitions_edit),
                 data_dir=self._path_from(self._data_edit),
                 port=self._port_spin.value() if self._port_spin else 8765,
+                config_limits=self._limits_from_form(),
                 open_in_editor=(
                     self._open_in_editor_check.isChecked()
                     if self._open_in_editor_check
@@ -296,6 +345,12 @@ class PreferencesDialog:
         )
         if self._dialog is not None:
             self._dialog.accept()
+
+    def _limits_from_form(self) -> str:
+        """The config size limit the combo box shows."""
+        if self._limits_combo is None or not self._limits_choices:
+            return self._prefs.config_limits
+        return self._limits_choices[self._limits_combo.currentIndex()]
 
     def _path_from(self, edit) -> Path | None:
         text = (edit.text() if edit else "").strip()

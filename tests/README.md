@@ -159,6 +159,35 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
    `mock_pyside6`, `mock_pystray`, and `mock_generate_tray_image` fixtures
    from `tests/desktop/conftest.py` to keep tests headless and fast.
 
+### Config limits in tests
+
+A parse that opens no limits scope runs under the `standard` config
+limits (`netcanon/migration/limits.py`), in a test as anywhere else.
+Two things follow.
+
+* **A test of COST asks for the `no_config_limits` fixture**
+  (`tests/conftest.py`).  Such a test builds texts no device has —
+  forty thousand ports on one LAG — and the limits refuse some of them;
+  a refused text is read quickly whatever the code behind it costs, so
+  the test would pass on code that is slow.  `tests/unit/test_untrusted_text_cost.py`
+  uses it for every test, and treats a reading that is refused all the
+  same as an error.
+* **A test of the limits says which limits**: `with
+  limits_scope("small"):`, or a `Limits` of its own made with
+  `dataclasses.replace` — a few thousand entries are enough to pass a
+  limit of a few thousand, and nothing has to be large.
+
+Where the limits themselves are tested: `tests/unit/migration/test_limits.py`
+(the mechanism, each limit, the measured texts, the deadline, and three
+rules read from the source), `tests/unit/test_limits_docs_truth.py`
+(every number a document prints), `tests/integration/test_config_limits_api.py`
+(the refusal on every HTTP surface; every handler that takes config
+text), `tests/unit/test_cli.py` (the command line),
+`tests/desktop/test_config_limits_desktop.py` and
+`test_preferences_dialog.py` (the preference, the control, the embedded
+server) and `tests/e2e/test_config_limits_e2e.py` (the sentence as the
+migrate and sanitise pages paint it).
+
 ## Markers
 
 | Marker        | Meaning |

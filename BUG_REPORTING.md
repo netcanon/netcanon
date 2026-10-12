@@ -165,6 +165,15 @@ Full rules and limitations in the sanitiser's module docstring at
   supported-subset reshape, not byte-identical with the original.
   This is acceptable for bug reports — operators usually don't want
   to share Tier-3 content (firewall, NAT, VPN) anyway.
+- **A config past the server's config size limits is refused, not
+  sanitised.**  The sanitiser parses and re-renders, so it is under the
+  same limits as a translation: the page shows the sentence under the
+  form, the API answers 413, and the CLI exits 2 (`--limits large`
+  allows more).  The sentence names what was large and the limit — see
+  [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) "The job says
+  `refused:`".  If the refusal is the bug you are reporting, paste the
+  sentence: it quotes one range or one port name from the config and
+  nothing else.
 - **Banner / comment text not redacted.**  These aren't in the
   canonical model.  Most are parse-and-ignored.  If your config has
   sensitive banner text, hand-edit it after sanitising.

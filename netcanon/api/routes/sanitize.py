@@ -18,16 +18,28 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ... import config as app_config
 from ...migration.codecs.base import ParseError, RenderError
 from ...migration.codecs.registry import list_public_codecs
-from ...tools.sanitize import sanitize_text
+from ...migration.limits import LimitExceeded, limits_scope
+from ...tools.sanitize import SanitizationResult, sanitize_text
+from ._migration_helpers import request_limits
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_within(
+    limits: str | None, raw: str, vendor: str, dry_run: bool,
+) -> SanitizationResult:
+    """``sanitize_text`` under this server's limits, with one deadline
+    for its parse and its render.  The scope is opened here, on the
+    worker thread that does the work."""
+    with limits_scope(limits):
+        return sanitize_text(raw, vendor, dry_run=dry_run)
 
 
 @router.post(
@@ -62,7 +74,14 @@ logger = logging.getLogger(__name__)
             },
         },
         400: {"description": "Upload could not be parsed as `source_vendor`."},
-        413: {"description": "Upload exceeds the configured size cap."},
+        413: {
+            "description": (
+                "Upload exceeds the configured size cap, or the config asks "
+                "for more than this server's limits allow "
+                "(`NETCANON_CONFIG_LIMITS`): the detail names what was "
+                "large, how large, and the limit."
+            )
+        },
         422: {
             "description": (
                 "Unknown `source_vendor`, or the sanitized tree could not be "
@@ -72,6 +91,7 @@ logger = logging.getLogger(__name__)
     },
 )
 async def post_sanitize(
+    request: Request,
     source_vendor: str = Form(...),
     config: UploadFile = File(...),
     dry_run: bool = Form(False),
@@ -109,8 +129,13 @@ async def post_sanitize(
         # the event loop (mirrors the scheduler's asyncio.to_thread dispatch
         # in routes/schedules.py).
         result = await asyncio.to_thread(
-            sanitize_text, raw, source_vendor, dry_run=dry_run
+            _sanitize_within, request_limits(request), raw, source_vendor, dry_run,
         )
+    except LimitExceeded as e:
+        # The status an upload over the byte cap gets, for the same
+        # reason: more than this server is set to take.  Not the
+        # "failed unexpectedly, please report this" net below.
+        raise HTTPException(status_code=413, detail=f"Refused: {e}") from e
     except ParseError as e:
         raise HTTPException(
             status_code=400,

@@ -60,6 +60,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
+from ...limits import ticked
 from .._helpers import (
     Uniques,
     _is_link_local_v6,
@@ -849,7 +850,7 @@ def _parse_vxlan(raw: str) -> tuple[list[CanonicalVxlan], dict[str, int]]:
     # Pass 1: vni → vlan_id from ``vlan configuration <N> / member ... vni``.
     vlan_by_vni: dict[int, int] = {}
     current_vlan: int | None = None
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         cm = _VLAN_CONFIG_RE.match(line)
         if cm:
             current_vlan = int(cm.group(1))
@@ -868,7 +869,7 @@ def _parse_vxlan(raw: str) -> tuple[list[CanonicalVxlan], dict[str, int]]:
     mcast_by_vni: dict[int, str] = {}
     l3vni_by_vrf: dict[str, int] = {}
     in_nve = False
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         im = _IFACE_RE.match(line)
         if im:
             in_nve = im.group(1).lower().startswith("nve")
@@ -1371,7 +1372,7 @@ def _parse_vlans(raw: str) -> list[CanonicalVlan]:
     current_id: int | None = None
     current_name: str = ""
 
-    for line in lines:
+    for line in ticked(lines):
         vm = _VLAN_RE.match(line)
         if vm:
             if current_id is not None:
@@ -1481,7 +1482,7 @@ def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
     declared_lag_names: set[str] = set()
 
     current_iface: str | None = None
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _IFACE_RE.match(line)
         if m:
             current_iface = m.group(1)
@@ -1551,7 +1552,7 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     global-table form.
     """
     routes: list[CanonicalStaticRoute] = []
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
             vrf = m6.group(1) or ""
@@ -1838,7 +1839,7 @@ def _parse_radius_servers(raw: str) -> list[CanonicalRADIUSServer]:
     servers: list[CanonicalRADIUSServer] = []
     current: CanonicalRADIUSServer | None = None
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         # Modern header opens a new stanza.
         header = _RADIUS_SERVER_HEADER_RE.match(line)
         if header:
@@ -1915,7 +1916,7 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
     """
     users: list[CanonicalLocalUser] = []
     seen_names: set[str] = set()
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _LOCAL_USER_RE.match(line)
         if not m:
             continue

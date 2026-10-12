@@ -168,6 +168,12 @@ real set-form) capture are welcomed via
   (curly-brace) is the native form; `show configuration commands`
   (set-form) is converted up front.  Distinct from the `juniper_junos`
   codec, which owns the Junos set-form.
+- **A set line nested more than 64 levels deep is a parse failure.**
+  A real path is a dozen words.  Set-form input is written out as
+  nested blocks before it is read, each level indented once more, so
+  what a line becomes grows with the square of its depth; the
+  characters of those blocks are held to the server's config size
+  limit (`text`).  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § H.
 - **VRF table ids are synthesised.**  Render emits a deterministic
   `table <id>` per VRF (`100 + sort-index`); the source table id is
   not preserved.

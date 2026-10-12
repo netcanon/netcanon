@@ -109,6 +109,7 @@ from ....models.migration import (
     LossyPath,
     UnsupportedPath,
 )
+from ...limits import ticked
 from .._helpers import Uniques, address_key
 from ..base import CodecBase, ParseError, RenderError
 from ..cisco_iosxe_cli import port_names as _cli_port_names
@@ -835,7 +836,7 @@ class CiscoIOSXECodec(CodecBase):
             source_format="xml-netconf",
         )
         intent.source_version = _extract_version(raw)
-        for idx, iface_el in enumerate(interfaces_el.findall(_q("interface"))):
+        for idx, iface_el in ticked(enumerate(interfaces_el.findall(_q("interface")))):
             raw_iface = _parse_interface(iface_el, idx=idx)
             intent.interfaces.append(_iface_dict_to_canonical(raw_iface))
         # Synthesise CanonicalVlan records from ``Vlan<N>`` SVI
@@ -1125,7 +1126,7 @@ def _parse_interface(el: ET.Element, idx: int = 0) -> dict[str, Any]:
     subs_el = el.find(_q("subinterfaces"))
     if subs_el is not None:
         subinterfaces: list[dict[str, Any]] = []
-        for si_el in subs_el.findall(_q("subinterface")):
+        for si_el in ticked(subs_el.findall(_q("subinterface"))):
             subinterfaces.append(
                 _parse_subinterface(si_el, iface_idx=idx)
             )

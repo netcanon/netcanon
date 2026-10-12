@@ -24,6 +24,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from ..migration.codecs.registry import get_codec, list_public_codecs
+from ..migration.limits import LimitExceeded
 
 #: Bytes of input passed to each codec's probe.
 #:
@@ -105,6 +106,10 @@ def detect_codec(
         List of :class:`DetectCandidate`, sorted by descending
         confidence (ties broken by codec name).  Empty list means
         no codec recognised the input.
+
+    Raises:
+        LimitExceeded: The caller's limits scope ran out of time
+            while a probe read the text.
     """
     prefix = raw[:probe_bytes] if len(raw) > probe_bytes else raw
     candidates: list[DetectCandidate] = []
@@ -112,6 +117,10 @@ def detect_codec(
         try:
             codec_cls = type(get_codec(name))
             result = codec_cls.probe(prefix)
+        except LimitExceeded:
+            # The request is out of time.  That is the caller's to
+            # answer, not "this codec has no opinion".
+            raise
         except Exception:  # pragma: no cover — probe MUST NOT raise
             # A malformed codec shouldn't take down detection for the
             # others.  Treat it as "no opinion".

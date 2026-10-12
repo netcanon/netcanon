@@ -71,7 +71,13 @@ looked at.
 Nor is any of this about what a config expands TO.  ``1-4094`` is a
 few bytes that parse to thousands of entries; reading it costs the
 size of what was asked for, which no search for work that grows
-faster than the text will report.
+faster than the text will report.  That is counted and limited
+(``netcanon.migration.limits``, ``tests/unit/migration/test_limits.py``).
+Every test here reads its texts with those limits off
+(``no_config_limits``): the texts are larger than any device, a limit
+would refuse some of them, and a refused text is read quickly whatever
+the code behind it costs.  A reading that is refused all the same is
+an error here, never a time.
 
 Each check is also handed something that is slow, and has to say so.
 """
@@ -99,10 +105,11 @@ import netcanon
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.migration.device_models import Deployment, MemberSpec, compile_deployment, load_model_families_dir
+from netcanon.migration.limits import LimitExceeded
 from netcanon.services.migration_detect import DEFAULT_PROBE_BYTES, detect_codec
 from netcanon.services.migration_pipeline import run_plan_with_models, run_plan_with_overrides
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("no_config_limits")]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "netcanon"
@@ -837,6 +844,10 @@ def _grows_faster_than_its_input(
     def quietly(text: str) -> None:
         try:
             read(text)
+        except LimitExceeded:
+            # Refused for its size: nothing was read, and the time to
+            # say no is not what this measures.
+            raise
         except Exception:  # a codec may refuse the text; how long it took is the point
             pass
 

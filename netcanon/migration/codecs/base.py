@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from pydantic import ValidationError
 
 from ...models.migration import CapabilityMatrix
+from ..limits import census, metered
 
 if TYPE_CHECKING:
     from ..canonical.port_names import PortIdentity
@@ -315,26 +316,63 @@ class CodecBase(ABC):
         tests) without each codec repeating a ``try/except ValidationError``.
         See :func:`_validation_error_as_parse_error` for the rationale.
 
-        Applied only to a subclass that DEFINES ``parse`` in its own body
-        (inherited implementations are already wrapped on the class that
-        defined them), and idempotent — re-decorating a class (e.g. under an
-        ``importlib`` reload) never double-wraps.
+        The same boundary is where what a config may make is counted
+        (:mod:`netcanon.migration.limits`): each ``parse`` and each
+        ``render`` runs inside a meter of its own, so a codec charges
+        what it is about to make without being handed anything, the
+        finished tree is counted whoever made it, and the length of
+        every output is held to the limit.  A caller that opened no
+        scope is counted against the standard limits.
+
+        Applied only to a subclass that DEFINES ``parse`` (or ``render``)
+        in its own body (inherited implementations are already wrapped on
+        the class that defined them), and idempotent — re-decorating a
+        class (e.g. under an ``importlib`` reload) never double-wraps.
         """
         super().__init_subclass__(**kwargs)
+        cls._wrap_parse()
+        cls._wrap_render()
+
+    @classmethod
+    def _wrap_parse(cls) -> None:
         raw_parse = cls.__dict__.get("parse")
         if raw_parse is None or getattr(raw_parse, "_nc_parse_wrapped", False):
             return
 
         @functools.wraps(raw_parse)
         def _wrapped_parse(self: CodecBase, raw: str) -> Any:
+            codec_name = getattr(self, "name", None) or cls.__name__
             try:
-                return raw_parse(self, raw)
+                with metered("parse", codec_name):
+                    tree = raw_parse(self, raw)
+                    # What the tree holds, counted whoever made it: an
+                    # expander that counts nothing is still held to
+                    # the limits here, after the fact.
+                    census(tree)
+                    return tree
             except ValidationError as exc:
-                codec_name = getattr(self, "name", None) or cls.__name__
                 raise _validation_error_as_parse_error(codec_name, exc) from exc
 
         _wrapped_parse._nc_parse_wrapped = True  # type: ignore[attr-defined]
         cls.parse = _wrapped_parse  # type: ignore[assignment]
+
+    @classmethod
+    def _wrap_render(cls) -> None:
+        raw_render = cls.__dict__.get("render")
+        if raw_render is None or getattr(raw_render, "_nc_render_wrapped", False):
+            return
+
+        @functools.wraps(raw_render)
+        def _wrapped_render(self: CodecBase, tree: Any) -> str:
+            codec_name = getattr(self, "name", None) or cls.__name__
+            with metered("render", codec_name) as meter:
+                rendered = raw_render(self, tree)
+                if isinstance(rendered, str):
+                    meter.settle("text", len(rendered))
+                return rendered
+
+        _wrapped_render._nc_render_wrapped = True  # type: ignore[attr-defined]
+        cls.render = _wrapped_render  # type: ignore[assignment]
 
     @property
     @abstractmethod
@@ -355,6 +393,11 @@ class CodecBase(ABC):
 
         Raises:
             ParseError: When *raw* cannot be parsed.
+            LimitExceeded: When *raw* asks for more than the limits in
+                force allow, or the request's time ran out while it
+                was read (:mod:`netcanon.migration.limits`).  Raised
+                by the boundary and by the places that count, not
+                by a codec's own code.
         """
 
     @abstractmethod
@@ -373,6 +416,8 @@ class CodecBase(ABC):
                 the :class:`ValidationReport` (a ``partial`` job).
                 ``RenderError`` is reserved for a tree the adapter
                 genuinely cannot serialise.
+            LimitExceeded: When the output is longer than the limit in
+                force (:mod:`netcanon.migration.limits`).
         """
 
     def iter_xpaths(self, tree: Any) -> Iterable[str]:

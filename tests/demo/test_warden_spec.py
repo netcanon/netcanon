@@ -135,7 +135,26 @@ def test_instance_env_is_exactly_the_expected_keys(spec):
         "NETCANON_PORT",
         "NETCANON_LOG_LEVEL",
         "NETCANON_FERNET_KEY",
+        "NETCANON_CONFIG_LIMITS",
     }
+
+
+def test_an_instance_runs_the_small_limits(spec):
+    """An instance is 256 MiB and half a CPU behind a proxy that waits
+    30 seconds.  Without this key it runs the product's default limits,
+    which are sized for a server: several times what the container can
+    hold.  ``small`` is a set of limits the product ships
+    (``netcanon.migration.limits``), and its deadline is inside the
+    proxy's timeout."""
+    from netcanon.migration import limits
+
+    assert spec["environment"]["NETCANON_CONFIG_LIMITS"] == "small"
+    assert limits.PROFILES["small"] is limits.SMALL
+    assert limits.SMALL.seconds < 30
+    assert all(
+        getattr(limits.SMALL, kind) <= getattr(limits.STANDARD, kind)
+        for kind in limits.KINDS
+    )
 
 
 def test_instance_binds_all_interfaces_on_the_internal_net_only(spec):

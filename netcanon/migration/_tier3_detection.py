@@ -51,6 +51,8 @@ from __future__ import annotations
 
 import re
 
+from .limits import ticked
+
 # IOS-XE CLI / Arista EOS shape — patterns target only stanzas that
 # the CLI parsers do NOT consume (firewall, QoS, route-maps, crypto).
 # Stanzas that the parsers DO consume (`interface`, `vlan`, `router`,
@@ -424,7 +426,7 @@ def _detect_regex(
     # the square of their number.
     known: set[str] = set()
     for pattern in patterns:
-        for match in pattern.finditer(raw):
+        for match in ticked(pattern.finditer(raw)):
             label = match.group(0).strip()
             if label and label not in known:
                 known.add(label)

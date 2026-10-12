@@ -249,6 +249,18 @@ image binds `0.0.0.0`, `netcanon serve` refuses to start without a key
 (or `NETCANON_ALLOW_INSECURE_BIND=1`), so an unauthenticated public bind
 is a deliberate choice — see [`SECURITY.md`](SECURITY.md) "Threat Model".
 
+`NETCANON_CONFIG_LIMITS` chooses how much one config may expand to and
+how long one request may take: `standard` (the default), `large`,
+`unlimited`, or `small`, which is what the public demo runs.  A config
+is refused past a limit — a range is a few characters that stand for
+thousands of entries — in a sentence that names what was large, how
+large, and the limit.  The numbers are in
+[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) § H; what the limits do
+not bound (requests in flight, the size of an answer) is in
+[`SECURITY.md`](SECURITY.md) "Input Validation — Config Text".  A server
+that takes text from people you do not trust still wants a memory limit
+and a limit on requests in flight in front of it.
+
 The published image is signed via Sigstore with an SBOM attestation.
 Verify against the immutable digest (`ghcr.io/netcanon/netcanon@sha256:<digest>`),
 not a mutable tag — see [`SECURITY.md`](SECURITY.md) "Supply-Chain

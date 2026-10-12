@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import ipaddress
 import re
-from collections.abc import Callable, Hashable
-from typing import TYPE_CHECKING, Generic, TypeVar
+from bisect import bisect_left
+from collections.abc import Callable, Hashable, Iterable
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+from ..limits import charge
 from .base import ParseError, RenderError
 
 if TYPE_CHECKING:
@@ -182,6 +184,10 @@ def address_key(address: object) -> tuple:
 #: eight bytes of its place there.  Counted from a range it cost a new
 #: int as well, 38 bytes in all, and a config can state ``1-4094`` on
 #: every port it has.  Use :func:`vlan_id_run` to expand a range.
+#:
+#: A place that makes a list from this counts the ids it is about to
+#: make first (``charge("vlan_ids", ...)``): eight bytes an id is
+#: still four million ids from a kilobyte of ``2-4000`` tokens.
 VLAN_IDS: tuple[int, ...] = tuple(range(4095))
 
 
@@ -191,7 +197,9 @@ def vlan_id_run(low: int, high: int) -> list[int]:
 
     Equal to ``list(range(low, high + 1))`` for ``1 <= low`` and
     ``high <= 4094``, which the caller has to have seen to: a slice
-    does not refuse a bound, it stops at the end of the tuple.
+    does not refuse a bound, it stops at the end of the tuple.  The
+    caller counts them, too, before it asks: it knows what the config
+    wrote, which a refusal quotes.
     """
     return list(VLAN_IDS[low:high + 1])
 
@@ -321,6 +329,8 @@ def _parse_vlan_list(text: str) -> list[int]:
                 continue
             lo_i, hi_i = max(1, lo_i), min(4094, hi_i)
             if lo_i <= hi_i:
+                # Counted before it is made: a range is a few bytes.
+                charge("vlan_ids", hi_i - lo_i + 1, part)
                 result.extend(VLAN_IDS[lo_i:hi_i + 1])
         elif part.isdigit():
             result.append(int(part))
@@ -379,11 +389,15 @@ def merge_trunk_allowed(
     if keyword == "none":
         return []
     if keyword == "all":
+        charge("vlan_ids", 4094, "all")
         return vlan_id_run(1, 4094)
     rest = tokens[1] if len(tokens) > 1 else ""
     ids = parse_ids(rest)
     if keyword == "except":
         blocked = set(ids)
+        charge(
+            "vlan_ids", 4094 - len(blocked.intersection(VLAN_IDS[1:])), remainder,
+        )
         return [vid for vid in VLAN_IDS[1:] if vid not in blocked]
     base = list(existing)
     if keyword == "add":
@@ -399,6 +413,62 @@ def merge_trunk_allowed(
     # keyword == "remove"
     drop = set(ids)
     return [vid for vid in base if vid not in drop]
+
+
+def joined_ids_length(ids: list[int]) -> int:
+    """How long ``",".join(str(vid) for vid in ids)`` is, without
+    writing it: a digit count and the commas.
+
+    Exact for ids from 0 to 9999, which is every VLAN id; an id with
+    more digits is counted as four, so the answer is never more than
+    the text.  One sort of the list in C and three lookups: nothing
+    is made for an id.
+    """
+    count = len(ids)
+    if not count:
+        return 0
+    ordered = sorted(ids)
+    shorter = (
+        bisect_left(ordered, 10) + bisect_left(ordered, 100)
+        + bisect_left(ordered, 1000)
+    )
+    return 4 * count - shorter + count - 1
+
+
+def charge_id_lines(
+    interfaces: Iterable[Any], lead: str, *, trunks_only: bool,
+) -> None:
+    """Count the lines that write a port's allowed-VLAN list id by id,
+    BEFORE a renderer writes any of them.
+
+    IOS-XE and EOS take the list as ``lead`` and every id, so a tree
+    whose lists hold four million ids is nineteen megabytes of those
+    lines.  The lists' lengths say so before the first character: a
+    renderer calls this once, ahead of its output.  What is charged is
+    the length of those lines and nothing else, so it is never more
+    than the output is.
+
+    Args:
+        interfaces: The interfaces the renderer is about to write.
+        lead: The line up to the first id, as the renderer writes it.
+        trunks_only: The renderer writes the line for a port in trunk
+            mode only (EOS); otherwise for any port with a list.
+
+    Raises:
+        LimitExceeded: Those lines alone are longer than the output
+            may be (:mod:`netcanon.migration.limits`).
+    """
+    total = ports = 0
+    for iface in interfaces:
+        ids = iface.trunk_allowed_vlans
+        if ids and (not trunks_only or iface.switchport_mode == "trunk"):
+            total += len(lead) + joined_ids_length(ids) + 1
+            ports += 1
+    if ports:
+        charge(
+            "text", total,
+            f"the allowed-VLAN lists of {ports:,} ports, written id by id",
+        )
 
 
 def _run_token(lo: int, hi: int) -> str:

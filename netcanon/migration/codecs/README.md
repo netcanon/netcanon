@@ -305,6 +305,35 @@ for the reference pattern).
    to the new codec.  Then run `python tools/stanza_cost_search.py
    --codec <name>`: it writes every line and block of the codec's
    captures many times over, which no test does.
+
+   And what a text EXPANDS to is counted, which is the codec's to do in
+   two places (`netcanon/migration/limits.py`; the Hard Rule in
+   `AGENTS.md` has the reasons).  **An expander charges before it
+   makes**: where a token becomes many entries — a range of VLAN ids
+   or of ports, a keyword for "every", a list copied onto every member
+   — count what is about to be made on the line before it is, with what
+   the config wrote, which a refusal quotes:
+   `charge("vlan_ids", high - low + 1, token)`.  **A loop over lines
+   looks at the deadline**: `for line in ticked(raw.splitlines()):`,
+   and `tick()` as the first statement of a `while` that walks by
+   index.  Nothing else is the codec's: the meter is opened round its
+   `parse` and `render` by `CodecBase`, an interface is counted by the
+   model, and the finished tree and the output are counted at the
+   boundary.  The tests that fail if either is forgotten, all in
+   `tests/unit/migration/test_limits.py`:
+   `test_every_loop_over_lines_is_ticked`
+   (reads the source of every module here);
+   `test_a_parse_past_its_deadline_is_stopped` (runs over
+   every public codec, and needs the synthetic capture under
+   `tests/fixtures/synthetic/<codec>/`);
+   `test_every_run_of_entries_has_its_answer`
+   (a new `range(...)`, slice of `VLAN_IDS` or `vlan_id_run(...)` goes
+   in its table, as `charged` or with what bounds it); and, for a
+   reader of VLAN id lists, add its stanza to `WIDE` there — a parser
+   whose expander does not count is refused only when its tree is
+   finished, and that test tells the difference.  A broad `except` in a
+   parser names `LimitExceeded` before it
+   (`test_no_broad_handler_swallows_a_refusal`).
 5. **Fill in `capabilities._CAPS`** listing every canonical xpath your
    parse/render actually handles (not aspirational — just what works).
 6. **Add real fixtures** under `tests/fixtures/real/<vendor>/` with
@@ -509,6 +538,18 @@ the policy locally:
   new int an id as well — a config can state a wide range on every
   port it has.  Used by `_parse_vlan_list` and `merge_trunk_allowed`
   here and by the Arista and Junos parsers' own expanders.
+
+* **`netcanon/migration/limits.py`** — what one request may make, and
+  for how long.  `charge(kind, n, where)` before an expander makes its
+  entries; `distinct(kind, names, where)` where the same names made
+  again are not more of the kind (the ports `1-48` tagged in 400 VLANs
+  are 48 ports); `ticked(iterable)` / `tick()` in a loop over lines.
+  `_helpers.charge_id_lines(...)` is for a renderer that writes every
+  id of a port's allowed list (IOS-XE, EOS): it adds up the lists'
+  lengths — `joined_ids_length` says how long a list is written out,
+  without writing it — and charges before the first character.
+  Callers: `grep -rn "limits import" netcanon/migration`.  See
+  `ARCHITECTURE.md` "Config limits".
 
 * **LAG-name helpers (location note)** — two LAG-name helpers exist
   but are NOT shared cross-codec utilities and do NOT live in

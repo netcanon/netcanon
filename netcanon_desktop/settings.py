@@ -80,6 +80,9 @@ def desktop_settings() -> Settings:
         port=prefs.port,
         log_level="info",
         open_in_editor=prefs.open_in_editor,
+        # The desktop's twin of NETCANON_CONFIG_LIMITS: what one config
+        # may expand to and how long one translation may take.
+        config_limits=prefs.config_limits,
     )
 
 

@@ -370,6 +370,60 @@ docker exec <id> printenv NETCANON_FERNET_KEY
 Belt and braces: `/app/data` is tmpfs regardless (proof 2), so even if the
 file had existed, it would never have touched disk.
 
+### 14. A paste cannot ask the instance for more than it holds [O]
+
+An instance runs with `NETCANON_CONFIG_LIMITS=small`.  An image built before
+netcanon had config limits **ignores that variable and says nothing**, so the
+variable in `docker inspect` proves nothing: this proof is by behaviour.  From
+the host, against one freshly assigned instance (raw host docker socket, as in
+proof 13; `<ip>` is the instance's address on `demo-int`, `<key>` its
+`NETCANON_API_KEY`):
+
+```bash
+IP=<ip> KEY=<key> python3 - <<'PY'
+import json, os, urllib.request
+
+def ask(source, text):
+    body = json.dumps({"source": source, "target": "cisco_iosxe_cli", "raw_text": text}).encode()
+    req = urllib.request.Request(
+        f"http://{os.environ['IP']}:8000/api/v1/migration/plan", data=body,
+        headers={"Authorization": "Bearer " + os.environ["KEY"], "Content-Type": "application/json"})
+    job = json.load(urllib.request.urlopen(req, timeout=30))
+    print(job["status"], (job.get("refusal") or {}).get("limit"))
+
+# one AOS-S line of 800 ranges of 1,001 ports
+ask("aruba_aoss", 'hostname "T"\nvlan 10\n   tagged '
+    + ",".join(f"{1 + i * 1001}-{(i + 1) * 1001}" for i in range(800)) + "\n   exit\n")
+# 1,000 Arista trunks that each allow VLANs 2-4000
+ask("arista_eos", "hostname T\n!\n" + "".join(
+    f"interface Ethernet{n}\n   switchport mode trunk\n   switchport trunk allowed vlan 2-4000\n!\n"
+    for n in range(1, 1001)))
+# 1,000 trunks that allow every VLAN, and 1,000 VLANs
+ask("cisco_nxos", "hostname T\n" + "".join(f"vlan {v}\n  name V{v}\n" for v in range(2, 1002)) + "".join(
+    f"interface Ethernet{p // 48 + 1}/{p % 48 + 1}\n  switchport\n  switchport mode trunk\n"
+    "  switchport trunk allowed vlan all\n" for p in range(1000)))
+# a real shape: 48 trunks that leave one VLAN out, ten VLANs declared
+ask("cisco_iosxe_cli", "hostname T\n!\n" + "".join(f"vlan {v}\n name V{v}\n!\n" for v in range(10, 20)) + "".join(
+    f"interface GigabitEthernet1/0/{n}\n switchport mode trunk\n switchport trunk allowed vlan 1-99,101-4094\n!\n"
+    for n in range(1, 49)) + "end\n")
+PY
+# expected, in this order:
+#   failed ports
+#   failed vlan_ids
+#   failed vlan_ids
+#   completed None
+
+docker exec <id> cat /sys/fs/cgroup/memory.events   # expected: oom_kill 0
+docker inspect -f '{{.State.Status}} {{.State.OOMKilled}}' <id>   # expected: running false
+```
+
+An image without the limits is killed by the first of these, or answers
+`completed` or `partial` to it (one from before the limits, given the same
+variable, was killed: `exited true`).  Measured with the limits, in a
+container with an
+instance's own: the three are refused in under a tenth of a second with the
+instance at 85–91 MB of its 256, and the fourth is translated.
+
 ---
 
 ## Pre-launch gate
@@ -377,7 +431,7 @@ file had existed, it would never have touched disk.
 The demo does not go (or stay) live on faith:
 
 - **All CI tests green**, and
-- **Proofs 1–13 executed on the production host**, with their raw output
+- **Proofs 1–14 executed on the production host**, with their raw output
   committed to `VERIFY_RESULTS_<date>.md`,
 - **re-run on every image-digest bump** — a new pin means a fresh full pass.
 

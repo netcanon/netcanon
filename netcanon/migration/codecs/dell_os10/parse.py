@@ -101,6 +101,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
+from ...limits import ticked
 from .._helpers import (
     Uniques,
     _is_link_local_v6,
@@ -754,7 +755,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
         if m:
             declared.add(f"port-channel{int(m.group(1))}")
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         hm = _IFACE_RE.match(line)
         if hm:
             current_iface = _iface_name(hm)
@@ -837,7 +838,7 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     synthetic unit test instead.
     """
     routes: list[CanonicalStaticRoute] = []
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m6 = _IPV6_ROUTE_RE.match(line)
         if m6:
             gateway, iface, metric = _split_nexthop(m6.group("rest"))
@@ -900,7 +901,7 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
     """
     users: list[CanonicalLocalUser] = []
     seen: set[str] = set()
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _USERNAME_RE.match(line)
         if not m:
             continue

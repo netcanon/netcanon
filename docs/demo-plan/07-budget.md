@@ -64,6 +64,41 @@ why the cap is not the sizing basis: sizing off it would imply 8 GB and make an
   mode (swap-off + `memswap_limit == mem_limit` means reaching the cap can only
   end in a kill, never in swap thrash).
 
+**What one paste can do to an instance** (measured 2026-10-11, Docker
+Desktop: a container with this instance's limits — 256 MiB and no swap, half
+a CPU, 128 pids, read-only root — running netcanon with
+`NETCANON_CONFIG_LIMITS=small`; memory is the cgroup's own `memory.peak`, of
+268.4 MB).  An instance idles at 84 MB after two small translations.
+
+| The request | The visitor gets | Most memory |
+|---|---|---|
+| A real 48-port switch whose trunks state `1-99,101-4094` (5 KB) | translated in 0.03 s | 86 MB |
+| One AOS-S line of 800 port ranges (11 KB) | `refused` in under 0.01 s | 85 MB |
+| 1,000 Arista trunks that allow 2-4000 (91 KB) | `refused` in 0.02 s | 91 MB |
+| 1,000 trunks that allow every VLAN x 1,000 VLANs (118 KB) | `refused` in 0.05 s | 91 MB |
+| 32,000 addresses on one Junos unit (2.0 MB) | translated in 1.4 s | 142 MB |
+| The largest committed capture (1.1 MB), sanitised: the page's two requests at once | sanitised in 0.6 s | 106 MB |
+| **Every limit at once** in a 1.98 MB body — 256 trunks that allow every VLAN, 195 VLANs, 2,244 one-line interfaces, static routes to fill — translated to OPNsense, four times over | translated in 1.4–1.6 s, a 38 MB answer | **193 → 205 MB** |
+| the same text, translated to Junos | translated in 1.5 s | 171 MB |
+| the same text, sanitised: one request after the other | sanitised in about 2 s each | **237 → 240 MB** |
+| the same text, two translations at once, or the sanitise page's two requests at once | connection lost | **instance killed** (`oom=true`) |
+
+So with `small`, one request does not end an instance, and the three texts
+that used to take hundreds of megabytes or gigabytes are refused in
+milliseconds.  Two things remain.  **Two large requests at once end the
+instance they were sent to** — and the sanitise page sends its two requests
+at once, so one click there with a paste near the body cap does it.  The
+kill is still contained to the sender's own sandbox, as before.  And most of
+the 240 MB is not anything a limit counts: two megabytes of static routes
+alone, sanitised, take the instance to 190 MB.  The limits are what was left
+after lowering them until the counted part was small beside that: with
+`vlan_ids` at four times its number and `interfaces` and `memberships` at
+twice theirs, the request built for those limits, repeated, took the
+instance to 264 MB, and one sanitise request of it ended the instance.  Past
+this, the levers are the body cap in Caddy and a limit on requests in
+flight, not the counts.  Re-measure on the real host with the release's own
+image, as for the numbers above.
+
 Per-box defaults:
 
 | Box | vCPU / RAM | `MAX_ACTIVE` | warm pool | idle / hard TTL |

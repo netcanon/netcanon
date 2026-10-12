@@ -52,6 +52,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
+from ...limits import ticked
 from .._helpers import Uniques
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -283,7 +284,7 @@ def _join_continuations(raw: str) -> str:
     def joined() -> str:
         return "".join(piece[:stop] for piece, stop in zip(pieces, ends, strict=True))
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         if pieces:
             more = line.strip()
             pieces += (" ", more)
@@ -327,7 +328,7 @@ def _group_by_section(raw: str) -> list[tuple[str, list[str]]]:
     current_section: str | None = None
     current_lines: list[str] = []
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         stripped = line.rstrip()
         if not stripped or _COMMENT_RE.match(stripped):
             continue
@@ -412,7 +413,7 @@ _FIND_NAME_RE = re.compile(r'\[\s*find\s+name=(?:"([^"]*)"|(\S+?))\s*\]')
 
 
 def _parse_system_identity(lines: list[str], intent: CanonicalIntent) -> None:
-    for line in lines:
+    for line in ticked(lines):
         if line.startswith("set"):
             kv = _parse_kv(line)
             if "name" in kv:
@@ -421,7 +422,7 @@ def _parse_system_identity(lines: list[str], intent: CanonicalIntent) -> None:
 
 
 def _parse_system_dns(lines: list[str], intent: CanonicalIntent) -> None:
-    for line in lines:
+    for line in ticked(lines):
         if line.startswith("set"):
             kv = _parse_kv(line)
             if "servers" in kv:
@@ -470,7 +471,7 @@ def _parse_system_ntp(lines: list[str], intent: CanonicalIntent, once: Uniques) 
     ``once`` is the parse's :class:`.._helpers.Uniques`, handed on to
     :func:`_add_ntp_servers`.
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("set"):
             continue
         kv = _parse_kv(line)
@@ -498,7 +499,7 @@ def _parse_system_ntp_client_servers(
     ``once`` is the parse's :class:`.._helpers.Uniques`, handed on to
     :func:`_add_ntp_servers`.
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -523,7 +524,7 @@ def _parse_interface_ethernet(
     the renderer can reconstruct the ``set [ find default-name=X ]``
     lookup.
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("set"):
             continue
         # Two find-clause forms accepted: ``[ find default-name=X ]``
@@ -589,7 +590,7 @@ def _parse_interface_vlan(
     intent: CanonicalIntent,
 ) -> None:
     """Parse ``add ... vlan-id=N name=X ...`` VLAN interface definitions."""
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -631,7 +632,7 @@ def _parse_interface_bridge(
     iface_by_name: dict[str, CanonicalInterface],
 ) -> None:
     """Parse bridge interface definitions (just record existence + name)."""
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -671,7 +672,7 @@ def _parse_interface_bonding(
         802.3ad -> LACP (canonical "active")
         active-backup / balance-* / broadcast -> static
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -743,7 +744,7 @@ def _parse_interface_tunnel(
     name + tunnel_type round-trip is what the renderer needs to emit
     the right ``/interface <encap>`` section.
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -808,7 +809,7 @@ def _parse_interface_vrrp(
       is operational), so this is parse-and-ignore.  ``on-backup``
       script bindings are Tier-3 and likewise dropped.
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -969,7 +970,7 @@ def _parse_ip_address(
     renderer can reconstruct ``X/Y``) rather than minting a phantom
     ``CanonicalInterface`` for the pseudo-name.
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -1045,7 +1046,7 @@ def _parse_ipv6_address(
     v6 address is routed into the scratch record's ``virtual_ipv6s``
     list rather than minting a phantom CanonicalInterface.
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -1105,7 +1106,7 @@ def _parse_snmp_root(lines: list[str], intent: CanonicalIntent) -> None:
     community strings live under ``/snmp community`` and are handled
     by :func:`_parse_snmp_community`.
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("set"):
             continue
         kv = _parse_kv(line)
@@ -1132,7 +1133,7 @@ def _parse_radius(
         add address=10.0.0.4 secret=shared-secret service=login,dhcp \\
             authentication-port=1812 accounting-port=1813
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -1174,7 +1175,7 @@ def _parse_dhcp_server_network(
     the sections structurally parallel so match-by-position works in
     simple cases; more complex cases need a future refinement pass.
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -1217,7 +1218,7 @@ def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> None:
         served.setdefault(network.prefixlen, {}).setdefault(
             int(network.network_address), (position, pool),
         )
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -1265,7 +1266,7 @@ def _parse_user(lines: list[str], intent: CanonicalIntent) -> None:
         read   -> 1  (operator, read-only)
         any custom group -> 1 (operator; unknown group treated as least-privileged)
     """
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
@@ -1325,7 +1326,7 @@ def _parse_snmp_community(lines: list[str], intent: CanonicalIntent) -> None:
     community field — full multi-community is a Tier 2.5 refinement).
     """
     from ...canonical.intent import CanonicalSNMPv3User  # lazy local import
-    for line in lines:
+    for line in ticked(lines):
         kv = _parse_kv(line)
         name = kv.get("name")
         if not name:
@@ -1355,7 +1356,7 @@ def _parse_snmp_community(lines: list[str], intent: CanonicalIntent) -> None:
 
 def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
     """Parse ``add dst-address=... gateway=...`` static routes."""
-    for line in lines:
+    for line in ticked(lines):
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)

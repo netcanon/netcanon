@@ -138,6 +138,7 @@ from pydantic import BaseModel, Field
 from ...migration.codecs.registry import get_codec
 from ...migration.deployment_detect import propose_deployment
 from ...migration.device_models import FamilyDef
+from ...migration.limits import LimitExceeded, limits_scope
 from ...migration.target_profiles import TargetProfile
 from ...models.migration import (
     CapabilityMatrix,
@@ -155,6 +156,7 @@ from ._migration_helpers import (
     get_model_families,
     get_target_profiles,
     request_has_overrides_or_profile,
+    request_limits,
     resolve_adapter_or_422,
     resolve_input_text,
     run_translation,
@@ -331,6 +333,11 @@ def plan_migration(
       deploying; an automation gate should treat ``partial`` as a
       non-success.
     * ``failed``   — a stage raised; ``job.error`` has the summary.
+      One kind of failure is not a fault: ``job.refusal`` is set, and
+      ``job.error`` begins ``refused:``, when the config asks for more
+      than this server's limits allow or the request ran out of time
+      (``NETCANON_CONFIG_LIMITS``).  The words name what was large,
+      how large, and the limit.
 
     **Declared devices.**  When the body says which device the config
     came from and which it is going to (``source_deployment`` or
@@ -803,11 +810,13 @@ def render_migration(
     summary="Auto-detect compatible source codecs for a raw config",
     responses={
         404: {"description": "source_filename does not exist"},
+        413: {"description": "Reading the text ran past the request's time limit"},
         422: {"description": "Invalid input specification"},
     },
 )
 def detect_source_codec(
     body: MigrationDetectRequest,
+    request: Request,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> list[DetectCandidate]:
     """Return a ranked list of codecs that can plausibly parse the input.
@@ -842,7 +851,14 @@ def detect_source_codec(
                 status_code=404,
                 detail=f"source_filename not found: {body.source_filename!r}",
             ) from exc
-    return detect_codec(raw, min_confidence=body.min_confidence)
+    # Under the server's limits, as everything that reads config text
+    # is.  A probe reads a bounded window and makes nothing, so the
+    # one limit that can be met here is the request's time.
+    try:
+        with limits_scope(request_limits(request)):
+            return detect_codec(raw, min_confidence=body.min_confidence)
+    except LimitExceeded as exc:
+        raise HTTPException(status_code=413, detail=f"Refused: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -997,8 +1013,10 @@ def detect_source_deployment(
       have (``missing_ports`` is capped; ``missing_port_count`` is
       the whole number).  A module the config does not state is one
       cause.  ``consistent`` is ``null`` when there was nothing to
-      check: nothing was proposed, the text could not be parsed, or
-      it names no port.
+      check: nothing was proposed, the text could not be parsed, it
+      asks for more than this server's limits allow (the last of
+      ``notes`` then says what was large and the limit), or it names
+      no port.
 
     ``deployment`` is ``null`` unless every device the config names is
     a model of one family, in a mode that is not in doubt, and the
@@ -1013,4 +1031,5 @@ def detect_source_deployment(
     """
     codec = resolve_adapter_or_422(body.source, side="source")
     raw_text = resolve_input_text(body, storage)
-    return propose_deployment(codec, raw_text, get_model_families(request))
+    with limits_scope(request_limits(request)):
+        return propose_deployment(codec, raw_text, get_model_families(request))

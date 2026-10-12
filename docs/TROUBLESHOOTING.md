@@ -558,6 +558,38 @@ config onto other hardware, declare both device models (API:
 of the declared target then moves the port there.  See
 [`CAPABILITIES.md`](CAPABILITIES.md) § G.
 
+### The job says `refused:` — "my config was refused"
+
+Not a parse failure and not a bug: the config was read, and it asks
+for more than this server is set to take, or the request ran out of
+time.  The sentence says which limit, how many were asked for ("or
+more" means the count stopped there) and the limit.  What each one
+means, and what to do:
+
+| The sentence names | What it is | What to do |
+|---|---|---|
+| VLAN ids that the config's lists and ranges name / VLAN ids in the allowed lists of ports | The ids on ports: every `switchport trunk allowed vlan 2-4000`, every `all`, every `vlan members` range, added up | A real chassis written `all` on thousands of ports: allow more (below).  Otherwise look at the list the sentence quotes |
+| port memberships | (port, VLAN) pairs: each trunk that allows every VLAN is on every VLAN the config declares, so two ordinary counts multiply — the sentence gives both | Allow more, or translate the trunks and the VLANs you need |
+| different ports named by port ranges / ports that a VLAN's or a LAG's port list names and no interface stanza declares | Ports that exist only as names in a list (AOS-S `tagged 1-1001,...`) | Almost always a range that names ports the device does not have: check the range the sentence quotes |
+| interfaces | Interface records | A router with that many sub-interfaces is real: allow more |
+| entries copied from an interface-range onto its members | A Junos `interface-range` with addresses on it: every address goes onto every member | Rarely meant; check the range the sentence names |
+| words of set commands written out from block-form text | Block-form Junos is converted to set commands, and the whole path is written again for each statement | Paste `show configuration \| display set` instead: it is not converted, and not counted in words |
+| characters of rendered config / characters of nested blocks written out from set lines | The output would be longer than the limit; or VyOS set lines, each written out as nested blocks | A wide VLAN list written to IOS-XE or EOS is a line of every id: allow more, or translate to a target that writes ranges |
+| the request passed the N seconds it may take | The time limit | Allow more.  If the config is small, that is a slow path: please [report it](../BUG_REPORTING.md) |
+
+**To allow more**, where the server is yours: set
+`NETCANON_CONFIG_LIMITS=large` (or `unlimited`) in its environment and
+restart it; in the desktop application, **Preferences... -> Config
+size limit**; on the command line, `--limits large`.  The numbers are
+in [`CAPABILITIES.md`](CAPABILITIES.md#h-config-size-limits-a-job-that-says-refused)
+§ H.  On the public demo the limit is not yours to change, and the
+sentence says what a Netcanon you run yourself allows by default.
+
+If you believe a limit refused a config of a real device that it
+should admit, that is worth a [bug report](../BUG_REPORTING.md): say
+which limit and what the device is.  (The sanitiser is under the same
+limits, so say what it answered if it refused the config too.)
+
 ### "The migrate page reports 'paramiko-shell capture artifact'"
 
 Specific to OPNsense backups via SSH + `cat /conf/config.xml`.

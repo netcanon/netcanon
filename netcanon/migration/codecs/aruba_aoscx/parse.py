@@ -83,6 +83,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVxlan,
 )
+from ...limits import ticked
 from .._helpers import (
     Uniques,
     _is_link_local_v6,
@@ -459,7 +460,7 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
     """
     instances: list[CanonicalRoutingInstance] = []
     seen: set[str] = set()
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _VRF_DECL_RE.match(line)
         if not m:
             continue
@@ -714,7 +715,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
         else:
             current_lag = None
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m = _IFACE_RE.match(line)
         if m:
             current_iface = _iface_name(m)
@@ -849,7 +850,7 @@ def _parse_vlans(raw: str) -> list[CanonicalVlan]:
         return v
 
     current_id: int | None = None
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         tm = _VLAN_TOP_RE.match(line)
         if tm:
             vid = int(tm.group(1))
@@ -917,7 +918,7 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     unsupported).
     """
     routes: list[CanonicalStaticRoute] = []
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         m6 = _STATIC_ROUTE_V6_RE.match(line)
         if m6:
             dest, gw_or_iface, gw2, metric_str = m6.groups()
@@ -992,7 +993,7 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
     in_vxlan = False
     current_vni: int | None = None
 
-    for line in raw.splitlines():
+    for line in ticked(raw.splitlines()):
         im = _IFACE_RE.match(line)
         if im:
             in_vxlan = _iface_name(im).lower().startswith("vxlan ")
