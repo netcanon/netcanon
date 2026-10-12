@@ -552,13 +552,37 @@ stanza headers.  The migrate page renders these as a warning banner:
 > rendered output.  Operator must apply them manually on the target
 > device.
 
+One kind of row is not a section to apply by hand.  A Junos
+statement the source had **deactivated** (`deactivate <path>` in
+set-form, `inactive:` in the hierarchical form) is not in force on
+the device, so it is left out of the translation and listed here as
+`inactive: <path>`; a statement under a load file's `delete:` is
+listed as `delete: <path>`.  The banner counts only the sections,
+says in a sentence of its own what the other rows are, and is
+headed "Statements the source held and did not run" when it holds
+nothing else.  A same-vendor Junos job does not write the statement
+back as inactive: it is gone from the output, and the row is the
+record.
+
+Such a row names the statement and never a secret.  Its path is cut
+after the first word that names one (a word with `community`,
+`password`, `secret`, `key`, `psk` or `authentication` in it) and
+the cut is marked: `inactive: snmp community ...`.  A deactivated
+leaf is named by its first word, without its value.  A row for a
+section is the stanza header as the config has it.
+
+A job whose only rows are of this kind, and which recognised
+nothing else, is `partial`: a statement is named whether or not
+anything under it would have been read, so the row is not a sign
+that the text was a config.
+
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):
 
 | Source codec | Patterns matched (excerpt) |
 |---|---|
 | `cisco_iosxe_cli` / `arista_eos` / `aruba_aoss` (IOS-style CLI heuristic) | `ip access-list extended/standard <name>`, `ipv6 access-list <name>`, numbered `access-list N permit/deny`, `ip nat inside/outside/pool`, `class-map`, `policy-map`, `route-map <name>`, `crypto isakmp/ipsec/map/pki`, `zone-pair security` |
-| `juniper_junos` (set form) | `set firewall [family X] filter <name>`, `set security {policies\|nat\|ike\|ipsec\|zones\|address-book\|flow\|screen\|alg\|utm\|application-tracking\|forwarding-options}`, `set policy-options {policy-statement\|prefix-list\|community} <name>`, `set class-of-service` |
+| `juniper_junos` (set form, and the hierarchical form as it is read: converted to set form first) | `set firewall [family X] filter <name>`, `set security {policies\|nat\|ike\|ipsec\|zones\|address-book\|flow\|screen\|alg\|utm\|application-tracking\|forwarding-options}`, `set policy-options {policy-statement\|prefix-list\|community} <name>`, `set class-of-service` |
 | `fortigate_cli` | `config firewall {policy\|policy6\|vip\|vip6\|central-snat-map\|address\|addrgrp\|service\|shaper}`, `config vpn {ipsec\|ssl}`, `config {webfilter\|antivirus\|ips\|dlp\|application}`, `config router {policy\|route-map}` |
 | `mikrotik_routeros` | `/ip firewall {filter\|nat\|mangle\|raw\|address-list}`, `/ipv6 firewall …`, `/queue`, `/ip ipsec`, `/routing {filter\|bgp\|ospf}` |
 | `opnsense` | XML elements: `<filter>`, `<nat>`, `<ipsec>`, `<openvpn>`, `<wireguard>`, `<shaper>`, `<load_balancer>`, `<captiveportal>` |
@@ -1536,6 +1560,19 @@ matter; the matrix is honest about both.
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP
   pools surface as a comment block, not as `dhcp-server pool`
   syntax.
+* **A trunk that allows no VLAN comes out allowing every VLAN on
+  four targets.**  The canonical tree has one value, an empty
+  list, for a trunk that allows nothing (`switchport trunk allowed
+  vlan none`, a list emptied by `remove`, a trunk whose VLANs were
+  all dropped), for a trunk that states no list, and for AOS-CX's
+  own `vlan trunk allowed all`.  Each renderer picks a reading:
+  `aruba_aoscx` writes `vlan trunk allowed all`; `cisco_iosxe_cli`,
+  `arista_eos` and `cisco_nxos` write a trunk with no allowed line,
+  which is every VLAN there; `juniper_junos`, `aruba_aoss` and
+  `dell_os10` write a trunk that carries none — which is wrong the
+  other way for a Cisco trunk that states no list.  The job reports
+  nothing.  A known defect, not a design: check any trunk whose
+  list is empty or absent on either side.
 * **A VLAN known only to an "allow-everything" trunk is not
   translated.**  On the six port-centric codecs (`cisco_iosxe_cli`,
   `arista_eos`, `cisco_nxos`, `juniper_junos`, `aruba_aoscx`,

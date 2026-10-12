@@ -99,6 +99,17 @@ tools/stanza_cost_search.py` takes minutes and is run by hand when a
 parser's handler changes (`tests/unit/tools/test_stanza_cost_search.py`
 pins that it can find what it is for).
 
+Two of its checks read no clock.  `TestNoListIsLookedThroughThenAddedTo`
+in the same module reads the source for a list that one function both
+looks through and adds to (`if x not in lst: lst.append(x)`); a new one
+fails until it is mended (`Uniques`, or a set kept beside the list) or
+entered in that module's `LOOKED_THROUGH` with the bound that makes it
+harmless.  And `tests/unit/migration/test_projection_makes_what_is_kept.py`
+counts memory, in bytes, with `tracemalloc`: what a VLAN id on a port
+and a port on a VLAN may cost while a config is parsed.  Those
+ceilings are several times what is measured, so one that fails means
+an entry has come to cost several times what it did.
+
 ## Test Isolation
 
 | Layer       | Isolation mechanism |

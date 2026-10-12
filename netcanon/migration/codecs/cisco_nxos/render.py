@@ -429,9 +429,10 @@ def _render_route_targets(imports: list, exports: list) -> list[str]:
     import-only and export-only remainders follow.  Lines are indented
     four spaces (nested under ``address-family ipv4 unicast``).
     """
-    both = [rt for rt in imports if rt in exports]
-    imp_only = [rt for rt in imports if rt not in exports]
-    exp_only = [rt for rt in exports if rt not in imports]
+    exported, imported = set(exports), set(imports)
+    both = [rt for rt in imports if rt in exported]
+    imp_only = [rt for rt in imports if rt not in exported]
+    exp_only = [rt for rt in exports if rt not in imported]
     lines: list[str] = []
     for rt in both:
         lines.append(f"    route-target both {rt}")

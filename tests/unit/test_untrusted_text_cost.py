@@ -47,6 +47,18 @@ pinned here, a text for each handler that was fixed
 (``TestParseFitsTheNumberOfItsStanzas``).  That part IS a list, and
 says so: run the tool when a parser's handler changes.
 
+Two more lists stand beside it.  One is of records that are given many
+lines -- the addresses of one interface, the members of one LAG --
+where the handler looked through the record's own list before it added
+to it (``TestParseFitsTheLinesOfOneRecord``): the tool writes a line
+many times with a counter in its last number, which for most of these
+lines makes many records and not many lines for one.  The other is of
+work done after the parse, by the port-name translator, a renderer or
+the plan (``TestATranslationFitsWhatItIsGiven``): the tool times
+``parse``.  The first of the two has a search of its own that needs no
+clock: ``TestNoListIsLookedThroughThenAddedTo`` reads the source
+for a list that one function both looks through and adds to.
+
 A search is not a proof.  What is not reached: a pattern put together
 inside a function from parts that are not literals and not kept, on a
 path the capture and its runs do not drive; a handler no capture has a
@@ -67,6 +79,7 @@ Each check is also handed something that is slow, and has to say so.
 from __future__ import annotations
 
 import ast
+import functools
 import importlib
 import pkgutil
 import re
@@ -77,13 +90,17 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 from re import _constants as sre
 from re import _parser as sre_parser
+from typing import Any
 
 import pytest
 import yaml
 
 import netcanon
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
+from netcanon.migration.device_models import Deployment, MemberSpec, compile_deployment, load_model_families_dir
 from netcanon.services.migration_detect import DEFAULT_PROBE_BYTES, detect_codec
+from netcanon.services.migration_pipeline import run_plan_with_models, run_plan_with_overrides
 
 pytestmark = pytest.mark.unit
 
@@ -1058,6 +1075,17 @@ def _junos_users(count: int) -> str:
     ))
 
 
+def _junos_v3_users(count: int) -> str:
+    """A user's key, and then its group: each line found its user by
+    reading every user so far."""
+    return _config("set system host-name r1", *(
+        line for number in range(count) for line in (
+            f"set snmp v3 usm local-engine user u{number} authentication-sha authentication-key fakeauthkey{number}",
+            f"set snmp v3 vacm security-to-group security-model usm security-name u{number} group readonly",
+        )
+    ))
+
+
 def _junos_applied_groups(count: int) -> str:
     return _config("set system host-name r1", *(f"set apply-groups g{number}" for number in range(count)))
 
@@ -1174,6 +1202,77 @@ def _junos_vnis(count: int) -> str:
     )
 
 
+def _junos_deactivated(count: int) -> str:
+    """An interface a line, and each deactivated.  A ``set`` line is
+    asked whether it is under a deactivated path: asked of each
+    path in turn, that is every line against every path."""
+    return _config(
+        "set system host-name r1",
+        *(f"set interfaces ge-0/0/{n} description d{n}" for n in range(count)),
+        *(f"deactivate interfaces ge-0/0/{n}" for n in range(count)),
+    )
+
+
+def _junos_open_comments(count: int) -> str:
+    """A ``/*`` in every line and no ``*/`` in the text.  Comments
+    were cut out of hierarchical text by a pattern, and the pattern
+    was run over every Junos text before its form was known: from
+    each ``/*`` it read to the end of the text for the ``*/``.
+    Set-form like this -- a description, a wildcard -- cost the
+    square of its lines: 8,000 of them, a third of a megabyte, took
+    seven seconds."""
+    return _config("set system host-name r1", *(
+        f"set interfaces ge-0/0/{n} description a/* b" for n in range(count)
+    ))
+
+
+#: Characters of the one word, for each unit of the two texts below.
+_WORD_A_UNIT = 100
+
+
+def _junos_long_word(count: int) -> str:
+    """One ``set`` line with one long word in it.  The words of a
+    line were split by ``shlex``, which builds a word by adding a
+    character at a time to a string it keeps: the word was copied
+    for each character of it."""
+    return _config("set system host-name r1", "set interfaces ge-0/0/1 description " + "a" * (_WORD_A_UNIT * count))
+
+
+def _junos_long_string(count: int) -> str:
+    """The same in quotes, with a backslash now and then."""
+    return _config(
+        "set system host-name r1",
+        'set interfaces ge-0/0/1 description "' + ("a" * (_WORD_A_UNIT - 2) + '\\"') * count + '"',
+    )
+
+
+#: Tags ahead of the statement, for each unit of the text below.
+_TAGS_A_UNIT = 10
+
+
+def _junos_tags(count: int) -> str:
+    """One statement with many tags ahead of it.  The tags were
+    taken off the front of the statement's words one at a time, and
+    each one moved every word after it."""
+    return _config(
+        "system {", "    host-name r1;", "}", "interfaces {",
+        "    " + "protect: " * (_TAGS_A_UNIT * count) + "ge-0/0/1 {", "        mtu 9000;", "    }", "}",
+    )
+
+
+def _junos_path_lengths(words: int, every_length: bool) -> str:
+    """``deactivate`` lines, and as many ``set`` lines of *words*
+    words that run beside them to the end and are under none.  With
+    *every_length* there is a path of each length from one word to
+    *words*; without, the same number of paths, all of half that
+    length -- the same text to read, near enough."""
+    if every_length:
+        paths = ("deactivate " + "x " * (length - 1) + "z" for length in range(1, words + 1))
+    else:
+        paths = ("deactivate " + "x " * (words // 2) + f"z{n}" for n in range(words))
+    return _config("set system host-name r1", *paths, *("set " + "x " * words for _ in range(words)))
+
+
 def _iosxe_class_maps(count: int) -> str:
     """Every line a Tier-3 section of its own.  The detector that
     every CLI parse runs kept its labels in a list and looked
@@ -1222,6 +1321,7 @@ STANZAS: dict[str, tuple[str, int, Callable[[int], str]]] = {
     "juniper_junos: routing instances": ("juniper_junos", 4000, _junos_instances),
     "juniper_junos: users": ("juniper_junos", 4000, _junos_users),
     "juniper_junos: applied groups": ("juniper_junos", 8000, _junos_applied_groups),
+    "juniper_junos: SNMPv3 users and their groups": ("juniper_junos", 4000, _junos_v3_users),
     "aruba_aoss: VLAN stanzas that claim the same ports": ("aruba_aoss", 2500, _aoss_vlans),
     "aruba_aoss: RADIUS hosts and a global key": ("aruba_aoss", 3000, _aoss_radius),
     "aruba_aoss: RADIUS hosts and a key that is empty": ("aruba_aoss", 3000, _aoss_radius_no_key),
@@ -1235,10 +1335,33 @@ STANZAS: dict[str, tuple[str, int, Callable[[int], str]]] = {
     "arista_eos: VRFs and then VLANs under router bgp": ("arista_eos", 4000, _eos_bgp_vrfs_then_vlans),
     "arista_eos: Vxlan stanzas that set a UDP port": ("arista_eos", 1500, _eos_vxlan_stanzas_with_a_port),
     "juniper_junos: the VNIs of one VLAN": ("juniper_junos", 4000, _junos_vnis),
+    "juniper_junos: deactivated paths": ("juniper_junos", 4000, _junos_deactivated),
+    "juniper_junos: comments that are never closed": ("juniper_junos", 2000, _junos_open_comments),
+    "juniper_junos: tags ahead of one statement": ("juniper_junos", 4000, _junos_tags),
+    "juniper_junos: one long word in a line": ("juniper_junos", 1000, _junos_long_word),
+    "juniper_junos: one long quoted string in a line": ("juniper_junos", 1000, _junos_long_string),
     "cisco_iosxe_cli: Tier-3 sections, each of its own": ("cisco_iosxe_cli", 10000, _iosxe_class_maps),
     "opnsense: laggs over many interfaces": ("opnsense", 3000, _opnsense_laggs),
     "mikrotik_routeros: pools over many networks": ("mikrotik_routeros", 1500, _routeros_pools),
 }
+
+
+#: Reading paths of every length may cost this many times what
+#: reading paths of one length costs.  Asked once for each length, the
+#: parser took two and a half to three times as long on the text the
+#: test uses; walking each line once, it takes the same.
+_FOR_THE_LENGTHS = 1.7
+
+
+def _costs_more_with_every_length(read: Callable[[str], object], words: int) -> str:
+    """Empty when *read* takes about as long over ``deactivate``
+    paths of every length as over paths of one length; otherwise what
+    was measured.  The quicker of two readings of each."""
+    every = _best(read, _junos_path_lengths(words, True), 2)
+    one = _best(read, _junos_path_lengths(words, False), 2)
+    if every <= _FOR_THE_LENGTHS * one:
+        return ""
+    return f"paths of every length up to {words} words: {every:.3f}s; of one length: {one:.3f}s"
 
 
 class TestParseFitsTheNumberOfItsStanzas:
@@ -1275,6 +1398,7 @@ class TestParseFitsTheNumberOfItsStanzas:
             "juniper_junos: routing instances": lambda t: len(t.routing_instances),
             "juniper_junos: users": lambda t: len(t.local_users),
             "juniper_junos: applied groups": lambda t: 40,
+            "juniper_junos: SNMPv3 users and their groups": lambda t: len(t.snmp.v3_users),
             "aruba_aoss: VLAN stanzas that claim the same ports": lambda t: len(t.vlans),
             "aruba_aoss: RADIUS hosts and a global key": lambda t: len(t.radius_servers),
             "aruba_aoss: RADIUS hosts and a key that is empty": lambda t: len(t.radius_servers),
@@ -1288,6 +1412,15 @@ class TestParseFitsTheNumberOfItsStanzas:
             "arista_eos: VRFs and then VLANs under router bgp": lambda t: len(t.routing_instances),
             "arista_eos: Vxlan stanzas that set a UDP port": lambda t: len(t.vxlan_vnis),
             "juniper_junos: the VNIs of one VLAN": lambda t: len(t.vxlan_vnis),
+            "juniper_junos: deactivated paths": lambda t: len(t.dropped_tier3_sections),
+            "juniper_junos: comments that are never closed": lambda t: len(t.interfaces),
+            # One port, whatever the count: it is behind every tag.
+            "juniper_junos: tags ahead of one statement": lambda t: 40 * [i.mtu for i in t.interfaces].count(9000),
+            # One word, whatever the count: as long as the text says.
+            "juniper_junos: one long word in a line": lambda t: len(t.interfaces[0].description) // _WORD_A_UNIT,
+            "juniper_junos: one long quoted string in a line": (
+                lambda t: len(t.interfaces[0].description) // (_WORD_A_UNIT - 1)
+            ),
             "cisco_iosxe_cli: Tier-3 sections, each of its own": lambda t: len(t.dropped_tier3_sections),
             "opnsense: laggs over many interfaces": lambda t: len(t.lags),
             "mikrotik_routeros: pools over many networks": lambda t: len(t.dhcp_servers),
@@ -1343,6 +1476,36 @@ class TestParseFitsTheNumberOfItsStanzas:
             costs_its_lines_after_a_quick_start, _routes, 1500, floor=0.02,
         )
 
+    def test_path_lengths_are_not_paid_for(self) -> None:
+        """Not a kind of stanza written many times, and not a cost the
+        check above can read: a ``set`` line asked once for each LENGTH
+        of deactivated path costs the square of its words, but the
+        paths of every length are themselves half the square of the
+        longest in text, so the whole grows as the text to the power
+        of one and a half -- eight times for four times the text,
+        which is exactly where that check draws its line.
+
+        So the same words are read twice: with a path of every
+        length, and with as many paths of one length.  They cost
+        about the same to read, or the lengths are being paid for."""
+        parse = get_codec("juniper_junos").parse
+        assert parse(_junos_path_lengths(40, True)).hostname == "r1"
+        said = _costs_more_with_every_length(parse, 800)
+        assert not said, said
+
+    def test_and_that_check_can_fail(self) -> None:
+        """A reader that asks once for each length, as the parser did."""
+
+        def asks_once_for_each_length(text: str) -> None:
+            lines = [line.split() for line in text.splitlines()]
+            paths = {tuple(words[1:]) for words in lines if words[0] == "deactivate"}
+            lengths = sorted({len(path) for path in paths})
+            for words in lines:
+                if words[0] == "set":
+                    assert not [length for length in lengths if tuple(words[1:1 + length]) in paths]
+
+        assert _costs_more_with_every_length(asks_once_for_each_length, 300)
+
     def test_a_third_size_is_not_read_past_the_largest_that_means_anything(self) -> None:
         """A probe reads a window.  Past it nothing grows, so a third
         size would clear a reader that is quadratic within the window:
@@ -1359,3 +1522,746 @@ class TestParseFitsTheNumberOfItsStanzas:
             _grows_faster_than_its_input(squares_within_a_window, _routes, 1500, floor=0.02, largest=6000)
             for _attempt in range(3)
         )
+
+
+# ---------------------------------------------------------------------------
+# Many lines for one record
+# ---------------------------------------------------------------------------
+
+
+def _host(number: int) -> str:
+    return f"10.{number // 65536 % 256}.{number // 256 % 256}.{number % 256}"
+
+
+def _v6(number: int) -> str:
+    return f"2001:db8:{number // 65536:x}:{number % 65536:x}::1"
+
+
+def _named(records: Any, name: object, by: str = "name") -> Any:
+    return next(record for record in records if getattr(record, by) == name)
+
+
+def _junos(*lines: str) -> str:
+    return _config("set system host-name r1", *lines)
+
+
+def _junos_unit_addresses(count: int) -> str:
+    return _junos(*(f"set interfaces ge-0/0/0 unit 0 family inet address {_host(n)}/24" for n in range(count)))
+
+
+def _junos_unit_v6_addresses(count: int) -> str:
+    return _junos(*(f"set interfaces ge-0/0/0 unit 0 family inet6 address {_v6(n)}/64" for n in range(count)))
+
+
+def _junos_irb_addresses(count: int) -> str:
+    return _junos(*(f"set interfaces irb unit 100 family inet address {_host(n)}/24" for n in range(count)))
+
+
+def _junos_irb_addresses_of_a_vlan(count: int) -> str:
+    """The unit is a VLAN's ``l3-interface``, so its addresses are
+    folded onto the VLAN: a set of the VLAN's addresses was built
+    again for each one."""
+    return _junos(
+        "set vlans V100 vlan-id 100", "set vlans V100 l3-interface irb.100",
+        *(f"set interfaces irb unit 100 family inet address {_host(n)}/24" for n in range(count)),
+    )
+
+
+def _junos_irb_v6_addresses(count: int) -> str:
+    return _junos(*(f"set interfaces irb unit 100 family inet6 address {_v6(n)}/64" for n in range(count)))
+
+
+def _junos_lag_members(count: int) -> str:
+    return _junos(*(f"set interfaces ge-0/0/{n} ether-options 802.3ad ae0" for n in range(count)))
+
+
+def _junos_range_members(count: int) -> str:
+    return _junos(*(f"set interfaces interface-range R member ge-0/0/{n}" for n in range(count)))
+
+
+def _junos_range_addresses(count: int) -> str:
+    """One member, so that the addresses of the range are the only
+    thing there is many of."""
+    return _junos(
+        "set interfaces interface-range R member ge-0/0/0",
+        *(f"set interfaces interface-range R unit 0 family inet address {_host(n)}/24" for n in range(count)),
+    )
+
+
+def _junos_pool_name_servers(count: int) -> str:
+    pool = "set access address-assignment pool P family inet"
+    return _junos(f"{pool} network 10.0.0.0/8", *(
+        f"{pool} dhcp-attributes name-server {_host(n)}" for n in range(count)
+    ))
+
+
+def _junos_old_pool_name_servers(count: int) -> str:
+    return _junos(*(f"set system services dhcp pool 10.0.0.0/8 name-server {_host(n)}" for n in range(count)))
+
+
+def _junos_route_targets(count: int) -> str:
+    return _junos("set routing-instances V instance-type vrf", *(
+        f"set routing-instances V vrf-target import target:65000:{n}" for n in range(count)
+    ))
+
+
+def _junos_route_targets_both_ways(count: int) -> str:
+    return _junos("set routing-instances V instance-type vrf", *(
+        f"set routing-instances V vrf-target target:65000:{n}" for n in range(count)
+    ))
+
+
+_JUNOS_VRRP = "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/8 vrrp-group 1"
+
+
+def _junos_vrrp_addresses(count: int) -> str:
+    return _junos(*(f"{_JUNOS_VRRP} virtual-address {_host(n)}" for n in range(count)))
+
+
+def _junos_vrrp_tracked(count: int) -> str:
+    return _junos(*(f"{_JUNOS_VRRP} track interface ge-0/0/{n}" for n in range(count)))
+
+
+def _junos_v3_users(count: int) -> str:
+    return _junos(*(
+        f"set snmp v3 usm local-engine user u{n} authentication-sha authentication-password fakepass{n}"
+        for n in range(count)
+    ))
+
+
+def _eos_vrf_route_targets(count: int) -> str:
+    return _config("hostname sw", "!", "vrf instance V", *(
+        f"   route-target import 65000:{n}" for n in range(count)
+    ), "!")
+
+
+def _eos_bgp_route_targets(count: int) -> str:
+    return _config("hostname sw", "!", "router bgp 65001", "   vrf V", "      rd 65001:1", *(
+        f"      route-target import evpn 65000:{n}" for n in range(count)
+    ), "!")
+
+
+def _eos_vrrp_tracked(count: int) -> str:
+    return _config("hostname sw", "!", "interface Ethernet1", "   no switchport", "   ip address 10.0.0.1/8", *(
+        f"   vrrp 1 track Ethernet{n}" for n in range(count)
+    ), "!")
+
+
+def _cx_lag_members(count: int) -> str:
+    return _config("hostname sw", "interface lag 1", "    no shutdown", *(
+        line for n in range(count) for line in (f"interface 1/1/{n + 1}", "    lag 1")
+    ))
+
+
+def _iosxe_lag_members(count: int) -> str:
+    return _config("hostname sw", "!", *(
+        line for n in range(count)
+        for line in (f"interface GigabitEthernet1/0/{n + 1}", " channel-group 1 mode active", "!")
+    ))
+
+
+def _iosxr_lag_members(count: int) -> str:
+    return _config("hostname r1", "!", *(
+        line for n in range(count)
+        for line in (f"interface GigabitEthernet0/0/0/{n}", " bundle id 1 mode active", "!")
+    ))
+
+
+def _nxos_lag_members(count: int) -> str:
+    return _config("hostname sw", "feature lacp", *(
+        line for n in range(count) for line in (f"interface Ethernet1/{n + 1}", "  channel-group 1 mode active")
+    ))
+
+
+def _os10_lag_members(count: int) -> str:
+    return _config("! Version 10.5.4.0", "hostname sw", "!", *(
+        line for n in range(count)
+        for line in (f"interface ethernet1/1/{n + 1}", " channel-group 1 mode active", "!")
+    ))
+
+
+def _secondary(count: int, line: str) -> Iterator[str]:
+    """An address line a number: the first primary, the rest secondary."""
+    return (line.format(_host(n)) + (" secondary" if n else "") for n in range(count))
+
+
+def _cx_svi_addresses(count: int) -> str:
+    """The VLAN is declared, so the SVI's addresses are merged onto a
+    record that is there: each was compared, field by field, with
+    every address the record had."""
+    return _config(
+        "hostname sw", "vlan 10", "    name users", "interface vlan 10",
+        *_secondary(count, "    ip address {}/24"),
+    )
+
+
+def _iosxe_svi_addresses(count: int) -> str:
+    return _config(
+        "hostname sw", "!", "vlan 10", " name users", "!", "interface Vlan10",
+        *_secondary(count, " ip address {} 255.255.255.0"), "!",
+    )
+
+
+def _nxos_svi_addresses(count: int) -> str:
+    return _config(
+        "hostname sw", "feature interface-vlan", "vlan 10", "  name users", "interface Vlan10",
+        *_secondary(count, "  ip address {}/24"),
+    )
+
+
+def _os10_svi_addresses(count: int) -> str:
+    """OS10 has no ``vlan N`` stanza: the first SVI makes the record
+    and a second stanza of the same SVI is merged onto it."""
+    return _config(
+        "! Version 10.5.4.0", "hostname sw", "!", "interface vlan10", " ip address 172.16.0.1/24", "!",
+        "interface vlan10", *(f" ip address {_host(n)}/24 secondary" for n in range(count)), "!",
+    )
+
+
+def _netconf_svi_addresses(count: int) -> str:
+    """As OS10: a second ``Vlan10`` element, merged onto the record
+    the first one made."""
+
+    def interface(addresses: list[str]) -> str:
+        return (
+            "<interface><name>Vlan10</name><config><name>Vlan10</name><enabled>true</enabled></config>"
+            '<subinterfaces><subinterface><index>0</index><ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">'
+            "<addresses>" + "".join(
+                f"<address><ip>{address}</ip><config><ip>{address}</ip>"
+                "<prefix-length>24</prefix-length></config></address>"
+                for address in addresses
+            ) + "</addresses></ipv4></subinterface></subinterfaces></interface>"
+        )
+
+    return _config(
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="101">', "<data>",
+        '<interfaces xmlns="http://openconfig.net/yang/interfaces">',
+        interface(["172.16.0.1"]), interface([_host(n) for n in range(count)]),
+        "</interfaces>", "</data>", "</rpc-reply>",
+    )
+
+
+def _vyos_bond_members(count: int) -> str:
+    return _config("set system host-name r1", "set interfaces bonding bond0 mode 802.3ad", *(
+        f"set interfaces bonding bond0 member interface eth{n}" for n in range(count)
+    ))
+
+
+def _vyos_ntp_servers(count: int) -> str:
+    return _config("set system host-name r1", *(f"set service ntp server {_host(n)}" for n in range(count)))
+
+
+def _vyos_vxlan_remotes(count: int) -> str:
+    return _config("set system host-name r1", "set interfaces vxlan vxlan10 vni 10010", *(
+        f"set interfaces vxlan vxlan10 remote {_host(n)}" for n in range(count)
+    ))
+
+
+#: Ports named by each ``untagged`` line of the text below.
+_PORTS_AN_UNTAGGED_LINE = 1000
+
+
+def _aoss_ports_taken_back(count: int) -> str:
+    """One VLAN: the same thousand ports stated on every ``untagged``
+    line, then as many ``no untagged`` lines.  The list was added to
+    without a look and written again whole for each line that took a
+    port out: 320 of each, thirteen kilobytes, took four seconds."""
+    return _config(
+        *_AOSS_TOP, "vlan 10", *(f"   untagged 1-{_PORTS_AN_UNTAGGED_LINE}" for _ in range(count)),
+        *(f"   no untagged {5000 + n}" for n in range(count)), "   exit",
+    )
+
+
+def _aoss_single_ports_taken_back(count: int) -> str:
+    return _config(
+        *_AOSS_TOP, "vlan 10", *(f"   untagged {n + 1}" for n in range(count)),
+        *(f"   no untagged {900000 + n}" for n in range(count)), "   exit",
+    )
+
+
+#: Ports each VLAN of the text below is tagged on.
+_PORTS_A_TAGGED_VLAN = 48
+
+
+def _aoss_vlans_tagged_on_a_switch(count: int) -> str:
+    """A real shape: 48 ports tagged in every VLAN.  Giving each port
+    its list of VLANs looked through that list for each VLAN."""
+    return _config(
+        *_AOSS_TOP,
+        *(line for port in range(1, _PORTS_A_TAGGED_VLAN + 1)
+          for line in (f"interface {port}", '   name "p"', "   exit")),
+        *(line for number in range(count)
+          for line in (f"vlan {number % 4093 + 2}", f"   tagged 1-{_PORTS_A_TAGGED_VLAN}", "   exit")),
+    )
+
+
+_ROUTEROS_TOP = "# 2026-01-01 00:00:00 by RouterOS 7.14"
+
+
+def _routeros_ntp_servers(count: int) -> str:
+    return _config(_ROUTEROS_TOP, "/system ntp client servers", *(f"add address={_host(n)}" for n in range(count)))
+
+
+def _routeros_ntp_set_lines(count: int) -> str:
+    return _config(_ROUTEROS_TOP, "/system ntp client", *(
+        f"set enabled=yes servers={_host(n)},pool.ntp.org" for n in range(count)
+    ))
+
+
+#: A list of ONE record that every line adds to, where the line used to
+#: look through the list first (``if x not in lst: lst.append(x)``):
+#: codec, the smaller count, the text, and what the parsed tree has to
+#: hold ``count`` of.  The addresses of one interface, the members of
+#: one LAG, the route targets of one VRF.  No index of the records
+#: helps -- there is one record -- and nothing about any line is odd.
+#: Read before the mend at four times the count here: from a second
+#: (1,600 secondary addresses on one SVI, 60 KB) to eight (32,000
+#: route targets of one Junos VRF, 1.7 MB).
+ONE_RECORD: dict[str, tuple[str, int, Callable[[int], str], Callable[[Any], int]]] = {
+    "juniper_junos: the addresses of one unit": (
+        "juniper_junos", 4000, _junos_unit_addresses, lambda t: len(_named(t.interfaces, "ge-0/0/0").ipv4_addresses),
+    ),
+    "juniper_junos: the IPv6 addresses of one unit": (
+        "juniper_junos", 4000, _junos_unit_v6_addresses,
+        lambda t: len(_named(t.interfaces, "ge-0/0/0").ipv6_addresses),
+    ),
+    "juniper_junos: the addresses of an IRB unit": (
+        "juniper_junos", 4000, _junos_irb_addresses, lambda t: len(_named(t.interfaces, "irb.100").ipv4_addresses),
+    ),
+    "juniper_junos: the addresses of an IRB unit, folded onto its VLAN": (
+        "juniper_junos", 2000, _junos_irb_addresses_of_a_vlan, lambda t: len(_named(t.vlans, 100, "id").ipv4_addresses),
+    ),
+    "juniper_junos: the IPv6 addresses of an IRB unit": (
+        "juniper_junos", 4000, _junos_irb_v6_addresses, lambda t: len(_named(t.interfaces, "irb.100").ipv6_addresses),
+    ),
+    "juniper_junos: the members of one LAG": (
+        "juniper_junos", 8000, _junos_lag_members, lambda t: len(_named(t.lags, "ae0").members),
+    ),
+    "juniper_junos: the members of one interface-range": (
+        "juniper_junos", 8000, _junos_range_members, lambda t: len(t.interfaces),
+    ),
+    "juniper_junos: the addresses of one interface-range": (
+        "juniper_junos", 4000, _junos_range_addresses, lambda t: len(_named(t.interfaces, "ge-0/0/0").ipv4_addresses),
+    ),
+    "juniper_junos: the name servers of one pool": (
+        "juniper_junos", 8000, _junos_pool_name_servers, lambda t: len(t.dhcp_servers[0].dns_servers),
+    ),
+    "juniper_junos: the name servers of one pool, old grammar": (
+        "juniper_junos", 8000, _junos_old_pool_name_servers, lambda t: len(t.dhcp_servers[0].dns_servers),
+    ),
+    "juniper_junos: the route targets of one VRF": (
+        "juniper_junos", 8000, _junos_route_targets, lambda t: len(_named(t.routing_instances, "V").rt_imports),
+    ),
+    "juniper_junos: the route targets of one VRF, both ways": (
+        "juniper_junos", 8000, _junos_route_targets_both_ways,
+        lambda t: len(_named(t.routing_instances, "V").rt_exports),
+    ),
+    "juniper_junos: the virtual addresses of one VRRP group": (
+        "juniper_junos", 8000, _junos_vrrp_addresses,
+        lambda t: len(_named(t.interfaces, "ge-0/0/0").vrrp_groups[0].virtual_ips),
+    ),
+    "juniper_junos: the tracked interfaces of one VRRP group": (
+        "juniper_junos", 8000, _junos_vrrp_tracked,
+        lambda t: len(_named(t.interfaces, "ge-0/0/0").vrrp_groups[0].track_interfaces),
+    ),
+    "juniper_junos: SNMPv3 users": ("juniper_junos", 4000, _junos_v3_users, lambda t: len(t.snmp.v3_users)),
+    "arista_eos: the route targets of one VRF": (
+        "arista_eos", 8000, _eos_vrf_route_targets, lambda t: len(_named(t.routing_instances, "V").rt_imports),
+    ),
+    "arista_eos: the route targets of one VRF under router bgp": (
+        "arista_eos", 8000, _eos_bgp_route_targets, lambda t: len(_named(t.routing_instances, "V").rt_imports),
+    ),
+    "arista_eos: the tracked interfaces of one VRRP group": (
+        "arista_eos", 8000, _eos_vrrp_tracked,
+        lambda t: len(_named(t.interfaces, "Ethernet1").vrrp_groups[0].track_interfaces),
+    ),
+    "aruba_aoscx: the members of one LAG": (
+        "aruba_aoscx", 8000, _cx_lag_members, lambda t: len(_named(t.lags, "lag 1").members),
+    ),
+    "cisco_iosxe_cli: the members of one LAG": (
+        "cisco_iosxe_cli", 8000, _iosxe_lag_members, lambda t: len(_named(t.lags, "Port-channel1").members),
+    ),
+    "cisco_iosxr: the members of one LAG": (
+        "cisco_iosxr", 8000, _iosxr_lag_members, lambda t: len(_named(t.lags, "Bundle-Ether1").members),
+    ),
+    "cisco_nxos: the members of one LAG": (
+        "cisco_nxos", 8000, _nxos_lag_members, lambda t: len(_named(t.lags, "port-channel1").members),
+    ),
+    "dell_os10: the members of one LAG": (
+        "dell_os10", 8000, _os10_lag_members, lambda t: len(_named(t.lags, "port-channel1").members),
+    ),
+    "aruba_aoscx: the addresses of one SVI": (
+        "aruba_aoscx", 400, _cx_svi_addresses, lambda t: len(_named(t.vlans, 10, "id").ipv4_addresses),
+    ),
+    "cisco_iosxe_cli: the addresses of one SVI": (
+        "cisco_iosxe_cli", 400, _iosxe_svi_addresses, lambda t: len(_named(t.vlans, 10, "id").ipv4_addresses),
+    ),
+    "cisco_iosxe: the addresses of one SVI": (
+        "cisco_iosxe", 400, _netconf_svi_addresses, lambda t: len(_named(t.vlans, 10, "id").ipv4_addresses),
+    ),
+    "cisco_nxos: the addresses of one SVI": (
+        "cisco_nxos", 400, _nxos_svi_addresses, lambda t: len(_named(t.vlans, 10, "id").ipv4_addresses),
+    ),
+    "dell_os10: the addresses of one SVI": (
+        "dell_os10", 400, _os10_svi_addresses, lambda t: len(_named(t.vlans, 10, "id").ipv4_addresses),
+    ),
+    "vyos: the members of one bond": (
+        "vyos", 8000, _vyos_bond_members, lambda t: len(_named(t.lags, "bond0").members),
+    ),
+    "vyos: NTP servers": ("vyos", 8000, _vyos_ntp_servers, lambda t: len(t.ntp_servers)),
+    "vyos: the remotes of one VXLAN": (
+        "vyos", 8000, _vyos_vxlan_remotes, lambda t: len(t.vxlan_vnis[0].flood_list),
+    ),
+    "aruba_aoss: ports stated again and again, then taken back": (
+        "aruba_aoss", 80, _aoss_ports_taken_back,
+        lambda t: len(_named(t.vlans, 10, "id").untagged_ports) * 40 // _PORTS_AN_UNTAGGED_LINE,
+    ),
+    "aruba_aoss: ports of one VLAN, then others taken back": (
+        "aruba_aoss", 2000, _aoss_single_ports_taken_back, lambda t: len(_named(t.vlans, 10, "id").untagged_ports),
+    ),
+    "aruba_aoss: a switch of ports tagged in every VLAN": (
+        "aruba_aoss", 1000, _aoss_vlans_tagged_on_a_switch,
+        lambda t: len(_named(t.interfaces, "1").trunk_allowed_vlans),
+    ),
+    "mikrotik_routeros: NTP servers": ("mikrotik_routeros", 2000, _routeros_ntp_servers, lambda t: len(t.ntp_servers)),
+    "mikrotik_routeros: NTP servers on set lines": (
+        "mikrotik_routeros", 2000, _routeros_ntp_set_lines, lambda t: len(t.ntp_servers),
+    ),
+}
+
+
+#: Texts whose list stops growing: a port is in at most 4,094 VLANs,
+#: so past that many stanzas the text grows and the list does not, and
+#: a third size would clear a reader that costs the square of the
+#: list.  Two steep readings are the verdict for these.
+NO_LARGER_THAN: dict[str, int] = {
+    "aruba_aoss: a switch of ports tagged in every VLAN": 4000,
+}
+
+
+class TestParseFitsTheLinesOfOneRecord:
+    """One record, and a line for each thing it holds.  A handler that
+    looks through the record's list before it adds to it costs the
+    square of the lines -- and so does one that compares a new address
+    with every address the record has, or writes the list again for
+    each line that takes something out.
+
+    A list like the one above it: a text for each place that was
+    found doing it, and not a search.  What keeps the next one out
+    is ``TestNoListIsLookedThroughThenAddedTo``, which reads the
+    source for the idiom and needs no clock.
+    """
+
+    @pytest.mark.parametrize("title", sorted(ONE_RECORD))
+    def test_one_record_given_many_lines(self, title: str) -> None:
+        name, small, make, _made = ONE_RECORD[title]
+        slow = _grows_faster_than_its_input(
+            get_codec(name).parse, make, small, largest=NO_LARGER_THAN.get(title),
+        )
+        assert not slow, f"{title}: {slow}"
+
+    def test_each_text_makes_what_it_says(self) -> None:
+        assert set(NO_LARGER_THAN) <= set(ONE_RECORD)
+        for title, (name, _small, make, made) in ONE_RECORD.items():
+            assert made(get_codec(name).parse(make(40))) >= 40, title
+
+
+# ---------------------------------------------------------------------------
+# Work that is done after the parse
+# ---------------------------------------------------------------------------
+
+
+def _translated(source: str, target: str, port_rename_map: dict[str, str | None] | None = None) -> Callable[[str], Any]:
+    def read(text: str) -> Any:
+        return run_plan_with_overrides(get_codec(source), get_codec(target), text, port_rename_map=port_rename_map)
+
+    return read
+
+
+@functools.cache
+def _declared_devices() -> tuple[Any, Any]:
+    """A standalone 48-port AOS-S switch, and a stack to move it to."""
+    registry = load_model_families_dir(LIBRARY_DIR / "model_families")
+
+    def device(mode: str, **member: Any) -> Any:
+        return compile_deployment(
+            Deployment(vendor="aruba_aoss", mode=mode, members=[MemberSpec(**member)]), registry,
+        )
+
+    return device("standalone", model="JL260A"), device("stacked", model="JL322A", modules={"A": "JL083A"})
+
+
+def _translated_between_devices(text: str) -> Any:
+    source, target = _declared_devices()
+    return run_plan_with_models(get_codec("aruba_aoss"), get_codec("aruba_aoss"), text, source, target)
+
+
+_AOSS_2930F = ("; JL260A Configuration Editor; Created on release #WC.16.07.0002", 'hostname "sw"')
+_AOSS_VLAN_1 = ("vlan 1", '   name "DEFAULT_VLAN"', "   untagged 1-52")
+
+
+def _aoss_ports_that_share_a_name(count: int) -> str:
+    """Port ``1/k`` and module port ``1/Ak`` are one name on Junos:
+    ``count`` pairs, and a warning for each.  The warning looked
+    through every name the run had translated to find its two."""
+    return _config(*_AOSS_TOP, *(
+        line for k in range(1, count + 1) for name in (f"1/{k}", f"1/A{k}")
+        for line in (f"interface {name}", '   name "p"', "   exit")
+    ))
+
+
+def _aoss_names_under_a_port(count: int) -> str:
+    """Names the declared switch does not have, each of which reads
+    as a sub-interface of its port 1."""
+    return _config(
+        *_AOSS_2930F, *_AOSS_VLAN_1, *(f"   tagged 1.{k}" for k in range(1, count + 1)), "   exit",
+    )
+
+
+def _aoss_lags_and_interfaces(count: int) -> str:
+    """A LAG of one port each, and a stanza for each port: for every
+    LAG, every interface was asked whether it belonged to it."""
+    return _config(
+        *_AOSS_2930F,
+        *(line for k in range(1, count + 1) for line in (f"interface {k}", '   name "p"', "   exit")),
+        *(f"trunk {k} trk{k} lacp" for k in range(1, count + 1)),
+        *_AOSS_VLAN_1, "   exit",
+    )
+
+
+def _nxos_route_targets(count: int) -> str:
+    """One VRF, as many imports as exports and none of them the
+    same: the renderer looked each up in the other list."""
+    return _config(
+        "hostname sw", "vrf context V", "  rd 65000:1", "  address-family ipv4 unicast",
+        *(f"    route-target import 65000:{n}" for n in range(count)),
+        *(f"    route-target export 65001:{n}" for n in range(count)),
+    )
+
+
+def _iosxe_vlans_and_lags(count: int) -> str:
+    """As many VLANs as port-channels as member ports.  To find the
+    parent of each VLAN the OPNsense renderer walked every interface
+    for every LAG, and again for every member: three kinds that grow
+    together, and 400 of each took twelve seconds."""
+    return _config(
+        "hostname sw", "!",
+        *(line for v in range(count) for line in (f"vlan {v % 4000 + 2}", f" name v{v}", "!")),
+        *(line for k in range(1, count + 1) for line in (f"interface Port-channel{k}", " switchport mode trunk", "!")),
+        *(line for k in range(1, count + 1)
+          for line in (f"interface GigabitEthernet1/0/{k}", f" channel-group {k} mode active", "!")),
+    )
+
+
+def _vyos_v3_users(count: int) -> str:
+    """A same-vendor render carries every user, and compared each,
+    field by field, with all that it carried."""
+    return _config("set system host-name r1", *(
+        line for n in range(count) for line in (
+            f"set service snmp v3 user u{n} auth type sha",
+            f"set service snmp v3 user u{n} auth plaintext-password fakepass{n}",
+        )
+    ))
+
+
+#: Work after the parse that cost the square of what it was given, or
+#: worse -- in the port-name translator, in a renderer, in what a plan
+#: says of itself: how the text is read, the smaller count, the text,
+#: and what the job has to hold ``count`` of.
+TRANSLATIONS: dict[str, tuple[Callable[[str], Any], int, Callable[[int], str], Callable[[Any], int]]] = {
+    "aruba_aoss to juniper_junos: ports that share a name": (
+        _translated("aruba_aoss", "juniper_junos", {}), 2000, _aoss_ports_that_share_a_name,
+        lambda job: sum("multiple source ports map to" in warning for warning in job.warnings),
+    ),
+    "aruba_aoss, devices declared: names that are no port's": (
+        _translated_between_devices, 16000, _aoss_names_under_a_port,
+        lambda job: len(job.port_mapping_plan.off_inventory) + len(job.port_mapping_plan.sub_interfaces),
+    ),
+    "aruba_aoss, devices declared: LAGs over many interfaces": (
+        _translated_between_devices, 1000, _aoss_lags_and_interfaces, lambda job: job.rendered.count(" lacp"),
+    ),
+    "cisco_nxos to cisco_nxos: the route targets of one VRF": (
+        _translated("cisco_nxos", "cisco_nxos"), 2000, _nxos_route_targets,
+        lambda job: job.rendered.count("route-target import"),
+    ),
+    "cisco_iosxe_cli to opnsense: VLANs, LAGs and their members": (
+        _translated("cisco_iosxe_cli", "opnsense"), 100, _iosxe_vlans_and_lags,
+        lambda job: job.rendered.count("<vlan>"),
+    ),
+    "vyos to vyos: SNMPv3 users": (
+        _translated("vyos", "vyos"), 500, _vyos_v3_users, lambda job: job.rendered.count("plaintext-password"),
+    ),
+}
+
+
+class TestATranslationFitsWhatItIsGiven:
+    """The parse is not all a request does with a config.  A list,
+    as the two above it are: one text for each place found."""
+
+    @pytest.mark.parametrize("title", sorted(TRANSLATIONS))
+    def test_one_kind_written_many_times(self, title: str) -> None:
+        read, small, make, _made = TRANSLATIONS[title]
+        # Read once before any reading is timed.  The first job of a
+        # process loads the device models, and that went into the
+        # smaller reading only: the step up then looked gentle, and
+        # a reader that costs the square was read in time whenever
+        # its test was the first in its worker.
+        read(make(3))
+        slow = _grows_faster_than_its_input(read, make, small)
+        assert not slow, f"{title}: {slow}"
+
+    def test_each_job_holds_what_its_text_says(self) -> None:
+        for title, (read, _small, make, made) in TRANSLATIONS.items():
+            job = read(make(40))
+            assert job.rendered and made(job) >= 40, title
+
+
+# ---------------------------------------------------------------------------
+# A list that is looked through before it is added to
+# ---------------------------------------------------------------------------
+
+_GROWS_A_LIST = {"append", "extend", "insert"}
+
+
+def _leaves(node: ast.AST) -> bool:
+    """Whether a ``return`` or a ``break`` ends *node*'s loop: one in
+    a function defined inside the loop does not."""
+    pending = list(ast.iter_child_nodes(node))
+    while pending:
+        inner = pending.pop()
+        if isinstance(inner, (ast.Return, ast.Break)):
+            return True
+        if not isinstance(inner, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            pending.extend(ast.iter_child_nodes(inner))
+    return False
+
+
+def _looks_then_adds(source: str) -> Iterator[tuple[str, str, str]]:
+    """``(function, expression, how)`` for every list a function both
+    adds to and looks through: ``x in lst`` or ``x not in lst``, or a
+    ``for`` over it that returns or breaks (a search written out).
+
+    The list is whatever expression ``.append``, ``.extend`` or
+    ``.insert`` is called on, compared as text; a function is read
+    with the functions defined inside it, since those share its
+    lists.  A set is not seen (it is added to with ``.add``), and that
+    is the point: looked for in a set, kept in a list.
+    """
+    for function in ast.walk(ast.parse(source)):
+        if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        grown = {
+            ast.unparse(node.func.value)
+            for node in ast.walk(function)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in _GROWS_A_LIST
+        }
+        if not grown:
+            continue
+        for node in ast.walk(function):
+            if isinstance(node, ast.Compare):
+                for op, right in zip(node.ops, node.comparators):
+                    if isinstance(op, (ast.In, ast.NotIn)) and ast.unparse(right) in grown:
+                        yield function.name, ast.unparse(right), "looked for in it"
+            elif isinstance(node, ast.For) and ast.unparse(node.iter) in grown and _leaves(node):
+                yield function.name, ast.unparse(node.iter), "searched in a loop"
+
+
+#: The places where a list is looked through and added to in one
+#: function, and why each may stay: file, function, the list.  A new
+#: one fails the test until it is mended -- ``Uniques`` or a set kept
+#: beside the list -- or is listed here with the bound that makes it
+#: harmless.
+LOOKED_THROUGH: dict[tuple[str, str, str], str] = {
+    ("migration/codecs/_helpers.py", "add", "same"): (
+        "Uniques itself: the values that share ONE key, which is one value unless the key is coarse"
+    ),
+    ("migration/codecs/arista_eos/parse.py", "_vrrp_group_for", "iface.vrrp_groups"): (
+        "the VRRP groups of one interface, found by number: at most the 4,096 group ids the model allows"
+    ),
+    ("migration/codecs/juniper_junos/parse.py", "_blockform_convert", "words"): (
+        "the words of one statement, looked through once when the statement ends"
+    ),
+    ("migration/deployment_detect.py", "propose_deployment", "proposal.unknown_parts"): (
+        "the part numbers of one deployment, refused above 64 members before this is reached"
+    ),
+}
+
+
+class TestNoListIsLookedThroughThenAddedTo:
+    """``if x not in lst: lst.append(x)`` reads the list for every
+    value it is given.  Where the list belongs to one record and a
+    config can give that record a line for each value, the cost is the
+    square of the lines; the texts above are what that looked like.
+
+    This reads the source instead of a clock, so it finds the idiom
+    where no text reaches it -- and it is narrower than it sounds.  It
+    does not see a set or a dict rebuilt from the list for every value,
+    a helper called per line that copies the list, a scan of ANOTHER
+    list, or a list that reaches the function under two names.
+    """
+
+    def _found(self) -> dict[tuple[str, str, str], str]:
+        found: dict[tuple[str, str, str], str] = {}
+        for path in sorted(PACKAGE.rglob("*.py")):
+            for function, expression, how in _looks_then_adds(path.read_text(encoding="utf-8")):
+                found[path.relative_to(PACKAGE).as_posix(), function, expression] = how
+        return found
+
+    def test_every_place_is_mended_or_listed(self) -> None:
+        found = self._found()
+        unlisted = {place: how for place, how in found.items() if place not in LOOKED_THROUGH}
+        assert not unlisted, f"a list is added to and {unlisted}: look in a set, or use Uniques"
+        gone = sorted(set(LOOKED_THROUGH) - set(found))
+        assert not gone, f"no longer in the source, so no longer to be listed: {gone}"
+
+    def test_the_reasons_given_are_true(self) -> None:
+        """A bound that is stated is a bound that is read."""
+        from netcanon.migration.canonical.intent import CanonicalVRRPGroup
+        from netcanon.migration.deployment_detect import MAX_DEPLOYMENT_MEMBERS
+
+        group_id = CanonicalVRRPGroup.model_fields["group_id"]
+        bounds = {type(bound).__name__: bound for bound in group_id.metadata}
+        assert (bounds["Ge"].ge, bounds["Le"].le) == (0, 4095)
+        assert MAX_DEPLOYMENT_MEMBERS == 64
+
+    def test_the_walk_sees_the_idiom(self) -> None:
+        seen = list(_looks_then_adds(
+            "def handler(entry, value, ports):\n"
+            "    if value not in entry['ipv4']:\n"
+            "        entry['ipv4'].append(value)\n"
+            "    if value in ports:\n"
+            "        return\n"
+            "    ports.extend([value])\n"
+            "def find(tree, name):\n"
+            "    for user in tree.users:\n"
+            "        if user.name == name:\n"
+            "            return user\n"
+            "    tree.users.append(name)\n"
+            "def outer(names, name):\n"
+            "    def inner():\n"
+            "        return name in names\n"
+            "    names.insert(0, name)\n"
+        ))
+        assert sorted(seen) == [
+            ("find", "tree.users", "searched in a loop"),
+            ("handler", "entry['ipv4']", "looked for in it"),
+            ("handler", "ports", "looked for in it"),
+            ("outer", "names", "looked for in it"),
+        ]
+
+    def test_and_passes_what_is_not_the_idiom(self) -> None:
+        """A set kept beside the list; a pass over the list that
+        leaves by no ``return``; a ``return`` inside a function made
+        in the loop; a list that is only read."""
+        assert not list(_looks_then_adds(
+            "def handler(entry, value, seen, others):\n"
+            "    if value not in seen:\n"
+            "        seen.add(value)\n"
+            "        entry.append(value)\n"
+            "    for item in entry:\n"
+            "        def later():\n"
+            "            return item\n"
+            "        print(later)\n"
+            "    return value in others\n"
+        ))

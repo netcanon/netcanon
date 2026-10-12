@@ -337,9 +337,10 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
     if intent.vlans:
         vlans_el = ET.SubElement(root, "vlans")
         parent_default = _vlan_parent_default(intent)
+        carriers = _vlan_carriers(intent)
         for vlan in intent.vlans:
             vlan_el = ET.SubElement(vlans_el, "vlan")
-            parent_if = _vlan_parent_for(vlan, intent, parent_default)
+            parent_if = _vlan_parent_for(vlan, carriers, parent_default)
             ET.SubElement(vlan_el, "if").text = parent_if
             ET.SubElement(vlan_el, "tag").text = str(vlan.id)
             ET.SubElement(vlan_el, "pcp").text = "0"
@@ -623,9 +624,50 @@ def _vlan_parent_default(intent: CanonicalIntent) -> str:
     return "lan"
 
 
+def _vlan_carriers(intent: CanonicalIntent) -> tuple[dict[int, str], dict[int, str]]:
+    """For every VLAN, the LAG and the plain interface that carry it.
+
+    What :func:`_vlan_parent_for` looked for by walking every interface
+    for every LAG, and again for every member of it, for every VLAN:
+    three kinds that grow together, and 400 VLANs, port-channels and
+    member ports took twelve seconds to render.  Read once here
+    instead, in the same order, so that the first LAG or interface
+    that carries a VLAN is still the one found.
+
+    Returns:
+        ``(by_lag, by_interface)``.  ``by_lag`` gives, for the id of a
+        VLAN of the tree, the first LAG in the order of
+        ``intent.lags`` whose own interface, or one of whose members,
+        allows it on its trunk.  ``by_interface`` gives the first
+        interface, in the order of ``intent.interfaces``, that allows
+        it and is neither VLAN-named nor a member of a LAG.
+    """
+    # Only the ids that will be asked about: a trunk that allows every
+    # VLAN lists 4,094, and the tree declares a handful.
+    wanted = {vlan.id for vlan in intent.vlans}
+    named: dict[str, list[Any]] = {}
+    for iface in intent.interfaces:
+        named.setdefault(iface.name, []).append(iface)
+    by_lag: dict[int, str] = {}
+    lag_members: set[str] = set()
+    for lag in intent.lags:
+        lag_members.update(lag.members)
+        for name in (lag.name, *lag.members):
+            for iface in named.get(name, ()):
+                for vid in wanted.intersection(iface.trunk_allowed_vlans):
+                    by_lag.setdefault(vid, lag.name)
+    by_interface: dict[int, str] = {}
+    for iface in intent.interfaces:
+        if iface.name.lower().startswith("vlan") or iface.name in lag_members:
+            continue
+        for vid in wanted.intersection(iface.trunk_allowed_vlans):
+            by_interface.setdefault(vid, iface.name)
+    return by_lag, by_interface
+
+
 def _vlan_parent_for(
     vlan: Any,
-    intent: CanonicalIntent,
+    carriers: tuple[dict[int, str], dict[int, str]],
     default: str,
 ) -> str:
     """Resolve the parent physical / lagg interface for a single VLAN.
@@ -645,35 +687,21 @@ def _vlan_parent_for(
     binding — OPNsense's ``<if>`` is the L2 trunk parent, not the L3
     interface.  Codecs that emit a Vlan-named SVI ``CanonicalInterface``
     are signalling routing intent, not the trunk anchor.
+
+    Args:
+        vlan: The VLAN.
+        carriers: What :func:`_vlan_carriers` read from the tree the
+            VLAN is in.
+        default: The parent when nothing carries the VLAN.
+
+    Returns:
+        The name of the parent interface.
     """
-    # Pass 1 — a LAG whose interface row carries this VLAN on its
-    # allowed-trunk list, or a LAG whose member is bound on it.
-    for lag in intent.lags:
-        # Match the LAG-named interface itself (some codecs put the
-        # trunk list on the LAG).
-        for iface in intent.interfaces:
-            if iface.name != lag.name:
-                continue
-            if vlan.id in iface.trunk_allowed_vlans:
-                return lag.name
-        # Match any LAG member that carries this VLAN.
-        for member in lag.members:
-            for iface in intent.interfaces:
-                if iface.name == member and vlan.id in iface.trunk_allowed_vlans:
-                    return lag.name
-    # Pass 2 — a non-LAG, non-VLAN interface carrying this VLAN.
-    lag_member_set = {
-        m for lag in intent.lags for m in lag.members
-    }
-    for iface in intent.interfaces:
-        lname = iface.name.lower()
-        if lname.startswith("vlan"):
-            continue
-        if iface.name in lag_member_set:
-            continue
-        if vlan.id in iface.trunk_allowed_vlans:
-            return iface.name
-    return default
+    by_lag, by_interface = carriers
+    parent = by_lag.get(vlan.id)
+    if parent is None:
+        parent = by_interface.get(vlan.id)
+    return default if parent is None else parent
 
 
 def _zone_tag_for(name: str) -> str:

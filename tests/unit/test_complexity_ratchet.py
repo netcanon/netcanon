@@ -72,7 +72,7 @@ _RUFF_FILE_IGNORE_RE = re.compile(
 #: Pre-existing functions over the max-complexity ceiling, grandfathered with an
 #: inline ``C901`` suppression.  RATCHET: decrement as hot spots are refactored;
 #: a new suppression (count > this) must not be added to dodge the gate.
-_GRANDFATHERED = 25
+_GRANDFATHERED = 24
 
 
 def _c901_suppression_count() -> int:
