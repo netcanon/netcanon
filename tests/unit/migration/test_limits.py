@@ -2034,12 +2034,18 @@ class TestRequestsAtOnce:
         newcomer.start()
         _until(lambda: L.in_flight() == (1, 2), "the newcomer standing behind it")
         assert not newcomer.inside.is_set() and not ahead.inside.is_set()
-        ahead.let_go.set()
-        newcomer.let_go.set()
         first.finish()
-        ahead.join(10)
-        newcomer.join(10)
-        assert entered == [first, ahead, newcomer]
+        # The head of the line has its turn, and the newcomer, behind
+        # it and allowed two at work, comes in beside it.  Neither was
+        # let in before the place was free.  Which of the two writes
+        # itself down first is theirs to race for once both are in,
+        # so that order is not asked: on a slower machine the
+        # newcomer sometimes wrote first.
+        assert ahead.inside.wait(10), "the head of the line never got its turn"
+        assert newcomer.inside.wait(10), "the newcomer never got in behind it"
+        assert entered[0] is first and set(entered[1:]) == {ahead, newcomer}
+        ahead.finish()
+        newcomer.finish()
 
 
 class TestATurnStaysWithTheAnswer:
