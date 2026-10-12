@@ -477,6 +477,29 @@ class MigrationJob(BaseModel):
             Populated by :func:`run_plan_with_overrides` via the
             capture transform.  Empty list when source config had
             v1/v2c only.
+        source_ports: Hardware port names the source config
+            references, in first-seen order, captured post-parse
+            and pre-transform -- whether or not a rename touched
+            them (:attr:`port_renames` holds only names that
+            changed).  See the field's own comment for what counts
+            as a hardware port.
+        source_other_names: Every other name the source config
+            uses in a place the port translator rewrites, in
+            first-seen order: a LAG, a VLAN interface, a loopback,
+            a tunnel, and a reference that names no interface (a
+            route to ``Null0``, a VTEP source address).  With
+            ``source_ports`` it is the names the config uses where
+            a port name goes.  A ``port_rename_map`` key outside
+            both has an effect in two cases: a port the config
+            names only through a sub-interface of it, whose entry
+            moves or drops that unit; and, where the source
+            platform's names have no letter case, another spelling
+            of a name in the lists.  Lets the rename
+            modal's ports pane draw a row for a name that no
+            rename changed and no warning quotes -- which, between
+            two configs of one codec, is all of them.  Populated
+            by :func:`run_plan_with_overrides` via the capture
+            transform.
         dropped_tier3_sections: Tier-3 stanza headers detected in
             the source bytes that the codec parser deliberately
             drops (firewall rules, NAT, QoS, route-maps, IPsec,
@@ -485,6 +508,11 @@ class MigrationJob(BaseModel):
             parse so the migrate page can render a "Detected in
             source but not translated" banner.  Notification surface
             only — never read by any render-side code or transform.
+            A parser may also list a statement it read and left out
+            on purpose (a Junos statement the source had
+            deactivated): a row that begins ``inactive: `` or
+            ``delete: `` is one, and is not a section
+            (``_tier3_detection.is_left_out_row``).
             See also ``scope_advisories``, which reports the TARGET
             platform rather than the source.
             Populated by every codec's ``parse()``; see
@@ -658,11 +686,40 @@ class MigrationJob(BaseModel):
     #: ``port_mapping_plan.pairings`` lists it.)
     #:
     #: :attr:`port_renames` holds only names that CHANGED, so on a
-    #: same-vendor translation it is usually empty.  The rename
+    #: translation from a codec to itself it is empty unless an entry
+    #: of ``port_rename_map``, or a declared device, moved one.  The rename
     #: modal's ports pane lists every name here that nothing else gave
     #: a row, and its capacity banner counts them.  Populated by
     #: :func:`run_plan_with_overrides` via the capture transform.
     source_ports: list[str] = Field(default_factory=list)
+
+    #: Every other name the source config uses in a place the port
+    #: translator rewrites, in first-seen order: what
+    #: ``collect_port_names`` finds that :attr:`source_ports` does
+    #: not hold.  A LAG, a VLAN interface, a loopback, a tunnel, a
+    #: bridge -- and a reference that names no interface at all: a
+    #: static route to ``Null0`` or to the keyword ``dhcp``, a DHCP
+    #: pool keyed by a zone name, a VRRP track OBJECT number, a VTEP
+    #: source address.  The translator sweeps those fields without
+    #: asking what they hold, so an entry of ``port_rename_map``
+    #: keyed by any name here is recorded, and applied where the
+    #: name is an interface the target writes by that name.  Where
+    #: it is not, the job lists the entry in :attr:`port_renames`
+    #: or :attr:`port_drops` and the output does not show it: a
+    #: VLAN interface on a target that writes one from the VLAN
+    #: (AOS-S by the VLAN's id; OS10, EOS, IOS-XE CLI and RouterOS
+    #: beside the renamed one), a dropped loopback that a VXLAN
+    #: source line still names, the bare Junos ``irb``.
+    #:
+    #: Between two configs of one codec a name nobody mapped stands:
+    #: no rename changes it and no warning quotes it, so without
+    #: this field nothing on the job says the config has a LAG at
+    #: all.  The rename modal's ports pane draws a row, in a section
+    #: of its own, for every name here that nothing else gave one.
+    #: The capacity banner does not count them: they are not ports
+    #: of any device.  Populated by :func:`run_plan_with_overrides`
+    #: via the capture transform; empty on a bare :func:`run_plan`.
+    source_other_names: list[str] = Field(default_factory=list)
 
     #: The positional port pairing made when the request declared both
     #: device models (:func:`run_plan_with_models`): every pair, every
@@ -684,7 +741,10 @@ class MigrationJob(BaseModel):
     #: translated" banner.  Notification surface only — never read by
     #: any render-side code or transform.  Populated by every codec's
     #: ``parse()``; see :mod:`netcanon.migration._tier3_detection` for
-    #: the per-vendor detectors.
+    #: the per-vendor detectors -- and for the rows that are not
+    #: sections: a statement a parser read and left out on purpose is
+    #: listed here too (``inactive: <path> ...``), and a client that
+    #: counts sections tells the two apart with ``is_left_out_row``.
     dropped_tier3_sections: list[str] = Field(default_factory=list)
 
     #: Scope notices about the TARGET platform, as opposed to

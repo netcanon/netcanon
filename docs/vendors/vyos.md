@@ -159,7 +159,11 @@ real set-form) capture are welcomed via
 - **VLANs are `vif` sub-interfaces.**  There is no VLAN database — a
   tagged VLAN is `interfaces ethernet ethN vif <vid>`, modelled as an
   `ethN.<vid>` interface.  A switch-source's per-port VLAN membership
-  drops (declared `unsupported`).
+  drops (declared `unsupported`).  Onto another vendor a `vif` goes
+  where its port goes, with its number (`Ethernet1.54`).  ⚠️ Up to
+  0.7.7 a `vif` was written onto its parent port — and a translation
+  from VyOS to VyOS lost it with its addresses; translate such a
+  config again.
 - **`protocols bgp` / `protocols ospf` are SHARED with Junos.**  Both
   VyOS and Junos use `set protocols …` — the probe disambiguates by
   config shape, not by that keyword alone.  Pick the right vendor in

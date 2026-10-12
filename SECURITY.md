@@ -461,7 +461,12 @@ number is not read, and a note counts such member lines, module lines and
 The evidence, the list of missing ports and the notes are capped
 (`MAX_EVIDENCE_LINES`, `MAX_MISSING_PORTS`, `MAX_NOTES`, `MAX_NOTE_LENGTH`), a
 list that was cut says so (`missing_port_count`, or a note), and
-a note spells out a few member numbers and counts the rest.  A detector that
+a note spells out a few member numbers and counts the rest.  A port name the
+answer repeats is the config's own text and has no length of its own: each is
+cut to `MAX_PORT_NAME_SHOWN` characters in `missing_ports`, and shorter still
+in the note that names the first few, which is written after the detector's
+notes were capped and stays within `MAX_NOTE_LENGTH` whatever a port is called
+(`tests/unit/migration/test_deployment_detect.py`).  A detector that
 raises is answered the same way, and the log line carries the exception's type
 only; so is a parser that refuses the text.
 
@@ -527,6 +532,48 @@ Five shapes did, and were mended:
 The same shapes in the shipped device definitions — probe patterns, which
 the collectors apply to what a device printed, and prompt patterns — were
 mended with them.
+
+One more was found afterwards, in code that search had passed.  The Junos
+parser cut comments out of hierarchical text with a pattern (`/\*.*?\*/`),
+and ran it over every Junos text before the form of the text was known.
+From each `/*` the pattern read on for the `*/`, and with none in the text
+it read to the end every time: 8,000 set-form lines that each hold a `/*`
+(a third of a megabyte) took seven seconds, sixteen times what a quarter as
+many took.  Comments are now recognised in the tokeniser's own walk over
+the characters, only where a token can begin, and a set-form text is known
+for set-form by its first statement.  The search builds, for a pattern, a
+run after what the pattern needs first; it does not write what the pattern
+needs first many times over, which is this text.  A text for this one is
+pinned in the test module.
+
+And one that was no pattern and not this project's code: the words of a
+Junos `set` line were split by the standard library's `shlex`, which adds a
+character at a time to a string it keeps on itself, and so copies a word for
+every character of it.  One word of 400,000 characters in a line took over a
+second, one of 1.6 MB about three minutes.  The search times runs of white
+space inside a capture's lines, not one long word.  The Junos parser splits
+its lines itself now, in time that fits the line, and its splitter is
+compared with `shlex` on every short line and on random longer ones
+(`tests/unit/migration/codecs/juniper_junos/test_set_line_words.py`); two
+texts are pinned for it.
+
+With the splitting out of the way the stanza search read the Junos parser
+again and reported what it had been too slow to see: each `set snmp v3`
+line found its user by reading every user so far (32,000
+`security-to-group` lines, fifteen seconds).  The user is found by name
+now, and a text is pinned.  The search also reports, for Junos, units of
+the first kind in the list below — many addresses on one unit — which is
+known and is not mended here.
+
+The same parser now also drops, before it judges the form, the lines of
+the terminal session a capture was copied from (a prompt, `{master:0}`,
+`[edit]`, a pager's prompt, a Markdown fence): one pattern over the whole
+text, each alternative anchored to a line that begins with a character
+that is not white space, bounded in what it takes, and with one way only to
+reach the end of the line.  A `deactivate` line's path is held as the path
+alone — a line is walked along the paths once, with nothing kept for each
+word of each path — and a row that names a statement left out is cut after
+the first word that names a secret.
 
 Results are unchanged on every config in the repository and the development
 corpora: detection, every codec's probe and every codec's parsed tree were

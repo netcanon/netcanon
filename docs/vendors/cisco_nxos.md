@@ -223,6 +223,13 @@ source are the highest-value contributions — see
   interface-vlan` / `feature lacp` / `feature hsrp` etc. from the
   canonical shape; it does not preserve arbitrary source `feature`
   declarations.
+- **Dropping the loopback a VTEP sources from leaves the VTEP naming
+  it.**  A translation from NX-OS to NX-OS lists the loopback under
+  *Other names in the config* in the rename modal.  Renamed there,
+  the output follows.  Dropped, its stanza goes and the VXLAN
+  source line still names it; the job records the drop and says
+  nothing.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 
 ## See also
 

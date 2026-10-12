@@ -54,7 +54,10 @@ Policy, in order:
    is not in the declared source inventory at all, which is
    **off-inventory** and is the tripwire for a source model that was
    declared wrongly; and every LOGICAL name — a LAG, an SVI, a
-   loopback — which was never the mapper's to decide.
+   loopback — which was never the mapper's to decide.  (Between two
+   configs of one codec the translator leaves each of them as it is
+   written.  A sub-interface is not among them: it goes where its
+   port goes.)
 
    The hazard of policy 4 applies to every one of these exactly as it
    does to an unplaced data port: what the translator makes of a name
@@ -449,6 +452,7 @@ def settle_plan(
     target_names: Iterable[str],
     displaced: Iterable[str] = (),
     sub_interfaces: Mapping[str, str | None] | None = None,
+    untagged_units: Mapping[str, str] | None = None,
     ignored_overrides: Iterable[str] = (),
     emptied_lags: Iterable[str] = (),
     shrunk_lags: Iterable[str] = (),
@@ -485,6 +489,7 @@ def settle_plan(
       track entry or a VTEP source with it.
 
     Fills the outcome fields (``overridden``, ``sub_interfaces``,
+    ``untagged_units``, ``unvouched_units``,
     ``displaced``, ``fused``, ``off_target``, ``target_hardware``,
     ``source_hardware``, ``unbound_ports``, ``landed_off_target``,
     ``stale_next_hops``, ``ignored_overrides``,
@@ -509,6 +514,11 @@ def settle_plan(
         displaced: Names dropped because of a clash; see
             :attr:`MappingPlan.displaced`.
         sub_interfaces: Sub-interface names that followed their parent.
+        untagged_units: Sub-interface names that went with their
+            parent across vendors although the parsed source holds
+            no 802.1Q tag for them, each with the name it has in the
+            output; see :attr:`MappingPlan.untagged_units`.  They
+            are not among *sub_interfaces* and stay off-inventory.
         ignored_overrides: Source names whose override was blank.
         emptied_lags: LAGs every member port of which was dropped.
         shrunk_lags: LAGs that lost some of their member ports.
@@ -537,7 +547,11 @@ def settle_plan(
         landed_off_target: See :attr:`MappingPlan.landed_off_target`.
         stale_next_hops: See :attr:`MappingPlan.stale_next_hops`.
         units: A unit of a target port (``ge-0/0/7.54``) is a name of
-            the target — true between two configs of one codec.
+            the target — true between two configs of one codec.  On
+            any pair it is one for an entry whose SOURCE name is a
+            sub-interface: a unit of a port the target lists is
+            where the translator itself puts a unit, and where the
+            plan's own lines tell an operator to name one.
         unbound: Keys of *target_hardware* whose hardware no line of
             their own in the rendered output looks up; see
             :attr:`MappingPlan.unbound_ports`.  Such a port is on no
@@ -561,6 +575,17 @@ def settle_plan(
     plan.overridden = sorted(k for k in operator_map if k in plan.rename_map)
     plan.sub_interfaces = followed
     plan.off_inventory = [n for n in plan.off_inventory if n not in followed]
+    # A unit the operator has since named, or that went, is theirs or
+    # gone: neither is a unit that moved and was left without a tag.
+    stray = set(plan.off_inventory) - decided - dropped
+    plan.untagged_units = {
+        name: where for name, where in (untagged_units or {}).items()
+        if name in stray
+    }
+    plan.unvouched_units = _moved_unvouched(
+        plan, stray - set(plan.untagged_units), followed, port_renames,
+        fold_source,
+    )
     present = set(every)
     plan.displaced = sorted(displaced)
     # An entry for a name the config does not have decided nothing and
@@ -631,12 +656,20 @@ def settle_plan(
                         have.add(name)
                         listed.append(name)
 
-        def listed_by_target(name: str) -> bool:
+        def listed_by_target(name: str, for_a_unit: bool = False) -> bool:
             if name_key(name, fold_target) in on_target:
                 return True
             port, dot, unit = name.strip().rpartition(".")
+            # A unit of a port the target lists.  Between two configs
+            # of one codec that is a name of the target for any
+            # source name.  Across vendors it is one for a source
+            # name that is itself a sub-interface: it is where the
+            # translator puts a unit, and the plan's line for a unit
+            # it does not vouch for says to name the unit in the
+            # port map.  Reported as off-target, the entry that did
+            # so cleared one line and raised another.
             return bool(
-                units and dot and unit.isdigit()
+                (units or for_a_unit) and dot and unit.isdigit()
                 and name_key(port, fold_target) in on_target
             )
 
@@ -658,7 +691,7 @@ def settle_plan(
             if isinstance(value, str) and key in present
             and key not in plan.target_hardware
             and key not in plan.unbound_ports
-            and not listed_by_target(value)
+            and not listed_by_target(value, _ends_in_a_unit(key))
             and forms.get(key) != name_key(value, fold_target)
         })
         # Every name that ended somewhere occupies that name -- a
@@ -732,6 +765,164 @@ def _loss_lines(plan: MappingPlan) -> list[str]:
     return lines
 
 
+def _is_unit_of(name: str, ports: Iterable[str]) -> bool:
+    """*name* is ``<port>.<unit>`` for one of *ports*.  A unit suffix
+    is a number: ``ether1.backup`` is a name with a dot in it, not a
+    sub-interface of ``ether1``."""
+    parent, dot, unit = name.rpartition(".")
+    return bool(dot and unit.isdigit() and parent in ports)
+
+
+def _ends_in_a_unit(name: str) -> bool:
+    """*name* is written ``<something>.<unit>``, whatever it is a
+    unit of."""
+    parent, dot, unit = name.rpartition(".")
+    return bool(dot and parent and unit.isdigit())
+
+
+def _moved_unvouched(
+    plan: MappingPlan,
+    names: Iterable[str],
+    followed: Mapping[str, str | None],
+    port_renames: Mapping[str, str],
+    fold_source: bool,
+) -> dict[str, str]:
+    """The names among *names* that went where the name before their
+    last dot went, although the plan did not take them for a unit of
+    it; see :attr:`MappingPlan.unvouched_units`.
+
+    Read from the run: a name is here only if it ended on exactly
+    ``<where that name ended>.<unit>``.
+
+    Args:
+        plan: The plan; its pairings and unplaced ports are the
+            ports of the declared source, as the config names them.
+        names: The off-inventory names nobody decided, that were not
+            dropped, and that are not units that went without a tag.
+        followed: The units the plan does vouch for, each with the
+            name it was given.  A unit of one of them is a unit of a
+            unit.
+        port_renames: ``MigrationJob.port_renames`` of the final run.
+        fold_source: Source names compare without regard to case, so
+            a unit spelt in another case than its port is that
+            port's.
+
+    Returns:
+        Each such name with the name it has in the output.
+    """
+    spelt: dict[str, list[str]] = {}
+    for port in [p.source for p in plan.pairings] + [p.source for p in plan.unplaced]:
+        spelt.setdefault(name_key(port, fold_source), []).append(port)
+    moved: dict[str, str] = {}
+    for name in sorted(names):
+        parent, dot, unit = name.rpartition(".")
+        if not (dot and unit.isdigit()):
+            continue
+        if followed.get(parent):
+            # A unit of a unit: the unit it is written under followed.
+            ended = followed[parent]
+        else:
+            same = spelt.get(name_key(parent, fold_source), [])
+            if len(same) != 1 or same[0] == parent:
+                # No port, or two spellings of one, or the port spelt
+                # as the config spells it -- and a unit written that
+                # way which is still here did not go with its port.
+                continue
+            ended = port_renames.get(same[0], same[0])
+        where = f"{ended}.{unit}"
+        if port_renames.get(name, name) == where:
+            moved[name] = where
+    return moved
+
+
+def _stray_lines(
+    plan: MappingPlan, stray: list[str], ports: set[str], gone: set[str],
+) -> list[str]:
+    """Lines for the names the config uses that are no port of the
+    declared source and that nobody decided (*stray*): a name the
+    device does not have, a unit that went with its port and took
+    no tag with it, a unit that went with its port and that the plan
+    does not vouch for, and a unit that did not go with its port.
+
+    Args:
+        plan: The plan.
+        stray: Those names.
+        ports: The ports of the declared source, as the config
+            names them.
+        gone: The names the run dropped; empty before there has
+            been one.
+    """
+    lines: list[str] = []
+    untagged = [n for n in stray if n in plan.untagged_units]
+    moved = [
+        n for n in stray
+        if n in plan.unvouched_units and n not in plan.untagged_units
+    ]
+    children = [
+        n for n in stray
+        if n not in plan.untagged_units and n not in plan.unvouched_units
+        and _is_unit_of(n, ports)
+    ]
+    # Looked up in a set: a pasted config can name as many units as
+    # it likes, and each is looked up once for every other.
+    units = set(children) | set(untagged) | set(moved)
+    others = [n for n in stray if n not in units]
+    if others:
+        lost = sum(1 for n in others if n in gone)
+        outcome = "they were left to name-shape translation"
+        if lost:
+            outcome += f", which dropped {lost} of them"
+        lines.append(
+            f"port mapping: {len(others)} port name(s) in the config are "
+            f"not ports of the declared source device "
+            f"({_summary(others)}); {outcome} — check the source model"
+        )
+    if untagged:
+        # These DID move with their port.  What they did not take is
+        # a tag, because the parsed source has none for them, and a
+        # sub-interface with no VLAN is not one an operator meant.
+        shown = [f"{name} -> {plan.untagged_units[name]}" for name in untagged]
+        lines.append(
+            f"port mapping: {len(untagged)} sub-interface name(s) moved "
+            f"with their port, but no 802.1Q tag was read for them from "
+            f"the source config, so the output carries no tag of the "
+            f"source config for them ({_summary(shown, limit=6, sep='; ')}) "
+            f"— look the VLAN id of each up in the source and set it on "
+            f"the target, then name the unit in the port map, or drop it"
+        )
+    if moved:
+        # These moved with their port as well, tag and all.  Among
+        # the names "left to name-shape translation — check the
+        # source model" they would be told neither what happened to
+        # them nor what is wrong with them.
+        shown = [f"{name} -> {plan.unvouched_units[name]}" for name in moved]
+        lines.append(
+            f"port mapping: {len(moved)} sub-interface name(s) moved with "
+            f"their port ({_summary(shown, limit=6, sep='; ')}), but the "
+            f"plan does not vouch for where they went: it takes a name "
+            f"for a unit of a port only where the name spells the port "
+            f"as the config does, and these are spelt in another letter "
+            f"case than their port, or are units of a unit — check each, "
+            f"then name it in the port map, or drop it"
+        )
+    if children:
+        # What is still here did not go with its port: across vendors
+        # a unit of a port whose kind carries no sub-interface (a
+        # management port, by its name or by what its parser read of
+        # it), a unit of a port the source codec's classifier does
+        # not know (a channelized Junos port), and an interface
+        # numbered 0.  A unit that followed is in ``sub_interfaces``
+        # and not listed; one that followed with no tag, or that the
+        # plan does not vouch for, has a line above.
+        lines.append(
+            f"port mapping: {len(children)} sub-interface name(s) belong "
+            f"to a port of the declared source device but are not ports "
+            f"themselves ({_summary(children)}); they were left to "
+            f"name-shape translation and did NOT move with their port"
+        )
+    return lines
+
+
 def describe_plan(
     plan: MappingPlan,
     *,
@@ -764,12 +955,6 @@ def describe_plan(
     displaced = set(plan.displaced)
     ports = {p.source for p in plan.pairings} | {p.source for p in plan.unplaced}
     lines: list[str] = []
-
-    def is_child(name: str) -> bool:
-        # A unit suffix is a number.  ``ether1.backup`` is a name with
-        # a dot in it, not a sub-interface of ``ether1``.
-        parent, dot, unit = name.rpartition(".")
-        return bool(dot and unit.isdigit() and parent in ports)
 
     removed = [
         p for p in plan.used_unplaced
@@ -823,7 +1008,7 @@ def describe_plan(
             f"interface, or drop them"
         )
 
-    folded = sorted(name for name in displaced if is_child(name))
+    folded = sorted(name for name in displaced if _is_unit_of(name, ports))
     clashed = sorted(displaced - set(folded))
     if clashed:
         lines.append(
@@ -851,26 +1036,7 @@ def describe_plan(
     stray = [
         n for n in plan.off_inventory if n not in seen and n not in displaced
     ]
-    children = [n for n in stray if is_child(n)]
-    of_a_port = set(children)
-    others = [n for n in stray if n not in of_a_port]
-    if others:
-        lost = sum(1 for n in others if n in gone)
-        outcome = "they were left to name-shape translation"
-        if ran and lost:
-            outcome += f", which dropped {lost} of them"
-        lines.append(
-            f"port mapping: {len(others)} port name(s) in the config are "
-            f"not ports of the declared source device "
-            f"({_summary(others)}); {outcome} — check the source model"
-        )
-    if children:
-        lines.append(
-            f"port mapping: {len(children)} sub-interface name(s) belong "
-            f"to a port of the declared source device but are not ports "
-            f"themselves ({_summary(children)}); they were left to "
-            f"name-shape translation and did NOT move with their port"
-        )
+    lines.extend(_stray_lines(plan, stray, ports, gone))
     if plan.fused:
         shown = [
             f"{target} <- {', '.join(sources)}"

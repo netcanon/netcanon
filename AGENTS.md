@@ -660,6 +660,49 @@ tests use these exclusively — never CSS classes or element structure.  See
   for every list (a member list and a next hop are not cut at the
   same characters), and give its oracle another way to look (the
   text).
+  **And a job from a codec to itself changes no name unless an entry
+  says so.**  The translator asks the source codec to classify a
+  name and the target codec to write it, and that round trip is not
+  the identity on several codecs' own names (AOS-S, IOS-XE CLI,
+  OS10, FortiOS, Junos and VyOS, over the committed inputs; the
+  guard below keeps that list).  A Junos config translated
+  to Junos came back with `fxp0` as `em0` and with the tagged unit
+  `ge-0/0/1.54` on `ge-0/0/1`, its `vlan-id` gone; FortiOS `dmz` came
+  back `dmz1`; a Catalyst's management port and every OS10 breakout
+  lane were dropped — all on committed captures, on the commonest
+  request there is (no port map at all), in jobs that said
+  `completed`.  Every guard compared one output of the translator
+  with another, and a loss common to both cancels: the experiment
+  below pins each port to its own name first, which is an entry.  A
+  name nobody mapped stands between two configs of one codec, and a
+  sub-interface goes where its port goes with its unit — no
+  classifier keeps one.  Compare the translator's output with
+  something it had no hand in: the bare pipeline's output for every
+  committed input, and each sub-interface found in the output by its
+  address, from every grammar that names one onto every codec.
+  Guarded by
+  `tests/unit/migration/test_units_follow_their_port.py`.
+  **And a name that moves does not carry what is not in the name.**
+  A sub-interface's 802.1Q tag is a field of the tree, and some
+  parsers read none (AOS-CX, OS10): sent after its port, such a
+  unit was an interface with no VLAN on a target that would have
+  carried the tag, in a job that said `completed` — where the
+  stranded name it replaced had at least been said.  There is no
+  tag for the validation report to list, so the translator says it
+  (one warning a unit) and, with devices declared, the unit is not
+  counted as having followed (`untagged_units`) and the job is
+  `partial`.  When a rule starts to move a name, ask what the name
+  stood for that the rule does not move, and what said so before.
+  **And ask what reads the name where it lands.**  A unit sent after
+  its port arrives as `<port>.<unit>`, which the FortiOS and VyOS
+  renderers make a VLAN id of.  A pasted config can write more digits
+  after a dot than an integer is converted from.  A translator that
+  makes a number of the unit, to ask whether it is 0, fails the job
+  on every target; and with no conversion of its own the same name
+  still fails the job in those two renderers.  A unit is read as text, and
+  across vendors one of more than ten digits (`UNIT_MAX_DIGITS`) is
+  not sent after its port: no longer run of digits reaches another
+  vendor's renderer by this rule.
   A list of places written by reading the tree cannot show that it is
   complete, and a test that walks the same list agrees with it.  So
   completeness is also checked by experiment:
@@ -728,6 +771,37 @@ tests use these exclusively — never CSS classes or element structure.  See
   target's parser reads one (the declared VLANs are a handful of
   ids, and a renderer that lost thousands of the others passed the
   first reading alone); and the text for the word itself, since a
+  parser may read its own word for "all" as an empty list.  **The
+  same class is still open one step on:** the tree has ONE value, an
+  empty list, for "none", for "nothing stated" and for AOS-CX's own
+  `all`, so a trunk that allows no VLAN is written as every VLAN on
+  AOS-CX, IOS-XE, EOS and NX-OS.  That module pins which targets
+  (`WRITES_NOTHING_AS_EVERYTHING`); the change that mends it empties
+  the pin.
+- **Never** translate a statement the source device holds and does not
+  run, and never read a form of a platform's config you do not parse as
+  an empty config.  Junos prints `inactive:` ahead of a deactivated
+  statement (`deactivate <path>` in set form), and the parser read both
+  as configuration: a deactivated BGP neighbour, firewall term or port
+  came out live on the target, in a job that said `completed`.  And a
+  `show configuration` pasted as the device prints it (braces, where the
+  parser's own form is `display set`) was read as nothing at all on
+  every public capture tried — an empty config and a bare scaffold for
+  output, or a refusal — while detection offered no codec.
+  A statement that is not in force is LEFT OUT AND SAID: one row in
+  `dropped_tier3_sections`, which shows the path and never a value (a
+  row is painted on a page and returned to every client, and a path is
+  keyed by its secret often enough), in a list that is bounded.  Such a
+  row is not a sign that the parser recognised the text
+  (`is_left_out_row`): a config that is all deactivated is not
+  `completed`.  What it took to get wrong twice: a form is not read
+  until every wrapping a terminal puts around it is (a prompt, a pager
+  line, a byte-order mark, carriage returns), and a comment begins only
+  where the grammar lets one begin — `member ge-0/*/*;` holds no
+  comment.  Each form a parser reads is held beside the other, typed by
+  hand, so that neither is the oracle for itself:
+  `tests/unit/migration/codecs/juniper_junos/test_two_forms_one_tree.py`
+  and `test_statements_left_out.py`.
   parser can read its own word for "all" as something a check of ids
   does not see (AOS-CX read it as an empty list).  The same class was
   open one step on — an EMPTY list written as every VLAN on four

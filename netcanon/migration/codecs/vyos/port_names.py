@@ -17,12 +17,15 @@ VyOS uses Linux-style device names (the OS is Debian-derived):
     vxlan0, vxlan1, ...  → vtep      (``vxlan`` overlay tunnel netdev)
 
 A ``vif`` sub-interface classifies as ``physical`` (it lives on a
-physical port); the cross-vendor formatter collapses it to the parent
-device name — the ``.<vid>`` tag is a VyOS-specific encoding with no
-portable cross-vendor home in v1 (declared lossy).  Same-vendor
-round-trips never invoke the cross-vendor bridge — they carry the
-canonical ``name`` (e.g. ``"eth0.100"``) verbatim — so the sub-interface
-survives a VyOS→VyOS round-trip intact.
+physical port), and the formatter writes the parent device name: a
+:class:`PortIdentity` has no place for a unit.  The translator
+(:func:`~netcanon.migration.canonical.port_names.translate_port_names`)
+therefore does not put such a name to this pair of functions.
+Between two VyOS configs a name nobody mapped stands as it is written
+(``"eth0.100"``), and across vendors a ``vif`` goes where its port
+goes, with its ``.<vid>``.  Every job runs the translator, a VyOS to
+VyOS one included; left to this classifier and formatter the
+sub-interface was written ONTO its parent, and its address lost.
 
 Unrecognised names return ``kind="unknown"`` (verbatim fallback).
 """

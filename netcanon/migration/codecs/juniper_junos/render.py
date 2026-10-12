@@ -1314,7 +1314,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 continue
             for tokens in body:
                 # Re-quote tokens containing whitespace or shell-
-                # special chars so the re-parser (shlex-based)
+                # special chars so the re-parser (shell-word rules)
                 # re-tokenises to the same token list.
                 quoted = " ".join(
                     _quote_if_needed(t) for t in tokens

@@ -213,6 +213,16 @@ Provenance + per-fixture detail in
 
 ## Common gotchas
 
+- **Renaming or dropping `Vlan<N>` in the rename modal is not
+  always shown by the output** (CLI codec).  A translation from
+  IOS-XE to IOS-XE lists each VLAN interface under *Other names in
+  the config*.  For some the output writes `interface Vlan<id>`
+  from the VLAN itself: renamed, the interface is then written under
+  the new name and the old one again; dropped, it comes back.  The
+  job records the entry and says nothing.  Read the output after
+  such an entry; renumbering or dropping the VLAN on the VLANs pane
+  takes its interface with it.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 - **A trunk's allowed list means what it says.**  A trunk with no
   `switchport trunk allowed vlan` line is read as a trunk of EVERY
   VLAN — the IOS-XE default — and reaches another vendor as that

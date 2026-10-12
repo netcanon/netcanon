@@ -952,7 +952,13 @@ class CanonicalIntent(BaseModel):
             but not translated" banner so the silent-drop is
             visible.  Empty list means the parser saw nothing
             Tier-3 in the input.  This is a NOTIFICATION-ONLY
-            surface — render-side code MUST NOT read it.
+            surface — render-side code MUST NOT read it.  A parser
+            may also put here a row for a statement it read and
+            left out on purpose -- the Junos parser, for one the
+            source had deactivated -- made by
+            ``_tier3_detection.left_out_row``.  Such a row is not a
+            section header, names no secret, and is told apart with
+            ``is_left_out_row``.
         source_vendor: ``vendor_id`` of the codec that produced this
             tree (metadata, populated by parse).
         source_format: ``input_format`` of the source codec

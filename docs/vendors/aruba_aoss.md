@@ -30,8 +30,10 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 - Static routes (incl. `ip default-gateway` form)
 - LAGs (`trk<N>` reconciled with cross-vendor `Port-channel<N>`).  The
   device writes a LAG `trk1` on its `trunk` line and `Trk1` everywhere
-  else; it is one name here, `trk1`, in the rename modal and as a key
-  of a rename map (`Trk1` reaches it too).  A second `trunk` line for
+  else; it is one name here, `trk1`, as a key of a rename map (`Trk1`
+  reaches it too) and as its one row in the rename modal.  A
+  translation from AOS-S to AOS-S does not rename it; its row is
+  then under *Other names in the config*.  A second `trunk` line for
   a LAG adds its ports to the first, and a second `interface` stanza
   for an interface goes on with the first (an address it states
   again is kept once)
@@ -173,6 +175,14 @@ pipeline — they just aren't pinned by a fixture yet").
 
 ## Common gotchas
 
+- **Renaming or dropping `Vlan<N>` in the rename modal changes
+  nothing.**  A translation from AOS-S to AOS-S lists each VLAN's
+  routed interface under *Other names in the config*.  AOS-S writes
+  a VLAN's address in the `vlan` stanza, by the VLAN's id, so an
+  entry on that row is recorded by the job (`port_renames`,
+  `port_drops`) and the output is the same to the byte.  Renumber or
+  drop the VLAN itself, on the VLANs pane.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 - **AOS-S has no allowed list.**  A port carries the VLANs that name
   it (`tagged`, `untagged`), so there is no trunk that states none.
   As a target: a trunk of every VLAN from another vendor — a Cisco or

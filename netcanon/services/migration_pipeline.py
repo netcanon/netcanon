@@ -93,6 +93,12 @@ enumerations and stashes them onto the :class:`MigrationJob` as:
   * ``source_ports`` — hardware port names as parsed, including
     ports no rename touches (``port_renames`` records only names
     that changed).
+  * ``source_other_names`` — every other name the config uses
+    where a port name goes: a LAG, a VLAN interface, a loopback,
+    a tunnel, and a reference that names no interface at all.
+    With ``source_ports`` it is every name the port translator
+    rewrites, so a rename modal can draw a row for a name that
+    no rename changed and no warning quotes.
 
 These fields are populated even when no overrides are engaged
 because the Tier-3 rename modal needs to enumerate every entity the
@@ -121,6 +127,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from ..migration._tier3_detection import is_left_out_row
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
 from ..models.migration import (
     MigrationJob,
@@ -173,7 +180,13 @@ def _input_not_recognized(raw_text: str, tree: Any, job: MigrationJob) -> bool:
         a firewall-only ruleset) already carries its own honest "detected
         in source but not translated" signal via
         ``dropped_tier3_sections``, so it is a *recognized* (if
-        untranslatable) input, not a rejection.
+        untranslatable) input, not a rejection.  A row that names a
+        statement the parser LEFT OUT (``inactive: ...``, see
+        ``_tier3_detection.is_left_out_row``) is not such a section: the
+        Junos parser names a deactivated path whether or not any handler
+        would have read a line under it, so ``hello world`` / ``set foo
+        bar`` / ``deactivate foo`` had a row and was ``completed`` with
+        nothing in it.
 
     Mirrors the UI's ``isEmptyCompleted`` zero-path test, plus the Tier-3
     exemption so the backend signal is at least as precise as the banner.
@@ -192,7 +205,7 @@ def _input_not_recognized(raw_text: str, tree: Any, job: MigrationJob) -> bool:
         return False
     if not (raw_text or "").strip():
         return False
-    if job.dropped_tier3_sections:
+    if not all(is_left_out_row(label) for label in job.dropped_tier3_sections):
         return False
     report = job.validation
     if report is None:
@@ -381,6 +394,15 @@ def run_plan(
                 "does not match the input format — treat this as a failed "
                 "translation, not a clean result."
             )
+            if job.dropped_tier3_sections:
+                # Every row names statements that were left out.  The
+                # rows are not counted here: one row may stand for
+                # several statements, and the last for all the rest.
+                job.error += (
+                    " All that was read is statements the source held "
+                    "and did not run; they are listed, and nothing else "
+                    "was recognized."
+                )
         else:
             job.status = MigrationJobStatus.completed
 
@@ -441,11 +463,14 @@ def run_plan_with_overrides(  # noqa: C901
     AHEAD of any caller-supplied transforms so overrides are the
     first thing that happens to the parsed tree.
 
-    Frozen-signatures rule: NEW function (signature free to grow);
-    :func:`run_plan` and :func:`run_plan_with_rename` remain
-    unchanged.  Adding a new override category in a later commit is
-    a same-function signature extension (optional param with default
-    None) — backwards compatible.
+    Frozen-signatures rule: this signature is one of the three the
+    freeze guard pins
+    (``tests/unit/migration/test_pipeline_signature_freeze.py``),
+    with :func:`run_plan` and :func:`run_plan_with_rename`.  A new
+    override category is one more optional parameter with default
+    None — backwards compatible for every caller, and a deliberate
+    edit of that guard in the same change.  Any other behaviour goes
+    on a new function.
 
     Args:
         source: Source codec.
@@ -525,6 +550,9 @@ def run_plan_with_overrides(  # noqa: C901
             references, whether or not any rename touched them, as
             far as the source codec can tell a port from a logical
             interface (see ``collect_hardware_port_names``).
+          * ``source_other_names`` — the names
+            ``collect_port_names`` finds that ``source_ports`` does
+            not hold, in first-seen order.
     """
     # Lazy imports to avoid circular dependency at module import time
     # (these modules import CodecBase; this module imports CodecBase).
@@ -535,6 +563,7 @@ def run_plan_with_overrides(  # noqa: C901
     from ..migration.canonical.port_names import (
         build_port_rename_transform,
         collect_hardware_port_names,
+        collect_port_names,
     )
     from ..migration.canonical.snmp_names import (
         build_snmp_community_rename_transform,
@@ -593,6 +622,7 @@ def run_plan_with_overrides(  # noqa: C901
         "snmp_community": "",
         "snmpv3_user_names": [],
         "ports": [],
+        "other_names": [],
     }
 
     def _capture_source_shape(tree: Any) -> Any:
@@ -634,6 +664,14 @@ def run_plan_with_overrides(  # noqa: C901
                 tree, classify=getattr(source, "classify_port_name", None),
                 fold=not getattr(source, "port_names_case_sensitive", False),
             )
+            # And every other name the translator rewrites: between
+            # two configs of one codec no rename changes one and no
+            # warning quotes one, so nothing else on the job says
+            # the config has it.
+            hardware = set(captured["ports"])
+            captured["other_names"] = [
+                name for name in collect_port_names(tree) if name not in hardware
+            ]
         return tree
 
     override_transforms.append(_capture_source_shape)
@@ -760,6 +798,7 @@ def run_plan_with_overrides(  # noqa: C901
     job.source_snmpv3_users = list(captured.get("snmpv3_user_names", []))
     job.source_hostname = captured.get("hostname", "") or ""
     job.source_ports = list(captured.get("ports", []))
+    job.source_other_names = list(captured.get("other_names", []))
 
     # Post-run DEBUG summary — mirrors the per-category outcome
     # fields the UI will read.  Useful for post-hoc debugging when
@@ -847,10 +886,13 @@ def _sub_interface_followers(
     Between two configs of the same codec the unit suffix means the
     same thing on both sides, so where the parent goes the
     sub-interface goes too — and where the parent is dropped, so is
-    it.  Left to the name-shape translator instead, a classifier that
-    folds a unit into its port (Junos) would send it onto the port
-    itself, and one that does not recognise it (IOS-XE) would leave it
-    behind under the old name.
+    it.  The translator sends a unit after a port an entry moved by a
+    rule of its own (``translate_port_names``); the entry is written
+    here as well so that the plan can say which names followed
+    (``sub_interfaces``) from what was decided, before any run.
+    Across vendors there is no entry to write beforehand -- the name
+    a unit takes is the translator's -- and what followed is read
+    from the finished run (:func:`_units_that_followed`).
 
     The parent's target is the operator's when they named the parent,
     else the name the pairing gives it on the target (*names*) —
@@ -883,6 +925,58 @@ def _sub_interface_followers(
             continue
         followers[name] = f"{target}.{unit}" if target else None
     return followers
+
+
+def _units_that_followed(
+    plan: MappingPlan,
+    operator_map: dict[str, str | None],
+    names: dict[str, str | None],
+    job: MigrationJob,
+) -> dict[str, str | None]:
+    """Sub-interfaces the translator sent after their port, across
+    vendors, read from the finished run.
+
+    Between two configs of one codec :func:`_sub_interface_followers`
+    writes an entry for each beforehand.  Across vendors the
+    translator makes a unit follow its port by its own rule
+    (``translate_port_names``), and which ones went is a fact about
+    the run: a name it read as something else (a RouterOS VLAN
+    interface named ``ether1.55``) did not.
+
+    Args:
+        plan: The pairing; its off-inventory names are the candidates.
+        operator_map: The operator's own entries, as applied.  A unit
+            they named is theirs, and has not "followed".
+        names: Source port to its name on the target, as given to
+            the run.
+        job: The finished run.
+
+    Returns:
+        Each unit that is where its port is, with the name it has
+        there -- or ``None`` where it went with a dropped port.
+        Whether the unit took an 802.1Q tag with it is not asked
+        here; the caller sets one that did not apart
+        (``MappingPlan.untagged_units``).
+    """
+    from ..migration.canonical.port_names import split_unit
+
+    gone = set(job.port_drops)
+    followed: dict[str, str | None] = {}
+    for name in plan.off_inventory:
+        split = split_unit(name)
+        if split is None or name in operator_map:
+            continue
+        port, unit = split
+        if port not in operator_map and port not in names:
+            continue
+        if name in gone:
+            if port in gone:
+                followed[name] = None
+            continue
+        where = f"{job.port_renames.get(port, port)}.{unit}"
+        if job.port_renames.get(name, name) == where:
+            followed[name] = where
+    return followed
 
 
 def _undecided_clashes(
@@ -1649,15 +1743,30 @@ def run_plan_with_models(
       dropped from the output and listed in ``job.port_drops`` — never
       left under its old name, which on a same-vendor pair could be
       the name another port was just mapped to;
-    * between two configs of the same codec, a sub-interface
-      (``ge-0/0/0.54``) follows its parent port.
+    * a sub-interface (``ge-0/0/0.54``) follows its parent port, and
+      is dropped with it: between two configs of the same codec by an
+      entry made here, across vendors by the translator's own rule
+      for a unit, read back from the run.  Either way it is recorded
+      in ``port_mapping_plan.sub_interfaces`` -- unless, across
+      vendors, the parsed source holds no 802.1Q tag for it (its
+      platform's parser reads none, or did not read the line, or
+      the config states none).
+      The output then has an interface of that name with no tag,
+      which nothing else in the job would say: the unit is recorded
+      in ``untagged_units`` instead and still asks for a decision.
+      So does a unit the plan does not take for a unit of its port
+      (typed in another letter case than the port, or a unit of a
+      unit): the run shows it went where its port went, and it is
+      recorded in ``unvouched_units``.
 
     What it leaves to the name-shape translator, and then checks:
 
     * an unplaced management port, a name the config uses that is not
       a port of the declared source (off-inventory), and every logical
-      name — a LAG, an SVI, a loopback.  What the translator makes of
-      such a name can be a port the pairing gave to something else —
+      name — a LAG, an SVI, a loopback.  Between two configs of one
+      codec the translator leaves such a name as it is written;
+      across vendors it gives it the target's form.  Either can be a
+      port the pairing gave to something else —
       the same fusion, by another door.  So the finished run is
       inspected, over EVERY name the config references and not only
       the hardware ones: where two names ended on one target, or a
@@ -1744,7 +1853,8 @@ def run_plan_with_models(
     status and has the same sentence appended to ``job.error``.  The
     detail is on the plan as fields — ``unresolved_ports``,
     ``displaced``, ``fused``, ``off_target``, ``landed_off_target``,
-    ``stale_next_hops``, ``unbound_ports``, ``sub_interfaces``, and what a dropped port
+    ``stale_next_hops``, ``unbound_ports``, ``sub_interfaces``,
+    ``untagged_units``, ``unvouched_units``, and what a dropped port
     took with it (``emptied_lags``, ``shrunk_lags``, ``lost_routes``,
     ``lost_dhcp_pools``, ``lost_tracking``, ``lost_vtep_sources``) —
     so no client has to read it out of prose.
@@ -1938,6 +2048,23 @@ def run_plan_with_models(
         positions.update({p.source: None for p in plan.unplaced})
         stale = _stale_next_hops(tree, job, same_codec, positions)
 
+    untagged: dict[str, str] = {}
+    if plan.applied and not same_codec:
+        # Read from the run, after any displacement: what the plan
+        # says of a unit is what happened to it.
+        tagged = {
+            iface.name for iface in tree.interfaces if iface.dot1q_vlan is not None
+        }
+        for name, where in _units_that_followed(plan, operator_map, merged, job).items():
+            if where is None or name in tagged:
+                followers[name] = where
+            else:
+                # It went with its port, and the tree holds no 802.1Q
+                # tag to go with it: the output has an interface of
+                # that name and nothing that says which VLAN it is.
+                # It stays among the names that need a decision.
+                untagged[name] = where
+
     dropped, taken = _taken_with_dropped_ports(tree, job.port_drops)
 
     # Where the binder put a port is what the TREE says; whether a line
@@ -1972,6 +2099,7 @@ def run_plan_with_models(
             name: where for name, where in followers.items()
             if name not in operator_map
         },
+        untagged_units=untagged,
         ignored_overrides=ignored,
         **taken,
         management_forms=forms,

@@ -73,16 +73,14 @@
     // with my chosen value" — same idiom as ports above.
     function applySubstitutionPreview(userMap, appliedMap) {
       if (!userMap || typeof userMap !== 'object') return;
-      var subs = {};
+      var subs = Object.create(null);
+      // The job's map read by a name: its own entries only.
+      var applied = _nameMap(appliedMap);
       Object.keys(userMap).forEach(function(src) {
         var userTarget = userMap[src];
         if (userTarget === null || userTarget === undefined) return;
         var srcKey = String(src);
-        var autoTarget = appliedMap && appliedMap[srcKey] !== undefined
-          ? String(appliedMap[srcKey])
-          : (appliedMap && appliedMap[src] !== undefined
-              ? String(appliedMap[src])
-              : srcKey);
+        var autoTarget = applied[srcKey] !== undefined ? String(applied[srcKey]) : srcKey;
         var tgtStr = String(userTarget);
         if (autoTarget === tgtStr) return;  // no-op
         subs[autoTarget] = tgtStr;
@@ -183,22 +181,25 @@
         }
       });
     }
-    // A port the config uses that was neither renamed nor dropped
+    // A name the config uses that was neither renamed nor dropped
     // keeps its own name -- which an override may not also take.
-    // Counted only against an entry of the operator's: where the
-    // translator itself put a name on an unchanged port's name (a
-    // Junos unit onto its port), that is the job as it came back, and
-    // holding Apply for it would hold every other edit too.
+    // That holds for a LAG or a loopback as for a port.  Counted
+    // only against an entry of the operator's: where the
+    // translator itself put a name on an unchanged name (a Junos
+    // loopback unit onto ``lo0``, which is the loopback's name on
+    // OPNsense too), that is the job as it came back, and holding
+    // Apply for it would hold every other edit too.
     var ownTargets = new Set();
     Object.keys(_renameUserMap).forEach(function(src) {
       if (_renameUserMap[src]) ownTargets.add(_renameUserMap[src]);
     });
-    (_lastJob.source_ports || []).forEach(function(src) {
-      if (_renameUserMap[src] === undefined && !autoDroppedSet.has(src)
-          && ownTargets.has(src)) {
-        tally(src, src);
-      }
-    });
+    (_lastJob.source_ports || []).concat(_lastJob.source_other_names || [])
+      .forEach(function(src) {
+        if (_renameUserMap[src] === undefined && !autoDroppedSet.has(src)
+            && ownTargets.has(src)) {
+          tally(src, src);
+        }
+      });
     var collisions = 0;
     // The same count, of targets an entry of the operator's points at.
     var ownCollisions = 0;
@@ -263,7 +264,7 @@
     // than to ship silently-merged output.
     function countCollisions(userMap, autoMap, dropsSet) {
       if (!userMap && !autoMap) return 0;
-      var hits = {};
+      var hits = Object.create(null);
       var seen = new Set();
       function t(src, tgt) {
         if (tgt === null || tgt === undefined) return;
