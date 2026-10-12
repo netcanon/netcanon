@@ -1536,6 +1536,19 @@ matter; the matrix is honest about both.
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP
   pools surface as a comment block, not as `dhcp-server pool`
   syntax.
+* **A trunk that allows no VLAN comes out allowing every VLAN on
+  four targets.**  The canonical tree has one value, an empty
+  list, for a trunk that allows nothing (`switchport trunk allowed
+  vlan none`, a list emptied by `remove`, a trunk whose VLANs were
+  all dropped), for a trunk that states no list, and for AOS-CX's
+  own `vlan trunk allowed all`.  Each renderer picks a reading:
+  `aruba_aoscx` writes `vlan trunk allowed all`; `cisco_iosxe_cli`,
+  `arista_eos` and `cisco_nxos` write a trunk with no allowed line,
+  which is every VLAN there; `juniper_junos`, `aruba_aoss` and
+  `dell_os10` write a trunk that carries none — which is wrong the
+  other way for a Cisco trunk that states no list.  The job reports
+  nothing.  A known defect, not a design: check any trunk whose
+  list is empty or absent on either side.
 * **A VLAN known only to an "allow-everything" trunk is not
   translated.**  On the six port-centric codecs (`cisco_iosxe_cli`,
   `arista_eos`, `cisco_nxos`, `juniper_junos`, `aruba_aoscx`,

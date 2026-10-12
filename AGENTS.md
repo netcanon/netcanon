@@ -469,11 +469,18 @@ tests use these exclusively — never CSS classes or element structure.  See
   Not reached: a pattern assembled at call time from parts that are not
   literals and not kept; a handler no capture has a line for; work that
   needs two kinds of stanza to grow together; a shape nobody thought to
-  build.  Known and NOT mended (SECURITY.md has the measurements): a
-  list of ONE record that a line adds to after reading it (`if pair not
-  in entry["ipv4"]: entry["ipv4"].append(pair)` — the addresses of one
-  interface, the members of one LAG, the route targets of one VRF), and
-  what a config EXPANDS to (`1-4094` is seven bytes).  When you find a
+  build.  A sixth shape was known when that list was written, and is
+  mended: a list of ONE record that a line adds to after reading it
+  (`if pair not in entry["ipv4"]: entry["ipv4"].append(pair)` — the
+  addresses of one interface, the members of one LAG, the route targets
+  of one VRF).  No index of the records helps, there being one; use
+  `Uniques` (beside `GrowingIndex`), or keep a set beside the list.  The
+  test module reads the source for that idiom, and a new one fails
+  until it is mended or listed there with the bound that makes it
+  harmless.  Known and NOT mended (SECURITY.md has the measurements):
+  what a config EXPANDS to (`1-4094` is seven bytes), the product of
+  two kinds of stanza that grow together, and that nothing limits the
+  time or the memory a request takes.  When you find a
   shape the search missed, add it to the search in the same change as
   the fix.  A pattern that is slow and safe (it reads only data the
   server ships) goes in that module's `KNOWN_SLOW` with the reason; an
@@ -697,6 +704,37 @@ tests use these exclusively — never CSS classes or element structure.  See
   defect it is for, in the same module, and has to fail — and so is
   the wrapper, once per assertion, because a check that is never
   CALLED passes every test too.
+- **Never** write a target's word for "everything" for a list that is
+  not everything.  `vlan members all` is every VLAN the switch has and
+  every VLAN it is given later; the Junos renderer wrote it for any
+  trunk list of 4,000 ids or more, so `switchport trunk allowed vlan
+  1-99,101-4094` — a line whose whole point is VLAN 100 — came out as
+  `all`, VLAN 100 back on the trunk, in a job that said `completed`
+  with nothing to report.  The shared projection read `2-4094` as
+  "all" as well and stamped the trunk onto a declared VLAN 1.  A
+  shorthand is right for the exact set it names and for nothing near
+  it: "long enough" is not "all", "all this config declares" is not
+  "all", and the ids a nearly-full list leaves out are the ones the
+  operator wrote the list for.  Where the target can state the list
+  as it stands (Junos takes ids and ranges as members), write that.
+  The audit had the evidence and it was explained away: the only
+  committed trunks that leave a VLAN out are two Arista `2-4094`
+  peer links, and the VLAN 1 they gained on Junos was pinned by a
+  test as "a documented one-VID asymmetry".  Guarded by
+  `tests/unit/migration/test_a_vlan_left_out_stays_out.py`, which
+  renders such trunks onto every public codec and reads the OUTPUT
+  three ways — the target's parser for the VLAN left out and for the
+  declared VLANs the list holds; the whole list as a set where the
+  target's parser reads one (the declared VLANs are a handful of
+  ids, and a renderer that lost thousands of the others passed the
+  first reading alone); and the text for the word itself, since a
+  parser may read its own word for "all" as an empty list.  **The
+  same class is still open one step on:** the tree has ONE value, an
+  empty list, for "none", for "nothing stated" and for AOS-CX's own
+  `all`, so a trunk that allows no VLAN is written as every VLAN on
+  AOS-CX, IOS-XE, EOS and NX-OS.  That module pins which targets
+  (`WRITES_NOTHING_AS_EVERYTHING`); the change that mends it empties
+  the pin.
 - **Never** translate a statement the source device holds and does not
   run, and never read a form of a platform's config you do not parse as
   an empty config.  Junos prints `inactive:` ahead of a deactivated

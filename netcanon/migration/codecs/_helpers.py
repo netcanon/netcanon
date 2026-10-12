@@ -96,6 +96,106 @@ class GrowingIndex(Generic[_K, _T]):
         return key in self._first
 
 
+class Uniques:
+    """Append a value to a list unless the list has it -- what ``if x
+    not in lst: lst.append(x)`` does -- without reading the list for
+    every value.
+
+    The addresses of one interface, the members of one LAG and the
+    route targets of one VRF are each a list of ONE record, and a line
+    that adds to one first looks for its value there.  Many lines for
+    one record cost their square, on a config with nothing odd in any
+    line of it: an index of the records (:class:`GrowingIndex`) does
+    not help, because there is only the one.
+
+    One is made per parse, or per pass, and asked about any number of
+    lists.  For each list it keeps what the list holds, by key, and
+    before every answer takes in what the list has gained since the
+    last, whoever appended it.  So an answer is the scan's answer for
+    a list that only grows; one that became shorter is read again
+    from the start, and a list a record was given anew is another
+    list.  What must not happen between two questions about one list
+    is an entry being replaced in place, or one taken out and another
+    put in.
+
+    *key* is for values that cannot be hashed (a pydantic record).  It
+    has to be equal for two values that are equal, and the same
+    function every time one list is asked about; values under one key
+    are still compared with ``==``, so a key that is too coarse costs
+    time and never an answer.
+    """
+
+    def __init__(self) -> None:
+        # id(list) -> [the list, its values by key, how many of its
+        # entries have been read].  The list is held, so its id cannot
+        # be given to another list.
+        self._lists: dict[int, list] = {}
+
+    def _entry(self, items: list, key: Callable | None) -> list:
+        """What is kept for *items*, with the entries the list has
+        gained since the last question taken in."""
+        entry = self._lists.get(id(items))
+        if entry is None or len(items) < entry[2]:
+            entry = self._lists[id(items)] = [items, {}, 0]
+        values = entry[1]
+        for at in range(entry[2], len(items)):
+            item = items[at]
+            values.setdefault(item if key is None else key(item), []).append(item)
+        entry[2] = len(items)
+        return entry
+
+    def add(self, items: list, value: object, key: Callable | None = None) -> bool:
+        """Append *value* to *items* unless it is there.
+
+        Args:
+            items: The list.  It is held from the first question on.
+            value: What to append.
+            key: A key for a value that cannot be hashed.
+
+        Returns:
+            True if *value* was appended.
+        """
+        entry = self._entry(items, key)
+        same = entry[1].setdefault(value if key is None else key(value), [])
+        if value in same:
+            return False
+        same.append(value)
+        items.append(value)
+        entry[2] += 1
+        return True
+
+
+def address_key(address: object) -> tuple:
+    """A key for :class:`Uniques` over IPv4 address records: fields
+    that two equal addresses share.  (Comparing the records themselves,
+    one against every other, is what made 8,000 secondary addresses on
+    one SVI take 28 seconds: a record is compared field by field.)"""
+    return (
+        address.ip, address.prefix_length, address.is_secondary,  # type: ignore[attr-defined]
+        address.virtual_gateway_address, address.virtual_gateway_mac,  # type: ignore[attr-defined]
+    )
+
+
+#: Every VLAN id, once: the int at index N is N (0 is there only to
+#: make that so).  A list of ids that is a slice of this holds these
+#: objects and makes none of its own, so an id in a list costs the
+#: eight bytes of its place there.  Counted from a range it cost a new
+#: int as well, 38 bytes in all, and a config can state ``1-4094`` on
+#: every port it has.  Use :func:`vlan_id_run` to expand a range.
+VLAN_IDS: tuple[int, ...] = tuple(range(4095))
+
+
+def vlan_id_run(low: int, high: int) -> list[int]:
+    """The VLAN ids *low* to *high*, both included, as a new list
+    whose entries are the shared ints of :data:`VLAN_IDS`.
+
+    Equal to ``list(range(low, high + 1))`` for ``1 <= low`` and
+    ``high <= 4094``, which the caller has to have seen to: a slice
+    does not refuse a bound, it stops at the end of the tuple.
+    """
+    return list(VLAN_IDS[low:high + 1])
+
+
 def same_vendor_version(
     tree: CanonicalIntent, *, vendor_id: str, default: str
 ) -> str:
@@ -221,7 +321,7 @@ def _parse_vlan_list(text: str) -> list[int]:
                 continue
             lo_i, hi_i = max(1, lo_i), min(4094, hi_i)
             if lo_i <= hi_i:
-                result.extend(range(lo_i, hi_i + 1))
+                result.extend(VLAN_IDS[lo_i:hi_i + 1])
         elif part.isdigit():
             result.append(int(part))
     return result
@@ -279,12 +379,12 @@ def merge_trunk_allowed(
     if keyword == "none":
         return []
     if keyword == "all":
-        return list(range(1, 4095))
+        return vlan_id_run(1, 4094)
     rest = tokens[1] if len(tokens) > 1 else ""
     ids = parse_ids(rest)
     if keyword == "except":
         blocked = set(ids)
-        return [vid for vid in range(1, 4095) if vid not in blocked]
+        return [vid for vid in VLAN_IDS[1:] if vid not in blocked]
     base = list(existing)
     if keyword == "add":
         # (#11) ``vid not in base`` is an O(len(base)) list scan per id;

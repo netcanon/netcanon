@@ -1201,12 +1201,17 @@ def _taken_with_dropped_ports(
     named = {iface.name for iface in tree.interfaces}
     emptied_lags: list[str] = []
     shrunk_lags: list[str] = []
+    # The interfaces that say they belong to each LAG, read once.  Asked
+    # of every interface for every LAG, a config of thousands of each
+    # cost their product.
+    belongs: dict[str, set[str]] = {}
+    for iface in tree.interfaces:
+        if iface.lag_member_of:
+            belongs.setdefault(iface.lag_member_of, set()).add(iface.name)
     for lag in tree.lags:
         members = {member for member in lag.members if member}
-        members.update(
-            iface.name for iface in tree.interfaces
-            if lag.name and iface.lag_member_of == lag.name
-        )
+        if lag.name:
+            members.update(belongs.get(lag.name, ()))
         lost = members & dropped
         if members and lost == members:
             emptied_lags.append(lag.name)

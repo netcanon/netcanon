@@ -83,7 +83,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
-from .._helpers import GrowingIndex
+from .._helpers import GrowingIndex, Uniques, vlan_id_run
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -119,7 +119,7 @@ def _resolve_vlan_member_to_vids(
     if sep and lo_str.isdigit() and hi_str.isdigit():
         lo, hi = int(lo_str), int(hi_str)
         if 1 <= lo <= hi <= 4094:
-            return list(range(lo, hi + 1))
+            return vlan_id_run(lo, hi)
     return []
 
 
@@ -523,8 +523,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                         prefix = int(prefix_str)
                         existing = member_state.setdefault("ipv4", [])
                         pair = (ip_str, prefix)
-                        if pair not in existing:
-                            existing.append(pair)
+                        found.once.add(existing, pair)
                     except ValueError:
                         pass
             # GAP-EVPN-3: same shape for v6 addresses on
@@ -538,8 +537,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                         prefix = int(prefix_str)
                         existing = member_state.setdefault("ipv6", [])
                         pair = (ip_str, prefix)
-                        if pair not in existing:
-                            existing.append(pair)
+                        found.once.add(existing, pair)
                     except ValueError:
                         pass
 
@@ -740,8 +738,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         else:
             existing.mode = mode
             for m in members:
-                if m not in existing.members:
-                    existing.members.append(m)
+                found.once.add(existing.members, m)
 
     # 2. Resolve L2 ``vlan members <NAME>`` lists on access / trunk
     #    interfaces — convert vlan-name lookups to numeric VIDs by
@@ -780,14 +777,14 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                     break
         elif iface.switchport_mode == "trunk":
             # Junos `vlan members all` is the operator-form for "all
-            # VLANs allowed on this trunk" — match Arista's
-            # `switchport trunk allowed vlan all` / `1-4094` /
-            # `2-4094`.  Expand to the full VID range so canonical
-            # comparison and any cross-vendor render carry the same
-            # semantic (Arista will collapse 2-4094 back to its own
-            # all-form on the symmetric render path).
+            # VLANs allowed on this trunk" — what Arista writes as
+            # `switchport trunk allowed vlan all` / `1-4094`.  Expand
+            # to the full VID range so canonical comparison and any
+            # cross-vendor render carry the same semantic.  (The
+            # renderer writes `all` for that full range and for no
+            # other list.)
             if any(vname == "all" for vname in names_list):
-                iface.trunk_allowed_vlans = list(range(1, 4095))
+                iface.trunk_allowed_vlans = vlan_id_run(1, 4094)
                 continue
             # (#8) Each member may be a name, a numeric VID, or a numeric
             # range (``100-110``) — resolve/expand all three.
@@ -874,11 +871,12 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         # surface.
         irb_v4_anycast = irb_entry.get("ipv4_anycast", {})
         irb_v4_mac = irb_entry.get("v4_mac", "")
+        existing_addrs = {
+            (a.ip, a.prefix_length) for a in vlan.ipv4_addresses
+        }
         for ip, prefix in irb_entry.get("ipv4", []):
-            existing_addrs = {
-                (a.ip, a.prefix_length) for a in vlan.ipv4_addresses
-            }
             if (ip, prefix) not in existing_addrs:
+                existing_addrs.add((ip, prefix))
                 vlan.ipv4_addresses.append(
                     CanonicalIPv4Address(
                         ip=ip,
@@ -990,7 +988,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     legitimate_vlan_ids = (
         {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
-    project_switchport_to_vlan(intent)
+    project_switchport_to_vlan(intent, keep=legitimate_vlan_ids)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
     # Cluster E.1-B: materialise CanonicalDHCPPool records from the
@@ -1645,17 +1643,24 @@ def _blockform_convert(
     return out_lines, left_out
 
 
+#: What the SNMPv3 user index reads while a config has no SNMP section.
+_NO_V3_USERS: list[Any] = []
+
+
 class _Found:
     """The records a set-line handler looks for among everything the
     earlier lines made: a user by name, a routing instance by name, a
     static route by destination, next hop and VRF, a VNI by VLAN and
-    number, an SNMPv3 user by name.
+    number, an SNMPv3 user by name -- and, in ``once``, the values of
+    the lists of ONE record that a line adds to (an interface's
+    addresses, a LAG's members, a VRF's route targets).
 
     Each handler runs once per line.  Looking through the whole list
-    each time (``next(...)``, ``any(...)``) cost the square of the
-    lines: a few thousand static routes took seconds, and the text is
-    whatever was pasted.  One of these is made per parse and handed
-    down; a handler called by itself makes its own.
+    each time (``next(...)``, ``any(...)``, ``value not in a_list``)
+    cost the square of the lines: a few thousand static routes took
+    seconds, and the text is whatever was pasted.  One of these is
+    made per parse and handed down; a handler called by itself makes
+    its own.
     """
 
     def __init__(self, intent: CanonicalIntent) -> None:
@@ -1667,8 +1672,10 @@ class _Found:
         )
         self.vnis = GrowingIndex(lambda: intent.vxlan_vnis, lambda vx: (vx.vlan_id, vx.vni))
         self.v3_users = GrowingIndex(
-            lambda: intent.snmp.v3_users if intent.snmp is not None else [], lambda user: user.name,
+            lambda: intent.snmp.v3_users if intent.snmp is not None else _NO_V3_USERS,
+            lambda user: user.name,
         )
+        self.once = Uniques()
 
 
 def _dispatch_set(
@@ -1714,10 +1721,10 @@ def _dispatch_set(
     elif head == "access":
         # Cluster E.1-B: ``set access address-assignment pool <P>
         # family inet ...`` (modern form DHCP server pool grammar).
-        _apply_access(tokens[1:], dhcp_pool_state)
+        _apply_access(tokens[1:], dhcp_pool_state, found)
     elif head == "interfaces":
         _apply_interfaces(
-            tokens[1:], iface_state, range_state, lag_state, irb_state,
+            tokens[1:], iface_state, range_state, lag_state, irb_state, found,
         )
     elif head == "vlans":
         _apply_vlans(tokens[1:], intent, irb_state, vlan_by_id, vlan_by_name, found)
@@ -1764,7 +1771,7 @@ def _apply_system(
         and tokens[1] in ("dhcp-local-server", "dhcp")
     ):
         _apply_system_services_dhcp(
-            tokens[1:], dhcp_pool_state, dhcp_group_iface,
+            tokens[1:], dhcp_pool_state, dhcp_group_iface, found,
         )
         return
     # GAP 8: richer system-scalar inheritance exercised primarily via
@@ -1827,6 +1834,7 @@ def _apply_interfaces(  # noqa: C901
     range_state: dict[str, dict[str, Any]] | None = None,
     lag_state: dict[str, dict[str, Any]] | None = None,
     irb_state: dict[int, dict[str, Any]] | None = None,
+    found: _Found | None = None,
 ) -> None:
     """Parse ``interfaces <name> ...`` variants.
 
@@ -1848,6 +1856,10 @@ def _apply_interfaces(  # noqa: C901
     * ``interfaces <name> native-vlan-id <vid>`` — trunk native VLAN.
     * ``interfaces irb unit <vid> family inet address <ip>/<prefix>`` —
       VLAN SVI L3 address; captured into *irb_state* keyed by vid.
+
+    ``found`` is the per-parse lookup (:class:`_Found`); its ``once``
+    appends a value to a list of one record unless the list has it.
+    A caller that has none may leave it out.
     """
     if not tokens:
         return
@@ -1858,8 +1870,9 @@ def _apply_interfaces(  # noqa: C901
         and len(tokens) >= 2
         and range_state is not None
     ):
-        _apply_interface_range(tokens[1:], range_state)
+        _apply_interface_range(tokens[1:], range_state, found)
         return
+    once = found.once if found is not None else Uniques()
     name = tokens[0]
     state = iface_state.setdefault(name, {})
 
@@ -1923,8 +1936,7 @@ def _apply_interfaces(  # noqa: C901
         # static, so seed the default ``static`` (an explicit lacp line, if
         # present, overwrites it above).
         entry = lag_state.setdefault(ae_name, {"members": [], "mode": "static"})
-        if name not in entry["members"]:
-            entry["members"].append(name)
+        once.add(entry["members"], name)
         return
 
     # --- Phase 4 rank-4: trunk native VLAN ---
@@ -2014,8 +2026,7 @@ def _apply_interfaces(  # noqa: C901
                     # content render both emit the same address
                     # line; we don't want it to accumulate.
                     pair = (ip_str, prefix)
-                    if pair not in existing:
-                        existing.append(pair)
+                    once.add(existing, pair)
                     # Wave C: ``family inet address <ip>/<prefix>
                     # virtual-gateway-address <vga>`` — capture the
                     # per-address anycast companion.  Multiple address
@@ -2044,7 +2055,7 @@ def _apply_interfaces(  # noqa: C901
                             _apply_vrrp_group_sub(
                                 target_state, gid, "vrrp",
                                 tokens[9:],
-                                addr_anchor=pair,
+                                addr_anchor=pair, once=once,
                             )
                 except ValueError:
                     pass
@@ -2094,8 +2105,7 @@ def _apply_interfaces(  # noqa: C901
                     prefix = int(prefix_str)
                     existing = target_state.setdefault("ipv6", [])
                     pair = (ip_str, prefix)
-                    if pair not in existing:
-                        existing.append(pair)
+                    once.add(existing, pair)
                     # Wave C: ``family inet6 address <ip>/<prefix>
                     # virtual-gateway-address <vga>``.
                     if (
@@ -2201,8 +2211,7 @@ def _apply_interfaces(  # noqa: C901
                     prefix = int(prefix_str)
                     entry = irb_state.setdefault(unit_num, {"ipv4": []})
                     pair = (ip_str, prefix)
-                    if pair not in entry["ipv4"]:
-                        entry["ipv4"].append(pair)
+                    once.add(entry["ipv4"], pair)
                     if (
                         len(tokens) >= 9
                         and tokens[7] == "virtual-gateway-address"
@@ -2230,7 +2239,7 @@ def _apply_interfaces(  # noqa: C901
                             _apply_vrrp_group_sub(
                                 entry, gid, "vrrp",
                                 tokens[9:],
-                                addr_anchor=pair,
+                                addr_anchor=pair, once=once,
                             )
                 except ValueError:
                     pass
@@ -2256,8 +2265,7 @@ def _apply_interfaces(  # noqa: C901
                     entry = irb_state.setdefault(unit_num, {"ipv4": []})
                     pair = (ip_str, prefix)
                     existing_v6 = entry.setdefault("ipv6", [])
-                    if pair not in existing_v6:
-                        existing_v6.append(pair)
+                    once.add(existing_v6, pair)
                     if (
                         len(tokens) >= 9
                         and tokens[7] == "virtual-gateway-address"
@@ -2294,6 +2302,7 @@ def _apply_interfaces(  # noqa: C901
 def _apply_interface_range(
     tokens: list[str],
     range_state: dict[str, dict[str, Any]],
+    found: _Found | None = None,
 ) -> None:
     """Parse ``interfaces interface-range <rname> ...`` variants.
 
@@ -2310,6 +2319,10 @@ def _apply_interface_range(
     materialisation time so the canonical tree looks identical
     whether the operator wrote interface-range blocks or flat
     per-interface lines.  Unknown sub-paths parse-and-ignore.
+
+    ``found`` is the per-parse lookup (:class:`_Found`); its ``once``
+    appends a value to a list of one record unless the list has it.
+    A caller that has none may leave it out.
     """
     if not tokens:
         return
@@ -2320,8 +2333,7 @@ def _apply_interface_range(
     sub = tokens[1]
     if sub == "member" and len(tokens) >= 3:
         member = tokens[2]
-        if member not in state["members"]:
-            state["members"].append(member)
+        (found.once if found is not None else Uniques()).add(state["members"], member)
         return
     if sub == "description" and len(tokens) >= 3:
         state["attrs"]["description"] = tokens[2]
@@ -2507,6 +2519,7 @@ def _apply_switch_options(tokens: list[str], intent: CanonicalIntent) -> None:
 def _apply_access(
     tokens: list[str],
     dhcp_pool_state: dict[str, dict[str, Any]] | None,
+    found: _Found | None = None,
 ) -> None:
     """Modern Junos DHCP grammar: ``set access address-assignment
     pool <P> family inet ...``.
@@ -2529,6 +2542,10 @@ def _apply_access(
 
     Other ``family inet6`` / non-DHCP ``access`` sub-paths (profile,
     radius-server) parse-and-ignore — out of Cluster E DHCP scope.
+
+    ``found`` is the per-parse lookup (:class:`_Found`); its ``once``
+    appends a value to a list of one record unless the list has it.
+    A caller that has none may leave it out.
     """
     if dhcp_pool_state is None:
         return
@@ -2570,8 +2587,7 @@ def _apply_access(
             return
         if attr == "name-server":
             servers = entry.setdefault("dns_servers", [])
-            if val not in servers:
-                servers.append(val)
+            (found.once if found is not None else Uniques()).add(servers, val)
             return
         if attr == "maximum-lease-time":
             try:
@@ -2590,6 +2606,7 @@ def _apply_system_services_dhcp(
     tokens: list[str],
     dhcp_pool_state: dict[str, dict[str, Any]] | None,
     dhcp_group_iface: dict[str, str] | None,
+    found: _Found | None = None,
 ) -> None:
     """Two grammars share this entry point:
 
@@ -2602,6 +2619,10 @@ def _apply_system_services_dhcp(
       Each ``set system services dhcp pool <CIDR> ...`` line is a
       flat sub-path that we map onto the same accumulator the
       modern form uses (keyed by the network CIDR).
+
+    ``found`` is the per-parse lookup (:class:`_Found`); its ``once``
+    appends a value to a list of one record unless the list has it.
+    A caller that has none may leave it out.
     """
     if not tokens:
         return
@@ -2639,8 +2660,7 @@ def _apply_system_services_dhcp(
             return
         if head == "name-server" and len(sub) >= 2:
             servers = entry.setdefault("dns_servers", [])
-            if sub[1] not in servers:
-                servers.append(sub[1])
+            (found.once if found is not None else Uniques()).add(servers, sub[1])
             return
         if head == "maximum-lease-time" and len(sub) >= 2:
             try:
@@ -2737,10 +2757,9 @@ def _apply_routing_instances(
         # ``export target:...``.
         if len(rest) >= 2 and rest[1].startswith("target:"):
             rt = rest[1][len("target:"):]
-            if rt not in ri.rt_imports:
-                ri.rt_imports.append(rt)
-            if rt not in ri.rt_exports:
-                ri.rt_exports.append(rt)
+            once = (found or _Found(intent)).once
+            once.add(ri.rt_imports, rt)
+            once.add(ri.rt_exports, rt)
             return
         if (
             len(rest) >= 3
@@ -2748,8 +2767,7 @@ def _apply_routing_instances(
             and rest[2].startswith("target:")
         ):
             rt = rest[2][len("target:"):]
-            if rt not in ri.rt_imports:
-                ri.rt_imports.append(rt)
+            (found or _Found(intent)).once.add(ri.rt_imports, rt)
             return
         if (
             len(rest) >= 3
@@ -2757,8 +2775,7 @@ def _apply_routing_instances(
             and rest[2].startswith("target:")
         ):
             rt = rest[2][len("target:"):]
-            if rt not in ri.rt_exports:
-                ri.rt_exports.append(rt)
+            (found or _Found(intent)).once.add(ri.rt_exports, rt)
             return
         return
     if head == "interface" and len(rest) >= 2:
@@ -2839,7 +2856,9 @@ def _apply_routing_options(
             ))
 
 
-def _apply_snmp(tokens: list[str], intent: CanonicalIntent, found: _Found | None = None) -> None:
+def _apply_snmp(
+    tokens: list[str], intent: CanonicalIntent, found: _Found | None = None,
+) -> None:
     """``set snmp community <name> authorization read-only|read-write``
     ``set snmp location "<loc>"``
     ``set snmp contact "<contact>"``
@@ -2850,6 +2869,10 @@ def _apply_snmp(tokens: list[str], intent: CanonicalIntent, found: _Found | None
         privacy-key "<key>"``
     ``set snmp v3 vacm security-to-group security-model usm
         security-name <name> group <group>``
+
+    ``found`` is the per-parse lookup (:class:`_Found`), where an
+    SNMPv3 user is found by name; a caller that has none may leave it
+    out.
     """
     if not tokens:
         return
@@ -2899,26 +2922,33 @@ _JUNOS_PRIV_MAP = {
 def _get_or_create_v3_user(
     snmp: CanonicalSNMP,
     name: str,
-    users: GrowingIndex[str, Any],
+    found: _Found | None = None,
 ) -> Any:
     """Look up the SNMPv3 user record by name, creating a stub if
     absent.  Merging lets the user's auth key, priv key, and VACM
     group binding arrive in any order (``set snmp v3`` lines can be
     scattered across the config).
 
-    Found in *users*, the index of ``snmp.v3_users`` by name: each
-    line of a user looked through every user so far, and 32,000
-    ``security-to-group`` lines took fifteen seconds.
+    ``found`` is the per-parse lookup (:class:`_Found`): with it the
+    user is found by name without the users so far being read for
+    every ``set snmp v3`` line.  A caller that has none may leave it
+    out, and the list is then read once for this call.
     """
     from ...canonical.intent import CanonicalSNMPv3User
+    users = found.v3_users if found is not None else GrowingIndex(
+        lambda: snmp.v3_users, lambda user: user.name,
+    )
     u = users.get(name)
-    if u is None:
-        u = CanonicalSNMPv3User(name=name)
-        snmp.v3_users.append(u)
+    if u is not None:
+        return u
+    u = CanonicalSNMPv3User(name=name)
+    snmp.v3_users.append(u)
     return u
 
 
-def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent, found: _Found | None = None) -> None:
+def _apply_snmp_v3(
+    tokens: list[str], intent: CanonicalIntent, found: _Found | None = None,
+) -> None:
     """Handle ``set snmp v3 ...`` tails.
 
     Two families:
@@ -2934,12 +2964,11 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent, found: _Found | N
     ``set snmp v3`` lines (trap-target, notify-view, access) are
     Tier-3 and out of this codec's scope.
 
-    ``found`` is the per-parse lookup of records by key
-    (:class:`_Found`); a caller without one gets its own.
+    ``found`` is the per-parse lookup (:class:`_Found`), where a user
+    is found by name; a caller that has none may leave it out.
     """
     if intent.snmp is None:
         intent.snmp = CanonicalSNMP()
-    users = (found or _Found(intent)).v3_users
     # ``usm local-engine user <name> ...``
     if (
         len(tokens) >= 6
@@ -2960,7 +2989,7 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent, found: _Found | N
             # render emits but the parser ignores is a silent loss.
             if key_tok in ("authentication-key", "authentication-password"):
                 from ..._usm_keys import LOCALISED, PLAINTEXT
-                u = _get_or_create_v3_user(intent.snmp, name, users)
+                u = _get_or_create_v3_user(intent.snmp, name, found)
                 u.auth_protocol = _JUNOS_AUTH_MAP[attr]
                 u.auth_passphrase = key_val
                 # WHICH leaf carried the value IS the kind: Junos derives the
@@ -2974,7 +3003,7 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent, found: _Found | N
             key_val = tokens[6]
             if key_tok in ("privacy-key", "privacy-password"):
                 from ..._usm_keys import LOCALISED, PLAINTEXT
-                u = _get_or_create_v3_user(intent.snmp, name, users)
+                u = _get_or_create_v3_user(intent.snmp, name, found)
                 u.priv_protocol = _JUNOS_PRIV_MAP[attr]
                 u.priv_passphrase = key_val
                 u.priv_kind = (
@@ -2984,12 +3013,12 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent, found: _Found | N
         # Bare ``authentication-none`` / ``privacy-none`` (no key
         # follows) — clears the corresponding field.
         if attr == "authentication-none":
-            u = _get_or_create_v3_user(intent.snmp, name, users)
+            u = _get_or_create_v3_user(intent.snmp, name, found)
             u.auth_protocol = ""
             u.auth_passphrase = ""
             return
         if attr == "privacy-none":
-            u = _get_or_create_v3_user(intent.snmp, name, users)
+            u = _get_or_create_v3_user(intent.snmp, name, found)
             u.priv_protocol = ""
             u.priv_passphrase = ""
             return
@@ -3006,7 +3035,7 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent, found: _Found | N
     ):
         name = tokens[5]
         group = tokens[7]
-        u = _get_or_create_v3_user(intent.snmp, name, users)
+        u = _get_or_create_v3_user(intent.snmp, name, found)
         u.group = group
 
 
@@ -3021,6 +3050,7 @@ def _apply_vrrp_group_sub(
     mode: str,
     rest_tokens: list[str],
     addr_anchor: tuple[str, int] | None = None,
+    once: Uniques | None = None,
 ) -> None:
     """Dispatch a single ``vrrp-group <gid> <sub-token> <args...>``
     sub-line into the per-group scratch dict stored on
@@ -3049,6 +3079,10 @@ def _apply_vrrp_group_sub(
       ``<scheme>:<value>`` form.
 
     Unknown sub-tokens parse-and-ignore (Tier-3 tolerance).
+
+    ``once`` appends a value to a list of the group unless the list
+    has it (:class:`.._helpers.Uniques`); the caller's own is handed
+    in so that many lines for one group do not each read the list.
     """
     groups = target_state.setdefault("vrrp_groups", {})
     g = groups.setdefault(gid, {
@@ -3070,13 +3104,11 @@ def _apply_vrrp_group_sub(
     sub = rest_tokens[0]
     if sub == "virtual-address" and len(rest_tokens) >= 2:
         vip = rest_tokens[1]
-        if vip not in g["virtual_ips"]:
-            g["virtual_ips"].append(vip)
+        (once if once is not None else Uniques()).add(g["virtual_ips"], vip)
         return
     if sub == "virtual-inet6-address" and len(rest_tokens) >= 2:
         vip = rest_tokens[1]
-        if vip not in g["virtual_ipv6s"]:
-            g["virtual_ipv6s"].append(vip)
+        (once if once is not None else Uniques()).add(g["virtual_ipv6s"], vip)
         return
     if sub == "priority" and len(rest_tokens) >= 2:
         try:
@@ -3104,8 +3136,7 @@ def _apply_vrrp_group_sub(
         and rest_tokens[1] == "interface"
     ):
         track_iface = rest_tokens[2]
-        if track_iface not in g["track_interfaces"]:
-            g["track_interfaces"].append(track_iface)
+        (once if once is not None else Uniques()).add(g["track_interfaces"], track_iface)
         return
     if sub == "authentication-type" and len(rest_tokens) >= 2:
         scheme = rest_tokens[1]

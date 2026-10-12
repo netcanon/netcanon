@@ -63,14 +63,91 @@ timestamp if your timezone matters for an audit.
   a capture with a run put into it (`tests/unit/test_untrusted_text_cost.py`).
   The last shape has a search of its own, run by hand
   (`tools/stanza_cost_search.py`), and a pinned text for each handler it
-  found.  It is a search, not a proof, and two things are known and not
-  mended: a list of one record that a line adds to after reading it
-  (32,000 addresses on one Junos unit take 8 seconds), and what a config
-  expands to (a thousand trunks that each allow VLANs 2-4000 are 86 KB
-  and over 3 GB) — see SECURITY.md.  Put a request timeout and a memory
+  found.  It is a search, not a proof; the two things it left known and
+  not mended are the next entry's.  Put a request timeout and a memory
   limit in front of a server that takes text from people it does not
   trust.
 
+- **A small config could still take seconds, or hundreds of megabytes,
+  to read.**  Three more shapes, none of which changes an output.
+  *A list of one record that a line adds to after looking for its value
+  there* — the addresses of one interface, the members of one LAG, the
+  route targets of one VRF — cost the square of the lines the record was
+  given: 32,000 addresses on one Junos IRB unit (2 MB) took 12 seconds,
+  8,000 secondary addresses on one AOS-CX SVI (0.3 MB) 28, 32,000
+  RouterOS NTP servers 24, and 640 lines in one AOS-S VLAN (13 KB) 4.
+  Each is about a second or less; the look is by key (`Uniques`, in
+  `netcanon/migration/codecs/_helpers.py`), in every parser that had it.
+  *A scan of another list for every item*, after the parse: rendering
+  400 VLANs, port-channels and member ports to OPNsense took 12 seconds
+  and takes 0.06; the port-name translator's collision warning, the
+  model-aware plan's account of dropped ports, the NX-OS route-target
+  lines and the VyOS SNMPv3 users each build an index once.  And *what
+  the switchport projection made and dropped*: for a trunk whose list is
+  wide it made a VLAN record and a membership for every id, and the six
+  port-centric codecs dropped all but the declared ones on their next
+  line.  50 Arista trunks that allow `2-4000` (5 KB) took 0.4 seconds and
+  180 MB to parse, and take 0.01 seconds and 1 MB; 48 NX-OS trunks that
+  state `1-99,101-4094`, translated to Junos, 0.4 seconds and 176 MB,
+  now 0.04 and 1.  The projection takes the set its caller keeps
+  (`project_switchport_to_vlan(intent, keep=...)`) and makes nothing
+  else; an id that is not a VLAN id in a wide list (`1-200,5000`) still
+  fails the parse, as it did.  Lists of VLAN ids are built from one
+  shared tuple of ints (8 bytes an id on a port, where it was 38), and a
+  membership costs 45 bytes while it is stamped, where it cost 800: a
+  thousand trunks that carry every VLAN on a thousand declared VLANs
+  (118 KB), translated to AOS-S, are 0.7 seconds and 72 MB, where 500 of
+  each were 0.7 seconds and 293 MB.  Nothing moved: every committed
+  capture parses, renders bare and translates onto all thirteen codecs
+  to the same digests as before, the cross-mesh results and the
+  reconciliation are unchanged, and the projection is compared in the
+  suite with the one it replaces, on built switches, with and without
+  the set.  New tests pin a text for each place
+  (`tests/unit/test_untrusted_text_cost.py`), read the source for a list
+  that is looked through before it is added to, and count what a VLAN id
+  and a membership cost in bytes
+  (`tests/unit/migration/test_projection_makes_what_is_kept.py`).
+  Still open, and named in SECURITY.md: what a config expands to (800
+  ranges on one AOS-S line are 800,000 names and 295 MB), the product of
+  two honest counts, and that there is no limit on the time or the
+  memory a request takes.
+
+### Fixed
+
+- **A trunk that leaves a VLAN out does not get it back on Junos.**
+  The Junos renderer wrote any trunk list of 4,000 VLAN ids or more
+  as `vlan members all`, which on Junos is every VLAN the switch has
+  and every VLAN it is given later.  So `switchport trunk allowed
+  vlan 1-99,101-4094` came out as `all`, with VLAN 100 back on the
+  trunk, and `2-4094` with VLAN 1 — in a job that said `completed`
+  and reported nothing.  `all` is now written only for a list of
+  every id (`1-4094`).  Any other list is cut into runs of
+  consecutive ids: a run made only of VLANs the output defines is
+  written by name, as before; any other run is written as one range
+  of ids, which covers the defined VLANs inside it (`vlan members
+  1-99`, `vlan members 101-4094`).  Junos documents ids and ranges
+  as members beside names, and this parser already read them.  A
+  list of 129 to 3,999 ids was a line per id, each a name
+  `VLAN-<id>` for a VLAN the output does not define (`1-3999`:
+  3,999 lines); that is one range now.  A list of 128 ids or fewer
+  is unchanged: its VLANs are made, and named.  A VLAN whose own
+  name is `all`, another VLAN's number or a range of numbers is
+  written as `VLAN-<id>` with a `# review:` line: a member list
+  reads those names as every VLAN, or as ids.  The shared projection read
+  `2-4094` as "all VLANs" and stamped the trunk onto every declared
+  VLAN, VLAN 1 included, so AOS-S tagged the port in VLAN 1; it
+  stamps the VLANs the list holds.  **If a trunk with a wide list
+  that leaves VLANs out was translated to Junos with release 0.7.7
+  or earlier, check its `vlan members` line: it says `all`, and the
+  VLANs the source left out are on it.**  Not verified on a device:
+  that a switch commits a member range most of whose ids have no
+  VLAN.  Juniper's pages give the grammar, and an example of a
+  range with no VLAN defined; none says so in words.  Two committed
+  captures change (an Arista MLAG peer link allowing `2-4094`:
+  `vlan members 2-4094` now).  They are the only committed trunks
+  that leave a VLAN out, and the VLAN 1 they gained had been written
+  down in a test as an asymmetry to accept.  A test now renders such
+  trunks onto every codec and reads the output back three ways.
 - **A Junos text with comments that are never closed cost the square of
   its lines.**  Comments were cut out of hierarchical text by a pattern,
   run over every Junos text before its form was known; from each `/*`
@@ -767,6 +844,19 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **A trunk that allows no VLAN comes out allowing every VLAN on four
+  targets.**  `switchport trunk allowed vlan none`, a list emptied by
+  `remove` or `except`, a Junos trunk with no members, and a trunk
+  whose only VLANs were dropped in the rename modal are all one value
+  in the canonical tree — an empty list — and so is a trunk that
+  states no list, and AOS-CX's own `vlan trunk allowed all`.  AOS-CX
+  writes the empty list as `vlan trunk allowed all`; IOS-XE, EOS and
+  NX-OS write a trunk with no allowed line, which on those platforms
+  is every VLAN.  The job says `completed`.  Older than this release;
+  found while mending the Junos `all` above, pinned by a test, and
+  not mended yet.  The other direction is in the same value: a Cisco
+  trunk that states no list, or an AOS-CX `all`, is a Junos trunk
+  with no members.  Check any trunk whose list is empty or absent.
 - **Selecting a profile in the rename modal still does not change
   auto-translated names.**  The translator derives a target name from the
   shape of the source name (Cisco `GigabitEthernet1/0/1` becomes AOS-S

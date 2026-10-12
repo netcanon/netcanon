@@ -502,11 +502,13 @@ stability.  The forward helper guards the Junos `vlan members all`
 sentinel (`range(1,4095)`) to avoid synthesising 4094 phantom VLANs.
 
 **What makes a switchport VLAN real** (the phantom-VLAN prune,
-`transforms.switchport_declared_vlan_ids`).  Projection synthesises a
-`CanonicalVlan` for every VID a switchport line mentions, so the six
-port-centric codecs (`cisco_iosxe_cli`, `arista_eos`, `cisco_nxos`,
-`juniper_junos`, `aruba_aoscx`, `dell_os10`) snapshot a "legitimate"
-VID set before projecting and prune to it after.  That set is every
+`transforms.switchport_declared_vlan_ids`).  Left to itself the
+projection synthesises a `CanonicalVlan` for every VID a switchport
+line mentions, so the six port-centric codecs (`cisco_iosxe_cli`,
+`arista_eos`, `cisco_nxos`, `juniper_junos`, `aruba_aoscx`,
+`dell_os10`) snapshot a "legitimate" VID set before projecting, hand it
+to the projection (`keep=`) so that no record outside it is made at
+all, and prune to it after.  That set is every
 declared `vlan <N>` stanza, every `access_vlan` / `trunk_native_vlan`,
 and — provided the expanded list is no wider than
 `TRUNK_ALLOWED_SPECIFICITY_BOUND` — every member of a

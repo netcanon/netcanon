@@ -85,7 +85,7 @@ from ...canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVlan,
 )
-from .._helpers import _is_link_local_v6, _mask_to_prefix
+from .._helpers import Uniques, _is_link_local_v6, _mask_to_prefix
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
 from ..base import ParseError
@@ -849,6 +849,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
     an empty bundle keeps :attr:`CanonicalLAG.mode` default.
     """
     members_by_lag: dict[str, list[str]] = {}
+    once = Uniques()
     mode_by_lag: dict[str, str] = {}
     declared: set[str] = set()
     current_iface: str | None = None
@@ -877,8 +878,8 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
             lag_name = f"Bundle-Ether{int(bm.group(1))}"
             mode = _IOSXR_LAG_MODE_MAP.get(bm.group(2).lower(), "active")
             members = members_by_lag.setdefault(lag_name, [])
-            if current_iface and current_iface not in members:
-                members.append(current_iface)
+            if current_iface:
+                once.add(members, current_iface)
             mode_by_lag.setdefault(lag_name, mode)
 
     lags: list[CanonicalLAG] = []

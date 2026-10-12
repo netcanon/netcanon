@@ -109,6 +109,7 @@ from ....models.migration import (
     LossyPath,
     UnsupportedPath,
 )
+from .._helpers import Uniques, address_key
 from ..base import CodecBase, ParseError, RenderError
 from ..cisco_iosxe_cli import port_names as _cli_port_names
 from ..registry import register
@@ -1504,6 +1505,7 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
     existing_by_id: dict[int, CanonicalVlan] = {
         v.id: v for v in intent.vlans
     }
+    once = Uniques()
     for iface in intent.interfaces:
         m = _SVI_NAME_RE.match(iface.name)
         if not m:
@@ -1522,8 +1524,7 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
             existing_by_id[vid] = synthesised
             continue
         for addr in iface.ipv4_addresses:
-            if addr not in existing.ipv4_addresses:
-                existing.ipv4_addresses.append(addr)
+            once.add(existing.ipv4_addresses, addr, address_key)
 
 
 def _walk(node: Any, prefix: str) -> Iterable[str]:
