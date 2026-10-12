@@ -320,11 +320,11 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: lossy
     reason: >
-      Drifts on 4 cells, survives on 1 and is trivially empty on 2 — the same
-      collapse as `vlans[].untagged_ports`, and the split is informative: the
-      cell that survives (the synthetic kitchen sink) trunks physical ports,
-      while the four that drift trunk LAGs.  Trunk membership survives exactly
-      where the member is not a LAG.  All 32 tagged members survive on the
+      Drifts on all 7 cells — the same collapse as
+      `vlans[].untagged_ports`.  Every cell trunks at least one LAG (the
+      synthetic kitchen sink among them: its physical-port members survive
+      and its `lag 1` collapses).  Trunk membership survives exactly
+      where the member is not a LAG.  All 122 tagged members survive on the
       `translate_port_names` path.
     references: [aoscx-nxos-surface]
 

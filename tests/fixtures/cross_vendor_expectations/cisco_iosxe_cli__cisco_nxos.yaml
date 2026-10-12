@@ -204,7 +204,7 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Same mode-directed drop as the native VLAN: the allowed-VLAN list on an
-      `access`-mode port is not rendered (`[100] -> []`), 1 of the 2 cells
+      `access`-mode port is not rendered (`[100] -> []`), 1 of the 4 cells
       that carry one.  Trunks that are actually trunks keep their allowed
       list intact -- this is not a general failure to carry the list.  The
       operator consequence is a port that silently becomes "allow all VLANs"

@@ -152,7 +152,7 @@ per_field_expectation:
   "interfaces[].trunk_allowed_vlans":
     disposition: unsupported
     reason: >
-      Drifts to `[]` on every trunk (10 record-occurrences; e.g. `[10, 2000]`
+      Drifts to `[]` on every trunk (16 record-occurrences; e.g. `[10, 2000]`
       -> `[]`).  The matrix declares `/interfaces/interface/trunk-allowed-vlans`
       unsupported: OPNsense uses the allowed-list only as a parent-binding
       hint, so it is never preserved on the port.  Each allowed VLAN has to be
@@ -357,7 +357,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: unsupported
     reason: >
-      Drifts to `[]` wherever populated (8 record-occurrences; e.g.
+      Drifts to `[]` wherever populated (18 record-occurrences; e.g.
       `["Ethernet1/1", "Ethernet1/2", "port-channel1"]` -> `[]`).  OPNsense
       binds a VLAN to exactly ONE parent (`<vlan><if>port-channel1</if>`), so
       multi-port tagged membership cannot be represented and the matrix
