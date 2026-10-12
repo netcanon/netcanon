@@ -416,8 +416,9 @@ timestamp if your timezone matters for an audit.
   itself and in its title.
 - **Why an Apply was refused was gone in four seconds.**  The server's
   words were in a toast and nowhere else.  They are now the status
-  line in the modal's footer, in red, until the next thing the footer
-  has to say; so is an Apply the server never answered.
+  line in the modal's footer, in red, until something in the modal is
+  changed or the footer has its next thing to say; so is an Apply the
+  server never answered.
 - **Nothing paired was shown as a pairing.**  With a source device
   chosen by hand that is not the one the config is of, no port is
   paired: every name is "not on the source device".  After *Accept as
@@ -471,6 +472,91 @@ timestamp if your timezone matters for an audit.
   longer becomes a row for it; a name of any length wraps instead of
   widening the table; a section you opened stays open when the table
   is redrawn.
+- **A VLAN, user or SNMP override could not be typed.**  The table
+  that was rebuilt on every key was mended for ports only.  The VLAN,
+  local-user, SNMP-community and SNMPv3-user tables still were:
+  `private9` typed at a keyboard was `p`, the focus was gone, and `p`
+  was the community Apply sent.  Each of them is now rebuilt when its
+  field is left, the control that had the focus has it again
+  afterwards, and a rebuild waits for a mouse button that is down, so
+  "drop" pressed straight out of a field is not lost.
+- **A VLAN id out of range was shown, and another one sent.**  A
+  number that is no VLAN id was not stored, and the field was left
+  showing it: after `409` and then `4095` the screen said 4095 and
+  Apply sent 409.  Such a number now takes the place of the entry
+  it was typed over: nothing is sent for that VLAN until it is put
+  right, the field goes on holding it with a red edge, says why in
+  its title, and is invalid to a screen reader.
+- **A user called `constructor` opened with an override nobody had
+  typed.**  The override maps of the VLAN, user and SNMP panes were
+  ordinary objects, in which a name every object has — a local
+  user `constructor`, an SNMPv3 user `toString` — reads as
+  something inherited.  They are keyed by the names alone now, as the
+  port map is, and so is what each pane reads of the job that came
+  back.
+- **Overrides kept for one config were sent for another of the same
+  host name.**  The browser remembers your overrides by source codec,
+  target codec and host name.  A second config with that host name
+  opened with the first one's entries; those for names it does not
+  have had no row to show them, and Apply sent them all the same.  An
+  entry for a name the config on the page has no row for is now left
+  out, and the footer says how many were.  (They are then no longer
+  kept: see the known limitations.)
+- **The footer's line outlived what it was about.**  It stayed until
+  the next line was written: a refusal of a member number that had
+  since been corrected, "4 decisions recorded — Apply to confirm"
+  beside devices that had since changed, "All overrides cleared."
+  beside two new overrides.  Changing anything in the modal now
+  clears it; looking at another pane does not.
+- **"drop" could not be reached from the keyboard.**  In every pane it
+  was a piece of text with a click handler, and Tab passed it by.  It
+  is a button, drawn as the link it was: Tab reaches it, and Enter or
+  Space presses it.  And Apply pressed from the keyboard has the
+  focus again when its answer is in: the button is disabled while the
+  request is out, which left the focus at the top of the page.
+- **A port's name typed on a closed list chose another port.**  A
+  closed list takes a name key by key, and the table was rebuilt at
+  each key: the list was a new one and the name began again, so `47`
+  typed chose port 7.  The table is now rebuilt when the typing has
+  stopped or the list is left.
+- **Reading the source device from the config had no end.**  The
+  request had no time limit, the modal said nothing while it was out
+  — the source read "(not declared)" and then filled itself in —
+  and a text that was never answered for was never asked about again.
+  The line under *Source device* now says "Reading the source device
+  from the config …", gives up after twenty seconds and says so, and
+  the config is asked about again the next time the modal opens.
+  Model families that fail to load under an open modal are said at
+  once, not when it is next opened.
+- **The strip above the table was announced again at every key.**  It
+  is a polite live region, and it was emptied and refilled with every
+  summary — one for each key typed in a row — though it said
+  what it had said.  It is now replaced only when what it says
+  changes; *Accept as shown* keeps the focus through a redraw that
+  leaves it alone.  A strip that cannot be drawn is taken away, not
+  left saying what the last one said.
+- **More small things in the rename modal.**  A long unbroken name
+  under the strip or in a device note wraps: it used to slide the
+  device rows, the notes and the strip out of sight to the left.  A
+  closed list of target ports is wide enough to read
+  (`sfp-sfpplus11` and `sfp-sfpplus12` were both `sfp-sfpplu` beside
+  a remark).  Target profiles that arrive after a family model was
+  chosen no longer leave the vendor list reading "(none)" over it,
+  and they reach the source list of a modal that is already open.  A
+  port kept under its own name reads "(kept as it is, by your own
+  entry)", not "needs override".  A space typed just before the
+  table is redrawn is still there (`my port` came out `myport`).  A
+  bay named like `constructor` in a family file of your own no longer
+  stops the device note and leaves the strip on "Checking the device
+  …".
+- **`detect-deployment` repeated a port name at any length.**  The
+  detector's own notes are capped.  The note added afterwards, about
+  port names the proposed device does not have, repeated the first
+  eight of them whole, and the names in `missing_ports` had no bound
+  either: a name of a hundred thousand characters was a note of eight
+  hundred thousand.  A name is now cut to 128 characters in
+  `missing_ports` and to 32 in the note, and ends `…` where it was
+  cut.
 - **The ports fit-check banner reappeared on the VLAN and user panes.**
   Editing an override on another pane refreshed the summary, which
   re-rendered the ports banner there.  It is ports-pane only again.
@@ -788,6 +874,13 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **Where a vendor has model families, its flat profiles are under
+  their own heading in the target model list.**  Four Aruba 2930F
+  switches are both a model of a family and a flat profile, under the
+  same words, and the list gave nothing to tell the two apart.  The
+  family models now come first, as in the source list, and the
+  profiles follow under "Profiles — one fixed port list".  A
+  vendor with no family lists its profiles as before.
 - **A static route whose next hop is the name of an interface follows
   that interface — in every translation, not only one that declares
   devices.**  Some parsers keep such a next hop in the route's
@@ -872,12 +965,18 @@ timestamp if your timezone matters for an audit.
   config before Apply.**  Only a device read from the config is (the
   note says which is the case).  After Apply the strip counts the names
   that are not ports of the declared source device.
-- **Tinted notes and strips are below WCAG AA contrast in the light
-  theme.**  The amber, green and red banners of the modal — the device
-  notes and the plan strip, like the fit-check banner and the profile
-  notice before them — draw the theme's badge text on a tint of the
-  same colour: about 3.4:1 to 4.0:1 for small text, where AA asks
-  4.5:1.  The chips on the strip are on the opaque surface and meet it.
+- **Tinted notes and strips are below WCAG AA contrast, in the light
+  theme and for red in the dark one.**  The amber, green and red
+  banners of the modal — the device notes and the plan strip, like
+  the fit-check banner and the profile notice before them — draw
+  the theme's badge text on a tint of the same colour.  AA asks 4.5:1
+  for small text.  Measured as painted, the light theme gives 3.4:1
+  for amber, 3.9:1 for green and 4.0:1 for red; the dark theme meets
+  it for amber and green and gives 4.4:1 for red.  The red "(+N over
+  capacity)" on an amber fit-check banner is 3.8:1 in the light theme
+  and 3.5:1 in the dark, and the amber count on a section's header
+  ("4 need a decision") is 4.2:1 in the light theme.  The chips on
+  the strip are on the opaque surface and meet it.
 - **Model families cover two Aruba AOS-S series.**  Every other device is
   declared through its target profile, as one device in the one state the
   profile documents, with its ports in the profile's list order — which

@@ -523,7 +523,7 @@ class TestPathListDeduplication:
 
         # Path LIST entries are coalesced — fewer rows than raw count.
         # Reveal the <details> so playwright can locate-entries.
-        page.locator('[data-testid="migrate-paths-section"] summary').click()
+        page.locator('[data-testid="migrate-paths-summary"]').click()
         entries = page.locator(
             '[data-testid="migrate-paths-supported"] '
             '[data-testid="migrate-path-entry"]'

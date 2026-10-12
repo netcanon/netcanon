@@ -880,7 +880,10 @@ Ports pane choose the *Source device* and the *Target device*.
   its own: the config uses port names the device does not have (it
   says how many, and the first few), or the config names no port, so
   nothing could be checked against it.  Where no device could be
-  read, the line says why.
+  read, the line says why.  While the config is being read the line
+  says so; a server that has not answered in twenty seconds is given
+  up on, the line says that, and the config is asked about again the
+  next time the modal opens.
 * The line under the source device, and under a target chosen from a
   model family, says what you declared, how many ports that is and
   the first and last name, and how well the names are established.  A
@@ -893,8 +896,10 @@ Ports pane choose the *Source device* and the *Target device*.
   not have — turns the line red and says why, in the server's words.
   It is still sent with Apply, which the server then refuses: the
   output is left as it was, and the footer of the modal says *Not
-  applied* with the server's reason until the next Apply (or *Accept
-  as shown*, or *Reset all*).  A line that
+  applied* with the server's reason until you change something in
+  the modal or the footer has its next thing to say (the footer's
+  line is about the last thing done: an edit clears it, looking at
+  another pane does not).  A line that
   says the device *could not be checked* is not a refusal: the preview
   did not arrive, and Apply sends the device for the server to compile
   itself.
@@ -938,6 +943,24 @@ Ports pane choose the *Source device* and the *Target device*.
   is redrawn from the new job; an Apply still out for the old one is
   given up.  An Apply the server does not answer in two minutes is
   given up too, and says so.
+* Where a vendor has model families, the target model list has the
+  family models first and the vendor's flat profiles after them,
+  under "Profiles — one fixed port list": a switch can be in both,
+  under the same words.
+* The modal can be worked from the keyboard.  Tab stops at every
+  control it shows, a row's "drop" included, and Esc closes it and
+  gives the focus back to the button that opened it.  On a closed
+  list of target ports, typing a port's name chooses that port.
+* Your own entries — in the ports pane and in the VLAN, user and
+  SNMP panes — are kept in the browser by source codec, target
+  codec and the config's host name, and put back when the modal
+  opens on such a config again; the footer says so.  Two configs can
+  share a host name: an entry kept for a name the config on the page
+  has no row for is left out, the footer says how many were, and
+  they stay kept for the config that has the name.  In
+  the VLAN pane a number that is no VLAN id (1 to 4094) is not an
+  entry: nothing is sent for that VLAN while the field holds it,
+  and the field has a red edge.
 
 **Through the API** the same steps are:
 
@@ -1058,7 +1081,8 @@ confirm, never applied by itself, and it tells you how far to trust it:
   port names the config uses that the proposed device does not have.
   One cause is a module the config does not state; another is a partial
   paste.  `missing_ports` holds the first few hundred and
-  `missing_port_count` the whole number.  `consistent` is `true` when
+  `missing_port_count` the whole number; a name longer than 128
+  characters is cut to that, ending `…`.  `consistent` is `true` when
   none is missing, `false` when some are, and `null` when there was
   nothing to check: nothing was proposed, the text could not be
   parsed, or it names no port (only its top was pasted).  `null` is

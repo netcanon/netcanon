@@ -211,6 +211,14 @@
     border-color:var(--badge-failed-fg);
     box-shadow:0 0 0 1px var(--badge-failed-fg);
   }
+  /* An override that is not an entry (a number that is no VLAN id):
+     nothing is sent for it, and the field is drawn so.  It was said
+     in a title and to a screen reader only, and looked like an
+     entry that would be sent. */
+  table.mig-rename-table input[aria-invalid="true"] {
+    border-color:var(--badge-failed-fg);
+    box-shadow:0 0 0 1px var(--badge-failed-fg);
+  }
   .mig-device-add, .mig-device-remove,
   .mig-device-use-detected, .mig-plan-accept {
     background:var(--surface); color:var(--text-primary);
@@ -244,6 +252,12 @@
     margin:.25rem 0 .1rem 1.1rem; padding:0;
   }
   .mig-device-note-list code { font-size:.76rem; }
+  /* A name of any length breaks where it has to: a line under the
+     strip or in a note that could not made the whole region --
+     pickers, notes, strip -- slide sideways. */
+  .mig-device-note .mig-device-note-part,
+  .mig-device-note-list li, .mig-plan-report li,
+  #mig-rename-plan > span { overflow-wrap:anywhere; }
 
   /* Port-plan strip -- where the mapping by position stands: what to
      do next while there is no plan, and what the plan did once there
@@ -287,7 +301,7 @@
      this region shrink. */
   #mig-rename-modal-top {
     flex:0 1 auto; min-height:0; max-height:45vh; overflow-y:auto;
-    overscroll-behavior:contain;
+    overflow-x:hidden; overscroll-behavior:contain;
   }
   #mig-rename-modal-body {
     flex:1 1000 auto; min-height:13rem; display:flex; overflow:hidden;
@@ -410,10 +424,13 @@
     color:var(--text-faint); font-style:italic; font-family:system-ui, sans-serif;
     font-size:.72rem;
   }
+  /* A button, so that Tab reaches it and Enter presses it; drawn as
+     the link it has always looked like. */
   .mig-rename-drop-link {
     font-size:.7rem; color:var(--badge-failed-fg); text-decoration:underline;
     cursor:pointer; margin-left:.3rem; user-select:none;
     white-space:nowrap;
+    background:none; border:0; padding:0; font-family:inherit;
   }
   .mig-rename-drop-link:hover { opacity:.8; }
   .mig-rename-summary-drop { color:var(--text-muted); font-weight:700; }
@@ -440,8 +457,13 @@
   }
   table.mig-rename-table td.mig-rename-why {
     color:var(--text-muted); font-family:system-ui, sans-serif;
-    font-size:.72rem; white-space:nowrap;
+    font-size:.72rem;
   }
+  /* The list of target ports is read closed, too: ``sfp-sfpplus11``
+     and ``sfp-sfpplus12`` in ninety-nine pixels were one name.  The
+     cell beside it (which position decided the pairing, and any
+     remark) wraps and gives the width up. */
+  table.mig-rename-table td.mig-rename-target select { min-width:11rem; }
   table.mig-rename-table td.mig-rename-why .flag {
     margin-left:.4rem; white-space:normal;
   }
@@ -696,7 +718,8 @@
   <div class="mig-result-section" id="mig-paths-section"
        data-testid="migrate-paths-section" style="display:none">
     <details>
-      <summary style="cursor:pointer;font-weight:600;font-size:.88rem">
+      <summary style="cursor:pointer;font-weight:600;font-size:.88rem"
+               data-testid="migrate-paths-summary">
         Validation details (supported / lossy / unsupported paths)
       </summary>
 
@@ -1112,7 +1135,11 @@
  *
  *   _partials/classify.js        — _guessKind + _looksLikeUplink
  *                                  (shared between rename table + fit-check)
- *   _partials/rename-table.js    — renderRenameTable (per-kind sections)
+ *   _partials/rename-table.js    — renderRenameTable (per-kind sections),
+ *                                  and when a table is rebuilt, for
+ *                                  every pane: rebuildRenameTableSoon,
+ *                                  rebuildRenamePaneSoon, and the focus
+ *                                  kept across a rebuild
  *   _partials/vlan-rename-table.js — renderVlanRenameTable (VLAN-pane
  *                                  rows under the left-rail nav; P2C3)
  *   _partials/local-user-rename-table.js — renderLocalUserRenameTable
@@ -1140,7 +1167,10 @@
  * auto-detect, validation-banner rendering, path-list fill, result
  * rendering, escapeHtml utility, rename-target-profile fetch +
  * vendor/model/module dropdown populators (depend on inline state
- * that hasn't been extracted yet).
+ * that hasn't been extracted yet).  Inline too, and of the modal: the
+ * five override maps and what the browser keeps of them between
+ * visits (saveRenameAck / applyLoadedRenameAck), and the footer's
+ * status line (setRenameStatus, and the edit that clears it).
  *
  * Every interactive element gets a data-testid — see
  * tests/testid_reference.md for the full inventory.
@@ -2082,10 +2112,56 @@
   // Keyed by interface names, which an operator chooses on some
   // platforms: no prototype, so no name finds anything inherited.
   var _renameUserMap = Object.create(null);  // source_name -> target_name (user overrides)
-  var _renameVlanUserMap = {};       // source_vlan_id -> target_vlan_id | null
-  var _renameLocalUserMap = {};      // source_username -> target_username | null
-  var _renameSnmpCommunityMap = {};  // source_community -> target_community | null (effectively single-entry)
-  var _renameSnmpV3UserMap = {};     // source_v3_name -> target_v3_name | null
+  // The other panes' maps are keyed by names too -- a user can be
+  // called ``constructor`` -- and have no prototype either.
+  var _renameVlanUserMap = Object.create(null);       // source_vlan_id -> target_vlan_id | null
+  var _renameLocalUserMap = Object.create(null);      // source_username -> target_username | null
+  var _renameSnmpCommunityMap = Object.create(null);  // source_community -> target_community | null (effectively single-entry)
+  var _renameSnmpV3UserMap = Object.create(null);     // source_v3_name -> target_v3_name | null
+  // What was typed for a VLAN that is no VLAN id (1-4094): nothing
+  // is sent for it, and the field goes on showing it, marked.
+  var _renameVlanRefused = Object.create(null);       // source_vlan_id -> the text typed
+
+  /** The names of *job* that each pane has a row for, as text. */
+  function _jobRowNames(job) {
+    var ports = new Set((job.source_ports || [])
+      .concat(Object.keys(job.port_renames || {}), job.port_drops || []));
+    (job.warnings || []).forEach(function(w) {
+      var quoted = String(w).match(/'([^']+)'/);
+      if (quoted) ports.add(quoted[1]);
+    });
+    var plan = job.port_mapping_plan;
+    if (plan && typeof plan === 'object') {
+      (plan.pairings || []).concat(plan.unplaced || []).forEach(function(p) {
+        if (p && typeof p.source === 'string') ports.add(p.source);
+      });
+      (plan.off_inventory || []).forEach(function(n) { ports.add(n); });
+    }
+    return {
+      ports: ports,
+      vlans: new Set((job.source_vlans || []).map(String)),
+      local_users: new Set(job.source_local_users || []),
+      snmp_community: new Set(job.source_snmp_community ? [job.source_snmp_community] : []),
+      snmpv3_users: new Set(job.source_snmpv3_users || []),
+    };
+  }
+
+  /** A map with no prototype holding the entries of *from* (an
+   *  object, or nothing). */
+  function _nameMap(from) {
+    var map = Object.create(null);
+    if (from && typeof from === 'object') {
+      Object.keys(from).forEach(function(key) { map[key] = from[key]; });
+    }
+    return map;
+  }
+
+  /** *map* as an ordinary object for JSON, entry by entry: assigned
+   *  onto ``{}``, a key ``__proto__`` would set the prototype and
+   *  make no entry. */
+  function _plainMap(map) {
+    return Object.fromEntries(Object.entries(map));
+  }
   var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans' | 'local_users' | 'snmp' | 'snmpv3'
   var _renameDragState = null;       // { offsetX, offsetY } while dragging
   var _renameApplying = false;       // an Apply is in flight
@@ -2162,7 +2238,22 @@
       var resp = await fetch('/api/v1/migration/target-profiles');
       if (!resp.ok) return;
       _renameProfiles = await resp.json();
+      // The vendor list can hold a choice already (the model
+      // families fill it too, and may have arrived first): refilled
+      // bare, the select read "(none)" over a chosen model.
+      var vsel = document.getElementById('mig-rename-target-vendor');
+      var vendorKept = vsel ? vsel.value : '';
       populateRenameVendorDropdown();
+      if (vsel && vendorKept) vsel.value = vendorKept;
+      // And they reach the source list of a modal that is open.
+      var modal = document.getElementById('mig-rename-modal');
+      var ssel = document.getElementById('mig-device-source-model');
+      if (modal && modal.classList.contains('open') && ssel
+          && typeof populateDeviceSourceModels === 'function') {
+        var sourceKept = ssel.value;
+        populateDeviceSourceModels();
+        ssel.value = sourceKept;
+      }
     } catch (_) {
       // Target profiles are optional; silent-ignore failures so the
       // migrate form itself still works.
@@ -2218,19 +2309,30 @@
         return (a.display_name || a.model).localeCompare(
           b.display_name || b.model);
       });
+    // Models from a model family, for the vendor the target codec
+    // writes: a family model is only ever sent as a declared device,
+    // and the server compiles it against the codec's own vendor.
+    var families = (typeof appendDeviceFamilyOptions === 'function'
+        && vendor === _codecVendor(_deviceCodec('target')))
+      ? _familiesOf(vendor).length : 0;
+    if (families) appendDeviceFamilyOptions(msel, vendor);
+    // A device can be in both lists -- a family model, and a flat
+    // profile of the same switch standing alone -- under the same
+    // words.  Where a vendor has families the profiles go under a
+    // heading that says what they are, after them, as in the source
+    // list.
+    var holder = msel;
+    if (families && models.length) {
+      holder = document.createElement('optgroup');
+      holder.label = 'Profiles — one fixed port list';
+      msel.appendChild(holder);
+    }
     models.forEach(function(p) {
       var opt = document.createElement('option');
       opt.value = p.model;
       opt.textContent = p.display_name || p.model;
-      msel.appendChild(opt);
+      holder.appendChild(opt);
     });
-    // Models from a model family, for the vendor the target codec
-    // writes: a family model is only ever sent as a declared device,
-    // and the server compiles it against the codec's own vendor.
-    if (typeof appendDeviceFamilyOptions === 'function'
-        && vendor === _codecVendor(_deviceCodec('target'))) {
-      appendDeviceFamilyOptions(msel, vendor);
-    }
     // Repopulate module dropdown for the (possibly-newly-selected)
     // model — no model yet → hides the dropdown.
     populateRenameModuleDropdown(vendor, msel.value);
@@ -2391,6 +2493,21 @@
     }
   }
 
+  // The kinds of entry kept, by the name each has in the record.
+  var _ACK_KINDS = ['ports', 'vlans', 'local_users', 'snmp_community', 'snmpv3_users'];
+  // Entries kept for this host name that the job on the page has
+  // no row for: another config of the same host.  They are not
+  // sent from here -- and they are not thrown away: a save writes
+  // them back beside this config's own.  (They were dropped from
+  // the record by the first save, so back on the other config
+  // they were gone, and nothing said so.)
+  var _renameAckAside = null;
+  function _noAckAside() {
+    var aside = {};
+    _ACK_KINDS.forEach(function(kind) { aside[kind] = Object.create(null); });
+    return aside;
+  }
+
   /** Write the current user-override maps to localStorage.  Called on
    *  every override change so a page reload mid-session doesn't lose
    *  work.  Silently no-ops when localStorage is unavailable (private
@@ -2403,16 +2520,22 @@
     // host, and is not stored as one.
     // Entry by entry, as Apply sends them: a port named ``__proto__``
     // is an entry like any other.
-    var ownPorts = Object.fromEntries(Object.entries(_renameUserMap));
+    var ownPorts = _plainMap(_renameUserMap);
     Object.keys(_planAccepted).forEach(function(name) {
       if (ownPorts[name] === _planAccepted[name]) delete ownPorts[name];
     });
+    // Beside them, what is kept for another config of this host.
+    var aside = _renameAckAside || _noAckAside();
+    var both = function(kind, own) {
+      return Object.fromEntries(
+        Object.entries(aside[kind]).concat(Object.entries(own)));
+    };
     var payload = {
-      ports: ownPorts,
-      vlans: Object.assign({}, _renameVlanUserMap),
-      local_users: Object.assign({}, _renameLocalUserMap),
-      snmp_community: Object.assign({}, _renameSnmpCommunityMap),
-      snmpv3_users: Object.assign({}, _renameSnmpV3UserMap),
+      ports: both('ports', ownPorts),
+      vlans: both('vlans', _plainMap(_renameVlanUserMap)),
+      local_users: both('local_users', _plainMap(_renameLocalUserMap)),
+      snmp_community: both('snmp_community', _plainMap(_renameSnmpCommunityMap)),
+      snmpv3_users: both('snmpv3_users', _plainMap(_renameSnmpV3UserMap)),
       ts: new Date().toISOString(),
     };
     // Skip writes when all maps are empty — keeps localStorage
@@ -2434,7 +2557,9 @@
 
   /** Remove the saved ack for the current job.  Called from the
    *  "Reset all" button so the saved state disappears along with
-   *  the in-memory state. */
+   *  the in-memory state.  What is kept for another config of the
+   *  host name is not this job's to forget: the summary's save,
+   *  which follows, writes that back. */
   function clearRenameAck() {
     if (!_lastJob) return;
     try { window.localStorage.removeItem(_ackKey(_lastJob)); } catch (_) {}
@@ -2445,9 +2570,25 @@
    *  restored — silently re-populating the table would be
    *  surprising ("why does this already have overrides?"). */
   function applyLoadedRenameAck(ack) {
+    _renameAckAside = _noAckAside();
     if (!ack) return;
+    // Kept by hostname, and two configs can share one.  An entry
+    // for a name this job does not have has no row -- and was sent
+    // all the same, unseen.  It is left out, counted, and set
+    // aside for the config that has the name.
+    var here = _jobRowNames(_lastJob || {});
+    var leftOut = 0;
+    var ours = function(kept, names, kind) {
+      var map = Object.create(null);
+      Object.keys(kept).forEach(function(key) {
+        if (names.has(String(key))) { map[key] = kept[key]; return; }
+        _renameAckAside[kind][key] = kept[key];
+        leftOut += 1;
+      });
+      return map;
+    };
     if (ack.ports && typeof ack.ports === 'object') {
-      _renameUserMap = Object.assign(Object.create(null), ack.ports);
+      _renameUserMap = ours(ack.ports, here.ports, 'ports');
       // What "Accept as shown" recorded for the plan on screen is not
       // stored (see saveRenameAck) and is still in force.
       Object.keys(_planAccepted).forEach(function(name) {
@@ -2459,24 +2600,27 @@
     if (ack.vlans && typeof ack.vlans === 'object') {
       // localStorage round-trips int keys as strings; coerce back
       // to int so lookups against source_vlans (int ids) match.
-      _renameVlanUserMap = {};
+      _renameVlanUserMap = Object.create(null);
       Object.keys(ack.vlans).forEach(function(k) {
         var n = parseInt(k, 10);
-        if (!isNaN(n)) _renameVlanUserMap[n] = ack.vlans[k];
+        if (isNaN(n)) return;
+        if (here.vlans.has(String(n))) { _renameVlanUserMap[n] = ack.vlans[k]; return; }
+        _renameAckAside.vlans[k] = ack.vlans[k];
+        leftOut += 1;
       });
     }
     if (ack.local_users && typeof ack.local_users === 'object') {
       // Usernames are string-keyed, no coercion needed.
-      _renameLocalUserMap = Object.assign({}, ack.local_users);
+      _renameLocalUserMap = ours(ack.local_users, here.local_users, 'local_users');
     }
     if (ack.snmp_community && typeof ack.snmp_community === 'object') {
       // Single-entry map keyed on source community string; same
       // no-coercion story as local_users.
-      _renameSnmpCommunityMap = Object.assign({}, ack.snmp_community);
+      _renameSnmpCommunityMap = ours(ack.snmp_community, here.snmp_community, 'snmp_community');
     }
     if (ack.snmpv3_users && typeof ack.snmpv3_users === 'object') {
       // String-keyed securityName map; no coercion needed.
-      _renameSnmpV3UserMap = Object.assign({}, ack.snmpv3_users);
+      _renameSnmpV3UserMap = ours(ack.snmpv3_users, here.snmpv3_users, 'snmpv3_users');
     }
     var portCount = Object.keys(_renameUserMap).length;
     var vlanCount = Object.keys(_renameVlanUserMap).length;
@@ -2492,7 +2636,10 @@
       if (snmpCount) bits.push(snmpCount + ' SNMP');
       if (v3Count) bits.push(v3Count + ' SNMPv3');
       setRenameStatus('Restored prior overrides ('
-        + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.');
+        + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.'
+        + (leftOut ? ' ' + leftOut + ' kept for this host name '
+            + (leftOut === 1 ? 'is' : 'are') + ' for a name this config does not have, and '
+            + (leftOut === 1 ? 'was' : 'were') + ' left out.' : ''));
       status.setAttribute('data-testid-state', 'ack-restored');
     }
   }
@@ -2777,10 +2924,11 @@
     // that Apply is free for this job.
     if (_renameApplyAbort) _renameApplyAbort.abort();
     _renameUserMap = Object.create(null);
-    _renameVlanUserMap = {};
-    _renameLocalUserMap = {};
-    _renameSnmpCommunityMap = {};
-    _renameSnmpV3UserMap = {};
+    _renameVlanUserMap = Object.create(null);
+    _renameLocalUserMap = Object.create(null);
+    _renameSnmpCommunityMap = Object.create(null);
+    _renameSnmpV3UserMap = Object.create(null);
+    _renameVlanRefused = Object.create(null);
     // A new translation: a different source text starts with no
     // source device declared, and nothing accepted for the last plan
     // is this job's.
@@ -2884,6 +3032,33 @@
     else status.removeAttribute('data-state');
   }
 
+  /** The footer's line says how the last thing went -- an Apply, a
+   *  reset, a restore.  Once the operator changes anything in the
+   *  modal it is about a state that is gone: "4 decisions recorded --
+   *  Apply to confirm" beside devices that have since changed, a
+   *  refusal of a member number that has since been corrected, "All
+   *  overrides cleared" beside two overrides.  So an edit clears it.
+   *  In the capture phase: a control whose own handler writes a line
+   *  ("Accept as shown") writes it after this. */
+  function _clearRenameStatusOnEdit(e) {
+    var modal = document.getElementById('mig-rename-modal');
+    var at = e.target;
+    if (!modal || !at || !modal.contains(at)) return;
+    if (e.type === 'click') {
+      var pressed = at.closest ? at.closest('button') : null;
+      if (!pressed) return;
+      // A button that changes something: "drop" in a table, and
+      // the buttons among the device pickers.  Not the rail (it
+      // changes the pane), nor Apply, Cancel and Reset all.
+      if (!pressed.classList.contains('mig-rename-drop-link')
+          && !pressed.closest('#mig-rename-modal-top')) return;
+    }
+    setRenameStatus('');
+  }
+  ['input', 'change', 'click'].forEach(function(type) {
+    document.addEventListener(type, _clearRenameStatusOnEdit, true);
+  });
+
   /** Draw the whole modal from the job on the page.  Called when the
    *  modal opens, and when a new translation replaces the job it was
    *  opened on. */
@@ -2893,8 +3068,9 @@
     // triple, if any.  Runs BEFORE the initial render so the
     // restored state is visible on first paint rather than flashing
     // blank then snapping to the restored state.
-    var ack = loadRenameAck(_lastJob);
-    if (ack) applyLoadedRenameAck(ack);
+    // (With nothing kept the call still runs: it forgets what was
+    // set aside for the job before this one.)
+    applyLoadedRenameAck(loadRenameAck(_lastJob));
     // Re-populate the vendor dropdown to pick up any late adapter
     // data.  loadAdapters() + loadRenameTargetProfiles() race at
     // page load; if profiles landed first, vendor labels fell back
@@ -2964,10 +3140,11 @@
   window.renameModalResetAll = function() {
     _renameUserMap = Object.create(null);
     _planAccepted = Object.create(null);
-    _renameVlanUserMap = {};
-    _renameLocalUserMap = {};
-    _renameSnmpCommunityMap = {};
-    _renameSnmpV3UserMap = {};
+    _renameVlanUserMap = Object.create(null);
+    _renameLocalUserMap = Object.create(null);
+    _renameSnmpCommunityMap = Object.create(null);
+    _renameSnmpV3UserMap = Object.create(null);
+    _renameVlanRefused = Object.create(null);
     // Clear the persisted entry so a subsequent modal-open for the
     // same (source, target, hostname) doesn't restore what the
     // operator just reset.  renderRenameSummary below will write an

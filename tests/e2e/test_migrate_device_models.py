@@ -177,6 +177,17 @@ def _plan(page: Page):
     return page.locator(_tid("migrate-rename-plan"))
 
 
+def _dropped(page: Page, port: str) -> bool:
+    """Whether *port*'s row is DRAWN as dropped: its name faint, with
+    a line through it.  The class that asks for that is not the
+    drawing -- with the rule behind it gone, the class is still
+    there.  (A line through a name is not a tint that stacks: what is
+    computed for it is what is drawn.)"""
+    name = page.locator(_tid("migrate-rename-source-" + port))
+    struck = name.evaluate("el => getComputedStyle(el).textDecorationLine") == "line-through"
+    return struck and ink(name) == token_ink(page, "--text-faint")
+
+
 def _pick_target(page: Page, value: str, bay_a: str | None = None) -> None:
     page.locator(_tid("migrate-rename-target-model-select")).select_option(value=value)
     expect(_target_note(page)).to_be_visible()
@@ -393,7 +404,12 @@ class TestSourceDeviceIsReadFromTheConfig:
         select = page.locator(_tid("migrate-device-source-model-select"))
         expect(select).to_have_value("")
         expect(select).to_be_enabled()
-        expect(_source_note(page)).to_contain_text("declare the device yourself")
+        # The whole reason: it names the codec the config was asked
+        # about as, and that is the SOURCE's.
+        expect(page.locator(_tid("migrate-device-source-note-detect-note-0"))).to_have_text(
+            "No detector reads the hardware lines of cisco_iosxe configurations yet; "
+            "declare the device yourself."
+        )
         values = select.locator("option").evaluate_all("els => els.map(e => e.value)")
         assert "profile:C9300-48P" in values
         assert not [v for v in values if v.startswith("fam:")]
@@ -539,7 +555,7 @@ class TestPortsWithNoPlace:
             re.compile(r"^no uplink port left on the target . dropped$")
         )
         expect(page.locator(_tid("migrate-rename-decision-49"))).to_be_visible()
-        expect(page.locator(_tid("migrate-rename-decision-count-physical"))).to_contain_text(
+        expect(page.locator(_tid("migrate-rename-section-decisions-physical"))).to_contain_text(
             "4 need a decision"
         )
         expect(page.locator(_tid("migrate-rename-status"))).to_contain_text(
@@ -599,6 +615,10 @@ class TestPortsWithNoPlace:
         expect(page.locator(_tid("migrate-rename-row-49"))).to_have_class(
             re.compile(r"\bhas-collision\b")
         )
+        # And is painted as one: the class stays when its rule is gone.
+        name = page.locator(_tid("migrate-rename-source-49"))
+        red = painted_token(page, "#mig-rename-table-pane", "--badge-failed-bg")
+        assert alike(painted_background(name), red)
         # Held, and it says why -- beside the button and in its title.
         button = page.locator(_tid("migrate-rename-apply-btn"))
         expect(button).to_be_disabled()
@@ -611,6 +631,7 @@ class TestPortsWithNoPlace:
         expect(button).to_have_attribute("title", re.compile(r"^Apply is held: two rows end on"))
         # Undone, it is available again and says nothing.
         choose_override(page, "49", "")
+        assert not alike(painted_background(page.locator(_tid("migrate-rename-source-49"))), red)
         expect(button).to_be_enabled()
         expect(why).to_be_hidden()
         expect(button).to_have_attribute("title", "")
@@ -636,6 +657,7 @@ class TestPortsWithNoPlace:
         expect(page.locator(_tid("migrate-rename-row-25"))).to_have_class(
             re.compile(r"\bhas-drop\b")
         )
+        assert _dropped(page, "25") and not _dropped(page, "49")
         expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
         # Two rules make that true -- the table's and the summary's --
         # and the summary's is the one that holds the button.
@@ -1007,8 +1029,8 @@ class TestAStackOnBothSides:
         )
         row = page.locator(_tid("migrate-rename-row-2/1"))
         expect(row).to_have_attribute("data-plan-state", "unplaced")
-        expect(page.locator(_tid("migrate-rename-plan-state-2/1"))).to_contain_text(
-            "the target has no stack member in this position"
+        expect(page.locator(_tid("migrate-rename-plan-state-2/1"))).to_have_text(
+            "the target has no stack member in this position — dropped"
         )
         expect(page.locator(_tid("migrate-rename-why-2/1"))).to_have_text(
             "access 1 · member 2 → no member"
