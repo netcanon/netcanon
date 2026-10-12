@@ -34,6 +34,7 @@ Four kinds of test:
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import random
@@ -577,6 +578,14 @@ _TOO_LOW = "fails: id: Input should be greater than or equal to 1"
 #: before the projection took ``keep``.  A value changes only when a
 #: parser's reading of that text is changed on purpose; the failing
 #: assertion prints the new one.
+#:
+#: Four have been changed on purpose, and by one port each: "every
+#: way of writing a list, on one switch" for the four codecs whose
+#: trunk carries every VLAN when it states no list.  That text has a
+#: trunk with no allowed line (on AOS-CX, one that says ``all``),
+#: which was read as an empty list and is read as every id, so the
+#: port is also among the tagged ports of each declared VLAN.
+#: ``TestATrunkThatStatesNoList`` below says the same in full.
 BEFORE: dict[str, str] = {
     "arista_eos: 128 ids": "8fa5a9d47dda",
     "arista_eos: 129 ids": "b720c7196755",
@@ -595,7 +604,7 @@ BEFORE: dict[str, str] = {
     "arista_eos: add that brings an id past the last": _TOO_HIGH,
     "arista_eos: all, none and except": "94d12e57db8a",
     "arista_eos: an access VLAN nobody declared beside a wide list": "4edac30770f9",
-    "arista_eos: every way of writing a list, on one switch": "75b9de985d0e",
+    "arista_eos: every way of writing a list, on one switch": "e05f74670579",
     "arista_eos: narrow lists and then a wide one, nothing declared": "f011febc416b",
     "arista_eos: one range twice": "870f7ab849bc",
     "arista_eos: two trunks of 2-4000, nothing declared": "95276150441a",
@@ -613,7 +622,7 @@ BEFORE: dict[str, str] = {
     "aruba_aoscx: a wide list and an undeclared native VLAN inside it": "a115a442ae2a",
     "aruba_aoscx: a wide list and then narrow ones, nothing declared": "7ca763a2646f",
     "aruba_aoscx: an access VLAN nobody declared beside a wide list": "42edc7abb9d7",
-    "aruba_aoscx: every way of writing a list, on one switch": "9941c516564f",
+    "aruba_aoscx: every way of writing a list, on one switch": "9debadc48543",
     "aruba_aoscx: narrow lists and then a wide one, nothing declared": "24934079ba7c",
     "aruba_aoscx: one range twice": "3ea30c295a65",
     "aruba_aoscx: two trunks of 2-4000, nothing declared": "a0914c53fca5",
@@ -635,7 +644,7 @@ BEFORE: dict[str, str] = {
     "cisco_iosxe_cli: add that brings an id past the last": _TOO_HIGH,
     "cisco_iosxe_cli: all, none and except": "9897324c91a9",
     "cisco_iosxe_cli: an access VLAN nobody declared beside a wide list": "9f1da1eac996",
-    "cisco_iosxe_cli: every way of writing a list, on one switch": "b37fa3725889",
+    "cisco_iosxe_cli: every way of writing a list, on one switch": "e8a9c4d4268e",
     "cisco_iosxe_cli: narrow lists and then a wide one, nothing declared": "0b6405f75663",
     "cisco_iosxe_cli: one range twice": "10711d3b14d2",
     "cisco_iosxe_cli: two trunks of 2-4000, nothing declared": "c8d9c8e86a78",
@@ -658,7 +667,7 @@ BEFORE: dict[str, str] = {
     "cisco_nxos: all, none and except": "c3ce77e32b34",
     "cisco_nxos: an access VLAN nobody declared beside a wide list": "456aab34a596",
     "cisco_nxos: every VLAN declared in one line": "02d79f94e6e3",
-    "cisco_nxos: every way of writing a list, on one switch": "b77385ea414c",
+    "cisco_nxos: every way of writing a list, on one switch": "25ec53dd04d4",
     "cisco_nxos: narrow lists and then a wide one, nothing declared": "5eacaaba968f",
     "cisco_nxos: one range twice": "0ef9fe5ea6fe",
     "cisco_nxos: two trunks of 2-4000, nothing declared": "fc265cc28dd9",
@@ -819,6 +828,100 @@ class TestWhatAnEntryCosts:
         assert ints > 20 * 3700 * _BYTES_AN_ID
         queues = _peak(lambda: [deque([entry]) for entry in range(4000)])
         assert queues > 4000 * _BYTES_A_MEMBERSHIP
+
+
+# ---------------------------------------------------------------------------
+# A trunk that states no list
+# ---------------------------------------------------------------------------
+
+#: The four codecs whose trunk carries every VLAN when it states no
+#: allowed list, and such a trunk as each one's text has it.  (On
+#: AOS-CX it is a native line with no allowed line beside it.)
+NO_LIST_IS_EVERY_VLAN: dict[str, _Port] = {
+    "arista_eos": _trunk(), "aruba_aoscx": _trunk(native=1), "cisco_iosxe_cli": _trunk(), "cisco_nxos": _trunk(),
+}
+
+#: Bytes a trunk of every VLAN may cost in the tree that is KEPT: 12
+#: for each of its 4,094 ids.  The place of an id in the list is 8 and
+#: the ids are the shared ints, so a trunk is some 35,000 bytes with
+#: its record; with an int of its own for every id it is over 160,000.
+_BYTES_A_TRUNK_OF_EVERY_VLAN = 4094 * 12
+
+
+def _held(work: Callable[[], object]) -> tuple[object, int]:
+    """What *work* returns, and the bytes still held for it once it
+    has returned -- whether or not the interpreter was already tracing
+    (``-X tracemalloc``)."""
+    gc.collect()
+    already = tracemalloc.is_tracing()
+    if not already:
+        tracemalloc.start()
+    try:
+        before = tracemalloc.get_traced_memory()[0]
+        made = work()
+        gc.collect()
+        return made, tracemalloc.get_traced_memory()[0] - before
+    finally:
+        if not already:
+            tracemalloc.stop()
+
+
+class TestATrunkThatStatesNoList:
+    """On four platforms a trunk with no allowed line carries every
+    VLAN, and its list says so: 4,094 ids for a line that is not in
+    the text.  A config can have such a trunk on every port.  What
+    that costs is counted here in bytes, as the rest of this module
+    counts: it is affordable only while an id in a list is its place
+    there and nothing more."""
+
+    @pytest.mark.parametrize("codec", sorted(NO_LIST_IS_EVERY_VLAN))
+    def test_every_id_and_on_each_declared_vlan(self, codec: str) -> None:
+        tree = get_codec(codec).parse(WRITTEN_BY[codec](_DECLARED, [NO_LIST_IS_EVERY_VLAN[codec], ("access", 12)]))
+        trunk, access = tree.interfaces
+        assert (trunk.switchport_mode, access.switchport_mode) == ("trunk", "access")
+        assert trunk.trunk_allowed_vlans == list(range(1, 4095)) and _shared(trunk.trunk_allowed_vlans)
+        assert access.trunk_allowed_vlans == []
+        tagged = {vlan.id for vlan in tree.vlans if trunk.name in vlan.tagged_ports}
+        assert tagged == set(_DECLARED), "on each VLAN the config declares, and on no other"
+
+    @pytest.mark.parametrize("codec", ["dell_os10", "juniper_junos"])
+    def test_on_the_other_two_it_is_no_vlan(self, codec: str) -> None:
+        tree = get_codec(codec).parse(WRITTEN_BY[codec](_DECLARED, [_trunk()]))
+        (trunk,) = (port for port in tree.interfaces if port.switchport_mode == "trunk")
+        assert trunk.trunk_allowed_vlans == []
+        assert not [vlan.id for vlan in tree.vlans if trunk.name in vlan.tagged_ports]
+
+    @pytest.mark.parametrize("codec", sorted(NO_LIST_IS_EVERY_VLAN))
+    def test_what_one_costs_in_the_tree(self, codec: str) -> None:
+        """48 trunks that state no list, ten VLANs declared: some
+        three kilobytes of text."""
+        write, parse = WRITTEN_BY[codec], get_codec(codec).parse
+        text = write(_DECLARED, [NO_LIST_IS_EVERY_VLAN[codec]] * _TRUNKS)
+        parse(write(_DECLARED, [_trunk("10-12")] * 2))  # imports and compiled patterns are not the config's
+        tree, held = _held(lambda: parse(text))
+        trunks = [port for port in tree.interfaces if port.switchport_mode == "trunk"]
+        assert len(trunks) == _TRUNKS and all(len(port.trunk_allowed_vlans) == 4094 for port in trunks)
+        assert held < _TRUNKS * _BYTES_A_TRUNK_OF_EVERY_VLAN, (
+            f"{codec}: {_TRUNKS} trunks that state no list are held in {held:,} bytes "
+            f"({held // _TRUNKS:,} a trunk; the ceiling is {_BYTES_A_TRUNK_OF_EVERY_VLAN:,})"
+        )
+
+    @pytest.mark.parametrize("codec", sorted(NO_LIST_IS_EVERY_VLAN))
+    def test_each_trunk_has_a_list_of_its_own(self, codec: str) -> None:
+        """The ints are shared; the lists are not.  A pass that edits
+        one trunk's list must not edit the next trunk's."""
+        tree = get_codec(codec).parse(WRITTEN_BY[codec](_DECLARED, [NO_LIST_IS_EVERY_VLAN[codec]] * 2))
+        first, second = (port.trunk_allowed_vlans for port in tree.interfaces)
+        assert first == second and first is not second
+        first.remove(100)
+        assert len(second) == 4094
+
+    def test_the_count_can_fail(self) -> None:
+        """The same count, on as many lists whose ids are ints of
+        their own, is over the ceiling."""
+        made, held = _held(lambda: [list(range(300 + at, 4394 + at)) for at in range(_TRUNKS)])
+        assert len(made) == _TRUNKS
+        assert held > _TRUNKS * _BYTES_A_TRUNK_OF_EVERY_VLAN
 
 
 # ---------------------------------------------------------------------------

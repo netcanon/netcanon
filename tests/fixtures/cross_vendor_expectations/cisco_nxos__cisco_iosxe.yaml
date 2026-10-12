@@ -247,7 +247,7 @@ per_field_expectation:
   "interfaces[].trunk_allowed_vlans":
     disposition: unsupported
     reason: >
-      Drifts on 4 of 13 cells: `[10, 2000]` -> `[]`.
+      Drifts on 5 of 13 cells: `[10, 2000]` -> `[]`.
       `/interfaces/interface/trunk-allowed-vlans` is declared unsupported —
       the stub renders no trunk allowed-list.  An empty allowed-list is not
       a safe default in either direction; re-declare the per-trunk VLAN set

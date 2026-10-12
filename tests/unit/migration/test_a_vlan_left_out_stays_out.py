@@ -17,11 +17,15 @@ does hold.  As a whole list, where the target's parser reads a trunk's
 list: the declared VLANs are a handful of ids, and a renderer that
 loses or adds thousands of the others would pass a check that looks
 at those alone.  And as text, for the word itself: a parser that reads
-its own word for "all" as an empty list (AOS-CX does) would hide it
+its own word for "all" as an empty list (AOS-CX did) would hide it
 from the first two.
 
-One neighbour of this is NOT mended and is pinned at the foot of the
-module: a trunk that allows no VLAN at all.
+A neighbour of this was pinned at the foot of the module as a defect
+that was open: a trunk that allows no VLAN at all came out as a trunk
+of every VLAN on four targets.  It is mended, the pin is gone, and the
+assertion that no target does it stays.  The cases of that neighbour --
+a trunk that says none, nothing or all, from every source that can say
+it -- are ``test_a_trunk_says_none_nothing_or_all.py``.
 """
 
 from __future__ import annotations
@@ -180,27 +184,23 @@ def test_the_targets_listed_are_the_ones_that_write_a_trunks_vlans() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Not mended: a trunk that allows nothing
+# A trunk that allows nothing
 # ---------------------------------------------------------------------------
 
 #: Targets on which a trunk with no allowed line carries every VLAN: the
 #: platform's default for a trunk (Cisco and Arista say so of their own).
 _NO_LIST_IS_EVERY_VLAN = frozenset({"arista_eos", "cisco_iosxe_cli", "cisco_nxos"})
 
-#: Targets that write a trunk which allows NO VLAN as a trunk of every
-#: VLAN.  A defect, known and open: the tree holds one value, an empty
-#: list, for "none", for "nothing stated" and for AOS-CX's own `all`,
-#: and each renderer picks a reading.  Pinned so that it is not
-#: forgotten, does not spread to another target unseen, and has to be
-#: taken out of here by the change that mends it.
-WRITES_NOTHING_AS_EVERYTHING = frozenset({
-    "arista_eos", "aruba_aoscx", "cisco_iosxe_cli", "cisco_nxos",
-})
-
 
 def _allows_everything(target: str, rendered: str) -> bool:
+    """Whether the TEXT of an output with one trunk says every VLAN:
+    by a word for it, by a trunk with no allowed line where that is
+    every VLAN, or -- on AOS-CX -- by a native line with no allowed
+    line beside it, which makes the switch add ``all`` itself."""
     if any(word in rendered for word in _WORDS_FOR_EVERYTHING):
         return True
+    if target == "aruba_aoscx":
+        return "vlan trunk native" in rendered and "vlan trunk allowed" not in rendered
     return (
         target in _NO_LIST_IS_EVERY_VLAN
         and "switchport mode trunk" in rendered
@@ -208,17 +208,44 @@ def _allows_everything(target: str, rendered: str) -> bool:
     )
 
 
-def test_a_trunk_that_allows_nothing_and_what_each_target_makes_of_it() -> None:
+@pytest.mark.parametrize("native", [None, 999])
+def test_no_target_writes_none_as_everything(native: int | None) -> None:
     """`switchport trunk allowed vlan none` parks a trunk.  On four
-    targets it comes out carrying everything, in a job that says
-    `completed`; on the rest it carries nothing, as it should."""
-    measured = set()
+    targets it came out carrying everything, in a job that said
+    `completed`: the tree had one value, an empty list, for "none",
+    for "nothing stated" and for AOS-CX's own `all`, and each renderer
+    picked a reading.  The four were pinned here by name until the
+    change that mended them; no target may do it now, with a native
+    VLAN beside the list or without."""
     for target in list_public_codecs():
-        job = _job("cisco_iosxe_cli", target, "none")
-        if _allows_everything(target, job.rendered):
-            measured.add(target)
-        elif target in WRITES_A_TRUNKS_VLANS:
+        source = _iosxe("none", declare_vlan_1=False)
+        if native is not None:
+            source = source.replace(
+                " switchport mode trunk\n", f" switchport mode trunk\n switchport trunk native vlan {native}\n", 1,
+            )
+        job = run_plan_with_overrides(
+            get_codec("cisco_iosxe_cli"), get_codec(target), source, port_rename_map={}, force=True,
+        )
+        assert job.rendered, target
+        assert not _allows_everything(target, job.rendered), (
+            f"{target}: a trunk that allows no VLAN is written as a trunk of every VLAN"
+        )
+        if target in WRITES_A_TRUNKS_VLANS:
             parsed = get_codec(target).parse(job.rendered)
-            assert not _ports_in(parsed, 999), target
             assert not _ports_in(parsed, 100), target
-    assert measured == WRITES_NOTHING_AS_EVERYTHING
+            if native is None:
+                assert not _ports_in(parsed, 999), target
+
+
+@pytest.mark.parametrize("target,rendered", [
+    ("cisco_iosxe_cli", "interface GigabitEthernet1/0/1\n switchport mode trunk\n!\n"),
+    ("arista_eos", "interface Ethernet1\n   switchport mode trunk\n   switchport trunk native vlan 999\n!\n"),
+    ("cisco_nxos", "interface Ethernet1/1\n  switchport mode trunk\n"),
+    ("aruba_aoscx", "interface 1/1/1\n    no routing\n    vlan trunk allowed all\n"),
+    ("aruba_aoscx", "interface 1/1/1\n    no routing\n    vlan trunk native 999\n"),
+    ("juniper_junos", "set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members all\n"),
+])
+def test_the_reader_sees_everything_written(target: str, rendered: str) -> None:
+    """The reader of the test above is handed each form the defect
+    took, and one it could have taken: it has to see every one."""
+    assert _allows_everything(target, rendered)

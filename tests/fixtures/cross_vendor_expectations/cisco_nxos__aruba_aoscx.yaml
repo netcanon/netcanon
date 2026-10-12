@@ -323,7 +323,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: unsupported
     reason: >
-      Drifts on all 4 cells that populate it, same total loss and same single
+      Drifts on all 5 cells that populate it, same total loss and same single
       cause as `vlans[].untagged_ports` — stated as one cause, not as two
       pieces of evidence.  `['Ethernet1/1', 'Ethernet1/2', 'port-channel1']`
       -> `[]`, because the trunk half of the same gated block (`vlan trunk

@@ -330,7 +330,7 @@ per_field_expectation:
       Same mechanism and same verdict as `vlans[].untagged_ports`: the target
       declares `/vlans/vlan/tagged-ports` unsupported alongside the per-port
       twins `/interfaces/interface/trunk-allowed-vlans` and
-      `/interfaces/interface/trunk-native-vlan`, and 11 of 11 populated tagged
+      `/interfaces/interface/trunk-native-vlan`, and 35 of 35 populated tagged
       lists come back empty.  Every trunk in the source arrives on the target
       carrying nothing.  Rebuild trunk membership by hand; this is the single
       largest re-authoring task in an AOS-CX -> RouterOS cutover.

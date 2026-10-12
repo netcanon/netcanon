@@ -189,7 +189,11 @@ def test_populates_every_expected_canonical_field(codec, raw_text):
                                   28, 29, 30]
     assert vlan_by_id[10].name == "USERS"
     assert vlan_by_id[10].description == "User access VLAN"
-    assert vlan_by_id[10].tagged_ports == ["1/1/4"]
+    # `lag 1` allows every VLAN (`vlan trunk allowed all`), so it is
+    # tagged in each VLAN there is but its own native one.
+    assert vlan_by_id[10].tagged_ports == ["1/1/4", "lag 1"]
+    assert vlan_by_id[30].tagged_ports == ["1/1/4", "lag 1"]
+    assert vlan_by_id[1].tagged_ports == []
     assert vlan_by_id[10].untagged_ports == ["1/1/2"]
     assert vlan_by_id[20].name == "VOICE"
     assert vlan_by_id[20].untagged_ports == ["lag 2"]
@@ -265,15 +269,31 @@ def test_usm_key_provenance_is_ciphertext_not_passphrase(codec, raw_text):
     assert v3.priv_kind == "ciphertext"
 
 
-def test_trunk_allowed_all_is_an_empty_list_not_every_vlan(codec, raw_text):
-    """``vlan trunk allowed all`` means "whatever exists", not 1-4094.
+def test_trunk_allowed_all_is_every_id(codec, raw_text):
+    """``vlan trunk allowed all`` is every id, 1-4094: the tree's one
+    spelling of "every VLAN".
 
-    Expanding it to an explicit list would pin today's VLAN set into
-    the canonical tree and silently change meaning on the target.
+    It was read as an empty list, on the reasoning that expanding
+    ``all`` would pin today's VLAN set into the canonical tree and
+    silently change its meaning on the target.  The 4,094 ids pin no
+    set.  They are not the VLANs this switch has today; they are every
+    VLAN there can be, and a renderer writes its target's own form for
+    that list and for no other -- ``all`` on AOS-CX and on Junos, no
+    allowed line on IOS-XE, NX-OS and EOS -- so "and any VLAN made
+    later" crosses with it.  (Where a target has no such form the
+    output says so, or holds the VLANs it declares: OS10 writes the
+    range under a review line, AOS-S tags the port in each VLAN of the
+    output.)
+
+    The empty list could not carry that meaning, because it already
+    had another: from four other parsers it was a trunk that allows NO
+    VLAN, and with one value for both each renderer had to pick a
+    reading -- ``switchport trunk allowed vlan none`` came out of this
+    codec as ``vlan trunk allowed all``.
     """
     by_name = {i.name: i for i in codec.parse(raw_text).interfaces}
     assert by_name["lag 1"].switchport_mode == "trunk"
-    assert by_name["lag 1"].trunk_allowed_vlans == []
+    assert by_name["lag 1"].trunk_allowed_vlans == list(range(1, 4095))
 
 
 def test_multi_chassis_modifier_is_stripped_from_the_lag_name(codec, raw_text):

@@ -67,12 +67,12 @@ from ...canonical.intent import (
     CanonicalVxlan,
 )
 from .._helpers import (
+    TrunksByName,
     Uniques,
     _is_link_local_v6,
     _normalise_mac_to_colon_hex,
     _parse_vlan_list,
     address_key,
-    merge_trunk_allowed,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -728,7 +728,6 @@ def _new_iface_scratch(name: str) -> dict:
         "switchport_mode": None,
         "access_vlan": None,
         "dot1q_vlan": None,
-        "trunk_allowed": [],
         "trunk_native": None,
         "lag_member_of": None,
         # Distributed Anycast Gateway: set True by ``fabric forwarding
@@ -753,6 +752,11 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     by name).  ``interface nve1`` is intercepted as a VXLAN config
     container and not materialised here (see ``_open``).
     """
+    # What each interface states about its trunk, by the name its
+    # header writes: a stanza can be met twice, and the list is the
+    # interface's.
+    trunks = TrunksByName("cisco_nxos")
+
     def _open(m: re.Match[str]) -> dict | None:
         # VTEP (``interface nve1``) is a VXLAN config container, not a
         # routed/switched port: its source-interface + member-vni
@@ -764,7 +768,11 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
         name = m.group(1)
         if name.lower().startswith("nve"):
             return None
-        return _new_iface_scratch(name)
+        scratch = _new_iface_scratch(name)
+        # Which interface the stanza is of, for ``trunks``: its header
+        # line, not the name read from it.
+        scratch["trunk_key"] = trunks.key(m.string)
+        return scratch
 
     def _on_line(line: str, current: dict) -> None:  # noqa: C901
         # ── HSRP nested block (Phase 2c) ──
@@ -900,6 +908,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
         sm = _SWITCHPORT_MODE_RE.match(line)
         if sm:
             current["switchport_mode"] = sm.group(1).lower()
+            trunks.mode_line(current["trunk_key"], current["switchport_mode"])
             return
         am = _SWITCHPORT_ACCESS_RE.match(line)
         if am:
@@ -908,10 +917,13 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             return
         tam = _SWITCHPORT_TRUNK_ALLOWED_RE.match(line)
         if tam:
+            # A trunk line and no mode line: the port is TAKEN for a
+            # trunk here, which NX-OS does not say (its port is an
+            # access port until ``switchport mode trunk``).  A trunk
+            # taken this way is given nothing from the platform's
+            # list (``TrunksByName``).
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
-            current["trunk_allowed"] = merge_trunk_allowed(
-                current["trunk_allowed"], tam.group(1).strip()
-            )
+            trunks.allowed_line(current["trunk_key"], tam.group(1).strip())
             return
         tnm = _SWITCHPORT_TRUNK_NATIVE_RE.match(line)
         if tnm:
@@ -931,18 +943,33 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     # non-indented (column-0) line closes a stanza, so an indented ``!``
     # is consumed as body (not a separator).  Behaviour-identical to the
     # previous loop.
-    return scan_stanzas(
+    interfaces = scan_stanzas(
         raw.splitlines(),
         is_header=_IFACE_RE.match,
         open_scratch=_open,
         on_line=_on_line,
-        build=_build_canonical_interface,
+        build=lambda scratch: trunks.made(
+            scratch["trunk_key"], _build_canonical_interface(scratch),
+        ),
         is_terminator=lambda line: bool(line) and not line[0].isspace(),
     )
+    # A trunk with no allowed line carries what the platform's trunk
+    # carries by default -- every VLAN on NX-OS -- and the list says
+    # so.  An empty list is a trunk that allows NO VLAN (``switchport
+    # trunk allowed vlan none``, or a ``remove`` that left nothing).
+    # A port that is not a trunk and states no list has none to keep.
+    trunks.settle()
+    return interfaces
 
 
 def _build_canonical_interface(raw: dict) -> CanonicalInterface:
-    """Convert the parse-time scratch dict into a CanonicalInterface."""
+    """Convert the parse-time scratch dict into a CanonicalInterface.
+
+    The record is made with no allowed list.  That list is the
+    interface's, which another stanza of the same name can state, and
+    :func:`_parse_interfaces` gives it when every stanza has been
+    read (:class:`.._helpers.TrunksByName`).
+    """
     name = raw["name"]
     vrf = raw.get("vrf", "")
     kind = raw.get("kind", "")
@@ -1007,7 +1034,6 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         switchport_mode=raw.get("switchport_mode"),
         access_vlan=raw.get("access_vlan"),
         dot1q_vlan=raw.get("dot1q_vlan"),  # GAP 7: routed-subif 802.1Q tag
-        trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),
         vrrp_groups=vrrp_groups,

@@ -54,7 +54,8 @@ to it (``TestParseFitsTheLinesOfOneRecord``): the tool writes a line
 many times with a counter in its last number, which for most of these
 lines makes many records and not many lines for one.  The other is of
 work done after the parse, by the port-name translator, a renderer or
-the plan (``TestATranslationFitsWhatItIsGiven``): the tool times
+the plan (``TestATranslationFitsWhatItIsGiven``, and for a renderer
+timed by itself ``TestARenderFitsTheTrunksItIsGiven``): the tool times
 ``parse``.  The first of the two has a search of its own that needs no
 clock: ``TestNoListIsLookedThroughThenAddedTo`` reads the source
 for a list that one function both looks through and adds to.
@@ -1525,6 +1526,84 @@ class TestParseFitsTheNumberOfItsStanzas:
 
 
 # ---------------------------------------------------------------------------
+# Trunks that state no allowed list
+# ---------------------------------------------------------------------------
+
+
+def _eos_trunks_with_no_list(count: int) -> str:
+    return _config("hostname sw", "!", "vlan 10-13", "!", *(
+        line for number in range(1, count + 1)
+        for line in (f"interface Ethernet{number}", "   switchport mode trunk", "!")
+    ))
+
+
+def _cx_trunks_with_no_list(count: int) -> str:
+    return _config("hostname sw", "vlan 1,10-13", *(
+        line for number in range(1, count + 1)
+        for line in (f"interface 1/1/{number}", "    no shutdown", "    no routing", "    vlan trunk native 1")
+    ))
+
+
+def _iosxe_trunks_with_no_list(count: int) -> str:
+    return _config("hostname sw", "!", "vlan 10-13", "!", *(
+        line for number in range(1, count + 1)
+        for line in (f"interface GigabitEthernet1/0/{number}", " switchport mode trunk", "!")
+    ))
+
+
+def _nxos_trunks_with_no_list(count: int) -> str:
+    return _config("hostname sw", "", "vlan 10-13", "", *(
+        line for number in range(1, count + 1)
+        for line in (f"interface Ethernet1/{number}", "  switchport mode trunk", "")
+    ))
+
+
+#: The four parsers that make every VLAN id of a trunk with no allowed
+#: line: the smaller count, and the text.
+TRUNKS_WITH_NO_LIST: dict[str, tuple[int, Callable[[int], str]]] = {
+    "arista_eos": (400, _eos_trunks_with_no_list),
+    "aruba_aoscx": (400, _cx_trunks_with_no_list),
+    "cisco_iosxe_cli": (400, _iosxe_trunks_with_no_list),
+    "cisco_nxos": (400, _nxos_trunks_with_no_list),
+}
+
+
+class TestATrunkWithNoListIsEveryVlan:
+    """On four platforms a trunk that states no allowed list carries
+    every VLAN, and the tree says so with the 4,094 ids: thousands of
+    entries for a line that is not in the text.
+
+    What that costs is the size of what the text means, which the
+    head of this module says no search here will report, and which is
+    counted in bytes where the ids are made
+    (``test_projection_makes_what_is_kept.py``).  What is asked here
+    is the other thing: that reading N such trunks costs N times one,
+    and not the square.
+    """
+
+    @pytest.mark.parametrize("name", sorted(TRUNKS_WITH_NO_LIST))
+    def test_parse_fits_the_number_of_trunks(self, name: str) -> None:
+        small, make = TRUNKS_WITH_NO_LIST[name]
+        slow = _grows_faster_than_its_input(get_codec(name).parse, make, small)
+        assert not slow, f"{name}: {slow}"
+
+    def test_each_text_is_trunks_of_every_id(self) -> None:
+        """A text read as ports with no list, or as no ports, would
+        be read quickly whatever the parser did."""
+        for name, (_small, make) in TRUNKS_WITH_NO_LIST.items():
+            tree = get_codec(name).parse(make(40))
+            every = [port for port in tree.interfaces if len(port.trunk_allowed_vlans) == 4094]
+            assert len(every) == 40 and all(port.switchport_mode == "trunk" for port in every), name
+
+    def test_they_are_the_codecs_of_every_vlan(self) -> None:
+        from netcanon.migration.codecs._helpers import TRUNK_ALL, TRUNK_THAT_STATES_NO_LIST
+
+        assert set(TRUNKS_WITH_NO_LIST) == {
+            name for name, default in TRUNK_THAT_STATES_NO_LIST.items() if default == TRUNK_ALL
+        }
+
+
+# ---------------------------------------------------------------------------
 # Many lines for one record
 # ---------------------------------------------------------------------------
 
@@ -2115,6 +2194,109 @@ class TestATranslationFitsWhatItIsGiven:
         for title, (read, _small, make, made) in TRANSLATIONS.items():
             job = read(make(40))
             assert job.rendered and made(job) >= 40, title
+
+
+# ---------------------------------------------------------------------------
+# A renderer that gives every VLAN one port to ride on
+# ---------------------------------------------------------------------------
+
+
+def _iosxe_trunks_and_vlan_interfaces(count: int) -> str:
+    """As many trunks that state no allowed list as VLAN interfaces.
+    On IOS-XE such a trunk is a trunk of every VLAN, and its list is
+    the 4,094 ids."""
+    return _config(
+        "hostname sw", "!",
+        *(line for k in range(count)
+          for line in (f"interface GigabitEthernet{k // 48 + 1}/0/{k % 48 + 1}", " switchport mode trunk", "!")),
+        *(line for v in range(count)
+          for line in (f"interface Vlan{v % 4000 + 2}", f" ip address 10.{v // 250}.{v % 250}.1 255.255.255.0", "!")),
+    )
+
+
+def _trunks_and_vlan_interfaces(count: int) -> Any:
+    """The tree a renderer is handed for that text."""
+    return get_codec("cisco_iosxe_cli").parse(_iosxe_trunks_and_vlan_interfaces(count))
+
+
+#: The targets that have no trunk of their own and hang each VLAN on
+#: ONE parent port, which they find by looking through the ports of
+#: the tree: what their output has one of for every VLAN.
+ONE_PARENT_A_VLAN: dict[str, str] = {
+    "fortigate_cli": "set vlanid ",
+    "mikrotik_routeros": " vlan-id=",
+    "opnsense": "<tag>",
+}
+
+
+class TestARenderFitsTheTrunksItIsGiven:
+    """Three renderers choose a parent port for each VLAN, and each
+    asks a port whether its trunk is a trunk of every VLAN -- which
+    reads a list of 4,094 ids.  Asked once a port, that costs the
+    ports.  Asked of every port again for every VLAN interface, it
+    costs their product: the FortiOS renderer did, and a thousand
+    trunks that state no list beside a thousand VLAN interfaces took
+    half a minute to write.
+
+    The RENDER is what is timed here, on a tree parsed beforehand.  A
+    tree of N trunks of every VLAN and N VLANs holds N times N
+    memberships, and reading it, translating its port names and
+    checking it cost that product whatever the renderer does: timed
+    as a whole plan, a renderer that is right and one that is not
+    both grow with the square, and only a clock tells them apart.
+    """
+
+    @pytest.mark.parametrize("target", sorted(ONE_PARENT_A_VLAN))
+    def test_render_fits_trunks_and_svis(self, target: str) -> None:
+        render = get_codec(target).render
+        # Rendered once before any reading is timed, for what the
+        # first render of a process loads.
+        render(_trunks_and_vlan_interfaces(3))
+        slow = _grows_faster_than_its_input(render, _trunks_and_vlan_interfaces, 100)
+        assert not slow, f"{target}: {slow}"
+
+    def test_each_tree_is_what_it_says(self) -> None:
+        """Trunks read as ports with no list, or VLAN interfaces that
+        no renderer writes a VLAN for, would be rendered quickly
+        whatever the renderer did."""
+        tree = _trunks_and_vlan_interfaces(40)
+        every = [port for port in tree.interfaces if len(port.trunk_allowed_vlans) == 4094]
+        assert len(every) == 40 and all(port.switchport_mode == "trunk" for port in every)
+        for target, one_a_vlan in ONE_PARENT_A_VLAN.items():
+            assert get_codec(target).render(tree).count(one_a_vlan) >= 40, target
+
+    def test_they_are_the_codecs_that_ask(self) -> None:
+        """The targets here are the codecs that ask what a trunk's
+        list says and are not in the table of platforms that have
+        such a list: they ask in order to choose a port.  One that
+        starts to ask is added here with it."""
+        from netcanon.migration.codecs._helpers import TRUNK_THAT_STATES_NO_LIST
+
+        asks = {
+            name for name in list_public_codecs()
+            if name not in TRUNK_THAT_STATES_NO_LIST and any(
+                re.search(r"\b(?:is_every_vlan|trunk_list_says)\(", path.read_text(encoding="utf-8"))
+                for path in (PACKAGE / "migration" / "codecs" / name).glob("*.py")
+            )
+        }
+        assert asks == set(ONE_PARENT_A_VLAN)
+
+    def test_the_check_can_fail(self) -> None:
+        """A renderer that asks every trunk again for every VLAN
+        interface, whatever the machine."""
+
+        def asks_each_port_for_each_vlan(tree: Any) -> None:
+            trunks = sum(1 for port in tree.interfaces if port.switchport_mode == "trunk")
+            _takes(trunks * (len(tree.interfaces) - trunks) * 2e-6)
+
+        # Asked up to three times: one stalled reading of the smaller
+        # tree passes a slow reader.
+        said = ""
+        for _attempt in range(3):
+            said = said or _grows_faster_than_its_input(
+                asks_each_port_for_each_vlan, _trunks_and_vlan_interfaces, 50, floor=0.02,
+            )
+        assert said.count("units") == 3, said
 
 
 # ---------------------------------------------------------------------------

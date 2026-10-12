@@ -102,11 +102,11 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
 )
 from .._helpers import (
+    TrunksByName,
     Uniques,
     _is_link_local_v6,
     _mask_to_prefix,
     address_key,
-    merge_trunk_allowed,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -516,7 +516,6 @@ def _new_iface_scratch(name: str) -> dict:
         # access_vlan or trunk_native_vlan at build time — see
         # _build_canonical_interface.
         "access_vlan_raw": None,
-        "trunk_allowed": [],
         "lag_member_of": None,
         # VRRP (Phase 3b): {gid: {virtual_ips, priority, preempt}}.
         "vrrp_groups": {},
@@ -530,6 +529,17 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     Per interface: description, admin state, mtu, IPv4 / IPv6 (CIDR), VRF
     bind, L2 switchport state and ``channel-group`` LAG membership.
     """
+    # What each interface states about its trunk, by the name its
+    # header writes: a stanza can be met twice, and the list is the
+    # interface's.
+    trunks = TrunksByName("dell_os10")
+
+    def _open(m: re.Match[str]) -> dict:
+        scratch = _new_iface_scratch(_iface_name(m))
+        # Which interface the stanza is of, for ``trunks``: its header
+        # line, not the name read from it.
+        scratch["trunk_key"] = trunks.key(m.string)
+        return scratch
 
     def _on_line(line: str, current: dict) -> None:
         # ── VRRP nested block (Phase 3b) ──
@@ -620,6 +630,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         sm = _SWITCHPORT_MODE_RE.match(line)
         if sm:
             current["switchport_mode"] = sm.group(1).lower()
+            trunks.mode_line(current["trunk_key"], current["switchport_mode"])
             return
         am = _SWITCHPORT_ACCESS_RE.match(line)
         if am:
@@ -631,9 +642,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         tam = _SWITCHPORT_TRUNK_ALLOWED_RE.match(line)
         if tam:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
-            current["trunk_allowed"] = merge_trunk_allowed(
-                current["trunk_allowed"], tam.group(1).strip(),
-            )
+            trunks.allowed_line(current["trunk_key"], tam.group(1).strip())
             return
 
         cgm = _CHANNEL_GROUP_RE.match(line)
@@ -641,14 +650,22 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["lag_member_of"] = f"port-channel{int(cgm.group(1))}"
             return
 
-    return scan_stanzas(
+    interfaces = scan_stanzas(
         raw.splitlines(),
         is_header=_IFACE_RE.match,
-        open_scratch=lambda m: _new_iface_scratch(_iface_name(m)),
+        open_scratch=_open,
         on_line=_on_line,
-        build=_build_canonical_interface,
+        build=lambda scratch: trunks.made(
+            scratch["trunk_key"], _build_canonical_interface(scratch),
+        ),
         is_terminator=_column_zero_terminator,
     )
+    # A trunk with no allowed line carries what the platform's trunk
+    # carries by default: on OS10 its untagged (access) VLAN and no
+    # tagged VLAN, which is the empty list.  A port that is not a
+    # trunk and states no list has none to keep.
+    trunks.settle()
+    return interfaces
 
 
 def _build_canonical_interface(raw: dict) -> CanonicalInterface:
@@ -666,6 +683,11 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
     Mapping the trunk case to ``access_vlan`` would invert the port's L2
     semantics on every downstream codec — the class of defect #239 fixed
     for Junos.
+
+    The record is made with no allowed list.  That list is the
+    interface's, which another stanza of the same name can state, and
+    :func:`_parse_interfaces` gives it when every stanza has been
+    read (:class:`.._helpers.TrunksByName`).
     """
     mode = raw.get("switchport_mode")
     access_raw = raw.get("access_vlan_raw")
@@ -718,7 +740,6 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         vrf=raw.get("vrf", ""),
         switchport_mode=mode,
         access_vlan=access_vlan,
-        trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=trunk_native,
         lag_member_of=raw.get("lag_member_of"),
         vrrp_groups=vrrp_groups,

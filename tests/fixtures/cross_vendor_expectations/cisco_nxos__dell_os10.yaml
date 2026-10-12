@@ -426,7 +426,7 @@ per_field_expectation:
   vlans[].tagged_ports:
     disposition: good
     note: >
-      Preserved on 4 of 13 cells. On 3 further cells the whole `vlans`
+      Preserved on 5 of 13 cells. On 3 further cells the whole `vlans`
       list drifted at once (records added or dropped), and the
       reconciler attributes that single structural event to one owner
       sub-field rather than counting it against every sibling. So this

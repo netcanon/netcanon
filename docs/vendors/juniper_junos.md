@@ -206,9 +206,22 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   members` line of any trunk translated that way.  Not verified on
   a device: that a switch commits a member range most of whose ids
   have no VLAN — run `commit check` on the output before relying on
-  it.  Two exceptions, both older and open: a trunk that states no
-  list (every VLAN, on Cisco and Arista) and an AOS-CX `vlan trunk
-  allowed all` reach Junos as a trunk with **no** members.
+  it.  A Junos trunk with no `vlan members` is read as a trunk of NO
+  VLAN, and reaches IOS-XE, NX-OS and EOS as `switchport trunk
+  allowed vlan none` (release 0.7.7 and earlier wrote it there as a
+  trunk with no allowed line, which is every VLAN).  The other way: a
+  Cisco or Arista trunk that states no list, and an AOS-CX `vlan
+  trunk allowed all`, are every VLAN and are written `vlan members
+  all` (those releases wrote them with **no** members).  So is a
+  source port that states the trunk mode and keeps its list where it
+  is not read — a port-channel member that leaves the list to its
+  port-channel, a port that takes it from `inherit port-profile` or
+  `source template`: check `vlan members all` on a port whose source
+  stanza has no allowed line.  Not
+  established from Juniper's pages: the sentence that says what a
+  trunk with no members carries; it is read as none from the page
+  for `members` and the one for `native-vlan-id`.  The vendors' own
+  sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
 - **A VLAN named `all`, or named like another VLAN's number or
   like a range (`50` for VLAN 100, `200-330`)** is written as
   `VLAN-<id>`, with a `# review:` line saying so: in a member list

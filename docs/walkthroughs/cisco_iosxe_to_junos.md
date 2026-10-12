@@ -175,6 +175,14 @@ verify:
       Release 0.7.7 and earlier wrote `all` for any list of 4,000
       ids or more: on a device migrated that way, the VLANs the
       Cisco trunk left out are on the Junos trunk — re-check it.
+- [ ] **Trunks with no allowed line, and `allowed vlan none`**: a
+      Cisco trunk that states no `switchport trunk allowed vlan`
+      line carries every VLAN, and is written `vlan members all`;
+      `switchport trunk allowed vlan none` is written as a trunk
+      with no `vlan members`, which carries none.  Release 0.7.7 and
+      earlier wrote both as a trunk with no members: on a device
+      migrated that way, an uplink that stated no list carries no
+      VLAN on Junos — re-check it.
 - [ ] **Hashed credentials**: Cisco type-9 hashes (`$9$`) survive
       round-trip; type-7 hashes are migration-blocked when targeting
       non-Cisco vendors and surface as `# REVIEW: ...` review

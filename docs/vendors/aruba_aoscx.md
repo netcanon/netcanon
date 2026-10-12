@@ -157,6 +157,30 @@ source, plus configs exercising symmetric-IRB **L3VNI**, **VSX**, and
 
 ## Common gotchas
 
+- **A trunk's allowed list means what it says, and AOS-CX cannot say
+  "no VLAN".**  `vlan trunk allowed all` is read as EVERY VLAN, and so
+  is `vlan trunk native <N>` with no allowed line: the switch adds
+  `all` itself.  Both reach another vendor as that.  As a target:
+  every VLAN is `vlan trunk allowed all`, and only that list is
+  (`1-4094` reads back as 4,094 VLANs).  A trunk of NO VLAN has no
+  AOS-CX form — HPE: when the last VLAN is removed from a trunk it
+  trunks every VLAN — so for a source trunk that allows none
+  (`switchport trunk allowed vlan none`, a Junos trunk with no
+  members, an OS10 trunk with no tagged VLAN) neither `vlan trunk`
+  line is written, and a `! review:` line in the stanza says what the
+  source said and names its native VLAN.  The job does not report it:
+  list the VLANs the port is to carry, or shut it down.  What IS
+  written is a switched port (`no routing`) with no `vlan` line,
+  which is taken here to be an access port in VLAN 1 by the switch's
+  default — one untagged VLAN, on a port that is up, where the source
+  had none.  That default is not established here from an HPE page or
+  from a switch.  Release
+  0.7.7 and earlier read `all` as an empty list, the value of a trunk
+  that allows no VLAN, and wrote both as `vlan trunk allowed all` —
+  check trunks translated that way.  On AOS-CX a native VLAN is carried only if the allowed
+  list names it; an OS10 or AOS-S trunk's untagged VLAN is outside
+  its list, and is not added to the list written here.  The vendors'
+  own sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
 - **AOS-CX is L3-by-default; `no routing` opts into L2.**  This is the
   **inverse** of NX-OS (where ports are L2 by default).  A physical
   port with no `no routing` is a routed interface; the switchport L2

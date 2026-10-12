@@ -202,7 +202,18 @@ class CanonicalInterface(BaseModel):
             Kept separate so a routed sub-interface never mis-renders as
             ``switchport access vlan N`` on a switchport-centric target
             (GAP 7).
-        trunk_allowed_vlans: VLAN IDs allowed on trunk.
+        trunk_allowed_vlans: VLAN IDs allowed on trunk.  On a trunk
+            the list means what it says: ``[]`` is NO VLAN, every id
+            (1-4094) is EVERY VLAN, and any other list is the list.
+            There is no value for "not stated": the parser knows its
+            platform and puts what the platform does with a trunk
+            that states no list (``TRUNK_THAT_STATES_NO_LIST`` in
+            ``codecs/_helpers.py``), and a renderer writes its
+            target's form for each of the three.  Whether the list
+            holds the native VLAN is not yet one convention: each
+            parser puts what its platform's text lists.  On a port
+            that is not a trunk it is a list stated for later, or
+            empty.
         trunk_native_vlan: Native (untagged) VLAN ID on trunk.
         voice_vlan: Voice VLAN ID for IP phone traffic.
         lag_member_of: LAG / port-channel name if this interface is

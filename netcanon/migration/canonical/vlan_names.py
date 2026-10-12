@@ -34,6 +34,10 @@ Drop semantics (map value is None):
       (``access_vlan = None``) — operator gets a warning and the
       interface becomes unassigned.
     * Dropped IDs are removed from ``trunk_allowed_vlans`` lists.
+      A trunk left with an empty list allows NO VLAN, and the
+      operator gets a warning that says so.  A list of every id
+      (1-4094) is the statement "every VLAN" and is left as it is by
+      a drop and by a rename alike.
     * ``trunk_native_vlan`` / ``voice_vlan`` pointing at a dropped
       VLAN are cleared; target device will fall back to vendor
       default (typically VLAN 1).
@@ -71,6 +75,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
+
+from .transforms import is_every_vlan
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +138,9 @@ def translate_vlan_ids(  # noqa: C901
         native / voice / trunk-allowed) → warning + no-op.  The UI should
         avoid sending these but the orchestrator doesn't crash on them.
         (An ID present only as an interface reference is still rewritten
-        by Pass 2, so it is NOT flagged as a no-op.)
+        by Pass 2, so it is NOT flagged as a no-op.  A trunk-allowed
+        list of every id, 1-4094, is no reference to any one VLAN: it
+        says "every VLAN" and Pass 2 leaves it alone.)
 
     Args:
         intent: Canonical tree to mutate.  Passed through the
@@ -239,7 +247,16 @@ def translate_vlan_ids(  # noqa: C901
         ):
             if vid is not None:
                 referenced_ids.add(vid)
-        referenced_ids.update(iface.trunk_allowed_vlans or [])
+        # A list of every id is the statement "every VLAN" and names
+        # no VLAN in particular (Pass 2 leaves it as it is for the
+        # same reason).  Counted id by id, one trunk that states no
+        # allowed list -- every VLAN, on four platforms -- made every
+        # id there is "referenced", and a map entry for a VLAN the
+        # config does not have was no longer reported.
+        if iface.trunk_allowed_vlans and not is_every_vlan(
+            iface.trunk_allowed_vlans
+        ):
+            referenced_ids.update(iface.trunk_allowed_vlans)
     # (#5) VXLAN VNI records carry a vlan_id that this orchestrator now
     # rewrites (Pass 3) — count it as a reference so a rename touching ONLY a
     # vni mapping isn't wrongly flagged "present nowhere".
@@ -341,17 +358,36 @@ def translate_vlan_ids(  # noqa: C901
                 iface.dot1q_vlan = renames[iface.dot1q_vlan]
 
         # Trunk allowed list — remove drops, rename renames, dedupe.
-        if iface.trunk_allowed_vlans:
+        #
+        # A list of every id is the statement "every VLAN", not 4,094
+        # VLANs: it is the same statement after one of them is
+        # renumbered or dropped, and it is left as it stands.
+        # Rewritten id by id it loses the id that moved or went: a
+        # trunk that said ``all`` came out as ``1-99,101-4094``, and
+        # so would every trunk of a config that states no list --
+        # every VLAN, on four platforms -- for one edit in the VLAN
+        # pane.
+        if iface.trunk_allowed_vlans and not is_every_vlan(
+            iface.trunk_allowed_vlans
+        ):
             new_list: list[int] = []
             seen: set[int] = set()
+            gone: list[int] = []
             for vid in iface.trunk_allowed_vlans:
                 if vid in drops:
+                    gone.append(vid)
                     continue
                 new_vid = renames.get(vid, vid)
                 if new_vid not in seen:
                     seen.add(new_vid)
                     new_list.append(new_vid)
             iface.trunk_allowed_vlans = new_list
+            if not new_list and iface.switchport_mode == "trunk":
+                # Every VLAN the trunk allowed was dropped.  An empty
+                # list is a trunk that allows NO VLAN, and that is
+                # what every target is now told -- so the operator is
+                # told as well.
+                result.warnings.append(_emptied_trunk_warning(iface.name, gone))
 
     # ------------------------------------------------------------------
     # Pass 2b — track the rename/drop on canonical ``Vlan<N>`` SVIs (#18).
@@ -448,6 +484,25 @@ def translate_vlan_ids(  # noqa: C901
         len(result.warnings),
     )
     return result
+
+
+def _emptied_trunk_warning(name: str, gone: list[int]) -> str:
+    """The warning for a trunk whose every allowed VLAN was dropped.
+
+    Names the first few ids and counts the rest: a trunk can list
+    thousands.
+    """
+    shown = ", ".join(str(vid) for vid in gone[:8])
+    if len(gone) == 1:
+        what = f"VLAN {shown} which was dropped"
+    elif len(gone) <= 8:
+        what = f"VLANs {shown} which were dropped"
+    else:
+        what = f"VLANs {shown} and {len(gone) - 8} more which were dropped"
+    return (
+        f"vlan_rename: interface {name!r} is a trunk that allowed only "
+        f"{what} — the trunk now allows no VLAN"
+    )
 
 
 def _merge_vlan(dest, src) -> None:

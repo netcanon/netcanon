@@ -204,6 +204,68 @@ database: the trunk lines were
 emitted correctly but the matching `vlan <N>` declarations could be
 missing, which silently stops those VLANs forwarding.
 
+### "A trunk's allowed list is not what I wrote"
+
+A trunk's list is carried as what it MEANS, and each target writes
+its own form for it.  What you may see:
+
+* **No `switchport trunk allowed vlan` line at all** (IOS-XE, NX-OS,
+  EOS).  The source trunk carried every VLAN — it said `all`, or
+  `vlan members all`, or stated no list on a platform where that is
+  every VLAN — and a trunk with no allowed line is how these
+  platforms say so.  Nothing to do.
+* **`switchport trunk allowed vlan none`**, or a Junos trunk with no
+  `vlan members`.  The source trunk allowed no VLAN: it said `none`,
+  its list was emptied by `remove` or `except`, it is a Dell OS10 or
+  Junos trunk that lists nothing, or you dropped every VLAN it
+  carried (next item).  A Dell OS10 trunk with an untagged VLAN and
+  no tagged one is written this way too, with the native line beside
+  it: check that its untagged VLAN is carried as you mean it to be.
+* **`! review: the source trunk allows no VLAN ...`** in an AOS-CX
+  interface stanza, and no `vlan trunk` line.  AOS-CX has no form
+  for a trunk that carries nothing: a trunk left with no allowed
+  VLAN carries every VLAN.  **Action:** add `vlan trunk allowed
+  <list>` (and `vlan trunk native <N>`) for what the port is to
+  carry, or `shutdown` it.  The job does not count this line.  As
+  written, the stanza is a switched port with no `vlan` line — taken
+  here to be an access port in VLAN 1 by the switch's default, which
+  is not established here from an HPE page — so do not leave it as
+  it is.
+* **`vlan members all`, `vlan trunk allowed all`, or OS10's `1-4094`,
+  on a port whose own stanza has no allowed line.**  A Cisco, Arista
+  or AOS-CX port that states the trunk mode and no list is a trunk
+  of every VLAN.  If its list is stated somewhere that is not read —
+  on the port-channel it is a member of, in an `inherit
+  port-profile` or a `source template` — the output is every VLAN
+  where the switch has that list.  **Action:** write the list on the
+  port.
+* **`switchport trunk allowed vlan none` (or a Junos trunk with no
+  members) for a port that had `switchport trunk native vlan <N>`
+  and no `switchport mode trunk`** (NX-OS, EOS sources).  The port
+  was read as a trunk from its trunk line, and a trunk read that way
+  is given no VLAN the config does not name.  On the switch it is an
+  access port.  **Action:** state the port's mode in the source, or
+  correct the stanza in the output.
+* **`! review: the source trunk allows every VLAN ...`** above
+  `switchport trunk allowed vlan 1-4094` on OS10.  OS10 has no word
+  for every VLAN, its ids end at 4093, and it lists only VLANs that
+  exist.  **Action:** replace `1-4094` with the VLANs the switch
+  has (not the port's own access VLAN, which a trunk carries
+  untagged).
+
+And one warning, when you drop VLANs in the rename modal's VLAN
+pane:
+
+```
+vlan_rename: interface 'GigabitEthernet1/0/1' is a trunk that allowed only VLAN 100 which was dropped — the trunk now allows no VLAN
+```
+
+Every VLAN that trunk carried was dropped, so it is written as a
+trunk of no VLAN (it is not removed, and the job is not failed by
+it).  If that is not what you meant, keep one of its VLANs, or drop
+the port as well.  A trunk of every VLAN is not touched by a drop or
+a renumber: it is still every VLAN.
+
 ### "My hashed password came out as a review comment"
 
 By design.  Netcanon's hash-portability policy (see

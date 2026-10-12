@@ -345,8 +345,8 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: unsupported
     reason: >
-      Same mechanism and the same total drop as `vlans[].untagged_ports`: 32
-      tagged-port entries across 11 VLAN records become 0, and
+      Same mechanism and the same total drop as `vlans[].untagged_ports`: 122
+      tagged-port entries across 35 VLAN records become 0, and
       `/vlans/vlan/tagged-ports` is declared unsupported by opnsense.  The
       renderer expresses a VLAN as ONE `<vlan>` entry bound to ONE `<if>`
       parent, so multi-port trunk membership has nowhere to go — measured on
