@@ -69,6 +69,7 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
 )
+from ...canonical.transforms import is_every_vlan
 from ..base import RenderError
 from .parse import (
     _CANONICAL_MODE_TO_FORTIGATE_LACP,
@@ -147,9 +148,96 @@ def _port_index_for(name: str) -> int:
     return int(m.group(1)) if m else 0
 
 
+#: Handed to :func:`_parent_for_vlan_iface` by a caller that has not
+#: asked the scorer: the scorer is then asked there.
+_NOT_SCORED: Any = object()
+
+
+def _scored_parent(deduped_ifaces: list[CanonicalInterface]) -> str | None:
+    """The port the LAN-preference scorer makes the parent of a VLAN
+    sub-interface, or ``None`` where no port has LAN evidence.
+
+    Nothing in the score looks at the sub-interface, so the answer is
+    the same for every one of an output.  It is worked out ONCE a
+    render and handed to :func:`_parent_for_vlan_iface`.  Worked out
+    there, every port was scored again for every VLAN interface --
+    and asked again whether its trunk is a trunk of every VLAN, which
+    reads a list of 4,094 ids.  A config of a thousand trunks that
+    state no allowed list and a thousand VLAN interfaces took half a
+    minute to render.
+
+    Scoring scheme (per candidate):
+
+    * ``+10`` — has a private RFC1918 IPv4 (192.168/16, 10/8, 172.16/12)
+    * ``+5``  — has L2 trunk semantics (``trunk_allowed_vlans`` set)
+    * ``-5``  — ``dhcp_client=True`` (likely the WAN)
+
+    These are the *signal* components.  Between two candidates that
+    tie on signal score, a trunk that NAMES its VLANs is looked for
+    before a trunk of EVERY VLAN
+    (:func:`...canonical.transforms.is_every_vlan`): a trunk that
+    states no allowed list is a trunk of every VLAN on four platforms
+    and has a list like any other, and an uplink of that kind is no
+    better a parent than the port that lists the VLANs.  A candidate's
+    port-index (trailing digits in the name) is layered in after that
+    as a deterministic
+    tiebreaker — when two candidates still tie, the higher
+    port-index wins (WAN is conventionally on ``port1`` / ``wan1``,
+    so a higher index is slightly less WAN-like).  Port-index is
+    NEVER allowed to *create* a positive score on its own — that
+    would silently change the legacy first-non-VLAN fallback
+    behaviour for signal-free trees and break round-trip stability
+    on existing tests.
+
+    Returns:
+        The name of the top-scoring port, or ``None`` when there is
+        no candidate or NO candidate has any positive signal (signal
+        score <= 0 on every iface).
+    """
+    candidates = [
+        i for i in deduped_ifaces
+        if not _looks_like_vlan_iface(i.name)
+        and i.interface_type != "ianaift:l3ipvlan"
+    ]
+    if not candidates:
+        return None
+
+    scored: list[tuple[int, int, int, int, int, str]] = []
+    for idx, cand in enumerate(candidates):
+        signal = 0
+        if _has_private_ipv4(cand):
+            signal += 10
+        if cand.trunk_allowed_vlans:
+            signal += 5
+        if cand.dhcp_client:
+            signal -= 5
+        of_every_vlan = int(is_every_vlan(cand.trunk_allowed_vlans))
+        port_idx = _port_index_for(cand.name)
+        # Sort key (lowest first wins because we negate signal):
+        #   1. -signal       (highest signal first)
+        #   2. of_every_vlan (a trunk that names its VLANs before a
+        #                     trunk of every VLAN)
+        #   3. -port_idx     (highest port-index first as tiebreaker)
+        #   4. idx           (enumeration order — final deterministic
+        #                     tiebreaker for byte-identity)
+        scored.append(
+            (-signal, of_every_vlan, -port_idx, idx, signal, cand.name)
+        )
+
+    scored.sort()
+    top = scored[0]
+    # If the top candidate has zero or negative signal, no candidate
+    # has positive LAN evidence: the caller keeps the legacy
+    # first-non-VLAN fallback.
+    if top[4] <= 0:
+        return None
+    return top[5]
+
+
 def _parent_for_vlan_iface(
     name: str,
     deduped_ifaces: list[CanonicalInterface],
+    scored: Any = _NOT_SCORED,
 ) -> str | None:
     """Resolve the parent physical interface for a VLAN sub-interface
     with a deterministic LAN-preference scorer.
@@ -160,77 +248,45 @@ def _parent_for_vlan_iface(
     With OPNsense source where ``igc0`` (WAN, DHCP-client) and
     ``port1`` (LAN, ixl0-renamed with a static RFC1918 address) both
     survive elision, the legacy iteration ordering picks WAN first —
-    wrong.
-
-    Scoring scheme (per candidate):
-
-    * ``+10`` — has a private RFC1918 IPv4 (192.168/16, 10/8, 172.16/12)
-    * ``+5``  — has L2 trunk semantics (``trunk_allowed_vlans`` set)
-    * ``-5``  — ``dhcp_client=True`` (likely the WAN)
-
-    These are the *signal* components.  A candidate's port-index
-    (trailing digits in the name) is layered in as a deterministic
-    tiebreaker — when two candidates tie on signal score, the higher
-    port-index wins (WAN is conventionally on ``port1`` / ``wan1``,
-    so a higher index is slightly less WAN-like).  Port-index is
-    NEVER allowed to *create* a positive score on its own — that
-    would silently change the legacy first-non-VLAN fallback
-    behaviour for signal-free trees and break round-trip stability
-    on existing tests.
+    wrong.  The port the scorer picks (:func:`_scored_parent`) is the
+    parent instead.
 
     When NO candidate has any positive signal (signal score <= 0 on
     every iface), fall back to
     :func:`vlan_heuristics.parent_for_vlan_iface` for byte-identity
     backward compatibility — pre-Finding-21 behaviour for canonical
-    trees with bare-stub interfaces and no LAN/WAN discriminators.
+    trees with bare-stub interfaces and no LAN/WAN discriminators
+    (existing tests pin port1 over port2 in this state).
 
     The dotted-form fast path (``port1.10`` -> parent ``port1``) is
     delegated to the fallback helper so a single source of truth
     handles dotted-form parents.
+
+    Args:
+        name: The VLAN sub-interface.
+        deduped_ifaces: The interfaces of the output.
+        scored: What :func:`_scored_parent` gave for *deduped_ifaces*.
+            A renderer asks it once and hands it to every call; left
+            out, it is asked here.
+
+    Returns:
+        The parent's name, or ``None`` when no parent candidate
+        exists.
     """
     # Dotted-form fast path delegates to the legacy helper.
     if "." in name:
         return _parent_for_vlan_iface_fallback(name, deduped_ifaces)
-
-    candidates = [
-        i for i in deduped_ifaces
-        if not _looks_like_vlan_iface(i.name)
-        and i.interface_type != "ianaift:l3ipvlan"
-    ]
-    if not candidates:
+    if scored is _NOT_SCORED:
+        scored = _scored_parent(deduped_ifaces)
+    if scored is None:
         return _parent_for_vlan_iface_fallback(name, deduped_ifaces)
-
-    scored: list[tuple[int, int, int, int, str]] = []
-    for idx, cand in enumerate(candidates):
-        signal = 0
-        if _has_private_ipv4(cand):
-            signal += 10
-        if cand.trunk_allowed_vlans:
-            signal += 5
-        if cand.dhcp_client:
-            signal -= 5
-        port_idx = _port_index_for(cand.name)
-        # Sort key (lowest first wins because we negate signal):
-        #   1. -signal       (highest signal first)
-        #   2. -port_idx     (highest port-index first as tiebreaker)
-        #   3. idx           (enumeration order — final deterministic
-        #                     tiebreaker for byte-identity)
-        scored.append((-signal, -port_idx, idx, signal, cand.name))
-
-    scored.sort()
-    top = scored[0]
-    # If the top candidate has zero or negative signal, no candidate
-    # has positive LAN evidence — preserve the legacy first-non-VLAN
-    # fallback so signal-free trees keep their pre-Finding-21
-    # ordering (existing tests pin port1 over port2 in this state).
-    if top[3] <= 0:
-        return _parent_for_vlan_iface_fallback(name, deduped_ifaces)
-    return top[4]
+    return scored
 
 
 def _build_vlan_children(
     tree: CanonicalIntent,
     deduped_ifaces: list[CanonicalInterface],
+    scored: Any = _NOT_SCORED,
 ) -> list[dict]:
     """Build the VLAN-on-parent child interface list (Issue #6).
 
@@ -271,6 +327,9 @@ def _build_vlan_children(
             * FortiGate-native ``vlan<id>`` from cross-vendor
               translation through :func:`format_port_identity`.
 
+    *scored* is what :func:`_scored_parent` gave for *deduped_ifaces*,
+    from a caller that has asked it; left out, it is asked here.
+
     Returns a list of dicts with keys ``name``, ``vlanid``,
     ``parent``, ``ip``, ``mask`` -- empty list when *tree.vlans* is
     empty.  Caller filters out names that already appear in
@@ -290,7 +349,7 @@ def _build_vlan_children(
         # child names are ``vlan<id>`` (no dot) so the scorer's
         # signal-based ranking applies — dotted-form fast path is
         # not relevant here.
-        parent_name = _parent_for_vlan_iface("vlan", deduped_ifaces)
+        parent_name = _parent_for_vlan_iface("vlan", deduped_ifaces, scored)
 
     iface_by_name = {i.name: i for i in deduped_ifaces}
 
@@ -558,8 +617,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         seen_iface_names.add(iface.name)
         deduped_ifaces.append(iface)
 
+    # The parent the scorer gives a VLAN sub-interface: the same for
+    # every one of them, so it is asked for once, here.
+    scored_parent = _scored_parent(deduped_ifaces)
+
     # VLAN child interface synthesis (Issue #6).
-    vlan_children = _build_vlan_children(tree, deduped_ifaces)
+    vlan_children = _build_vlan_children(tree, deduped_ifaces, scored_parent)
     existing_vlan_ids = set()
     for cand in deduped_ifaces:
         vid = _vlan_id_for(cand.name, tree.vlans)
@@ -608,7 +671,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # in user_smoke_findings.md).  The pre-elision tree
                 # still has ``igc0`` as its first iface, which would
                 # incorrectly anchor every VLAN child to the WAN.
-                parent = _parent_for_vlan_iface(iface.name, deduped_ifaces)
+                parent = _parent_for_vlan_iface(
+                    iface.name, deduped_ifaces, scored_parent,
+                )
                 if vid is not None:
                     out.append("        set type vlan")
                     out.append(f"        set vlanid {vid}")

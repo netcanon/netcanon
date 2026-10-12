@@ -552,13 +552,37 @@ stanza headers.  The migrate page renders these as a warning banner:
 > rendered output.  Operator must apply them manually on the target
 > device.
 
+One kind of row is not a section to apply by hand.  A Junos
+statement the source had **deactivated** (`deactivate <path>` in
+set-form, `inactive:` in the hierarchical form) is not in force on
+the device, so it is left out of the translation and listed here as
+`inactive: <path>`; a statement under a load file's `delete:` is
+listed as `delete: <path>`.  The banner counts only the sections,
+says in a sentence of its own what the other rows are, and is
+headed "Statements the source held and did not run" when it holds
+nothing else.  A same-vendor Junos job does not write the statement
+back as inactive: it is gone from the output, and the row is the
+record.
+
+Such a row names the statement and never a secret.  Its path is cut
+after the first word that names one (a word with `community`,
+`password`, `secret`, `key`, `psk` or `authentication` in it) and
+the cut is marked: `inactive: snmp community ...`.  A deactivated
+leaf is named by its first word, without its value.  A row for a
+section is the stanza header as the config has it.
+
+A job whose only rows are of this kind, and which recognised
+nothing else, is `partial`: a statement is named whether or not
+anything under it would have been read, so the row is not a sign
+that the text was a config.
+
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):
 
 | Source codec | Patterns matched (excerpt) |
 |---|---|
 | `cisco_iosxe_cli` / `arista_eos` / `aruba_aoss` (IOS-style CLI heuristic) | `ip access-list extended/standard <name>`, `ipv6 access-list <name>`, numbered `access-list N permit/deny`, `ip nat inside/outside/pool`, `class-map`, `policy-map`, `route-map <name>`, `crypto isakmp/ipsec/map/pki`, `zone-pair security` |
-| `juniper_junos` (set form) | `set firewall [family X] filter <name>`, `set security {policies\|nat\|ike\|ipsec\|zones\|address-book\|flow\|screen\|alg\|utm\|application-tracking\|forwarding-options}`, `set policy-options {policy-statement\|prefix-list\|community} <name>`, `set class-of-service` |
+| `juniper_junos` (set form, and the hierarchical form as it is read: converted to set form first) | `set firewall [family X] filter <name>`, `set security {policies\|nat\|ike\|ipsec\|zones\|address-book\|flow\|screen\|alg\|utm\|application-tracking\|forwarding-options}`, `set policy-options {policy-statement\|prefix-list\|community} <name>`, `set class-of-service` |
 | `fortigate_cli` | `config firewall {policy\|policy6\|vip\|vip6\|central-snat-map\|address\|addrgrp\|service\|shaper}`, `config vpn {ipsec\|ssl}`, `config {webfilter\|antivirus\|ips\|dlp\|application}`, `config router {policy\|route-map}` |
 | `mikrotik_routeros` | `/ip firewall {filter\|nat\|mangle\|raw\|address-list}`, `/ipv6 firewall …`, `/queue`, `/ip ipsec`, `/routing {filter\|bgp\|ospf}` |
 | `opnsense` | XML elements: `<filter>`, `<nat>`, `<ipsec>`, `<openvpn>`, `<wireguard>`, `<shaper>`, `<load_balancer>`, `<captiveportal>` |
@@ -1177,7 +1201,10 @@ Ports pane choose the *Source device* and the *Target device*.
   its own: the config uses port names the device does not have (it
   says how many, and the first few), or the config names no port, so
   nothing could be checked against it.  Where no device could be
-  read, the line says why.
+  read, the line says why.  While the config is being read the line
+  says so; a server that has not answered in twenty seconds is given
+  up on, the line says that, and the config is asked about again the
+  next time the modal opens.
 * The line under the source device, and under a target chosen from a
   model family, says what you declared, how many ports that is and
   the first and last name, and how well the names are established.  A
@@ -1190,8 +1217,10 @@ Ports pane choose the *Source device* and the *Target device*.
   not have — turns the line red and says why, in the server's words.
   It is still sent with Apply, which the server then refuses: the
   output is left as it was, and the footer of the modal says *Not
-  applied* with the server's reason until the next Apply (or *Accept
-  as shown*, or *Reset all*).  A line that
+  applied* with the server's reason until you change something in
+  the modal or the footer has its next thing to say (the footer's
+  line is about the last thing done: an edit clears it, looking at
+  another pane does not).  A line that
   says the device *could not be checked* is not a refusal: the preview
   did not arrive, and Apply sends the device for the server to compile
   itself.
@@ -1235,6 +1264,24 @@ Ports pane choose the *Source device* and the *Target device*.
   is redrawn from the new job; an Apply still out for the old one is
   given up.  An Apply the server does not answer in two minutes is
   given up too, and says so.
+* Where a vendor has model families, the target model list has the
+  family models first and the vendor's flat profiles after them,
+  under "Profiles — one fixed port list": a switch can be in both,
+  under the same words.
+* The modal can be worked from the keyboard.  Tab stops at every
+  control it shows, a row's "drop" included, and Esc closes it and
+  gives the focus back to the button that opened it.  On a closed
+  list of target ports, typing a port's name chooses that port.
+* Your own entries — in the ports pane and in the VLAN, user and
+  SNMP panes — are kept in the browser by source codec, target
+  codec and the config's host name, and put back when the modal
+  opens on such a config again; the footer says so.  Two configs can
+  share a host name: an entry kept for a name the config on the page
+  has no row for is left out, the footer says how many were, and
+  they stay kept for the config that has the name.  In
+  the VLAN pane a number that is no VLAN id (1 to 4094) is not an
+  entry: nothing is sent for that VLAN while the field holds it,
+  and the field has a red edge.
 
 **Through the API** the same steps are:
 
@@ -1355,7 +1402,8 @@ confirm, never applied by itself, and it tells you how far to trust it:
   port names the config uses that the proposed device does not have.
   One cause is a module the config does not state; another is a partial
   paste.  `missing_ports` holds the first few hundred and
-  `missing_port_count` the whole number.  `consistent` is `true` when
+  `missing_port_count` the whole number; a name longer than 128
+  characters is cut to that, ending `…`.  `consistent` is `true` when
   none is missing, `false` when some are, and `null` when there was
   nothing to check: nothing was proposed, the text could not be
   parsed, or it names no port (only its top was pasted).  `null` is
@@ -1921,6 +1969,75 @@ matter; the matrix is honest about both.
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP
   pools surface as a comment block, not as `dhcp-server pool`
   syntax.
+* **A trunk's allowed list means what it says.**  On a trunk an
+  empty list is NO VLAN, a list of every id (1-4094) is EVERY VLAN,
+  and any other list is the list.  A trunk that states no allowed
+  list is read as what its platform does with one: every VLAN on
+  `cisco_iosxe_cli`, `cisco_nxos`, `arista_eos` and `aruba_aoscx`;
+  no VLAN on `dell_os10` and `juniper_junos`.  Each target writes
+  its own form: `switchport trunk allowed vlan none` and, for every
+  VLAN, a trunk with no allowed line on IOS-XE, NX-OS and EOS;
+  `vlan trunk allowed all` on AOS-CX; `vlan members all`, or no
+  members, on Junos; no allowed line for no VLAN on OS10; the VLANs
+  that tag the port on AOS-S.  Release 0.7.7 and earlier had one
+  value, an empty list, for all three statements, and a trunk that
+  allowed no VLAN came out allowing every VLAN on four targets:
+  check any trunk translated then whose list is empty or absent on
+  either side.  These limits remain, each written in the output or
+  here:
+  * **AOS-CX cannot be told "no VLAN".**  A trunk with no allowed
+    VLAN carries every VLAN there.  For a source trunk that allows
+    none, neither `vlan trunk` line is written and a `! review:`
+    line in the stanza says what the source said.  The job does not
+    report it: list the VLANs the port is to carry, or shut it down.
+    What is written is a switched port with no `vlan` line, taken
+    here to be an access port in VLAN 1 by the switch's default;
+    that default is not established here from a vendor's page.
+  * **OS10 cannot be told "every VLAN".**  It has no word for it,
+    its VLAN ids end at 4093, and a VLAN must exist before a port
+    is put in it.  A trunk of every VLAN is written `switchport
+    trunk allowed vlan 1-4094` under a `! review:` line: replace
+    the range with the VLANs the switch has.  A list that is not
+    every VLAN is written as it stands with no such line, though it
+    can name an id past 4093 (`2-4094`) or a VLAN the output does
+    not declare.
+  * **AOS-S cannot be told "and any VLAN made later".**  A trunk of
+    every VLAN is tagged in each VLAN the output declares, and
+    nothing in the output marks that more was meant.
+  * **`none` on a port that is not `switchport mode trunk` is
+    dropped.**  On such a port an empty list and no list are one
+    value, and no line is written for it, same vendor included.  An
+    IOS-XE port in a dynamic mode that states `switchport trunk
+    allowed vlan none` comes back with no allowed line, and carries
+    every VLAN if it negotiates a trunk.  A VLAN drop that empties
+    the list kept on such a port gives no line and no warning.
+  * **A trunk line with no `switchport mode trunk` line is read as a
+    trunk** by `cisco_nxos` and `arista_eos`, though a port of
+    either platform is an access port until it is told otherwise.
+    Such a port is a trunk of the VLANs its lines name, or of no
+    VLAN — never of every VLAN: the platform's default is given only
+    to a port that says it is a trunk.
+  * **A trunk whose list is stated where the parser does not read it
+    is a trunk of every VLAN:** a port-channel member that states
+    the mode and leaves the list to its port-channel, and a port
+    that takes its list from `inherit port-profile` (NX-OS) or
+    `source template` (IOS-XE).  Check `vlan members all`, OS10's
+    `1-4094` and AOS-S tags on such a port.
+  * **A stanza met twice is one interface for its allowed list
+    only.**  Its allowed lines are applied to one list, in order;
+    each stanza is still written, with the mode it states.
+  * **Whether a trunk's list holds its native VLAN differs by
+    platform, and the canonical tree does not say which.**  On
+    AOS-CX the native VLAN is carried only if the allowed list
+    names it; on OS10 and AOS-S the untagged VLAN is outside the
+    list by grammar.  It errs both ways: an AOS-CX trunk whose
+    native VLAN is not in its list reaches OS10 and AOS-S carrying
+    that VLAN untagged (more than the source), and an OS10 trunk's
+    untagged VLAN is not in the list written for AOS-CX, IOS-XE,
+    NX-OS or EOS (an OS10 trunk with an untagged VLAN and no tagged
+    one is written as a trunk that allows none, with the native
+    line beside it).  Check the native VLAN of any trunk translated
+    between those families.
 * **A VLAN known only to an "allow-everything" trunk is not
   translated.**  On the six port-centric codecs (`cisco_iosxe_cli`,
   `arista_eos`, `cisco_nxos`, `juniper_junos`, `aruba_aoscx`,

@@ -382,27 +382,15 @@ per_field_expectation:
   vlans[].id:
     disposition: good
     note: >
-      Preserved on 3 of 15 cells. On 1 further cell the whole `vlans`
-      list drifted at once (records added or dropped), and the
-      reconciler attributes that single structural event to one owner
-      sub-field rather than counting it against every sibling. So this
-      field shows no loss of its own on this pair: the parent-level
-      drift is recorded against that owner key, and declaring it lossy
-      here would over-claim a second, independent loss that the corpus
-      does not exhibit.
+      Preserved on 4 of 15 cells, and empty on both sides on the
+      other 11. The field shows no loss on this pair.
     references: [iosxe-os10-surface]
 
   vlans[].ipv4_addresses:
     disposition: good
     note: >
-      Preserved on 2 of 15 cells. On 1 further cell the whole `vlans`
-      list drifted at once (records added or dropped), and the
-      reconciler attributes that single structural event to one owner
-      sub-field rather than counting it against every sibling. So this
-      field shows no loss of its own on this pair: the parent-level
-      drift is recorded against that owner key, and declaring it lossy
-      here would over-claim a second, independent loss that the corpus
-      does not exhibit.
+      Preserved on 3 of 15 cells, and empty on both sides on the
+      other 12. The field shows no loss on this pair.
     references: [iosxe-os10-surface]
 
   vlans[].name:
@@ -416,27 +404,17 @@ per_field_expectation:
   vlans[].tagged_ports:
     disposition: good
     note: >
-      Preserved on 1 of 15 cells. On 1 further cell the whole `vlans`
-      list drifted at once (records added or dropped), and the
-      reconciler attributes that single structural event to one owner
-      sub-field rather than counting it against every sibling. So this
-      field shows no loss of its own on this pair: the parent-level
-      drift is recorded against that owner key, and declaring it lossy
-      here would over-claim a second, independent loss that the corpus
-      does not exhibit.
+      Preserved on 3 of 15 cells, and empty on both sides on the
+      other 12. A trunk that states no allowed
+      list is every VLAN on IOS-XE, so it is a tagged port of each
+      VLAN its switch declares. The field shows no loss on this pair.
     references: [iosxe-os10-surface]
 
   vlans[].untagged_ports:
     disposition: good
     note: >
-      Preserved on 3 of 15 cells. On 1 further cell the whole `vlans`
-      list drifted at once (records added or dropped), and the
-      reconciler attributes that single structural event to one owner
-      sub-field rather than counting it against every sibling. So this
-      field shows no loss of its own on this pair: the parent-level
-      drift is recorded against that owner key, and declaring it lossy
-      here would over-claim a second, independent loss that the corpus
-      does not exhibit.
+      Preserved on 4 of 15 cells, and empty on both sides on the
+      other 11. The field shows no loss on this pair.
     references: [iosxe-os10-surface]
 
   vxlan_vnis:

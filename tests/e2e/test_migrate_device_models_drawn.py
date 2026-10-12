@@ -26,9 +26,11 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable, Iterator
+from pathlib import Path
 
 import pytest
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Locator, Page, expect
 
 from tests.e2e.drawn import (
     alike,
@@ -37,6 +39,8 @@ from tests.e2e.drawn import (
     ink,
     override_options,
     painted_background,
+    painted_bar,
+    painted_ring,
     painted_token,
     token_ink,
 )
@@ -53,6 +57,7 @@ from tests.e2e.test_migrate_device_models import (
     TARGET_2930M_48G,
     _apply,
     _declare,
+    _dropped,
     _open,
     _open_fabric,
     _pick_a_two_member_stack,
@@ -252,6 +257,9 @@ class TestTheTableAndApplyStayInTheModal:
 
 TOP = "#mig-rename-modal-top"
 
+#: The table's cells are painted on the pane that scrolls them.
+PANE = "#mig-rename-table-pane"
+
 
 def _saved_overrides(page: Page) -> dict:
     """Every rename-override record the page keeps across a reload."""
@@ -312,6 +320,7 @@ class TestAcceptedDecisionsAreForOnePairing:
         expect(page.locator(_tid("migrate-rename-row-49"))).not_to_have_class(
             re.compile(r"\bhas-drop\b")
         )
+        assert not _dropped(page, "49")
         expect(aoss_2930f.output).to_contain_text("untagged 1/48,1/A1,1/A2,1/A3,1/A4")
 
     def test_they_are_sent_again_while_the_devices_are_the_same(
@@ -326,6 +335,7 @@ class TestAcceptedDecisionsAreForOnePairing:
         expect(page.locator(_tid("migrate-rename-row-49"))).to_have_class(
             re.compile(r"\bhas-drop\b")
         )
+        assert _dropped(page, "49") and not _dropped(page, "48")
         body = _apply(page)
         assert body["port_rename_map"] == {"49": None, "50": None, "51": None, "52": None}
         expect(_plan(page)).to_have_attribute("data-state", "ok")
@@ -415,6 +425,7 @@ class TestAcceptedDecisionsAreForOnePairing:
         expect(page.locator(_tid("migrate-rename-row-49"))).not_to_have_class(
             re.compile(r"\bhas-drop\b")
         )
+        assert _dropped(page, "3") and not _dropped(page, "49")
         page.locator(_tid("migrate-device-target-member-0-bay-A")).select_option(value="JL083A")
         expect(page.locator(_tid("migrate-device-target-note-ports"))).to_contain_text("52 ports")
         assert _apply(page)["port_rename_map"] == {"3": None}
@@ -445,6 +456,7 @@ class TestAcceptedDecisionsAreForOnePairing:
         expect(page.locator(_tid("migrate-rename-row-3"))).to_have_class(
             re.compile(r"\bhas-drop\b")
         )
+        assert _dropped(page, "3") and not _dropped(page, "8")
         # Port 49 is dropped by the mapping, not by an entry.
         expect(page.locator(_tid("migrate-rename-row-49"))).to_have_class(
             re.compile(r"\bhas-auto-drop\b")
@@ -484,6 +496,10 @@ class TestAcceptedDecisionsAreForOnePairing:
         expect(off).to_have_text("1 on a name the target does not list, by your own entries")
         expect(page.locator(_tid("migrate-rename-row-fortilink"))).to_have_class(
             re.compile(r"\bhas-offtarget\b")
+        )
+        assert alike(
+            painted_background(page.locator(_tid("migrate-rename-source-fortilink"))),
+            painted_token(page, PANE, "--badge-partial-bg"),
         )
         expect(page.locator(_tid("migrate-rename-offtarget-fortilink"))).to_have_attribute(
             "title", "ge-0/0/1 is not a port the declared target device lists"
@@ -578,7 +594,7 @@ class TestTheStripCountsWhatHappened:
         expect(flag).to_have_text("no PoE on the target port")
         expect(flag).to_have_attribute("data-level", "warn")
         assert ink(flag) == token_ink(page, "--badge-partial-fg")
-        expect(page.locator(_tid("migrate-rename-why-49"))).to_contain_text("slower: 10gig")
+        expect(page.locator(_tid("migrate-rename-flag-49-0"))).to_have_text("slower: 10gig → gig")
         choose_override(page, "1", "__DROP__")
         _apply(page)
         expect(poe).to_have_text("47 PoE ports on a port without PoE")
@@ -686,15 +702,50 @@ def _apply_and_read(page: Page) -> dict:
 # ---------------------------------------------------------------------------
 
 
+#: The least contrast text in the modal is held to, in either theme:
+#: 4.5 on the plain surface.  On one of the theme's tints it is less,
+#: and known: the amber strip and notes of the light theme are the
+#: lowest of them at 3.44, from Chromium on Windows and on Linux
+#: alike.  A tint is a blend, and ``alike`` lets a painted colour be
+#: two off in each channel; two darker, that ground reads 3.38.  So a
+#: tint is held to a floor that is under what it measures by more
+#: than that rounding -- and far over what the floor is for: a
+#: warning chip once read 2.7.  The surface is opaque and is painted
+#: exactly; the amber ink on it measures 4.57.
+ON_THE_SURFACE = 4.5
+ON_A_TINT = 3.3
+
+THEMES = ["light", "dark"]
+
+
+def _in_theme(page: Page, mode: str) -> None:
+    page.evaluate("(mode) => NcTheme.set(null, mode)", mode)
+
+
+def _contrast_of(written: Locator) -> float:
+    """The contrast of *written*'s text with what is painted behind it."""
+    return contrast(ink(written), painted_background(written))
+
+
+def _without_the_toast(page: Page) -> None:
+    """Put the toast away.  It is drawn over the modal's footer, and
+    what is read next is the footer's own paint."""
+    page.evaluate("document.getElementById('_toast').style.display = 'none'")
+
+
 class TestWhatIsPainted:
     """A state is an attribute; what the operator sees is paint.  With
     the strip's class fixed at ``plan-ok`` and its ``data-state``
     right, every test passed and the strip was green while it blocked
-    the job.  Each state is read here as the colour that was drawn."""
+    the job.  Each state is read here as the colour that was drawn --
+    in both themes: a colour written out as the light theme's value
+    is right in one of them, and can be unreadable in the other."""
 
+    @pytest.mark.parametrize("mode", THEMES)
     def test_the_strip_is_the_colour_of_its_state(
-        self, aoss_2930f: MigratePage, page: Page,
+        self, aoss_2930f: MigratePage, page: Page, mode: str,
     ) -> None:
+        _in_theme(page, mode)
         expect(_source_note(page)).to_be_visible()
         # No pair yet: a hint, in the information colours.
         _pick_target(page, TARGET_2930M_48G)
@@ -704,31 +755,46 @@ class TestWhatIsPainted:
         amber = painted_token(page, TOP, "--badge-partial-bg")
         red = painted_token(page, TOP, "--badge-failed-bg")
         assert len({info, green, amber, red}) == 4
+        # The ink is read where the words are -- the hint, and then the
+        # heading -- not on the strip that holds them: a rule on the
+        # one is not seen on the other.
+        hint = page.locator(_tid("migrate-rename-plan-hint"))
+        heading = page.locator(_tid("migrate-rename-plan-title"))
         assert alike(painted_background(_plan(page)), info)
+        assert ink(hint) == token_ink(page, "--alert-info-fg")
+        assert contrast(ink(hint), info) >= ON_A_TINT, mode
         # Four ports need a decision: amber.
         _apply(page)
         expect(_plan(page)).to_have_attribute("data-state", "warn")
         assert alike(painted_background(_plan(page)), amber)
-        assert ink(_plan(page)) == token_ink(page, "--badge-partial-fg")
+        assert ink(heading) == token_ink(page, "--badge-partial-fg")
+        assert contrast(ink(heading), amber) >= ON_A_TINT, mode
         # Every port has a place: green.
         page.locator(_tid("migrate-device-target-member-0-bay-A")).select_option(value="JL083A")
         expect(page.locator(_tid("migrate-device-target-note-ports"))).to_contain_text("52 ports")
         _apply(page)
         expect(_plan(page)).to_have_attribute("data-state", "ok")
         assert alike(painted_background(_plan(page)), green)
-        assert ink(_plan(page)) == token_ink(page, "--badge-completed-fg")
+        assert ink(heading) == token_ink(page, "--badge-completed-fg")
+        assert contrast(ink(heading), green) >= ON_A_TINT, mode
 
+    @pytest.mark.parametrize("mode", THEMES)
     def test_a_strip_that_blocks_is_red_and_so_is_its_chip_and_its_row(
-        self, page: Page, live_server_url: str,
+        self, page: Page, live_server_url: str, mode: str,
     ) -> None:
         _translate(
             page, live_server_url, "mikrotik_routeros", "mikrotik_routeros",
             _ROUTEROS_NAMED.replace("core-a", "bond1"),
         )
+        _in_theme(page, mode)
         _declare(page, "CRS310-8G+2S+", "CCR2004-1G-12S+2XS")
         _apply(page)
         expect(_plan(page)).to_have_attribute("data-state", "block")
-        assert alike(painted_background(_plan(page)), painted_token(page, TOP, "--badge-failed-bg"))
+        strip = painted_background(_plan(page))
+        assert alike(strip, painted_token(page, TOP, "--badge-failed-bg"))
+        heading = page.locator(_tid("migrate-rename-plan-title"))
+        assert ink(heading) == token_ink(page, "--badge-failed-fg")
+        assert contrast(ink(heading), strip) >= ON_A_TINT, mode
         # Under a red strip the footer does not say "Applied." and stop,
         # and the toast is not the green one.
         expect(page.locator(_tid("migrate-rename-status"))).to_have_text(
@@ -741,66 +807,94 @@ class TestWhatIsPainted:
         assert ink(chip) == red
         ground = painted_background(chip)
         assert alike(ground, painted_token(page, TOP, "--surface"))
-        assert contrast(ink(chip), ground) >= 4.5
+        assert contrast(ink(chip), ground) >= ON_THE_SURFACE, mode
         # The row: the flag that holds the job is red, the remark about
-        # the port is not, and the row carries a mark of its own.
+        # the port is not, and the row carries a mark of its own -- a
+        # red bar on its leading edge, which a row that holds nothing
+        # does not have.  The bar is read from the cell's own pixels.
         row = page.locator(_tid("migrate-rename-row-bond1"))
         expect(row).to_have_class(re.compile(r"\bhas-block\b"))
+        assert painted_bar(page.locator(_tid("migrate-rename-source-bond1"))) == red
+        assert painted_bar(page.locator(_tid("migrate-rename-source-ether1"))) is None
         flags = page.locator('[data-testid^="migrate-rename-flag-bond1-"]')
         blocking = flags.filter(has_text="no line of the output finds this port")
         expect(blocking).to_be_visible()
         expect(blocking).to_have_attribute("data-level", "block")
         assert ink(blocking) == red
+        assert _contrast_of(blocking) >= ON_THE_SURFACE, mode
         remark = flags.filter(has_text="in the device model")
         expect(remark).to_be_visible()
         expect(remark).to_have_attribute("data-level", "info")
         assert ink(remark) == token_ink(page, "--text-muted")
+        assert _contrast_of(remark) >= ON_THE_SURFACE, mode
         mark = page.locator(_tid("migrate-rename-block-bond1"))
         expect(mark).to_be_visible()
         expect(mark).to_have_attribute("title", re.compile(r"^no line of the output finds this port"))
         # The report under a strip that needs the operator is open.
         expect(page.locator(_tid("migrate-rename-plan-report")).locator("li").first).to_be_visible()
 
+    @pytest.mark.parametrize("mode", THEMES)
     def test_a_note_is_the_colour_of_what_it_says(
-        self, aoss_2930f: MigratePage, page: Page,
+        self, aoss_2930f: MigratePage, page: Page, mode: str,
     ) -> None:
+        _in_theme(page, mode)
         expect(_source_note(page)).to_be_visible()
         # A bay that was not stated: amber.
         _pick_target(page, TARGET_2930M_48G)
         note = _target_note(page)
-        expect(page.locator(_tid("migrate-device-target-note-unstated"))).to_be_visible()
-        assert alike(painted_background(note), painted_token(page, TOP, "--badge-partial-bg"))
-        assert ink(note) == token_ink(page, "--badge-partial-fg")
+        unstated = page.locator(_tid("migrate-device-target-note-unstated"))
+        expect(unstated).to_be_visible()
+        amber = painted_background(note)
+        assert alike(amber, painted_token(page, TOP, "--badge-partial-bg"))
+        # The ground is the note's; the ink is that of the part of it
+        # that holds the words.
+        assert ink(unstated) == token_ink(page, "--badge-partial-fg")
+        assert contrast(ink(unstated), amber) >= ON_A_TINT, mode
         # Stated: no colour of its own.
         page.locator(_tid("migrate-device-target-member-0-bay-A")).select_option(value="JL083A")
         expect(page.locator(_tid("migrate-device-target-note-unstated"))).to_have_count(0)
-        expect(page.locator(_tid("migrate-device-target-note-evidence"))).to_have_text(
+        graded = page.locator(_tid("migrate-device-target-note-evidence"))
+        expect(graded).to_have_text(
             "Port names from published vendor sources (no capture of this deployment here)"
         )
         plain = painted_background(note)
         assert not alike(plain, painted_token(page, TOP, "--badge-partial-bg"))
-        # Refused by the server: red.
+        assert ink(graded) == token_ink(page, "--text-muted")
+        assert contrast(ink(graded), plain) >= ON_THE_SURFACE, mode
+        # Refused by the server: red.  The number is typed and the
+        # field left with Tab, as at a keyboard: leaving it is the
+        # field's one change, and takes the focus off it.
         member = page.locator(_tid("migrate-device-target-member-0-id"))
+        assert painted_ring(member) is None
         member.fill("11")
-        member.dispatch_event("change")
-        expect(page.locator(_tid("migrate-device-target-note-error"))).to_be_visible()
-        assert alike(painted_background(note), painted_token(page, TOP, "--badge-failed-bg"))
-        assert ink(note) == token_ink(page, "--badge-failed-fg")
-        # The field itself is marked: the browser knows 11 is out of range.
+        member.press("Tab")
+        expect(member).not_to_be_focused()
+        error = page.locator(_tid("migrate-device-target-note-error"))
+        expect(error).to_be_visible()
+        refused = painted_background(note)
+        assert alike(refused, painted_token(page, TOP, "--badge-failed-bg"))
+        assert ink(error) == token_ink(page, "--badge-failed-fg")
+        assert contrast(ink(error), refused) >= ON_A_TINT, mode
+        # The field itself is marked.  The browser knows 11 is out of
+        # range; what the operator sees of that is a ring the page
+        # draws round the field, in the error's ink.  It is read from
+        # the pixels beside the field -- with the focus elsewhere,
+        # since the focus has an outline of its own out there.
         assert member.evaluate("el => el.matches(':invalid')")
+        assert painted_ring(member) == token_ink(page, "--badge-failed-fg")
         # And the source, which a real capture proves, says so.
         expect(page.locator(_tid("migrate-device-source-note-evidence"))).to_have_text(
             "Port names checked against a real capture of this deployment"
         )
 
-    @pytest.mark.parametrize("mode", ["light", "dark"])
+    @pytest.mark.parametrize("mode", THEMES)
     def test_a_warning_chip_is_legible_in_any_strip(
         self, aoss_2930f: MigratePage, page: Page, mode: str,
     ) -> None:
         """A chip sits in a strip of any colour.  Laid on the strip as
         a tint of its own it was darker than either and read 2.7:1;
         on the opaque surface it reads the same wherever it is."""
-        page.evaluate("(mode) => NcTheme.set(null, mode)", mode)
+        _in_theme(page, mode)
         expect(_source_note(page)).to_be_visible()
         _pick_target(page, TARGET_2930M_48G)
         _apply(page)
@@ -812,10 +906,31 @@ class TestWhatIsPainted:
             assert alike(ground, painted_token(page, TOP, "--surface")), name
             assert not alike(ground, painted_background(_plan(page))), name
             assert ink(chip) == token_ink(page, "--badge-partial-fg"), name
-            assert contrast(ink(chip), ground) >= 4.5, (name, mode)
+            assert contrast(ink(chip), ground) >= ON_THE_SURFACE, (name, mode)
         paired = page.locator(_tid("migrate-rename-plan-paired"))
         expect(paired).to_be_visible()
         expect(paired).to_have_text("48 paired")
+
+    @pytest.mark.parametrize("mode", THEMES)
+    def test_an_information_chip_is_legible(
+        self, aoss_2930f: MigratePage, page: Page, mode: str,
+    ) -> None:
+        """A remark that is no warning -- here, that the entries
+        changed since the mapping was made -- is in the page's own
+        ink, on the same opaque surface, under a strip of any colour."""
+        _in_theme(page, mode)
+        expect(_source_note(page)).to_be_visible()
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        _apply(page)
+        expect(_plan(page)).to_have_attribute("data-state", "ok")
+        choose_override(page, "3", "__DROP__")
+        chip = page.locator(_tid("migrate-rename-plan-unsent"))
+        expect(chip).to_be_visible()
+        ground = painted_background(chip)
+        assert alike(ground, painted_token(page, TOP, "--surface"))
+        assert not alike(ground, painted_background(_plan(page)))
+        assert ink(chip) == token_ink(page, "--text-primary")
+        assert contrast(ink(chip), ground) >= ON_THE_SURFACE, mode
 
     def test_a_section_with_a_row_that_needs_a_decision_does_not_stay_closed(
         self, aoss_2930f: MigratePage, page: Page,
@@ -827,7 +942,7 @@ class TestWhatIsPainted:
         _pick_target(page, TARGET_2930M_48G)
         _apply(page)
         section = page.locator(_tid("migrate-rename-section-physical"))
-        expect(page.locator(_tid("migrate-rename-decision-count-physical"))).to_have_text(
+        expect(page.locator(_tid("migrate-rename-section-decisions-physical"))).to_have_text(
             "4 need a decision"
         )
         page.locator(_tid("migrate-rename-section-summary-physical")).click()
@@ -845,17 +960,24 @@ class TestWhatIsPainted:
         page.locator(_tid("migrate-rename-rail-ports")).click()
         expect(section).not_to_have_attribute("open", "")
 
+    @pytest.mark.parametrize("mode", THEMES)
     def test_a_row_that_needs_a_decision_is_marked_on_its_edge(
-        self, aoss_2930f: MigratePage, page: Page,
+        self, aoss_2930f: MigratePage, page: Page, mode: str,
     ) -> None:
+        _in_theme(page, mode)
         expect(_source_note(page)).to_be_visible()
         _pick_target(page, TARGET_2930M_48G)
         _apply(page)
+        # The bar is the leading pixels of the row's first cell: a
+        # rule that asks for one no pixels wide draws none.
         needs = page.locator(_tid("migrate-rename-source-49"))
         plain = page.locator(_tid("migrate-rename-source-1"))
-        assert needs.evaluate("el => getComputedStyle(el).boxShadow") != "none"
-        assert plain.evaluate("el => getComputedStyle(el).boxShadow") == "none"
-        expect(page.locator(_tid("migrate-rename-decision-49"))).to_be_visible()
+        assert painted_bar(needs) == token_ink(page, "--badge-partial-fg")
+        assert painted_bar(plain) is None
+        mark = page.locator(_tid("migrate-rename-decision-49"))
+        expect(mark).to_be_visible()
+        assert ink(mark) == token_ink(page, "--badge-partial-fg")
+        assert _contrast_of(mark) >= ON_THE_SURFACE, mode
         # The table reads in the order of the device, under its headers.
         rows = page.locator('[data-testid^="migrate-rename-row-"][data-plan-state]')
         expect(rows.first).to_have_attribute("data-testid", "migrate-rename-row-1")
@@ -1015,7 +1137,7 @@ class TestApplyIsHeldOnlyForAReasonItStates:
             held[0].continue_()
         expect(page.locator(_tid("migrate-rename-status"))).to_contain_text("Applied")
         _settle(page)
-        expect(button).to_have_text(re.compile(r"^Apply"))
+        expect(button).to_have_text("Apply & regenerate")
         expect(button).to_be_disabled()
         expect(page.locator(_tid("migrate-rename-apply-why"))).to_contain_text(
             "two rows end on one target name (1/9)"
@@ -1036,22 +1158,27 @@ class TestApplyIsHeldOnlyForAReasonItStates:
         expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
         expect(page.locator(_tid("migrate-rename-apply-why"))).to_be_hidden()
 
+    @pytest.mark.parametrize("mode", THEMES)
     def test_an_entry_that_takes_the_name_of_an_unchanged_port_holds_it(
-        self, page: Page, live_server_url: str,
+        self, page: Page, live_server_url: str, mode: str,
     ) -> None:
         """What the count is for: a port the config uses under an
         unchanged name holds that name against an entry of the
         operator's."""
         _translate(page, live_server_url, "aruba_aoss", "aruba_aoss", CAPTURE_2930F)
+        _in_theme(page, mode)
         page.locator(_tid("migrate-rename-open-btn")).click()
         expect(_source_note(page)).to_be_visible()
         field = page.locator(_tid("migrate-rename-override-1"))
         field.fill("2")
         expect(page.locator(_tid("migrate-rename-summary"))).to_contain_text("2 collisions")
         expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_disabled()
-        expect(page.locator(_tid("migrate-rename-apply-why"))).to_contain_text(
-            "two rows end on one target name (2)"
-        )
+        why = page.locator(_tid("migrate-rename-apply-why"))
+        expect(why).to_contain_text("two rows end on one target name (2)")
+        # Why it is held is in the footer, in the error's ink, and can
+        # be read there in either theme.
+        assert ink(why) == token_ink(page, "--badge-failed-fg")
+        assert _contrast_of(why) >= ON_THE_SURFACE, mode
         field.fill("")
         expect(page.locator(_tid("migrate-rename-apply-btn"))).to_be_enabled()
 
@@ -1344,8 +1471,12 @@ class TestWhatApplySendsForEveryFieldItOwns:
         source.select_option(value="profile:C9300-24UX")
         source_module = page.locator(_tid("migrate-device-source-module-select"))
         expect(source_module).to_be_visible()
+        ports = page.locator(_tid("migrate-device-source-note-ports"))
+        expect(ports).to_contain_text("33 ports")
         source_module.select_option(value="NM-2Q")
-        expect(page.locator(_tid("migrate-device-source-note-device"))).to_be_visible()
+        # The note is of the device WITH that module: eight 10G
+        # uplinks are two 40G.
+        expect(ports).to_have_text("27 ports: TenGigabitEthernet1/0/1 … FortyGigabitEthernet1/1/2")
         model = page.locator(_tid("migrate-rename-target-model-select"))
         model.select_option(value="C9300-24UX")
         target_module = page.locator(_tid("migrate-rename-target-module-select"))
@@ -1396,26 +1527,36 @@ class TestWhatApplySendsForEveryFieldItOwns:
         assert "target_deployment" not in _apply(page)
 
     @pytest.mark.parametrize(
-        "rail,field,value,key,sent",
+        "rail,field,row,value,key,sent",
         [
-            ("local-users", "migrate-rename-local-user-override-netops", "netadmin",
+            ("local-users", "migrate-rename-local-user-override-netops",
+             "migrate-rename-local-user-row-netops", "netadmin",
              "local_user_rename_map", {"netops": "netadmin"}),
-            ("snmp", "migrate-rename-snmp-community-override", "fakeOtherCommunity",
+            ("snmp", "migrate-rename-snmp-community-override",
+             "migrate-rename-snmp-community-row", "fakeOtherCommunity",
              "snmp_community_rename_map", {"fakeCommunity": "fakeOtherCommunity"}),
-            ("snmpv3", "migrate-rename-snmpv3-user-override-opsuser", "opsuser2",
+            ("snmpv3", "migrate-rename-snmpv3-user-override-opsuser",
+             "migrate-rename-snmpv3-user-row-opsuser", "opsuser2",
              "snmpv3_user_rename_map", {"opsuser": "opsuser2"}),
         ],
+        ids=["local-users", "snmp", "snmpv3"],
     )
     def test_reset_all_takes_each_panes_map_out_of_the_next_request(
         self, page: Page, live_server_url: str,
-        rail: str, field: str, value: str, key: str, sent: dict,
+        rail: str, field: str, row: str, value: str, key: str, sent: dict,
     ) -> None:
         _translate(page, live_server_url, "cisco_iosxe_cli", "cisco_iosxe_cli", _CISCO_WITH_EVERYTHING)
         page.locator(_tid("migrate-rename-open-btn")).click()
         page.locator(_tid(f"migrate-rename-rail-{rail}")).click()
+        said = page.locator(_tid(row))
+        expect(said).to_contain_text("(no rewrite)")
         page.locator(_tid(field)).fill(value)
         assert _apply(page)[key] == sent
-        # The pane is redrawn from the job that came back.
+        # The pane is redrawn from the job that came back: the row
+        # says what the job renamed.  (The field holds what was typed
+        # whether or not anything is redrawn.)
+        expect(said).to_contain_text(value)
+        expect(said).not_to_contain_text("(no rewrite)")
         expect(page.locator(_tid(field))).to_have_value(value)
         page.locator(_tid("migrate-rename-modal-reset")).click()
         assert key not in _apply(page)
@@ -1719,6 +1860,94 @@ class TestAServerThatDoesNotAnswer:
         expect(page.locator(_tid("migrate-device-source-note-checking"))).to_have_count(0)
         page.unroute("**/api/v1/migration/inventory")
 
+    def test_a_late_detection_is_not_drawn(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """The same for what a config says of its own hardware.  An
+        answer about the last config, arriving after another has been
+        translated, is not about the config on the page: the list
+        stays "(not declared)", with no "Read from the config" lines
+        that this config does not hold."""
+        held: list = []
+
+        def hold_the_first(route) -> None:
+            if held:
+                route.continue_()
+            else:
+                held.append(route)
+
+        page.route("**/api/v1/migration/detect-deployment", hold_the_first)
+        _translate(page, live_server_url, "aruba_aoss", "aruba_aoss", CAPTURE_2930F)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        reading = page.locator(_tid("migrate-device-source-note-detecting"))
+        expect(reading).to_be_visible()
+        # A config that states no device, asked about and answered for.
+        with page.expect_response("**/api/v1/migration/detect-deployment") as second:
+            _translate_behind_the_modal(page, "aruba_aoss", "aruba_aoss", _NO_DEVICE_STATED)
+        second.value.finished()
+        source = page.locator(_tid("migrate-device-source-model-select"))
+        expect(page.locator(_tid("migrate-rename-row-7"))).to_be_visible()
+        expect(reading).to_have_count(0)
+        expect(source).to_have_value("")
+        assert len(held) == 1
+        # Now the first config's answer: a 2930F, read from its banner.
+        with page.expect_response("**/api/v1/migration/detect-deployment") as late:
+            held[0].continue_()
+        assert "JL260A" in json.dumps(late.value.json())
+        _settle(page)
+        expect(source).to_have_value("")
+        expect(page.locator(_tid("migrate-device-source-note-device"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-device-source-note-read-from"))).to_have_count(0)
+        page.unroute("**/api/v1/migration/detect-deployment")
+
+    def test_nor_is_it_kept_for_the_next_opening(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """With the modal CLOSED while the next config is translated,
+        nothing is asked about that config until the modal opens --
+        so nothing else stands between the late answer and the page.
+        Kept, it was the next config's device at the next opening:
+        "52 ports" of a 2930F beside "The config does not say which
+        device it came from"."""
+        held: list = []
+
+        def hold_the_first(route) -> None:
+            if held:
+                route.continue_()
+            else:
+                held.append(route)
+
+        page.route("**/api/v1/migration/detect-deployment", hold_the_first)
+        mp = _translate(page, live_server_url, "aruba_aoss", "aruba_aoss", CAPTURE_2930F)
+        opener = page.locator(_tid("migrate-rename-open-btn"))
+        opener.click()
+        reading = page.locator(_tid("migrate-device-source-note-detecting"))
+        expect(reading).to_be_visible()
+        page.locator(_tid("migrate-rename-modal-close")).click()
+        expect(page.locator(_tid("migrate-rename-modal"))).to_be_hidden()
+        # A config that states no device, translated behind the closed
+        # modal: it is not asked about yet.
+        _translate_behind_the_modal(page, "aruba_aoss", "aruba_aoss", _NO_DEVICE_STATED)
+        expect(mp.output).to_contain_text("printer")
+        assert len(held) == 1
+        # Now the first config's answer: a 2930F, read from its banner.
+        with page.expect_response("**/api/v1/migration/detect-deployment") as late:
+            held[0].continue_()
+        assert "JL260A" in json.dumps(late.value.json())
+        _settle(page)
+        # Opened, the modal asks about the config on the page, and is
+        # answered: it states no device.
+        with page.expect_response("**/api/v1/migration/detect-deployment") as own:
+            opener.click()
+        assert "JL260A" not in json.dumps(own.value.json())
+        expect(page.locator(_tid("migrate-rename-row-7"))).to_be_visible()
+        expect(reading).to_have_count(0)
+        _settle(page)
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value("")
+        expect(page.locator(_tid("migrate-device-source-note-device"))).to_have_count(0)
+        expect(page.locator(_tid("migrate-device-source-note-read-from"))).to_have_count(0)
+        page.unroute("**/api/v1/migration/detect-deployment")
+
     def test_apply_stays_held_while_it_is_out_and_a_late_answer_is_dropped(
         self, aoss_2930f: MigratePage, page: Page,
     ) -> None:
@@ -1750,6 +1979,7 @@ class TestAServerThatDoesNotAnswer:
         # A row edit redraws the summary.  The button stays held.
         choose_override(page, "7", "__DROP__")
         expect(page.locator(_tid("migrate-rename-row-7"))).to_have_class(re.compile(r"\bhas-drop\b"))
+        assert _dropped(page, "7") and not _dropped(page, "8")
         expect(button).to_be_disabled()
         # And Apply asked for by any other road does not go out twice.
         sent: list[str] = []
@@ -1771,8 +2001,43 @@ class TestAServerThatDoesNotAnswer:
         expect(aoss_2930f.output).to_contain_text("printer")
         expect(aoss_2930f.output).not_to_contain_text("1/A1")
         expect(page.locator(_tid("migrate-rename-status"))).not_to_contain_text("Applied")
-        expect(button).to_have_text(re.compile(r"^Apply"))
+        expect(button).to_have_text("Apply & regenerate")
         expect(button).to_be_enabled()
+        page.unroute("**/api/v1/migration/plan")
+
+    def test_devices_changed_mid_apply_are_stale(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """The mapping that comes back is of the devices that were
+        SENT.  With a module taken out of its bay while Apply is out,
+        it is the mapping of a device that is no longer the one
+        declared: the strip says so, and is not the green of a
+        pairing that stands."""
+        expect(_source_note(page)).to_be_visible()
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        ports = page.locator(_tid("migrate-device-target-note-ports"))
+        expect(ports).to_contain_text("52 ports")
+        held: list = []
+        page.route("**/api/v1/migration/plan", lambda route: held.append(route))
+        with page.expect_request("**/api/v1/migration/plan") as sent:
+            page.locator(_tid("migrate-rename-apply-btn")).click()
+        body = json.loads(sent.value.post_data)
+        assert body["target_deployment"]["members"][0]["modules"] == {"A": "JL083A"}
+        # While it is out: nothing fitted, 48 ports.
+        page.locator(_tid("migrate-device-target-member-0-bay-A")).select_option(value="__empty__")
+        expect(ports).to_contain_text("48 ports")
+        with page.expect_response("**/api/v1/migration/plan"):
+            held[0].continue_()
+        expect(page.locator(_tid("migrate-rename-status"))).to_contain_text("Applied")
+        # The table is the mapping that was asked for, module and all.
+        expect(page.locator(_tid("migrate-rename-auto-49"))).to_have_text("1/A1")
+        expect(_plan(page)).to_have_attribute("data-stale", "true")
+        expect(_plan(page)).to_have_attribute("data-state", "ready")
+        expect(page.locator(_tid("migrate-rename-plan-hint"))).to_have_text(
+            "The devices changed since this mapping was made — Apply to pair again."
+        )
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_count(0)
+        assert alike(painted_background(_plan(page)), painted_token(page, TOP, "--alert-info-bg"))
         page.unroute("**/api/v1/migration/plan")
 
 
@@ -2452,9 +2717,11 @@ class TestWhyAnApplyDidNotHappenStays:
         page.locator(_tid(buttons[1])).click(timeout=2_000)
         expect(page.locator(_tid("migrate-rename-modal"))).to_be_hidden()
 
+    @pytest.mark.parametrize("mode", THEMES)
     def test_the_reason_for_a_refusal_stays_in_the_footer(
-        self, aoss_2930f: MigratePage, page: Page,
+        self, aoss_2930f: MigratePage, page: Page, mode: str,
     ) -> None:
+        _in_theme(page, mode)
         status = page.locator(_tid("migrate-rename-status"))
         _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
         width = _box(page, "#mig-rename-apply-btn")["width"]
@@ -2469,6 +2736,7 @@ class TestWhyAnApplyDidNotHappenStays:
         expect(page.locator(_tid("toast"))).to_be_hidden(timeout=8_000)
         expect(status).to_contain_text("member id 11 is outside 1-10")
         expect(status).to_be_visible()
+        assert _contrast_of(status) >= ON_THE_SURFACE, mode
         assert aoss_2930f.output.inner_text() == before
         # A long reason wraps beside the buttons: they keep their size
         # and stay in the footer, the footer in the modal, and the table
@@ -2491,23 +2759,32 @@ class TestWhyAnApplyDidNotHappenStays:
         expect(status).to_have_text("Applied. Rendered output refreshed.")
         assert status.get_attribute("data-state") is None
         assert alike(ink(status), token_ink(page, "--text-faint"))
+        _without_the_toast(page)
+        assert _contrast_of(status) >= ON_THE_SURFACE, mode
 
+    @pytest.mark.parametrize("mode", THEMES)
     def test_a_report_after_a_refusal_is_not_drawn_as_the_error(
-        self, aoss_2930f: MigratePage, page: Page,
+        self, aoss_2930f: MigratePage, page: Page, mode: str,
     ) -> None:
         """The footer's line has more than one writer.  Each clears
         what marked the line before it."""
+        _in_theme(page, mode)
         status = page.locator(_tid("migrate-rename-status"))
         _refuse(page)
         expect(status).to_have_attribute("data-state", "failed")
+        assert alike(ink(status), token_ink(page, "--badge-failed-fg"))
         page.locator(_tid("migrate-rename-modal-reset")).click()
         expect(status).to_have_text("All overrides cleared.")
         assert status.get_attribute("data-state") is None
         assert alike(ink(status), token_ink(page, "--text-faint"))
+        _without_the_toast(page)
+        assert _contrast_of(status) >= ON_THE_SURFACE, mode
 
+    @pytest.mark.parametrize("mode", THEMES)
     def test_an_apply_the_server_never_answered_says_so_and_stays(
-        self, aoss_2930f: MigratePage, page: Page,
+        self, aoss_2930f: MigratePage, page: Page, mode: str,
     ) -> None:
+        _in_theme(page, mode)
         status = page.locator(_tid("migrate-rename-status"))
         apply_button = page.locator(_tid("migrate-rename-apply-btn"))
         _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
@@ -2521,6 +2798,8 @@ class TestWhyAnApplyDidNotHappenStays:
         expect(status).to_have_attribute("data-state", "failed")
         assert alike(ink(status), token_ink(page, "--badge-failed-fg"))
         expect(page.locator(_tid("toast"))).to_contain_text("Not applied: the server did not answer")
+        _without_the_toast(page)
+        assert _contrast_of(status) >= ON_THE_SURFACE, mode
         # Nothing was applied, and Apply can be pressed again.
         assert aoss_2930f.output.inner_text() == before
         expect(apply_button).to_be_enabled()
@@ -3076,3 +3355,945 @@ class TestWhatTheStripCallsAPairing:
         _a_target_that_answers_after_the_press(page)
         page.evaluate("window.dispatchEvent(new Event('blur'))")
         page.wait_for_function(_ROW_ONE_IS_A_LIST, arg="migrate-rename-override-1")
+
+
+# ---------------------------------------------------------------------------
+# The other four panes
+# ---------------------------------------------------------------------------
+
+#: A VLAN, two users, a community and two SNMPv3 users whose names are
+#: properties every object has.
+_CISCO_NAMED_LIKE_PROPERTIES = """hostname cat
+!
+username constructor privilege 15 secret 0 fakeSecretForTests
+username netops privilege 15 secret 0 fakeSecretForTests
+!
+vlan 10
+ name users
+!
+vlan 20
+ name voice
+!
+interface GigabitEthernet1/0/1
+ description desk
+ switchport mode access
+ switchport access vlan 10
+!
+snmp-server community fakeCommunity RO
+snmp-server group opsgroup v3 priv
+snmp-server user toString opsgroup v3 auth sha fakeAuthPass priv aes 128 fakePrivPass
+snmp-server user opsuser opsgroup v3 auth sha fakeAuthPass priv aes 128 fakePrivPass
+!
+end
+"""
+
+
+def _open_pane(page: Page, base: str, rail: str, raw: str = _CISCO_WITH_EVERYTHING) -> None:
+    _translate(page, base, "cisco_iosxe_cli", "cisco_iosxe_cli", raw)
+    page.locator(_tid("migrate-rename-open-btn")).click()
+    page.locator(_tid(f"migrate-rename-rail-{rail}")).click()
+
+
+class TestTheOtherPanesCanBeTypedIn:
+    """The ports table was rebuilt on every key until the device
+    pickers landed, and its fix was made for that table only.  The
+    VLAN, local-user, SNMP and SNMPv3 tables still were: ``private9``
+    typed at a keyboard was ``p``, the focus was on the page, and ``p``
+    was the community Apply sent.  Every test of these panes used
+    ``fill``, which sets a value in one event."""
+
+    @pytest.mark.parametrize(
+        "rail,field,typed,key,sent",
+        [
+            ("local-users", "migrate-rename-local-user-override-netops", "netadmin9",
+             "local_user_rename_map", {"netops": "netadmin9"}),
+            ("snmp", "migrate-rename-snmp-community-override", "private9",
+             "snmp_community_rename_map", {"fakeCommunity": "private9"}),
+            ("snmpv3", "migrate-rename-snmpv3-user-override-opsuser", "opsuser9",
+             "snmpv3_user_rename_map", {"opsuser": "opsuser9"}),
+            ("vlans", "migrate-rename-vlan-override-10", "409",
+             "vlan_rename_map", {"10": 409}),
+        ],
+    )
+    def test_what_is_typed_is_held_and_sent(
+        self, page: Page, live_server_url: str,
+        rail: str, field: str, typed: str, key: str, sent: dict,
+    ) -> None:
+        _open_pane(page, live_server_url, rail)
+        box = page.locator(_tid(field))
+        box.click()
+        typed_into = box.element_handle()
+        box.press_sequentially(typed, delay=20)
+        expect(box).to_have_value(typed)
+        expect(box).to_be_focused()
+        # The field that was clicked, not a copy made for each key.
+        assert typed_into.evaluate("el => el.isConnected")
+        assert _apply(page)[key] == sent
+
+    def test_a_field_left_for_another_keeps_both(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        _open_pane(page, live_server_url, "local-users", _CISCO_NAMED_LIKE_PROPERTIES)
+        first = page.locator(_tid("migrate-rename-local-user-override-netops"))
+        second = page.locator(_tid("migrate-rename-local-user-override-constructor"))
+        first.click()
+        first.press_sequentially("alpha")
+        second.click()
+        # Leaving a field rebuilds the table, which marks its row, and
+        # the field that was clicked -- an element the rebuild made --
+        # has the focus.  What comes next is typed where the focus
+        # is: ``press_sequentially`` would put it on the field first.
+        expect(page.locator(_tid("migrate-rename-local-user-row-netops"))).to_have_class(
+            re.compile(r"\bhas-override\b")
+        )
+        expect(second).to_be_focused()
+        page.keyboard.type("beta")
+        expect(second).to_have_value("beta")
+        expect(second).to_be_focused()
+        expect(first).to_have_value("alpha")
+        assert _apply(page)["local_user_rename_map"] == {"netops": "alpha", "constructor": "beta"}
+
+    def test_a_drop_pressed_from_a_field_is_kept(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """Leaving the field rebuilds the table.  A rebuild between the
+        press on "drop" and its release replaces the link, and the
+        click goes nowhere: the rebuild waits for the release."""
+        _open_pane(page, live_server_url, "vlans", _CISCO_NAMED_LIKE_PROPERTIES)
+        box = page.locator(_tid("migrate-rename-vlan-override-10"))
+        box.click()
+        box.press_sequentially("30")
+        link = page.locator(_tid("migrate-rename-vlan-drop-20"))
+        place = link.bounding_box()
+        page.mouse.move(place["x"] + place["width"] / 2, place["y"] + place["height"] / 2)
+        page.mouse.down()
+        _settle(page)
+        page.mouse.up()
+        expect(page.locator(_tid("migrate-rename-vlan-row-20"))).to_have_class(re.compile(r"\bhas-drop\b"))
+        expect(page.locator(_tid("migrate-rename-vlan-override-10"))).to_have_value("30")
+        assert _apply(page)["vlan_rename_map"] == {"10": 30, "20": None}
+
+    @pytest.mark.parametrize("typed", ["4095", "0", "40950"])
+    def test_a_bad_vlan_id_is_kept_and_not_sent(
+        self, page: Page, live_server_url: str, typed: str,
+    ) -> None:
+        """An id out of range was not stored, and the field was left
+        showing it: after ``409`` and then ``4095`` the screen said
+        4095 and Apply sent 409."""
+        _open_pane(page, live_server_url, "vlans", _CISCO_NAMED_LIKE_PROPERTIES)
+        box = page.locator(_tid("migrate-rename-vlan-override-10"))
+        box.click()
+        box.press_sequentially("409")
+        box.press("Control+a")
+        box.press_sequentially(typed)
+        expect(box).to_have_value(typed)
+        expect(box).to_have_attribute("aria-invalid", "true")
+        expect(box).to_have_attribute("title", "Not a VLAN id (1-4094): nothing is sent for VLAN 10")
+        # Left, the table is rebuilt and the field is another element.
+        # It still says what was typed, and is still marked.  (Waited
+        # for: read at once, it is the field that was typed in.)
+        typed_into = box.element_handle()
+        page.locator(_tid("migrate-rename-vlan-override-20")).click()
+        page.wait_for_function("(field) => !field.isConnected", arg=typed_into)
+        expect(box).to_have_value(typed)
+        expect(box).to_have_attribute("aria-invalid", "true")
+        # And it is DRAWN as what it is: with the focus elsewhere, a
+        # red ring, where the field beside it has none.
+        other = page.locator(_tid("migrate-rename-vlan-override-20"))
+        page.locator(_tid("migrate-rename-apply-btn")).focus()
+        failed = painted_token(page, _tid("migrate-rename-vlan-row-10"), "--badge-failed-fg")
+        assert alike(painted_ring(box), failed), painted_ring(box)
+        assert painted_ring(other) is None
+        assert "vlan_rename_map" not in _apply(page)
+        # Put right, it is an entry like any other.
+        box = page.locator(_tid("migrate-rename-vlan-override-10"))
+        box.click()
+        box.press("Control+a")
+        box.press_sequentially("30")
+        assert box.get_attribute("aria-invalid") is None
+        assert _apply(page)["vlan_rename_map"] == {"10": 30}
+
+    def test_a_user_named_constructor_is_a_user(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """``constructor`` read from a map with a prototype is a
+        function: the row opened as overridden to it.  And read so
+        from what the job renamed, the row said the server had
+        renamed the user to ``function Object() { [native code] }``."""
+        _open_pane(page, live_server_url, "local-users", _CISCO_NAMED_LIKE_PROPERTIES)
+        row = page.locator(_tid("migrate-rename-local-user-row-constructor"))
+        expect(row).to_be_visible()
+        expect(row).not_to_have_class(re.compile(r"\bhas-override\b"))
+        expect(row).to_have_text("constructor(no rewrite)drop")
+        box = page.locator(_tid("migrate-rename-local-user-override-constructor"))
+        expect(box).to_have_value("")
+        expect(box).to_have_attribute("placeholder", "target username (leave blank to keep)")
+        box.click()
+        box.press_sequentially("builder")
+        body = _apply(page)
+        assert body["local_user_rename_map"] == {"constructor": "builder"}
+        page.locator(_tid("migrate-rename-rail-snmpv3")).click()
+        expect(page.locator(_tid("migrate-rename-snmpv3-user-row-toString"))).to_have_text(
+            "toString(no rewrite)drop"
+        )
+        v3 = page.locator(_tid("migrate-rename-snmpv3-user-override-toString"))
+        expect(v3).to_have_value("")
+        v3.click()
+        v3.press_sequentially("stringer")
+        body = _apply(page)
+        assert body["snmpv3_user_rename_map"] == {"toString": "stringer"}
+        assert body["local_user_rename_map"] == {"constructor": "builder"}
+        kept = page.evaluate(
+            """() => Object.keys(localStorage)
+                .filter((key) => key.startsWith('netcanon.rename-ack'))
+                .map((key) => localStorage.getItem(key))"""
+        )
+        (record,) = [json.loads(text) for text in kept]
+        assert record["local_users"] == {"constructor": "builder"}
+        assert record["snmpv3_users"] == {"toString": "stringer"}
+
+
+# ---------------------------------------------------------------------------
+# Smaller things in the modal
+# ---------------------------------------------------------------------------
+
+_SAME_HOST_ONE = (
+    "; JL260A Configuration Editor; Created on release #WC.16.07.0002\n"
+    'hostname "sw"\n'
+    'vlan 1\n   name "DEFAULT_VLAN"\n   untagged 1-4,49-50\n   exit\n'
+    'vlan 30\n   name "thirty"\n   tagged 49\n   exit\n'
+)
+_SAME_HOST_TWO = (
+    "; JL260A Configuration Editor; Created on release #WC.16.07.0002\n"
+    'hostname "sw"\n'
+    'vlan 1\n   name "DEFAULT_VLAN"\n   untagged 1-2,5-8\n   exit\n'
+)
+
+
+class TestOverridesKeptForAnotherConfig:
+    """Overrides are remembered by source, target and HOST NAME.  Two
+    configs can share a host name; the second then opened with the
+    first one's entries -- those for ports it does not have with no
+    row to show them, and Apply sent them all the same."""
+
+    def test_an_entry_with_no_row_is_left_out(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        _open(page, live_server_url, _SAME_HOST_ONE)
+        for port, target in (("3", "9/9"), ("49", "9/8"), ("1", "9/7")):
+            box = page.locator(_tid("migrate-rename-override-" + port))
+            box.click()
+            box.press_sequentially(target)
+        page.locator(_tid("migrate-rename-rail-vlans")).click()
+        vlan = page.locator(_tid("migrate-rename-vlan-override-30"))
+        vlan.click()
+        vlan.press_sequentially("31")
+        page.locator(_tid("migrate-rename-rail-ports")).click()
+        assert _apply(page)["port_rename_map"] == {"3": "9/9", "49": "9/8", "1": "9/7"}
+        # The other config of that host name, behind the modal.
+        _translate_behind_the_modal(page, "aruba_aoss", "aruba_aoss", _SAME_HOST_TWO)
+        expect(page.locator(_tid("migrate-rename-row-5"))).to_be_visible()
+        status = page.locator(_tid("migrate-rename-status"))
+        expect(status).to_contain_text("Restored prior overrides (1 port)")
+        expect(status).to_contain_text(
+            "3 kept for this host name are for a name this config does not have, and were left out."
+        )
+        expect(page.locator(_tid("migrate-rename-override-1"))).to_have_value("9/7")
+        expect(page.locator(_tid("migrate-rename-row-3"))).to_have_count(0)
+        body = _apply(page)
+        assert body["port_rename_map"] == {"1": "9/7"}
+        assert "vlan_rename_map" not in body
+
+    def test_what_was_left_out_is_still_kept(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """Left out of the second config, the first one's entries
+        were also dropped from what the browser keeps: back on the
+        first config one port came back of three, and the VLAN did
+        not."""
+        _open(page, live_server_url, _SAME_HOST_ONE)
+        for port, target in (("3", "9/9"), ("49", "9/8"), ("1", "9/7")):
+            box = page.locator(_tid("migrate-rename-override-" + port))
+            box.click()
+            box.press_sequentially(target)
+        page.locator(_tid("migrate-rename-rail-vlans")).click()
+        vlan = page.locator(_tid("migrate-rename-vlan-override-30"))
+        vlan.click()
+        vlan.press_sequentially("31")
+        page.locator(_tid("migrate-rename-rail-ports")).click()
+        first = _apply(page)
+        _translate_behind_the_modal(page, "aruba_aoss", "aruba_aoss", _SAME_HOST_TWO)
+        expect(page.locator(_tid("migrate-rename-row-5"))).to_be_visible()
+        _settle(page)
+        # An entry of the second config's own, so that a save is made.
+        box = page.locator(_tid("migrate-rename-override-5"))
+        box.click()
+        box.press_sequentially("9/5")
+        assert _apply(page)["port_rename_map"] == {"1": "9/7", "5": "9/5"}
+        (kept,) = _saved_overrides(page).values()
+        assert kept["ports"] == {"3": "9/9", "49": "9/8", "1": "9/7", "5": "9/5"}
+        assert kept["vlans"] == {"30": 31}
+        # Back on the first config: its three ports and its VLAN.
+        _translate_behind_the_modal(page, "aruba_aoss", "aruba_aoss", _SAME_HOST_ONE)
+        expect(page.locator(_tid("migrate-rename-row-49"))).to_be_visible()
+        _settle(page)
+        for port, target in (("3", "9/9"), ("49", "9/8"), ("1", "9/7")):
+            expect(page.locator(_tid("migrate-rename-override-" + port))).to_have_value(target)
+        again = _apply(page)
+        assert again["port_rename_map"] == first["port_rename_map"]
+        assert again["vlan_rename_map"] == first["vlan_rename_map"] == {"30": 31}
+
+    def test_reset_all_leaves_the_other_configs_entries(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        _open(page, live_server_url, _SAME_HOST_ONE)
+        for port, target in (("3", "9/9"), ("1", "9/7")):
+            box = page.locator(_tid("migrate-rename-override-" + port))
+            box.click()
+            box.press_sequentially(target)
+        _apply(page)
+        _translate_behind_the_modal(page, "aruba_aoss", "aruba_aoss", _SAME_HOST_TWO)
+        expect(page.locator(_tid("migrate-rename-row-5"))).to_be_visible()
+        _settle(page)
+        page.locator(_tid("migrate-rename-modal-reset")).click()
+        expect(page.locator(_tid("migrate-rename-override-1"))).to_have_value("")
+        # Port 1 is this config's too and is forgotten; port 3 is not.
+        (kept,) = _saved_overrides(page).values()
+        assert kept["ports"] == {"3": "9/9"}
+
+
+    def test_another_hosts_entries_do_not_follow(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """What is set aside is for one host name.  A config of
+        another host that has nothing kept starts with nothing set
+        aside: the first host's entries are not written into its
+        record."""
+        _open(page, live_server_url, _SAME_HOST_ONE)
+        box = page.locator(_tid("migrate-rename-override-3"))
+        box.click()
+        box.press_sequentially("9/9")
+        _apply(page)
+        # The second config of that host: port 3 is set aside.
+        _translate_behind_the_modal(page, "aruba_aoss", "aruba_aoss", _SAME_HOST_TWO)
+        expect(page.locator(_tid("migrate-rename-row-5"))).to_be_visible()
+        _settle(page)
+        # A config of another host, with a port 5 of its own.
+        other = _SAME_HOST_TWO.replace('hostname "sw"', 'hostname "other"')
+        assert other != _SAME_HOST_TWO
+        _translate_behind_the_modal(page, "aruba_aoss", "aruba_aoss", other)
+        expect(page.locator(_tid("migrate-rename-row-5"))).to_be_visible()
+        _settle(page)
+        box = page.locator(_tid("migrate-rename-override-5"))
+        box.click()
+        box.press_sequentially("9/5")
+        _apply(page)
+        records = _saved_overrides(page)
+        assert sorted(record["ports"] for record in records.values() if "5" in record["ports"]) == [
+            {"5": "9/5"}
+        ]
+
+
+class TestSmallerThingsInTheModal:
+    def test_a_long_name_does_not_slide_the_top(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """The table's cells and the footer break a name anywhere; the
+        lines under the strip and the notes did not, and one long name
+        slid the pickers, the notes and the strip off to the left."""
+        name = "x" * 300
+        raw = _SAME_HOST_TWO + f'interface {name}\n   name "long"\n   exit\n'
+        _open(page, live_server_url, raw)
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        _apply(page)
+        expect(page.locator(_tid("migrate-rename-plan-report"))).to_contain_text(name)
+        widths = page.evaluate(
+            """() => {
+                const top = document.getElementById('mig-rename-modal-top');
+                top.scrollLeft = 5000;
+                return [top.scrollWidth, top.clientWidth, top.scrollLeft];
+            }"""
+        )
+        assert widths[0] <= widths[1] + 1 and widths[2] == 0, widths
+
+    def test_a_closed_list_is_wide_enough_to_read(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """With a remark in the cell beside it the list was ninety-nine
+        pixels wide: ``sfp-sfpplus11`` and ``sfp-sfpplus12`` both read
+        ``sfp-sfpplu``."""
+        _translate(page, live_server_url, "mikrotik_routeros", "mikrotik_routeros", _ROUTEROS_NAMED)
+        _declare(page, "CRS310-8G+2S+", "CCR2004-1G-12S+2XS")
+        _apply(page)
+        choose_override(page, "ether1", "sfp-sfpplus12")
+        rem = page.evaluate("parseFloat(getComputedStyle(document.documentElement).fontSize)")
+        for port in ("ether1", "core-a"):
+            box = page.locator(_tid("migrate-rename-override-" + port)).bounding_box()
+            assert box["width"] >= 11 * rem - 1, (port, box)
+        fits = page.locator(_tid("migrate-rename-override-ether1")).evaluate(
+            """(list) => {
+                const probe = document.createElement('span');
+                probe.style.font = getComputedStyle(list).font;
+                probe.style.visibility = 'hidden';
+                probe.textContent = list.options[list.selectedIndex].textContent;
+                document.body.appendChild(probe);
+                const needed = probe.getBoundingClientRect().width;
+                probe.remove();
+                return [needed, list.getBoundingClientRect().width];
+            }"""
+        )
+        assert fits[0] + 24 <= fits[1], fits
+        # The table still fits its pane.
+        pane = page.evaluate(
+            """() => {
+                const pane = document.getElementById('mig-rename-table-pane');
+                return [pane.scrollWidth, pane.clientWidth];
+            }"""
+        )
+        assert pane[0] <= pane[1] + 1, pane
+
+    def test_profiles_are_under_their_own_heading(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """Four 2930F switches are both a flat profile and a family
+        model, under the same words.  The profiles go under a heading
+        that says what they are."""
+        groups = page.locator(_tid("migrate-rename-target-model-select")).evaluate(
+            """(list) => Array.from(list.options).filter((o) => o.value).map((o) => [
+                o.textContent, o.parentElement.tagName === 'OPTGROUP' ? o.parentElement.label : '',
+            ])"""
+        )
+        flat = [label for label, group in groups if group == "Profiles — one fixed port list"]
+        family = [label for label, group in groups if "model family" in group]
+        assert "Aruba 2930F-48G-4SFP (JL260A)" in flat and "Aruba 2930F-48G-4SFP (JL260A)" in family
+        assert all(group for _label, group in groups), groups
+        # The families come first, as in the source list.
+        assert groups[0][1].endswith("model family (mode, modules, stack members)")
+
+    def test_a_vendor_with_no_families_has_none(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        _translate(page, live_server_url, "cisco_iosxe_cli", "cisco_iosxe_cli", _CISCO_SRC)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        page.locator(_tid("migrate-rename-target-vendor-select")).select_option(value="cisco_iosxe")
+        parents = page.locator(_tid("migrate-rename-target-model-select")).evaluate(
+            "(list) => Array.from(list.options).map((o) => o.parentElement.tagName)"
+        )
+        assert set(parents) == {"SELECT"} and len(parents) > 3
+
+    def test_late_profiles_keep_the_chosen_vendor(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """The vendor list is filled by the model families too.  The
+        profiles, arriving after a family model was chosen, refilled it
+        bare: "(none)" over a model, a mode, a member and a bay."""
+        held: list = []
+        page.route("**/api/v1/migration/target-profiles", lambda route: held.append(route))
+        _translate(page, live_server_url, "aruba_aoss", "aruba_aoss", CAPTURE_2930F)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        expect(_source_note(page)).to_be_visible()
+        # The vendor list is there without the profiles: the families filled it.
+        vendor = page.locator(_tid("migrate-rename-target-vendor-select"))
+        vendor.select_option(value="aruba_aoss")
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        source = page.locator(_tid("migrate-device-source-model-select"))
+        before = source.evaluate("(list) => list.options.length")
+        for route in held:
+            route.continue_()
+        page.unroute("**/api/v1/migration/target-profiles")
+        page.wait_for_function(
+            "(count) => document.getElementById('mig-device-source-model').options.length > count",
+            arg=before,
+        )
+        expect(vendor).to_have_value("aruba_aoss")
+        expect(page.locator(_tid("migrate-rename-target-model-select"))).to_have_value(TARGET_2930M_48G)
+        expect(source).to_have_value(SOURCE_2930F_48G)
+        assert "target_deployment" in _apply(page)
+
+    def test_a_bay_named_constructor_is_a_bay(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """No shipped family can have one (a bay is one letter); the
+        answer is edited on its way to the page.  The note used to
+        throw, and the strip stayed on "Checking the device" for good."""
+
+        def with_a_strange_bay(route) -> None:
+            answer = route.fetch()
+            data = answer.json()
+            for member in data.get("members", []):
+                member["unstated_bays"] = ["constructor"]
+            route.fulfill(response=answer, json=data)
+
+        page.route("**/api/v1/migration/inventory", with_a_strange_bay)
+        _pick_target(page, TARGET_2930M_48G)
+        expect(page.locator(_tid("migrate-device-target-note-ports"))).to_be_visible()
+        expect(_target_note(page)).to_contain_text("bay constructor")
+        expect(_plan(page)).to_have_attribute("data-state", "ready")
+        page.unroute("**/api/v1/migration/inventory")
+
+
+# ---------------------------------------------------------------------------
+# The footer's line, the keyboard, and detection that ends
+# ---------------------------------------------------------------------------
+
+
+class TestTheFooterIsAboutTheLastThing:
+    """The line stayed until the next one was written.  So it outlived
+    what it was about: a refusal of a member number that had since
+    been corrected, "4 decisions recorded -- Apply to confirm" beside
+    devices that had since changed (Apply then forgets them), "All
+    overrides cleared." beside two overrides."""
+
+    def test_a_refusal_goes_with_a_device_edit(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        status = page.locator(_tid("migrate-rename-status"))
+        _refuse(page)
+        expect(status).to_have_attribute("data-state", "failed")
+        member = page.locator(_tid("migrate-device-target-member-0-id"))
+        member.fill("2")
+        member.dispatch_event("change")
+        expect(status).to_have_text("")
+        assert status.get_attribute("data-state") is None
+
+    def test_what_was_recorded_goes_with_a_device(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        status = page.locator(_tid("migrate-rename-status"))
+        _pick_target(page, TARGET_2930M_48G)
+        _apply(page)
+        page.locator(_tid("migrate-rename-plan-accept")).click()
+        # The button's own line is written after the clearing.
+        expect(status).to_have_text("4 decisions recorded — Apply to confirm.")
+        page.locator(_tid("migrate-device-target-member-0-bay-A")).select_option(value="JL083A")
+        expect(status).to_have_text("")
+
+    def test_all_cleared_goes_with_a_new_override(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        status = page.locator(_tid("migrate-rename-status"))
+        page.locator(_tid("migrate-rename-modal-reset")).click()
+        expect(status).to_have_text("All overrides cleared.")
+        box = page.locator(_tid("migrate-rename-override-1"))
+        box.click()
+        box.press_sequentially("9")
+        expect(status).to_have_text("")
+
+    def test_a_drop_clears_it_and_a_pane_does_not(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        status = page.locator(_tid("migrate-rename-status"))
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        _apply(page)
+        expect(status).to_have_text("Applied. Rendered output refreshed.")
+        # Looking at another pane changes nothing.
+        page.locator(_tid("migrate-rename-rail-vlans")).click()
+        page.locator(_tid("migrate-rename-rail-ports")).click()
+        expect(status).to_have_text("Applied. Rendered output refreshed.")
+        page.locator(_tid("migrate-rename-rail-vlans")).click()
+        page.locator(_tid("migrate-rename-vlan-drop-1")).click()
+        expect(status).to_have_text("")
+
+
+#: The test id of every control the open modal shows, in the order
+#: of the page.
+_CONTROLS_SHOWN = """() => Array.from(
+    document.querySelectorAll('#mig-rename-modal [data-testid]')
+).filter((el) => el.matches('button, select, input, textarea, summary, a[href]')
+    && !el.disabled && el.getClientRects().length > 0
+).map((el) => el.getAttribute('data-testid'))"""
+
+_FOCUSED = """() => {
+    const at = document.activeElement;
+    return at ? (at.getAttribute('data-testid') || at.tagName) : '';
+}"""
+
+
+class TestTheKeyboardReachesIt:
+    def test_tab_walks_the_modal_and_esc_leaves(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """Opened from the keyboard, the modal takes the focus; Tab
+        then stops at every control it shows, as far as Apply; Esc
+        closes it and gives the focus back to the button that opened
+        it.  The other tests reach a control with ``focus()``, which
+        one taken out of the tab order accepts all the same."""
+        _open(page, live_server_url, _SAME_HOST_ONE)
+        # A source chosen by hand, so that the config's own is offered
+        # back; a target with no uplink, so that two ports need a
+        # decision.  Every kind of control is then on screen.
+        page.locator(_tid("migrate-device-source-model-select")).select_option(
+            value="fam:2930F:2930F-48G-PoEP-4SFPP"
+        )
+        _pick_target(page, TARGET_2930M_48G)
+        _apply(page)
+        page.locator(_tid("migrate-rename-modal-close")).click()
+        opener = page.locator(_tid("migrate-rename-open-btn"))
+        opener.focus()
+        page.keyboard.press("Enter")
+        modal = page.locator(_tid("migrate-rename-modal"))
+        expect(modal).to_be_visible()
+        expect(page.locator(_tid("migrate-rename-modal-close"))).to_be_focused()
+        for name in (
+            "migrate-device-source-use-detected",
+            "migrate-device-target-add-member",
+            "migrate-rename-plan-accept",
+            "migrate-rename-override-49",
+        ):
+            expect(page.locator(_tid(name))).to_be_visible()
+        # One control comes before the close button; from it, forwards.
+        page.keyboard.press("Shift+Tab")
+        expect(page.locator(_tid("migrate-rename-modal-reset"))).to_be_focused()
+        shown = page.evaluate(_CONTROLS_SHOWN)
+        stops = [page.evaluate(_FOCUSED)]
+        while stops[-1] != "migrate-rename-apply-btn" and len(stops) < 2 * len(shown):
+            page.keyboard.press("Tab")
+            stops.append(page.evaluate(_FOCUSED))
+        assert stops[-1] == "migrate-rename-apply-btn", stops
+        # Every control was a stop, once, in the order of the page.
+        missed = [name for name in shown if name not in stops]
+        assert [name for name in stops if name in shown] == shown, ("not reached", missed)
+        page.keyboard.press("Escape")
+        expect(modal).to_be_hidden()
+        expect(opener).to_be_focused()
+
+    def test_tab_reaches_drop_and_enter_presses(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """It was a ``<span>``: no keyboard reached it."""
+        _open_pane(page, live_server_url, "vlans")
+        for testid in ("migrate-rename-vlan-drop-10",):
+            link = page.locator(_tid(testid))
+            assert link.evaluate("(el) => el.tagName") == "BUTTON"
+        box = page.locator(_tid("migrate-rename-vlan-override-10"))
+        box.focus()
+        page.keyboard.press("Tab")
+        expect(page.locator(_tid("migrate-rename-vlan-drop-10"))).to_be_focused()
+        page.keyboard.press("Enter")
+        expect(page.locator(_tid("migrate-rename-vlan-row-10"))).to_have_class(re.compile(r"\bhas-drop\b"))
+        # The focus is still on the button, which now undoes it.
+        expect(page.locator(_tid("migrate-rename-vlan-drop-10"))).to_be_focused()
+        expect(page.locator(_tid("migrate-rename-vlan-drop-10"))).to_have_text("un-drop")
+        page.keyboard.press("Enter")
+        expect(page.locator(_tid("migrate-rename-vlan-row-10"))).not_to_have_class(re.compile(r"\bhas-drop\b"))
+
+    @pytest.mark.parametrize(
+        "rail,testid",
+        [
+            ("ports", "migrate-rename-drop-GigabitEthernet1/0/1"),
+            ("local-users", "migrate-rename-local-user-drop-netops"),
+            ("snmp", "migrate-rename-snmp-community-drop"),
+            ("snmpv3", "migrate-rename-snmpv3-user-drop-opsuser"),
+        ],
+    )
+    def test_every_panes_drop_is_a_button(
+        self, page: Page, live_server_url: str, rail: str, testid: str,
+    ) -> None:
+        _open_pane(page, live_server_url, rail)
+        link = page.locator(_tid(testid))
+        expect(link).to_be_visible()
+        assert link.evaluate("(el) => [el.tagName, el.type]") == ["BUTTON", "button"]
+
+    def test_apply_by_keyboard_keeps_the_focus(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """The button is disabled while the request is out, which drops
+        the focus to the page: the next Tab started from the top."""
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        button = page.locator(_tid("migrate-rename-apply-btn"))
+        button.focus()
+        with page.expect_response("**/api/v1/migration/plan"):
+            page.keyboard.press("Enter")
+        expect(page.locator(_tid("migrate-rename-status"))).to_contain_text("Applied")
+        expect(button).to_be_focused()
+
+    def test_a_name_typed_on_a_list_chooses_it(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """Each key is a choice, and the table was rebuilt at each: the
+        list was a new one and the name began again -- ``47`` typed
+        chose port 7."""
+        page.locator(_tid("migrate-rename-target-model-select")).select_option(value="2930F-48G")
+        page.wait_for_function(_ROW_ONE_IS_A_LIST, arg="migrate-rename-override-1")
+        row = page.locator(_tid("migrate-rename-override-3"))
+        row.focus()
+        page.keyboard.type("47", delay=60)
+        expect(row).to_have_value("47")
+        expect(row).to_be_focused()
+        # Once the typing has stopped the row is marked.
+        expect(page.locator(_tid("migrate-rename-row-3"))).to_have_class(
+            re.compile(r"\bhas-override\b"), timeout=4_000,
+        )
+        expect(page.locator(_tid("migrate-rename-override-3"))).to_have_value("47")
+        # Port 47 has that name already: two rows on it, and Apply says so.
+        expect(page.locator(_tid("migrate-rename-apply-why"))).to_contain_text("(47)")
+        expect(page.locator(_tid("migrate-rename-row-7"))).not_to_have_class(re.compile(r"\bhas-collision\b"))
+
+    def test_a_space_typed_before_a_redraw_stays(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """The map holds a name trimmed.  A redraw from elsewhere, in
+        the middle of a name with a space in it, gave the field the
+        trimmed text back: ``my port`` came out ``myport``."""
+        expect(_source_note(page)).to_be_visible()
+        held: list = []
+        page.route("**/api/v1/migration/inventory", lambda route: held.append(route))
+        page.locator(_tid("migrate-device-source-model-select")).select_option(
+            value="fam:2930F:2930F-24G-4SFP"
+        )
+        box = page.locator(_tid("migrate-rename-override-1"))
+        box.click()
+        box.press_sequentially("my ")
+        for route in held:
+            route.continue_()
+        page.unroute("**/api/v1/migration/inventory")
+        expect(page.locator(_tid("migrate-device-source-note-ports"))).to_contain_text("28 ports")
+        _settle(page)
+        box = page.locator(_tid("migrate-rename-override-1"))
+        expect(box).to_be_focused()
+        expect(box).to_have_value("my ")
+        box.press_sequentially("port")
+        expect(box).to_have_value("my port")
+
+    def test_a_kept_port_does_not_ask_for_a_name(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        _translate(page, live_server_url, "cisco_iosxe_cli", "aruba_aoss", _CISCO_TWO_ON_ONE_NAME)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        page.locator(_tid("migrate-rename-drop-TenGigabitEthernet1/1/1")).click()
+        expect(page.locator(_tid("migrate-rename-row-TenGigabitEthernet1/1/1"))).to_have_class(
+            re.compile(r"\bhas-override\b")
+        )
+        cell = page.locator(_tid("migrate-rename-auto-TenGigabitEthernet1/1/1"))
+        expect(cell).not_to_contain_text("needs override")
+
+
+class TestDetectionEnds:
+    """Reading the device from the config had no time limit, said
+    nothing while it was out, and was never asked for again for a text
+    it had not answered for."""
+
+    def test_it_says_so_gives_up_and_asks_again(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        _translate(page, live_server_url, "aruba_aoss", "aruba_aoss", CAPTURE_2930F)
+        page.clock.install()
+        asked: list = []
+        page.route("**/api/v1/migration/detect-deployment", lambda route: asked.append(route))
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        expect(page.locator(_tid("migrate-device-source-note-detecting"))).to_have_text(
+            "Reading the source device from the config …"
+        )
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value("")
+        page.clock.fast_forward(21_000)
+        failed = page.locator(_tid("migrate-device-source-note-detect-failed"))
+        expect(failed).to_contain_text("no answer from the server in 20 seconds")
+        assert len(asked) == 1
+        # Asked again the next time the modal opens, and answered this time.
+        page.unroute("**/api/v1/migration/detect-deployment")
+        page.locator(_tid("migrate-rename-modal-close")).click()
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value(SOURCE_2930F_48G)
+
+    def test_families_that_fail_are_said_at_once(
+        self, page: Page, live_server_url: str,
+    ) -> None:
+        """The note went on saying no family describes the device until
+        the modal was reopened."""
+        held: list = []
+        page.route("**/api/v1/migration/model-families", lambda route: held.append(route))
+        _translate(page, live_server_url, "aruba_aoss", "aruba_aoss", CAPTURE_2930F)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        missing = page.locator(_tid("migrate-device-source-note-families-missing"))
+        expect(missing).to_contain_text("No model family loaded here describes it")
+        for route in held:
+            route.abort()
+        page.unroute("**/api/v1/migration/model-families")
+        expect(missing).to_contain_text("The model families could not be loaded")
+
+
+# ---------------------------------------------------------------------------
+# The strip is a live region
+# ---------------------------------------------------------------------------
+
+#: Count every rewrite of the strip's content from now on.
+_WATCH_THE_STRIP = """() => {
+    window.__strip_rewrites = 0;
+    new MutationObserver((records) => { window.__strip_rewrites += records.length; })
+        .observe(document.getElementById('mig-rename-plan'),
+                 {childList: true, characterData: true, subtree: true});
+}"""
+
+
+class TestAStripThatSaysTheSameIsLeftAlone:
+    """The strip is a polite live region, and it is drawn again with
+    every summary -- one for each key typed in a row.  It was emptied
+    and refilled each time: four keys, four rewrites of a strip whose
+    words had not changed, each of them something a screen reader may
+    read out again."""
+
+    def test_typing_leaves_the_same_strip_alone(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        expect(_source_note(page)).to_be_visible()
+        expect(_plan(page)).to_have_attribute("aria-live", "polite")
+        hint = page.locator(_tid("migrate-rename-plan-hint"))
+        expect(hint).to_have_text("Choose the target device to pair ports by position.")
+        said = hint.element_handle()
+        page.evaluate(_WATCH_THE_STRIP)
+        field = page.locator(_tid("migrate-rename-override-1"))
+        field.click()
+        field.press_sequentially("1/17")
+        expect(field).to_have_value("1/17")
+        _settle(page)
+        assert page.evaluate("window.__strip_rewrites") == 0
+        assert said.evaluate("el => el.isConnected")
+        # What it says changing is drawn, and is counted: the watch
+        # is not blind.
+        _pick_target(page, TARGET_2930M_48G)
+        expect(_plan(page)).to_have_attribute("data-state", "ready")
+        expect(hint).to_have_text(
+            "Both devices are declared — Apply to pair their ports by position."
+        )
+        assert page.evaluate("window.__strip_rewrites") > 0
+        assert not said.evaluate("el => el.isConnected")
+
+    def test_a_strip_that_fails_is_taken_away(
+        self, aoss_2930f: MigratePage, page: Page,
+    ) -> None:
+        """Drawn aside, a strip that fails half way is never put in.
+        Then the one before it must not be left either, saying what
+        it said about a job that is no longer the one on the page:
+        here the answer's plan cannot be read, and the strip that said
+        both devices were declared is taken away."""
+        expect(_source_note(page)).to_be_visible()
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        hint = page.locator(_tid("migrate-rename-plan-hint"))
+        expect(hint).to_have_text(
+            "Both devices are declared — Apply to pair their ports by position."
+        )
+
+        def with_pairings_that_are_no_list(route) -> None:
+            answer = route.fetch()
+            job = answer.json()
+            job["port_mapping_plan"]["pairings"] = 5
+            route.fulfill(response=answer, json=job)
+
+        page.route("**/api/v1/migration/plan", with_pairings_that_are_no_list)
+        page.locator(_tid("migrate-rename-apply-btn")).click()
+        expect(page.locator(_tid("migrate-rename-status"))).to_contain_text(
+            "this dialog could not be redrawn"
+        )
+        expect(aoss_2930f.output).to_contain_text("1/A1")
+        expect(hint).to_have_count(0)
+        expect(_plan(page)).to_be_hidden()
+        page.unroute("**/api/v1/migration/plan")
+
+
+# ---------------------------------------------------------------------------
+# A config from the store
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def store(_e2e_configs_dir: Path) -> Iterator[Callable[[str, str], str]]:
+    """Put a text in the config store as a backup of a host, laid out
+    as the file store lays one out, and get its file name back.  Dated
+    long ago: a test that takes the newest stored config does not get
+    this one.
+
+    The store is the session's, so what a test puts there it takes
+    out when it ends, and the store is then checked to hold no config
+    of this kind.  Left behind, the two files were the stored configs
+    another module's test found: one written for a session whose
+    only stored configs are the canned Cisco backups."""
+    kind = _e2e_configs_dir / "Aruba"
+    made: list[Path] = []
+
+    def put(host: str, text: str) -> str:
+        name = f"Aruba_{host}_20200101_000000.cfg"
+        home = kind / host
+        home.mkdir(parents=True, exist_ok=True)
+        (home / name).write_text(text, encoding="utf-8")
+        made.append(home / name)
+        return name
+
+    yield put
+    for path in made:
+        path.unlink(missing_ok=True)
+    for home in [*{path.parent for path in made}, kind]:
+        if home.is_dir() and not any(home.iterdir()):
+            home.rmdir()
+    assert not kind.exists(), sorted(kind.rglob("*"))
+
+
+def _translate_stored(page: Page, base: str, name: str) -> MigratePage:
+    """The stored config *name* translated AOS-S to AOS-S."""
+    mp = MigratePage(page)
+    page.goto(base + "/migrate")
+    mp.source_select.wait_for(state="visible", timeout=5_000)
+    mp.pick_source("aruba_aoss")
+    mp.pick_target("aruba_aoss")
+    page.locator(_tid("migrate-input-mode-filename")).click()
+    page.locator(_tid("migrate-filename-select")).select_option(value=name)
+    mp.submit_and_wait()
+    return mp
+
+
+def _asked_about(page: Page) -> list[dict]:
+    """Every question the page puts about a config's hardware from
+    now on, as it is sent."""
+    asked: list[dict] = []
+    page.on(
+        "request",
+        lambda request: asked.append(json.loads(request.post_data or "{}"))
+        if request.url.endswith("/detect-deployment") else None,
+    )
+    return asked
+
+
+class TestAStoredConfigMeetsTheModal:
+    """Every other test here pastes its config.  One translated from
+    the store has no text on the page: what the server is asked about,
+    and what tells one config from the next, is the file's name."""
+
+    def test_it_is_asked_about_by_its_file_name(
+        self, page: Page, live_server_url: str, store: Callable[[str, str], str],
+    ) -> None:
+        name = store("10-99-0-1", _SAME_HOST_ONE)
+        asked = _asked_about(page)
+        _translate_stored(page, live_server_url, name)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        expect(page.locator(_tid("migrate-device-source-model-select"))).to_have_value(
+            SOURCE_2930F_48G
+        )
+        expect(page.locator(_tid("migrate-device-source-note-read-from"))).to_contain_text(
+            "Read from the config"
+        )
+        assert asked == [{"source": "aruba_aoss", "source_filename": name}]
+        # Apply names the file too, and sends no text.
+        _pick_target(page, TARGET_2930M_48G, bay_a="JL083A")
+        body = _apply(page)
+        assert body["source_filename"] == name and "raw_text" not in body
+        expect(page.locator(_tid("migrate-rename-plan-paired"))).to_have_text("6 paired")
+
+    def test_two_files_of_one_codec_are_two_texts(
+        self, page: Page, live_server_url: str, store: Callable[[str, str], str],
+    ) -> None:
+        """The second file is asked about for itself, and its device
+        is the one shown: not the first file's."""
+        first = store("10-99-0-1", _SAME_HOST_ONE)
+        second = store("10-99-0-2", _stack_of(2))
+        asked = _asked_about(page)
+        mp = _translate_stored(page, live_server_url, first)
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        source = page.locator(_tid("migrate-device-source-model-select"))
+        expect(source).to_have_value(SOURCE_2930F_48G)
+        page.locator(_tid("migrate-rename-modal-close")).click()
+        page.locator(_tid("migrate-filename-select")).select_option(value=second)
+        with page.expect_response("**/api/v1/migration/plan"):
+            mp.submit_btn.click()
+        page.locator(_tid("migrate-rename-open-btn")).click()
+        expect(source).to_have_value("fam:2930M:2930M-48G-PoEP")
+        expect(page.locator(_tid("migrate-device-source-note-ports"))).to_contain_text("96 ports")
+        assert [each.get("source_filename") for each in asked] == [first, second]

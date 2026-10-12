@@ -1,14 +1,25 @@
 """
 Parse path for Juniper Junos CLI (set-form + block-form).
 
-Public function: :func:`parse_intent` — raw text in,
-:class:`CanonicalIntent` out.
+Public functions: :func:`parse_intent` — raw text in,
+:class:`CanonicalIntent` out — and :func:`read_intent`, which also
+hands back the set-form text the tree was read from (the Tier-3
+detector reads that text, and its patterns begin ``set ``).
 
 Two-pass parse: groups bucketed first, replayed in reverse-apply-
 groups order, then top-level dispatch.  Block-form (curly-brace
 hierarchical) input is converted to set-form by
-:func:`_blockform_to_setform` before the normal set-form parser
+:func:`_blockform_convert` before the normal set-form parser
 runs, so the dispatch surface is identical for both grammars.
+
+Before the form is judged, the lines of the terminal session a
+capture was copied from are dropped (:func:`drop_session_lines`).
+
+A statement the config holds and does not run -- ``deactivate
+<path>`` in set-form, ``inactive:`` in the hierarchical form -- is
+left out with everything under it, and named in
+``dropped_tier3_sections`` by a row that shows its path and never a
+secret (``_tier3_detection.left_out_rows``).
 
 Handles VXLAN switch-options globals (``set switch-options
 vtep-source-interface`` / ``vxlan-port``) by stashing on intent
@@ -35,14 +46,17 @@ behaviour is identical to the prior in-class implementation.  The
 codec module's ``parse()`` method is now a one-line delegator to
 :func:`parse_intent`.
 
-Internal helpers (``_tokenise_set``, ``_dispatch_set``,
+Internal helpers (``_split_words``, ``_tokenise_set``, ``_dispatch_set``,
 ``_apply_system``, ``_apply_interfaces``, ``_apply_interface_range``,
 ``_apply_vlans``, ``_apply_switch_options``,
 ``_apply_routing_instances``, ``_apply_routing_options``,
 ``_apply_snmp``, ``_apply_snmp_v3``, ``_get_or_create_v3_user``,
-``_looks_like_blockform``, ``_tokenise_blockform``,
-``_blockform_to_setform``, ``_infer_iface_type``) and the module-
-level constants (``_BLOCKFORM_COMMENT_RE``, ``_JUNOS_AUTH_MAP``,
+``drop_session_lines``, ``_looks_like_blockform``,
+``_blockform_tokens``, ``_tokenise_blockform``,
+``_blockform_convert``, ``_blockform_to_setform``, ``_leaf_lines``,
+``_Paths``,
+``_infer_iface_type``) and the module-level
+constants (``_SESSION_LINE_RE``, ``_JUNOS_AUTH_MAP``,
 ``_JUNOS_PRIV_MAP``) live here because they are parse-only.
 """
 
@@ -50,9 +64,10 @@ from __future__ import annotations
 
 import logging
 import re
-import shlex
+from collections.abc import Iterable, Iterator, Sequence
 from typing import Any
 
+from ..._tier3_detection import left_out_rows
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -68,7 +83,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
-from .._helpers import GrowingIndex
+from .._helpers import GrowingIndex, Uniques, unstated_trunk_list, vlan_id_run
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -104,45 +119,102 @@ def _resolve_vlan_member_to_vids(
     if sep and lo_str.isdigit() and hi_str.isdigit():
         lo, hi = int(lo_str), int(hi_str)
         if 1 <= lo <= hi <= 4094:
-            return list(range(lo, hi + 1))
+            return vlan_id_run(lo, hi)
     return []
 
 
-def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
+#: Lines of the terminal session a capture was copied from: the
+#: ``{master:0}`` line a Virtual Chassis or a second Routing Engine
+#: prints above the prompt (with ``[edit]`` after it in configuration
+#: mode), ``[edit ...]``, the prompt with or without the command typed
+#: at it, the command echoed with no prompt, a pager's prompt, and
+#: the fence of a Markdown file.  None is a statement, and one of them
+#: ahead of the configuration made the whole text read as nothing.
+#:
+#: Applied to a whole text, so each alternative begins with a
+#: character that is not white space, stands on a line of its own, and
+#: has one way only to reach the end of that line.
+_SESSION_LINE_RE = re.compile(
+    r"^(?:"
+    r"\{[a-z][a-z-]{0,23}(?::[\w-]{1,32})?\}(?:\[edit[^\]\n]{0,200}\])?[ \t\r]*"
+    r"|\[edit[^\]\n]{0,200}\][ \t\r]*"
+    r"|[\w.-]{1,64}@[\w.-]{1,64}[>#%](?:[ \t][^\n]{0,400}|\r)?"
+    r"|show[ \t]{1,8}configuration\b[^\n{;]{0,400}"
+    r"|---\(more(?: \d{1,3}%)?\)---[ \t\r]*"
+    r"|```[\w-]{0,32}[ \t\r]*"
+    r")$",
+    re.MULTILINE,
+)
+
+
+def drop_session_lines(raw: str) -> str:
+    """*raw* without the lines of a terminal session, and without a
+    byte-order mark at its head.
+
+    A capture pasted with the prompt it was taken at began
+    ``user@host> show configuration``: a line that is no statement,
+    ahead of the first block, and the hierarchical form was then not
+    known for what it was.  The line is emptied, not removed, so every
+    other line keeps its number.
+    """
+    return _SESSION_LINE_RE.sub("", raw.lstrip(chr(0xFEFF)))
+
+
+def parse_intent(raw: str) -> CanonicalIntent:
     """Parse Junos ``set``-form (or block-form) text into a
     :class:`CanonicalIntent`.
 
     Block-form input is converted to set-form via
-    :func:`_blockform_to_setform` before the set-form parser runs.
+    :func:`_blockform_convert` before the set-form parser runs.
 
     Raises:
         ParseError: On empty input, XML input, JSON-shaped input that
             starts with ``{`` but isn't recognisable block-form, or a
             block-form conversion failure.
     """
+    return read_intent(raw)[0]
+
+
+def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
+    """Parse Junos text, and say what was read.
+
+    Args:
+        raw: Set-form or hierarchical text, with or without the lines
+            of the session it was copied from.
+
+    Returns:
+        The tree, and the set-form text it was read from: *raw* as it
+        came for set-form input, the conversion for hierarchical
+        input, in both cases without the ``set`` lines that were left
+        out as deactivated.  A reader of set-form lines that is not
+        this parser (the Tier-3 detector) is handed this text, so that
+        it sees one form and only what was in force.
+
+    Raises:
+        ParseError: On empty input, XML input, JSON-shaped input that
+            starts with ``{`` but isn't recognisable block-form, or a
+            block-form conversion failure.
+    """
+    raw = drop_session_lines(raw)
     if not raw.strip():
         raise ParseError(
             "juniper_junos: empty input", snippet="",
         )
-    # Shape sanity — Round-4.2 shared helper tolerates leading
-    # shell-echo / banner framing.  Only reject XML here; the leading
-    # ``{`` case below is handled by the Junos-specific block-form
-    # detector (legitimate Junos curly-brace syntax — NOT JSON).
-    if detect_input_shape(raw) == "xml":
-        raise ParseError(
-            "juniper_junos: input looks like XML, not Junos "
-            "set-form.  If you have NETCONF get-config XML, use "
-            "a different codec.",
-            snippet=raw.lstrip()[:120],
-        )
     stripped = raw.lstrip()
+    # What the hierarchical form marked as not in force: the path as
+    # the set-form lines below spell it, to the kind of row it gets
+    # and the words that row shows.
+    left_out: dict[tuple[str, ...], tuple[str, tuple[str, ...]]] = {}
     # Detect block-form input: first non-comment meaningful
     # content contains a curly-brace at a sensible location.
     # We convert block-form → set-form here and feed the
     # resulting text through the normal set-form parser below.
+    # Judged before the XML test: a group's wildcard is written
+    # ``<ge-0/0/*> {``, and an angle bracket in the first lines of a
+    # hierarchical config was taken for a document's root element.
     if _looks_like_blockform(raw):
         try:
-            raw = _blockform_to_setform(raw)
+            set_lines, left_out = _blockform_convert(raw)
         except ParseError:
             raise
         except Exception as e:
@@ -153,6 +225,16 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 "set-form output directly.",
                 snippet=stripped[:120],
             ) from e
+        raw = "\n".join(set_lines) + ("\n" if set_lines else "")
+    elif detect_input_shape(raw) == "xml":
+        # Shape sanity — Round-4.2 shared helper tolerates leading
+        # shell-echo / banner framing.
+        raise ParseError(
+            "juniper_junos: input looks like XML, not Junos "
+            "set-form.  If you have NETCONF get-config XML, use "
+            "a different codec.",
+            snippet=stripped[:120],
+        )
     elif stripped.startswith("{"):
         # Starts with `{` but doesn't pattern-match block-form
         # (bare `{`, or JSON-shaped ``"key": ...``) — reject
@@ -249,19 +331,79 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     applied: set[str] = set()
     found = _Found(intent)
 
-    for raw_line in raw.splitlines():
+    # Statements the config holds and does not run: ``deactivate
+    # <path>`` (``inactive:`` in the hierarchical form).  The device
+    # ignores the statement and everything under it, so reading its
+    # ``set`` lines put on the target what the source did not have
+    # in force.  They are left out, and named among the sections of
+    # the source that were not translated.
+    lines = raw.splitlines()
+    inactive_paths: set[tuple[str, ...]] = set()
+    for raw_line in lines:
+        line = raw_line.strip()
+        if line.startswith("deactivate "):
+            inactive_paths.add(tuple(_tokenise_set(line[11:])))
+        elif line.startswith("activate "):
+            inactive_paths.discard(tuple(_tokenise_set(line[9:])))
+    # Each line is walked along the paths once (``_Paths``).  Asked
+    # once for each LENGTH of path instead, a line of many words
+    # under paths of many lengths cost the square of its words.
+    inactive = _Paths(inactive_paths)
+    # Each path that took something out, to the number of the first
+    # line it took: the rows are in the order of the text.
+    inactive_met: dict[tuple[str, ...], int] = {}
+    # A group's line under a path deactivated at the top level: the
+    # line, the group, the path.  It is a row only if the group is
+    # applied, which is not known until the last line.
+    met_in_groups: list[tuple[int, str, tuple[str, ...]]] = []
+    # Groups that lost a line, and the lines that were left out.
+    cut_groups: set[str] = set()
+    cut_lines: set[int] = set()
+
+    def held_back(*words: str) -> bool:
+        """Whether a statement at *words* is under a deactivated
+        path.  Asked for what a line does NOT say in so many words:
+        what an interface-range gives each of its members."""
+        under = inactive.over(words) if inactive else None
+        if under is None:
+            return False
+        inactive_met.setdefault(under, len(lines))
+        return True
+
+    for number, raw_line in enumerate(lines):
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
-        # Junos set-form begins with `set ` (or `delete ` /
-        # `deactivate ` which we skip).
+        # Junos set-form begins with `set ` (`delete ` is skipped;
+        # `deactivate ` was read above).
         if not line.startswith("set "):
             continue
         tokens = _tokenise_set(line[4:])
         if not tokens:
             continue
         head = tokens[0]
-        if head == "groups" and len(tokens) >= 3:
+        in_group = head == "groups" and len(tokens) >= 3
+        if inactive:
+            under = inactive.over(tokens)
+            if under is not None:
+                inactive_met.setdefault(under, number)
+                cut_lines.add(number)
+                if in_group:
+                    cut_groups.add(tokens[1])
+                continue
+            # What a group gives to a path that is deactivated at the
+            # top level is not in force either: read, it put an
+            # address on a port under a row that said the port was
+            # not translated.  (No Juniper page says what a device
+            # does here in as many words; batfish reads it this way,
+            # pruning deactivated paths again after inheritance.)
+            under = inactive.over(tokens[2:]) if in_group else None
+            if under is not None:
+                met_in_groups.append((number, tokens[1], under))
+                cut_lines.add(number)
+                cut_groups.add(tokens[1])
+                continue
+        if in_group:
             # ``set groups <gname> <path...>`` — bucket the path
             # tokens (after the group name) for later replay.
             gname = tokens[1]
@@ -277,6 +419,14 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                     applied_groups.append(gname)
             continue
         top_level_lines.append(tokens)
+
+    # A group whose every line was left out has nothing to give.
+    # Kept in the list, ``set apply-groups G`` was written to a Junos
+    # target that was given no group ``G``.
+    applied_groups = [
+        gname for gname in applied_groups
+        if gname in group_lines or gname not in cut_groups
+    ]
 
     # Pass 2a: apply group content in REVERSE apply-groups order
     # so that the first-declared group's scalars win (matches
@@ -334,38 +484,60 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     for rname, rstate in range_state.items():
         attrs = rstate.get("attrs", {})
         for member in rstate.get("members", []):
+            # What the range gives a member goes where the member's
+            # own statements go: under a path that is deactivated it
+            # is not in force.  (No Juniper page says so in as many
+            # words; batfish reads it this way, pruning deactivated
+            # paths again after inheritance.)
+            if held_back("interfaces", member):
+                continue
+            own = ("interfaces", member)
             member_state = iface_state.setdefault(member, {})
             range_membership[member] = rname
             # Shared scalars default when member-state doesn't
             # override.  member_state wins on conflict.
-            if "description" in attrs and not member_state.get("description"):
+            if (
+                "description" in attrs
+                and not member_state.get("description")
+                and not held_back(*own, "description")
+            ):
                 member_state["description"] = attrs["description"]
-            if "mtu" in attrs and "mtu" not in member_state:
+            if (
+                "mtu" in attrs
+                and "mtu" not in member_state
+                and not held_back(*own, "mtu")
+            ):
                 member_state["mtu"] = attrs["mtu"]
-            if attrs.get("enabled") is False and "enabled" not in member_state:
+            if (
+                attrs.get("enabled") is False
+                and "enabled" not in member_state
+                and not held_back(*own, "disable")
+            ):
                 member_state["enabled"] = False
             for addr in attrs.get("ipv4", []):
-                if "/" in addr:
+                if "/" in addr and not held_back(
+                    *own, "unit", "0", "family", "inet", "address", addr,
+                ):
                     ip_str, prefix_str = addr.split("/", 1)
                     try:
                         prefix = int(prefix_str)
                         existing = member_state.setdefault("ipv4", [])
                         pair = (ip_str, prefix)
-                        if pair not in existing:
-                            existing.append(pair)
+                        found.once.add(existing, pair)
                     except ValueError:
                         pass
             # GAP-EVPN-3: same shape for v6 addresses on
             # interface-range members.
             for addr in attrs.get("ipv6", []):
-                if "/" in addr:
+                if "/" in addr and not held_back(
+                    *own, "unit", "0", "family", "inet6", "address", addr,
+                ):
                     ip_str, prefix_str = addr.split("/", 1)
                     try:
                         prefix = int(prefix_str)
                         existing = member_state.setdefault("ipv6", [])
                         pair = (ip_str, prefix)
-                        if pair not in existing:
-                            existing.append(pair)
+                        found.once.add(existing, pair)
                     except ValueError:
                         pass
 
@@ -566,8 +738,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         else:
             existing.mode = mode
             for m in members:
-                if m not in existing.members:
-                    existing.members.append(m)
+                found.once.add(existing.members, m)
 
     # 2. Resolve L2 ``vlan members <NAME>`` lists on access / trunk
     #    interfaces — convert vlan-name lookups to numeric VIDs by
@@ -577,6 +748,16 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     for name, state in iface_state.items():
         names_list = state.get("l2_vlan_member_names")
         if not names_list:
+            # A trunk that states no ``vlan members``: what the
+            # platform's trunk carries by default, which on Junos is
+            # no VLAN.
+            unstated = iface_by_name.get(name)
+            if (
+                unstated is not None
+                and unstated.switchport_mode == "trunk"
+                and not unstated.trunk_allowed_vlans
+            ):
+                unstated.trunk_allowed_vlans = unstated_trunk_list("juniper_junos")
             continue
         iface = iface_by_name.get(name)
         if iface is None:
@@ -606,14 +787,14 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                     break
         elif iface.switchport_mode == "trunk":
             # Junos `vlan members all` is the operator-form for "all
-            # VLANs allowed on this trunk" — match Arista's
-            # `switchport trunk allowed vlan all` / `1-4094` /
-            # `2-4094`.  Expand to the full VID range so canonical
-            # comparison and any cross-vendor render carry the same
-            # semantic (Arista will collapse 2-4094 back to its own
-            # all-form on the symmetric render path).
+            # VLANs allowed on this trunk" — what Arista writes as
+            # `switchport trunk allowed vlan all` / `1-4094`.  Expand
+            # to the full VID range so canonical comparison and any
+            # cross-vendor render carry the same semantic.  (The
+            # renderer writes `all` for that full range and for no
+            # other list.)
             if any(vname == "all" for vname in names_list):
-                iface.trunk_allowed_vlans = list(range(1, 4095))
+                iface.trunk_allowed_vlans = vlan_id_run(1, 4094)
                 continue
             # (#8) Each member may be a name, a numeric VID, or a numeric
             # range (``100-110``) — resolve/expand all three.
@@ -700,11 +881,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         # surface.
         irb_v4_anycast = irb_entry.get("ipv4_anycast", {})
         irb_v4_mac = irb_entry.get("v4_mac", "")
+        existing_addrs = {
+            (a.ip, a.prefix_length) for a in vlan.ipv4_addresses
+        }
         for ip, prefix in irb_entry.get("ipv4", []):
-            existing_addrs = {
-                (a.ip, a.prefix_length) for a in vlan.ipv4_addresses
-            }
             if (ip, prefix) not in existing_addrs:
+                existing_addrs.add((ip, prefix))
                 vlan.ipv4_addresses.append(
                     CanonicalIPv4Address(
                         ip=ip,
@@ -816,7 +998,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     legitimate_vlan_ids = (
         {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
-    project_switchport_to_vlan(intent)
+    project_switchport_to_vlan(intent, keep=legitimate_vlan_ids)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
     # Cluster E.1-B: materialise CanonicalDHCPPool records from the
@@ -906,7 +1088,18 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     intent.dns_servers = list(dict.fromkeys(intent.dns_servers))
     intent.ntp_servers = list(dict.fromkeys(intent.ntp_servers))
     intent.syslog_servers = list(dict.fromkeys(intent.syslog_servers))
-    return intent
+    for number, gname, path in met_in_groups:
+        if gname in applied:
+            inactive_met[path] = min(number, inactive_met.get(path, number))
+    intent.dropped_tier3_sections = left_out_rows(
+        left_out.get(path, ("inactive", path))
+        for path in sorted(inactive_met, key=inactive_met.__getitem__)
+    )
+    if not cut_lines:
+        return intent, raw
+    return intent, "\n".join(
+        line for number, line in enumerate(lines) if number not in cut_lines
+    ) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -914,12 +1107,91 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 # ---------------------------------------------------------------------------
 
 
+#: A word of a line with no quote and no backslash in it.
+_PLAIN_WORD_RE = re.compile(r"[^ \t\r\n]+")
+#: What ends a run of plain characters outside quotes, and inside
+#: double quotes.
+_WORD_BREAK_RE = re.compile(r"[ \t\r\n'\"\\]")
+_QUOTED_BREAK_RE = re.compile(r'["\\]')
+
+
+def _split_words(payload: str) -> list[str]:
+    """The words of *payload*, as ``shlex.split(payload, posix=True)``
+    gives them, in time that fits the payload.
+
+    ``shlex`` builds each word a character at a time by adding to a
+    string it keeps on itself, which copies the word for every
+    character: one word of 400,000 characters took a second and a
+    half, and one of two megabytes six minutes.  Every ``set`` line
+    goes through here.  The rules are ``shlex``'s for a POSIX shell
+    word and nothing else -- white space parts words; ``'...'`` is
+    literal; in ``"..."`` a backslash escapes a quote or a backslash
+    and is itself kept before anything else; outside quotes it
+    escapes the next character; quoted and bare pieces that touch
+    are one word, and ``""`` is a word.
+
+    Raises:
+        ValueError: a quote that is never closed, or a backslash
+            with nothing after it -- as ``shlex`` does.
+    """
+    if '"' not in payload and "'" not in payload and "\\" not in payload:
+        return _PLAIN_WORD_RE.findall(payload)
+    words: list[str] = []
+    # The pieces of the word being read.  Each branch below adds one,
+    # if only an empty one: ``""`` is a word.
+    pieces: list[str] = []
+    at = 0
+    end = len(payload)
+    while at < end:
+        ch = payload[at]
+        if ch in " \t\r\n":
+            if pieces:
+                words.append("".join(pieces))
+                pieces = []
+            at += 1
+        elif ch == "'":
+            close = payload.find("'", at + 1)
+            if close < 0:
+                raise ValueError("No closing quotation")
+            pieces.append(payload[at + 1:close])
+            at = close + 1
+        elif ch == '"':
+            at += 1
+            while True:
+                found = _QUOTED_BREAK_RE.search(payload, at)
+                if found is None:
+                    raise ValueError("No closing quotation")
+                stop = found.start()
+                pieces.append(payload[at:stop])
+                if payload[stop] == '"':
+                    at = stop + 1
+                    break
+                if stop + 1 >= end:
+                    raise ValueError("No escaped character")
+                escaped = payload[stop + 1]
+                pieces.append(escaped if escaped in '"\\' else "\\" + escaped)
+                at = stop + 2
+        elif ch == "\\":
+            if at + 1 >= end:
+                raise ValueError("No escaped character")
+            pieces.append(payload[at + 1])
+            at += 2
+        else:
+            found = _WORD_BREAK_RE.search(payload, at)
+            stop = end if found is None else found.start()
+            pieces.append(payload[at:stop])
+            at = stop
+    if pieces:
+        words.append("".join(pieces))
+    return words
+
+
 def _tokenise_set(payload: str) -> list[str]:
     """Split a Junos set-line payload into tokens, honouring quoted
     string values that contain spaces (e.g. ``description "WAN uplink"``).
     """
     try:
-        return shlex.split(payload, posix=True)
+        return _split_words(payload)
     except ValueError:
         return payload.split()
 
@@ -929,8 +1201,14 @@ def _tokenise_set(payload: str) -> list[str]:
 #: ``version 25.4R1.12;`` — the optional ``set`` prefix + optional trailing
 #: ``;`` make one regex cover both.  ``[\w.\-]+`` excludes the block-form
 #: semicolon.  Extracted from the ORIGINAL input (pre block→set conversion).
+#: A value in quotes may hold a space: a build prints ``version "8.2I0
+#: [builder]";``, and read by the second form alone that was no version.
+#: A ``#`` comment may follow on the line (``; ## last changed: ...``).
+#: The end of the line is one run and then the comment: with a second
+#: run after it, white space ahead of a word could be split two ways.
 _VERSION_RE = re.compile(
-    r'^(?:set\s+)?version\s+"?([\w.\-]+)"?;?\s*$', re.MULTILINE
+    r'^(?:set\s+)?version\s+(?:"([^"\n]{1,80})"|"?([\w.\-]+)"?);?[ \t\r]*(?:#[^\n]*)?$',
+    re.MULTILINE,
 )
 
 
@@ -942,7 +1220,7 @@ def _extract_version(raw: str) -> str:
     when the capture carries no version statement.
     """
     m = _VERSION_RE.search(raw)
-    return m.group(1) if m else ""
+    return (m.group(1) or m.group(2)) if m else ""
 
 
 # ---------------------------------------------------------------------------
@@ -950,79 +1228,152 @@ def _extract_version(raw: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-_BLOCKFORM_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+#: The first word of a line of set-form.
+_SETFORM_WORDS = frozenset({"set", "delete", "activate", "deactivate"})
 
+#: What a DEVICE prints ahead of a statement: ``inactive:`` on one it
+#: holds and does not run, ``protect:`` on one that may not be changed.
+_DEVICE_TAGS = frozenset({"inactive:", "protect:"})
 
-def _looks_like_blockform(raw: str) -> bool:
-    """Heuristic: does *raw* look like Junos block-form (hierarchical
-    curly-brace) rather than set-form?
+#: What a LOAD FILE may write there and no device prints -- the
+#: operators of ``load replace`` and ``load update``.  ``replace:``,
+#: ``active:`` and ``unprotect:`` leave the statement in force;
+#: ``delete:`` says it is to be removed.  Not known, each was the
+#: first word of the path: an interface named ``active:``.
+_LOAD_FILE_TAGS = frozenset({"replace:", "active:", "unprotect:", "delete:"})
 
-    Signals:
-      * Strip comments + leading whitespace; the first meaningful line
-        starts with a word followed by ``{`` (and NOT with ``set``).
-      * The text contains at least one ``{``-terminated line AND at
-        least one statement-terminator ``;``.
+_STATEMENT_TAGS = _DEVICE_TAGS | _LOAD_FILE_TAGS
+
+#: Between the tokens of one line and the next, for a reader that asks
+#: where lines end.  No token is this: a word holds no white space.
+_LINE_END = "\n"
+
+class _Paths:
+    """Paths, asked which of them a line begins with.
+
+    A line is walked once, a word at a time, whatever the number of
+    paths and of their lengths: each word is folded into one number
+    with the words before it, and the number is looked up among the
+    numbers the paths end on.  It is a walk down the tree of the
+    paths with the tree left out -- a tree keeps a node for every
+    word of every path, some two hundred bytes each, which for the
+    ``deactivate`` lines one request may carry came to several
+    hundred megabytes.  Here nothing is kept for a path but the path.
+
+    Two paths may end on one number, so a path that is found is
+    compared, word for word, before it is believed.
     """
-    # Remove /* ... */ comments for the heuristic (they can confuse
-    # detection on block-form configs that lead with a comment).
-    cleaned = _BLOCKFORM_COMMENT_RE.sub("", raw)
-    stripped = cleaned.lstrip()
-    if stripped.startswith(("set ", "version ")):
-        return False
-    # At least one opening curly on a line that isn't a comment.
-    has_open_brace = bool(re.search(r"\{\s*$", cleaned, re.MULTILINE))
-    has_semi = ";" in cleaned
-    if not has_open_brace or not has_semi:
-        return False
-    # First non-empty non-comment line must end with ``{`` AND
-    # have content BEFORE the `{` (block-form sections look like
-    # ``system {`` or ``interfaces {``; JSON starts with bare ``{``).
-    # ``"key":`` in the same line is a strong JSON signal; Junos
-    # values don't use ``:`` as a key/value separator at the block
-    # level.
-    for line in cleaned.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        # Reject lines that look like JSON (key:value shape).
-        if '"' in line and ":" in line:
-            return False
-        if line.endswith("{") and len(line) > 1:
-            return True
-        if line == "{":
-            # Bare ``{`` as the first meaningful line — ambiguous
-            # (could be JSON or a bare Junos block).  Favour
-            # rejection so callers get a clearer error via the
-            # normal set-form parse path.
-            return False
-        # A top-level statement before any brace means set-form.
-        return False
-    return False
+
+    def __init__(self, paths: Iterable[tuple[str, ...]]) -> None:
+        self._heads: set[str] = set()
+        self._ends: dict[int, list[tuple[str, ...]]] = {}
+        self._longest = 0
+        for path in paths:
+            if not path:
+                continue
+            link = 0
+            for word in path:
+                link = hash((link, word))
+            self._ends.setdefault(link, []).append(path)
+            self._heads.add(path[0])
+            self._longest = max(self._longest, len(path))
+
+    def __bool__(self) -> bool:
+        return bool(self._ends)
+
+    def over(self, words: Sequence[str]) -> tuple[str, ...] | None:
+        """The shortest path that *words* begin with, by whole words
+        (``ge-0/0/2`` is not the beginning of ``ge-0/0/20``), or
+        ``None``."""
+        if not words or words[0] not in self._heads:
+            return None
+        link = 0
+        for count, word in enumerate(words, 1):
+            if count > self._longest:
+                break
+            link = hash((link, word))
+            for path in self._ends.get(link, ()):
+                if len(path) == count and tuple(words[:count]) == path:
+                    return path
+        return None
 
 
-def _tokenise_blockform(raw: str) -> list[str]:
-    """Tokenise Junos block-form into a flat list with ``{``, ``}``,
-    and ``;`` as standalone tokens.  Quoted strings stay intact.
+def _blockform_tokens(raw: str, *, line_ends: bool = False) -> Iterator[str]:
+    """The tokens of hierarchical text: words, quoted strings (with
+    their quotes), and ``{`` ``}`` ``;`` each by itself.
+
+    One walk over the characters, comments included, because a
+    comment begins only where a token could:
+
+    * ``/* ... */`` wherever a token could begin -- an annotation
+      above a statement, ``secret /* SECRET-DATA */;``.  Inside a
+      word it is the word's: ``member ge-0/*/*;`` and a group's
+      ``<*/*>`` are what a device prints.  A pattern that cut every
+      ``/*`` to the next ``*/`` in the text took whole blocks with
+      it; and from every ``/*`` that was never closed it read to
+      the end of the text, which cost the square of their number.
+    * ``#`` to the end of its line, where a STATEMENT could begin:
+      ``## Last commit: ...`` above the configuration, ``##
+      SECRET-DATA`` after a statement.  A device prints its
+      comments there.  After the first word of a statement a ``#``
+      is a character of a value (``description #1;``).
+    * Inside a quoted string neither is a comment.
+
+    One comment is kept, as the three words ``display set`` prints
+    for it: ``/* SECRET-DATA */`` where a value would stand, which is
+    what a viewer without the ``secret`` permission is shown
+    (``encrypted-password /* SECRET-DATA */;``).  Left out, the
+    statement had no value at all, and a user whose hash was hidden
+    was read as a user who has none -- an account a target may
+    write with no password.  Kept, both forms say the same.
+
+    With *line_ends*, ``_LINE_END`` is given between the tokens of
+    one line and those of the next.
+
+    Raises:
+        ParseError: a quoted string, or a ``/*`` comment, that is
+            never closed.
     """
-    # Strip comments first — Junos allows /* ... */ anywhere.
-    cleaned = _BLOCKFORM_COMMENT_RE.sub(" ", raw)
-    tokens: list[str] = []
     i = 0
-    n = len(cleaned)
+    n = len(raw)
+    held = False  # the statement being read has a word already
     while i < n:
-        ch = cleaned[i]
+        ch = raw[i]
         if ch.isspace():
+            if line_ends and ch == "\n":
+                yield _LINE_END
             i += 1
             continue
         if ch in "{};":
-            tokens.append(ch)
+            yield ch
+            held = False
             i += 1
+            continue
+        if ch == "/" and raw.startswith("/*", i):
+            end = raw.find("*/", i + 2)
+            if end < 0:
+                # Not read as a comment to the end of the text: what
+                # follows would be left out with no word said.
+                raise ParseError(
+                    "juniper_junos: a `/*` comment is opened and "
+                    "never closed in block-form input",
+                    snippet=raw[i:i + 80],
+                )
+            if held and raw[i + 2:end].strip() == "SECRET-DATA":
+                yield "/*"
+                yield "SECRET-DATA"
+                yield "*/"
+            i = end + 2
+            continue
+        if ch == "#" and not held:
+            end = raw.find("\n", i)
+            i = n if end < 0 else end
             continue
         if ch == '"':
             # Quoted string — preserve the quotes for later rendering.
             end = i + 1
-            while end < n and cleaned[end] != '"':
-                if cleaned[end] == "\\" and end + 1 < n:
+            while end < n and raw[end] != '"':
+                if raw[end] == "\\" and end + 1 < n:
                     end += 2
                     continue
                 end += 1
@@ -1030,18 +1381,69 @@ def _tokenise_blockform(raw: str) -> list[str]:
                 raise ParseError(
                     "juniper_junos: unterminated quoted string in "
                     "block-form input",
-                    snippet=cleaned[i:i + 80],
+                    snippet=raw[i:i + 80],
                 )
-            tokens.append(cleaned[i:end + 1])
+            yield raw[i:end + 1]
+            held = True
             i = end + 1
             continue
         # Bare word: run of non-delim chars.
         end = i
-        while end < n and not cleaned[end].isspace() and cleaned[end] not in "{};\"":
+        while end < n and not raw[end].isspace() and raw[end] not in "{};\"":
             end += 1
-        tokens.append(cleaned[i:end])
+        yield raw[i:end]
+        held = True
         i = end
-    return tokens
+
+
+def _looks_like_blockform(raw: str) -> bool:
+    """Heuristic: does *raw* look like Junos block-form (hierarchical
+    curly-brace) rather than set-form?
+
+    Read a line at a time from the top, comments left out as the
+    tokeniser leaves them out, until a line decides:
+
+      * a line whose last token is ``{`` opens the first block: yes
+        -- unless the brace is all there is of it (JSON), or the text
+        has no ``;`` anywhere;
+      * a line that ends in ``;`` is a statement of the top level,
+        which a device prints ahead of the first block (``version
+        21.4R3.15;``): stepped over;
+      * a line that begins with a set-form verb is set-form, whatever
+        it ends in (``set interfaces ge-0/0/1 description b{``); so is
+        any other line (a Cisco ``version 17.12`` has no ``;``);
+      * a line that begins with a quoted string or a brace is no
+        Junos statement (``"key": {``).
+    """
+    if "{" not in raw or ";" not in raw:
+        return False
+    first = last = ""
+    try:
+        for token in _blockform_tokens(raw, line_ends=True):
+            if token != _LINE_END:
+                if not first:
+                    if token in _SETFORM_WORDS or token[0] in '{}"':
+                        return False
+                    first = token
+                last = token
+            elif first:
+                if last == "{":
+                    return True
+                if last != ";":
+                    return False
+                first = last = ""
+    except ParseError:
+        # A quote or a comment that never closes, ahead of any block.
+        return False
+    return bool(first) and last == "{"
+
+
+def _tokenise_blockform(raw: str) -> list[str]:
+    """Tokenise Junos block-form into a flat list with ``{``, ``}``,
+    and ``;`` as standalone tokens.  Quoted strings stay intact, and
+    comments are left out (:func:`_blockform_tokens`).
+    """
+    return list(_blockform_tokens(raw))
 
 
 #: Maximum curly-brace nesting depth accepted by the block-form
@@ -1056,13 +1458,66 @@ def _tokenise_blockform(raw: str) -> list[str]:
 _MAX_BLOCK_DEPTH = 100
 
 
+def _leaf_lines(path: list[str], words: list[str]) -> list[str]:
+    """The set-form lines of the leaf statement *words* under *path*."""
+    if not words:
+        return []
+    if words == ["..."]:
+        # What ``display max-depth`` prints for the blocks it does
+        # not show (``family inet { ... }``).  The block is there;
+        # what is in it is not in the text.
+        return ["set " + " ".join(path)] if path else []
+    # (#7) Expand a bracket value-list into one set-line per value.
+    # Block-form writes multi-value leaves as ``key [ v1 v2 … ];``;
+    # the set-form equivalent is one ``set <path> key <vi>`` per value.
+    # Without this the literal ``[`` / values are ingested as data
+    # (``name-server [ 8.8.8.8 1.1.1.1 ]`` → dns_servers == ['[']).
+    if "[" in words:
+        lb = words.index("[")
+        prefix = words[:lb]
+        try:
+            rb = words.index("]", lb + 1)
+        except ValueError:
+            rb = len(words)
+        values = words[lb + 1:rb]
+        trailing = words[rb + 1:]  # tokens after ] (rare); kept verbatim
+        if prefix and values:
+            return ["set " + " ".join(path + prefix + [v] + trailing) for v in values]
+        # Empty list or bracket-first (no leaf key) — fall through to
+        # verbatim emission rather than silently dropping the line.
+    return ["set " + " ".join(path + words)]
+
+
 def _blockform_to_setform(raw: str) -> str:
-    """Convert Junos block-form config text to set-form.
+    """Convert Junos block-form config text to set-form: the lines of
+    :func:`_blockform_convert`, as one text."""
+    out_lines, _left_out = _blockform_convert(raw)
+    return "\n".join(out_lines) + ("\n" if out_lines else "")
+
+
+def _blockform_convert(
+    raw: str,
+) -> tuple[list[str], dict[tuple[str, ...], tuple[str, tuple[str, ...]]]]:
+    """Convert Junos block-form config text to set-form lines.
 
     Walks the curly-brace hierarchy maintaining a path stack; emits
     ``set <path...> <leaf-value>`` for each leaf statement.  Supports
     apply-groups (both ``apply-groups G;`` and
     ``apply-groups [ G1 G2 ];`` forms).
+
+    The tags ahead of a statement are taken off it.  One that says
+    the statement is not in force -- ``inactive:``, or a load file's
+    ``delete:`` -- is written as ``display set`` writes a deactivated
+    statement: its ``set`` lines, and ``deactivate <path>``, which
+    the set-form parser reads and leaves out what is under.
+
+    Returns:
+        The lines, and for each ``deactivate`` line written: its
+        path, as the set-form parser will tokenise it, to the kind
+        of statement (``"inactive"`` or ``"delete"``) and the words
+        to name it by.  A leaf is named by its first word, as
+        ``display set`` names one, because what follows is its value
+        and a value may be a secret.
 
     Raises ParseError if braces are unbalanced or the input isn't
     recognisable block-form.  Conversion is grammar-agnostic beyond
@@ -1071,36 +1526,25 @@ def _blockform_to_setform(raw: str) -> str:
     """
     tokens = _tokenise_blockform(raw)
     out_lines: list[str] = []
+    left_out: dict[tuple[str, ...], tuple[str, tuple[str, ...]]] = {}
     path_stack: list[str] = []
     pos = 0
 
-    def emit_leaf(words: list[str]) -> None:
-        if not words:
-            return
-        # (#7) Expand a bracket value-list into one set-line per value.
-        # Block-form writes multi-value leaves as ``key [ v1 v2 … ];``;
-        # the set-form equivalent is one ``set <path> key <vi>`` per value.
-        # Without this the literal ``[`` / values are ingested as data
-        # (``name-server [ 8.8.8.8 1.1.1.1 ]`` → dns_servers == ['[']).
-        if "[" in words:
-            lb = words.index("[")
-            prefix = words[:lb]
-            try:
-                rb = words.index("]", lb + 1)
-            except ValueError:
-                rb = len(words)
-            values = words[lb + 1:rb]
-            trailing = words[rb + 1:]  # tokens after ] (rare); kept verbatim
-            if prefix and values:
-                for v in values:
-                    out_lines.append(
-                        "set " + " ".join(path_stack + prefix + [v] + trailing)
-                    )
-                return
-            # Empty list or bracket-first (no leaf key) — fall through to
-            # verbatim emission rather than silently dropping the line.
-        line = "set " + " ".join(path_stack + words)
-        out_lines.append(line)
+    def hold_back(kind: str, words: list[str], leaf: bool) -> bool:
+        """Write ``deactivate <path>`` for the statement *words*.
+        False when the statement has no word to be named by
+        (``inactive: [ a b ];``): nothing is written then."""
+        named = words[:words.index("[")] if "[" in words else words
+        if not named:
+            return False
+        payload = " ".join(path_stack + named)
+        out_lines.append("deactivate " + payload)
+        path = tuple(_tokenise_set(payload))
+        shown = path
+        if leaf:
+            shown = tuple(_tokenise_set(" ".join(path_stack + named[:1])))
+        left_out[path] = (kind, shown)
+        return True
 
     def parse_block(is_top_level: bool, depth: int = 0) -> None:
         nonlocal pos
@@ -1125,6 +1569,15 @@ def _blockform_to_setform(raw: str) -> str:
                 return
             tok = tokens[pos]
             if tok == "}":
+                if is_top_level:
+                    # Read as the end of the text, everything after
+                    # it was left out with no word said.
+                    raise ParseError(
+                        "juniper_junos: unbalanced braces in "
+                        "block-form input (a `}` closes a block that "
+                        "was never opened)",
+                        snippet=raw[:120],
+                    )
                 pos += 1
                 return
             # Read a statement: sequence of word tokens up to ; or {.
@@ -1132,35 +1585,62 @@ def _blockform_to_setform(raw: str) -> str:
             while pos < len(tokens) and tokens[pos] not in ("{", "}", ";"):
                 words.append(tokens[pos])
                 pos += 1
-            if pos >= len(tokens):
+            # The tags ahead of it, counted and cut once: taken off
+            # the front one at a time, a statement of many tags cost
+            # the square of their number.
+            tags = 0
+            kind = ""
+            while tags < len(words) and words[tags] in _STATEMENT_TAGS:
+                if words[tags] == "delete:":
+                    kind = "delete"
+                elif words[tags] == "inactive:" and not kind:
+                    kind = "inactive"
+                tags += 1
+            if tags:
+                words = words[tags:]
+            closer = tokens[pos] if pos < len(tokens) else ""
+            if not closer and not is_top_level:
                 # EOF.  At the top level this is expected; inside a
                 # nested block it means unbalanced braces — raise.
-                if not is_top_level:
+                raise ParseError(
+                    "juniper_junos: unbalanced braces in "
+                    "block-form input (reached EOF inside a "
+                    "nested block)",
+                    snippet=raw[:120],
+                )
+            if closer == "{":
+                if kind and not hold_back(kind, words, leaf=False):
+                    # ``inactive: {``: read on, the block was in
+                    # force under the statement above it.
                     raise ParseError(
-                        "juniper_junos: unbalanced braces in "
-                        "block-form input (reached EOF inside a "
-                        "nested block)",
+                        f"juniper_junos: `{kind}:` ahead of a block "
+                        "that has no name in block-form input",
                         snippet=raw[:120],
                     )
-                # Top-level trailing words without ; — emit as leaf
-                # for tolerance, though this is unusual.
-                emit_leaf(words)
-                return
-            if tokens[pos] == ";":
-                emit_leaf(words)
-                pos += 1
-            elif tokens[pos] == "{":
                 # Block: push all words onto the path and recurse.
                 pos += 1
-                push_count = len(words)
+                written = len(out_lines)
                 path_stack.extend(words)
                 parse_block(is_top_level=False, depth=depth + 1)
-                for _ in range(push_count):
-                    path_stack.pop()
-            elif tokens[pos] == "}":
-                # Closing brace with leftover words — malformed;
-                # emit as leaf and let the outer loop close.
-                emit_leaf(words)
+                if words and len(out_lines) == written:
+                    # A block with nothing in it -- an empty
+                    # ``prefix-list``, ``{ /* OMITTED */ }``, what
+                    # ``| except SECRET-DATA`` leaves of a block -- is
+                    # there all the same, and ``display set`` writes
+                    # its path.  With no line, a Tier-3 section and a
+                    # deactivated block of this kind went unnamed.
+                    out_lines.append("set " + " ".join(path_stack))
+                if words:
+                    del path_stack[-len(words):]
+                continue
+            # A leaf.  Ended by its ``;``; by the ``}`` of its block,
+            # where the ``;`` is missing -- the brace then closes that
+            # block and no other; or by the end of the text.
+            if not kind or hold_back(kind, words, leaf=True):
+                out_lines.extend(_leaf_lines(path_stack, words))
+            if closer == ";":
+                pos += 1
+            elif not closer:
                 return
 
     parse_block(is_top_level=True)
@@ -1170,20 +1650,27 @@ def _blockform_to_setform(raw: str) -> str:
             f"(path_stack at end: {path_stack})",
             snippet=raw[:120],
         )
-    return "\n".join(out_lines) + ("\n" if out_lines else "")
+    return out_lines, left_out
+
+
+#: What the SNMPv3 user index reads while a config has no SNMP section.
+_NO_V3_USERS: list[Any] = []
 
 
 class _Found:
     """The records a set-line handler looks for among everything the
     earlier lines made: a user by name, a routing instance by name, a
     static route by destination, next hop and VRF, a VNI by VLAN and
-    number.
+    number, an SNMPv3 user by name -- and, in ``once``, the values of
+    the lists of ONE record that a line adds to (an interface's
+    addresses, a LAG's members, a VRF's route targets).
 
     Each handler runs once per line.  Looking through the whole list
-    each time (``next(...)``, ``any(...)``) cost the square of the
-    lines: a few thousand static routes took seconds, and the text is
-    whatever was pasted.  One of these is made per parse and handed
-    down; a handler called by itself makes its own.
+    each time (``next(...)``, ``any(...)``, ``value not in a_list``)
+    cost the square of the lines: a few thousand static routes took
+    seconds, and the text is whatever was pasted.  One of these is
+    made per parse and handed down; a handler called by itself makes
+    its own.
     """
 
     def __init__(self, intent: CanonicalIntent) -> None:
@@ -1194,6 +1681,11 @@ class _Found:
             lambda route: (route.destination, route.gateway, route.vrf),
         )
         self.vnis = GrowingIndex(lambda: intent.vxlan_vnis, lambda vx: (vx.vlan_id, vx.vni))
+        self.v3_users = GrowingIndex(
+            lambda: intent.snmp.v3_users if intent.snmp is not None else _NO_V3_USERS,
+            lambda user: user.name,
+        )
+        self.once = Uniques()
 
 
 def _dispatch_set(
@@ -1239,17 +1731,17 @@ def _dispatch_set(
     elif head == "access":
         # Cluster E.1-B: ``set access address-assignment pool <P>
         # family inet ...`` (modern form DHCP server pool grammar).
-        _apply_access(tokens[1:], dhcp_pool_state)
+        _apply_access(tokens[1:], dhcp_pool_state, found)
     elif head == "interfaces":
         _apply_interfaces(
-            tokens[1:], iface_state, range_state, lag_state, irb_state,
+            tokens[1:], iface_state, range_state, lag_state, irb_state, found,
         )
     elif head == "vlans":
         _apply_vlans(tokens[1:], intent, irb_state, vlan_by_id, vlan_by_name, found)
     elif head == "routing-options":
         _apply_routing_options(tokens[1:], intent, found)
     elif head == "snmp":
-        _apply_snmp(tokens[1:], intent)
+        _apply_snmp(tokens[1:], intent, found)
     elif head == "routing-instances":
         # GAP 6: ``set routing-instances <name> ...`` populates
         # CanonicalRoutingInstance + per-interface VRF membership.
@@ -1289,7 +1781,7 @@ def _apply_system(
         and tokens[1] in ("dhcp-local-server", "dhcp")
     ):
         _apply_system_services_dhcp(
-            tokens[1:], dhcp_pool_state, dhcp_group_iface,
+            tokens[1:], dhcp_pool_state, dhcp_group_iface, found,
         )
         return
     # GAP 8: richer system-scalar inheritance exercised primarily via
@@ -1352,6 +1844,7 @@ def _apply_interfaces(  # noqa: C901
     range_state: dict[str, dict[str, Any]] | None = None,
     lag_state: dict[str, dict[str, Any]] | None = None,
     irb_state: dict[int, dict[str, Any]] | None = None,
+    found: _Found | None = None,
 ) -> None:
     """Parse ``interfaces <name> ...`` variants.
 
@@ -1373,6 +1866,10 @@ def _apply_interfaces(  # noqa: C901
     * ``interfaces <name> native-vlan-id <vid>`` — trunk native VLAN.
     * ``interfaces irb unit <vid> family inet address <ip>/<prefix>`` —
       VLAN SVI L3 address; captured into *irb_state* keyed by vid.
+
+    ``found`` is the per-parse lookup (:class:`_Found`); its ``once``
+    appends a value to a list of one record unless the list has it.
+    A caller that has none may leave it out.
     """
     if not tokens:
         return
@@ -1383,8 +1880,9 @@ def _apply_interfaces(  # noqa: C901
         and len(tokens) >= 2
         and range_state is not None
     ):
-        _apply_interface_range(tokens[1:], range_state)
+        _apply_interface_range(tokens[1:], range_state, found)
         return
+    once = found.once if found is not None else Uniques()
     name = tokens[0]
     state = iface_state.setdefault(name, {})
 
@@ -1448,8 +1946,7 @@ def _apply_interfaces(  # noqa: C901
         # static, so seed the default ``static`` (an explicit lacp line, if
         # present, overwrites it above).
         entry = lag_state.setdefault(ae_name, {"members": [], "mode": "static"})
-        if name not in entry["members"]:
-            entry["members"].append(name)
+        once.add(entry["members"], name)
         return
 
     # --- Phase 4 rank-4: trunk native VLAN ---
@@ -1539,8 +2036,7 @@ def _apply_interfaces(  # noqa: C901
                     # content render both emit the same address
                     # line; we don't want it to accumulate.
                     pair = (ip_str, prefix)
-                    if pair not in existing:
-                        existing.append(pair)
+                    once.add(existing, pair)
                     # Wave C: ``family inet address <ip>/<prefix>
                     # virtual-gateway-address <vga>`` — capture the
                     # per-address anycast companion.  Multiple address
@@ -1569,7 +2065,7 @@ def _apply_interfaces(  # noqa: C901
                             _apply_vrrp_group_sub(
                                 target_state, gid, "vrrp",
                                 tokens[9:],
-                                addr_anchor=pair,
+                                addr_anchor=pair, once=once,
                             )
                 except ValueError:
                     pass
@@ -1619,8 +2115,7 @@ def _apply_interfaces(  # noqa: C901
                     prefix = int(prefix_str)
                     existing = target_state.setdefault("ipv6", [])
                     pair = (ip_str, prefix)
-                    if pair not in existing:
-                        existing.append(pair)
+                    once.add(existing, pair)
                     # Wave C: ``family inet6 address <ip>/<prefix>
                     # virtual-gateway-address <vga>``.
                     if (
@@ -1726,8 +2221,7 @@ def _apply_interfaces(  # noqa: C901
                     prefix = int(prefix_str)
                     entry = irb_state.setdefault(unit_num, {"ipv4": []})
                     pair = (ip_str, prefix)
-                    if pair not in entry["ipv4"]:
-                        entry["ipv4"].append(pair)
+                    once.add(entry["ipv4"], pair)
                     if (
                         len(tokens) >= 9
                         and tokens[7] == "virtual-gateway-address"
@@ -1755,7 +2249,7 @@ def _apply_interfaces(  # noqa: C901
                             _apply_vrrp_group_sub(
                                 entry, gid, "vrrp",
                                 tokens[9:],
-                                addr_anchor=pair,
+                                addr_anchor=pair, once=once,
                             )
                 except ValueError:
                     pass
@@ -1781,8 +2275,7 @@ def _apply_interfaces(  # noqa: C901
                     entry = irb_state.setdefault(unit_num, {"ipv4": []})
                     pair = (ip_str, prefix)
                     existing_v6 = entry.setdefault("ipv6", [])
-                    if pair not in existing_v6:
-                        existing_v6.append(pair)
+                    once.add(existing_v6, pair)
                     if (
                         len(tokens) >= 9
                         and tokens[7] == "virtual-gateway-address"
@@ -1819,6 +2312,7 @@ def _apply_interfaces(  # noqa: C901
 def _apply_interface_range(
     tokens: list[str],
     range_state: dict[str, dict[str, Any]],
+    found: _Found | None = None,
 ) -> None:
     """Parse ``interfaces interface-range <rname> ...`` variants.
 
@@ -1835,6 +2329,10 @@ def _apply_interface_range(
     materialisation time so the canonical tree looks identical
     whether the operator wrote interface-range blocks or flat
     per-interface lines.  Unknown sub-paths parse-and-ignore.
+
+    ``found`` is the per-parse lookup (:class:`_Found`); its ``once``
+    appends a value to a list of one record unless the list has it.
+    A caller that has none may leave it out.
     """
     if not tokens:
         return
@@ -1845,8 +2343,7 @@ def _apply_interface_range(
     sub = tokens[1]
     if sub == "member" and len(tokens) >= 3:
         member = tokens[2]
-        if member not in state["members"]:
-            state["members"].append(member)
+        (found.once if found is not None else Uniques()).add(state["members"], member)
         return
     if sub == "description" and len(tokens) >= 3:
         state["attrs"]["description"] = tokens[2]
@@ -2032,6 +2529,7 @@ def _apply_switch_options(tokens: list[str], intent: CanonicalIntent) -> None:
 def _apply_access(
     tokens: list[str],
     dhcp_pool_state: dict[str, dict[str, Any]] | None,
+    found: _Found | None = None,
 ) -> None:
     """Modern Junos DHCP grammar: ``set access address-assignment
     pool <P> family inet ...``.
@@ -2054,6 +2552,10 @@ def _apply_access(
 
     Other ``family inet6`` / non-DHCP ``access`` sub-paths (profile,
     radius-server) parse-and-ignore — out of Cluster E DHCP scope.
+
+    ``found`` is the per-parse lookup (:class:`_Found`); its ``once``
+    appends a value to a list of one record unless the list has it.
+    A caller that has none may leave it out.
     """
     if dhcp_pool_state is None:
         return
@@ -2095,8 +2597,7 @@ def _apply_access(
             return
         if attr == "name-server":
             servers = entry.setdefault("dns_servers", [])
-            if val not in servers:
-                servers.append(val)
+            (found.once if found is not None else Uniques()).add(servers, val)
             return
         if attr == "maximum-lease-time":
             try:
@@ -2115,6 +2616,7 @@ def _apply_system_services_dhcp(
     tokens: list[str],
     dhcp_pool_state: dict[str, dict[str, Any]] | None,
     dhcp_group_iface: dict[str, str] | None,
+    found: _Found | None = None,
 ) -> None:
     """Two grammars share this entry point:
 
@@ -2127,6 +2629,10 @@ def _apply_system_services_dhcp(
       Each ``set system services dhcp pool <CIDR> ...`` line is a
       flat sub-path that we map onto the same accumulator the
       modern form uses (keyed by the network CIDR).
+
+    ``found`` is the per-parse lookup (:class:`_Found`); its ``once``
+    appends a value to a list of one record unless the list has it.
+    A caller that has none may leave it out.
     """
     if not tokens:
         return
@@ -2164,8 +2670,7 @@ def _apply_system_services_dhcp(
             return
         if head == "name-server" and len(sub) >= 2:
             servers = entry.setdefault("dns_servers", [])
-            if sub[1] not in servers:
-                servers.append(sub[1])
+            (found.once if found is not None else Uniques()).add(servers, sub[1])
             return
         if head == "maximum-lease-time" and len(sub) >= 2:
             try:
@@ -2262,10 +2767,9 @@ def _apply_routing_instances(
         # ``export target:...``.
         if len(rest) >= 2 and rest[1].startswith("target:"):
             rt = rest[1][len("target:"):]
-            if rt not in ri.rt_imports:
-                ri.rt_imports.append(rt)
-            if rt not in ri.rt_exports:
-                ri.rt_exports.append(rt)
+            once = (found or _Found(intent)).once
+            once.add(ri.rt_imports, rt)
+            once.add(ri.rt_exports, rt)
             return
         if (
             len(rest) >= 3
@@ -2273,8 +2777,7 @@ def _apply_routing_instances(
             and rest[2].startswith("target:")
         ):
             rt = rest[2][len("target:"):]
-            if rt not in ri.rt_imports:
-                ri.rt_imports.append(rt)
+            (found or _Found(intent)).once.add(ri.rt_imports, rt)
             return
         if (
             len(rest) >= 3
@@ -2282,8 +2785,7 @@ def _apply_routing_instances(
             and rest[2].startswith("target:")
         ):
             rt = rest[2][len("target:"):]
-            if rt not in ri.rt_exports:
-                ri.rt_exports.append(rt)
+            (found or _Found(intent)).once.add(ri.rt_exports, rt)
             return
         return
     if head == "interface" and len(rest) >= 2:
@@ -2364,7 +2866,9 @@ def _apply_routing_options(
             ))
 
 
-def _apply_snmp(tokens: list[str], intent: CanonicalIntent) -> None:
+def _apply_snmp(
+    tokens: list[str], intent: CanonicalIntent, found: _Found | None = None,
+) -> None:
     """``set snmp community <name> authorization read-only|read-write``
     ``set snmp location "<loc>"``
     ``set snmp contact "<contact>"``
@@ -2375,6 +2879,10 @@ def _apply_snmp(tokens: list[str], intent: CanonicalIntent) -> None:
         privacy-key "<key>"``
     ``set snmp v3 vacm security-to-group security-model usm
         security-name <name> group <group>``
+
+    ``found`` is the per-parse lookup (:class:`_Found`), where an
+    SNMPv3 user is found by name; a caller that has none may leave it
+    out.
     """
     if not tokens:
         return
@@ -2397,7 +2905,7 @@ def _apply_snmp(tokens: list[str], intent: CanonicalIntent) -> None:
         # ``set snmp trap-group <name> targets <ip>``
         intent.snmp.trap_hosts.append(tokens[3])
     elif head == "v3":
-        _apply_snmp_v3(tokens[1:], intent)
+        _apply_snmp_v3(tokens[1:], intent, found)
 
 
 # Junos authentication-* → canonical auth_protocol short form.
@@ -2424,22 +2932,33 @@ _JUNOS_PRIV_MAP = {
 def _get_or_create_v3_user(
     snmp: CanonicalSNMP,
     name: str,
+    found: _Found | None = None,
 ) -> Any:
     """Look up the SNMPv3 user record by name, creating a stub if
     absent.  Merging lets the user's auth key, priv key, and VACM
     group binding arrive in any order (``set snmp v3`` lines can be
     scattered across the config).
+
+    ``found`` is the per-parse lookup (:class:`_Found`): with it the
+    user is found by name without the users so far being read for
+    every ``set snmp v3`` line.  A caller that has none may leave it
+    out, and the list is then read once for this call.
     """
     from ...canonical.intent import CanonicalSNMPv3User
-    for u in snmp.v3_users:
-        if u.name == name:
-            return u
+    users = found.v3_users if found is not None else GrowingIndex(
+        lambda: snmp.v3_users, lambda user: user.name,
+    )
+    u = users.get(name)
+    if u is not None:
+        return u
     u = CanonicalSNMPv3User(name=name)
     snmp.v3_users.append(u)
     return u
 
 
-def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent) -> None:
+def _apply_snmp_v3(
+    tokens: list[str], intent: CanonicalIntent, found: _Found | None = None,
+) -> None:
     """Handle ``set snmp v3 ...`` tails.
 
     Two families:
@@ -2454,6 +2973,9 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent) -> None:
     Malformed / unrecognised sub-paths are silently ignored — other
     ``set snmp v3`` lines (trap-target, notify-view, access) are
     Tier-3 and out of this codec's scope.
+
+    ``found`` is the per-parse lookup (:class:`_Found`), where a user
+    is found by name; a caller that has none may leave it out.
     """
     if intent.snmp is None:
         intent.snmp = CanonicalSNMP()
@@ -2477,7 +2999,7 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent) -> None:
             # render emits but the parser ignores is a silent loss.
             if key_tok in ("authentication-key", "authentication-password"):
                 from ..._usm_keys import LOCALISED, PLAINTEXT
-                u = _get_or_create_v3_user(intent.snmp, name)
+                u = _get_or_create_v3_user(intent.snmp, name, found)
                 u.auth_protocol = _JUNOS_AUTH_MAP[attr]
                 u.auth_passphrase = key_val
                 # WHICH leaf carried the value IS the kind: Junos derives the
@@ -2491,7 +3013,7 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent) -> None:
             key_val = tokens[6]
             if key_tok in ("privacy-key", "privacy-password"):
                 from ..._usm_keys import LOCALISED, PLAINTEXT
-                u = _get_or_create_v3_user(intent.snmp, name)
+                u = _get_or_create_v3_user(intent.snmp, name, found)
                 u.priv_protocol = _JUNOS_PRIV_MAP[attr]
                 u.priv_passphrase = key_val
                 u.priv_kind = (
@@ -2501,12 +3023,12 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent) -> None:
         # Bare ``authentication-none`` / ``privacy-none`` (no key
         # follows) — clears the corresponding field.
         if attr == "authentication-none":
-            u = _get_or_create_v3_user(intent.snmp, name)
+            u = _get_or_create_v3_user(intent.snmp, name, found)
             u.auth_protocol = ""
             u.auth_passphrase = ""
             return
         if attr == "privacy-none":
-            u = _get_or_create_v3_user(intent.snmp, name)
+            u = _get_or_create_v3_user(intent.snmp, name, found)
             u.priv_protocol = ""
             u.priv_passphrase = ""
             return
@@ -2523,7 +3045,7 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent) -> None:
     ):
         name = tokens[5]
         group = tokens[7]
-        u = _get_or_create_v3_user(intent.snmp, name)
+        u = _get_or_create_v3_user(intent.snmp, name, found)
         u.group = group
 
 
@@ -2538,6 +3060,7 @@ def _apply_vrrp_group_sub(
     mode: str,
     rest_tokens: list[str],
     addr_anchor: tuple[str, int] | None = None,
+    once: Uniques | None = None,
 ) -> None:
     """Dispatch a single ``vrrp-group <gid> <sub-token> <args...>``
     sub-line into the per-group scratch dict stored on
@@ -2566,6 +3089,10 @@ def _apply_vrrp_group_sub(
       ``<scheme>:<value>`` form.
 
     Unknown sub-tokens parse-and-ignore (Tier-3 tolerance).
+
+    ``once`` appends a value to a list of the group unless the list
+    has it (:class:`.._helpers.Uniques`); the caller's own is handed
+    in so that many lines for one group do not each read the list.
     """
     groups = target_state.setdefault("vrrp_groups", {})
     g = groups.setdefault(gid, {
@@ -2587,13 +3114,11 @@ def _apply_vrrp_group_sub(
     sub = rest_tokens[0]
     if sub == "virtual-address" and len(rest_tokens) >= 2:
         vip = rest_tokens[1]
-        if vip not in g["virtual_ips"]:
-            g["virtual_ips"].append(vip)
+        (once if once is not None else Uniques()).add(g["virtual_ips"], vip)
         return
     if sub == "virtual-inet6-address" and len(rest_tokens) >= 2:
         vip = rest_tokens[1]
-        if vip not in g["virtual_ipv6s"]:
-            g["virtual_ipv6s"].append(vip)
+        (once if once is not None else Uniques()).add(g["virtual_ipv6s"], vip)
         return
     if sub == "priority" and len(rest_tokens) >= 2:
         try:
@@ -2621,8 +3146,7 @@ def _apply_vrrp_group_sub(
         and rest_tokens[1] == "interface"
     ):
         track_iface = rest_tokens[2]
-        if track_iface not in g["track_interfaces"]:
-            g["track_interfaces"].append(track_iface)
+        (once if once is not None else Uniques()).add(g["track_interfaces"], track_iface)
         return
     if sub == "authentication-type" and len(rest_tokens) >= 2:
         scheme = rest_tokens[1]

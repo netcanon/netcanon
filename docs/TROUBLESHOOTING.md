@@ -30,6 +30,37 @@ pair with an adjacent tool — see
 [`COMPARISON.md`](COMPARISON.md) for Capirca / Aerleon (firewall
 DSL) and Batfish (network analysis).
 
+A row that begins `inactive:` is different: it is a Junos statement
+the source had deactivated (`deactivate interfaces ge-0/0/2`, or
+`inactive: ge-0/0/2 {` in the hierarchical form).  The device was
+not running it, so it is not translated, and the banner does not
+count it among the sections to apply by hand.  (A row that begins
+`delete:` is a statement a load file marks for deletion, and is
+treated the same.)  **Action:** none, unless you meant to bring it
+back into force on the target — then add it there by hand.  Two
+things to look at when the row is an interface: whether a
+`routing-instances` statement or a LAG member still names it — what
+names a deactivated statement is still read, see
+[`vendors/juniper_junos.md`](vendors/juniper_junos.md) — and
+whether the output has what you expected of the group or the
+interface-range that would have filled it: under a deactivated path
+that is left out too.
+
+A job that is `partial` with "No source constructs were recognized"
+and rows that all begin `inactive:` read nothing else: every
+statement it understood was deactivated in the source, or the text
+is not a Junos config.
+
+**A pasted Junos `show configuration` came out empty or was
+refused.**  Read are the hierarchical form as a device prints it and
+the lines of the session around it (the prompt, `{master:0}`,
+`[edit]`, a pager's prompt).  Refused, with the reason in the
+error: a `}` that closes nothing, a block that is never closed, a
+`/*` comment opened after the first block and never closed — a
+capture that was cut off.  If
+the text begins with anything else that is not configuration, take
+it off, or use `show configuration | display set`.
+
 ### B. The unsupported-paths panel
 
 > "Field /routing-instances/instance is declared `unsupported` for
@@ -172,6 +203,68 @@ config on one of those releases, re-check the target's VLAN
 database: the trunk lines were
 emitted correctly but the matching `vlan <N>` declarations could be
 missing, which silently stops those VLANs forwarding.
+
+### "A trunk's allowed list is not what I wrote"
+
+A trunk's list is carried as what it MEANS, and each target writes
+its own form for it.  What you may see:
+
+* **No `switchport trunk allowed vlan` line at all** (IOS-XE, NX-OS,
+  EOS).  The source trunk carried every VLAN — it said `all`, or
+  `vlan members all`, or stated no list on a platform where that is
+  every VLAN — and a trunk with no allowed line is how these
+  platforms say so.  Nothing to do.
+* **`switchport trunk allowed vlan none`**, or a Junos trunk with no
+  `vlan members`.  The source trunk allowed no VLAN: it said `none`,
+  its list was emptied by `remove` or `except`, it is a Dell OS10 or
+  Junos trunk that lists nothing, or you dropped every VLAN it
+  carried (next item).  A Dell OS10 trunk with an untagged VLAN and
+  no tagged one is written this way too, with the native line beside
+  it: check that its untagged VLAN is carried as you mean it to be.
+* **`! review: the source trunk allows no VLAN ...`** in an AOS-CX
+  interface stanza, and no `vlan trunk` line.  AOS-CX has no form
+  for a trunk that carries nothing: a trunk left with no allowed
+  VLAN carries every VLAN.  **Action:** add `vlan trunk allowed
+  <list>` (and `vlan trunk native <N>`) for what the port is to
+  carry, or `shutdown` it.  The job does not count this line.  As
+  written, the stanza is a switched port with no `vlan` line — taken
+  here to be an access port in VLAN 1 by the switch's default, which
+  is not established here from an HPE page — so do not leave it as
+  it is.
+* **`vlan members all`, `vlan trunk allowed all`, or OS10's `1-4094`,
+  on a port whose own stanza has no allowed line.**  A Cisco, Arista
+  or AOS-CX port that states the trunk mode and no list is a trunk
+  of every VLAN.  If its list is stated somewhere that is not read —
+  on the port-channel it is a member of, in an `inherit
+  port-profile` or a `source template` — the output is every VLAN
+  where the switch has that list.  **Action:** write the list on the
+  port.
+* **`switchport trunk allowed vlan none` (or a Junos trunk with no
+  members) for a port that had `switchport trunk native vlan <N>`
+  and no `switchport mode trunk`** (NX-OS, EOS sources).  The port
+  was read as a trunk from its trunk line, and a trunk read that way
+  is given no VLAN the config does not name.  On the switch it is an
+  access port.  **Action:** state the port's mode in the source, or
+  correct the stanza in the output.
+* **`! review: the source trunk allows every VLAN ...`** above
+  `switchport trunk allowed vlan 1-4094` on OS10.  OS10 has no word
+  for every VLAN, its ids end at 4093, and it lists only VLANs that
+  exist.  **Action:** replace `1-4094` with the VLANs the switch
+  has (not the port's own access VLAN, which a trunk carries
+  untagged).
+
+And one warning, when you drop VLANs in the rename modal's VLAN
+pane:
+
+```
+vlan_rename: interface 'GigabitEthernet1/0/1' is a trunk that allowed only VLAN 100 which was dropped — the trunk now allows no VLAN
+```
+
+Every VLAN that trunk carried was dropped, so it is written as a
+trunk of no VLAN (it is not removed, and the job is not failed by
+it).  If that is not what you meant, keep one of its VLANs, or drop
+the port as well.  A trunk of every VLAN is not touched by a drop or
+a renumber: it is still every VLAN.
 
 ### "My hashed password came out as a review comment"
 
@@ -515,6 +608,37 @@ target of its own, or drop it — see "My job is `partial` and the
 validation report is clean" above.  (Amber under that heading is a
 name waiting for your decision: one that was dropped, or one left
 under its source name.)
+
+### The line under *Source device* says the device could not be read
+
+"Reading the source device from the config …" is the question being
+put; it should be gone in a moment.  If it turns into "Could not read
+the device from the config (…)", the words in brackets are why: the
+server's status, a network failure, or "no answer from the server in
+20 seconds".  Nothing is wrong with the config.  Choose the source
+device yourself, or close the modal and open it again: the config is
+asked about again every time the modal opens until it has been
+answered for.
+
+### The footer says overrides "were left out"
+
+"Restored prior overrides (…)" means the browser had entries of yours
+for this source codec, target codec and host name, and put them
+back.  Two configs can share a host name.  "N kept for this host
+name are for a name this config does not have, and were left out"
+counts the entries that belong to the other config: a port, a VLAN
+or a user this one has no row for.  They are not sent, and they
+stay kept: back on the other config they are put back.  **Reset
+all** forgets what this config has rows for, and leaves the
+other config's entries as they are.
+
+### A VLAN override was typed and that VLAN did not change
+
+A number that is no VLAN id (1 to 4094) is not an entry: nothing is
+sent for that VLAN while the field holds it, and an earlier entry
+for it is gone too.  The field looks like any other; its title says
+"Not a VLAN id (1-4094): nothing is sent for VLAN N".  Type an id in
+range.
 
 ### Detection proposes a device, and says ports are missing
 

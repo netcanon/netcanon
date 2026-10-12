@@ -26,6 +26,12 @@ Public functions:
       firewall / QoS / route-map config — those live in CLI), but
       retained for symmetry so the per-codec hook is structurally
       identical.
+    * :func:`left_out_row` / :func:`left_out_rows` /
+      :func:`is_left_out_row` — the row for a statement a parser
+      read and left out on purpose (a Junos statement the source
+      had deactivated), the rows for all of them (bounded, and
+      one row for statements that read alike), and the test that
+      tells such a row from a section header.
 
 Each returns a list of section labels like::
 
@@ -50,6 +56,7 @@ whole run of blank lines it is in, and a run costs its square.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 
 # IOS-XE CLI / Arista EOS shape — patterns target only stanzas that
 # the CLI parsers do NOT consume (firewall, QoS, route-maps, crypto).
@@ -339,7 +346,14 @@ def detect_tier3_sections_fortios(raw: str) -> list[str]:
 
 
 def detect_tier3_sections_junos(raw: str) -> list[str]:
-    """Detect Tier-3 stanza headers in Junos set-form text."""
+    """Detect Tier-3 stanza headers in Junos set-form text.
+
+    Every pattern begins ``set ``, so hierarchical text has to be
+    handed over as the set-form the parser read it as
+    (``juniper_junos.parse.read_intent`` returns that text): given the
+    hierarchical text itself this found nothing, and a firewall's
+    filters, NAT and policies were dropped with no row to say so.
+    """
     return _detect_regex(raw, _JUNOS_TIER3_HEADERS)
 
 
@@ -396,6 +410,106 @@ def detect_tier3_sections_iosxe_xml(raw: str) -> list[str]:
     """
     del raw  # unused; reserved for future extension
     return []
+
+
+# ---------------------------------------------------------------------------
+# Statements a parser read and left out
+# ---------------------------------------------------------------------------
+
+#: Kind of statement to what its row begins with and why it is there.
+#: Such a row is in the list because the statement is not in the
+#: output; it is not a section the parser has no model for, and it is
+#: not something to apply by hand.
+_LEFT_OUT: dict[str, tuple[str, str]] = {
+    "inactive": ("inactive: ", "deactivated in the source; not translated"),
+    "delete": ("delete: ", "marked for deletion in a load file; not translated"),
+}
+
+#: A word of a path that names a secret.  What follows it is the
+#: secret (a community string, a hash, a key) or leads to it, and is
+#: not shown.
+_NAMES_A_SECRET = ("community", "password", "secret", "key", "psk", "authentication")
+
+
+def left_out_row(kind: str, path: Sequence[str]) -> str:
+    """The row for a statement a parser read and left out.
+
+    The row names the statement and never a secret: a path is the
+    words of the statement, and a statement is keyed by its secret
+    often enough (``snmp community <string>``) or ends in one
+    (``authentication encrypted-password <hash>``).  The words are
+    cut after the first that names a secret and has something after
+    it, and the cut is marked ``...``.
+
+    Args:
+        kind: ``"inactive"`` (deactivated in the source) or
+            ``"delete"`` (under a load file's ``delete:``).
+        path: The words of the statement's path, outermost first.
+
+    Returns:
+        ``"<kind>: <path> (<why it was left out>)"``.
+    """
+    shown = list(path)
+    for at, word in enumerate(shown[:-1]):
+        lowered = word.lower()
+        if any(name in lowered for name in _NAMES_A_SECRET):
+            del shown[at + 1:]
+            break
+    words = [f'"{word}"' if not word or any(ch.isspace() for ch in word) else word for word in shown]
+    if len(shown) < len(path):
+        words.append("...")
+    prefix, why = _LEFT_OUT[kind]
+    return f"{prefix}{' '.join(words)} ({why})"
+
+
+#: The most rows given for the statements a parser left out.  The
+#: list is in every answer, and a row is longer than the statement
+#: it names: eighty thousand deactivated leaves made an answer of
+#: thirty-six megabytes to a request of one and a half.
+LEFT_OUT_ROWS_SHOWN = 200
+
+
+def left_out_rows(statements: Iterable[tuple[str, Sequence[str]]]) -> list[str]:
+    """The rows for the statements a parser read and left out.
+
+    Statements whose rows read alike share one, which says how
+    many it stands for: two deactivated NTP servers are both
+    ``inactive: system ntp server``, the value of a leaf being
+    left out of its row.  Past :data:`LEFT_OUT_ROWS_SHOWN` rows
+    one last row counts the statements that are not listed.
+
+    Args:
+        statements: ``(kind, path)`` for each, in the order the
+            rows are to have (see :func:`left_out_row`).
+
+    Returns:
+        The rows, each one :func:`is_left_out_row` knows.
+    """
+    counts: dict[str, int] = {}
+    for kind, path in statements:
+        row = left_out_row(kind, path)
+        counts[row] = counts.get(row, 0) + 1
+    rows = [
+        row if count == 1 else f"{row[:-1]}; {count} statements)"
+        for row, count in counts.items()
+    ]
+    if len(rows) > LEFT_OUT_ROWS_SHOWN:
+        rest = sum(list(counts.values())[LEFT_OUT_ROWS_SHOWN:])
+        rows[LEFT_OUT_ROWS_SHOWN:] = [
+            f"{_LEFT_OUT['inactive'][0]}... ({rest} more statements left out; not listed)"
+        ]
+    return rows
+
+
+def is_left_out_row(label: str) -> bool:
+    """Whether *label* is a row made by :func:`left_out_row`.
+
+    A reader of ``dropped_tier3_sections`` that takes a row for a sign
+    that the parser recognised something has to ask this first: a
+    deactivated statement is named whether or not any handler would
+    have read a line of it.
+    """
+    return label.startswith(tuple(prefix for prefix, _why in _LEFT_OUT.values()))
 
 
 # ---------------------------------------------------------------------------

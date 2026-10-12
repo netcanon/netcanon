@@ -508,3 +508,38 @@ class TestJunosVlanL3ToSviRender:
         codec = AristaEOSCodec()
         out = codec.render(codec.parse(own))
         assert out.count("interface Vlan698") == 1
+
+
+# ---------------------------------------------------------------------------
+# "All" is the VLANs the list holds
+# ---------------------------------------------------------------------------
+
+
+def _one_trunk(allowed: list[int]) -> CanonicalIntent:
+    return CanonicalIntent(
+        vlans=[CanonicalVlan(id=1, name="default"), CanonicalVlan(id=10, name="users")],
+        interfaces=[CanonicalInterface(
+            name="Ethernet1", switchport_mode="trunk", trunk_allowed_vlans=allowed,
+        )],
+    )
+
+
+def test_a_trunk_of_all_but_vlan_1_is_not_stamped_onto_vlan_1() -> None:
+    """`2-4094` is read as "all" so that 4,093 VLANs are not made for
+    it, and the trunk is stamped onto the VLANs the config declares.
+    It was stamped onto a declared VLAN 1 too -- the one VLAN the list
+    leaves out -- and a VLAN-centric target then tagged the port in it."""
+    intent = _one_trunk(list(range(2, 4095)))
+    project_switchport_to_vlan(intent)
+    by_id = {vlan.id: vlan for vlan in intent.vlans}
+    assert by_id[10].tagged_ports == ["Ethernet1"]
+    assert by_id[1].tagged_ports == []
+    assert sorted(by_id) == [1, 10]
+
+
+def test_a_trunk_of_every_vlan_is_stamped_onto_each() -> None:
+    intent = _one_trunk(list(range(1, 4095)))
+    project_switchport_to_vlan(intent)
+    assert {vlan.id: vlan.tagged_ports for vlan in intent.vlans} == {
+        1: ["Ethernet1"], 10: ["Ethernet1"],
+    }

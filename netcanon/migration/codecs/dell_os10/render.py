@@ -66,7 +66,12 @@ from __future__ import annotations
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalInterface
-from .._helpers import _coalesce_vlan_ids, same_vendor_version
+from .._helpers import (
+    TRUNK_ALL,
+    same_vendor_version,
+    switchport_trunk_allowed_value,
+    trunk_list_says,
+)
 from . import port_names as _port_names
 
 #: Canonical SNMPv3 auth protocol → OS10 keyword.  OS10 offers ONLY
@@ -338,6 +343,14 @@ def _sort_interfaces(interfaces: list[CanonicalInterface]):
     return sorted(interfaces, key=_key)
 
 
+#: Written above the allowed line of a trunk of every VLAN.
+_EVERY_VLAN_REVIEW = (
+    " ! review: the source trunk allows every VLAN; OS10 has no word "
+    "for that, its VLAN ids end at 4093 and a VLAN must exist before "
+    "it is listed -- list the VLANs this trunk is to carry"
+)
+
+
 def _render_switchport_lines(iface: CanonicalInterface) -> list[str]:
     """The L2 switchport lines for an interface.
 
@@ -353,8 +366,19 @@ def _render_switchport_lines(iface: CanonicalInterface) -> list[str]:
         out.append(" switchport mode trunk")
         if iface.trunk_native_vlan is not None:
             out.append(f" switchport access vlan {iface.trunk_native_vlan}")
-        if iface.trunk_allowed_vlans:
-            vlist = _coalesce_vlan_ids(sorted(set(iface.trunk_allowed_vlans)))
+        # The list means what it says.  No VLAN is no line: an OS10
+        # trunk carries no tagged VLAN until a line names one.  Any
+        # other list is written as ranges.
+        vlist = switchport_trunk_allowed_value(
+            "dell_os10", iface.trunk_allowed_vlans, coalesce=True,
+        )
+        if vlist is not None:
+            if trunk_list_says(iface.trunk_allowed_vlans) == TRUNK_ALL:
+                # Every VLAN, which OS10 cannot be told: it has no
+                # word for it, its ids end at 4093, and a VLAN has to
+                # exist before a port is put in it.  The range is
+                # written as it always was, and the operator is told.
+                out.append(_EVERY_VLAN_REVIEW)
             out.append(f" switchport trunk allowed vlan {vlist}")
     elif iface.switchport_mode == "access":
         if iface.access_vlan is not None:

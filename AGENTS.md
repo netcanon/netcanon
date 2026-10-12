@@ -158,6 +158,7 @@ mapping below is concrete; audit every applicable row before you run
 | A new interactive HTML element (button, input, link, row, `<select>`, `<option>` inside a form) | `tests/testid_reference.md` — document the new `data-testid` in the appropriate page section.  **Self-check:** run `grep -r 'data-testid="<new-id>"' tests/testid_reference.md` before committing; if it returns nothing, you haven't done the update. |
 | A new Jinja partial (`templates/_partials/<name>.js`) | The file-level comment block in the parent template (e.g. `migrate.html`'s "Contents map" comment) **and** the "Template organisation" section of `ARCHITECTURE.md` if the partial introduces a new pattern |
 | A new file under `netcanon/templates/` with a non-`.html` extension OR in a new subdirectory not covered by the existing globs | `pyproject.toml` `[tool.setuptools.package-data]` — extend the `netcanon = [...]` list with a glob covering the new pattern (e.g. `templates/_partials/*.js`, `templates/_components/*.svg`).  Editable installs (`pip install -e`) hide this because they import from the source tree directly; production wheels do not.  Missing template files in the wheel result in `jinja2.exceptions.TemplateNotFound` 500-on-render at runtime — the bug that broke v0.1.0-rc1 / rc2.  The CI `docker-build-smoke` job catches dashboard-rendering regressions of this class but only for the dashboard page; if your new pattern only affects a different page, also add a smoke-test step that visits that page. |
+| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class.  Set `ports_keep_a_factory_name = True` ONLY if its parser records a factory name beside a port's own; every other codec leaves it to the base class (`test_the_flag_is_what_the_captures_show` in `tests/unit/migration/test_port_name_universe.py` fails for a codec whose captures and flag disagree).  And say what a trunk that states no allowed list carries on the platform: a row in `TRUNK_THAT_STATES_NO_LIST` (`netcanon/migration/codecs/_helpers.py`), which the parser fills an unstated list from — through `TrunksByName`, which keeps what an interface states by its name, so that a stanza met twice is one interface and only a port that SAYS it is a trunk is given the default — or — if the platform has no allowed list, or the parser reads none — the codec's name and the reason in `NO_ALLOWED_LIST` in `tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py`.  `test_each_codec_is_in_the_table_or_named` fails for a public codec that is in neither (see the Hard Rule on "not stated") |
 | A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class.  And state `port_names_case_sensitive` in the codec's own class body (there is no safe default; see the Hard Rule on port names) — `test_the_codecs_say_which_they_are` in `tests/unit/migration/test_run_plan_with_models.py` fails for a public codec that leaves it to the base class.  Set `ports_keep_a_factory_name = True` ONLY if its parser records a factory name beside a port's own; every other codec leaves it to the base class (`test_the_flag_is_what_the_captures_show` in `tests/unit/migration/test_port_name_universe.py` fails for a codec whose captures and flag disagree).  A codec that declares the `vendor_id` of another is one PLATFORM with it: a name the port translator leaves between the two is taken for the platform's own and holds no job.  `test_which_codecs_are_one_platform` in `tests/unit/migration/test_run_plan_checked_names.py` pins the pairs and fails for a new one until it is added there |
 | A new module inside an existing codec (e.g. `port_names.py`, `vlan_heuristics.py`, `_svi_absorption.py`) | `netcanon/migration/codecs/README.md` "Module layout" section if the pattern is worth propagating to other codecs |
 | A new target-profile YAML under `netcanon/definitions/library/target_profiles/` | (1) Per-profile unit test in `tests/unit/migration/test_target_profile_shipped.py` asserting exact port-name list + count (regression guard against copy-paste mistakes).  (2) Provenance per [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) §4: `deployment_state` whenever `stacking` is set, `evidence` + `evidence_ref`, and the key added to the pinned set for its grade in `tests/unit/migration/test_target_profile_evidence.py` — `CAPTURE_MODEL_MARKER` (with a line only a capture of that model contains), `EXPECTED_VENDOR_DOC_GRADED`, or `KNOWN_DOUBTFUL`.  The sets are compared for equality with what the YAMLs declare, so a graded profile that skips this fails CI |
@@ -469,11 +470,18 @@ tests use these exclusively — never CSS classes or element structure.  See
   Not reached: a pattern assembled at call time from parts that are not
   literals and not kept; a handler no capture has a line for; work that
   needs two kinds of stanza to grow together; a shape nobody thought to
-  build.  Known and NOT mended (SECURITY.md has the measurements): a
-  list of ONE record that a line adds to after reading it (`if pair not
-  in entry["ipv4"]: entry["ipv4"].append(pair)` — the addresses of one
-  interface, the members of one LAG, the route targets of one VRF), and
-  what a config EXPANDS to (`1-4094` is seven bytes).  When you find a
+  build.  A sixth shape was known when that list was written, and is
+  mended: a list of ONE record that a line adds to after reading it
+  (`if pair not in entry["ipv4"]: entry["ipv4"].append(pair)` — the
+  addresses of one interface, the members of one LAG, the route targets
+  of one VRF).  No index of the records helps, there being one; use
+  `Uniques` (beside `GrowingIndex`), or keep a set beside the list.  The
+  test module reads the source for that idiom, and a new one fails
+  until it is mended or listed there with the bound that makes it
+  harmless.  Known and NOT mended (SECURITY.md has the measurements):
+  what a config EXPANDS to (`1-4094` is seven bytes), the product of
+  two kinds of stanza that grow together, and that nothing limits the
+  time or the memory a request takes.  When you find a
   shape the search missed, add it to the search in the same change as
   the fix.  A pattern that is slow and safe (it reads only data the
   server ships) goes in that module's `KNOWN_SLOW` with the reason; an
@@ -843,6 +851,159 @@ tests use these exclusively — never CSS classes or element structure.  See
   defect it is for, in the same module, and has to fail — and so is
   the wrapper, once per assertion, because a check that is never
   CALLED passes every test too.
+- **Never** write a target's word for "everything" for a list that is
+  not everything.  `vlan members all` is every VLAN the switch has and
+  every VLAN it is given later; the Junos renderer wrote it for any
+  trunk list of 4,000 ids or more, so `switchport trunk allowed vlan
+  1-99,101-4094` — a line whose whole point is VLAN 100 — came out as
+  `all`, VLAN 100 back on the trunk, in a job that said `completed`
+  with nothing to report.  The shared projection read `2-4094` as
+  "all" as well and stamped the trunk onto a declared VLAN 1.  A
+  shorthand is right for the exact set it names and for nothing near
+  it: "long enough" is not "all", "all this config declares" is not
+  "all", and the ids a nearly-full list leaves out are the ones the
+  operator wrote the list for.  Where the target can state the list
+  as it stands (Junos takes ids and ranges as members), write that.
+  The audit had the evidence and it was explained away: the only
+  committed trunks that leave a VLAN out are two Arista `2-4094`
+  peer links, and the VLAN 1 they gained on Junos was pinned by a
+  test as "a documented one-VID asymmetry".  Guarded by
+  `tests/unit/migration/test_a_vlan_left_out_stays_out.py`, which
+  renders such trunks onto every public codec and reads the OUTPUT
+  three ways — the target's parser for the VLAN left out and for the
+  declared VLANs the list holds; the whole list as a set where the
+  target's parser reads one (the declared VLANs are a handful of
+  ids, and a renderer that lost thousands of the others passed the
+  first reading alone); and the text for the word itself, since a
+  parser may read its own word for "all" as an empty list.  **The
+  same class is still open one step on:** the tree has ONE value, an
+  empty list, for "none", for "nothing stated" and for AOS-CX's own
+  `all`, so a trunk that allows no VLAN is written as every VLAN on
+  AOS-CX, IOS-XE, EOS and NX-OS.  That module pins which targets
+  (`WRITES_NOTHING_AS_EVERYTHING`); the change that mends it empties
+  the pin.
+- **Never** translate a statement the source device holds and does not
+  run, and never read a form of a platform's config you do not parse as
+  an empty config.  Junos prints `inactive:` ahead of a deactivated
+  statement (`deactivate <path>` in set form), and the parser read both
+  as configuration: a deactivated BGP neighbour, firewall term or port
+  came out live on the target, in a job that said `completed`.  And a
+  `show configuration` pasted as the device prints it (braces, where the
+  parser's own form is `display set`) was read as nothing at all on
+  every public capture tried — an empty config and a bare scaffold for
+  output, or a refusal — while detection offered no codec.
+  A statement that is not in force is LEFT OUT AND SAID: one row in
+  `dropped_tier3_sections`, which shows the path and never a value (a
+  row is painted on a page and returned to every client, and a path is
+  keyed by its secret often enough), in a list that is bounded.  Such a
+  row is not a sign that the parser recognised the text
+  (`is_left_out_row`): a config that is all deactivated is not
+  `completed`.  What it took to get wrong twice: a form is not read
+  until every wrapping a terminal puts around it is (a prompt, a pager
+  line, a byte-order mark, carriage returns), and a comment begins only
+  where the grammar lets one begin — `member ge-0/*/*;` holds no
+  comment.  Each form a parser reads is held beside the other, typed by
+  hand, so that neither is the oracle for itself:
+  `tests/unit/migration/codecs/juniper_junos/test_two_forms_one_tree.py`
+  and `test_statements_left_out.py`.
+  parser can read its own word for "all" as something a check of ids
+  does not see (AOS-CX read it as an empty list).  The same class was
+  open one step on — an EMPTY list written as every VLAN on four
+  targets — and that module pinned which.  It is mended, the pin is
+  gone, and the assertion that no target does it stays there; what
+  made it is the next rule.
+- **Never** let one value stand for "not stated".  The canonical tree
+  had ONE value, an empty list, for three statements: a trunk that
+  allows no VLAN (`switchport trunk allowed vlan none`, a list a
+  `remove` emptied, an OS10 or Junos trunk with no list, a list the
+  operator emptied by dropping its VLANs), a trunk that states no
+  list (every VLAN on IOS-XE, NX-OS and EOS), and AOS-CX's own `vlan
+  trunk allowed all`.  Each renderer then picked one reading for all
+  three.  Failure mode: a trunk that carried one VLAN came out as a
+  trunk for every VLAN on four targets (IOS-XE, NX-OS, EOS, AOS-CX),
+  and a trunk for every VLAN — a vPC peer link — came out carrying
+  none on the other three, in jobs that said `completed` and reported
+  nothing.  What a platform does with a statement that is not there
+  is a fact about the SOURCE, and only its parser knows it.  So the
+  parser resolves "not stated" to what its platform does — from one
+  table, `TRUNK_THAT_STATES_NO_LIST` in
+  `netcanon/migration/codecs/_helpers.py` — the tree holds what is
+  meant (on a trunk `[]` is no VLAN, every id is every VLAN, any other
+  list is the list), and a renderer writes its target's form for
+  each: its word for none, its word or its default for every VLAN.
+  Where the target has no form, the cell is a pinned, documented
+  limitation, never a silent pick, and the output says so where there
+  is a line to say it beside: AOS-CX cannot be told "none" and OS10
+  cannot be told "all", and each writes a `! review:` line in the
+  stanza.  AOS-S cannot be told "and any VLAN made later" either,
+  and has no such line: a trunk of every VLAN is tagged in each VLAN
+  the output declares and nothing in the output says more was meant
+  (its vendor page does).  And a limitation says what IS written as
+  well as what is not: the AOS-CX stanza for "none" is a switched
+  port with no `vlan` line, which is something on the switch, and
+  what that is has to be said, or said to be unknown.  A
+  marker for "not stated" carried to the renderer is the same defect
+  with a flag on it: every reader of the value has to remember to
+  ask.  **The blind spot that hid it:** a guard that reads the output
+  with the TARGET's parser reads the target's default.  That parser
+  read its own "no allowed line", and AOS-CX its own `all`, as the
+  same empty list the source had, so every wrong cell agreed with
+  itself and passed.  Whatever a default can spell is read as TEXT,
+  by a reader the test owns for each target's grammar, beside the
+  parser.  And a pass that EDITS the
+  value has to know what it means: a list of every id is the
+  statement "every VLAN", which a VLAN drop or renumber leaves as it
+  is (rewritten id by id, a trunk that said `all` came out as
+  `1-99,101-4094`, and so would every trunk of a config that states
+  no list, for one edit), and a list a drop empties is "none", which
+  the job says in a warning.  The same holds for a reader that
+  took "has a list" to mean "carries something": a default trunk has
+  a list now, and is in the list of every VLAN there is, so where one
+  port is chosen for a VLAN a trunk that NAMES it is looked for before
+  a trunk of every VLAN.  Three corollaries, each found after the
+  rule was built.  (1) **What is stated is stated by the INTERFACE,
+  not by a stanza.**  Four parsers make a record a stanza, and
+  resolved "no allowed line" a stanza: a trunk of VLAN 10 whose
+  stanza was met again with only its mode line got a second record of
+  the platform's default — every VLAN, or from OS10 none.  Keep what
+  an interface states by its NAME (`TrunksByName` in
+  `codecs/_helpers.py`), and resolve "not stated" when the whole
+  config has been read.  The name is the one the config WRITES, the
+  stanza's header line, not the one the parser reads from it: two
+  parsers read `interface port-channel 1` and `interface
+  port-channel 2` as one name, and keyed by that name a trunk with
+  no list of its own would be given its neighbour's.  (2) **A default is given to what the config
+  STATES, never to what the parser inferred.**  The NX-OS and EOS
+  parsers take a port for a trunk from a trunk line with no
+  `switchport mode trunk`; filling "every VLAN" into a trunk the
+  parser guessed turned a guess about the mode into every VLAN on
+  every target.  Such a trunk keeps what its lines name, or nothing:
+  when a default has to rest on an inference, choose the reading that
+  carries fewer.  (3) **A value that now holds thousands of entries
+  is read once.**  A list of every id costs 4,094 comparisons to
+  recognise; asked of every port again for every VLAN, it was half a
+  minute for a config of a thousand trunks and a thousand VLAN
+  interfaces, and no cost test rendered.  Ask once a port, and time
+  the render (`TestARenderFitsTheTrunksItIsGiven`).  And a reader
+  that counts what a value "references" has to skip the statement
+  that names nothing in particular: every id of a default trunk
+  counted as a reference, and a VLAN map entry for a VLAN the config
+  does not have was no longer reported.  Guarded by
+  `tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py` —
+  every public codec as a target; sources that say none, nothing and
+  all in their own grammar, with what each means written out by hand
+  and compared with the table; the output read as text and with the
+  parser; the gaps that remain as named sets compared for EQUALITY
+  with what is measured, so closing one fails until its pin is taken
+  out; a stanza met twice and a trunk line with no mode line, from
+  each parser of the table; and a public codec is in the table or is
+  named with its reason — and by
+  `test_a_vlan_drop_and_a_trunks_list.py` and
+  `test_the_trunk_that_names_a_vlan.py`.  Still open, and in the
+  CHANGELOG's known limitations: whether a trunk's list holds its
+  native VLAN is one more thing the tree does not state, and the
+  platforms differ; and on a port that is NOT a trunk an empty list
+  is still two statements, `none` and no list at all.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

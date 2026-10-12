@@ -209,6 +209,28 @@ in the job to say so, and the pin keeps the documents which say so
 true.  The same module keeps the list of the codecs whose own
 names do not come back from their classifier and formatter, which
 is the reason a same-vendor job no longer asks them.
+**What a default can spell is read as text.**  Most checks of an
+output read it back with the target's own parser.  That is blind to
+one thing: a parser reads its own default.  A trunk with no allowed
+line is every VLAN on some platforms and none on others, and for a
+long time the tree had one value for both — so a trunk that allowed no
+VLAN was written as a trunk with no allowed line, which the target's
+parser read back as the same value the source had, and every wrong
+output agreed with itself.  `test_a_trunk_says_none_nothing_or_all.py`
+therefore reads the output twice: with the target's parser, and as
+TEXT, with a reader written in the test for each target's grammar
+(a trunk stanza with no allowed line is every VLAN on some targets
+and none on another; the ids spelled out are not the platform's form
+for every VLAN).  Every public codec is a target; the sources say
+none, nothing and all in their own grammar; and what each statement
+means is written out in the test by hand and compared with the table
+the parsers read, so that a correction is made in both places on
+purpose.  The gaps the code does not close are named sets in the
+module, compared for equality with what is measured: the change that
+closes one fails there until its pin is taken out.  The readers are
+handed each form they must tell apart, and a new codec fails the
+module until it says what a trunk with no list carries on its
+platform.
 
 **A status is checked against the output, not against the warning
 that should have moved it.**  With no devices declared, a job in
@@ -272,7 +294,12 @@ with MANY stanzas, read by a handler that looks through everything the
 earlier lines made: that search is `tools/stanza_cost_search.py`, which
 writes every line and block of every capture many times over, takes
 minutes and is run by hand; each handler it found is pinned in the
-test module with a text of its own.  Each check is also handed
+test module with a text of its own.  So is each record that was given
+many lines (the addresses of one interface, looked through before each
+was added) and each piece of work after the parse that was found doing
+the same; and for the first of those the module reads the source
+itself, with no clock, for a list one function both looks through and
+adds to.  Each check is also handed
 something slow, and has to say so.  It is a search and not a proof — its first version
 timed only whole lines and short units, passed, and missed three of
 the four shapes it now builds — so a slow path it does not reach is to

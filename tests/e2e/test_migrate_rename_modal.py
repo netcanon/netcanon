@@ -34,6 +34,9 @@ from tests.e2e.helpers import MigratePage
 
 pytestmark = pytest.mark.e2e
 
+#: What the banner and the notice above the table are painted on.
+TOP = "#mig-rename-modal-top"
+
 
 _CISCO_SRC = """hostname test-sw
 !
@@ -143,51 +146,104 @@ class TestRenameModalDrop:
     """Dropping an interface removes it from the rendered output.
 
     Two paths:
-      * Auto-drop (default) — server strips unmappable names (Loopback0
-        on Aruba target, etc.) before render.  The rendered output
-        already excludes them; UI shows them as "auto-dropped" rows.
+      * Auto-drop (default) — the server leaves out a name the target
+        has no form for (a tunnel, on AOS-S) before render.  The
+        rendered output is already without it; the modal shows the
+        row as "auto-dropped", with a link that keeps it instead.
+        A loopback is not one of these on AOS-S, which has loopback
+        interfaces of its own.
       * Explicit drop — operator clicks the row's drop link to
         remove a name that would otherwise auto-translate.
     """
 
-    def test_loopback_auto_dropped_by_default(
+    def test_a_loopback_is_renamed_not_dropped(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
     ):
-        # Default behaviour (strip_unmappable=True): Loopback0 has no
-        # Aruba equivalent and is auto-dropped before render.  The
-        # main output does NOT contain the Loopback name without any
-        # user action.
+        # ``Loopback0`` is given the first loopback an operator can
+        # create on AOS-S and is rendered with its address; the job
+        # drops nothing for this config.  (That the source name is not
+        # in the output says nothing: no AOS-S output has it.)
         output = page.locator('[data-testid="migrate-output"]')
-        assert "Loopback0" not in (output.text_content() or "")
+        rendered = (output.text_content() or "").splitlines()
+        assert "interface loopback1" in rendered
+        assert "   ip address 1.1.1.1/32" in rendered
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        # Its row says so.  (A section with nothing to attend to
+        # starts folded, so the row is read, not looked for on screen.)
+        row = page.locator('[data-testid="migrate-rename-row-Loopback0"]')
+        expect(row).to_have_count(1)
+        assert "has-auto-drop" not in (row.get_attribute("class") or "").split()
+        expect(
+            page.locator('[data-testid="migrate-rename-auto-Loopback0"]')
+        ).to_have_text("loopback1")
+        expect(
+            page.locator('[data-testid="migrate-rename-drop-Loopback0"]')
+        ).to_have_text("drop")
+
+    def test_a_name_with_no_target_form_is_dropped(
+        self, page: Page, live_server_url: str,
+    ):
+        # A tunnel has no AOS-S form.  The server leaves it out before
+        # render, without any action of the operator's; its row says
+        # it was dropped, and its link offers to keep the name.
+        mp = MigratePage(page)
+        page.goto(live_server_url + "/migrate")
+        mp.source_select.wait_for(state="visible", timeout=5_000)
+        mp.pick_source("cisco_iosxe_cli")
+        mp.pick_target("aruba_aoss")
+        mp.fill_raw(_CISCO_SRC.replace(
+            "end\n", "interface Tunnel0\n ip address 10.9.9.1 255.255.255.252\n!\nend\n",
+        ))
+        mp.submit_and_wait()
+        output = page.locator('[data-testid="migrate-output"]')
+        rendered = output.text_content() or ""
+        assert "interface loopback1" in rendered.splitlines()
+        assert "tunnel" not in rendered.lower() and "10.9.9.1" not in rendered
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        row = page.locator('[data-testid="migrate-rename-row-Tunnel0"]')
+        expect(row).to_have_count(1)
+        assert "has-auto-drop" in (row.get_attribute("class") or "").split()
+        expect(
+            page.locator('[data-testid="migrate-rename-auto-Tunnel0"]')
+        ).to_have_text("(auto-dropped \u2014 won't render)")
+        expect(
+            page.locator('[data-testid="migrate-rename-drop-Tunnel0"]')
+        ).to_have_text("keep verbatim")
 
     def test_explicit_drop_link_removes_interface(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
     ):
         # Drop a source that WOULD auto-translate (Gi1/0/1 → 1/1);
         # user explicitly says "don't render this".
+        output = page.locator('[data-testid="migrate-output"]')
+        # Before the drop the port is rendered: its stanza, and its
+        # place in the VLAN.
+        rendered = (output.text_content() or "").splitlines()
+        assert "interface 1/1" in rendered and "   untagged 1/1" in rendered
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         drop_link = page.locator(
             '[data-testid="migrate-rename-drop-GigabitEthernet1/0/1"]'
         )
         expect(drop_link).to_be_visible()
-        # For rows that auto-translated successfully, link says "drop".
-        expect(drop_link).to_contain_text("drop")
+        # For rows that auto-translated successfully, link says "drop"
+        # -- and once dropped, the same link undoes it.
+        expect(drop_link).to_have_text("drop")
         drop_link.click()
+        expect(drop_link).to_have_text("un-drop")
         summary = page.locator('[data-testid="migrate-rename-summary"]')
-        expect(summary).to_contain_text("drop")
+        expect(summary).to_contain_text("1 drop")
         page.locator('[data-testid="migrate-rename-apply-btn"]').click()
         expect(
             page.locator('[data-testid="migrate-rename-status"]')
         ).to_contain_text("Applied", timeout=5_000)
         page.locator('[data-testid="migrate-rename-modal-close"]').click()
-        # The target-side name for Gi1/0/1 would have been "1/1";
-        # assert neither source nor target appears in rendered output.
-        output = page.locator('[data-testid="migrate-output"]')
-        text = output.text_content() or ""
-        assert "GigabitEthernet1/0/1" not in text
-        # "1/1" check is stricter than needed — Aruba's Trk1 rendering
-        # contains "1/1" as part of trunk port lists — so just assert
-        # the Gi1/0/1 interface STANZA doesn't appear.
+        # The source name is never in an AOS-S output; what the drop
+        # takes out is the port's target-side stanza and membership.
+        # (Whole lines: "1/1" alone is also the start of other names.)
+        rendered = (output.text_content() or "").splitlines()
+        assert "interface 1/1" not in rendered
+        assert "   untagged 1/1" not in rendered
+        assert "interface 1/2" in rendered
 
 
 class TestRenameModalTargetProfileTwoStage:
@@ -1068,6 +1124,30 @@ class TestRenameModalNamesNotSettled:
         expect(strip).to_be_hidden()
         assert "status: completed" in _status_line(page)
 
+    def test_the_second_drop_is_a_button(self, page: Page, live_server_url: str):
+        """It was a ``<span>``: no keyboard reached it.  Tab goes
+        from "keep verbatim" to it and Space presses it.  The link
+        is gone once pressed; the focus is then on the link beside
+        where it was, which undoes it, and not on the page."""
+        _open_modal_on(
+            page, live_server_url, "cisco_nxos", "cisco_iosxe_cli", _NXOS_WITH_MGMT,
+        )
+        acknowledge = page.locator(_tid("migrate-rename-ack-drop-mgmt0"))
+        expect(acknowledge).to_be_visible()
+        assert acknowledge.evaluate("(el) => [el.tagName, el.type]") == ["BUTTON", "button"]
+        beside = page.locator(_tid("migrate-rename-drop-mgmt0"))
+        assert beside.inner_text() == "keep verbatim"
+        beside.focus()
+        page.keyboard.press("Tab")
+        expect(acknowledge).to_be_focused()
+        page.keyboard.press("Space")
+        expect(acknowledge).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-decision-mgmt0"))).to_have_count(0)
+        expect(beside).to_have_text("un-drop")
+        expect(beside).to_be_focused()
+        assert _apply(page)["port_rename_map"] == {"mgmt0": None}
+        assert "status: completed" in _status_line(page)
+
     def test_a_dropped_port_given_a_name_instead(
         self, page: Page, live_server_url: str,
     ):
@@ -1499,6 +1579,30 @@ class TestRenameModalNamesLeftAsTheyWere:
         assert "status: completed" in _status_line(page)
         assert "10.2.0.1" not in page.locator(_tid("migrate-output")).inner_text()
 
+    def test_keep_is_a_button_the_keyboard_reaches(self, page: Page, live_server_url: str):
+        """It was a ``<span>``: no keyboard reached it.  Tab goes
+        from the name's field to "drop" and on to it, and Enter
+        presses it.  The link is gone once pressed, and the focus
+        is on the link beside where it was, not on the page."""
+        self._open(page, live_server_url)
+        keep = page.locator(_tid("migrate-rename-keep-GigabitEthernet1"))
+        assert keep.evaluate("(el) => [el.tagName, el.type]") == ["BUTTON", "button"]
+        box = page.locator(_tid("migrate-rename-override-GigabitEthernet1"))
+        drop = page.locator(_tid("migrate-rename-drop-GigabitEthernet1"))
+        box.focus()
+        page.keyboard.press("Tab")
+        expect(drop).to_be_focused()
+        page.keyboard.press("Tab")
+        expect(keep).to_be_focused()
+        page.keyboard.press("Enter")
+        expect(keep).to_have_count(0)
+        expect(page.locator(_tid("migrate-rename-decision-GigabitEthernet1"))).to_have_count(0)
+        expect(box).to_have_value("GigabitEthernet1")
+        expect(drop).to_have_text("drop")
+        expect(drop).to_be_focused()
+        assert _apply(page)["port_rename_map"] == {"GigabitEthernet1": "GigabitEthernet1"}
+        assert "status: completed" in _status_line(page)
+
     def test_a_list_of_ports_offers_to_keep_it(self, page: Page, live_server_url: str):
         """With a target device chosen the row has a list of that
         device's ports.  The list says what happened to the name,
@@ -1835,7 +1939,7 @@ class TestRenameModalModuleDropdown:
         expect(module_sel).to_be_hidden()
 
     def test_module_switch_retargets_uplink_dropdown(
-        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+        self, page: Page, live_server_url: str,
     ):
         """The core value of module variants: swapping NM-8X →
         NM-2Q must replace the uplink dropdown options from 10G
@@ -1843,6 +1947,18 @@ class TestRenameModalModuleDropdown:
         guard for the user-reported 40G case — source ports that
         look like uplinks must be offered 40G targets once NM-2Q
         is selected."""
+        # The shared fixture's ports are all access ports; this needs
+        # one that looks like an uplink.
+        uplink = "TenGigabitEthernet1/1/1"
+        mp = MigratePage(page)
+        page.goto(live_server_url + "/migrate")
+        mp.source_select.wait_for(state="visible", timeout=5_000)
+        mp.pick_source("cisco_iosxe_cli")
+        mp.pick_target("aruba_aoss")
+        mp.fill_raw(_CISCO_SRC.replace(
+            "interface Loopback0", f"interface {uplink}\n description uplink\n!\ninterface Loopback0",
+        ))
+        mp.submit_and_wait()
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         page.locator(
             '[data-testid="migrate-rename-target-vendor-select"]'
@@ -1850,33 +1966,30 @@ class TestRenameModalModuleDropdown:
         page.locator(
             '[data-testid="migrate-rename-target-model-select"]'
         ).select_option(value="C9300-24UX")
-        # NM-8X selected by default → GigabitEthernet1/0/1 is access,
-        # but we need an uplink-looking source to probe the uplink
-        # dropdown.  GigabitEthernet1/0/1 is physical-access; the
-        # dropdown filter returns access options on NM-8X AND NM-2Q
-        # (chassis ports are module-independent).  Instead, target
-        # the auto-dropped sections — check Loopback0 won't help
-        # either since it's not in the profile.
-        #
-        # Simplest probe: read the selected profile's uplink port
-        # ids via the in-DOM datasource by forcing-looking-up a
-        # physical-but-flagged-uplink source.  Cat 9300 sources in
-        # the fixture are all 1/0/N (access), so we instead verify
-        # the module change re-renders the preview pane and
-        # dropdown option-sets by checking via any uplink row the
-        # auto-heuristic surfaces.  If the fixture has none, skip
-        # the assertion — the dropdown-population logic is already
-        # unit-tested at the JS level via populateRenameModuleDropdown.
-        # Switch module → NM-2Q.
+
+        def offered(source: str) -> list[str]:
+            return [
+                value for value, _text in override_options(page, source)
+                if value and not value.startswith("__")
+            ]
+
+        # NM-8X is selected by default: eight 10G ports for the
+        # uplink, and the chassis ports for an access port.
+        assert offered(uplink) == [f"TenGigabitEthernet1/1/{n}" for n in range(1, 9)]
+        access = offered("GigabitEthernet1/0/1")
+        assert access[0] == "TenGigabitEthernet1/0/1" and len(access) == 24
         page.locator(
             '[data-testid="migrate-rename-target-module-select"]'
         ).select_option(value="NM-2Q")
-        # Post-switch the dropdown state persists (SKU actually
-        # selected).
-        module_sel = page.locator(
-            '[data-testid="migrate-rename-target-module-select"]'
-        )
-        assert module_sel.input_value() == "NM-2Q"
+        expect(
+            page.locator('[data-testid="migrate-fitcheck-module-note"]')
+        ).to_contain_text("NM-2Q")
+        # The uplink is offered the module's two 40G ports; the
+        # chassis ports do not depend on the module.
+        assert offered(uplink) == [
+            "FortyGigabitEthernet1/1/1", "FortyGigabitEthernet1/1/2",
+        ]
+        assert offered("GigabitEthernet1/0/1") == access
 
     def test_aruba_3810m_exposes_jl_module_variants(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
@@ -1950,36 +2063,34 @@ class TestRenameModalFitCheck:
         expect(access).to_be_visible()
         expect(access).to_contain_text("48")  # target count
 
-    def test_fitcheck_shows_overage_when_source_exceeds_target(
+    def test_fitcheck_is_green_when_it_fits(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
     ):
-        """User picks an undersized target → banner flags the
-        overage per kind so they see the capacity shortfall before
-        committing mappings.  The Cisco fixture's Port-channel1 +
-        uplink-flavoured ports should expose overage when target is
-        a 24-port legacy 2930F with 4 uplinks."""
+        """Two access ports onto a 24-port 2930F: the banner says it
+        fits, and is drawn so -- green, its counts in the ink that
+        goes with it.  An overage is held in
+        ``test_migrate_device_models_drawn.py``, by
+        ``test_the_capacity_banner_counts_the_ports_the_config_uses``."""
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         page.locator(
             '[data-testid="migrate-rename-target-vendor-select"]'
         ).select_option(value="aruba_aoss")
-        # Pick a 24-port switch — fits access comfortably, this test
-        # validates the overage *path* renders by asserting the
-        # banner has the `fit-` class even when OK, i.e. the
-        # colour-state plumbing works.  Overage assertion uses a
-        # deliberately tiny source contrived below via the module
-        # chooser test.
         page.locator(
             '[data-testid="migrate-rename-target-model-select"]'
         ).select_option(value="2930F-24G")
         banner = page.locator('[data-testid="migrate-rename-fitcheck"]')
         expect(banner).to_be_visible()
-        # Banner always has one of the fit-* colour classes once a
-        # profile is selected — guards against the CSS class never
-        # being applied.
-        cls = banner.get_attribute("class") or ""
-        assert "fit-" in cls, (
-            f"expected banner to carry a fit-* class, got: {cls!r}"
+        counts = page.locator('[data-testid="migrate-fitcheck-kind-physical"]')
+        expect(counts).to_have_text("access: 2 / 24")
+        # The class that says it fits -- and the paint, which the
+        # class is not: green, in the ink that goes with it.  The ink
+        # is read on the counts, which are the banner's words.
+        assert (banner.get_attribute("class") or "").split() == ["fit-ok"]
+        assert alike(
+            painted_background(banner),
+            painted_token(page, TOP, "--badge-completed-bg"),
         )
+        assert ink(counts) == token_ink(page, "--badge-completed-fg")
 
     def test_fitcheck_module_note_surfaces_selected_sku(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
@@ -2145,10 +2256,21 @@ class TestRenameModalProfileNotice:
         notice = page.locator(self.NOTICE)
         expect(notice).to_be_visible()
         assert "notice-warn" in (notice.get_attribute("class") or "")
+        # Amber is paint; the class only asks for it.
+        assert alike(
+            painted_background(notice),
+            painted_token(page, TOP, "--badge-partial-bg"),
+        )
         caveat = page.locator(
             '[data-testid="migrate-rename-profile-notice-caveat"]'
         )
         expect(caveat).to_have_text(target["caveat"])
+        # The ink is read on the parts that hold the words.
+        grade = page.locator(
+            '[data-testid="migrate-rename-profile-notice-evidence"]'
+        )
+        for part in (grade, caveat):
+            assert ink(part) == token_ink(page, "--badge-partial-fg")
 
     def test_notice_is_ports_pane_only(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
@@ -2212,7 +2334,7 @@ class TestRenameModalOffProfileAutoTarget:
         expect(mark).to_be_visible()
         assert "1/1 is not a port on" in (mark.get_attribute("title") or "")
         expect(page.locator(
-            '[data-testid="migrate-rename-offprofile-count-physical"]'
+            '[data-testid="migrate-rename-section-offprofile-physical"]'
         )).to_contain_text("not on profile")
         # Choosing a real port clears it.
         choose_override(page, "GigabitEthernet1/0/1", "12")
@@ -2673,10 +2795,10 @@ class TestRenameModalLocalUsersPane:
             '[data-testid="migrate-rename-local-user-drop-svc-backup-2019"]'
         )
         # Default state: "drop".
-        expect(drop_link).to_contain_text("drop")
+        expect(drop_link).to_have_text("drop")
         drop_link.click()
         # After click: "un-drop".
-        expect(drop_link).to_contain_text("un-drop")
+        expect(drop_link).to_have_text("un-drop")
 
     def test_override_persists_across_reload(
         self,

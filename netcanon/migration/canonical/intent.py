@@ -202,7 +202,18 @@ class CanonicalInterface(BaseModel):
             Kept separate so a routed sub-interface never mis-renders as
             ``switchport access vlan N`` on a switchport-centric target
             (GAP 7).
-        trunk_allowed_vlans: VLAN IDs allowed on trunk.
+        trunk_allowed_vlans: VLAN IDs allowed on trunk.  On a trunk
+            the list means what it says: ``[]`` is NO VLAN, every id
+            (1-4094) is EVERY VLAN, and any other list is the list.
+            There is no value for "not stated": the parser knows its
+            platform and puts what the platform does with a trunk
+            that states no list (``TRUNK_THAT_STATES_NO_LIST`` in
+            ``codecs/_helpers.py``), and a renderer writes its
+            target's form for each of the three.  Whether the list
+            holds the native VLAN is not yet one convention: each
+            parser puts what its platform's text lists.  On a port
+            that is not a trunk it is a list stated for later, or
+            empty.
         trunk_native_vlan: Native (untagged) VLAN ID on trunk.
         voice_vlan: Voice VLAN ID for IP phone traffic.
         lag_member_of: LAG / port-channel name if this interface is
@@ -941,7 +952,13 @@ class CanonicalIntent(BaseModel):
             but not translated" banner so the silent-drop is
             visible.  Empty list means the parser saw nothing
             Tier-3 in the input.  This is a NOTIFICATION-ONLY
-            surface — render-side code MUST NOT read it.
+            surface — render-side code MUST NOT read it.  A parser
+            may also put here a row for a statement it read and
+            left out on purpose -- the Junos parser, for one the
+            source had deactivated -- made by
+            ``_tier3_detection.left_out_row``.  Such a row is not a
+            section header, names no secret, and is told apart with
+            ``is_left_out_row``.
         source_vendor: ``vendor_id`` of the codec that produced this
             tree (metadata, populated by parse).
         source_format: ``input_format`` of the source codec

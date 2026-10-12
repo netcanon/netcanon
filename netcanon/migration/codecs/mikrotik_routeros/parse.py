@@ -52,6 +52,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
+from .._helpers import Uniques
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -137,6 +138,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # the cross-reference robust against hand-edited / reordered
     # exports where ``/ip address`` precedes ``/interface vrrp``.
     vrrp_scratch: dict[str, dict[str, Any]] = {}
+    ntp_once = Uniques()
     for section, lines in sections:
         if section == "/interface vrrp":
             _parse_interface_vrrp(lines, vrrp_scratch)
@@ -147,9 +149,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         elif section == "/system dns":
             _parse_system_dns(lines, intent)
         elif section == "/system ntp client":
-            _parse_system_ntp(lines, intent)
+            _parse_system_ntp(lines, intent, ntp_once)
         elif section == "/system ntp client servers":
-            _parse_system_ntp_client_servers(lines, intent)
+            _parse_system_ntp_client_servers(lines, intent, ntp_once)
         elif section == "/interface ethernet":
             _parse_interface_ethernet(lines, iface_by_name)
         elif section == "/interface vlan":
@@ -434,7 +436,7 @@ def _parse_system_dns(lines: list[str], intent: CanonicalIntent) -> None:
 _NTP_UNSET_TOKENS = frozenset({"", "0.0.0.0"})
 
 
-def _add_ntp_servers(intent: CanonicalIntent, candidates: list[str]) -> None:
+def _add_ntp_servers(intent: CanonicalIntent, candidates: list[str], once: Uniques) -> None:
     """Union NTP server tokens onto ``intent.ntp_servers``.
 
     Order-preserving and de-duplicated, skipping empty / ``0.0.0.0``
@@ -442,25 +444,31 @@ def _add_ntp_servers(intent: CanonicalIntent, candidates: list[str]) -> None:
     (``primary-ntp=``/``secondary-ntp=``/``server-dns-names=``), the
     RouterOS 7 inline (``servers=A,B``) and the RouterOS 7 subsection
     (``/system ntp client servers``) forms all merge into one list.
+
+    Args:
+        intent: The tree; its ``ntp_servers`` is appended to in place.
+        candidates: The tokens one line gave.
+        once: The parse's :class:`.._helpers.Uniques`, which knows what
+            the list holds.  (The list and a set of it used to be made
+            again for every line: 32,000 ``add address=`` lines took
+            24 seconds.)
     """
-    servers = list(intent.ntp_servers)
-    seen = set(servers)
     for raw in candidates:
         token = raw.strip()
-        if token in _NTP_UNSET_TOKENS or token in seen:
-            continue
-        seen.add(token)
-        servers.append(token)
-    intent.ntp_servers = servers
+        if token not in _NTP_UNSET_TOKENS:
+            once.add(intent.ntp_servers, token)
 
 
-def _parse_system_ntp(lines: list[str], intent: CanonicalIntent) -> None:
+def _parse_system_ntp(lines: list[str], intent: CanonicalIntent, once: Uniques) -> None:
     """Parse the ``/system ntp client`` ``set`` line across RouterOS versions.
 
     RouterOS 7 uses ``servers=A,B`` (a comma list); RouterOS 6 uses
     ``primary-ntp=A`` / ``secondary-ntp=B`` (IP literals) plus
     ``server-dns-names=`` (a comma list of hostnames).  Union every form
     so a v6 export no longer silently loses its NTP servers.
+
+    ``once`` is the parse's :class:`.._helpers.Uniques`, handed on to
+    :func:`_add_ntp_servers`.
     """
     for line in lines:
         if not line.startswith("set"):
@@ -474,11 +482,11 @@ def _parse_system_ntp(lines: list[str], intent: CanonicalIntent) -> None:
                 candidates.append(kv[key])
         if "server-dns-names" in kv:                   # RouterOS 6 hostnames
             candidates.extend(kv["server-dns-names"].split(","))
-        _add_ntp_servers(intent, candidates)
+        _add_ntp_servers(intent, candidates, once)
 
 
 def _parse_system_ntp_client_servers(
-    lines: list[str], intent: CanonicalIntent
+    lines: list[str], intent: CanonicalIntent, once: Uniques,
 ) -> None:
     """Parse the RouterOS 7 ``/system ntp client servers`` subsection.
 
@@ -486,13 +494,16 @@ def _parse_system_ntp_client_servers(
     subsection of ``add address=X`` rows (each an IP literal or a
     hostname).  Merge them into ``intent.ntp_servers`` alongside anything
     the ``set`` line already produced.
+
+    ``once`` is the parse's :class:`.._helpers.Uniques`, handed on to
+    :func:`_add_ntp_servers`.
     """
     for line in lines:
         if not line.startswith("add"):
             continue
         kv = _parse_kv(line)
         if "address" in kv:
-            _add_ntp_servers(intent, [kv["address"]])
+            _add_ntp_servers(intent, [kv["address"]], once)
 
 
 def _parse_interface_ethernet(

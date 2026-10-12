@@ -139,6 +139,7 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from ..migration._tier3_detection import is_left_out_row
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
 from ..models.migration import (
     MigrationJob,
@@ -191,7 +192,13 @@ def _input_not_recognized(raw_text: str, tree: Any, job: MigrationJob) -> bool:
         a firewall-only ruleset) already carries its own honest "detected
         in source but not translated" signal via
         ``dropped_tier3_sections``, so it is a *recognized* (if
-        untranslatable) input, not a rejection.
+        untranslatable) input, not a rejection.  A row that names a
+        statement the parser LEFT OUT (``inactive: ...``, see
+        ``_tier3_detection.is_left_out_row``) is not such a section: the
+        Junos parser names a deactivated path whether or not any handler
+        would have read a line under it, so ``hello world`` / ``set foo
+        bar`` / ``deactivate foo`` had a row and was ``completed`` with
+        nothing in it.
 
     Mirrors the UI's ``isEmptyCompleted`` zero-path test, plus the Tier-3
     exemption so the backend signal is at least as precise as the banner.
@@ -210,7 +217,7 @@ def _input_not_recognized(raw_text: str, tree: Any, job: MigrationJob) -> bool:
         return False
     if not (raw_text or "").strip():
         return False
-    if job.dropped_tier3_sections:
+    if not all(is_left_out_row(label) for label in job.dropped_tier3_sections):
         return False
     report = job.validation
     if report is None:
@@ -399,6 +406,15 @@ def run_plan(
                 "does not match the input format — treat this as a failed "
                 "translation, not a clean result."
             )
+            if job.dropped_tier3_sections:
+                # Every row names statements that were left out.  The
+                # rows are not counted here: one row may stand for
+                # several statements, and the last for all the rest.
+                job.error += (
+                    " All that was read is statements the source held "
+                    "and did not run; they are listed, and nothing else "
+                    "was recognized."
+                )
         else:
             job.status = MigrationJobStatus.completed
 
@@ -1827,12 +1843,17 @@ def _taken_with_dropped_ports(
     named = {iface.name for iface in tree.interfaces}
     emptied_lags: list[str] = []
     shrunk_lags: list[str] = []
+    # The interfaces that say they belong to each LAG, read once.  Asked
+    # of every interface for every LAG, a config of thousands of each
+    # cost their product.
+    belongs: dict[str, set[str]] = {}
+    for iface in tree.interfaces:
+        if iface.lag_member_of:
+            belongs.setdefault(iface.lag_member_of, set()).add(iface.name)
     for lag in tree.lags:
         members = {member for member in lag.members if member}
-        members.update(
-            iface.name for iface in tree.interfaces
-            if lag.name and iface.lag_member_of == lag.name
-        )
+        if lag.name:
+            members.update(belongs.get(lag.name, ()))
         lost = members & dropped
         if members and lost == members:
             emptied_lags.append(lag.name)

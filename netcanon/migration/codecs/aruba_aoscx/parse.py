@@ -83,7 +83,15 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVxlan,
 )
-from .._helpers import _is_link_local_v6, _normalise_mac_to_colon_hex, _parse_vlan_list
+from .._helpers import (
+    TrunksByName,
+    Uniques,
+    _is_link_local_v6,
+    _normalise_mac_to_colon_hex,
+    _parse_vlan_list,
+    address_key,
+    vlan_id_run,
+)
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
 from ..base import ParseError
@@ -142,14 +150,14 @@ _VLAN_ACCESS_RE = re.compile(r"^\s+vlan\s+access\s+(\d+)\s*$", re.IGNORECASE)
 _VLAN_TRUNK_NATIVE_RE = re.compile(
     r"^\s+vlan\s+trunk\s+native\s+(\d+)(?:\s+tag)?\s*$", re.IGNORECASE,
 )
-#: ``vlan trunk allowed <list|all>`` — ``all`` maps to an empty
-#: allowed-list (the render re-emits ``all`` for an empty list).
+#: ``vlan trunk allowed <list|all>`` — ``all`` is every id, 1-4094
+#: (the render writes ``all`` for that list and for no other).
 # Anchor the value on a leading ``\S`` and let the consumer ``.strip()`` the
 # trailing whitespace, instead of ``(.+?)\s*$`` -- the lazy ``.+?`` overlapped
 # both the leading ``\s+`` separator and the trailing ``\s*`` (polynomial
 # ReDoS, CodeQL py/polynomial-redos #125).  Every real trunk line has a VLAN
 # list or ``all``; a value-less ``vlan trunk allowed`` was degenerate config
-# (it set trunk_allowed=[] == "all") and is now skipped.
+# (it gave an empty list, which was then read as "all") and is now skipped.
 _VLAN_TRUNK_ALLOWED_RE = re.compile(
     r"^\s+vlan\s+trunk\s+allowed\s+(\S.*)$", re.IGNORECASE,
 )
@@ -407,7 +415,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
     legitimate_vlan_ids = (
         {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
-    project_switchport_to_vlan(intent)
+    project_switchport_to_vlan(intent, keep=legitimate_vlan_ids)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
     logger.debug(
@@ -484,7 +492,6 @@ def _new_iface_scratch(name: str) -> dict:
         "vrf": "",
         "switchport_mode": None,
         "access_vlan": None,
-        "trunk_allowed": [],
         "trunk_native": None,
         "lag_member_of": None,
         # Active-gateway anycast: the per-SVI `active-gateway ip <vip>`
@@ -515,6 +522,12 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     config container — a later phase), mirroring cisco_nxos's ``nve1``
     interception.
     """
+    # What each interface states about its trunk, by the name its
+    # header writes: a stanza can be met twice, and the list is the
+    # interface's.  On AOS-CX a ``vlan trunk`` line is how a trunk is
+    # stated.
+    trunks = TrunksByName("aruba_aoscx")
+
     def _open(m: re.Match) -> dict | None:
         """Return a fresh scratch for an interface header, or None for the
         ``vxlan`` kind (a later phase).  Returning None leaves the stanza
@@ -523,7 +536,11 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         name = _iface_name(m)
         if name.lower().startswith("vxlan "):
             return None
-        return _new_iface_scratch(name)
+        scratch = _new_iface_scratch(name)
+        # Which interface the stanza is of, for ``trunks``: its header
+        # line, not the name read from it.
+        scratch["trunk_key"] = trunks.key(m.string)
+        return scratch
 
     def _on_line(line: str, current: dict) -> None:
         dm = _DESC_RE.match(line)
@@ -606,14 +623,17 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         if tnm:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
             current["trunk_native"] = int(tnm.group(1))
+            trunks.says_trunk(current["trunk_key"])
             return
         tam = _VLAN_TRUNK_ALLOWED_RE.match(line)
         if tam:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
             val = tam.group(1).strip()
-            current["trunk_allowed"] = (
-                [] if val.lower() == "all" else _parse_vlan_list(val)
-            )
+            trunks.says_trunk(current["trunk_key"])
+            trunks.allowed_is(current["trunk_key"], (
+                vlan_id_run(1, 4094) if val.lower() == "all"
+                else _parse_vlan_list(val)
+            ))
             return
 
         # ── LAG membership (Phase 2) ── ``lag N`` on a physical port.
@@ -631,18 +651,33 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     # vxlan`` interception.  The terminator replicates the former
     # hand-rolled rule exactly: only a non-indented (column-0) line closes
     # a stanza.  Behaviour-identical to the previous loop.
-    return scan_stanzas(
+    interfaces = scan_stanzas(
         raw.splitlines(),
         is_header=_IFACE_RE.match,
         open_scratch=_open,
         on_line=_on_line,
-        build=_build_canonical_interface,
+        build=lambda scratch: trunks.made(
+            scratch["trunk_key"], _build_canonical_interface(scratch),
+        ),
         is_terminator=lambda line: bool(line) and not line[0].isspace(),
     )
+    # A trunk with no ``vlan trunk allowed`` line (``vlan trunk native
+    # N`` alone) carries what the platform's trunk carries by default:
+    # on AOS-CX every VLAN -- the switch runs ``vlan trunk allowed
+    # all`` itself when a native VLAN is defined.  A port that is not
+    # a trunk and states no list has none to keep.
+    trunks.settle()
+    return interfaces
 
 
 def _build_canonical_interface(raw: dict) -> CanonicalInterface:
-    """Convert the parse-time scratch dict into a CanonicalInterface."""
+    """Convert the parse-time scratch dict into a CanonicalInterface.
+
+    The record is made with no allowed list.  That list is the
+    interface's, which another stanza of the same name can state, and
+    :func:`_parse_interfaces` gives it when every stanza has been
+    read (:class:`.._helpers.TrunksByName`).
+    """
     return CanonicalInterface(
         name=raw["name"],
         description=raw.get("description", ""),
@@ -673,7 +708,6 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         vrf=raw.get("vrf", ""),
         switchport_mode=raw.get("switchport_mode"),
         access_vlan=raw.get("access_vlan"),
-        trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),
     )
@@ -694,6 +728,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
     dropped in v1.
     """
     members_by_lag: dict[str, list[str]] = {}
+    once = Uniques()
     mode_by_lag: dict[str, str] = {}
     declared: set[str] = set()
     current_iface: str | None = None
@@ -734,8 +769,8 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
         if lm:
             lag_name = f"lag {int(lm.group(1))}"
             members = members_by_lag.setdefault(lag_name, [])
-            if current_iface and current_iface not in members:
-                members.append(current_iface)
+            if current_iface:
+                once.add(members, current_iface)
 
     lags: list[CanonicalLAG] = []
     for lag_name in sorted(declared | set(members_by_lag), key=_lag_sort_key):
@@ -877,6 +912,7 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
     carries its L3 config), so create / merge a record.
     """
     existing_by_id: dict[int, CanonicalVlan] = {v.id: v for v in intent.vlans}
+    once = Uniques()
     for iface in intent.interfaces:
         m = _SVI_NAME_RE.match(iface.name)
         if not m:
@@ -895,8 +931,7 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
             existing_by_id[vid] = synthesised
             continue
         for addr in iface.ipv4_addresses:
-            if addr not in existing.ipv4_addresses:
-                existing.ipv4_addresses.append(addr)
+            once.add(existing.ipv4_addresses, addr, address_key)
 
 
 def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:

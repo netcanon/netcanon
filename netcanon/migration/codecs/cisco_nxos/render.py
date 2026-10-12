@@ -34,7 +34,11 @@ import re
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
-from .._helpers import _coalesce_vlan_ids, same_vendor_version
+from .._helpers import (
+    _coalesce_vlan_ids,
+    same_vendor_version,
+    switchport_trunk_allowed_value,
+)
 from . import port_names as _port_names
 
 #: Canonical algorithm token -> NX-OS ``password <type>`` digit.  Keys mirror
@@ -429,9 +433,10 @@ def _render_route_targets(imports: list, exports: list) -> list[str]:
     import-only and export-only remainders follow.  Lines are indented
     four spaces (nested under ``address-family ipv4 unicast``).
     """
-    both = [rt for rt in imports if rt in exports]
-    imp_only = [rt for rt in imports if rt not in exports]
-    exp_only = [rt for rt in exports if rt not in imports]
+    exported, imported = set(exports), set(imports)
+    both = [rt for rt in imports if rt in exported]
+    imp_only = [rt for rt in imports if rt not in exported]
+    exp_only = [rt for rt in exports if rt not in imported]
     lines: list[str] = []
     for rt in both:
         lines.append(f"    route-target both {rt}")
@@ -510,8 +515,15 @@ def _render_switchport_lines(iface) -> list[str]:
             out.append(
                 f"  switchport trunk native vlan {iface.trunk_native_vlan}"
             )
-        if iface.trunk_allowed_vlans:
-            vlist = _coalesce_vlan_ids(sorted(set(iface.trunk_allowed_vlans)))
+        # The list means what it says.  No VLAN is ``none``.  Every
+        # VLAN is no line at all: it is the default and what the
+        # device prints, and ``1-4094`` names the ids NX-OS keeps for
+        # itself, which it does not take in a list.  Any other list is
+        # written as ranges.
+        vlist = switchport_trunk_allowed_value(
+            "cisco_nxos", iface.trunk_allowed_vlans, coalesce=True,
+        )
+        if vlist is not None:
             out.append(f"  switchport trunk allowed vlan {vlist}")
     elif iface.ipv4_addresses or iface.ipv6_addresses:
         # Routed physical / LAG port — state the L3 intent explicitly.

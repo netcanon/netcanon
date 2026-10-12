@@ -34,7 +34,11 @@ AOS-CX grammar notes that shape the output (see
   ``vlan trunk`` (the INVERSE of NX-OS); a routed port carries a bare
   ``ip address`` with no ``routing`` keyword.  Switchport lines are
   kind-gated to physical + LAG ports.
-* An empty trunk-allowed list re-emits as ``vlan trunk allowed all``.
+* A trunk-allowed list of every id (1-4094) is ``vlan trunk allowed
+  all``; no other list is.  AOS-CX has no form for a trunk that allows
+  NO VLAN (a trunk left with no allowed VLAN carries every VLAN
+  there), so such a trunk is written with neither ``vlan trunk`` line
+  and a ``! review:`` line that says why.
 * Admin-state is emitted explicitly (``no shutdown`` / ``shutdown``) so
   the round-trip is stable regardless of the parser's type-aware default.
 """
@@ -52,7 +56,13 @@ from ..._usm_keys import (
     user_usm_kind,
 )
 from ...canonical.intent import CanonicalIntent
-from .._helpers import _coalesce_vlan_ids, same_vendor_version
+from .._helpers import (
+    TRUNK_ALL,
+    TRUNK_NONE,
+    _coalesce_vlan_ids,
+    same_vendor_version,
+    trunk_list_says,
+)
 
 #: Synthesised AOS-CX release stamped into the ``!Version`` banner when the
 #: source device's own release is unknown.  When the tree was parsed from THIS
@@ -347,18 +357,39 @@ def _render_interface(
             if iface.access_vlan is not None:
                 block.append(f"    vlan access {iface.access_vlan}")
         else:  # trunk
-            if iface.trunk_native_vlan is not None:
-                block.append(
-                    f"    vlan trunk native {iface.trunk_native_vlan}"
+            says = trunk_list_says(iface.trunk_allowed_vlans)
+            if says == TRUNK_NONE:
+                # A trunk that allows no VLAN.  AOS-CX has no form
+                # for it: when the last VLAN is taken off a trunk the
+                # trunk carries every VLAN, and ``vlan trunk native
+                # N`` alone makes the switch add ``allowed all``.  So
+                # neither ``vlan trunk`` line is written, and the
+                # operator is told what the source said.
+                native = (
+                    "" if iface.trunk_native_vlan is None
+                    else f" (native VLAN {iface.trunk_native_vlan})"
                 )
-            allowed = sorted(set(iface.trunk_allowed_vlans))
-            if allowed:
                 block.append(
-                    f"    vlan trunk allowed {_coalesce_vlan_ids(allowed)}"
+                    "    ! review: the source trunk allows no VLAN"
+                    f"{native}; AOS-CX has no form for that (a trunk "
+                    "with no allowed VLAN carries every VLAN), so no "
+                    "vlan trunk line is written -- list the VLANs "
+                    "this port is to carry, or shut it down"
                 )
             else:
-                # Empty allowed-list == all (the parser maps ``all`` -> []).
-                block.append("    vlan trunk allowed all")
+                if iface.trunk_native_vlan is not None:
+                    block.append(
+                        f"    vlan trunk native {iface.trunk_native_vlan}"
+                    )
+                if says == TRUNK_ALL:
+                    # Every VLAN is the word for it, and only that
+                    # list is: ``1-4094`` reads back as 4,094 VLANs.
+                    block.append("    vlan trunk allowed all")
+                else:
+                    allowed = sorted(set(iface.trunk_allowed_vlans))
+                    block.append(
+                        f"    vlan trunk allowed {_coalesce_vlan_ids(allowed)}"
+                    )
     else:
         # ── L3 (routed) — vrf bind precedes the address ──
         if iface.vrf:

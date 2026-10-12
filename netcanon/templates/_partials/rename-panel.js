@@ -73,16 +73,14 @@
     // with my chosen value" — same idiom as ports above.
     function applySubstitutionPreview(userMap, appliedMap) {
       if (!userMap || typeof userMap !== 'object') return;
-      var subs = {};
+      var subs = Object.create(null);
+      // The job's map read by a name: its own entries only.
+      var applied = _nameMap(appliedMap);
       Object.keys(userMap).forEach(function(src) {
         var userTarget = userMap[src];
         if (userTarget === null || userTarget === undefined) return;
         var srcKey = String(src);
-        var autoTarget = appliedMap && appliedMap[srcKey] !== undefined
-          ? String(appliedMap[srcKey])
-          : (appliedMap && appliedMap[src] !== undefined
-              ? String(appliedMap[src])
-              : srcKey);
+        var autoTarget = applied[srcKey] !== undefined ? String(applied[srcKey]) : srcKey;
         var tgtStr = String(userTarget);
         if (autoTarget === tgtStr) return;  // no-op
         subs[autoTarget] = tgtStr;
@@ -286,7 +284,7 @@
     // than to ship silently-merged output.
     function countCollisions(userMap, autoMap, dropsSet) {
       if (!userMap && !autoMap) return 0;
-      var hits = {};
+      var hits = Object.create(null);
       var seen = new Set();
       function t(src, tgt) {
         if (tgt === null || tgt === undefined) return;

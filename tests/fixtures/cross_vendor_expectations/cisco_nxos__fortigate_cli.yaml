@@ -150,7 +150,7 @@ per_field_expectation:
   "interfaces[].trunk_allowed_vlans":
     disposition: unsupported
     reason: >
-      Drifts to `[]` on every trunk (6 record-occurrences; e.g. `[10, 2000]`
+      Drifts to `[]` on every trunk (9 record-occurrences; e.g. `[10, 2000]`
       -> `[]`).  FortiOS carries trunks as stacked VLAN child-interfaces, not
       as an allowed-list on the parent, so the list has nowhere to render.
       Each allowed VLAN has to be re-created as its own child interface.
@@ -330,7 +330,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: unsupported
     reason: >
-      Drifts to `[]` wherever populated (8 record-occurrences; e.g.
+      Drifts to `[]` wherever populated (18 record-occurrences; e.g.
       `["Ethernet1/1", "Ethernet1/2", "port-channel1"]` -> `[]`).  FortiOS
       binds a VLAN to exactly ONE parent (`set interface "<parent>"`), so
       multi-port tagged membership cannot be represented and the fortigate_cli

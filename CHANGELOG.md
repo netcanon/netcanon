@@ -63,16 +63,322 @@ timestamp if your timezone matters for an audit.
   a capture with a run put into it (`tests/unit/test_untrusted_text_cost.py`).
   The last shape has a search of its own, run by hand
   (`tools/stanza_cost_search.py`), and a pinned text for each handler it
-  found.  It is a search, not a proof, and two things are known and not
-  mended: a list of one record that a line adds to after reading it
-  (32,000 addresses on one Junos unit take 8 seconds), and what a config
-  expands to (a thousand trunks that each allow VLANs 2-4000 are 86 KB
-  and over 3 GB) — see SECURITY.md.  Put a request timeout and a memory
+  found.  It is a search, not a proof; the two things it left known and
+  not mended are the next entry's.  Put a request timeout and a memory
   limit in front of a server that takes text from people it does not
   trust.
 
+- **A small config could still take seconds, or hundreds of megabytes,
+  to read.**  Three more shapes, none of which changes an output.
+  *A list of one record that a line adds to after looking for its value
+  there* — the addresses of one interface, the members of one LAG, the
+  route targets of one VRF — cost the square of the lines the record was
+  given: 32,000 addresses on one Junos IRB unit (2 MB) took 12 seconds,
+  8,000 secondary addresses on one AOS-CX SVI (0.3 MB) 28, 32,000
+  RouterOS NTP servers 24, and 640 lines in one AOS-S VLAN (13 KB) 4.
+  Each is about a second or less; the look is by key (`Uniques`, in
+  `netcanon/migration/codecs/_helpers.py`), in every parser that had it.
+  *A scan of another list for every item*, after the parse: rendering
+  400 VLANs, port-channels and member ports to OPNsense took 12 seconds
+  and takes 0.06; the port-name translator's collision warning, the
+  model-aware plan's account of dropped ports, the NX-OS route-target
+  lines and the VyOS SNMPv3 users each build an index once.  And *what
+  the switchport projection made and dropped*: for a trunk whose list is
+  wide it made a VLAN record and a membership for every id, and the six
+  port-centric codecs dropped all but the declared ones on their next
+  line.  50 Arista trunks that allow `2-4000` (5 KB) took 0.4 seconds and
+  180 MB to parse, and take 0.01 seconds and 1 MB; 48 NX-OS trunks that
+  state `1-99,101-4094`, translated to Junos, 0.4 seconds and 176 MB,
+  now 0.04 and 1.  The projection takes the set its caller keeps
+  (`project_switchport_to_vlan(intent, keep=...)`) and makes nothing
+  else; an id that is not a VLAN id in a wide list (`1-200,5000`) still
+  fails the parse, as it did.  Lists of VLAN ids are built from one
+  shared tuple of ints (8 bytes an id on a port, where it was 38), and a
+  membership costs 45 bytes while it is stamped, where it cost 800: a
+  thousand trunks that carry every VLAN on a thousand declared VLANs
+  (118 KB), translated to AOS-S, are 0.7 seconds and 72 MB, where 500 of
+  each were 0.7 seconds and 293 MB.  Nothing moved: every committed
+  capture parses, renders bare and translates onto all thirteen codecs
+  to the same digests as before, the cross-mesh results and the
+  reconciliation are unchanged, and the projection is compared in the
+  suite with the one it replaces, on built switches, with and without
+  the set.  New tests pin a text for each place
+  (`tests/unit/test_untrusted_text_cost.py`), read the source for a list
+  that is looked through before it is added to, and count what a VLAN id
+  and a membership cost in bytes
+  (`tests/unit/migration/test_projection_makes_what_is_kept.py`).
+  Still open, and named in SECURITY.md: what a config expands to (800
+  ranges on one AOS-S line are 800,000 names and 295 MB), the product of
+  two honest counts, and that there is no limit on the time or the
+  memory a request takes.
+
 ### Fixed
 
+- **A trunk that allows no VLAN no longer comes out allowing every
+  VLAN, and a trunk of every VLAN no longer comes out carrying
+  none.**  The canonical tree had one value, an empty list, for three
+  statements: a trunk that allows no VLAN (`switchport trunk allowed
+  vlan none`, a list emptied by `remove` or `except`, a Dell OS10 or
+  Junos trunk that lists nothing, a trunk whose VLANs were all dropped
+  in the rename modal), a trunk that states no list (every VLAN on
+  IOS-XE, NX-OS and EOS), and AOS-CX's own `vlan trunk allowed all`.
+  Each renderer picked one reading for all three.  IOS-XE, NX-OS and
+  EOS wrote the empty list as a trunk with no allowed line, and
+  AOS-CX as `vlan trunk allowed all`: every VLAN, for a trunk that
+  carried none.  Junos, OS10 and AOS-S wrote it as a trunk that
+  carries none: for a Cisco uplink that carried everything.  The job
+  said `completed` and reported nothing, and a test that read the
+  output back with the target's parser saw nothing either, because
+  that parser read its own default as the same empty list.  In the
+  committed captures: two Dell peer links that carry one untagged
+  VLAN came out as trunks of every VLAN on four targets, and 23
+  trunks of every VLAN — two vPC peer links and their members among
+  them — reached Junos, OS10 and AOS-S carrying nothing.
+  A list now means what it says.  On a trunk an empty list is NO
+  VLAN, a list of every id (1-4094) is EVERY VLAN, and any other list
+  is the list.  The parser, which knows its platform, puts what a
+  trunk with no allowed list carries there, from one table: every
+  VLAN on IOS-XE, NX-OS, EOS and AOS-CX; none on OS10 and Junos
+  (each vendor's sentence, with its source, is in
+  `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md`).
+  `add` and `remove` on an interface's first allowed line start from
+  that list, as they do on the device (`remove 10` on a Cisco trunk
+  with no earlier line was read as no VLAN, and is every VLAN but 10).
+  What an interface states is kept by its NAME — the one its header
+  line writes — so a stanza that is met twice is one interface: a
+  trunk of VLAN 10 whose stanza appears again with only its mode line
+  is a trunk of VLAN 10 both times, and `add 30` in a second stanza
+  is added to the interface's own list.
+  And the platform's list is given only where the interface SAYS it
+  is a trunk: the NX-OS and EOS parsers take a port for a trunk from a
+  trunk line alone, and a trunk taken that way gets nothing from the
+  default (Known limitations, below).
+  Each renderer writes its target's form: IOS-XE, NX-OS and EOS write
+  `switchport trunk allowed vlan none` for no VLAN and no allowed line
+  for every VLAN — they wrote the 4,094 ids on one line of some
+  19,000 characters, or `1-4094`, which names ids NX-OS keeps for
+  itself — AOS-CX writes `vlan trunk allowed all` for every VLAN and
+  for no other list, and Junos, OS10 and AOS-S write what they did.
+  **If a config was translated with release 0.7.7 or earlier, check
+  every trunk whose allowed list is empty or absent on either side.**
+  Every committed capture comes back through its own codec byte for
+  byte as it did (230 outputs, and 474 over the development
+  captures).  Same-vendor texts that no capture holds do change, two
+  of them
+  each to what the device prints: `switchport trunk allowed vlan all`
+  (or `1-4094`) comes back from IOS-XE, NX-OS and EOS as a trunk with
+  no allowed line, and an AOS-CX `vlan trunk native <N>` with no
+  allowed line comes back with `vlan trunk allowed all` beside it (as
+  does `vlan trunk allowed 1-4094`).  A third changes to something
+  the source did not print: an NX-OS or EOS port with a trunk line
+  and no `switchport mode trunk`, which was and is written back as a
+  trunk, now has `switchport trunk allowed vlan none` under it (Known
+  limitations).  Of the 1,495 outputs every
+  capture makes onto every codec, 57 change, none of them onto its
+  own; no job changes status and, with no VLAN map given, no job's
+  warnings change.  What else moves with it:
+  - *The VLAN pane.*  A trunk that allowed only VLANs you dropped is
+    written as a trunk of no VLAN — it was every VLAN on four targets
+    — and the job says so: `vlan_rename: interface
+    'GigabitEthernet1/0/1' is a trunk that allowed only VLAN 100
+    which was dropped — the trunk now allows no VLAN`.  A trunk of
+    every VLAN is left as it is by a drop or a renumber: a trunk that
+    said `all` came out as `1-99,101-4094` when VLAN 100 was dropped
+    or given another id.  And it is no reference to any one VLAN: a
+    map entry for a VLAN the config does not have is still reported
+    (`VLAN 555 is present nowhere in the parsed config ... entry
+    ignored`), whatever trunks of every VLAN the config holds.
+  - *The validation report* names
+    `/interfaces/interface/trunk-allowed-vlans` for a trunk that
+    states no list, where the target drops it.  It was not walked:
+    the list was empty.
+  - *The VLAN parent on OPNsense, RouterOS and FortiOS*, which have
+    no trunks and hang a VLAN on one port.  Each looks through the
+    source's trunks for one that carries the VLAN, and a trunk that
+    states no list carries every VLAN now.  A trunk that NAMES the
+    VLAN is looked for before a trunk of every VLAN, so an output is
+    as it was wherever a trunk names the VLAN.  Four committed
+    outputs change, all onto OPNsense.  In three, VLANs that no trunk
+    names move from a parent chosen without looking to the LAG that
+    carries every VLAN (two AOS-CX captures, and the vPC peer link of
+    an NX-OS one).  In the fourth, a Junos QFX, VLANs move from a LAG
+    that says `vlan members all` to the port that names them.
+  - *What it costs.*  A trunk that states no list is 4,094 ids in the
+    tree on those four platforms, which is what a trunk that states
+    `1-4094` already cost: some 35 KB a trunk.  A thousand of them
+    (60 KB of text) are 36 MB of tree where they were 3; ten thousand
+    (0.6 MB) are 364 MB, the figure for ten thousand that state
+    `1-4094`, and take what those take: a second to read, and under
+    four to translate to Junos (the stated list took seven, until
+    the Junos renderer asked the shared reading of "every VLAN").
+    Reading them still grows with their number and no faster.  Such
+    trunks beside as many VLAN interfaces are a product — N trunks in
+    each of M VLANs — as they are with the list stated.  A thousand
+    of each takes one to two seconds onto OPNsense, RouterOS and
+    FortiOS, which is what the stated list took, or less: just over
+    a second onto FortiOS, where it took more than four, because that
+    renderer scored every port again for every VLAN interface and now
+    scores them once a render.  SECURITY.md has both under what a
+    config expands to.
+  New tests render a trunk that says none, nothing and all — in each
+  source's own grammar — onto every codec, and read the output as
+  text with a reader of their own as well as with the target's parser
+  (`tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py`);
+  a stanza met twice and a trunk line with no mode line are among
+  them; and a public codec that makes trunks fails there until it
+  says what a trunk with no list carries on its platform.
+
+- **A trunk that leaves a VLAN out does not get it back on Junos.**
+  The Junos renderer wrote any trunk list of 4,000 VLAN ids or more
+  as `vlan members all`, which on Junos is every VLAN the switch has
+  and every VLAN it is given later.  So `switchport trunk allowed
+  vlan 1-99,101-4094` came out as `all`, with VLAN 100 back on the
+  trunk, and `2-4094` with VLAN 1 — in a job that said `completed`
+  and reported nothing.  `all` is now written only for a list of
+  every id (`1-4094`).  Any other list is cut into runs of
+  consecutive ids: a run made only of VLANs the output defines is
+  written by name, as before; any other run is written as one range
+  of ids, which covers the defined VLANs inside it (`vlan members
+  1-99`, `vlan members 101-4094`).  Junos documents ids and ranges
+  as members beside names, and this parser already read them.  A
+  list of 129 to 3,999 ids was a line per id, each a name
+  `VLAN-<id>` for a VLAN the output does not define (`1-3999`:
+  3,999 lines); that is one range now.  A list of 128 ids or fewer
+  is unchanged: its VLANs are made, and named.  A VLAN whose own
+  name is `all`, another VLAN's number or a range of numbers is
+  written as `VLAN-<id>` with a `# review:` line: a member list
+  reads those names as every VLAN, or as ids.  The shared projection read
+  `2-4094` as "all VLANs" and stamped the trunk onto every declared
+  VLAN, VLAN 1 included, so AOS-S tagged the port in VLAN 1; it
+  stamps the VLANs the list holds.  **If a trunk with a wide list
+  that leaves VLANs out was translated to Junos with release 0.7.7
+  or earlier, check its `vlan members` line: it says `all`, and the
+  VLANs the source left out are on it.**  Not verified on a device:
+  that a switch commits a member range most of whose ids have no
+  VLAN.  Juniper's pages give the grammar, and an example of a
+  range with no VLAN defined; none says so in words.  Two committed
+  captures change (an Arista MLAG peer link allowing `2-4094`:
+  `vlan members 2-4094` now).  They are the only committed trunks
+  that leave a VLAN out, and the VLAN 1 they gained had been written
+  down in a test as an asymmetry to accept.  A test now renders such
+  trunks onto every codec and reads the output back three ways.
+- **A Junos text with comments that are never closed cost the square of
+  its lines.**  Comments were cut out of hierarchical text by a pattern,
+  run over every Junos text before its form was known; from each `/*`
+  it read on for the `*/`, to the end of the text when there was none.
+  8,000 set-form lines that each hold a `/*` (a third of a megabyte)
+  took seven seconds, sixteen times what a quarter as many took.
+  Comments are now known in the tokeniser's own walk, where a token can
+  begin, and set-form is known for set-form by its first statement.  The
+  search in `tests/unit/test_untrusted_text_cost.py` had not built that
+  text — it writes a run after one opener, not the opener many times —
+  and has one for it now.
+- **One long word in a Junos line cost its square.**  The words of a
+  `set` line were split by Python's `shlex`, which builds a word by
+  adding a character at a time to a string it keeps, and so copies the
+  word for every character of it.  A word of 400,000 characters — a
+  description, a login message, in quotes or not, in either form — took
+  over a second to split, and one of 1.6 MB about three minutes.  The
+  words are now read in time that fits the line, by a splitter that is
+  held to `shlex`'s own answers: every short line there is over the
+  characters that matter, and longer lines at random, are split both
+  ways and compared.  Parsing the committed Junos captures takes under
+  a third of the time it did, and none of them reads differently.
+- **Junos SNMPv3 users cost the square of their number.**  Each `set
+  snmp v3` line found its user by reading every user so far: 32,000
+  `security-to-group` lines took fifteen seconds.  The user is found by
+  name now.  `tools/stanza_cost_search.py` had not reported it — at the
+  sizes it reads, the time the lines took to split hid the growth — and
+  with that time gone it also reports, for Junos, the cost SECURITY.md
+  already lists as known and not mended: many addresses on one unit.
+
+### Fixed
+
+- **A hierarchical Junos config is read as a device prints it, and as
+  it leaves a terminal.**  The hierarchical output of `show
+  configuration` begins `## Last commit: ...` and `version
+  21.4R3.15;`, and marks its secrets `## SECRET-DATA`.  The parser
+  read the hierarchical form only if it began with a block: with the
+  `version` line first the text was taken for set-form, where no line
+  of it is a statement, and the config was read as empty — a job that
+  rendered nothing and gave no reason.  A `## SECRET-DATA` marker was
+  read as words of a statement (`set system login user admin
+  authentication ## SECRET-DATA`), and that put every block after it
+  one level out: in a small config the next user was written outside
+  `login` and lost, and the `snmp` block was not read at all.  No
+  probe knew the form, so detection offered no codec for it.  And the
+  list of what was not translated was empty for it: the Tier-3
+  detector was handed the text as it came, and its patterns begin
+  `set`, so a firewall's filters, NAT and policies were dropped with
+  no row to say so.
+
+  Read now: comments — `#` where a statement can begin, `/* */` where
+  a word can, and nowhere else (`member ge-0/*/*;` and a group's
+  `<*/*>` were cut as comments, with every block up to the next
+  `*/`); statements ahead of the first block; the lines of the
+  session a capture was copied from (`{master:0}`, the prompt with or
+  without its command, `[edit]`, a pager's `---(more)---`), a
+  Markdown fence, a byte-order mark, carriage returns; the tags a
+  device prints (`inactive:`, `protect:`) and the operators of a load
+  file, which no device prints (`replace:`, `active:`, `unprotect:`;
+  a statement under `delete:` is left out and listed); a block with
+  nothing in it; what `display max-depth` elides.  Both forms list
+  the same Tier-3 sections.  A `}` that closes nothing, and a `/*`
+  opened after the first block and never closed, are refused with a
+  sentence, where the read used to end there in silence, and a
+  missing `;` before a `}` no longer closes two blocks.  (A `/*`
+  left open ahead of the first block is not refused: the text is
+  then not taken for the hierarchical form at all.)  The rows for
+  statements left out are bounded: statements that read alike share
+  a row that counts them, and past two hundred rows one last row
+  counts the rest.  Detection offers Junos for the form: its
+  last-commit line counts beside a second sign of Junos (by itself
+  the line is a comment, and a page of prose that quotes it is not
+  claimed), and so do two of `version X;`, `system {` and `host-name
+  X;`.
+
+  Measured on 18 public `show configuration` captures as they were
+  fetched, none of them committed: before, none was read (17 came out
+  as an empty config, one was refused, and detection offered a codec
+  for none); now each gives the tree its `display set` form gives.
+  0 of 2,998 digests of the committed captures differ from before,
+  and detection is unchanged for every file under `tests/fixtures`.
+
+  Not read: the wildcards of an interface-range `member` and of a
+  group (`<*>`) are not expanded — each is an interface of that
+  name, in both forms; a `member-range` is not read at all, so the
+  ports it names get nothing of the range; and `apply-groups
+  "${node}"` is not resolved.  Every committed capture is set-form:
+  the hierarchical reader is held by built configs, each beside its
+  set form typed by hand.
+- **A deactivated Junos statement is not translated as if it were in
+  force.**  `deactivate interfaces ge-0/0/2` (`inactive: ge-0/0/2 {`
+  in the hierarchical form) marks a statement the device holds and
+  does not run.  The parser skipped the `deactivate` line and read
+  the `set` lines under it, so an interface the source had switched
+  off came out with its addresses on the target, in a job that said
+  nothing; in the hierarchical form it became an interface named
+  `inactive:`.  The statement and everything under it is now left
+  out and listed with what was not translated, as `inactive:
+  <path>`; the banner says in a sentence that such a row is not
+  something to apply by hand, and does not count it among the
+  sections that are.  The row names the statement and never a
+  secret: a path is cut after the word that names one (`inactive:
+  snmp community ...`), and a leaf is named without its value.  What
+  an applied group or an interface-range would give to a deactivated
+  path is left out with it — no Juniper page was found that says so
+  in as many words; batfish reads it this way — and a group whose
+  every line was left out is no longer applied.  A text whose only
+  rows are of this kind is not taken for a recognised config: the
+  job is `partial` and says why.  **If a Junos config with
+  deactivated statements was translated with release 0.7.7 or
+  earlier, check the output for what the source had switched off.**
+  A Junos to Junos job does not write the statement back as
+  inactive: it is gone from the output.  Not handled: a reference to
+  a deactivated statement from one that is in force — an OSPF
+  interface line; a port a routing instance still names; the member
+  ports of a LAG whose own interface is deactivated, which still
+  make the LAG, as a static bundle with none of its own settings.
 - **The rename modal held Apply on a job the server called
   `completed`.**  A Junos config that names its VXLAN source as
   Junos does — `vtep-source-interface lo0.0`, where the interface
@@ -394,8 +700,9 @@ timestamp if your timezone matters for an audit.
   itself and in its title.
 - **Why an Apply was refused was gone in four seconds.**  The server's
   words were in a toast and nowhere else.  They are now the status
-  line in the modal's footer, in red, until the next thing the footer
-  has to say; so is an Apply the server never answered.
+  line in the modal's footer, in red, until something in the modal is
+  changed or the footer has its next thing to say; so is an Apply the
+  server never answered.
 - **Nothing paired was shown as a pairing.**  With a source device
   chosen by hand that is not the one the config is of, no port is
   paired: every name is "not on the source device".  After *Accept as
@@ -449,6 +756,91 @@ timestamp if your timezone matters for an audit.
   longer becomes a row for it; a name of any length wraps instead of
   widening the table; a section you opened stays open when the table
   is redrawn.
+- **A VLAN, user or SNMP override could not be typed.**  The table
+  that was rebuilt on every key was mended for ports only.  The VLAN,
+  local-user, SNMP-community and SNMPv3-user tables still were:
+  `private9` typed at a keyboard was `p`, the focus was gone, and `p`
+  was the community Apply sent.  Each of them is now rebuilt when its
+  field is left, the control that had the focus has it again
+  afterwards, and a rebuild waits for a mouse button that is down, so
+  "drop" pressed straight out of a field is not lost.
+- **A VLAN id out of range was shown, and another one sent.**  A
+  number that is no VLAN id was not stored, and the field was left
+  showing it: after `409` and then `4095` the screen said 4095 and
+  Apply sent 409.  Such a number now takes the place of the entry
+  it was typed over: nothing is sent for that VLAN until it is put
+  right, the field goes on holding it with a red edge, says why in
+  its title, and is invalid to a screen reader.
+- **A user called `constructor` opened with an override nobody had
+  typed.**  The override maps of the VLAN, user and SNMP panes were
+  ordinary objects, in which a name every object has — a local
+  user `constructor`, an SNMPv3 user `toString` — reads as
+  something inherited.  They are keyed by the names alone now, as the
+  port map is, and so is what each pane reads of the job that came
+  back.
+- **Overrides kept for one config were sent for another of the same
+  host name.**  The browser remembers your overrides by source codec,
+  target codec and host name.  A second config with that host name
+  opened with the first one's entries; those for names it does not
+  have had no row to show them, and Apply sent them all the same.  An
+  entry for a name the config on the page has no row for is now left
+  out, and the footer says how many were.  (They are then no longer
+  kept: see the known limitations.)
+- **The footer's line outlived what it was about.**  It stayed until
+  the next line was written: a refusal of a member number that had
+  since been corrected, "4 decisions recorded — Apply to confirm"
+  beside devices that had since changed, "All overrides cleared."
+  beside two new overrides.  Changing anything in the modal now
+  clears it; looking at another pane does not.
+- **"drop" could not be reached from the keyboard.**  In every pane it
+  was a piece of text with a click handler, and Tab passed it by.  It
+  is a button, drawn as the link it was: Tab reaches it, and Enter or
+  Space presses it.  And Apply pressed from the keyboard has the
+  focus again when its answer is in: the button is disabled while the
+  request is out, which left the focus at the top of the page.
+- **A port's name typed on a closed list chose another port.**  A
+  closed list takes a name key by key, and the table was rebuilt at
+  each key: the list was a new one and the name began again, so `47`
+  typed chose port 7.  The table is now rebuilt when the typing has
+  stopped or the list is left.
+- **Reading the source device from the config had no end.**  The
+  request had no time limit, the modal said nothing while it was out
+  — the source read "(not declared)" and then filled itself in —
+  and a text that was never answered for was never asked about again.
+  The line under *Source device* now says "Reading the source device
+  from the config …", gives up after twenty seconds and says so, and
+  the config is asked about again the next time the modal opens.
+  Model families that fail to load under an open modal are said at
+  once, not when it is next opened.
+- **The strip above the table was announced again at every key.**  It
+  is a polite live region, and it was emptied and refilled with every
+  summary — one for each key typed in a row — though it said
+  what it had said.  It is now replaced only when what it says
+  changes; *Accept as shown* keeps the focus through a redraw that
+  leaves it alone.  A strip that cannot be drawn is taken away, not
+  left saying what the last one said.
+- **More small things in the rename modal.**  A long unbroken name
+  under the strip or in a device note wraps: it used to slide the
+  device rows, the notes and the strip out of sight to the left.  A
+  closed list of target ports is wide enough to read
+  (`sfp-sfpplus11` and `sfp-sfpplus12` were both `sfp-sfpplu` beside
+  a remark).  Target profiles that arrive after a family model was
+  chosen no longer leave the vendor list reading "(none)" over it,
+  and they reach the source list of a modal that is already open.  A
+  port kept under its own name reads "(kept as it is, by your own
+  entry)", not "needs override".  A space typed just before the
+  table is redrawn is still there (`my port` came out `myport`).  A
+  bay named like `constructor` in a family file of your own no longer
+  stops the device note and leaves the strip on "Checking the device
+  …".
+- **`detect-deployment` repeated a port name at any length.**  The
+  detector's own notes are capped.  The note added afterwards, about
+  port names the proposed device does not have, repeated the first
+  eight of them whole, and the names in `missing_ports` had no bound
+  either: a name of a hundred thousand characters was a note of eight
+  hundred thousand.  A name is now cut to 128 characters in
+  `missing_ports` and to 32 in the note, and ends `…` where it was
+  cut.
 - **The ports fit-check banner reappeared on the VLAN and user panes.**
   Editing an override on another pane refreshed the summary, which
   re-rendered the ports banner there.  It is ports-pane only again.
@@ -767,6 +1159,13 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **Where a vendor has model families, its flat profiles are under
+  their own heading in the target model list.**  Four Aruba 2930F
+  switches are both a model of a family and a flat profile, under the
+  same words, and the list gave nothing to tell the two apart.  The
+  family models now come first, as in the source list, and the
+  profiles follow under "Profiles — one fixed port list".  A
+  vendor with no family lists its profiles as before.
 - **A job with no devices declared is `partial` when the port
   translator left a name unsettled: two names on one name, a name
   dropped because the target has none for it, or a name it could not
@@ -1015,6 +1414,92 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **Dell OS10 cannot be told "every VLAN".**  It has no word for it,
+  its VLAN ids end at 4093, and a VLAN must exist before a port is put
+  in it.  A trunk of every VLAN is written `switchport trunk allowed
+  vlan 1-4094`, as it always was, now under a `! review:` line that
+  says so — and for more trunks than before, since a Cisco, Arista or
+  AOS-CX trunk that states no list is every VLAN (28 trunks of the
+  committed captures, where it was 5).  The line has to be replaced
+  with the VLANs the switch has.  The job does not report it.  Pinned
+  by a test, and not mended yet.  A list that is NOT every VLAN is
+  written as it stands with no such line, and can have the same two
+  faults: `2-4094` names an id OS10 does not have, and a list can
+  name VLANs the output does not declare, which OS10 wants made
+  first.  In the outputs the committed captures make, two lines are
+  `2-4094` and 39 name a VLAN the output has no `interface vlan` for
+  (those two among them).  Older than this release, and unchanged.
+- **Aruba AOS-CX cannot be told "no VLAN".**  A trunk left with no
+  allowed VLAN carries every VLAN there, so a trunk that allows none
+  has no AOS-CX form.  Neither `vlan trunk` line is written, and a
+  `! review:` line in the stanza says what the source said and names
+  its native VLAN: list the VLANs the port is to carry, or shut it
+  down.  The job does not report it.  What IS written is a switched
+  port (`no routing`) with no `vlan` line.  That is taken here to be
+  an access port in VLAN 1, by the platform's default — one untagged
+  VLAN more than the source's none, on a port that is up — but that
+  default is not established here from a vendor's page or from a
+  switch.
+- **Whether a trunk's allowed list holds its native VLAN differs by
+  platform, and the canonical tree does not yet say which.**  On
+  AOS-CX the native VLAN is carried only if the list names it; on
+  OS10 and AOS-S the untagged VLAN is outside the list by grammar.
+  It errs both ways.  *More:* an AOS-CX trunk whose native VLAN is
+  not in its list — untagged traffic dropped, by HPE's own sentence —
+  reaches OS10 and AOS-S carrying that VLAN untagged.  *Fewer:* an
+  OS10 trunk's untagged VLAN is not in the list written for AOS-CX,
+  IOS-XE, NX-OS or EOS; the two Dell peer links named above, which
+  carry an untagged VLAN and no tagged one, are written as trunks
+  that allow none with the native line beside them.  That is safer
+  than the trunk of every VLAN they were given before, and not yet
+  right.  Check the native VLAN of any trunk translated between those
+  families.
+- **A port with a trunk line and no `switchport mode trunk` line is
+  read as a trunk** by the NX-OS and EOS parsers (a `switchport trunk
+  native vlan` line alone, say; on EOS even after `switchport mode
+  access`), though a port of either platform is an access port until
+  it is told otherwise, and EOS keeps a trunk line on an access port
+  without acting on it.  That reading is older than this release and
+  is not mended here.  What is new is that such a port gets nothing
+  from the platform's default: its list is what its lines name, or
+  empty, so it is written as a trunk of NO VLAN (`switchport trunk
+  allowed vlan none`, a Junos trunk with no members) — fewer VLANs
+  than a trunk carries, never more, and still a trunk where the
+  switch has an access port.  A port that says `switchport mode
+  trunk` anywhere under its name is not affected.  No committed
+  capture has one; pinned by a test.
+- **`switchport trunk allowed vlan none` on a port that is not
+  `switchport mode trunk` is dropped**, same vendor included.  On
+  such a port the canonical tree has one value, an empty list, for
+  `none` and for no list at all, and no line is written for it.  An
+  IOS-XE port in a dynamic mode that states `none` comes back as a
+  stanza with no allowed line; if it negotiates a trunk, it carries
+  every VLAN.  A VLAN drop that empties the list kept on such a port
+  writes no line and gives no warning either: the warning is for
+  trunks.  Older than this release; pinned by a test.
+- **A trunk whose list is stated where the parser does not read it is
+  a trunk of every VLAN.**  A Cisco, Arista or AOS-CX port that
+  states the trunk mode and no allowed list is every VLAN, which is
+  right for a port that stands by itself.  Two hand-written shapes
+  put the list elsewhere: a LAG member that says `switchport mode
+  trunk` and leaves the list to its port-channel, and a port that
+  takes its list from `inherit port-profile` (NX-OS) or `source
+  template` (IOS-XE), neither of which is read.  Such a port reaches
+  Junos as `vlan members all`, OS10 as `1-4094` under its review
+  line, and AOS-S tagged in every VLAN the output declares, where
+  release 0.7.7 wrote it with none.  No committed capture has either
+  shape.
+- **A stanza met twice is one interface for its allowed list only.**
+  Its lines are applied to one list, in order.  Everything else is
+  still read a stanza at a time, and each stanza is written: two
+  stanzas that each state a list outright are both written, so a
+  target whose lines add up (Junos `vlan members`, AOS-S `tagged`)
+  carries both lists where the switch carries the second; and an
+  IOS-XE stanza that states no mode is a record with no mode, so an
+  `add` in it is not written on NX-OS, OS10, AOS-CX or AOS-S, which
+  write a list for a trunk alone.  Both are older than this release.
+  Where the parser makes two records of the name, the job warns of
+  duplicate stanzas.
 - **Selecting a profile in the rename modal still does not change
   auto-translated names.**  The translator derives a target name from the
   shape of the source name (Cisco `GigabitEthernet1/0/1` becomes AOS-S
@@ -1030,12 +1515,18 @@ timestamp if your timezone matters for an audit.
   config before Apply.**  Only a device read from the config is (the
   note says which is the case).  After Apply the strip counts the names
   that are not ports of the declared source device.
-- **Tinted notes and strips are below WCAG AA contrast in the light
-  theme.**  The amber, green and red banners of the modal — the device
-  notes and the plan strip, like the fit-check banner and the profile
-  notice before them — draw the theme's badge text on a tint of the
-  same colour: about 3.4:1 to 4.0:1 for small text, where AA asks
-  4.5:1.  The chips on the strip are on the opaque surface and meet it.
+- **Tinted notes and strips are below WCAG AA contrast, in the light
+  theme and for red in the dark one.**  The amber, green and red
+  banners of the modal — the device notes and the plan strip, like
+  the fit-check banner and the profile notice before them — draw
+  the theme's badge text on a tint of the same colour.  AA asks 4.5:1
+  for small text.  Measured as painted, the light theme gives 3.4:1
+  for amber, 3.9:1 for green and 4.0:1 for red; the dark theme meets
+  it for amber and green and gives 4.4:1 for red.  The red "(+N over
+  capacity)" on an amber fit-check banner is 3.8:1 in the light theme
+  and 3.5:1 in the dark, and the amber count on a section's header
+  ("4 need a decision") is 4.2:1 in the light theme.  The chips on
+  the strip are on the opaque surface and meet it.
 - **Model families cover two Aruba AOS-S series.**  Every other device is
   declared through its target profile, as one device in the one state the
   profile documents, with its ports in the profile's list order — which

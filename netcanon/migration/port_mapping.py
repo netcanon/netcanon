@@ -648,7 +648,13 @@ def settle_plan(
             )
             for where, sources in by_hardware.items():
                 listed = plan.fused.setdefault(where, [])
-                listed.extend(name for name in sources if name not in listed)
+                # Looked for in a set, kept in the list: a rename map
+                # can send every name of a config to one port.
+                have = set(listed)
+                for name in sources:
+                    if name not in have:
+                        have.add(name)
+                        listed.append(name)
 
         def listed_by_target(name: str, for_a_unit: bool = False) -> bool:
             if name_key(name, fold_target) in on_target:

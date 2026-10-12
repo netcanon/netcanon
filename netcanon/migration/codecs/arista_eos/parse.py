@@ -56,7 +56,14 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
-from .._helpers import GrowingIndex, _mask_to_prefix, merge_trunk_allowed
+from .._helpers import (
+    VLAN_IDS,
+    GrowingIndex,
+    TrunksByName,
+    Uniques,
+    _mask_to_prefix,
+    merge_trunk_allowed,
+)
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
 from ..base import ParseError
@@ -252,6 +259,8 @@ def _parse_vrf_stanzas(raw: str) -> list[CanonicalRoutingInstance]:
     was silently lost (2026-07-06 review MEDIUM #21).  The ``_parse_router_bgp``
     pass merges by name on top and its RD wins where present (EOS precedence).
     """
+    once = Uniques()
+
     def _on_line(line: str, current: CanonicalRoutingInstance) -> None:
         dm = _VRF_DESC_RE.match(line)
         if dm:
@@ -265,10 +274,10 @@ def _parse_vrf_stanzas(raw: str) -> list[CanonicalRoutingInstance]:
         if rtm:
             direction = rtm.group(1).lower()
             rt = rtm.group(2)
-            if direction in ("import", "both") and rt not in current.rt_imports:
-                current.rt_imports.append(rt)
-            if direction in ("export", "both") and rt not in current.rt_exports:
-                current.rt_exports.append(rt)
+            if direction in ("import", "both"):
+                once.add(current.rt_imports, rt)
+            if direction in ("export", "both"):
+                once.add(current.rt_exports, rt)
 
     return scan_stanzas(
         raw.splitlines(),
@@ -792,7 +801,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     legitimate_vlan_ids = (
         {v.id for v in intent.vlans} | switchport_declared_vlan_ids(intent)
     )
-    project_switchport_to_vlan(intent)
+    project_switchport_to_vlan(intent, keep=legitimate_vlan_ids)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
     logger.debug(
@@ -833,6 +842,12 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     # Per-channel LACP mode captured from ``channel-group N mode <X>`` so it
     # round-trips instead of defaulting to "active" (audit bb47f21 T0-1).
     lag_modes: dict[int, str] = {}
+    once = Uniques()
+    # What each interface states about its trunk, by its name (this
+    # parser keeps one record a name).  A trunk that states no list
+    # gets its platform's once the scan is over -- where the
+    # interface says it is a trunk.
+    trunks = TrunksByName("arista_eos", parse_ids=_expand_vlan_list)
     # GAP-EVPN-2: switch-level VXLAN settings are captured inside
     # ``interface Vxlan1`` but apply globally to every CanonicalVxlan
     # record produced from that stanza.  Stash them as parse-time
@@ -934,10 +949,22 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
         if current_iface is not None:
             _apply_iface_subcommand(
                 current_iface, stripped, lag_members, lag_modes, intent,
-                vxlan_state,
+                vxlan_state, once, trunks,
             )
         elif current_vlan is not None and stripped.startswith("name "):
             current_vlan.name = stripped.split(None, 1)[1].strip()
+
+    # A trunk with no allowed line carries what the platform's trunk
+    # carries by default -- every VLAN on EOS -- and the list says so.
+    # An empty list is a trunk that allows NO VLAN (``switchport trunk
+    # allowed vlan none``, or a ``remove`` that left nothing).  A port
+    # this parser took for a trunk from a trunk line alone, with no
+    # ``switchport mode trunk``, is given nothing from the platform's
+    # list: EOS keeps such a line on an access port without acting on
+    # it.
+    for iface in iface_by_name.values():
+        trunks.made(iface.name, iface)
+    trunks.settle()
 
     # GAP-EVPN-2 post-pass: stamp every CanonicalVxlan record we
     # produced with the switch-level source-interface + udp-port we
@@ -986,7 +1013,7 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
                 m_iface.lag_member_of = lag_name
 
 
-def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:  # noqa: C901
+def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:
     """Parse ``router bgp <asn> / vrf <name> / rd <rd> /
     route-target import|export|both <rt>`` — VRF metadata — AND
     ``router bgp <asn> / vlan <N> / rd ... / route-target ...``
@@ -1005,6 +1032,7 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:  # noqa: C901
     propagated.
     """
     in_bgp = False
+    once = Uniques()
     # Renamed from current_vrf — now tracks both VRF and MAC-VRF
     # contexts with the same RD/RT machinery.
     current_ri: CanonicalRoutingInstance | None = None
@@ -1119,10 +1147,8 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:  # noqa: C901
             continue
         if stripped.startswith("route-target both "):
             rt = stripped.split(None, 2)[2].strip()
-            if rt not in current_ri.rt_imports:
-                current_ri.rt_imports.append(rt)
-            if rt not in current_ri.rt_exports:
-                current_ri.rt_exports.append(rt)
+            once.add(current_ri.rt_imports, rt)
+            once.add(current_ri.rt_exports, rt)
             continue
         if stripped.startswith("route-target import "):
             rt = stripped.split(None, 2)[2].strip()
@@ -1132,15 +1158,15 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:  # noqa: C901
             # actual RT follows.  Strip the ``evpn `` prefix.
             if rt.startswith("evpn "):
                 rt = rt[len("evpn "):].strip()
-            if rt and rt not in current_ri.rt_imports:
-                current_ri.rt_imports.append(rt)
+            if rt:
+                once.add(current_ri.rt_imports, rt)
             continue
         if stripped.startswith("route-target export "):
             rt = stripped.split(None, 2)[2].strip()
             if rt.startswith("evpn "):
                 rt = rt[len("evpn "):].strip()
-            if rt and rt not in current_ri.rt_exports:
-                current_ri.rt_exports.append(rt)
+            if rt:
+                once.add(current_ri.rt_exports, rt)
             continue
         # ``redistribute learned`` / ``redistribute connected`` —
         # parse-and-ignore.  Future enrichment under
@@ -1154,8 +1180,24 @@ def _apply_iface_subcommand(  # noqa: C901
     lag_modes: dict[int, str],
     intent: CanonicalIntent,
     vxlan_state: dict[str, Any] | None = None,
+    once: Uniques | None = None,
+    trunks: TrunksByName | None = None,
 ) -> None:
-    """Apply one indented sub-command to *iface*."""
+    """Apply one indented sub-command to *iface*.
+
+    ``once`` appends a value to a list of one record unless the list
+    has it (:class:`.._helpers.Uniques`); the stanza reader hands in
+    the one it made for the parse.  A caller that has none may leave
+    it out.
+
+    ``trunks`` is told what the interface states about its trunk --
+    each ``switchport trunk allowed vlan`` line, and ``switchport mode
+    trunk`` -- so that the stanza reader can tell a trunk that states
+    no list (every VLAN on EOS) from one that states an empty one,
+    and a port that says it is a trunk from one taken for a trunk
+    (:class:`.._helpers.TrunksByName`).  A caller that has none may
+    leave it out; the interface's list is then taken as stated.
+    """
     if line == "shutdown":
         iface.enabled = False
         return
@@ -1368,9 +1410,12 @@ def _apply_iface_subcommand(  # noqa: C901
         # so a lingering access_vlan would silently drop on round-trip.
         iface.access_vlan = None
         tail = line.split(None, 4)[-1]
-        iface.trunk_allowed_vlans = merge_trunk_allowed(
-            iface.trunk_allowed_vlans, tail, parse_ids=_expand_vlan_list
-        )
+        if trunks is None:
+            iface.trunk_allowed_vlans = merge_trunk_allowed(
+                iface.trunk_allowed_vlans, tail, parse_ids=_expand_vlan_list,
+            )
+        else:
+            iface.trunk_allowed_vlans = trunks.allowed_line(iface.name, tail)
         return
     if line.startswith("switchport trunk native vlan "):
         # Phase 4b Wave 7c-C: ``switchport trunk native vlan <N>``.
@@ -1388,6 +1433,8 @@ def _apply_iface_subcommand(  # noqa: C901
         return
     if line == "switchport mode trunk":
         iface.switchport_mode = "trunk"
+        if trunks is not None:
+            trunks.says_trunk(iface.name)
         # Trunk ports carry no access VLAN — clear a stale access_vlan
         # (see the ``switchport trunk allowed vlan`` handler above).
         iface.access_vlan = None
@@ -1491,8 +1538,7 @@ def _apply_iface_subcommand(  # noqa: C901
         if m:
             g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
             tracked = m.group(2)
-            if tracked not in g.track_interfaces:
-                g.track_interfaces.append(tracked)
+            (once if once is not None else Uniques()).add(g.track_interfaces, tracked)
             return
         # ``vrrp <gid> timers advertise <N>`` (VRRPv2 seconds form).
         m = re.match(
@@ -1679,7 +1725,7 @@ def _expand_vlan_list(spec: str) -> list[int]:
             # span cannot OOM the process (valid sub-range preserved).
             a_i, b_i = max(1, a_i), min(4094, b_i)
             if a_i <= b_i:
-                out.extend(range(a_i, b_i + 1))
+                out.extend(VLAN_IDS[a_i:b_i + 1])
         else:
             try:
                 out.append(int(chunk))

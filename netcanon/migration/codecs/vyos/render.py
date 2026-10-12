@@ -424,9 +424,13 @@ def _render_snmp_v3(users: list, source_vendor: str = "") -> list[str]:
     if not usable:
         return []
     same_vendor = source_vendor == "vyos"
-    carried = [u for u in sorted(usable, key=lambda x: x.name)
-               if same_vendor and u.auth_passphrase]
-    refused = [u for u in sorted(usable, key=lambda x: x.name) if u not in carried]
+    # One pass sorts them into the two.  (``u not in carried`` compared
+    # every user with every carried one, field by field: the square of
+    # the users, for a list that a same-vendor render carries whole.)
+    carried: list = []
+    refused: list = []
+    for u in sorted(usable, key=lambda x: x.name):
+        (carried if same_vendor and u.auth_passphrase else refused).append(u)
     out = [_snmp_v3_review(u.name, source_vendor) for u in refused]
     if not carried:
         return out

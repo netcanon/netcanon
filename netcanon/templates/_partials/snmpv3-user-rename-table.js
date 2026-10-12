@@ -37,6 +37,7 @@
     var sectionsEl = document.getElementById('mig-rename-snmpv3-sections');
     var emptyEl = document.getElementById('mig-rename-snmpv3-empty');
     if (!sectionsEl) return;
+    var focusKept = renameFocusUnder(sectionsEl);
     sectionsEl.innerHTML = '';
 
     var sourceUsers = (_lastJob && _lastJob.source_snmpv3_users) || [];
@@ -46,7 +47,7 @@
     }
     if (emptyEl) emptyEl.style.display = 'none';
 
-    var appliedRenames = (_lastJob && _lastJob.snmpv3_user_renames) || {};
+    var appliedRenames = _nameMap(_lastJob && _lastJob.snmpv3_user_renames);
     var autoDroppedSet = new Set(
       (_lastJob && _lastJob.snmpv3_user_drops) || []
     );
@@ -54,7 +55,7 @@
     // Target-collision set — informational only (server does
     // first-wins merge, auth/priv keys never combined).  Surface
     // advisory in the warn column.
-    var targetHits = {};
+    var targetHits = Object.create(null);
     sourceUsers.forEach(function(src) {
       var userVal = _renameSnmpV3UserMap[src];
       if (userVal === null) return;
@@ -130,6 +131,10 @@
       inp.disabled = isDropped;
       inp.setAttribute('data-testid',
         'migrate-rename-snmpv3-user-override-' + src);
+      // Typing changes the map, the preview and the counts.  The table
+      // is rebuilt when the field is left, not on every key: a rebuild
+      // replaces the field being typed in, which then held one
+      // character and no focus.
       inp.addEventListener('input', function() {
         var raw = inp.value.trim();
         if (!raw) {
@@ -137,14 +142,17 @@
         } else {
           _renameSnmpV3UserMap[src] = raw;
         }
-        renderSnmpV3UserRenameTable();
         renderRenamePreview();
         renderRenameSummary();
         renderRenameRailCounts();
       });
+      inp.addEventListener('change', function() {
+        rebuildRenamePaneSoon(renderSnmpV3UserRenameTable);
+      });
       overrideCell.appendChild(inp);
 
-      var dropLink = document.createElement('span');
+      var dropLink = document.createElement('button');
+      dropLink.type = 'button';
       dropLink.className = 'mig-rename-drop-link';
       if (isUserDropped) {
         dropLink.textContent = 'un-drop';
@@ -188,4 +196,5 @@
     });
     table.appendChild(tbody);
     sectionsEl.appendChild(table);
+    renameFocusBack(sectionsEl, focusKept);
   }

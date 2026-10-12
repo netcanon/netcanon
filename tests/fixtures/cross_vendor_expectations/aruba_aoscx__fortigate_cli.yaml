@@ -341,7 +341,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: unsupported
     reason: >
-      Same mechanism and the same total drop as `vlans[].untagged_ports`: 11
+      Same mechanism and the same total drop as `vlans[].untagged_ports`: 35
       tagged-port lists become 0, and `/vlans/vlan/tagged-ports` is declared
       unsupported by fortigate_cli.  The renderer expresses a VLAN as ONE
       child interface on ONE parent, so multi-port trunk membership has nowhere

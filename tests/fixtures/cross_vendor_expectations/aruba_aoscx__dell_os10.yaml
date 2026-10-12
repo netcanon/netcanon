@@ -420,8 +420,8 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 4, preserved on 1, both
-      sides empty on 2.
+      trip. Measured over 7 cells: drifted on 7, preserved on 0, both
+      sides empty on 0.
     references: [aoscx-os10-surface]
 
   vlans[].untagged_ports:
