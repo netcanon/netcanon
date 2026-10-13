@@ -21,6 +21,15 @@ read two ways, and neither asks the code under test what a default is:
   cell;
 * with the target's parser, as ports in VLANs.
 
+A trunk's list is what the trunk CARRIES, its native VLAN among
+them.  So one statement here has a third meaning: an OS10 trunk with
+an access VLAN and no allowed line carries that VLAN, untagged, and
+no other (`ONLY_UNTAGGED`) -- OS10 states the untagged VLAN beside an
+allowed line that names tagged VLANs only.  And a native VLAN beside
+a list that leaves it out (`none`, native 999) is on no port of any
+output.  What each platform's text says of the two is the subject of
+``test_the_list_holds_the_native_vlan.py``.
+
 Two things about WHO states a list follow from that, and have a
 section each.  A stanza met twice is one interface: what it states is
 kept by its name, not resolved a stanza.  And the platform's list is
@@ -203,10 +212,20 @@ _STATED = {
 }
 
 
+#: What an OS10 trunk with an access VLAN and no allowed line carries:
+#: that VLAN, untagged, and no tagged VLAN.  Its list in the tree is
+#: that one id.
+ONLY_UNTAGGED = "its untagged VLAN alone"
+
+
 def _means(source: str, says: str) -> str:
-    """NONE or ALL.  A native VLAN alone, and `add` on a stanza's first
-    allowed line, both leave the list at what the platform's trunk
-    carries when it states none (`add` adds to that list)."""
+    """NONE, ALL or ONLY_UNTAGGED.  A native VLAN alone, and `add` on
+    a stanza's first allowed line, both leave the list at what the
+    platform's trunk carries when it states none (`add` adds to that
+    list).  On OS10 that is no TAGGED VLAN, and the untagged one is a
+    statement beside the allowed line: the trunk carries it."""
+    if source == "dell_os10" and _native(says):
+        return ONLY_UNTAGGED
     return _STATED.get(says) or NOTHING_MEANS[source]
 
 
@@ -287,21 +306,44 @@ def _switchport_text(target: str, rendered: str, declared: tuple[int, ...] = DEC
     return _switchport_says(target, _the_trunk(target, rendered), declared)
 
 
+def _untagged_stated(target: str, stanza: list[str]) -> int | None:
+    """The VLAN a trunk stanza STATES untagged: the native line of
+    IOS-XE, EOS and NX-OS; on OS10 the access line, which `no
+    switchport access vlan` takes back."""
+    lead = "switchport access vlan " if target == "dell_os10" else "switchport trunk native vlan "
+    stated = None
+    for line in stanza:
+        if line.startswith(lead) and line.removeprefix(lead).isdigit():
+            stated = int(line.removeprefix(lead))
+        elif target == "dell_os10" and line == "no switchport access vlan":
+            stated = None
+    return stated
+
+
 def _switchport_says(target: str, stanza: list[str], declared: tuple[int, ...] = DECLARED) -> str:
     """The same, of one trunk stanza."""
     allowed = [line for line in stanza if line.startswith(_ALLOWED + " ")]
+    untagged = _untagged_stated(target, stanza)
     if not allowed:
-        return ALL if target in _NO_LINE_IS_EVERY_VLAN else NONE
+        if target in _NO_LINE_IS_EVERY_VLAN:
+            return ALL
+        # OS10: no tagged VLAN.  The access VLAN is stated beside the
+        # allowed line, and the trunk carries it.
+        return NONE if untagged is None else ONLY_UNTAGGED
     assert len(allowed) == 1, allowed
     value = allowed[0].removeprefix(_ALLOWED + " ").strip()
     if value == "none":
         return NONE
     if target == "dell_os10":
+        # The allowed line names tagged VLANs: no VLAN is on it and on
+        # the access line.
+        assert untagged not in _ids(value), stanza
         # No word for every VLAN and no id past 4093.  The nearest OS10
         # has is the VLANs the output declares.
         if value == "all" or max(_ids(value), default=0) > 4093:
             return _IDS_OS10_HAS_NOT
-        return ALL if _ids(value) >= set(declared) else _SOME
+        carried = _ids(value) | ({untagged} if untagged is not None else set())
+        return ALL if carried >= set(declared) else _SOME
     if value == "all":
         # Grammar, but not what the device prints, and not what makes a
         # trunk that stated no list come back as it went.
@@ -310,6 +352,8 @@ def _switchport_says(target: str, stanza: list[str], declared: tuple[int, ...] =
         # 19,000 characters on IOS-XE and EOS, and ids NX-OS keeps for
         # itself: every VLAN is the trunk with no allowed line.
         return _IDS_SPELLED_OUT
+    if _ids(value) == {untagged}:
+        return ONLY_UNTAGGED          # the list is the native VLAN and no other
     return _SOME
 
 
@@ -342,6 +386,8 @@ def _aoscx_says(stanza: list[str]) -> str:
         return ALL
     if _ids(value) == EVERY_ID:
         return _IDS_SPELLED_OUT       # its word is `all`, and reads back otherwise
+    if native and _ids(value) == {int(native[0].split()[3])}:
+        return ONLY_UNTAGGED          # the list is the native VLAN and no other
     return _SOME
 
 
@@ -358,34 +404,57 @@ def _junos_text(rendered: str) -> str:
     )
     if not members:
         return NONE
-    return ALL if members == ["all"] else _SOME
+    if members == ["all"]:
+        return ALL
+    named = {name: int(vid) for name, vid in re.findall(r"^set vlans (\S+) vlan-id (\d+)$", rendered, re.M)}
+    native = re.findall(rf"^set interfaces {re.escape(trunk[0])} native-vlan-id (\d+)$", rendered, re.M)
+    if native and [named.get(member) for member in members] == [int(native[0])]:
+        return ONLY_UNTAGGED          # a member of its native VLAN and of no other
+    return _SOME
 
 
-def _aoss_text(rendered: str, native: int | None, declared: tuple[int, ...] = DECLARED) -> str:
-    """AOS-S says it VLAN by VLAN: the port is tagged in each VLAN the
-    output declares (but its own untagged one), or in none."""
-    tagged_in: set[int] = set()
+def _aoss_ports(listed: str) -> set[str]:
+    """The ports of an AOS-S port list: `1/1-1/3` runs over the last
+    number of its two ends."""
+    ports: set[str] = set()
+    for part in listed.replace(" ", "").split(","):
+        ends = re.fullmatch(r"(.*?)(\d+)-(.*?)(\d+)", part)
+        if ends and ends.group(1) == ends.group(3):
+            ports.update(f"{ends.group(1)}{n}" for n in range(int(ends.group(2)), int(ends.group(4)) + 1))
+        elif part:
+            ports.add(part)
+    return ports
+
+
+def _aoss_text(rendered: str, declared: tuple[int, ...] = DECLARED) -> str:
+    """AOS-S says it VLAN by VLAN: the trunk is the port that is
+    tagged somewhere, and it carries each VLAN the output declares --
+    tagged, or untagged in the one that lists it so -- or none.  The
+    VLAN it is untagged in is read from the text, like the rest."""
+    tagged: dict[int, set[str]] = {}
+    untagged: dict[int, set[str]] = {}
     vid = None
     for line in rendered.splitlines():
         stanza = re.match(r"^vlan (\d+)\s*$", line)
+        words = line.split(None, 1)
         if stanza:
             vid = int(stanza.group(1))
         elif line.strip() == "exit":
             vid = None
-        elif vid is not None and line.strip().startswith("tagged "):
-            tagged_in.add(vid)
-    if not tagged_in:
+        elif vid is not None and len(words) == 2 and words[0] in ("tagged", "untagged"):
+            (tagged if words[0] == "tagged" else untagged).setdefault(vid, set()).update(_aoss_ports(words[1]))
+    trunk = set().union(*tagged.values())
+    if not trunk:
         return NONE
-    return ALL if tagged_in >= set(declared) - {native} else _SOME
+    carried = set(tagged) | {vid for vid, ports in untagged.items() if ports & trunk}
+    return ALL if carried >= set(declared) else _SOME
 
 
-def _says_in_text(
-    target: str, rendered: str, native: int | None = None, declared: tuple[int, ...] = DECLARED,
-) -> str:
+def _says_in_text(target: str, rendered: str, declared: tuple[int, ...] = DECLARED) -> str:
     """What the TEXT of an output with one trunk says the trunk
-    carries: NONE, ALL, or the name of another form.  *declared* is
-    the VLANs the output declares, for the two targets whose nearest
-    thing to "every VLAN" is those."""
+    carries: NONE, ALL, ONLY_UNTAGGED, or the name of another form.
+    *declared* is the VLANs the output declares, for the two targets
+    whose nearest thing to "every VLAN" is those."""
     if target in ("arista_eos", "cisco_iosxe_cli", "cisco_nxos", "dell_os10"):
         return _switchport_text(target, rendered, declared)
     if target == "aruba_aoscx":
@@ -393,7 +462,7 @@ def _says_in_text(
     if target == "juniper_junos":
         return _junos_text(rendered)
     assert target == "aruba_aoss", target
-    return _aoss_text(rendered, native, declared)
+    return _aoss_text(rendered, declared)
 
 
 # ---------------------------------------------------------------------------
@@ -402,10 +471,14 @@ def _says_in_text(
 
 
 def _ports_in(parsed, vid: int) -> set[str]:
+    """The ports the tree puts in VLAN *vid*, by either record.  A
+    trunk's native VLAN is on the port where the trunk's list holds
+    it, which the look in the list finds; one the list leaves out is
+    stated and not carried, and is on no port."""
     names = {
         iface.name for iface in parsed.interfaces
         if vid in (iface.trunk_allowed_vlans or [])
-        or vid in (iface.access_vlan, iface.trunk_native_vlan)
+        or vid == iface.access_vlan
     }
     for vlan in parsed.vlans:
         if vlan.id == vid:
@@ -438,7 +511,7 @@ def test_the_output_says_what_the_source_did(source: str, says: str, target: str
     if target == "aruba_aoss" and source in AOSS_WRITES_NO_PORT_OF:
         return                      # the pinned gap above; see its own test
     # 1. As text.
-    said = _says_in_text(target, job.rendered, _native(says))
+    said = _says_in_text(target, job.rendered)
     if target in CANNOT_BE_TOLD_ALL and means == ALL:
         assert said == _IDS_OS10_HAS_NOT, (source, says, target, said)   # pinned; see its own test
     else:
@@ -446,21 +519,23 @@ def test_the_output_says_what_the_source_did(source: str, says: str, target: str
             f"{source} says {says!r} (which is {means}); the {target} output says {said}"
         )
     # 2. With the target's parser: VLANs 100 and 999 are on the trunk
-    # alone, or on no port.  (Where 999 is the source's native VLAN it
-    # is left out: what a native VLAN outside the list does differs by
-    # platform, and is not this module's question.)
+    # alone, or on no port.  VLAN 999 is the native VLAN of some of
+    # these trunks, and it is carried where the list holds it -- a
+    # trunk of every VLAN, an OS10 trunk's access VLAN -- and on no
+    # port where the list leaves it out (`none` beside a native line).
     parsed = get_codec(target).parse(job.rendered)
-    for vid in ((100,) if _native(says) else (100, 999)):
+    for vid, carried in ((100, means == ALL), (999, means in (ALL, ONLY_UNTAGGED))):
         ports = _ports_in(parsed, vid)
-        if means == NONE:
-            assert not ports, f"{source} ({says}) to {target}: VLAN {vid} is on {sorted(ports)}"
-        else:
+        if carried:
             assert len(ports) == 1, f"{source} ({says}) to {target}: VLAN {vid} is on {sorted(ports)}"
+        else:
+            assert not ports, f"{source} ({says}) to {target}: VLAN {vid} is on {sorted(ports)}"
 
 
 def test_each_source_parses_as_it_is_meant() -> None:
     """One trunk and one access port on its own parser, and the trunk's
-    list is empty or every id as the statement means."""
+    list is empty, every id, or its untagged VLAN alone, as the
+    statement means."""
     for (source, says), text in SOURCES.items():
         parsed = get_codec(source).parse(text)
         modes = sorted(iface.switchport_mode for iface in parsed.interfaces if iface.switchport_mode)
@@ -469,7 +544,8 @@ def test_each_source_parses_as_it_is_meant() -> None:
         assert set(DECLARED) <= {vlan.id for vlan in parsed.vlans} <= {1, *DECLARED}, (source, says)
         trunk = next(iface for iface in parsed.interfaces if iface.switchport_mode == "trunk")
         listed = set(trunk.trunk_allowed_vlans)
-        assert listed == (EVERY_ID if _means(source, says) == ALL else set()), (source, says, len(listed))
+        means = {ALL: EVERY_ID, NONE: set(), ONLY_UNTAGGED: {999}}[_means(source, says)]
+        assert listed == means, (source, says, len(listed))
         assert trunk.trunk_native_vlan == (1 if "native 1" in text else _native(says)), (source, says)
 
 
@@ -502,6 +578,10 @@ def test_the_same_vendor_text_is_as_stated(source: str, says: str) -> None:
         assert lines == ["vlan trunk allowed all"], (source, says, lines)
     elif means == NOTHING_MEANS[source]:
         assert lines == [], f"{source} ({says}): a trunk of its platform's own list came back with {lines}"
+    elif means == ONLY_UNTAGGED:
+        # OS10: no tagged VLAN, so no allowed line; the access line
+        # states the one VLAN, and comes back as it went.
+        assert lines == [] and "switchport access vlan 999" in _the_trunk(source, job.rendered), (source, says)
     elif means == NONE:
         assert lines == [f"{_ALLOWED} none"], (source, says, lines)
     else:
@@ -527,7 +607,7 @@ def test_what_is_not_told_all_is_as_pinned() -> None:
         for source, says in sorted(SOURCES):
             if _means(source, says) != ALL or (target == "aruba_aoss" and source in AOSS_WRITES_NO_PORT_OF):
                 continue
-            if _says_in_text(target, _job(source, says, target).rendered, _native(says)) != ALL:
+            if _says_in_text(target, _job(source, says, target).rendered) != ALL:
                 measured.add(target)
     assert measured == CANNOT_BE_TOLD_ALL
 
@@ -549,18 +629,40 @@ def test_the_aoss_port_name_gap_is_as_pinned() -> None:
 @pytest.mark.parametrize("source,says", sorted(key for key in SOURCES if _means(*key) == ALL))
 def test_os10_says_so_beside_every_vlan(source: str, says: str) -> None:
     """OS10 cannot be told "every VLAN".  The range it is given is
-    written under a line that tells the operator why it will not do."""
+    written under a line that tells the operator why it will not do.
+    It is every id but the trunk's untagged VLAN, which stands on the
+    access line: no VLAN is on both."""
     trunk = _the_trunk("dell_os10", _job(source, says, "dell_os10").rendered)
-    at = trunk.index(f"{_ALLOWED} 1-4094")
+    (at,) = [n for n, line in enumerate(trunk) if line.startswith(_ALLOWED + " ")]
+    untagged = _untagged_stated("dell_os10", trunk)
+    assert untagged == (1 if "native 1" in SOURCES[(source, says)] else _native(says)), trunk
+    assert _ids(trunk[at].removeprefix(_ALLOWED + " ")) == EVERY_ID - {untagged}, trunk[at][:60]
     review = trunk[at - 1]
     assert review.startswith("! review: "), trunk
     for words in ("allows every VLAN", "no word", "4093", "must exist"):
         assert words in review, (words, review)
 
 
-@pytest.mark.parametrize("source,says", sorted(key for key in SOURCES if _means(*key) == NONE))
+@pytest.mark.parametrize("source,says", sorted(key for key in SOURCES if _means(*key) != ALL))
 def test_os10_says_nothing_of_the_rest(source: str, says: str) -> None:
-    assert "review" not in "\n".join(_the_trunk("dell_os10", _job(source, says, "dell_os10").rendered))
+    """...but for one thing.  A native VLAN beside a list that leaves
+    it out is, in the tree, stated and not carried: OS10 is not
+    written it as an access VLAN, which its trunk carries untagged,
+    and the line that takes the access VLAN back stands under a line
+    that says why -- the whole of it, as it is typed here."""
+    trunk = _the_trunk("dell_os10", _job(source, says, "dell_os10").rendered)
+    reviews = [n for n, line in enumerate(trunk) if "review" in line]
+    if _means(source, says) == NONE and _native(says):
+        (at,) = reviews
+        assert trunk[at] == (
+            "! review: native VLAN 999 is stated for this trunk and its allowed list leaves it out, so no "
+            "untagged VLAN is written for this port; Dell's pages disagree on whether the next line leaves an "
+            "OS10 trunk with no untagged VLAN or with VLAN 1 -- check what this port is to carry untagged"
+        ), trunk
+        assert trunk[at + 1] == "no switchport access vlan", trunk
+        assert _untagged_stated("dell_os10", trunk) is None, trunk
+    else:
+        assert not reviews, trunk
 
 
 @pytest.mark.parametrize("source,says", sorted(key for key in SOURCES if _means(*key) == NONE))
@@ -585,7 +687,7 @@ def test_aoscx_says_so_for_no_vlan(source: str, says: str) -> None:
 
 def test_aoscx_says_nothing_of_the_rest() -> None:
     for source, says in sorted(SOURCES):
-        if _means(source, says) == ALL:
+        if _means(source, says) != NONE:
             assert "review: the source trunk" not in _job(source, says, "aruba_aoscx").rendered, (source, says)
 
 
@@ -608,7 +710,13 @@ def _stanza(*lines: str) -> str:
     ("cisco_nxos", _stanza("switchport mode trunk", f"{_ALLOWED} 1-4094"), _IDS_SPELLED_OUT),
     ("arista_eos", _stanza("switchport mode trunk", f"{_ALLOWED} all"), _THE_WORD_ALL),
     ("arista_eos", _stanza("switchport mode trunk", f"{_ALLOWED} 10,999"), _SOME),
+    ("arista_eos", _stanza("switchport mode trunk", _NATIVE, f"{_ALLOWED} 999"), ONLY_UNTAGGED),
+    ("arista_eos", _stanza("switchport mode trunk", _NATIVE, f"{_ALLOWED} 10,999"), _SOME),
+    ("cisco_nxos", _stanza("switchport mode trunk", _NATIVE, f"{_ALLOWED} 100"), _SOME),
     ("dell_os10", _stanza("switchport mode trunk"), NONE),
+    ("dell_os10", _stanza("switchport mode trunk", "switchport access vlan 999"), ONLY_UNTAGGED),
+    ("dell_os10", _stanza("switchport mode trunk", "switchport access vlan 999", "no switchport access vlan"), NONE),
+    ("dell_os10", _stanza("switchport mode trunk", "switchport access vlan 999", f"{_ALLOWED} 10,100"), ALL),
     ("dell_os10", _stanza("switchport mode trunk", f"{_ALLOWED} 1-4094"), _IDS_OS10_HAS_NOT),
     ("dell_os10", _stanza("switchport mode trunk", f"{_ALLOWED} 10,100,999"), ALL),
     ("dell_os10", _stanza("switchport mode trunk", f"{_ALLOWED} 10"), _SOME),
@@ -617,12 +725,27 @@ def _stanza(*lines: str) -> str:
     ("aruba_aoscx", _stanza("no routing", "vlan trunk native 1", "vlan trunk allowed all"), ALL),
     ("aruba_aoscx", _stanza("no routing", "vlan trunk allowed 1-4094"), _IDS_SPELLED_OUT),
     ("aruba_aoscx", _stanza("no routing", "vlan trunk allowed 10"), _SOME),
+    ("aruba_aoscx", _stanza("no routing", "vlan trunk native 999", "vlan trunk allowed 999"), ONLY_UNTAGGED),
+    ("aruba_aoscx", _stanza("no routing", "vlan trunk native 999", "vlan trunk allowed 100"), _SOME),
     ("juniper_junos", "set interfaces a unit 0 family ethernet-switching interface-mode trunk\n", NONE),
     ("juniper_junos", "set interfaces a unit 0 family ethernet-switching interface-mode trunk\n"
                       "set interfaces a unit 0 family ethernet-switching vlan members all\n", ALL),
     ("juniper_junos", "set interfaces a unit 0 family ethernet-switching interface-mode trunk\n"
                       "set interfaces a unit 0 family ethernet-switching vlan members 1-4094\n", _SOME),
+    ("juniper_junos", "set vlans mgmt vlan-id 999\n"
+                      "set interfaces a unit 0 family ethernet-switching interface-mode trunk\n"
+                      "set interfaces a unit 0 family ethernet-switching vlan members mgmt\n"
+                      "set interfaces a native-vlan-id 999\n", ONLY_UNTAGGED),
+    ("juniper_junos", "set vlans mgmt vlan-id 999\n"
+                      "set interfaces a unit 0 family ethernet-switching interface-mode trunk\n"
+                      "set interfaces a unit 0 family ethernet-switching vlan members mgmt\n", _SOME),
     ("aruba_aoss", "vlan 10\n   untagged 2\n   exit\nvlan 100\n   exit\n", NONE),
+    # The trunk is port 1: tagged in two VLANs and untagged in the third,
+    ("aruba_aoss", "vlan 10\n   untagged 2\n   tagged 1\n   exit\nvlan 100\n   tagged 1\n   exit\n"
+                   "vlan 999\n   untagged 1\n   exit\n", ALL),
+    # ... which another port's `untagged` does not make it.
+    ("aruba_aoss", "vlan 10\n   untagged 2\n   tagged 1\n   exit\nvlan 100\n   tagged 1\n   exit\n"
+                   "vlan 999\n   untagged 2-3\n   exit\n", _SOME),
     ("aruba_aoss", "".join(f"vlan {vid}\n   tagged 1\n   exit\n" for vid in DECLARED), ALL),
     ("aruba_aoss", "vlan 10\n   tagged 1\n   exit\nvlan 100\n   exit\n", _SOME),
 ])
@@ -984,15 +1107,16 @@ def test_an_inferred_trunk_is_not_every_vlan(source: str, title: str, target: st
     if target == "aruba_aoss" and source in AOSS_WRITES_NO_PORT_OF:
         return                      # the pinned gap above
     lines, listed = _INFERRED[title]
-    native = 999 if _NATIVE in lines else None
     job = run_plan_with_overrides(
         get_codec(source), get_codec(target), _no_mode_line(source, *lines), port_rename_map={}, force=True,
     )
     assert job.rendered, (source, title, target, job.status)
-    said = _says_in_text(target, job.rendered, native)
+    said = _says_in_text(target, job.rendered)
     assert said == (_SOME if listed else NONE), f"{source} ({title}) to {target}: the output says {said}"
+    # (VLAN 999 is the native VLAN of one of these trunks, whose list
+    # is empty: it is on no port either.)
     parsed = get_codec(target).parse(job.rendered)
-    for vid in ((100,) if native else (100, 999)):
+    for vid in (100, 999):
         assert len(_ports_in(parsed, vid)) == (vid in listed), (source, title, target, vid)
 
 

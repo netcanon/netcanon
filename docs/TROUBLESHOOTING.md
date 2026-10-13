@@ -235,11 +235,59 @@ its own form for it.  What you may see:
   platforms say so.  Nothing to do.
 * **`switchport trunk allowed vlan none`**, or a Junos trunk with no
   `vlan members`.  The source trunk allowed no VLAN: it said `none`,
-  its list was emptied by `remove` or `except`, it is a Dell OS10 or
-  Junos trunk that lists nothing, or you dropped every VLAN it
-  carried (next item).  A Dell OS10 trunk with an untagged VLAN and
-  no tagged one is written this way too, with the native line beside
-  it: check that its untagged VLAN is carried as you mean it to be.
+  its list was emptied by `remove` or `except`, it is a Junos trunk
+  with no members or a Dell OS10 trunk with no allowed line and no
+  access VLAN, or you dropped every VLAN it carried (next item).  (A
+  Dell OS10 trunk with an access VLAN and no allowed line is not one
+  of these: it carries that VLAN, and is written with it as its
+  native VLAN and as its whole allowed list.  Release 0.7.7 and
+  earlier wrote it `none`.)
+* **The native VLAN is on the allowed line as well**
+  (`switchport trunk native vlan 10` beside `switchport trunk allowed
+  vlan 10,20,30`; `vlan trunk native 10` beside `vlan trunk allowed
+  10,20,30`; `native-vlan-id 10` and `vlan members` that include
+  it).  The source was an AOS-S port untagged in one VLAN and tagged
+  in others, or an OS10 trunk with an access VLAN: both carry that
+  VLAN, and a trunk's list is what it carries.  Nothing to do.
+  **If the port was migrated with release 0.7.7 or earlier, the VLAN
+  is NOT on the allowed line: add it**, or the port may carry no
+  untagged traffic (on AOS-CX it does not, by HPE's own page).
+* **A native line whose VLAN the allowed line leaves out.**  The
+  source trunk said so itself -- only a source with a native line of
+  its own can -- and it is written as it stood.  If that was not
+  meant on the source either, add the VLAN to the list on both.
+* **`! review: native VLAN <N> is stated for this trunk and its
+  allowed list leaves it out ...`** above `no switchport access
+  vlan`, on OS10.  The source trunk states a native VLAN its own
+  list leaves out (N is the id the OUTPUT has for it: the new one,
+  if you renumbered the VLAN), so no untagged VLAN is written for
+  the port: an OS10 trunk carries its access VLAN untagged whatever
+  its allowed line says.  The line goes on to say that Dell's pages
+  disagree on what `no switchport access vlan` then leaves the
+  trunk with -- no untagged VLAN, or VLAN 1.  **Action:** check
+  what the port carries untagged on the switch; if untagged traffic
+  was meant to pass on the source, write `switchport access vlan
+  <N>` instead.
+* **`; review: port <P> -- native VLAN <N> is stated for this trunk
+  and its allowed list leaves it out ...`** in the `vlan <N>`
+  stanza, on AOS-S.  The same case: the source trunk states a
+  native VLAN its own list leaves out.  The port is tagged in the
+  VLANs the list names, and no `untagged` line is written for it.
+  That is not known to be a port that carries nothing untagged, and
+  the rest of the line says what is known.  For a port: `in the
+  factory default configuration an AOS-S port is in the default
+  VLAN (VID 1), and it remains there until it is removed` -- what
+  HPE's guide says of a port, and all it says: not whether that
+  membership is tagged or untagged.  For a trunk group (`Trk<n>`),
+  and for a port that the same output puts on a `trunk` line:
+  `which VLAN an AOS-S trunk group, or a port that is in one, is in
+  by default is not established` -- no sentence of HPE's was found
+  for either.  No line of the output takes the port out of VLAN 1.
+  **Action:** decide what the port is to carry untagged, look at
+  what the switch has it in, and write `untagged` or `no untagged`
+  for it.  (A source trunk that states no native VLAN at all is
+  written no `untagged` line either, and has no review line: see
+  the limits in [`CAPABILITIES.md`](CAPABILITIES.md).)
 * **`! review: the source trunk allows no VLAN ...`** in an AOS-CX
   interface stanza, and no `vlan trunk` line.  AOS-CX has no form
   for a trunk that carries nothing: a trunk left with no allowed
@@ -269,11 +317,12 @@ its own form for it.  What you may see:
   `switchport trunk allowed vlan 1-4094` on OS10.  OS10 has no word
   for every VLAN, its ids end at 4093, and it lists only VLANs that
   exist.  **Action:** replace `1-4094` with the VLANs the switch
-  has (not the port's own access VLAN, which a trunk carries
-  untagged).
+  has.  The port's own access VLAN is not in the range (a trunk
+  carries it untagged, and OS10 does not take one VLAN on both
+  lines): `1-9,11-4094` beside `switchport access vlan 10`.
 
-And one warning, when you drop VLANs in the rename modal's VLAN
-pane:
+And the warnings of the rename modal's VLAN pane that are about a
+trunk.  When you drop VLANs:
 
 ```
 vlan_rename: interface 'GigabitEthernet1/0/1' is a trunk that allowed only VLAN 100 which was dropped — the trunk now allows no VLAN
@@ -284,6 +333,64 @@ trunk of no VLAN (it is not removed, and the job is not failed by
 it).  If that is not what you meant, keep one of its VLANs, or drop
 the port as well.  A trunk of every VLAN is not touched by a drop or
 a renumber: it is still every VLAN.
+
+When you give one VLAN the id of another:
+
+```
+vlan_rename: interface 'GigabitEthernet1/0/1' had native VLAN 10 outside its allowed list, and the map merges it into VLAN 20, which the trunk carries tagged — native VLAN cleared
+```
+
+The trunk stated native VLAN 10 beside an allowed list that left 10
+out, and carried VLAN 20 tagged.  With the two made one VLAN, its
+native line would name a VLAN that is on its list, and the trunk
+would carry UNTAGGED what it carried tagged.  So its native VLAN is
+cleared and the VLAN stays tagged (the job is not failed by it).
+The same is done when the map gives VLAN 20 the id 10, and said as
+`the map merges VLAN 20, which the trunk carries tagged, into it`.
+The trunk then states no native VLAN, and the target's own default
+applies (VLAN 1 on IOS-XE, NX-OS, EOS and AOS-CX).  If untagged is
+what you meant, set the native VLAN on the target.  Before this
+the merged VLAN was written as the trunk's native VLAN, and the job
+said only that two VLANs were merged.
+
+And when you renumber a VLAN onto an id that a trunk's list only
+covers:
+
+```
+vlan_rename: interface 'Ethernet1' had native VLAN 1000 outside its allowed list, and the map gives it the id 900, which the list named only as a number no VLAN of the config had — 900 is taken out of the list, and the trunk does not carry native VLAN 900
+```
+
+The trunk stated native VLAN 1000 beside a list written around it
+-- `switchport trunk allowed vlan 2-999,1001-4094`; `allowed vlan
+except 1000` is such a list too -- so that VLAN was stated and not
+carried.  You gave VLAN 1000 the id 900.  The config has no VLAN
+900: the list names that number only because its range covers it,
+and nothing was merged.  Left as it stood, the list would hold the
+trunk's native VLAN, and the trunk would carry UNTAGGED a VLAN it
+did not carry at all.  So 900 is taken out of the list and the
+native VLAN is kept: `native vlan 900` beside
+`2-899,901-999,1001-4094`, and on AOS-S and OS10 the review line
+above, with 900 as its VLAN.  If you meant the trunk to carry the VLAN,
+add it to the allowed list on the target.  The middle of the
+warning has two more forms: `the map gives its id to 500` when it
+is a number of the list that you renumbered onto the native VLAN's
+id, and `the map gives it the id 900 and gives the same id to 500`
+when you renumbered both.
+
+Which of the two warnings you get turns on that id of the list.  A
+VLAN the config has -- one it declares, an access port's VLAN, one
+that a trunk names as its native VLAN or in a short allowed list
+(see "My VLANs disappeared") -- is a VLAN the trunk carried tagged,
+and giving the native VLAN its id is a merge.  So is any id of a
+short allowed list, whether or not the config declares it.  A
+number that only a longer list covers with a range is no VLAN, and
+is taken out.  Both are done for any port that states a native
+line and an allowed line, whatever its mode: a port in a dynamic
+mode, or one with no mode line, can become a trunk.  (No VLAN is
+made from the allowed list of such a port, and its short list is
+read as a trunk's is all the same.)  Before this, either way, the
+VLAN was written as the trunk's native VLAN with the VLAN on its
+list.
 
 ### "My hashed password came out as a review comment"
 

@@ -582,7 +582,9 @@ class TestEveryExpanderCountsFirst:
     def test_the_projection_counts_what_it_stamps(self) -> None:
         """What is charged is what is then stamped, for a tree with
         every kind of port: an upper bound that is exact when no list
-        names a VLAN twice."""
+        names a VLAN twice.  Port ``b`` states a native VLAN its list
+        does not hold: it is no member of that VLAN, and nothing is
+        counted for it."""
         tree = CanonicalIntent(
             vlans=[CanonicalVlan(id=vid) for vid in (1, 10, 20, 30)],
             interfaces=[
@@ -598,7 +600,7 @@ class TestEveryExpanderCountsFirst:
             project_switchport_to_vlan(tree, keep={1, 10, 20, 30})
             charged = meter.counts["memberships"]
         stamped = sum(len(vlan.tagged_ports) + len(vlan.untagged_ports) for vlan in tree.vlans)
-        assert charged == stamped == 1 + 3 + 4 + 3
+        assert charged == stamped == 1 + 2 + 4 + 3
 
     def test_an_interface_range_is_counted_first(self) -> None:
         exc = _refused("juniper_junos", junos_range(30, 30), TINY)

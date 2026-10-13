@@ -193,6 +193,62 @@ pipeline — they just aren't pinned by a fixture yet").
   VLAN you add afterwards), and a trunk of no VLAN is tagged in none.
   Release 0.7.7 and earlier
   tagged a Cisco trunk with no list, and an AOS-CX `all`, in nothing.
+- **The VLAN a port is untagged in is on its allowed list on the
+  target.**  AOS-S states a port's untagged VLAN apart from its
+  tagged ones (`untagged 1` in one VLAN, `tagged 1` in others), and
+  the port carries it.  Onto a platform that has an allowed list —
+  IOS-XE, NX-OS, EOS, AOS-CX, Junos — such a port is a trunk whose
+  native VLAN is ALSO on its allowed line (`switchport trunk native
+  vlan 10` beside `switchport trunk allowed vlan 10,20,30`), as HPE's
+  own side-by-side of the AOS-S and AOS-CX grammars writes it; onto
+  OS10 it is `switchport access vlan 10` beside an allowed line of
+  the tagged VLANs.  **Release 0.7.7 and earlier left the untagged
+  VLAN off the allowed line** on the first five, in jobs that said
+  `completed`: where the list decides what a trunk carries — on
+  AOS-CX, by HPE's own page — that port passes no untagged traffic.
+  Check the allowed list of every trunk with a native line migrated
+  from AOS-S then, and add the native VLAN to it.  As a target: a
+  trunk whose own list leaves its native VLAN out is written
+  `untagged` in no VLAN (it was written `untagged` in that one), and
+  a `; review:` line in that VLAN's stanza names the port and says
+  so.  For a port: `; review: port 5 -- native VLAN 10 is stated for
+  this trunk and its allowed list leaves it out, so no untagged line
+  is written for this port; in the factory default configuration an
+  AOS-S port is in the default VLAN (VID 1), and it remains there
+  until it is removed -- check what this port is to carry
+  untagged`.  That is what HPE says of a port, and all it says --
+  "In the factory default configuration, all ports are assigned to
+  the default VLAN (DEFAULT_VLAN; VID=1).", and "Any ports not
+  specifically removed from the default VLAN remain in the
+  DEFAULT_VLAN, regardless of other port assignments." -- neither
+  sentence says whether that membership is tagged or untagged, and
+  the line does not either.  A LAG has its line under `Trk<n>`, and
+  a member port that states the same lines under its own name.  No
+  sentence of HPE's was found for a trunk group, or for a port once
+  it is in one, so the line for a `Trk<n>` name, and for a port the
+  same output puts on a `trunk` line, says that instead: `; review:
+  port Trk1 -- native VLAN 10 is stated for this trunk and its
+  allowed list leaves it out, so no untagged line is written for
+  this port; which VLAN an AOS-S trunk group, or a port that is in
+  one, is in by default is not established -- check what this port
+  is to carry untagged`.  Either line says what the text the trunk
+  was read from states and no more: what the source switch did with
+  that VLAN is each vendor's to say, and not every vendor says it.
+  The VLAN in it is the output's: after a VLAN map, the new id.  A
+  trunk that states no native VLAN is written `untagged` in no VLAN
+  either, and has no such line: it left nothing out.  No line of
+  the output takes either port out of VLAN 1 (see below).  So
+  decide what the port is to carry untagged, look at what the
+  switch has it in, and write `untagged` or `no untagged` for it.
+  The VLAN pane's map keeps to the same reading: where it would
+  bring a native VLAN that the list leaves out INTO the list, the
+  native VLAN is cleared if the map has merged it with a VLAN of the
+  config that the list names, and the new id is taken out of the
+  list -- the review line then standing under that id -- if the
+  list only covered that number with a range; the job says which
+  ([`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A trunk's
+  allowed list is not what I wrote").  The vendors' own sentences are in the
+  [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
 - **A port with no `interface` stanza is a port all the same.**  An
   AOS-S switch prints an `interface` stanza only for a port with a
   setting of its own — a name, `disable`, an address.  Every other

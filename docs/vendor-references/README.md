@@ -94,6 +94,11 @@ here:
   [`cisco_iosxe_cli_to_juniper_junos/vlans.md`](cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
   It backs `TRUNK_THAT_STATES_NO_LIST` in
   `netcanon/migration/codecs/_helpers.py`.
+- **Where a trunk's untagged VLAN is stated, and what a native VLAN
+  its allowed list leaves out does**, platform by platform, with each
+  vendor's sentence, its source and what is not established:
+  [`cisco_iosxe_cli_to_juniper_junos/vlans.md`](cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
+  It backs `NATIVE_VLAN_AND_THE_LIST` in the same module.
 
 ## See also
 

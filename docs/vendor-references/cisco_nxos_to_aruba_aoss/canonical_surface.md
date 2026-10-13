@@ -8,6 +8,8 @@ Source: `netcanon/migration/codecs/cisco_nxos/codec.py` and
 against a full `tools/run_full_mesh.py` run over the committed corpus.
 Retrieved: 2026-08-20
 
+> **Update 2026-10-13 — `interfaces[].trunk_native_vlan` is `lossy` on this pair.**  A trunk's allowed list is now what the trunk carries, so a native VLAN its list leaves out is stated and not carried.  AOS-S states membership VLAN by VLAN and has no line for a VLAN a port names and does not carry: the kitchen-sink's `switchport trunk native vlan 1` beside `allowed vlan 10,20,30` is written `untagged` in no VLAN, under a `; review:` line that says so, and reads back with no native VLAN (it was written `untagged` in VLAN 1, and read back as it went).  A native VLAN the list holds is preserved.  The rest of this file is as retrieved.
+
 This is a *rich-source / narrow-target* pair: `cisco_nxos` is a DC leaf/spine
 codec (VXLAN-EVPN, VRFs, HSRP, anycast gateway), `aruba_aoss` is a campus
 L2/basic-L3 codec with a single global routing table. Everything the source

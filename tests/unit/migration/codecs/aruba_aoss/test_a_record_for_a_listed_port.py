@@ -49,7 +49,9 @@ def test_a_port_a_vlan_names_has_a_record() -> None:
     assert got == {
         "1": ("access", 1, None, []),
         "A1": ("access", 1, None, []),
-        "2": ("trunk", None, 1, [10]),
+        # Untagged in VLAN 1 and tagged in VLAN 10: the list is what
+        # the port carries, the VLAN it carries untagged among them.
+        "2": ("trunk", None, 1, [1, 10]),
         "3": ("access", 10, None, []),
         "4": ("trunk", None, None, [10]),
         "23": (None, None, None, []),
@@ -94,7 +96,7 @@ def test_a_stanza_keeps_what_it_says() -> None:
     tree = ArubaAOSSCodec().parse(text)
     (two,) = [iface for iface in tree.interfaces if iface.name == "2"]
     assert (two.enabled, two.description) == (False, "uplink")
-    assert (two.switchport_mode, two.trunk_native_vlan, two.trunk_allowed_vlans) == ("trunk", 1, [10])
+    assert (two.switchport_mode, two.trunk_native_vlan, two.trunk_allowed_vlans) == ("trunk", 1, [1, 10])
     assert len({iface.name for iface in tree.interfaces}) == len(tree.interfaces)
 
 

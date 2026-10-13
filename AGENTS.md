@@ -1111,10 +1111,81 @@ tests use these exclusively — never CSS classes or element structure.  See
   named with its reason — and by
   `test_a_vlan_drop_and_a_trunks_list.py` and
   `test_the_trunk_that_names_a_vlan.py`.  Still open, and in the
-  CHANGELOG's known limitations: whether a trunk's list holds its
-  native VLAN is one more thing the tree does not state, and the
-  platforms differ; and on a port that is NOT a trunk an empty list
-  is still two statements, `none` and no list at all.
+  CHANGELOG's known limitations: on a port that is NOT a trunk an
+  empty list is still two statements, `none` and no list at all.
+  (Whether a trunk's list holds its native VLAN was a third thing
+  the tree did not state; the next rule is what it cost.)
+- **Never** let two fields of the tree hold one fact each in its own
+  platform's way.  A trunk's untagged VLAN is in the tree twice over:
+  `trunk_native_vlan` says which VLAN, `trunk_allowed_vlans` what the
+  trunk carries.  Whether the second has to name the first is not one
+  grammar.  On IOS-XE, NX-OS, EOS, AOS-CX and Junos the native VLAN
+  is a line of its own, which the allowed line may name or leave
+  out; on OS10 it is the trunk's access VLAN, and the allowed line
+  names tagged VLANs only; AOS-S lists a VLAN's untagged ports apart
+  from its tagged ones.  Each parser put what its text lists, each
+  renderer wrote the list as it stood, and the two projections
+  between a port's fields and the VLANs' member lists answered the
+  question differently from each other.  Failure mode: every AOS-S
+  and OS10 trunk that has an untagged VLAN was written for the other
+  five with a native line beside an allowed list that left the VLAN
+  out -- on AOS-CX, by HPE's own sentence, a port that drops its
+  untagged traffic -- in jobs that said `completed` and reported
+  nothing; and the other way a native VLAN its list left out was
+  written `untagged` on AOS-S and as the access VLAN on OS10.  The
+  convention is ONE, and the tree holds it: a trunk's list is what
+  the trunk carries, its native VLAN among them, and a native VLAN
+  the list does not hold is stated and not carried
+  (`trunk_untagged_vlan` in `canonical/transforms.py`: read a trunk
+  through it, never from `trunk_native_vlan` alone).  A platform's
+  text is brought to it at the platform's edge, by one table
+  (`NATIVE_VLAN_AND_THE_LIST` in `codecs/_helpers.py`): the parser of
+  a platform that states the untagged VLAN beside its list puts it
+  INTO the list, and its renderer takes it out again, in the same
+  change.  And a pass that rewrites a trunk's native VLAN or its
+  list asks what the trunk carried untagged BEFORE and AFTER
+  (`trunk_untagged_vlan`), so that no rewrite turns "stated and not
+  carried" into "carried" -- the VLAN rename pass renumbered the two
+  fields one after the other, and a native VLAN outside its list
+  that a map moved onto an id of the list came out as the trunk's
+  untagged VLAN: a VLAN the source carried tagged, or one it did not
+  carry at all.  **The blind spot that hid it:** every check read both
+  trees the tree's way.  A native VLAN counted as a membership
+  whatever the list said, on the source's tree and on the output
+  parsed again, so the two always agreed and the guard that looks
+  for every membership in the output passed.  A check of a
+  convention must not read by the convention: read what the DEVICE
+  carries on each side by its own platform's grammar, written out
+  by hand in the test, from the output's text as well as from its
+  parse.  Two corollaries.
+  (1) **What a device does with the statement is the vendor's to
+  say.**  That a native VLAN outside the list is not carried is a
+  vendor's sentence for AOS-CX and, for the default VLAN 1, for
+  IOS-XE and NX-OS; it is an inference for another VLAN there, a
+  stated requirement to receive in the Junos ELS grammar, and not
+  established for EOS.  Say which, with the sentence, in the vendor
+  reference -- and say "not established" in the comment, the
+  `review:` line and the document where no page says it (what `no
+  switchport access vlan` leaves an OS10 trunk with is one such:
+  Dell's pages disagree, and the line is written under a review
+  line that says so).  (2) **Right where the list decides is not
+  "harmless" everywhere else.**  On a Junos switch that takes the
+  older grammar a native VLAN that is ALSO on `vlan members` is sent
+  tagged.  The codec writes the ELS grammar only, so no output is
+  touched, and its vendor page says the output is not for such a
+  switch; a rule for five platforms is a rule for those five.
+  Guarded by
+  `tests/unit/migration/test_the_list_holds_the_native_vlan.py`:
+  every committed capture onto every codec whose parser states
+  memberships, each side read by its own row, the output twice;
+  each shape of trunk through every pair, with what its source
+  carries written beside it by hand; each check handed the defect it
+  is for; and a codec that is in one of the two trunk tables and not
+  the other fails.  Still open, and in the CHANGELOG's known
+  limitations: a trunk that states NO native VLAN is "not stated" in
+  the tree, which is the defect of the rule above with its mending
+  still to do -- the platforms' defaults differ, and VLAN 1 can come
+  out tagged.
 - **Never** put a word of the config where a port name goes, and never
   make an interface record for a name the config configures nothing
   under.  A parser that takes the first word after a keyword for a

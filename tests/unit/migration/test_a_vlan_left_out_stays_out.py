@@ -89,11 +89,18 @@ WRITES_A_TRUNKS_VLANS = frozenset({
 
 
 def _ports_in(parsed, vid: int) -> set[str]:
-    """The ports the tree puts in VLAN *vid*, by either record."""
+    """The ports the tree puts in VLAN *vid*, by either record.
+
+    A trunk's list is what it carries, so its native VLAN is on the
+    port where the list holds it -- which the look in the list finds
+    -- and is on no port where the list leaves it out: stated, and
+    not carried.  (A native VLAN counted here whatever the list said,
+    and a trunk of no VLAN with a native line beside it could not be
+    asked about that VLAN at all.)"""
     names = {
         iface.name for iface in parsed.interfaces
         if vid in (iface.trunk_allowed_vlans or [])
-        or vid in (iface.access_vlan, iface.trunk_native_vlan)
+        or vid == iface.access_vlan
     }
     for vlan in parsed.vlans:
         if vlan.id == vid:
@@ -216,7 +223,12 @@ def test_no_target_writes_none_as_everything(native: int | None) -> None:
     for "nothing stated" and for AOS-CX's own `all`, and each renderer
     picked a reading.  The four were pinned here by name until the
     change that mended them; no target may do it now, with a native
-    VLAN beside the list or without."""
+    VLAN beside the list or without.
+
+    The native VLAN is then one the trunk does not carry -- the list
+    is what a trunk carries, and it holds nothing -- and the output
+    puts it on no port either: a target that is told VLAN by VLAN
+    wrote the port untagged in it."""
     for target in list_public_codecs():
         source = _iosxe("none", declare_vlan_1=False)
         if native is not None:
@@ -233,8 +245,7 @@ def test_no_target_writes_none_as_everything(native: int | None) -> None:
         if target in WRITES_A_TRUNKS_VLANS:
             parsed = get_codec(target).parse(job.rendered)
             assert not _ports_in(parsed, 100), target
-            if native is None:
-                assert not _ports_in(parsed, 999), target
+            assert not _ports_in(parsed, 999), target
 
 
 @pytest.mark.parametrize("target,rendered", [

@@ -53,6 +53,22 @@ Collision detection:
     * Mapping a VLAN to an ID that already EXISTS in the tree (a
       non-collision rename conflict) → same merge semantics: the
       renamed VLAN's membership is unioned into the existing one.
+    * A map can bring a port's native VLAN INTO its allowed list.
+      The port stated native VLAN 10 outside a list of 20 and 30 --
+      stated and not carried -- and the map sends 10 to 20.  Left
+      alone the port would carry VLAN 20 UNTAGGED, which it carried
+      tagged.  What is done turns on the ids of the list that the map
+      puts on the native VLAN's id.  Where the list names one of
+      them as a VLAN -- it has a record in ``intent.vlans`` before
+      the map, or the list is a short one, whose every id is a
+      VLAN -- two VLANs have been made one, and the native VLAN is
+      cleared.  Where it names none so -- ``native vlan 1000`` beside
+      ``allowed vlan 2-999,1001-4094``, and 1000 renumbered to 900,
+      a number the range covers and no VLAN had -- nothing was
+      merged: the new id is taken out of the list, and the port
+      still states its native VLAN and still does not carry it.
+      Each has a warning of its own.  A native VLAN the list held
+      already is renumbered with it as before.
 
 SVI interfaces named with the canonical ``Vlan<N>`` spelling (Cisco /
 Arista / NX-OS — the exact form render-side
@@ -76,7 +92,11 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
-from .transforms import is_every_vlan
+from .transforms import (
+    TRUNK_ALLOWED_SPECIFICITY_BOUND,
+    is_every_vlan,
+    trunk_untagged_vlan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +148,60 @@ def translate_vlan_ids(  # noqa: C901
     already exists in the tree) merge tagged/untagged port lists
     and SVI addresses by union, de-duplicating while preserving
     order of first occurrence.
+
+    A port's native VLAN that its allowed list did NOT hold before
+    the map and WOULD hold after it is not left to become a VLAN the
+    port carries untagged.  The list is what a trunk carries
+    (:func:`.transforms.trunk_untagged_vlan`), so that native VLAN
+    was stated and not carried, and it is asked which ids of the list
+    as it stood the map puts on the native VLAN's id:
+
+    * The list names one of them as a VLAN.  The port carried that
+      VLAN tagged, and the map has made the two VLANs one: left
+      alone, every target that writes a native line would carry
+      untagged a VLAN the source carried tagged, while a target
+      written from the VLANs' member lists kept it tagged.  The
+      native VLAN is CLEARED, with a warning that names the
+      interface, both ids and that VLAN.  The port then states no
+      native VLAN, and both halves of the tree say tagged.
+    * It names none of them so.  It covered that number only as part of a
+      range, no VLAN had it, and nothing was merged: ``native vlan
+      1000`` beside ``allowed vlan 2-999,1001-4094`` with 1000
+      renumbered to 900, or ``allowed vlan except 10`` with 10
+      renumbered to 4000.  The new id is TAKEN OUT of the list and
+      the native VLAN is kept, with a warning of its own: the port
+      did not carry that VLAN before the map and does not carry it
+      after.
+
+    A list names an id as a VLAN where the id is a VLAN of the
+    config -- it has a record in ``intent.vlans`` before the map --
+    or where the list as it stood is no longer than
+    ``TRUNK_ALLOWED_SPECIFICITY_BOUND``.  The second is the parsers'
+    own reading of a list
+    (:func:`.transforms.switchport_declared_vlan_ids`): every id of
+    a list that short is a VLAN, declared or not, and a longer list
+    or a range covers numbers.  A parser makes a record for every
+    VLAN the config declares, for an access port's access VLAN, and
+    for a trunk's native VLAN and the ids of its short list; in
+    such a tree an id of a trunk's list has a record exactly where
+    the trunk is that VLAN's tagged member, so after either branch
+    the trunk's own fields and the VLANs' member lists say one
+    thing.
+
+    This is asked of every port that has the two fields, whatever
+    its mode: a port's trunk lines say what it carries when it is a
+    trunk, and a port in a dynamic mode or with no mode line can
+    become one.  Such a port is no VLAN's tagged member, and no
+    record is made from its trunk lines; its short list is read as
+    a trunk's is all the same.  Asked for a record alone,
+    ``native vlan 10`` beside ``allowed vlan 500`` with 10 given the
+    id 500 would be a merge under ``switchport mode trunk`` and,
+    in a dynamic mode, a list emptied of its only id -- for which
+    such a port has no line, so that it would be written its native
+    line alone.  A list longer than the bound is not emptied by one
+    id taken out.  A native VLAN the list held before is renumbered
+    with the list, and a list of every VLAN holds every native VLAN
+    before and after.
 
     Input validation:
       * Source or target IDs outside 1-4094 → warning; entry
@@ -321,6 +395,15 @@ def translate_vlan_ids(  # noqa: C901
                 iface.access_vlan = renames[iface.access_vlan]
 
         # Native VLAN
+        #
+        # Whether the trunk carried it is asked first, of the fields
+        # as the source stated them: the native VLAN is rewritten
+        # here and the list further down, and the answer is wanted
+        # again when both are done.
+        native_before = iface.trunk_native_vlan
+        carried_before = trunk_untagged_vlan(
+            iface.trunk_allowed_vlans, native_before,
+        )
         if iface.trunk_native_vlan is not None:
             if iface.trunk_native_vlan in drops:
                 result.warnings.append(
@@ -373,6 +456,7 @@ def translate_vlan_ids(  # noqa: C901
             new_list: list[int] = []
             seen: set[int] = set()
             gone: list[int] = []
+            allowed_before = iface.trunk_allowed_vlans
             for vid in iface.trunk_allowed_vlans:
                 if vid in drops:
                     gone.append(vid)
@@ -388,6 +472,58 @@ def translate_vlan_ids(  # noqa: C901
                 # what every target is now told -- so the operator is
                 # told as well.
                 result.warnings.append(_emptied_trunk_warning(iface.name, gone))
+            # A native VLAN the port stated and did not carry, which
+            # the map has brought into the port's list.  The list is
+            # what a trunk carries, so the port would now carry that
+            # VLAN untagged.  (Only a list that was rewritten can
+            # come to hold it: a list of every VLAN held the native
+            # VLAN before.  Whatever the port's mode: its trunk lines
+            # say what it carries when it is a trunk.)
+            native_after = iface.trunk_native_vlan
+            if (
+                native_before is not None
+                and carried_before is None
+                and trunk_untagged_vlan(new_list, native_after) is not None
+            ):
+                # The ids of the list as it stood that the map puts
+                # on the native VLAN's id: there is one, or the new
+                # list would not hold it.
+                landed = [
+                    vid for vid in allowed_before
+                    if vid not in drops
+                    and renames.get(vid, vid) == native_after
+                ]
+                merged = next(
+                    (vid for vid in landed if vid in source_ids), None,
+                )
+                if merged is None and (
+                    len(allowed_before) <= TRUNK_ALLOWED_SPECIFICITY_BOUND
+                ):
+                    # A list this short names VLANs, with or without
+                    # a record: it is how a parser reads a trunk's,
+                    # and a port in another mode gets no record from
+                    # its trunk lines.
+                    merged = landed[0]
+                if merged is not None:
+                    # A VLAN the list names, which the port carried
+                    # tagged: the map has made the two one.  Cleared,
+                    # the port states no native VLAN and the merged
+                    # VLAN stays tagged.
+                    result.warnings.append(_merged_native_warning(
+                        iface.name, native_before, native_after, merged,
+                    ))
+                    iface.trunk_native_vlan = None
+                else:
+                    # A number a longer list covered and no VLAN had:
+                    # nothing was merged.  The native VLAN's id comes
+                    # out of the NEW list, so the port states it and
+                    # does not carry it, as before the map.
+                    iface.trunk_allowed_vlans = [
+                        vid for vid in new_list if vid != native_after
+                    ]
+                    result.warnings.append(_number_only_warning(
+                        iface.name, native_before, native_after, landed[0],
+                    ))
 
     # ------------------------------------------------------------------
     # Pass 2b — track the rename/drop on canonical ``Vlan<N>`` SVIs (#18).
@@ -502,6 +638,71 @@ def _emptied_trunk_warning(name: str, gone: list[int]) -> str:
     return (
         f"vlan_rename: interface {name!r} is a trunk that allowed only "
         f"{what} — the trunk now allows no VLAN"
+    )
+
+
+def _merged_native_warning(
+    name: str, before: int, after: int, tagged: int,
+) -> str:
+    """The warning for a port whose native VLAN was outside its
+    allowed list and is merged by the map with a VLAN of the list.
+
+    *before* and *after* are the native VLAN's id on either side of
+    the map, and *tagged* is a VLAN that the list names (a VLAN of
+    the config, or an id of a short list), by its id before the
+    map, which the map puts on the same
+    id.  *before* and *after* are one id where the map moved that
+    VLAN onto the native VLAN and not the other way.
+    """
+    if before == after:
+        how = (
+            f"the map merges VLAN {tagged}, which the trunk carries "
+            f"tagged, into it"
+        )
+    else:
+        how = (
+            f"the map merges it into VLAN {after}, which the trunk "
+            f"carries tagged"
+        )
+    return (
+        f"vlan_rename: interface {name!r} had native VLAN {before} "
+        f"outside its allowed list, and {how} — native VLAN cleared"
+    )
+
+
+def _number_only_warning(
+    name: str, before: int, after: int, number: int,
+) -> str:
+    """The warning for a port whose native VLAN was outside its
+    allowed list and is given, by the map, an id the list named only
+    as a number: no VLAN of the config had it.
+
+    *before* and *after* are the native VLAN's id on either side of
+    the map, and *number* is the id of the list, before the map, that
+    the map puts on *after*.  It is *after* itself where the list
+    named the new id, and another id where the map moved a number of
+    the list onto the native VLAN's.
+
+    Nothing was merged and no VLAN was carried tagged under that
+    number: the warning says neither.
+    """
+    nothing_had = (
+        "which the list named only as a number no VLAN of the "
+        "config had"
+    )
+    if number == after:
+        how = f"the map gives it the id {after}, {nothing_had}"
+    elif before == after:
+        how = f"the map gives its id to {number}, {nothing_had}"
+    else:
+        how = (
+            f"the map gives it the id {after} and gives the same id "
+            f"to {number}, {nothing_had}"
+        )
+    return (
+        f"vlan_rename: interface {name!r} had native VLAN {before} "
+        f"outside its allowed list, and {how} — {after} is taken out "
+        f"of the list, and the trunk does not carry native VLAN {after}"
     )
 
 

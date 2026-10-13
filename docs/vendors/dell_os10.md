@@ -312,7 +312,8 @@ working, not a parser fault.
 
 ⚠️ **OS10 cannot be told "every VLAN".**  An OS10 trunk with no
 `switchport trunk allowed vlan` line carries untagged traffic on its
-access VLAN and no tagged VLAN, and is read so: a trunk of NO VLAN.
+access VLAN and no tagged VLAN, and is read so: a trunk of that one
+VLAN, or of NO VLAN where it states no access VLAN either.
 As a target that is written the same way, with no allowed line.  But
 OS10 has no word for every VLAN, its VLAN ids end at 4093, and a VLAN
 must exist before a port is put in it.  A trunk of EVERY VLAN — a
@@ -329,11 +330,55 @@ that allows no VLAN and for one that states no list: an OS10 trunk
 with no tagged VLAN came out as a trunk of every VLAN on IOS-XE,
 NX-OS, EOS and AOS-CX, and a Cisco trunk with no list reached OS10
 with no allowed line — check trunks translated that way.  The
-untagged (access) VLAN of an OS10 trunk is never in its allowed list,
-and is not added to the list written for another vendor: a trunk with
-an untagged VLAN and no tagged one is written there as a trunk that
-allows none, with the native line beside it.  The vendors' own
-sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
+vendors' own sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
+
+⚠️ **A trunk's access VLAN is carried, and is never on its allowed
+line.**  `switchport access vlan <N>` on a trunk is the VLAN it
+carries untagged, and `switchport trunk allowed vlan` names tagged
+VLANs only — Dell: "An interface cannot be an access and trunk member
+of the same VLAN."  In the canonical tree a trunk's list is
+everything it carries, so the access VLAN is read INTO the list
+(`access vlan 1` beside `allowed vlan 32,34` is native 1 and the list
+`1,32,34`) and written back out of it: an OS10 config comes back with
+the lines it had.  Onto IOS-XE, NX-OS, EOS, AOS-CX and Junos the
+trunk is written with that VLAN on the allowed line beside the native
+line.  **Release 0.7.7 and earlier left it off that line** — a port
+with no untagged VLAN, where the allowed list decides what a trunk
+carries — for every OS10 trunk that has an access VLAN, in jobs that
+said `completed`: check the allowed list of every trunk with a native
+line migrated from OS10 then, and add the native VLAN to it.  A trunk
+with an access VLAN and no tagged one was written there as a trunk
+that allows NONE; it is a trunk of that one VLAN.  As a target: the
+allowed line is the source's list without its native VLAN (those
+releases wrote the VLAN on both lines when the source list named
+it).  A native VLAN the source list does NOT hold is one the source
+trunk does not carry, as the tree reads it.  It is not written as an
+access VLAN; `no switchport access vlan` stands in its place under a
+`! review:` line: `! review: native VLAN 10 is stated for this trunk
+and its allowed list leaves it out, so no untagged VLAN is written
+for this port; Dell's pages disagree on whether the next line leaves
+an OS10 trunk with no untagged VLAN or with VLAN 1 -- check what this
+port is to carry untagged`.  (The VLAN in it is the output's: after a
+VLAN map, the new id.  And where a map would bring such a native VLAN
+INTO the source list, it is cleared if the map has merged it with a
+VLAN of the config that the list names, and the new id is taken out
+of the list -- the trunk then written as above -- if the list only
+covered that number with a range; the job says which, see
+[`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A trunk's allowed
+list is not what I wrote".)  Dell's page for that command says it resets the
+access VLAN membership, and gives VLAN 1; Dell's procedure for a
+trunk uses it to remove the membership; which a switch does is not
+established, so check what the port carries untagged.  As a source,
+that line is read on any switched port: a trunk is left with no
+native VLAN, and an access port with no access VLAN stated.  It is
+not written again for a tree that came from OS10's own text -- the
+tree cannot tell "no untagged VLAN, stated" from "not stated" -- so
+an OS10 config that has the line comes back without it.  A trunk that
+states no access VLAN is written none: by Dell's page it then
+carries the switch's default VLAN untagged.  `interface range` is
+not read, so a trunk stated that way has no VLANs in any output.  The
+vendors' own sentences are in the
+[vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
 
 ## Two things that would have been silent bugs
 

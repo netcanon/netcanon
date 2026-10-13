@@ -335,6 +335,17 @@ for the reference pattern).
    line: the platform's default is not given to a guess.
    Read the platform's own words for all and none as what they say
    (`all` is `vlan_id_run(1, 4094)`, counted first: step 4).
+   **And say where the platform's text states a trunk's untagged
+   VLAN.**  In the tree a trunk's list is what it carries, its native
+   VLAN among them.  If the platform writes the native VLAN on a line
+   of its own and its allowed line may name it or leave it out, the
+   row in `NATIVE_VLAN_AND_THE_LIST` (`_helpers.py`, below) is
+   `LIST_DECIDES` and the parser puts the list as the text has it.
+   If it states the untagged VLAN BESIDE a list of tagged VLANs, the
+   row is `BESIDE_THE_LIST` and the parser adds it
+   (`trunk_list_read`).  Add the vendor's sentence for what a
+   native VLAN outside the list does -- or "not established" -- to
+   the second table of that vendor-reference page.
 3. **Write `render()`** against the same synthetic fixtures, driving
    toward round-trip stability (`parse(render(parse(raw))) == parse(raw)`
    at the canonical level).  **A trunk's list is one of three
@@ -346,14 +357,21 @@ for the reference pattern).
    — and never the platform's word for "everything" for any other
    list.  Where the platform has no form for one of the three, write
    a `! review:` line in the stanza that says so; do not pick the
-   nearest thing in silence.
+   nearest thing in silence.  A `BESIDE_THE_LIST` renderer writes its
+   allowed line WITHOUT the native VLAN (`trunk_list_written`), and writes
+   the untagged VLAN only where the list holds it
+   (`trunk_untagged_vlan`): a native VLAN outside the list is, in
+   the tree, stated and not carried.
    `tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py`
    fails for a public codec that is neither in the table nor named,
    with its reason, in that module's `NO_ALLOWED_LIST`; and a codec
    that starts to write a trunk's VLANs fails
    `test_a_vlan_left_out_stays_out.py` until it is listed there, and
    then the first module until it has a reader for the new target's
-   text.
+   text.  `test_the_list_holds_the_native_vlan.py` fails for a codec
+   that is in one of the two trunk tables and not the other, and
+   wants a reader of its own for the new grammar and a row in its
+   hand-written table.
 4. **Write `probe()`** using 2-3 discriminating structural markers
    unique to your vendor's wire format.  A probe — and everything
    `parse` does — reads whatever was pasted, so its cost has to fit the
@@ -709,6 +727,47 @@ the policy locally:
     table what "no line" means on their platform.  (`aruba_aoscx` and
     `juniper_junos` have grammars of their own and call
     `trunk_list_says` / `is_every_vlan`.)
+
+* **`netcanon/migration/codecs/_helpers.py::NATIVE_VLAN_AND_THE_LIST`**
+  — where a platform's text states the VLAN a trunk carries
+  untagged, by codec: `LIST_DECIDES` on `arista_eos`, `aruba_aoscx`,
+  `cisco_iosxe_cli`, `cisco_nxos` and `juniper_junos` (a native line
+  of its own; the allowed line may name the VLAN or leave it out),
+  `BESIDE_THE_LIST` on `dell_os10` (the trunk's access VLAN, beside
+  an allowed line of tagged VLANs).  The ONE place it is written,
+  with the same codecs as the table above and no other; the vendors'
+  sentences are in the same vendor-reference page.  In the tree a
+  trunk's list is what the trunk carries, its native VLAN among them,
+  and a native VLAN the list does not hold is stated and not carried.
+  Its readers:
+  * **`canonical/transforms.py::trunk_untagged_vlan(allowed,
+    native)`** (also importable from `_helpers`) — the VLAN a trunk
+    carries untagged, or `None`.  Every reader of a trunk's untagged
+    VLAN asks it: `project_switchport_to_vlan`; the OS10 renderer;
+    the AOS-S renderer, for the `; review:` line it writes where a
+    trunk's native VLAN is outside its list and no `untagged` line
+    is written; and the VLAN rename pass (`canonical/vlan_names.py`),
+    which asks it before and after a map: a native VLAN the map
+    would bring into its port's list is cleared where the map merged
+    it with a VLAN of the config that the list names, and the new id
+    is taken out of the list where the list only covered that number
+    with a range.  Never read `trunk_native_vlan` alone.
+  * **`trunk_list_read(codec, stated, untagged)`** — the list a
+    parser puts: for a `BESIDE_THE_LIST` codec the tagged VLANs its
+    text lists with the untagged one added, in its place among
+    them; for a `LIST_DECIDES` codec the list as stated.
+  * **`trunk_list_written(codec, allowed, native)`** — what a
+    renderer names on its allowed line: for a `BESIDE_THE_LIST`
+    codec the list without the native VLAN; for a `LIST_DECIDES`
+    codec the list as it stands.
+  Both ask the table by the codec's name, as
+  `switchport_trunk_allowed_value` asks its own; a codec that is not
+  in it is a `KeyError`.  The `LIST_DECIDES` codecs have nothing to
+  convert and do not call them.
+  Callers: `grep -rn "trunk_list_read\|trunk_list_written\|trunk_untagged_vlan" netcanon/migration`.
+  AOS-S is in neither table: it is told VLAN by VLAN, and its port
+  records are made by `project_vlan_to_switchport`, which puts the
+  VLAN a port is untagged in into the port's list.
 
 * **`netcanon/migration/codecs/_helpers.py::spaced_port_name`** and
   **`without_keyword_stanzas`** — two readings of a Cisco header

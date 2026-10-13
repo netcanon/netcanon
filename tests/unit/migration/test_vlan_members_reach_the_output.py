@@ -19,8 +19,11 @@ What a membership is, said once and used for both trees
 ``(vlan id, port, "u" | "t")``.  A tree states one in two places and the
 two are united: a VLAN's ``untagged_ports`` / ``tagged_ports``, and an
 interface's ``access_vlan`` (mode ``access``) or ``trunk_native_vlan``
-and ``trunk_allowed_vlans`` (mode ``trunk``).  Untagged stands where a
-tree says both.  Nothing is filled in that a tree does not state.  A
+and ``trunk_allowed_vlans`` (mode ``trunk``).  A trunk's list is what
+it carries: its native VLAN is an untagged membership where the list
+holds it, and no membership at all where the list leaves it out (a
+native VLAN stated and not carried).  Untagged stands where a tree
+says both.  Nothing is filled in that a tree does not state.  A
 trunk of every id, and a list longer than 128 ids, are a statement and
 not thousands of memberships: they are compared over the VLAN ids the
 SOURCE tree knows (declared, or named by a membership), the same ids
@@ -143,14 +146,13 @@ READ_AS_TEXT = frozenset({
 NAME_STANDS_IN_A_RANGE = frozenset({"aruba_aoss"})
 
 #: (capture, target) -> memberships not in the output that the port's own
-#: stanza speaks for in a ``review:`` line.  An OS10 trunk that states no
-#: list carries no tagged VLAN, and AOS-CX cannot be told "none": its
-#: stanza says so, and the untagged VLAN goes unwritten with the lines it
-#: would have stood beside.  Compared for equality.
-SAID_IN_THE_STANZA: dict[tuple[str, str], int] = {
-    ("real/dell_os10/azsupport_TOR1_Sample.cfg", "aruba_aoscx"): 1,
-    ("real/dell_os10/azsupport_TOR2_Sample.cfg", "aruba_aoscx"): 1,
-}
+#: stanza speaks for in a ``review:`` line.  None today.  Two were here:
+#: an OS10 trunk with an access VLAN and no allowed line was read as a
+#: trunk of no VLAN, which AOS-CX cannot be told, and its untagged VLAN
+#: went unwritten under the line that said so.  Such a trunk carries
+#: its access VLAN, its list now holds it, and AOS-CX is written both
+#: of its ``vlan trunk`` lines.  Compared for equality.
+SAID_IN_THE_STANZA: dict[tuple[str, str], int] = {}
 
 #: Targets on which a port under a name the OPERATOR chose (an entry of
 #: the port map that is no port name of the target) is written with no
@@ -230,9 +232,12 @@ class Reading:
         self.stated.setdefault((vid, port, mode), set()).update(xpaths)
 
     def trunk(self, name: str, allowed: Any, native: int | None, *xpaths: str) -> None:
-        """A trunk: *allowed* is the word ``"all"`` or a list of ids."""
-        if native is not None:
-            self.say(native, name, "u", *(x for x in xpaths if x != X_ALLOWED))
+        """A trunk: *allowed* is the word ``"all"`` or a list of ids,
+        and it is what the trunk carries.  The native VLAN is untagged
+        where the list holds it; where the list leaves it out it is
+        stated and not carried, and is no membership."""
+        if native is not None and (allowed == "all" or native in allowed):
+            self.say(native, name, "u", *xpaths)
         if allowed == "all" or len(set(allowed)) >= EVERY:
             self.every.add(name)
         elif len(allowed) > SPECIFIC:
@@ -313,7 +318,10 @@ def _stanzas(text: str, opener: str):
 def _read_ios_like(text: str, codec: str) -> Reading:
     """NX-OS, IOS-XE, EOS, OS10.  A trunk with no allowed line is every
     VLAN -- none on OS10, where a trunk's untagged VLAN is its
-    ``switchport access vlan``."""
+    ``switchport access vlan``: a statement beside the allowed line,
+    which names tagged VLANs only, so the trunk carries it whatever
+    that line says (and ``no switchport access vlan`` takes it
+    back)."""
     r = Reading()
     for name, body in _stanzas(text, "interface "):
         mode = access = native = None
@@ -323,6 +331,8 @@ def _read_ios_like(text: str, codec: str) -> Reading:
                 mode = line.rsplit(" ", 1)[1]
             elif m := re.fullmatch(r"switchport access vlan (\d+)", line):
                 access = int(m.group(1))
+            elif line == "no switchport access vlan":
+                access = None
             elif m := re.fullmatch(r"switchport trunk native vlan (\d+)", line):
                 native = int(m.group(1))
             elif m := re.fullmatch(r"switchport trunk allowed vlan (?:add )?(\S+)", line):
@@ -331,7 +341,9 @@ def _read_ios_like(text: str, codec: str) -> Reading:
                 allowed = "all" if "all" in (more, allowed) else (allowed or []) + more
         if mode == "trunk":
             if codec == "dell_os10":
-                r.trunk(name, allowed if allowed is not None else [], access)
+                tagged = allowed if allowed is not None else []
+                carried = tagged if tagged == "all" or access is None else [*tagged, access]
+                r.trunk(name, carried, access)
             else:
                 r.trunk(name, allowed if allowed is not None else "all", native)
         elif access is not None:
@@ -898,6 +910,18 @@ class TestTheCheckItself:
         (said,) = self._judge(job)["wrong"]
         assert said == f"VLAN 10 on 'Ethernet2' ('{self.E2}') was u and is t"
 
+    def test_a_native_vlan_left_out_of_the_list(self, job: Any) -> None:
+        """The native line stands and the allowed line does not name
+        its VLAN: stated, and not carried.  Read as carried whatever
+        the list says, this output passed -- and so did every trunk of
+        AOS-S and OS10 written that way."""
+        job.rendered = job.rendered.replace("allowed vlan 10,20", "allowed vlan 20")
+        (said,) = self._judge(job)["wrong"]
+        assert said == (
+            f"VLAN 10 u on 'Ethernet2' ('{self.E2}') is not in the output: "
+            "nothing on the job or in the output says so"
+        )
+
     def test_a_stanza_under_another_name(self, job: Any) -> None:
         job.rendered = job.rendered.replace(f"interface {self.E1}\n", "interface Ethernet0/9\n")
         wrong = self._judge(job)["wrong"]
@@ -1021,24 +1045,37 @@ _TYPED = {
         "interface Ethernet1/1\n  switchport access vlan 10\n"
         "interface Ethernet1/2\n  switchport mode trunk\n  switchport trunk native vlan 10\n"
         "  switchport trunk allowed vlan 10,20-21\n"
-        "interface Ethernet1/3\n  switchport mode trunk\n",
+        "interface Ethernet1/3\n  switchport mode trunk\n"
+        # A native VLAN the list leaves out is no membership.
+        "interface Ethernet1/4\n  switchport mode trunk\n  switchport trunk native vlan 10\n"
+        "  switchport trunk allowed vlan 20\n"
+        # ... and beside no list (every VLAN) it is one.
+        "interface Ethernet1/5\n  switchport mode trunk\n  switchport trunk native vlan 21\n",
         {(10, "Ethernet1/1", "u"), (10, "Ethernet1/2", "u"), (20, "Ethernet1/2", "t"), (21, "Ethernet1/2", "t"),
-         (10, "Ethernet1/3", "t"), (20, "Ethernet1/3", "t"), (21, "Ethernet1/3", "t")},
+         (10, "Ethernet1/3", "t"), (20, "Ethernet1/3", "t"), (21, "Ethernet1/3", "t"),
+         (20, "Ethernet1/4", "t"),
+         (10, "Ethernet1/5", "t"), (20, "Ethernet1/5", "t"), (21, "Ethernet1/5", "u")},
     ),
     "dell_os10": (
         "interface ethernet1/1/1\n switchport access vlan 10\n"
         "interface ethernet1/1/2\n switchport mode trunk\n switchport access vlan 10\n"
         " switchport trunk allowed vlan 20-21\n"
-        "interface ethernet1/1/3\n switchport mode trunk\n",
+        "interface ethernet1/1/3\n switchport mode trunk\n"
+        # The access VLAN of a trunk is carried with no allowed line,
+        "interface ethernet1/1/4\n switchport mode trunk\n switchport access vlan 21\n"
+        # and not once it is taken back.
+        "interface ethernet1/1/5\n switchport mode trunk\n switchport access vlan 10\n"
+        " no switchport access vlan\n switchport trunk allowed vlan 20\n",
         {(10, "ethernet1/1/1", "u"), (10, "ethernet1/1/2", "u"), (20, "ethernet1/1/2", "t"),
-         (21, "ethernet1/1/2", "t")},
+         (21, "ethernet1/1/2", "t"), (21, "ethernet1/1/4", "u"), (20, "ethernet1/1/5", "t")},
     ),
     "aruba_aoscx": (
         "interface 1/1/1\n    no routing\n    vlan access 10\n"
         "interface lag 1\n    no routing\n    vlan trunk native 10\n    vlan trunk allowed 10,20-21\n"
-        "interface 1/1/3\n    no routing\n    vlan trunk allowed all\n",
+        "interface 1/1/3\n    no routing\n    vlan trunk allowed all\n"
+        "interface 1/1/4\n    no routing\n    vlan trunk native 10\n    vlan trunk allowed 20\n",
         {(10, "1/1/1", "u"), (10, "lag 1", "u"), (20, "lag 1", "t"), (21, "lag 1", "t"),
-         (10, "1/1/3", "t"), (20, "1/1/3", "t"), (21, "1/1/3", "t")},
+         (10, "1/1/3", "t"), (20, "1/1/3", "t"), (21, "1/1/3", "t"), (20, "1/1/4", "t")},
     ),
     "aruba_aoss": (
         "vlan 10\n   untagged 1-2,A1\n   exit\nvlan 20\n   tagged 2,Trk1\n   untagged A1\n   exit\n"
@@ -1051,13 +1088,17 @@ _TYPED = {
         "set interfaces ge-0/0/1 unit 0 family ethernet-switching interface-mode access\n"
         "set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members USERS\n"
         "set interfaces ge-0/0/2 unit 0 family ethernet-switching interface-mode trunk\n"
+        "set interfaces ge-0/0/2 unit 0 family ethernet-switching vlan members USERS\n"
         'set interfaces ge-0/0/2 unit 0 family ethernet-switching vlan members "V 20"\n'
         "set interfaces ge-0/0/2 unit 0 family ethernet-switching vlan members 21\n"
         "set interfaces ge-0/0/2 native-vlan-id 10\n"
         "set interfaces ge-0/0/3 unit 0 family ethernet-switching interface-mode trunk\n"
-        "set interfaces ge-0/0/3 unit 0 family ethernet-switching vlan members all\n",
+        "set interfaces ge-0/0/3 unit 0 family ethernet-switching vlan members all\n"
+        "set interfaces ge-0/0/4 unit 0 family ethernet-switching interface-mode trunk\n"
+        'set interfaces ge-0/0/4 unit 0 family ethernet-switching vlan members "V 20"\n'
+        "set interfaces ge-0/0/4 native-vlan-id 10\n",
         {(10, "ge-0/0/1", "u"), (10, "ge-0/0/2", "u"), (20, "ge-0/0/2", "t"), (21, "ge-0/0/2", "t"),
-         (10, "ge-0/0/3", "t"), (20, "ge-0/0/3", "t"), (21, "ge-0/0/3", "t")},
+         (10, "ge-0/0/3", "t"), (20, "ge-0/0/3", "t"), (21, "ge-0/0/3", "t"), (20, "ge-0/0/4", "t")},
     ),
 }
 _TYPED["cisco_iosxe_cli"] = (_TYPED["cisco_nxos"][0].replace("  ", " "), _TYPED["cisco_nxos"][1])

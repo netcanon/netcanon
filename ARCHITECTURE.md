@@ -854,9 +854,44 @@ the list follow the same rule: the VLAN rename pass leaves "every
 VLAN" as it is and warns when a drop empties a trunk, and the
 renderers that hang a VLAN on one parent (OPNsense, RouterOS,
 FortiOS) look for a trunk that names it before a trunk of every
-VLAN.  Whether the list holds the native
-VLAN is not yet one convention; each parser puts what its platform's
-text lists.
+VLAN.
+
+**A trunk's list holds its native VLAN**
+(`NATIVE_VLAN_AND_THE_LIST` in `netcanon/migration/codecs/_helpers.py`;
+`trunk_untagged_vlan` in `netcanon/migration/canonical/transforms.py`).
+`trunk_allowed_vlans` is what a trunk CARRIES, its native VLAN among
+them, and `trunk_native_vlan` says which of them goes without a tag.
+A native VLAN the list does not hold is stated and not carried.  The
+platforms' texts do not all say it that way, so each is brought to
+the convention at its own edge, by the one table.  Where the native
+VLAN is a line of its own that the allowed line may name or leave out
+(IOS-XE, NX-OS, EOS, AOS-CX, the Junos ELS grammar) the parser puts
+the list the text states and the renderer writes the list as it
+stands.  Where the untagged VLAN is stated BESIDE a list of tagged
+VLANs (OS10's access VLAN of a trunk) the parser adds it to the list
+and the renderer takes it out, so no VLAN is on both lines.  AOS-S,
+which is told VLAN by VLAN, gets there through the projections: a
+port tagged in some VLANs and untagged in one is a trunk whose list
+holds all of them, and a trunk is an untagged member of its native
+VLAN only where its list holds it (`trunk_untagged_vlan`, which is
+also what a renderer asks), so the two halves of the tree do not
+answer differently.  A pass that rewrites the two fields keeps them
+so, by asking what the port carried untagged before and after: where
+a VLAN map would bring a native VLAN outside its port's list into
+the list, the VLAN rename pass clears the native VLAN if the map has
+merged it with a VLAN of the config that the list names, and takes
+the new id out of the list if the list only covered that number with
+a range -- each with a warning, and whatever the port's mode.
+What a switch does with a native VLAN its list leaves out is
+established for some of these platforms and not for others; the
+vendors' sentences are in
+[`docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md`](docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
+A trunk that states NO native VLAN is still "not stated" in the tree:
+no platform's default is filled in, and none is written.
+[`tests/unit/migration/test_the_list_holds_the_native_vlan.py`](tests/unit/migration/test_the_list_holds_the_native_vlan.py)
+reads what a device carries untagged on each side of every job by
+its own platform's grammar, and does not read the tree by the
+convention it guards.
 
 **What makes a switchport VLAN real** (the phantom-VLAN prune,
 `transforms.switchport_declared_vlan_ids`).  Left to itself the

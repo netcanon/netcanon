@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from .._tier3_detection import left_out_rows
 from ..canonical.transforms import is_every_vlan
+from ..canonical.transforms import trunk_untagged_vlan as trunk_untagged_vlan
 from ..limits import charge, ticked
 from .base import ParseError, RenderError
 
@@ -243,7 +244,10 @@ TRUNK_SOME = "some"
 #: * AOS-CX: every VLAN.  Defining a native VLAN makes the switch
 #:   run ``vlan trunk allowed all`` itself.
 #: * OS10: none.  A trunk carries untagged traffic on its access
-#:   VLAN and no tagged VLAN until an allowed line names one.
+#:   VLAN and no tagged VLAN until an allowed line names one.  (The
+#:   allowed line of OS10 names tagged VLANs only; its parser then
+#:   adds the access VLAN to the list, by
+#:   :data:`NATIVE_VLAN_AND_THE_LIST`.)
 #: * Junos: none.  A trunk is a member of the VLANs its ``vlan
 #:   members`` name.
 #:
@@ -263,6 +267,148 @@ TRUNK_THAT_STATES_NO_LIST: dict[str, str] = {
     "dell_os10": TRUNK_NONE,
     "juniper_junos": TRUNK_NONE,
 }
+
+
+#: How a platform's text states the VLAN a trunk carries untagged
+#: (:data:`NATIVE_VLAN_AND_THE_LIST`).
+LIST_DECIDES = "list decides"
+BESIDE_THE_LIST = "beside the list"
+
+#: Where a platform's TEXT states the VLAN a trunk carries untagged,
+#: by codec.  The ONE place this is written.
+#:
+#: In the tree a trunk's allowed list is what the port carries, its
+#: native VLAN among them, and the native VLAN says which of them
+#: goes untagged.  A native VLAN the list does not hold is stated
+#: and not carried (:func:`trunk_untagged_vlan`: read a trunk
+#: through it, never from ``trunk_native_vlan`` alone).  A platform's
+#: text says that in one of two ways:
+#:
+#: * :data:`LIST_DECIDES` -- IOS-XE, EOS, NX-OS, AOS-CX, Junos.  The
+#:   native VLAN is a line of its own, and the allowed line (``vlan
+#:   members`` on Junos) can name it or leave it out: both are text
+#:   these platforms print.  The parser puts the list the text
+#:   states and the renderer writes the list as it stands, so a
+#:   native line beside a list that leaves the VLAN out comes back
+#:   as it went.  (Junos here is the ELS grammar, which is what its
+#:   codec writes: ``interface-mode trunk`` and ``native-vlan-id`` on
+#:   the physical interface.  The older grammar -- ``port-mode
+#:   trunk`` and ``native-vlan-id`` under the unit -- states the
+#:   native VLAN beside its members, and a native VLAN that is ALSO
+#:   on the members is sent tagged there; its parser reads the two
+#:   grammars as one today, which the known limitations say.)
+#: * :data:`BESIDE_THE_LIST` -- OS10.  The untagged VLAN is the
+#:   trunk's ``switchport access vlan`` line, and the allowed line
+#:   names tagged VLANs: one VLAN is not on both.  The parser adds
+#:   the access VLAN to the list it puts (:func:`trunk_list_read`)
+#:   and the renderer takes the native VLAN out of the list it
+#:   writes (:func:`trunk_list_written`).  Both ask this table, by
+#:   the codec's name.
+#:
+#: The value says how the text is WRITTEN, which is all a codec
+#: needs of it.  What a device then does with a native VLAN its
+#: list leaves out is the vendor's to say, and not every vendor
+#: says it: the sentences, their sources and what is not
+#: established are in
+#: ``docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md``.
+#: A trunk that carries an untagged VLAN is written with that VLAN
+#: in its list for every :data:`LIST_DECIDES` target.  The vendor
+#: says the list has to hold it on AOS-CX, on IOS-XE and NX-OS for
+#: the default native VLAN 1, and -- as a requirement to receive --
+#: in the Junos grammar written here; for another native VLAN on
+#: IOS-XE and NX-OS that is an inference from the vendor's rule, and
+#: for EOS it is not established.  It is NOT a rule for platforms
+#: in general: where the untagged VLAN is stated beside the list,
+#: naming it in the list as well can mean something else.
+#:
+#: Every codec of :data:`TRUNK_THAT_STATES_NO_LIST` is here and no
+#: other is;
+#: ``tests/unit/migration/test_the_list_holds_the_native_vlan.py``
+#: fails for a codec that is in one table and not the other.  (AOS-S
+#: is in neither, for the one reason: it is told VLAN by VLAN.  Its
+#: port records are made by ``project_vlan_to_switchport``, which
+#: puts the VLAN a port is untagged in into the port's list.)
+NATIVE_VLAN_AND_THE_LIST: dict[str, str] = {
+    "arista_eos": LIST_DECIDES,
+    "aruba_aoscx": LIST_DECIDES,
+    "cisco_iosxe_cli": LIST_DECIDES,
+    "cisco_nxos": LIST_DECIDES,
+    "dell_os10": BESIDE_THE_LIST,
+    "juniper_junos": LIST_DECIDES,
+}
+
+
+def trunk_list_read(
+    codec: str, stated: list[int], untagged: int | None,
+) -> list[int]:
+    """The allowed list a parser of *codec* puts for a trunk whose
+    allowed line names *stated* and whose text states *untagged* as
+    the VLAN it carries untagged.
+
+    Where the list decides (:data:`LIST_DECIDES`) the text says what
+    the tree says: *stated*, whether or not it names the native VLAN.
+    Where the untagged VLAN is stated beside the list
+    (:data:`BESIDE_THE_LIST`) the trunk carries it whatever the
+    allowed line names, so it is added to the list -- unless there
+    is none, or the line names it already.  It goes before the first
+    id greater than it, so that a list in rising order stays in
+    rising order, and ``2-4094`` beside VLAN 1 is the list of every
+    VLAN in the order :func:`...canonical.transforms.is_every_vlan`
+    knows at sight.
+
+    *stated* itself where nothing is added; a new list otherwise.
+
+    Args:
+        codec: A codec of :data:`NATIVE_VLAN_AND_THE_LIST`.
+        stated: The ids the allowed line names (the platform's list
+            for a trunk with no line, where it has none).
+        untagged: The VLAN the text states untagged, or ``None``.
+
+    Raises:
+        KeyError: *codec* is not in the table.
+    """
+    if (
+        NATIVE_VLAN_AND_THE_LIST[codec] == LIST_DECIDES
+        or untagged is None or untagged in stated
+    ):
+        return stated
+    at = next(
+        (n for n, vid in enumerate(stated) if vid > untagged), len(stated),
+    )
+    return [*stated[:at], untagged, *stated[at:]]
+
+
+def trunk_list_written(
+    codec: str, allowed: Sequence[int], native: int | None,
+) -> Sequence[int]:
+    """The VLANs a renderer of *codec* names on a trunk's allowed
+    line, for a trunk whose list is *allowed* and whose native VLAN
+    is *native*.
+
+    Where the list decides (:data:`LIST_DECIDES`): the list as it
+    stands.  Where the untagged VLAN is stated beside the list
+    (:data:`BESIDE_THE_LIST`): the list WITHOUT the native VLAN, so
+    that no VLAN is on that line and on the line of the untagged
+    VLAN.  A native VLAN the list does not hold is not carried, and
+    there is nothing to take out.
+
+    *allowed* itself where nothing is taken out; a new list
+    otherwise.
+
+    Args:
+        codec: A codec of :data:`NATIVE_VLAN_AND_THE_LIST`.
+        allowed: The trunk's ``trunk_allowed_vlans``.
+        native: Its ``trunk_native_vlan``.
+
+    Raises:
+        KeyError: *codec* is not in the table.
+    """
+    if (
+        NATIVE_VLAN_AND_THE_LIST[codec] == LIST_DECIDES
+        or native is None or native not in allowed
+    ):
+        return allowed
+    return [vid for vid in allowed if vid != native]
 
 
 def unstated_trunk_list(codec: str, where: str = "") -> list[int]:
@@ -329,7 +475,9 @@ def switchport_trunk_allowed_value(
     VLAN by default.  The list otherwise: as ranges with *coalesce*,
     as the ids in their order without.  (OS10 has no word for every
     VLAN; that list is written there as the range, and its renderer
-    says so beside it.)
+    says so beside it.  Its renderer hands over the list WITHOUT the
+    native VLAN, :func:`trunk_list_written`: an OS10 allowed line
+    names tagged VLANs.)
 
     Raises:
         KeyError: *codec* is not in the table.

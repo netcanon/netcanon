@@ -60,6 +60,19 @@ they carry real password hashes), not inferred from another vendor:
   stanza.  OS10 emits no ``switchport trunk native vlan`` line at all
   (measured: 0 occurrences), so this is the only route to a native VLAN.
 
+* **A trunk's allowed list holds its access VLAN.**  The allowed line
+  of OS10 names TAGGED VLANs and the access line states the untagged
+  one beside it (``BESIDE_THE_LIST`` in ``NATIVE_VLAN_AND_THE_LIST``,
+  :mod:`.._helpers`), while in the tree a trunk's list is everything
+  the port carries and a native VLAN outside it is not carried.  So
+  the access VLAN is added to the list the allowed line states
+  (:func:`.._helpers.trunk_list_read`): ``access vlan 1`` beside
+  ``trunk allowed vlan 32,34`` is native 1 and the list ``1,32,34``,
+  and a trunk with an access line and no allowed line is the list of
+  that one VLAN.  ``no switchport access vlan`` takes back an access
+  VLAN stated above it in the stanza, and the trunk then has no
+  native VLAN.
+
 * **``management route`` is not ``ip route``.**  It outnumbers ``ip
   route`` 8:2 in the corpus and installs a default into the management
   VRF only.  Parsing it as a global static route would put a
@@ -108,6 +121,7 @@ from .._helpers import (
     _is_link_local_v6,
     _mask_to_prefix,
     address_key,
+    trunk_list_read,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -189,6 +203,11 @@ _SWITCHPORT_MODE_RE = re.compile(
 )
 _SWITCHPORT_ACCESS_RE = re.compile(
     r"^\s+switchport\s+access\s+vlan\s+(\d+)\s*$", re.IGNORECASE,
+)
+#: ``no switchport access vlan``: the port's access VLAN is taken
+#: back.  The line carries no id.
+_NO_SWITCHPORT_ACCESS_RE = re.compile(
+    r"^\s+no\s+switchport\s+access\s+vlan\s*$", re.IGNORECASE,
 )
 _SWITCHPORT_TRUNK_ALLOWED_RE = re.compile(
     r"^\s+switchport\s+trunk\s+allowed\s+vlan\s+(\S.*)$", re.IGNORECASE,
@@ -640,6 +659,13 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             # which may be declared on a later line.
             current["access_vlan_raw"] = int(am.group(1))
             return
+        if _NO_SWITCHPORT_ACCESS_RE.match(line):
+            # Takes back what an access line above it stated: the
+            # device applies each line as it meets it.  A trunk is
+            # then left with no native VLAN, which is what this
+            # codec's renderer writes the line for.
+            current["access_vlan_raw"] = None
+            return
         tam = _SWITCHPORT_TRUNK_ALLOWED_RE.match(line)
         if tam:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
@@ -666,6 +692,13 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     # tagged VLAN, which is the empty list.  A port that is not a
     # trunk and states no list has none to keep.
     trunks.settle()
+    # The allowed line names the tagged VLANs; the list of the tree
+    # is what the trunk carries, so the access VLAN goes into it.
+    for iface in interfaces:
+        if iface.switchport_mode == "trunk":
+            iface.trunk_allowed_vlans = trunk_list_read(
+                _VENDOR, iface.trunk_allowed_vlans, iface.trunk_native_vlan,
+            )
     return interfaces
 
 
@@ -676,7 +709,8 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
     stanza has been seen, so the outcome does not depend on the order the
     switchport lines appeared in:
 
-    * mode ``trunk``  → the value is the NATIVE (untagged) VLAN;
+    * mode ``trunk``  → the value is the NATIVE (untagged) VLAN, which
+      :func:`_parse_interfaces` then adds to the trunk's list;
     * otherwise       → it is the access VLAN, and the port is an access
       port even if no explicit ``switchport mode access`` line was given
       (OS10 defaults a switched port to access).

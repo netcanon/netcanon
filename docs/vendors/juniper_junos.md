@@ -234,6 +234,47 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   trunk with no members carries; it is read as none from the page
   for `members` and the one for `native-vlan-id`.  The vendors' own
   sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
+- **A trunk's native VLAN is among its `vlan members`, in the ELS
+  grammar this codec writes.**  `native-vlan-id <N>` is written on
+  the physical interface, beside the unit's `interface-mode trunk`
+  and `vlan members`.  Juniper, of that grammar: "The logical
+  interface on which untagged packets are to be received must be
+  configured with the same VLAN ID as the native VLAN ID configured
+  on the physical interface." — and its procedure fulfils that with
+  `vlan members`.  So an AOS-S port that is untagged in one VLAN and
+  tagged in others, and an OS10 trunk with an access VLAN, are
+  written with that VLAN among the members as well as on
+  `native-vlan-id`.  Release 0.7.7 and earlier left it off the
+  members, in jobs that said `completed`: check the `vlan members`
+  of every trunk with a `native-vlan-id` migrated then from AOS-S or
+  OS10.  (That an untagged frame is dropped otherwise is not printed
+  by Juniper, and the send direction is not established.)  A source
+  trunk whose own list leaves its native VLAN out is written as it
+  stands: `native-vlan-id` and members without it.  **The older
+  grammar is another matter.**  On a switch that takes `port-mode
+  trunk`, with `native-vlan-id` under the unit, the native VLAN
+  belongs OFF the members: Juniper's knowledge base (KB17419, for EX
+  Series, read in an archived copy) has it carried untagged both
+  ways when it is not a member, and SENT TAGGED when it is.  An
+  output of this codec is not for such a switch as it stands.  And
+  as a source, a trunk in that grammar is read as an ELS one and its
+  `native-vlan-id` under the unit is not read: the port's untagged
+  VLAN is lost, and the job does not say so.  A Junos trunk with no
+  `native-vlan-id` has no untagged VLAN (Juniper: "By default, the
+  untagged packets are dropped on trunk interfaces."), and is
+  written none.  The VLAN pane's map keeps to that
+  reading.  Where a map would bring a native VLAN that the list
+  leaves out INTO the list, the native VLAN is cleared if the map
+  has merged it with a VLAN of the config that the list names, and
+  the new id is taken out of the list if the list only covered that
+  number with a range
+  (`native-vlan-id 1000` beside `vlan members 2-999` and
+  `1001-4094`, and 1000 renumbered to 900); the job says which, in
+  a `vlan_rename:` warning
+  ([`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A trunk's
+  allowed list is not what I wrote").  The vendors' own sentences
+  are in the
+  [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
 - **A VLAN named `all`, or named like another VLAN's number or
   like a range (`50` for VLAN 100, `200-330`)** is written as
   `VLAN-<id>`, with a `# review:` line saying so: in a member list

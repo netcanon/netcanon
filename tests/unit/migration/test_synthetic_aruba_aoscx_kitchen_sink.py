@@ -200,7 +200,13 @@ def test_populates_every_expected_canonical_field(codec, raw_text):
     assert vlan_by_id[30].name == "MGMT-NET"
     assert vlan_by_id[30].description == "Out-of-band management"
     # VLAN 1 is synthesised from the native-vlan references only.
-    assert sorted(vlan_by_id[1].untagged_ports) == ["1/1/4", "lag 1"]
+    # `lag 1` allows every VLAN, so its list holds its native VLAN 1
+    # and it carries it untagged.  1/1/4 states `vlan trunk native 1`
+    # beside `vlan trunk allowed 10,20-30`: its list leaves VLAN 1
+    # out, so the port is no member of it.
+    assert vlan_by_id[1].untagged_ports == ["lag 1"]
+    assert by_name["1/1/4"].trunk_native_vlan == 1
+    assert 1 not in by_name["1/1/4"].trunk_allowed_vlans
 
     # /vlans/vlan/ipv4/address/ip (lossy) — SVI address projected onto
     # the VLAN record, carrying the active-gateway with it.

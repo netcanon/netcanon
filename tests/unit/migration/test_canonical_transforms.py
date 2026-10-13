@@ -19,6 +19,7 @@ from netcanon.migration.canonical.transforms import (
     project_switchport_to_vlan,
     project_vlan_to_switchport,
     synthesize_svis_from_vlan_l3,
+    trunk_untagged_vlan,
 )
 
 pytestmark = pytest.mark.unit
@@ -95,6 +96,77 @@ class TestSwitchportToVlan:
         assert v99.untagged_ports == ["Gi1/0/24"]
         # Native VLAN must NOT also be in tagged_ports.
         assert v99.tagged_ports == []
+
+    @pytest.mark.parametrize("allowed", [[10], [], list(range(2, 4095))])
+    def test_native_outside_the_list_no_member(self, allowed):
+        """The list is what the trunk carries.  A native VLAN it does
+        not hold is stated and not carried: the port is made no member
+        of that VLAN, tagged or untagged.  (It was made an untagged
+        member whatever the list said, and a target that is told VLAN
+        by VLAN then carried a VLAN the source trunk did not.)"""
+        native = 1 if len(allowed) > 1 else 99
+        intent = _mk_intent(
+            interfaces=[
+                CanonicalInterface(
+                    name="Gi1/0/24",
+                    switchport_mode="trunk",
+                    trunk_allowed_vlans=list(allowed),
+                    trunk_native_vlan=native,
+                )
+            ],
+            vlans=[CanonicalVlan(id=10)],
+        )
+        project_switchport_to_vlan(intent)
+        by_id = {v.id: v for v in intent.vlans}
+        # The record of a stated native VLAN is made all the same.
+        assert native in by_id
+        assert by_id[native].untagged_ports == [] and by_id[native].tagged_ports == []
+        assert by_id[10].tagged_ports == (["Gi1/0/24"] if 10 in allowed else [])
+
+    def test_a_native_vlan_in_every_vlan(self):
+        intent = _mk_intent(
+            interfaces=[
+                CanonicalInterface(
+                    name="Gi1/0/24",
+                    switchport_mode="trunk",
+                    trunk_allowed_vlans=list(range(1, 4095)),
+                    trunk_native_vlan=99,
+                )
+            ],
+            vlans=[CanonicalVlan(id=10)],
+        )
+        project_switchport_to_vlan(intent)
+        by_id = {v.id: v for v in intent.vlans}
+        assert by_id[99].untagged_ports == ["Gi1/0/24"] and by_id[99].tagged_ports == []
+        assert by_id[10].tagged_ports == ["Gi1/0/24"]
+
+    def test_what_a_list_held_already_is_left(self):
+        """Outside the list nothing is added and nothing is taken out."""
+        intent = _mk_intent(
+            interfaces=[
+                CanonicalInterface(
+                    name="Gi1", switchport_mode="trunk", trunk_allowed_vlans=[10], trunk_native_vlan=99,
+                )
+            ],
+            vlans=[CanonicalVlan(id=10), CanonicalVlan(id=99, tagged_ports=["Gi1"])],
+        )
+        project_switchport_to_vlan(intent)
+        v99 = next(v for v in intent.vlans if v.id == 99)
+        assert (v99.tagged_ports, v99.untagged_ports) == (["Gi1"], [])
+
+
+class TestTheUntaggedVlanOfATrunk:
+    @pytest.mark.parametrize("allowed,native,carried", [
+        ([10, 20, 30], 10, 10),
+        ([20, 30], 10, None),
+        ([], 10, None),
+        ([20, 30], None, None),
+        (list(range(1, 4095)), 999, 999),
+        (list(range(2, 4095)), 1, None),
+        ((10, 20), 20, 20),
+    ])
+    def test_native_where_the_list_holds_it(self, allowed, native, carried):
+        assert trunk_untagged_vlan(allowed, native) == carried
 
     def test_missing_vlan_gets_synthesized(self):
         """A port references VLAN 20 but no top-level `vlan 20` stanza
@@ -326,7 +398,9 @@ class TestVlanToSwitchport:
         i = intent.interfaces[0]
         assert i.switchport_mode == "trunk"
         assert i.trunk_native_vlan == 99
-        assert 10 in i.trunk_allowed_vlans
+        # The list is what the trunk carries: the VLAN it is tagged in
+        # and the one it is untagged in.
+        assert i.trunk_allowed_vlans == [10, 99]
 
     def test_existing_switchport_state_not_clobbered(self):
         intent = _mk_intent(

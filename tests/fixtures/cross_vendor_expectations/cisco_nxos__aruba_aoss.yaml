@@ -262,7 +262,18 @@ per_field_expectation:
     references: [nxos-aoss-surface]
 
   "interfaces[].trunk_native_vlan":
-    disposition: good
+    disposition: lossy
+    reason: >
+      A trunk's allowed list is what the trunk carries, and a native VLAN the
+      list leaves out is stated and not carried.  AOS-S states membership VLAN
+      by VLAN and has no line for a VLAN a port names and does not carry, so
+      the port is written `untagged` in no VLAN and reads back with no native
+      VLAN.  (It was written `untagged` there, which put the port in a VLAN
+      the source trunk leaves out.)  A native VLAN the list holds is written
+      `untagged` and comes back.  Measured over 13 cells: drifted on 1 -- the
+      kitchen-sink's `switchport trunk native vlan 1` beside `allowed vlan
+      10,20,30` -- and both sides empty on 1; on the other 11 the interface
+      list drifts as a whole, which the audit files under one owner key.
     references: [nxos-aoss-surface]
 
   "interfaces[].dhcp_client":

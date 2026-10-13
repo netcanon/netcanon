@@ -221,12 +221,23 @@ class CanonicalInterface(BaseModel):
             platform and puts what the platform does with a trunk
             that states no list (``TRUNK_THAT_STATES_NO_LIST`` in
             ``codecs/_helpers.py``), and a renderer writes its
-            target's form for each of the three.  Whether the list
-            holds the native VLAN is not yet one convention: each
-            parser puts what its platform's text lists.  On a port
-            that is not a trunk it is a list stated for later, or
-            empty.
-        trunk_native_vlan: Native (untagged) VLAN ID on trunk.
+            target's form for each of the three.  The list is what
+            the trunk CARRIES, its native VLAN among them: a native
+            VLAN the list does not hold is stated and not carried.
+            A platform whose text states the untagged VLAN beside
+            its list -- OS10's access VLAN of a trunk, AOS-S's
+            ``untagged`` -- has that VLAN put into the list by its
+            parser and taken out again by its renderer
+            (``NATIVE_VLAN_AND_THE_LIST`` in ``codecs/_helpers.py``).
+            On a port that is not a trunk it is a list stated for
+            later, or empty.
+        trunk_native_vlan: Native (untagged) VLAN ID on trunk: which
+            of the VLANs of ``trunk_allowed_vlans`` goes without a
+            tag.  ``None`` is "not stated"; no platform's default is
+            filled in.  It is carried only where the list holds it,
+            so a trunk's untagged VLAN is read with
+            ``trunk_untagged_vlan`` (``canonical/transforms.py``),
+            never from this field alone.
         voice_vlan: Voice VLAN ID for IP phone traffic.
         lag_member_of: LAG / port-channel name if this interface is
             bundled, otherwise ``None``.

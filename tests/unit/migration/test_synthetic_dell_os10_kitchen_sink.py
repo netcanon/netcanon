@@ -115,9 +115,11 @@ def test_populates_every_expected_canonical_field(codec, raw_text):
     assert eth3.access_vlan == 32
 
     # L2 trunk port — see the native-VLAN guard below for the trap.
+    # The list is what the trunk carries: the two VLANs its allowed
+    # line names and the access VLAN it carries untagged.
     eth4 = by_name["ethernet1/1/4"]
     assert eth4.switchport_mode == "trunk"
-    assert eth4.trunk_allowed_vlans == [461, 700]
+    assert eth4.trunk_allowed_vlans == [1, 461, 700]
 
     # Admin-down port (`shutdown`, no `no shutdown`).
     assert by_name["ethernet1/1/5"].enabled is False

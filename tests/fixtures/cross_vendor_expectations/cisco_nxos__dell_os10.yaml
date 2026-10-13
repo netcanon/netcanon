@@ -385,20 +385,29 @@ per_field_expectation:
       SVI's `description` — and the render spends it on
       CanonicalVlan.name. A separate canonical VLAN description has no
       second place to go and is dropped. Measured over 13 cells:
-      drifted on 3, preserved on 0, both sides empty on 10.
+      drifted on 4, preserved on 0, both sides empty on 9. On one of
+      the four no description is involved: a whole VLAN record is not
+      written (`vlans[].id` below), and the audit files that event
+      under this key, the first of the list's sub-fields.
     references: [nxos-os10-surface]
 
   vlans[].id:
     disposition: good
     note: >
-      Preserved on 10 of 13 cells. On 3 further cells the whole
+      Preserved on 9 of 13 cells. On 4 further cells the whole
       `vlans` list drifted at once (records added or dropped), and the
       reconciler attributes that single structural event to one owner
       sub-field rather than counting it against every sibling. So this
       field shows no loss of its own on this pair: the parent-level
       drift is recorded against that owner key, and declaring it lossy
       here would over-claim a second, independent loss that the corpus
-      does not exhibit.
+      does not exhibit. One of the four is a record that is not
+      written: the kitchen-sink's VLAN 1 has no name and no address,
+      and the one port that names it is a trunk whose `native vlan 1`
+      stands beside `allowed vlan 10,20,30`. The list is what a trunk
+      carries, so no port is in VLAN 1, and OS10 -- where a VLAN
+      exists through an SVI or a port's membership -- has no line for
+      it. The trunk's stanza says so in a `review:` line.
     references: [nxos-os10-surface]
 
   vlans[].ipv4_addresses:
@@ -426,7 +435,7 @@ per_field_expectation:
   vlans[].tagged_ports:
     disposition: good
     note: >
-      Preserved on 5 of 13 cells. On 3 further cells the whole `vlans`
+      Preserved on 4 of 13 cells. On 4 further cells the whole `vlans`
       list drifted at once (records added or dropped), and the
       reconciler attributes that single structural event to one owner
       sub-field rather than counting it against every sibling. So this
@@ -439,7 +448,7 @@ per_field_expectation:
   vlans[].untagged_ports:
     disposition: good
     note: >
-      Preserved on 7 of 13 cells. On 3 further cells the whole `vlans`
+      Preserved on 6 of 13 cells. On 4 further cells the whole `vlans`
       list drifted at once (records added or dropped), and the
       reconciler attributes that single structural event to one owner
       sub-field rather than counting it against every sibling. So this
