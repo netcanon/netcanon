@@ -405,9 +405,10 @@
     });
 
     // Without a plan the rows are in the order the job named them,
-    // which is the order the config first mentions its ports in.  A
-    // config that lists its ports VLAN by VLAN (AOS-S) mentions them
-    // as 1, 48-52, 35-47, 2...: no order to look a port up in.  Where
+    // which is the order of the config's interface records.  That is
+    // not always an order to look a port up in: an AOS-S config has
+    // a stanza only for a port with a setting of its own, and those
+    // ports come first (1, 30, 2, 3...).  Where
     // the source device is declared, the rows go in its own port
     // order, as they will after Apply; a name the device does not
     // have keeps its place, after them.  Under a plan the order is

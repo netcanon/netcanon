@@ -257,6 +257,14 @@ per_field_expectation:
       ``xe-`` / ``mge-`` / ``et-``).  Aruba has no first-class
       loopback construct; Junos's ``lo0.0`` does not arise from
       Aruba parse.
+      The audit's own path translates no name, and there the names
+      are carried verbatim: preserved on 5 of the 6 cells that
+      populate interfaces.  On
+      ``aruba_central_5memberstack_rendered.cfg`` the interface list
+      itself drifts, 49 records to 28 -- the Junos render writes
+      nothing for a port that has no description, no address and no
+      VLAN under a name that is not a Junos interface name -- and
+      that drift of the whole list is recorded against this key.
     references: [aruba-port-naming, junos-iface-naming]
 
   interfaces[].description:
@@ -314,15 +322,18 @@ per_field_expectation:
     references: [aruba-ip-addressing, junos-family-inet6]
 
   interfaces[].switchport_mode:
-    disposition: lossy
-    reason: >
-      The aruba_aoss codec parses VLAN-centric port lists rather
-      than per-interface switchport state; Aruba source's
-      ``CanonicalInterface.switchport_mode`` is populated by
-      ``project_vlan_to_switchport`` from the membership lists
-      before Junos render walks the interface list.  The Junos
-      render emits ``family ethernet-switching interface-mode
-      {access | trunk}`` from the synthesised state.
+    disposition: good
+    note: >
+      Aruba states membership per VLAN; the aruba_aoss parser gives
+      every port a VLAN's list names an interface record and sets
+      its ``switchport_mode`` from the lists (tagged anywhere ->
+      trunk, untagged only -> access).  The Junos render emits
+      ``family ethernet-switching interface-mode {access | trunk}``
+      from it.  Preserved on 5 of the 6 cells that populate
+      interfaces; on the sixth the whole list drifts (see
+      ``interfaces[].name``).  It was declared lossy while the Junos
+      render made the records itself, which drifted the list on
+      every cell and left this field unmeasured.
 
   interfaces[].access_vlan:
     disposition: good
@@ -341,15 +352,16 @@ per_field_expectation:
       members [ <name> ... ]``.
 
   interfaces[].trunk_native_vlan:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Aruba's native-VLAN concept lives implicitly through the
       ``no untagged 1-22`` + ``untagged <port>`` shape on a single
-      VLAN.  The codec's projection synthesises ``trunk_native_vlan``
-      heuristically; Junos render emits ``set interfaces <name>
-      native-vlan-id N`` at the parent-interface hierarchy (NOT the
-      unit).  Round-trip preserves the integer; structural
-      transformation is internal to each codec.
+      VLAN.  The parser sets ``trunk_native_vlan`` to the VLAN a
+      tagged port is also untagged in; Junos render emits
+      ``set interfaces <name> native-vlan-id N`` at the
+      parent-interface hierarchy (NOT the unit).  Round-trip
+      preserves the integer: on both cells that populate it and
+      keep their interface list.
 
   interfaces[].voice_vlan:
     disposition: not_applicable
@@ -371,14 +383,18 @@ per_field_expectation:
     references: [aruba-lags, junos-lag-overview]
 
   interfaces[].dhcp_client:
-    disposition: lossy
-    reason: >
-      Aruba parse populates ``dhcp_client`` for VLAN SVIs that use
-      ``ip address dhcp-bootp``; Junos render emits
-      ``set interfaces <name> unit 0 family inet dhcp``.
-      Per-platform DHCP-client option semantics (lease length,
-      hostname-option) are not modelled canonically and drop on
-      round-trip.
+    disposition: good
+    note: >
+      Nothing is lost because nothing is carried: the aruba_aoss
+      parser sets ``dhcp_client`` on no interface of any committed
+      capture (a VLAN's ``ip address dhcp-bootp`` is not read into
+      it), so the flag is false on every record on both sides.
+      Preserved on 5 of the 6 cells that populate interfaces; on the
+      sixth the whole list drifts (see ``interfaces[].name``).  A
+      source that did set it would be written
+      ``set interfaces <name> unit 0 family inet dhcp``; DHCP-client
+      options (lease length, hostname option) are in no canonical
+      field on any pair.
 
   interfaces[].vrf:
     disposition: not_applicable

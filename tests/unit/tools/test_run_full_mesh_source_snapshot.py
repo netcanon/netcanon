@@ -52,8 +52,7 @@ _spec.loader.exec_module(run_full_mesh)
 
 
 # An aruba_aoss capture whose VLAN port-membership lists name many ports that
-# have no ``interface`` stanza of their own — the shape that makes the
-# port-centric renderers synthesise, and the shape the bug hid behind.
+# have no ``interface`` stanza of their own.
 _FIXTURE = (
     _REPO_ROOT
     / "tests"
@@ -67,18 +66,42 @@ _FIXTURE = (
 _SYNTHESISING_TARGETS = ("arista_eos", "cisco_iosxe_cli", "juniper_junos")
 
 
+class _ListsOnly(type(get_codec("aruba_aoss"))):
+    """AOS-S read by a parser that makes no record for a port only a
+    VLAN's list names: the shape that makes the port-centric renderers
+    synthesise, and the shape the bug hid behind.
+
+    The AOS-S parser itself gives every such port a record, so no
+    committed capture has that shape any more.  The harness invariant
+    is about ANY source whose tree a render changes, so the source
+    here is a codec that hands over the capture's tree with its
+    interface records taken away -- the capture has no ``interface``
+    stanza, so every one of them was made for a listed port.
+    """
+
+    def parse(self, raw: str):
+        intent = super().parse(raw)
+        intent.interfaces = []
+        return intent
+
+
+def _source() -> _ListsOnly:
+    return _ListsOnly()
+
+
 def _fresh_source_interface_count() -> int:
     raw = _FIXTURE.read_text(encoding="utf-8", errors="replace")
-    return len(get_codec("aruba_aoss").parse(raw).interfaces)
+    return len(_source().parse(raw).interfaces)
 
 
 def test_fixture_still_has_the_shape_this_test_depends_on() -> None:
-    """Guard the guard: if the capture or the aruba parser changes so that
+    """Guard the guard: if the capture or the source above changes so that
     the fixture no longer exercises synthesis, the assertions below would
     pass vacuously.  Fail loudly instead."""
     assert _FIXTURE.exists(), f"fixture moved: {_FIXTURE}"
     raw = _FIXTURE.read_text(encoding="utf-8", errors="replace")
-    intent = get_codec("aruba_aoss").parse(raw)
+    assert "\ninterface " not in raw, "the capture has a stanza: _ListsOnly would take a real record away"
+    intent = _source().parse(raw)
     ports_named_by_vlans: set[str] = set()
     for vlan in intent.vlans:
         ports_named_by_vlans.update(vlan.tagged_ports)
@@ -89,6 +112,12 @@ def test_fixture_still_has_the_shape_this_test_depends_on() -> None:
         "stanza — it can no longer trigger render-side synthesis, so this "
         "module would pass vacuously"
     )
+    # ... and a render does change the tree it is handed: without that,
+    # a harness that scored against the live tree would pass here too.
+    for target_name in _SYNTHESISING_TARGETS:
+        handed = _source().parse(raw)
+        get_codec(target_name).render(handed)
+        assert len(handed.interfaces) == len(unbacked), target_name
 
 
 @pytest.mark.parametrize("target_name", _SYNTHESISING_TARGETS)
@@ -99,7 +128,7 @@ def test_source_counts_match_a_fresh_parse(target_name: str) -> None:
 
     cell = run_full_mesh.process_cell(
         fixture_path=_FIXTURE,
-        source_codec=get_codec("aruba_aoss"),
+        source_codec=_source(),
         source_codec_name="aruba_aoss",
         target_codec=get_codec(target_name),
         target_codec_name=target_name,
@@ -123,7 +152,7 @@ def test_process_cell_does_not_leak_into_the_next_cell(
     source counts.  Pins that nothing accumulates across calls."""
     kwargs = {
         "fixture_path": _FIXTURE,
-        "source_codec": get_codec("aruba_aoss"),
+        "source_codec": _source(),
         "source_codec_name": "aruba_aoss",
         "target_codec": get_codec(target_name),
         "target_codec_name": target_name,

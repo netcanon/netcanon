@@ -14,7 +14,10 @@ SNMP, RADIUS, DHCP-relay-comment-block, local users, LAG trunks,
 VLAN stanzas (with absorbed SVI L3 + nested **VRRP groups** — a
 global ``router vrrp`` enable then ``vrrp vrid N / virtual-ip-address
 X / owner|priority / preempt / enable / exit`` inside the VLAN stanza),
-physical interface stanzas, static routes / default-gateway.
+physical interface stanzas (none for a port that would say ``enable``
+alone and that a VLAN's list or a ``trunk`` line of the output gives
+back when it is read: the device prints none either), static routes /
+default-gateway.
 Multi-VIP cross-vendor sources drop secondaries with ``; review:``
 comments (AOS-S supports one virtual IP per VRID).  Non-``vrrp``
 modes (HSRP / CARP) emit review comments and skip.
@@ -42,7 +45,8 @@ from ..._user_secrets import classify_hash, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
-from .port_names import trunk_number
+from .parse import _lists_read_from, _members_read_from
+from .port_names import one_spelling, trunk_number
 
 # ---------------------------------------------------------------------------
 # Render-only constants and helpers
@@ -327,6 +331,42 @@ def _is_collapsible_aos_prefix(prefix: str) -> bool:
     return prefix.lower() == "trk"
 
 
+def _is_a_port_of_the_device(name: str) -> bool:
+    """Whether *name* has one of the forms AOS-S gives a port or a LAG
+    -- ``24``, ``A1``, ``1/24``, ``1/A1``, ``Trk1``.
+
+    What the device does with a port that has no setting of its own
+    -- print no stanza for it -- is known of its own ports, and is
+    followed for those names only.  Whether a line of the output
+    gives such a name back is another question (``01`` has the form,
+    and a list writes it ``1``): :func:`_given_back` answers it.
+    """
+    stem = name.rstrip("0123456789")
+    return stem != name and _is_collapsible_aos_prefix(stem)
+
+
+def _given_back(read: list[str], written: list[str]) -> list[str]:
+    """The ports of one line of the output that the parser gives back.
+
+    *written* are the ports a ``trunk`` line or a VLAN's ``untagged``
+    / ``tagged`` line was written for; *read* is what the parser's own
+    reader makes of that line where it stands
+    (:func:`~.parse._members_read_from`,
+    :func:`~.parse._lists_read_from`).  The line counts for its ports
+    only if every one of them comes back as itself, under the name the
+    parsed tree has for it, and for none of them otherwise: a
+    ``trunk`` line with a space in a member's name is not read at all,
+    ``01`` is written ``1`` and comes back as another port, and a name
+    with a hyphen in it can come back as a range.
+
+    A LAG comes back from a VLAN's list and not from its own ``trunk``
+    line: that line is written for its members, and the parser makes
+    a record for a member, not for the LAG.
+    """
+    want = list(dict.fromkeys(one_spelling(port) for port in written))
+    return want if read == want else []
+
+
 def _format_port_list(ports: list[str]) -> str:
     """Render a flat port list back into AOS-S range syntax.
 
@@ -590,6 +630,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # <type>`` line per trunk.  Vendor-native LAG names (e.g.
     # Cisco ``Port-channel1``) are translated to AOS-S trunk names
     # (``trk1``) so the output is syntactically valid.
+    #
+    # ``given_back``: the ports that these lines, and the VLAN lists
+    # below, give back to the parser (:func:`_given_back`).  Asked of
+    # each line as it is written, and used where the ``interface``
+    # stanzas are.
+    given_back: set[str] = set()
     for lag in tree.lags:
         if not lag.members:
             # Empty LAG — AOS-S has no syntax for declaring one
@@ -604,6 +650,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         trunk_name = _lag_name_to_aos_trunk(lag.name)
         trunk_type = _lag_mode_to_aos_type(lag.mode)
         lines.append(f"trunk {port_list} {trunk_name} {trunk_type}")
+        given_back.update(_given_back(_members_read_from(lines[-1]), lag.members))
 
     # VLANs — the architecturally interesting part.  AOS-S's
     # VLAN-centric port membership is our canonical model's
@@ -658,6 +705,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     ):
         lines.append("router vrrp")
     for vlan in tree.vlans:
+        opens_at = len(lines)
         lines.append(f"vlan {vlan.id}")
         if vlan.name:
             lines.append(f'   name "{_esc(vlan.name)}"')
@@ -669,6 +717,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             lines.append(
                 f"   tagged {_format_port_list(vlan.tagged_ports)}"
             )
+        if vlan.untagged_ports or vlan.tagged_ports:
+            untagged, tagged = _lists_read_from("\n".join(lines[opens_at:]))
+            given_back.update(_given_back(untagged, vlan.untagged_ports))
+            given_back.update(_given_back(tagged, vlan.tagged_ports))
         # SVI absorption — codepath 2 of 3.  See
         # ._svi_absorption for the full rule.  SVI address may live
         # on:
@@ -895,6 +947,25 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # stanza so AOS-S doesn't see two ``interface <name>``.
             continue
         rendered_names.add(_as_the_device_writes(iface.name))
+        # A stanza that would say ``enable`` and nothing else is not
+        # written for a port that a ``trunk`` line or a VLAN's list of
+        # this output gives back to the parser (``given_back``).  The
+        # device prints a stanza only for a port with a setting of its
+        # own, and the parser gives a port such a line names the
+        # record an empty stanza makes, so the port reads back the
+        # same either way.  A port no line gives back keeps its
+        # stanza: nothing else would say it is there.  So does a name
+        # that is not in one of the device's own forms, which is
+        # written as it always was.
+        if (
+            iface.enabled
+            and not iface.description
+            and not iface.ipv4_addresses
+            and not iface.ipv6_addresses
+            and _is_a_port_of_the_device(iface.name)
+            and one_spelling(iface.name) in given_back
+        ):
+            continue
         # Loopback interfaces use AOS-S `interface loopback <N>`
         # syntax; the rest of the body (ip address, ipv6 address,
         # description) is identical to the physical-port form.

@@ -216,10 +216,12 @@ class TestRenameModalDrop:
         # Drop a source that WOULD auto-translate (Gi1/0/1 → 1/1);
         # user explicitly says "don't render this".
         output = page.locator('[data-testid="migrate-output"]')
-        # Before the drop the port is rendered: its stanza, and its
-        # place in the VLAN.
+        # Before the drop the port is rendered: its place in the VLAN.
+        # (It has no stanza of its own, as on the device: enabled and
+        # unnamed, it has nothing to say in one.)
         rendered = (output.text_content() or "").splitlines()
-        assert "interface 1/1" in rendered and "   untagged 1/1" in rendered
+        assert "   untagged 1/1" in rendered and "interface 1/1" not in rendered
+        assert "trunk 1/2 trk1 lacp" in rendered
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         drop_link = page.locator(
             '[data-testid="migrate-rename-drop-GigabitEthernet1/0/1"]'
@@ -238,12 +240,15 @@ class TestRenameModalDrop:
         ).to_contain_text("Applied", timeout=5_000)
         page.locator('[data-testid="migrate-rename-modal-close"]').click()
         # The source name is never in an AOS-S output; what the drop
-        # takes out is the port's target-side stanza and membership.
-        # (Whole lines: "1/1" alone is also the start of other names.)
+        # takes out is the port's target-side membership, the one
+        # line that named it.  (Whole lines: "1/1" alone is also the
+        # start of other names.)
         rendered = (output.text_content() or "").splitlines()
         assert "interface 1/1" not in rendered
         assert "   untagged 1/1" not in rendered
-        assert "interface 1/2" in rendered
+        assert not [line for line in rendered if "1/1" in line.replace(",", " ").split()]
+        # ... and the port beside it is where it was.
+        assert "trunk 1/2 trk1 lacp" in rendered
 
 
 class TestRenameModalTargetProfileTwoStage:

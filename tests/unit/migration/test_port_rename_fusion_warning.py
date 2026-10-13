@@ -26,6 +26,13 @@ We warn rather than repair: no target models a letter slot, and
 synthesising an offset port number would fabricate topology the operator
 never wrote.  An explicit ``port_rename_map`` entry overrides, which is
 the documented escape hatch and is pinned below.
+
+The AOS-S parser has since given every port a list names a record, so
+the capture's own tree no longer has the shape the defect hid behind.
+The translator is still handed such trees -- by whoever builds one, and
+by any parser that makes no record for a listed port -- so each test
+below runs on both: the tree as it is parsed, and the same tree with
+its interface records taken away (``_lists_only``).
 """
 
 from __future__ import annotations
@@ -71,33 +78,53 @@ def _fusion_warnings(result) -> list[str]:
     return [w for w in result.warnings if "multiple source ports" in w]
 
 
-def test_the_fixture_has_no_interface_stanzas() -> None:
+def _as_parsed():
+    return get_codec("aruba_aoss").parse(_raw())
+
+
+def _lists_only():
+    """The capture's tree with its interface records taken away: every
+    port then lives only in a VLAN's ``tagged_ports`` /
+    ``untagged_ports``, and the detector that walked ``interfaces``
+    and ``lags`` has two empty lists to look at."""
+    intent = _as_parsed()
+    intent.interfaces = []
+    return intent
+
+
+_SHAPES = pytest.mark.parametrize("tree", [_lists_only, _as_parsed], ids=["lists only", "as parsed"])
+
+
+def test_the_two_shapes_are_what_they_say() -> None:
     """Guard the guard.
 
-    The whole point is that the old detector saw empty lists.  If this
-    capture ever grows ``interface`` stanzas, the assertions below stop
-    exercising the bug and start passing for the wrong reason.
+    The capture has no ``interface`` stanza, so every record in its
+    tree was made for a port a list names: taking the records away
+    takes nothing a stanza said.  If the capture ever grows stanzas,
+    or the lists-only tree stops being lists only, the assertions
+    below stop exercising the reported defect and start passing for
+    the wrong reason.
     """
-    intent = get_codec("aruba_aoss").parse(_raw())
-    assert not intent.interfaces, (
-        "fixture now has interface stanzas — the old interfaces-walking "
-        "detector would catch the fusion, so this module no longer pins "
-        "the reported defect"
-    )
+    assert "\ninterface " not in _raw()
+    parsed, bare = _as_parsed(), _lists_only()
+    assert not bare.interfaces and not bare.lags
     named_in_vlans: set[str] = set()
-    for vlan in intent.vlans:
+    for vlan in bare.vlans:
         named_in_vlans.update(vlan.tagged_ports)
         named_in_vlans.update(vlan.untagged_ports)
     assert {"1/1", "1/A1"} <= named_in_vlans, (
         "fixture no longer names both an access port and its "
         "letter-slot twin"
     )
+    assert {iface.name for iface in parsed.interfaces} == named_in_vlans
+    assert [vlan.model_dump() for vlan in parsed.vlans] == [vlan.model_dump() for vlan in bare.vlans]
 
 
+@_SHAPES
 @pytest.mark.parametrize("target_name", _FUSING_TARGETS)
-def test_fusion_is_reported(target_name: str) -> None:
+def test_fusion_is_reported(target_name: str, tree) -> None:
     source = get_codec("aruba_aoss")
-    intent = source.parse(_raw())
+    intent = tree()
 
     result = translate_port_names(
         intent, source, get_codec(target_name), rename_map={},
@@ -112,15 +139,22 @@ def test_fusion_is_reported(target_name: str) -> None:
         f"{target_name}: the warning does not name the uplink-module "
         f"port that was fused"
     )
+    # Each fused name is reported once, whichever sweep found it: the
+    # sweep of the records and the sweep of the lists say it in
+    # different words, so the lines are compared by the name they are for.
+    names = [w.split("map to '", 1)[1].split("'", 1)[0] for w in warnings]
+    assert len(names) == len(set(names)), names
+    assert len(names) == 4, names
 
 
-def test_no_warning_when_the_target_keeps_them_distinct() -> None:
+@_SHAPES
+def test_no_warning_when_the_target_keeps_them_distinct(tree) -> None:
     """cisco_iosxe_cli's grammar does not collapse the letter slot.
 
     A detector that fired everywhere would be noise, not signal.
     """
     source = get_codec("aruba_aoss")
-    intent = source.parse(_raw())
+    intent = tree()
 
     result = translate_port_names(
         intent, source, get_codec("cisco_iosxe_cli"), rename_map={},
@@ -129,7 +163,8 @@ def test_no_warning_when_the_target_keeps_them_distinct() -> None:
     assert not _fusion_warnings(result)
 
 
-def test_an_explicit_map_entry_resolves_the_fusion() -> None:
+@_SHAPES
+def test_an_explicit_map_entry_resolves_the_fusion(tree) -> None:
     """The documented escape hatch must actually work.
 
     An operator who maps the colliding ports apart should stop being
@@ -137,7 +172,7 @@ def test_an_explicit_map_entry_resolves_the_fusion() -> None:
     """
     source = get_codec("aruba_aoss")
     target = get_codec("juniper_junos")
-    intent = source.parse(_raw())
+    intent = tree()
 
     result = translate_port_names(
         intent,
@@ -159,8 +194,8 @@ def test_an_explicit_map_entry_resolves_the_fusion() -> None:
 # ---------------------------------------------------------------------------
 # The masked shape (found 2026-10-07).
 #
-# Everything above runs against a capture with ZERO interface stanzas -- and
-# `test_the_fixture_has_no_interface_stanzas` insists on it.  That is the one
+# Everything above runs against a tree with ZERO interface records -- and
+# `test_the_two_shapes_are_what_they_say` insists on it.  That is the one
 # shape the following defect did NOT hide behind: the membership sweep skipped
 # any final name present in `intent.interfaces`, whether or not anything had
 # warned about it.  So a single `interface 1/1` record suppressed the report

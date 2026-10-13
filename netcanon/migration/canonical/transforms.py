@@ -36,8 +36,13 @@ Public surface:
   ``tagged_ports`` / ``untagged_ports`` lists and synthesise
   ``switchport_mode`` + ``access_vlan`` + ``trunk_allowed_vlans`` on each
   :class:`CanonicalInterface`.
-  Called by VLAN-centric codecs (Aruba AOS-S, OPNsense, MikroTik)
-  before handing the tree to a per-port-shape target renderer.
+  Called by the one parser whose config states membership per VLAN
+  (Aruba AOS-S), which first gives every listed port a record, and
+  by three renderers (Arista EOS, Cisco IOS-XE CLI, Junos), where it
+  also makes a record for a listed port that has none.  The other
+  renderers write a port from its record alone, so a parser must not
+  leave that to them: every port one of its lists names has a record
+  when ``parse`` returns.
 * :func:`project_svi_to_vlan` — synthesise a :class:`CanonicalVlan`
   record for every ``Vlan<N>`` SVI interface that lacks one,
   bridging the gap between OpenConfig's "SVI is just an interface"

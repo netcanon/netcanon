@@ -1015,17 +1015,36 @@ class TestAnInterfaceIsCountedWhereItIsMade:
                 copy.deepcopy(port)
             assert meter.counts["interfaces"] == 1
 
-    def test_a_port_a_render_makes_is_counted(self) -> None:
-        """A VLAN-centric source names ports with no stanza; a
-        port-centric renderer makes an interface for each."""
+    def test_a_port_only_a_list_names_is_counted(self) -> None:
+        """A VLAN-centric config names ports with no stanza, and its
+        parser makes an interface for each.  Such a port is held to
+        ``ports`` while it is a name in a list -- before any record
+        is made -- and is counted as an interface when its record is."""
         text = 'hostname "T"\nvlan 10\n   tagged ' + ",".join(f"p{n}" for n in range(80)) + "\n   exit\n"
         job = _plan("aruba_aoss", "cisco_iosxe_cli", text, replace(TINY, ports=60, interfaces=70))
         assert job.status.value == "failed"
         assert (job.refusal.limit, job.refusal.stage, job.refusal.exact) == ("ports", "parse", True)
         job = _plan("aruba_aoss", "cisco_iosxe_cli", text, replace(TINY, ports=100, interfaces=70))
         assert job.status.value == "failed"
-        assert (job.refusal.limit, job.refusal.stage, job.refusal.codec) == ("interfaces", "render", "cisco_iosxe_cli")
+        assert (job.refusal.limit, job.refusal.stage, job.refusal.codec) == ("interfaces", "parse", "aruba_aoss")
+        assert job.error.startswith(
+            "refused: reading the config as aruba_aoss would make 71 or more interfaces; the limit is 70"
+        )
         assert _plan("aruba_aoss", "cisco_iosxe_cli", text, replace(TINY, ports=100, interfaces=80)).refusal is None
+
+    def test_a_port_a_render_makes_is_counted(self) -> None:
+        """A tree can still hold a port in a VLAN's list alone -- one
+        built by hand, or read by a parser that makes no record for
+        it -- and a port-centric renderer makes an interface for each."""
+        def tree() -> CanonicalIntent:
+            return CanonicalIntent(vlans=[CanonicalVlan(id=10, tagged_ports=[f"p{n}" for n in range(80)])])
+
+        with L.limits_scope(replace(TINY, interfaces=70)), pytest.raises(L.LimitExceeded) as caught:
+            get_codec("cisco_iosxe_cli").render(tree())
+        exc = caught.value
+        assert (exc.kind, exc.stage, exc.codec, exc.asked) == ("interfaces", "render", "cisco_iosxe_cli", 71)
+        with L.limits_scope(replace(TINY, interfaces=80)):
+            assert get_codec("cisco_iosxe_cli").render(tree()).count("\ninterface p") == 80
 
 
 # ---------------------------------------------------------------------------
@@ -1254,11 +1273,30 @@ class TestTheRenderersCountFirst:
         """An output over the limit that nothing counted beforehand is
         refused when it is done: no renderer is outside the limit."""
         text = 'hostname "T"\n' + "".join(f"vlan {vid}\n   tagged 1-48\n   exit\n" for vid in range(2, 400))
-        job = _plan("aruba_aoss", "aruba_aoss", text, replace(TINY, memberships=None, text=5_000))
+        limits = replace(TINY, memberships=None, vlan_ids=None, text=5_000)
+        job = _plan("aruba_aoss", "aruba_aoss", text, limits)
         assert job.status.value == "failed"
         assert (job.refusal.limit, job.refusal.stage, job.refusal.exact) == ("text", "render", True)
         assert job.rendered is None and job.validation is None
         assert job.error.startswith("refused: writing the config for aruba_aoss makes ")
+
+    def test_a_listed_ports_ids_are_counted(self) -> None:
+        """The same text: 48 ports tagged in 398 VLANs.  Each port has
+        a record, and its record holds the 398 ids -- counted where
+        the config is read, as the ids of a port with a stanza are."""
+        text = 'hostname "T"\n' + "".join(f"vlan {vid}\n   tagged 1-48\n   exit\n" for vid in range(2, 400))
+        exc = _refused("aruba_aoss", text, replace(TINY, memberships=None))
+        assert (exc.kind, exc.asked, exc.exact, exc.stage) == ("vlan_ids", 48 * 398, True, "parse")
+
+    def test_no_shipped_limit_refuses_them_first(self) -> None:
+        """A port holds one id for each VLAN it is tagged in, so the
+        ids on listed ports are never more than the memberships the
+        lists hold.  In every shipped set of limits ``memberships`` is
+        the smaller number: a config whose lists pass it is not then
+        refused for the ids its ports hold."""
+        for limits in L.PROFILES.values():
+            if limits.memberships is not None and limits.vlan_ids is not None:
+                assert limits.memberships <= limits.vlan_ids, limits.name
 
 
 # ---------------------------------------------------------------------------

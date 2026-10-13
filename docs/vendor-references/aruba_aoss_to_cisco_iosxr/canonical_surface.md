@@ -1,5 +1,7 @@
 # AOS-S → Cisco IOS-XR: measured canonical surface
 
+> **Update 2026-10-12 — the interface counts in this document have changed, and so has what is said here about the kitchen sink's second LAG.**  The AOS-S parser now gives an interface record to every port a VLAN's `untagged` / `tagged` list or a `trunk` line names.  It used to make one only for an `interface` stanza, and a switch's own config has a stanza only for a port with a setting of its own — so most ports of a real capture had no record, and a target that writes a port's VLANs and its LAG from the port's record had no line for them.  After the change the source trees hold several times the interface records, and every one comes back.  `lags`: every bundle arrives — on `kitchen_sink.cfg` `trk2` (members `A3`, `A4`) re-parses as `Bundle-Ether2` beside `Bundle-Ether1`; what drifts is the name alone.  `interfaces[].interface_type` drifts on every cell that carries interfaces.  Any statement below that `trk2` is gone, that the fixture has no interface records named `A3` / `A4`, or that counts interface records, describes the trees before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoss__cisco_iosxr.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/aruba_aoss__cisco_iosxr.yaml`.
 

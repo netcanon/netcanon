@@ -30,6 +30,12 @@ Structural quirks handled:
     * IP addresses support BOTH ``A.B.C.D M.M.M.M`` and ``A.B.C.D/N``
     * VLAN port lists: ``untagged 1-24``, ``untagged 1,3,5``,
       ``tagged 25-26,A1``
+    * A port has an ``interface`` stanza only if it has a setting of
+      its own; the others are named by the VLAN lists and ``trunk``
+      lines alone.  The parser gives each of those a record too, and
+      the renderer writes no stanza that would say ``enable`` and
+      nothing else for a port one of those lines gives back when the
+      parser reads it
 
 Out of scope (declared unsupported in matrix):
     * STP per-port (``spanning-tree 1-24 priority 4``)

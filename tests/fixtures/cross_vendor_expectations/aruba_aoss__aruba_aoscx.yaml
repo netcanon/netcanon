@@ -11,7 +11,7 @@
 # targeting aruba_aoscx.
 #
 # The dominant loss is NOT structural in the way the aruba_aoscx__arista_eos
-# pair is. The interface list does not shrink: 85 interface records in, 85
+# pair is. The interface list does not shrink: 259 interface records in, 259
 # out, name-for-name, on all 7 cells. Instead ONE root cause produces three
 # separate symptoms, and it is worth naming once so the entries below are not
 # read as three independent findings:
@@ -23,7 +23,7 @@
 #   `netcanon/migration/codecs/aruba_aoscx/port_names.py`.
 #
 #   From that single fact follow: (a) `interfaces[].interface_type` degrades
-#   to `ianaift:other` on all 85 records; (b) the render's L2 branch
+#   to `ianaift:other` on all 259 records; (b) the render's L2 branch
 #   (`kind in ("physical","lag")`) never fires, so NO per-port `vlan access` /
 #   `vlan trunk` line is emitted anywhere, and `vlans[].untagged_ports` /
 #   `tagged_ports` drop to empty; (c) the names themselves survive, precisely
@@ -138,9 +138,12 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      The interface inventory does NOT shrink on this pair — 49 -> 49,
-      9 -> 9, 10 -> 10, 4 -> 4 and 13 -> 13 on the five cells that carry
-      interfaces (the other two carry none), 85 records in and 85 out.
+      The interface inventory does NOT shrink on this pair — 49 -> 49 on
+      each of two cells, and 61 -> 61, 14 -> 14, 52 -> 52 and 34 -> 34 on
+      four more: the six that carry interfaces (the seventh carries none),
+      259 records in and 259 out.  A port the AOS-S config names only in a
+      VLAN's list or on a
+      `trunk` line is among them: its parser gives each one a record.
       Names round-trip verbatim, which is a consequence of the AOS-CX codec
       NOT recognising AOS-S port-name shapes: `format_port_identity` returns
       `None` for an `unknown` kind and the orchestrator leaves the name as it
@@ -151,7 +154,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: good
     note: >
-      Preserved on all 5 cells that carry interfaces.  Both matrices declare
+      Preserved on all 5 cells that carry a description.  Both matrices declare
       `/interfaces/interface/config/description` supported and the AOS-CX
       render emits `description <text>` inside each interface stanza.
     references: [aoss-aoscx-surface]
@@ -159,7 +162,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on all 5 populated cells; the render emits an
+      Admin state preserved on all 6 populated cells; the render emits an
       explicit `no shutdown` / `shutdown` on every interface, so a port that
       was administratively down on AOS-S arrives down on AOS-CX rather than
       defaulting up.
@@ -200,7 +203,7 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Degrades to `ianaift:other` on all 85 interface records, on every cell
+      Degrades to `ianaift:other` on all 259 interface records, on every cell
       that carries interfaces.  Both codecs infer the IANA ifType from the
       interface-name shape and their shapes disagree: aruba_aoss maps a bare
       number to ethernetCsmacd, `Trk<N>` to ieee8023adLag and `Vlan<N>` to
@@ -219,10 +222,11 @@ per_field_expectation:
   "interfaces[].lag_member_of":
     disposition: lossy
     reason: >
-      Drifts on 4 member records across 2 cells, and the drift is a NAMING
+      Drifts on 6 member records across 2 cells, and the drift is a NAMING
       artifact rather than lost membership: the round-trip shows
       `trk1` -> `lag 1` with the member set unchanged (`['23','24']` in,
-      `['23','24']` out), and `lag 1` appears under the member interface in
+      `['23','24']` out; likewise `trk2` -> `lag 2` with `['A3','A4']`), and
+      `lag 1` appears under the member interface in
       the rendered config.  The audit's own `_canonical_lag_name` collapses
       `ae<N>` / `Po<N>` / `Port-channel<N>` / `trk<N>` / `agg<N>` / `bond<N>`
       to a common token but does NOT recognise the space-separated AOS-CX
@@ -308,11 +312,13 @@ per_field_expectation:
       Second, there is a remediation: routing the migration through the
       port-rename path (`run_plan_with_overrides`, which engages
       `translate_port_names`) rewrites `1/25` -> `1/1/25` and restores real
-      `vlan access` / `vlan trunk allowed` lines — measured on the
-      kitchen-sink cell, 11 of 31 member tokens come back.  That converts a
-      total drop into a partial one; it does not close it, because
-      `Vlan<N>`- and `A<N>`-shaped names still do not map.  Plan on
-      re-applying access-port assignment on the target either way.
+      `vlan access` / `vlan trunk allowed` lines — measured over the corpus,
+      352 of 353 member tokens come back, 30 of 31 on the kitchen-sink cell.
+      The one that does not is on a port under an `A<N>`-shaped name, which
+      still does not map.  (That path brought back only 11 of the kitchen
+      sink's 31 until the AOS-S parser gave a port named only in a VLAN's
+      list an interface record: the other 20 had mapped names and no record
+      for a `vlan access` line to be written on.)
     references: [aoss-aoscx-surface]
 
   "vlans[].tagged_ports":
@@ -477,14 +483,15 @@ per_field_expectation:
       falls from `active` to `static`; both matrices declare
       `/lags/lag/mode` lossy, and an ACTIVE-LACP uplink arriving as a STATIC
       bundle will not negotiate with the far end — check this first on any
-      uplink.  Second cause, measured on the synthetic cell: 2 LAGs in, 1
-      out.  The bundle that vanished has members (`A3`, `A4`) that exist as
-      member names but not as interface RECORDS in the source intent, and the
-      AOS-CX renderer emits a LAG from `CanonicalInterface.lag_member_of`
-      rather than from `CanonicalLAG.members` — a bundle with no member
-      interface record renders nothing at all.  The surviving bundle keeps
-      its exact member set.  Inventory your bundles before cutover and expect
-      to re-assert `lacp mode active` on the target.
+      uplink.  A second cause is gone, and is recorded because it explains
+      older results: the synthetic cell used to arrive with 1 of its 2 LAGs.
+      The AOS-CX renderer emits a LAG from `CanonicalInterface.lag_member_of`
+      rather than from `CanonicalLAG.members`, and the bundle that vanished
+      has members (`A3`, `A4`) the config names only on its `trunk` line,
+      which then had no interface RECORD.  The AOS-S parser now gives every
+      member a record, and all 3 bundles of the corpus arrive with their
+      exact member sets.  Expect to re-assert `lacp mode active` on the
+      target.
     references: [aoss-aoscx-surface]
 
   # -- Identity -------------------------------------------------------------

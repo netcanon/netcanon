@@ -1114,6 +1114,40 @@ tests use these exclusively — never CSS classes or element structure.  See
   native VLAN is one more thing the tree does not state, and the
   platforms differ; and on a port that is NOT a trunk an empty list
   is still two statements, `none` and no list at all.
+- **Never** leave a port the config names with no record of its own.
+  The tree states a port's VLANs and its LAG twice — in the VLAN's
+  and the LAG's member lists, and on the port's interface record —
+  and most renderers write a port from its record and never read the
+  lists.  The AOS-S parser made a record only for an `interface`
+  stanza, which the device prints only for a port with a setting of
+  its own: a switch's access ports, named only under `vlan ...
+  untagged`, came out on NX-OS, AOS-CX, OS10 and IOS-XR with no line
+  at all, their VLANs with them, in jobs that said `completed` — 181
+  of 182 memberships on one committed capture.  Nothing said so:
+  `port_renames` listed each port, the validation report counted the
+  membership as supported (it walks the tree, before a line is
+  written), a same-codec round trip never sees a tree its own parser
+  does not make, and the cross-mesh audit, which HAD measured the
+  drift, held it as an expected loss on the word of a sentence about
+  another path that nobody had run.  A parser gives a record to
+  every port one of its lists names — a VLAN's `tagged_ports` /
+  `untagged_ports`, a LAG's `members` — and it is the record its own
+  empty stanza makes, so that a config and its own rendering parse
+  alike.  "The matrix says `supported`" and "two trees agree" are
+  not "the line is in the output".  Guarded by
+  `tests/unit/migration/test_vlan_members_reach_the_output.py`, which
+  looks for every membership of every committed capture in the
+  OUTPUT of every target, three ways (the target's parser, the text
+  by a reader of its own, the port's name in a line), holds every
+  parser to the record on the captures, and pins by name what it
+  knows is still open — the change that mends one empties its pin.
+  The same holds the other way: a renderer that leaves a port's
+  stanza out because another line of its output names the port asks
+  the target's own reader whether that line gives the port back.
+  Before it asked, the AOS-S renderer left out `interface 1` on the
+  strength of `trunk 1,my port trk1 lacp`, a line the parser does
+  not read, and port 1 came back in no record.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_no_stanza_for_enable_alone.py`.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,
