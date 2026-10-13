@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-10-13T07:29:20+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261013T072918Z.json",
-  "mesh_run_started_utc": "2026-10-13T07:29:11+00:00",
+  "started_utc": "2026-10-13T08:11:47+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261013T081144Z.json",
+  "mesh_run_started_utc": "2026-10-13T08:11:37+00:00",
   "cells_total": 1456,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -598,19 +598,19 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 9274,
+    "ALIGNED": 9324,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 4208,
-    "EXPECTED_UNSUPPORTED": 2660,
-    "METHODOLOGY_ISSUE_under": 1930,
+    "EXPECTED_LOSSY": 4202,
+    "EXPECTED_UNSUPPORTED": 2669,
+    "METHODOLOGY_ISSUE_under": 1912,
     "METHODOLOGY_ISSUE_over": 21,
-    "STRUCTURAL_ONLY": 4551,
-    "TRIVIAL_EMPTY": 35345,
+    "STRUCTURAL_ONLY": 4557,
+    "TRIVIAL_EMPTY": 35304,
     "fields_total": 57994,
     "severity_high": 5,
-    "severity_medium": 286,
-    "severity_low": 6216,
-    "severity_ok": 51487
+    "severity_medium": 287,
+    "severity_low": 6203,
+    "severity_ok": 51499
   },
   "severity_matrix": {
     "arista_eos": {
@@ -2544,11 +2544,15 @@
                 "source": "ianaift:softwareLoopback",
                 "target": "ianaift:other"
               },
-              "interfaces[12] {'name': 'st0.100'}": {
+              "interfaces[12] {'name': 'st0'}": {
                 "source": "ianaift:tunnel",
                 "target": "ianaift:other"
               },
-              "interfaces[13] {'name': 'st0.200'}": {
+              "interfaces[13] {'name': 'st0.100'}": {
+                "source": "ianaift:tunnel",
+                "target": "ianaift:other"
+              },
+              "interfaces[14] {'name': 'st0.200'}": {
                 "source": "ianaift:tunnel",
                 "target": "ianaift:other"
               }
@@ -3266,7 +3270,7 @@
           "severity": "ok",
           "drift_detail": {
             "subfield": "name",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)"
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)"
           }
         },
         "interfaces[].description": {
@@ -3276,7 +3280,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "description",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3287,7 +3291,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "enabled",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3298,7 +3302,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "interface_type",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3309,7 +3313,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "mtu",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3320,7 +3324,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "ipv4_addresses",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3331,7 +3335,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "ipv6_addresses",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3342,7 +3346,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "switchport_mode",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3353,7 +3357,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "access_vlan",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3364,7 +3368,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "trunk_allowed_vlans",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3375,7 +3379,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "trunk_native_vlan",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3386,7 +3390,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "voice_vlan",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3397,7 +3401,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "lag_member_of",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3408,7 +3412,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "dhcp_client",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },
@@ -3419,7 +3423,7 @@
           "severity": "low",
           "drift_detail": {
             "subfield": "vrf",
-            "drift_summary": "count drift: 24 \u2192 20 (interfaces)",
+            "drift_summary": "count drift: 25 \u2192 20 (interfaces)",
             "structural_owner": "interfaces[].name"
           }
         },

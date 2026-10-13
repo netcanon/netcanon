@@ -261,6 +261,62 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+- **AOS-S output has no `interface` stanza that says `enable` and
+  nothing else** for a port that a VLAN's `untagged` / `tagged` list
+  or a `trunk` line of the same output names.  The device prints a
+  stanza only for a port with a setting of its own, and the output
+  now does the same: a port that is disabled, named or addressed has
+  its stanza, and so has a port no other line names.  Whether a line
+  names a port is asked of the parser's own reader, on the line as
+  it is written, and the line counts only if every port on it comes
+  back as itself: a `trunk` line with a member whose name has a
+  space in it is read by nobody, and a list writes `01` as `1`, so
+  the ports of such a line keep their stanzas.  So does a port under
+  a name the switch does not use (`Ethernet1`).  Every port
+  reads back as it did -- the parser gives a listed port the record
+  an empty stanza makes (the first entry under Fixed).  Over the
+  committed captures, an output onto AOS-S from another vendor loses
+  such stanzas in 14 jobs and gains or loses nothing else; an AOS-S
+  config onto AOS-S gains none, and loses the stanzas that were
+  empty in the source or held only a line Netcanon does not model.
+  The output is a whole configuration: read into a switch that
+  already has one, a port left out keeps what that switch had for
+  it.  Reading its own lists back, the render counts what their
+  ranges name as a parse does: an AOS-S output whose ranges name
+  more different ports than the `ports` limit (2,048 under `small`)
+  is refused where it is written.  Over the committed captures the
+  most one output's ranges name is 51.
+- **What else moves for an AOS-S source**, with the first entry under
+  Fixed.  The validation report lists the paths of every port, not
+  only of those with a stanza: a port's VLAN membership is listed as
+  unsupported on a target that has no form for it, and the type
+  Netcanon infers for a port (`/interfaces/interface/config/type`)
+  as lossy where it is -- which takes four jobs of the committed
+  captures from severity `ok` to `warn`; no job's status moves.
+  `source_ports` -- and with it the rename table, where no source
+  device is declared -- lists the ports that have a stanza as their
+  stanzas come, then the others in the order an operator counts
+  them; it followed the order the VLANs first named them (1, 48-52,
+  35-47, 2... on a committed 2930F capture, which is 1 to 52 now).
+  A port named only in a list counts toward the `interfaces`
+  limit where the config is read (it was counted only by a target
+  that made a record for it), and the VLANs it is tagged in toward
+  `vlan_ids`; in every shipped set of limits a config that passes
+  `memberships` passes that.  Two ports that end on one target name
+  are two stanzas of that name, and the warning says `the target
+  will render duplicate/fused interface stanzas`.  And the port a
+  **FortiOS or OPNsense VLAN interface** is put on moves: those
+  renderers choose a parent port for each VLAN among the ports the
+  tree holds, and it now holds the listed ones.  Over the committed
+  AOS-S captures, 32 VLAN interfaces onto each: on FortiOS 16 are on
+  a port that is a member of the VLAN in the source (3 before), 9 on
+  a port that is not (15), and 3 have no `set interface` line (10);
+  on OPNsense 15 are on a member (2), 10 on a port that is not (17),
+  and 7 on a name no source port has (13).  Not every move is to a
+  member: four FortiOS VLAN interfaces that had no parent line are
+  on a port that is not in the VLAN, and three OPNsense ones went
+  from `lan` to such a port.  Nothing on the job says a parent was
+  chosen, and how one is chosen is as it was.
 - **The public demo runs `small`** (`NETCANON_CONFIG_LIMITS` in the
   instance environment), sized in a container with an instance's own
   limits: the request built to reach every limit at once is translated
@@ -441,6 +497,51 @@ timestamp if your timezone matters for an audit.
   `st0` it has a bare `set interfaces st0` where the config has a
   unit of it too or a routing instance names it, and no line where
   it stands alone.
+- **An AOS-S port with no `interface` stanza was in no line of the
+  output, and its VLANs with it.**  An AOS-S switch prints an
+  `interface` stanza only for a port that has a setting of its own.
+  Every other port is in the config through the `untagged` /
+  `tagged` lists of its VLANs, or as a member on a `trunk` line, and
+  a switch's own config can have no `interface` stanza at all.  The
+  parser made a port record only for a stanza, and most targets
+  write a port -- its VLANs, its LAG -- from the port's own record.
+  Onto **NX-OS, AOS-CX, OS10 and IOS-XR** the output had no line for
+  such a port, in a job that could say `completed`: `port_renames`
+  listed the port under a name the output did not have, and the
+  validation report counted its VLAN membership as supported.  On a
+  committed capture of a standalone 2930F, 181 of 182 VLAN port
+  memberships were missing from an NX-OS output in a `completed`
+  job; over the committed AOS-S captures, 297 on each of the four
+  targets.  A `trunk` member with no stanza was likewise no member
+  of its LAG on those four targets and on EOS, IOS-XE CLI and Junos.
+  It has been so in every release that has the target: NX-OS since
+  0.1.4, IOS-XR since 0.1.5, AOS-CX since 0.1.6, OS10 since 0.7.5.
+  (EOS, IOS-XE CLI and Junos wrote the VLANs: their renderers made
+  the missing record themselves.)
+
+  The parser now gives a record to every port a VLAN's list or a
+  `trunk` line names: the record a stanza with no lines makes.
+  Every target writes the port.  Where it has a form for a port's
+  VLANs and LAG they are on the port's stanza (`switchport access
+  vlan`, `vlan trunk allowed`, `channel-group`, `lag`); where it has
+  none -- IOS-XR, IOS-XE over NETCONF, VyOS, FortiOS, RouterOS,
+  OPNsense -- the port is written without them and the validation
+  report lists the port's membership as unsupported; onto IOS-XR,
+  IOS-XE over NETCONF and VyOS it used to list nothing that said
+  so.  With both devices declared such a port is
+  found by its hardware like any other, under the name an operator
+  gives it.
+
+  **To re-check on a device migrated before:** an AOS-S switch moved
+  onto NX-OS, AOS-CX, OS10 or IOS-XR.  Every port that has no
+  `interface` stanza in the AOS-S config -- on a switch's own config
+  that is most of them -- was left out: compare the `untagged` and
+  `tagged` lines of each `vlan` in the source with the `switchport`
+  (or `vlan access` / `vlan trunk`) lines of the output port by
+  port, and give each missing port its lines.  For a `trunk` line,
+  also on EOS, IOS-XE and Junos: check that each member carries its
+  `channel-group` (`lag`, `bundle id`, `802.3ad`).  A port that had
+  a stanza of its own was written as it is now.
 - **A trunk that allows no VLAN no longer comes out allowing every
   VLAN, and a trunk of every VLAN no longer comes out carrying
   none.**  The canonical tree had one value, an empty list, for three
@@ -1935,21 +2036,23 @@ timestamp if your timezone matters for an audit.
   `gateway=Null0`; onto EOS it is right as it stands.  Over the
   committed captures 21 of the 392 jobs that are still `completed`
   have such a name.  Read a finished job's warnings for that line.
-- **A port with VLAN membership and no stanza of its own is in no
-  line of the output on four targets.**  An AOS-S config lists an
-  access port only under `vlan ... untagged`.  Onto AOS-CX, IOS-XR,
-  NX-OS and OS10 no line is written for such a port: those renderers
-  write a port from its interface stanza, and it has none.  The job
-  can be `completed`, and `port_renames` lists the port under a name
-  the output does not have.  (EOS, IOS-XE CLI and Junos write it;
-  onto IOS-XE over NETCONF, FortiOS, RouterOS, OPNsense and VyOS it
-  is not written either, in a job that is `partial` for other
-  reasons.)  On a committed capture: ten ports of a 2930F onto
-  NX-OS, none in the output, whose only `interface` lines are four
-  `Vlan`s.  The bare render loses them too: this is not the port
-  translator.  And a job that is `partial` because two such ports
-  ended on one name (`1/1` and `1/A1` both `Ethernet1/0/1`) names a
-  port of which the output has no line.
+- **A LAG member the config has no interface for is no member in
+  the output of seven targets.**  The members of an OPNsense lagg
+  are as a rule NICs assigned to nothing, and a FortiGate aggregate
+  can name a member that has no `edit` stanza; those two parsers
+  make no record for such a member.  Onto EOS, AOS-CX, IOS-XE CLI,
+  IOS-XR, NX-OS, OS10 and Junos, which write a LAG on each member's
+  own stanza, the LAG comes out with no member, in a job that can be
+  `completed`.  Shown on configs typed for the purpose; no committed
+  capture has such a member.  (For an AOS-S port named only in a
+  VLAN's list or on a `trunk` line this was so on more targets, VLAN
+  membership included: the first entry under Fixed.)
+- **AOS-CX writes no VLAN line for a port under a name it cannot
+  read as a port.**  A port left under its source name, or given a
+  name of the operator's own (`{"1": "uplink-x"}`), has its stanza
+  on AOS-CX and no `vlan access` / `vlan trunk` line in it, with
+  nothing said: that renderer writes a port's VLANs only where the
+  name classifies as a port or a LAG.
 - **Two spellings the target reads as one name are not seen as
   one.**  IOS-XE onto Junos with `{"GigabitEthernet1/0/2":
   "ge-1/0/1.0"}`: both addresses under `ge-1/0/1 unit 0`, which the

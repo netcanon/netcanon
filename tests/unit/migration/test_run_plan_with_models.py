@@ -1688,9 +1688,15 @@ class TestSourcePortsAreCaptured:
 
     def test_a_port_named_only_in_a_vlan_list_counts(self) -> None:
         """The 2930F capture has ONE interface stanza; the other 51
-        ports appear only in VLAN membership lines."""
+        ports appear only in VLAN membership lines.  The parser gives
+        each of them a record -- and a tree that holds such a port in
+        a VLAN's list alone, as a tree built by hand may, counts it
+        all the same."""
+        assert CAPTURE_2930F.count("\ninterface ") == 1
         tree = AOSS.parse(CAPTURE_2930F)
-        assert len([i for i in tree.interfaces if i.name.isdigit()]) == 1
+        assert len([i for i in tree.interfaces if i.name.isdigit()]) == 52
+        assert len(collect_hardware_port_names(tree)) == 52
+        tree.interfaces = [i for i in tree.interfaces if not i.name.isdigit()]
         assert len(collect_hardware_port_names(tree)) == 52
 
 
@@ -4711,6 +4717,36 @@ class TestEveryPlacedPortIsFoundByItsHardware:
             in job.rendered
         )
 
+    def test_an_aoss_port_only_a_list_names(self) -> None:
+        """An AOS-S config has no stanza for a port with no setting of
+        its own.  Its parser gives the port a record all the same, so
+        a LAG member and a port in a VLAN's list are each found by the
+        hardware they were paired with -- under the mapping's name, or
+        under one an operator gave.  Without the record the LAG member
+        was written into ``slaves=`` under a name nothing defined, and
+        the VLAN's port was in no line at all."""
+        devices = (_device("standalone", {"model": "JL259A"}), _profile(_CCR2004))
+        mikrotik = get_codec("mikrotik_routeros")
+        job = run_plan_with_models(AOSS, mikrotik, _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices)
+        assert _find_lines(job) == [
+            f"set [ find default-name=sfp-sfpplus{n} ] disabled=no" for n in (1, 2, 3, 4)
+        ]
+        assert "slaves=sfp-sfpplus1,sfp-sfpplus2" in job.rendered
+        job = run_plan_with_models(
+            AOSS, mikrotik, _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
+            port_rename_map={"1": "up-a", "3": "srv"},
+        )
+        plan = job.port_mapping_plan
+        assert _find_lines(job) == [
+            "set [ find default-name=sfp-sfpplus1 ] name=up-a disabled=no",
+            "set [ find default-name=sfp-sfpplus2 ] disabled=no",
+            "set [ find default-name=sfp-sfpplus3 ] name=srv disabled=no",
+            "set [ find default-name=sfp-sfpplus4 ] disabled=no",
+        ]
+        assert "slaves=up-a,sfp-sfpplus2" in job.rendered
+        assert plan.unbound_ports == {} and plan.off_target == []
+        assert plan.target_hardware == {"1": "sfp-sfpplus1", "3": "sfp-sfpplus3"}
+
     def test_it_is_done_before_a_callers_own_transforms_run(self) -> None:
         seen: list[tuple[str, str]] = []
 
@@ -5460,6 +5496,9 @@ interface Ethernet4
 end
 """
 
+#: An AOS-S config with no ``interface`` stanza: two ports are
+#: members of a LAG, two are in a VLAN's list.  The parser gives each
+#: of the four a record.
 _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA = """; JL259A Configuration Editor; Created on release #WC.16.11.0003
 hostname "sw"
 trunk 1-2 trk1 lacp
@@ -5468,6 +5507,46 @@ vlan 1
    untagged 3-4
    ip address 10.0.0.2 255.255.255.0
    exit
+"""
+
+#: An OPNsense lagg.  Its members are NICs assigned to nothing: the
+#: config has an interface for ``lagg0`` and none for ``igb0`` or
+#: ``igb1``, and the parser makes no record for them.
+_OPNSENSE_LAGG = """<?xml version="1.0"?>
+<opnsense>
+  <system>
+    <hostname>fw</hostname>
+  </system>
+  <interfaces>
+    <lan>
+      <if>lagg0</if>
+      <enable>1</enable>
+      <ipaddr>10.0.0.2</ipaddr>
+      <subnet>24</subnet>
+    </lan>
+  </interfaces>
+  <laggs>
+    <lagg>
+      <members>igb0,igb1</members>
+      <laggif>lagg0</laggif>
+      <proto>lacp</proto>
+    </lagg>
+  </laggs>
+</opnsense>
+"""
+
+_PROTECTLI = "opnsense/Protectli-FW4B-IGB"
+
+#: A VRRP group that tracks a port the config has no stanza for.
+_IOS_TRACKS_A_PORT_WITH_NO_STANZA = """hostname sw
+!
+interface GigabitEthernet1/0/1
+ no switchport
+ ip address 10.10.0.2 255.255.255.0
+ vrrp 20 ip 10.10.0.1
+ vrrp 20 track GigabitEthernet1/0/3 decrement 20
+!
+end
 """
 
 _IOS_ROUTES_BY_PORTS_WITH_NO_STANZA = """hostname r1
@@ -5634,42 +5713,50 @@ class TestAPortIsJudgedByItsOwnLine:
 class TestAPortTheConfigHasNoInterfaceFor:
     """The pairing is over every port the config USES: an interface
     stanza, a VLAN's membership, a LAG's member list, a route.  The
-    binder walks interfaces.  A port named only as a LAG member or in
-    a route has none, so there is nothing to write a factory name on
-    and no line for the renderer to write.  Under the name of the
+    binder walks interfaces.  A port a parser made no record for has
+    none -- the members of an OPNsense lagg, which are NICs assigned
+    to nothing; a port an IOS route or a VRRP group names and no
+    stanza configures -- so there is nothing to write a factory name
+    on and no line for the renderer to write.  Under the name of the
     target port it was paired with it needs none.  Under a name an
     operator gave it, it is looked up by nothing -- and the job once
-    said ``completed`` with that name in ``slaves=`` or ``gateway=``."""
+    said ``completed`` with that name in ``slaves=`` or ``gateway=``.
+
+    (An AOS-S port that only a VLAN's list or a ``trunk`` line names
+    was such a port until its parser gave it a record:
+    ``TestEveryPlacedPortIsFoundByItsHardware`` has what it is now.)"""
 
     @pytest.fixture(scope="class")
     def devices(self):
-        return _device("standalone", {"model": "JL259A"}), _profile(_CCR2004)
+        return _profile(_PROTECTLI), _profile(_CCR2004)
 
     def test_under_the_mappings_name_it_needs_no_line(self, devices) -> None:
+        opnsense = get_codec("opnsense")
         job = run_plan_with_models(
-            AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
+            opnsense, get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
         )
-        # The config's one interface is the routed VLAN: no port has one.
-        parsed = AOSS.parse(_AOSS_TRUNK_MEMBERS_WITH_NO_STANZA)
-        assert [iface.name for iface in parsed.interfaces] == ["Vlan1"]
-        assert [(lag.name, lag.members) for lag in parsed.lags] == [("trk1", ["1", "2"])]
+        # The config's one interface is the lagg: no member has one.
+        parsed = opnsense.parse(_OPNSENSE_LAGG)
+        assert [iface.name for iface in parsed.interfaces] == ["lagg0"]
+        assert [(lag.name, lag.members) for lag in parsed.lags] == [("lagg0", ["igb0", "igb1"])]
         assert "slaves=sfp-sfpplus1,sfp-sfpplus2" in job.rendered
         assert job.port_mapping_plan.unbound_ports == {}
+        assert job.status == MigrationJobStatus.completed
 
     def test_named_by_an_entry_it_is_reported(self, devices) -> None:
         job = run_plan_with_models(
-            AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
-            port_rename_map={"1": "up-a"},
+            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            port_rename_map={"igb0": "up-a"},
         )
         plan = job.port_mapping_plan
         assert "slaves=up-a,sfp-sfpplus2" in job.rendered
         assert "default-name=sfp-sfpplus1" not in job.rendered
-        assert plan.unbound_ports == {"1": "sfp-sfpplus1"}
+        assert plan.unbound_ports == {"igb0": "sfp-sfpplus1"}
         assert plan.target_hardware == {} and plan.off_target == []
         assert job.status == MigrationJobStatus.partial
         assert "1 " + _UNBOUND_SENTENCE in job.error
         (line,) = [w for w in plan.warnings if "not looked up by their hardware" in w]
-        assert "(1 on sfp-sfpplus1)" in line
+        assert "(igb0 on sfp-sfpplus1)" in line
         assert "or for a port the config has no interface for" in line
 
     @pytest.mark.parametrize("name", ["my port", "a,b"])
@@ -5683,12 +5770,12 @@ class TestAPortTheConfigHasNoInterfaceFor:
         # itself, and the wrapper rightly finds a port in it (``my``)
         # that the job does not report.
         job = migration_pipeline.run_plan_with_models(
-            AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
-            port_rename_map={"1": name},
+            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            port_rename_map={"igb0": name},
         )
         plan = job.port_mapping_plan
         assert f"slaves={name},sfp-sfpplus2" in job.rendered
-        assert plan.unbound_ports == {"1": "sfp-sfpplus1"}
+        assert plan.unbound_ports == {"igb0": "sfp-sfpplus1"}
         assert plan.off_target == [] and plan.target_hardware == {}
         assert job.status == MigrationJobStatus.partial
 
@@ -5696,11 +5783,11 @@ class TestAPortTheConfigHasNoInterfaceFor:
         """On RouterOS ``SFP-SFPPLUS1`` is not ``sfp-sfpplus1``: it is
         a name, defined by nothing."""
         job = run_plan_with_models(
-            AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
-            port_rename_map={"1": "SFP-SFPPLUS1"},
+            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            port_rename_map={"igb0": "SFP-SFPPLUS1"},
         )
         assert "slaves=SFP-SFPPLUS1,sfp-sfpplus2" in job.rendered
-        assert job.port_mapping_plan.unbound_ports == {"1": "sfp-sfpplus1"}
+        assert job.port_mapping_plan.unbound_ports == {"igb0": "sfp-sfpplus1"}
         assert job.status == MigrationJobStatus.partial
 
     @pytest.mark.parametrize(
@@ -5725,23 +5812,29 @@ class TestAPortTheConfigHasNoInterfaceFor:
 
     def test_given_a_port_of_the_target_it_is_that_port(self, devices) -> None:
         job = run_plan_with_models(
-            AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
-            port_rename_map={"1": "sfp-sfpplus9"},
+            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            port_rename_map={"igb0": "sfp-sfpplus9"},
         )
         assert "slaves=sfp-sfpplus9,sfp-sfpplus2" in job.rendered
         assert job.port_mapping_plan.unbound_ports == {}
 
-    def test_a_name_the_output_never_uses_is_not_reported(self, devices) -> None:
-        """Port ``3`` is known only from a VLAN's membership, which
-        RouterOS output does not carry.  The name reaches no line, and
-        the plan says only that it is no port of the target -- without
-        the warning about another spelling of a port, which on this
-        target a name cannot be."""
+    def test_a_name_the_output_never_uses_is_not_reported(self) -> None:
+        """Port ``GigabitEthernet1/0/3`` is known only from a VRRP
+        group that tracks it, which RouterOS output does not carry.
+        The name reaches no line, and the plan says only that it is no
+        port of the target -- without the warning about another
+        spelling of a port, which on this target a name cannot be."""
+        ios = get_codec("cisco_iosxe_cli")
+        assert [iface.name for iface in ios.parse(_IOS_TRACKS_A_PORT_WITH_NO_STANZA).interfaces] == [
+            "GigabitEthernet1/0/1",
+        ]
         job = run_plan_with_models(
-            AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA, *devices,
-            port_rename_map={"3": "srv"},
+            ios, get_codec("mikrotik_routeros"), _IOS_TRACKS_A_PORT_WITH_NO_STANZA,
+            _profile("cisco_iosxe/C9300-24P"), _profile(_CCR2004),
+            port_rename_map={"GigabitEthernet1/0/3": "srv"},
         )
         plan = job.port_mapping_plan
+        assert job.port_renames["GigabitEthernet1/0/3"] == "srv"
         assert "srv" not in job.rendered
         assert plan.unbound_ports == {} and plan.off_target == ["srv"]
         (line,) = [w for w in plan.warnings if "override target(s) are not names" in w]
@@ -6208,9 +6301,9 @@ class TestTheWrapperAppliesEveryCheck:
         self._engine_that(spoils, monkeypatch)
         with pytest.raises(AssertionError, match="uses a name for a paired port that nothing defines"):
             run_plan_with_models(
-                AOSS, get_codec("mikrotik_routeros"), _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA,
-                _device("standalone", {"model": "JL259A"}), _profile(_CCR2004),
-                port_rename_map={"1": "up-a"},
+                get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG,
+                _profile(_PROTECTLI), _profile(_CCR2004),
+                port_rename_map={"igb0": "up-a"},
             )
 
     @pytest.mark.parametrize(

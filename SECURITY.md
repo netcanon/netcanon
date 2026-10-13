@@ -766,6 +766,10 @@ rest.  A VyOS set line becomes nested blocks, each
 indented once more, so what a line becomes grows with the square of its
 depth: counted in characters; and a set line nested more than 64 levels deep
 is a parse failure, where past about a thousand it was an unexpected error.
+The AOS-S renderer reads the `trunk` lines and VLAN lists it writes back
+with the parser's own reader, to know which ports a line gives back: a port
+name with a hyphen in it comes back as a range, so what that reader makes is
+counted on the render as it is on a parse (`memberships`, `ports`).
 
 **Time.**  A request has one deadline, and every parser looks at it: in
 every loop over the lines of a config, in the projection's passes, at every

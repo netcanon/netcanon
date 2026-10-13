@@ -18,7 +18,9 @@ Wire-format surfaces handled (mirrors the codec's CapabilityMatrix
 location / contact / trap-host / v3 USM users with separate
 ``snmpv3 user`` and ``snmpv3 group`` lines), local users, RADIUS
 servers, VLANs (with absorbed SVI L3), physical interfaces
-(IPv4 + IPv6 with global / link-local scope discriminator), LAG
+(IPv4 + IPv6 with global / link-local scope discriminator; a port
+that only a VLAN's list or a ``trunk`` line names has a record like
+one with a stanza), LAG
 trunk membership, static routes / default-gateway, and **VRRP
 groups** (``vrrp vrid N`` sub-block inside ``vlan N`` stanza
 with virtual-ip-address / priority / preempt / enable /
@@ -554,6 +556,52 @@ def _stated_once(items: list, key) -> list:
     return list(kept.values())
 
 
+def _a_record_for_every_port_named(intent: CanonicalIntent) -> None:
+    """Give a record to every port the config names and no ``interface``
+    stanza configures.
+
+    The device prints an ``interface`` stanza only for a port that has
+    a setting of its own.  Every other port is in the config all the
+    same: in the ``untagged`` and ``tagged`` lists of its VLANs, or on
+    a ``trunk`` line as a member of a LAG.  A port-centric target
+    writes a port's VLANs and its LAG on the port's own stanza, from
+    its record, so a port with no record is a port in no line of that
+    output -- its memberships with it, in a job that reports nothing.
+
+    The record is the one a stanza with no lines would have made (a
+    port is enabled unless a line says otherwise, and its type comes
+    from its name), so that a config and its own rendering parse
+    alike.  Records go on the end, in the order an operator would
+    count the ports.
+
+    Called once the lists have been counted (``census``): a port named
+    here was held to the ``ports`` limit while it had no record, and
+    each record is counted as it is made (``CanonicalInterface``).
+    Nothing is made from a few bytes that the lists do not already
+    hold a name for.
+    """
+    from ...canonical.transforms import _natural_port_sort_key
+
+    have = {iface.name for iface in intent.interfaces}
+    named: set[str] = set()
+    for vlan in intent.vlans:
+        named.update(vlan.untagged_ports)
+        named.update(vlan.tagged_ports)
+    member_of: dict[str, str] = {}
+    for lag in intent.lags:
+        for member in lag.members:
+            member_of.setdefault(member, lag.name)
+    named.update(member_of)
+    for name in sorted(named - have, key=_natural_port_sort_key):
+        tick()
+        intent.interfaces.append(CanonicalInterface(
+            name=name,
+            enabled=True,
+            interface_type=_infer_iface_type(name),
+            lag_member_of=member_of.get(name),
+        ))
+
+
 def _one_name_per_lag(intent: CanonicalIntent) -> None:
     """Give a LAG one name everywhere the tree refers to it.
 
@@ -976,6 +1024,54 @@ def _parse_interface_stanza(
         # infer from the presence of `ip address`.
         i += 1
     return iface, i
+
+
+# ---------------------------------------------------------------------------
+# What a written line gives back
+# ---------------------------------------------------------------------------
+#
+# For the renderer.  It leaves a port's ``interface`` stanza out only
+# where another line of its output gives the port back, and whether a
+# line does is this parser's to say: it is asked here, with the
+# patterns and the readers the parse itself uses, of the text as it
+# is written -- not answered from what a name looks like.
+
+
+def _members_read_from(line: str) -> list[str]:
+    """The LAG members this parser reads from *line*: those of a
+    ``trunk`` line that stands as the top-level loop takes one (one
+    line, from column 0), under the names the tree would have for
+    them.  None from anything else.
+
+    A member list with a space in it is no ``trunk`` line to
+    :data:`_TRUNK_LINE_RE`: such a line gives back none of its ports.
+    """
+    if line.splitlines() != [line] or line[0].isspace():
+        return []
+    trunk = _TRUNK_LINE_RE.match(line.strip())
+    lag = _build_lag_from_trunk_line(trunk) if trunk else None
+    return [] if lag is None else list(lag.members)
+
+
+def _lists_read_from(stanza: str) -> tuple[list[str], list[str]]:
+    """The untagged and the tagged ports this parser reads from a
+    ``vlan`` stanza, given as the text of its header and of the lines
+    under it: what :func:`_parse_vlan_stanza` makes of them.  Two
+    empty lists where the text does not open with a header.
+
+    The stanza and not the one line, because a list is read only
+    while its stanza lasts: a line above it that a line break cuts in
+    two (one in a VLAN's name) ends the stanza, and nobody reads the
+    lists below.
+    """
+    lines = stanza.splitlines()
+    if not lines or lines[0][:1].isspace():
+        return [], []
+    header = _VLAN_HEADER_RE.match(lines[0].strip())
+    if header is None:
+        return [], []
+    vlan = _parse_vlan_stanza(lines, 1, int(header.group(1)))[0]
+    return vlan.untagged_ports, vlan.tagged_ports
 
 
 # ---------------------------------------------------------------------------
@@ -1507,6 +1603,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
     _one_name_per_lag(intent)
 
+    # A port that only a VLAN's list or a ``trunk`` line names is a
+    # port of the device, and gets its record here.  Two things fix
+    # the place: it is after ``census`` above, which holds such ports
+    # to their own limit while they have no record, and before the
+    # mirrors below, which give every record its VLANs.
+    _a_record_for_every_port_named(intent)
+
     # Bug 3 transpose: mirror any per-port switchport state into the
     # VLAN-centric tagged_ports / untagged_ports lists.  AOS-S source
     # is natively VLAN-centric so this is normally a no-op against
@@ -1525,11 +1628,17 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # ``trunk_allowed_vlans`` lines.  Without this mirror, any cell
     # that exits Aruba parse with a VLAN-centric tree leaves
     # ``interfaces[].switchport_mode`` and ``trunk_allowed_vlans``
-    # blank, so a Phase-4 source -> aruba_aoss -> reparse round-trip
-    # loses the per-iface switchport view that the source codec
-    # populated upstream.  Synthesise=False because Aruba's iface
-    # stanza listing IS the canonical port list — we don't want to
-    # add phantom ifaces from VLAN port-lists alone.
+    # blank, and a target that writes a port's VLANs from the port's
+    # own record writes none.
+    #
+    # The ``interface`` stanzas are NOT the port inventory -- the
+    # device prints one only for a port with a setting of its own, and
+    # a switch's own config can have none at all -- so every port a
+    # list names was given its record above, and this fills all of
+    # them.  ``synthesise_missing=False`` because no port is left for
+    # the projection to make, and the record it would make is not the
+    # one this parser makes for a stanza: it has no interface type,
+    # and a config and its own rendering would then parse differently.
     project_vlan_to_switchport(intent, synthesise_missing=False)
 
     logger.debug(

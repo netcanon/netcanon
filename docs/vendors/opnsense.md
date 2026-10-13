@@ -242,6 +242,13 @@ Provenance in
   output bound its DHCP server to `interface lan`, FortiOS wrote
   `set interface "lan"`, and an OPNsense output had `<dhcpd><lan>`
   beside an `<interfaces>` with no `<lan>` in it.
+- **A lagg's members onto a switch** — the members of a lagg are
+  as a rule NICs assigned to nothing, so the config has no interface
+  for them and Netcanon makes no port record for them.  A target
+  that writes a LAG on each member's own stanza (EOS, AOS-CX, IOS-XE,
+  IOS-XR, NX-OS, OS10, Junos) then writes the LAG with no member, in
+  a job that can be `completed`.  Add the members on the target by
+  hand.  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
 - **Declaring an OPNsense device** — BSD device names are the
   system's and are lower-case, so with both devices declared on the
   API or in the Interface rename modal an override typed in another

@@ -432,10 +432,14 @@ port name`.
 ### "Two of my ports became one port"
 
 Check the job warnings for `port_rename: multiple source ports map
-to ...; these are distinct ports on the source device`.  Where the
+to ...` (the line goes on `the target will render duplicate/fused
+interface stanzas`, or, for names a config holds only in a VLAN's
+list, `these are distinct ports on the source device and their VLAN
+membership will be merged`).  Where the
 sources are two ports this is a **real loss**, not cosmetic: two
 physically distinct source ports resolved to a single name on the
-target, and their VLAN memberships merged.  The job is `partial`
+target.  A target that writes a stanza for each port writes two
+under that name, and a device reads one port.  The job is `partial`
 for it, and lists the names in `fused_ports` (with both devices
 declared, in `port_mapping_plan.fused`).  (One exception: a Junos
 interface named with and without its unit, `sources: lo0, lo0.0`, is
