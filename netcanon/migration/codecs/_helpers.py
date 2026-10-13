@@ -24,8 +24,9 @@ from bisect import bisect_left
 from collections.abc import Callable, Hashable, Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+from .._tier3_detection import left_out_rows
 from ..canonical.transforms import is_every_vlan
-from ..limits import charge
+from ..limits import charge, ticked
 from .base import ParseError, RenderError
 
 if TYPE_CHECKING:
@@ -652,9 +653,10 @@ class TrunksByName:
     when the config has been read (:meth:`settle`).  Each of those
     takes a KEY that says which interface is meant.  For a parser
     that reads stanzas the key is :meth:`key` of the stanza's header
-    line, and not the name it gives the record: two of these parsers
-    read ``interface port-channel 1`` and ``interface port-channel 2``
-    as one name, ``port-channel``, and those are two interfaces.  (A
+    line, and not the name it gives the record: the NX-OS parser
+    reads ``interface port-channel 1`` and ``interface port-channel 2``
+    as one name, ``port-channel`` (the IOS-XE parser did, before
+    :func:`spaced_port_name`), and those are two interfaces.  (A
     parser that keeps one record a name has nothing better than that
     name.)  Each record is then given its interface's list:
 
@@ -989,3 +991,147 @@ def _coalesce_vlan_ids(ids: list[int]) -> str:
         run_start = prev = vid
     parts.append(_run_token(run_start, prev))
     return ",".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Cisco header lines: a type and its number as two words, and keywords
+# ---------------------------------------------------------------------------
+
+#: A word that follows ``interface`` on a Cisco-shaped header line
+#: and is no interface type.
+#:
+#: * ``interface preconfigure TenGigE0/0/0/12`` (IOS XR) holds
+#:   configuration for an interface the system does not have until
+#:   its line card is put in.
+#: * ``interface range ...`` configures several interfaces at once.
+#:   IOS does not print it in ``show running-config``; a text written
+#:   by hand, or one from another system, can hold it.  Its body is
+#:   in no output, and its row says so.
+#: * ``interface breakout 1/1/49 map 100g-1x`` splits a port into
+#:   lanes.  It is OS10's grammar, in a text these parsers can be
+#:   handed, and it states nothing on any interface.
+#:
+#: None of the three is a name, and none is joined to what follows
+#: it (:func:`spaced_port_name`).
+NOT_AN_INTERFACE_TYPE = frozenset({"breakout", "preconfigure", "range"})
+
+#: The one of them whose stanza the device holds and does not run.
+_HELD_KEYWORD = "preconfigure"
+
+#: The first word after ``interface`` on a header line.
+_HEADER_WORD_RE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+
+
+def spaced_port_name(first: str, second: str | None) -> str:
+    """The interface name that two words of a Cisco line spell.
+
+    IOS and IOS XR read ``interface ethernet 1/11`` and ``ip route
+    0.0.0.0 0.0.0.0 loopback 66`` as ``Ethernet1/11`` and
+    ``Loopback66``: a type and its number may be written apart.
+    ``show running-config`` prints them together, so the spaced form
+    is in pasted and documentation-shaped text.  Read a word at a
+    time, the name was the TYPE: two stanzas made one interface
+    called ``ethernet``, and in a route the interface's number was
+    taken for the distance.
+
+    The two words are one name when *first* is a type on its own (it
+    ends in a letter, as a type does and a whole name does not) and
+    *second* begins with a digit.  What follows a whole name is a
+    keyword (``point-to-point``, ``l2transport``), which is left
+    where it is.  The letters stay as the config has them.
+
+    Args:
+        first: The word in the place of a name.
+        second: The word after it, or ``None`` at the end of a line.
+
+    Returns:
+        ``first + second`` when the two are one name, else *first*.
+        A word of :data:`NOT_AN_INTERFACE_TYPE` is returned alone.
+    """
+    if (
+        second
+        and first[-1:].isalpha()
+        and second[0].isdigit()
+        and first.lower() not in NOT_AN_INTERFACE_TYPE
+    ):
+        return first + second
+    return first
+
+
+def without_keyword_stanzas(raw: str) -> tuple[str, list[str]]:
+    """*raw* without the ``interface`` stanzas a keyword opens, and
+    the header line of each.
+
+    A header whose first word is one of :data:`NOT_AN_INTERFACE_TYPE`
+    names no interface a record can be made for.  Read as a name, the
+    keyword became an interface of the tree and was written into every
+    target's output.  The whole stanza is taken out before any reader
+    sees it -- its body with it, so that a ``bundle id`` or an
+    ``encapsulation dot1q`` inside binds nothing -- and its header is
+    returned for ``dropped_tier3_sections``
+    (:func:`keyword_stanza_rows`): the stanza is not translated, and
+    the list says which.  A stanza ends where the interface readers
+    end one, at the next line that is not indented: a line that
+    begins with a space or a tab is of the body, and so is an empty
+    line.  The keyword is read in any letter case, as ``interface``
+    is.
+
+    Returns:
+        ``(text, headers)``: *raw* itself when it has no such stanza;
+        the header lines as written, white space apart, in the order
+        met and once each.
+    """
+    lines = raw.splitlines(keepends=True)
+    kept: list[str] | None = None
+    headers: dict[str, None] = {}
+    inside = False
+    for at, line in enumerate(ticked(lines)):
+        if inside and line[:1].isspace():
+            continue
+        inside = False
+        word = _HEADER_WORD_RE.match(line)
+        if word and word.group(1).lower() in NOT_AN_INTERFACE_TYPE:
+            if kept is None:
+                kept = lines[:at]
+            headers[" ".join(line.split())] = None
+            inside = True
+            continue
+        if kept is not None:
+            kept.append(line)
+    if kept is None:
+        return raw, []
+    return "".join(kept), list(headers)
+
+
+def keyword_stanza_rows(headers: Iterable[str]) -> list[str]:
+    """The rows of ``dropped_tier3_sections`` for the stanzas
+    :func:`without_keyword_stanzas` took out.
+
+    The keywords are two different things to say.  ``interface
+    preconfigure <name>`` is a statement the device HOLDS AND DOES
+    NOT RUN, configuration for an interface it does not have: its row
+    is a left-out row (``_tier3_detection.left_out_rows``), which
+    shows the stanza's path and nothing of its body, is one of a
+    bounded number, and is not taken for a sign that the text was a
+    config -- a text that is nothing but such stanzas translated
+    nothing, and its job is not ``completed``.  ``interface range
+    ...`` and ``interface breakout ...`` are in force where they
+    were typed and are not translated: the row of each is its header
+    line, a section like any other the output does not have.
+
+    Args:
+        headers: The header lines, as :func:`without_keyword_stanzas`
+            returns them.
+
+    Returns:
+        The left-out rows, then the header lines that are sections.
+    """
+    held: list[tuple[str, list[str]]] = []
+    sections: list[str] = []
+    for header in headers:
+        words = header.split()
+        if words[1].lower() == _HELD_KEYWORD:
+            held.append((_HELD_KEYWORD, [words[0].lower(), *words[2:]]))
+        else:
+            sections.append(header)
+    return [*left_out_rows(held, rest=_HELD_KEYWORD), *sections]

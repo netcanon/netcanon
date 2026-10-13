@@ -178,7 +178,10 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     # ── Tier 2 — DHCP server pools ──
     assert len(intent.dhcp_servers) == 1
     pool = intent.dhcp_servers[0]
-    assert pool.interface == "lan"
+    # The device of the zone the pool is keyed by: <dhcpd><lan>, and
+    # <interfaces><lan><if>em1</if>.  It read "lan", the zone's name,
+    # which no other platform has an interface called.
+    assert pool.interface == "em1"
     assert pool.start_ip == "192.168.10.100"
     assert pool.end_ip == "192.168.10.199"
     assert pool.gateway == "192.168.10.1"

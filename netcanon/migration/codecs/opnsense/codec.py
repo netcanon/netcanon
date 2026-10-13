@@ -171,6 +171,19 @@ class OPNsenseCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/dhcp-servers/pool",
+                reason=(
+                    "OPNsense keys a DHCP pool by the zone of its interface. "
+                    "A pool whose interface is no interface of the output "
+                    "serves nothing there, and one that names no interface "
+                    "is written under `<lan>`, a zone the output has only "
+                    "if an interface is called that; read back, such a pool "
+                    "is left out. Bind the pool to an interface, or move it "
+                    "on the target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/lags/lag/mode",
                 reason=(
                     "OPNsense `lagg` uses a single `lacp` proto with no "
@@ -586,7 +599,12 @@ class OPNsenseCodec(CodecBase):
         # Surface Tier-3 XML elements the parser drops (`<filter>`,
         # `<nat>`, `<ipsec>`, `<openvpn>`, `<wireguard>`, captive
         # portal, traffic shaper, load balancer).  Notification-only.
-        intent.dropped_tier3_sections = detect_tier3_sections_opnsense(raw)
+        # After them, what the parser itself left out: a DHCP pool
+        # whose zone is assigned to no device.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_opnsense(raw),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

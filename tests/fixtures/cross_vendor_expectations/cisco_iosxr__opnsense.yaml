@@ -14,7 +14,7 @@
 #
 # The usual structural loss on this mesh — the interface list shrinking, so
 # every `interfaces[].*` sub-field drifts for one shared reason — does NOT
-# happen here.  156 source interface records, 156 survivors, on all 12 cells:
+# happen here.  155 source interface records, 155 survivors, on all 12 cells:
 # name, description, admin state, MTU, IPv4, IPv6 and LAG membership all
 # preserved with zero drift.  Almost every `interfaces[].*` key below is
 # therefore honestly `good`, and the losses that ARE declared each stand on
@@ -140,7 +140,7 @@ per_field_expectation:
   # -- Interfaces -- the plane that survives ---------------------------------
   #
   # The interface RECORD count is preserved on every cell (15/15, 17/17,
-  # 55/55, ...): 156 source records, 156 survivors.  So unlike most pairs in
+  # 54/54, ...): 155 source records, 155 survivors.  So unlike most pairs in
   # this mesh, these keys carry independent signal — a `good` here means the
   # attribute really was measured intact, and the one `lossy` is not
   # corroborated by its siblings.
@@ -160,7 +160,7 @@ per_field_expectation:
     disposition: good
     note: >
       Preserved on all 9 cells that populate it, with zero drifting records
-      out of 156.  opnsense declares `/interfaces/interface/config/description`
+      out of 155.  opnsense declares `/interfaces/interface/config/description`
       LOSSY, but its recorded reason is about length limits OTHER vendors
       impose (Cisco 240 characters, Juniper 900) — OPNsense itself imposes
       none, so that declaration does not bite on this pair.
@@ -169,7 +169,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state is preserved on every one of the 156 interface records.
+      Admin state is preserved on every one of the 155 interface records.
       IOS-XR `shutdown` maps onto OPNsense's `<enable>` element cleanly, and
       because no record is dropped there is no case of a shut port silently
       arriving as absent rather than disabled.
@@ -210,13 +210,13 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on 156 of 156 interface records, on all 12 cells:
+      Drifts on 155 of 155 interface records, on all 12 cells:
       `ianaift:ethernetCsmacd`, `ianaift:softwareLoopback` and
       `ianaift:ieee8023adLag` all arrive as the empty string, because
       OPNsense's `config.xml` `<interfaces>` block has no element that
       carries an ianaift type.  Recorded `lossy` rather than `unsupported`
       after checking the round-trip rather than reasoning from the drift
-      shape: the interface RECORD survives intact on every one of those 156
+      shape: the interface RECORD survives intact on every one of those 155
       rows with its name, addressing and admin state, so `unsupported` —
       which blocks — would overstate an interface plane that is otherwise
       clean.  Per #436 the rule is that a vanished RECORD is not lossy; here

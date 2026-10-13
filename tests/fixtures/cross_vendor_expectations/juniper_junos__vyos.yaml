@@ -15,8 +15,8 @@
 #
 # READ THIS BEFORE COMPARING WITH `arista_eos__vyos.yaml`: this pair is
 # shaped like `cisco_iosxr__arista_eos.yaml`, not like the AOS-CX pairs.
-# The interface inventory is FULLY PRESERVED — 151 interface records in,
-# 151 out, identical name sets on all 11 cells.  Every interface loss
+# The interface inventory is FULLY PRESERVED — 147 interface records in,
+# 147 out, identical name sets on all 11 cells.  Every interface loss
 # below is therefore a genuine per-attribute loss that stands on its own
 # measurement, and the interface sub-fields that survive are declared
 # `good` rather than dragged down by a vanishing parent.
@@ -154,8 +154,8 @@ per_field_expectation:
 
   # -- Interfaces -- inventory intact, four attributes lost ------------------
   #
-  # The measured record count is the headline: 151 interface records across
-  # the 11 cells, 151 after the round-trip, with identical name sets on every
+  # The measured record count is the headline: 147 interface records across
+  # the 11 cells, 147 after the round-trip, with identical name sets on every
   # cell.  Junos 3-segment names (`ge-0/0/0`), unit-qualified names
   # (`irb.100`, `st0.100`), `lo0`, `fxp0` and even `aeN` all survive the VyOS
   # render verbatim, because the VyOS block-type dispatch falls through to
@@ -166,7 +166,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 11 of 11 cells: 151 source interface records, 151
+      Preserved on 11 of 11 cells: 147 source interface records, 147
       after parse -> render -> re-parse, identical name sets on every
       cell.  The VyOS render does not re-shape Junos 3-segment naming,
       does not collapse unit-qualified names such as `irb.100` or
@@ -178,7 +178,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: good
     note: >
-      Zero drift: 84 populated descriptions across the corpus, 0 of 151
+      Zero drift: 84 populated descriptions across the corpus, 0 of 147
       records differing on any cell.  Both matrices declare
       `/interfaces/interface/config/description` supported.
       Stated explicitly because there is a known VyOS behaviour that
@@ -196,7 +196,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 151 of 151 records — zero differing.  The
+      Admin state preserved on 147 of 147 records — zero differing.  The
       2 records that are administratively down on the source arrive
       disabled on the target.  Both matrices declare
       `/interfaces/interface/config/enabled` supported.
@@ -205,7 +205,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 151 of 151 records; MTU is actually populated on 18
+      Preserved on 147 of 147 records; MTU is actually populated on 18
       of them and all 18 round-trip unchanged.  vyos declares
       `/interfaces/interface/config/mtu` supported; juniper_junos
       declares no path for it either way, so the declaration coverage is
@@ -266,12 +266,12 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on all 11 cells: 149 of 151 records lose the IANA type hint
+      Drifts on all 11 cells: 145 of 147 records lose the IANA type hint
       entirely, going to the empty string.  The 2 that "survive" carried
       no type on the source side to begin with, so the honest reading is
       that every typed record loses it.  The breakdown is uniform across
       types — 99 `ianaift:ethernetCsmacd`, 18 `ianaift:ieee8023adLag`,
-      16 `ianaift:l3ipvlan`, 13 `ianaift:softwareLoopback` and 3
+      13 `ianaift:l3ipvlan`, 13 `ianaift:softwareLoopback` and 2
       `ianaift:tunnel`.
       vyos declares `/interfaces/interface/config/type` LOSSY and states
       why: VyOS has no IANA ifType, so its parser infers the type from
@@ -328,7 +328,7 @@ per_field_expectation:
       and `not_applicable` would be the wrong call: a Junos config with
       `family inet address ... vrrp-group` would populate the field and
       lose it entirely on render.  No committed cell exercises it —
-      measured 0 populated records of 151 on all 11 cells — so the
+      measured 0 populated records of 147 on all 11 cells — so the
       disposition rests on the declarations.
       First-hop redundancy has to be rebuilt on the VyOS side by hand,
       and it will not be flagged by the round-trip because the source

@@ -1724,7 +1724,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
     "fortigate_cli": (0, 0, 0, 0, 0, 11),
-    "juniper_junos": (0, 0, 7, 0, 5, 7),
+    # From (0, 0, 7, 0, 5, 7): no record is made for a bare `irb`
+    # or `st0` that no line configures, so it is no longer a name
+    # left.  Two jobs of batfish_evpntype5 (onto EOS and NX-OS)
+    # listed nothing else and are `completed`; three that listed it
+    # beside a dropped port now list the port alone.
+    "juniper_junos": (0, 0, 8, 0, 3, 6),
     "mikrotik_routeros": (0, 0, 0, 0, 21, 7),
     "opnsense": (4, 0, 0, 0, 23, 1),
     "vyos": (17, 0, 0, 0, 0, 0),
@@ -1742,7 +1747,12 @@ _STANDS: dict[str, dict[str, int]] = {
     "aruba_aoss": {
         "arista_eos": 14, "cisco_iosxe": 14, "cisco_iosxe_cli": 14, "cisco_nxos": 14,
     },
-    "cisco_iosxe_cli": {"cisco_iosxe": 19},
+    # 18, from 19: `ethernet` of batfish_cisco_interface.txt was one
+    # of them while `interface ethernet 1/11` was read as that word.
+    # Read as `ethernet1/11` and `ethernet1/12` the two are ports the
+    # classifier reads, and are renamed (`FastEthernet1/11`) between
+    # the two codecs as every `Ethernet<slot>/<port>` already is.
+    "cisco_iosxe_cli": {"cisco_iosxe": 18},
 }
 
 
@@ -1780,9 +1790,9 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [43, 0, 60, 1, 59, 48]
-        assert sum(by_reason) == 211
-        assert sum(sum(row.values()) for row in _STANDS.values()) == 75
+        assert by_reason == [43, 0, 61, 1, 57, 47]
+        assert sum(by_reason) == 209
+        assert sum(sum(row.values()) for row in _STANDS.values()) == 74
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))
     def test_what_moves_and_what_is_read_back(self, codec_name: str) -> None:

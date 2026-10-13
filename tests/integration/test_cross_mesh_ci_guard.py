@@ -422,6 +422,14 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # METHODOLOGY_ISSUE_under**, with the same helper the test uses
 # (``_unevidenced_by_pair`` against the newest ``_phase4_runs`` archive) —
 # never by hand, and never from the capability matrices.
+#
+# One entry has since been RAISED, from 2 to 3: juniper_junos__mikrotik_routeros.
+# Its ``interfaces[].description`` loss was observed on one record only, an
+# empty ``st0`` that the Junos parser made beside the capture's ``st0`` units
+# and that no line of the capture configures.  That record is no longer made.
+# The loss is real (a secure-tunnel interface with no description comes back
+# with a ``review:`` comment for one) and no committed capture shows it; the
+# YAML's reason says so.  The same re-measure found no entry with slack.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -463,7 +471,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "juniper_junos__cisco_iosxe": 2,
     "juniper_junos__cisco_iosxe_cli": 7,
     "juniper_junos__fortigate_cli": 4,
-    "juniper_junos__mikrotik_routeros": 2,
+    "juniper_junos__mikrotik_routeros": 3,
     "juniper_junos__opnsense": 5,
     "mikrotik_routeros__arista_eos": 2,
     "mikrotik_routeros__aruba_aoss": 1,

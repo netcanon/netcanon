@@ -680,9 +680,10 @@ class TestADeactivatedStatement:
             "set firewall family inet filter F"
         )
         expect(page.locator('[data-testid="migrate-tier3-section-2"]')).to_have_count(0)
-        expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_contain_text(
-            "not something to apply by hand"
-        )
+        note = page.locator('[data-testid="migrate-tier3-inactive-note"]')
+        expect(note).to_contain_text("not something to apply by hand")
+        # A job with no held stanza is told nothing of one.
+        expect(note).not_to_contain_text("preconfigure")
 
     def test_a_capture_pasted_with_its_prompt(self, page: Page, base_url: str):
         """As it leaves a terminal: the prompt and the command, what
@@ -732,3 +733,47 @@ class TestADeactivatedStatement:
             "a load file marks for deletion"
         )
         expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_count(0)
+
+    def test_a_stanza_held_for_absent_hardware(
+        self, page: Page, base_url: str
+    ):
+        """IOS XR ``interface preconfigure``: listed as a statement
+        the source held and did not run, beside a section, and not
+        counted with it."""
+        page.goto("/migrate")
+        mig = MigratePage(page)
+        page.wait_for_function(
+            """() => document.querySelector(
+                '[data-testid="migrate-source-select"]'
+            ).options.length > 0"""
+        )
+        mig.pick_source("cisco_iosxr")
+        mig.pick_target("arista_eos")
+        mig.fill_raw(
+            "!! IOS XR Configuration 7.5.2\nhostname xr1\n"
+            "interface GigabitEthernet0/0/0/1\n ipv4 address 10.0.0.1 255.255.255.0\n!\n"
+            "interface preconfigure TenGigE0/0/0/12\n description held-for-a-card\n!\n"
+            "router bgp 65000\n!\nend\n"
+        )
+        mig.submit_and_wait()
+        expect(mig.output).to_contain_text("10.0.0.1")
+        expect(mig.output).not_to_contain_text("held-for-a-card")
+        expect(mig.output).not_to_contain_text("preconfigure")
+        expect(page.locator('[data-testid="migrate-tier3-count"]')).to_have_text("1")
+        expect(page.locator('[data-testid="migrate-tier3-section-0"]')).to_have_text(
+            "router bgp 65000"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-section-1"]')).to_have_text(
+            "preconfigure: interface TenGigE0/0/0/12 "
+            "(held for an interface the source does not have; not translated)"
+        )
+        expect(page.locator('[data-testid="migrate-tier3-section-2"]')).to_have_count(0)
+        # The sentence for this kind of row is its own: a deactivated
+        # statement is not something to apply by hand, and a held
+        # stanza is, where the target is to hold the same.
+        expect(page.locator('[data-testid="migrate-tier3-inactive-note"]')).to_have_text(
+            "A line that begins preconfigure: is configuration an IOS XR router "
+            "holds for an interface it does not have: it was not in force there, "
+            "and is left out here for that reason. Write it on the target by hand "
+            "only if the target is to hold configuration for the same hardware."
+        )

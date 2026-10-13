@@ -13,7 +13,7 @@ so this file and the ratchet agree by construction.
   `tests/fixtures/real/junos/` plus the synthetic
   `tests/fixtures/synthetic/juniper_junos/kitchen_sink.set`
 - Render errors: **0** · re-parse errors: **0**
-- Interface records: **151 in → 151 out**
+- Interface records: **147 in → 147 out**
 - Retrieved: 2026-08-25
 
 > **No device-vendor documentation was consulted for this file.** Everything
@@ -34,8 +34,8 @@ page is a target-side drop, not a source-side gap.
 
 On `aruba_aoscx__arista_eos` the dominant loss was structural: the interface
 list shrank and dragged every `interfaces[].*` sub-field down with it. **That
-does not happen here.** Across all 11 cells the source carries 151 interface
-records and the AOS-CX render re-parses to 151 — every record survives, by
+does not happen here.** Across all 11 cells the source carries 147 interface
+records and the AOS-CX render re-parses to 147 — every record survives, by
 name. `only_in_source` and `only_in_target` are both empty on every cell.
 
 The consequence is the useful one: on this pair each `interfaces[].*` sub-field
@@ -45,11 +45,11 @@ reasons:
 
 | sub-field | records drifted | cause |
 |---|---|---|
-| `interface_type` | 151 of 151 | AOS-CX infers ifType from the *name shape* |
-| `lag_member_of` | 25 of 151 | `ae<N>` → `lag <N>` rename |
-| `ipv4_addresses` | 6 of 151 | per-address anycast MAC blanked |
-| `ipv6_addresses` | 6 of 151 | IPv6 anycast gateway address blanked |
-| `name` / `description` / `enabled` / `mtu` | 0 of 151 | — |
+| `interface_type` | 147 of 147 | AOS-CX infers ifType from the *name shape* |
+| `lag_member_of` | 25 of 147 | `ae<N>` → `lag <N>` rename |
+| `ipv4_addresses` | 6 of 147 | per-address anycast MAC blanked |
+| `ipv6_addresses` | 6 of 147 | IPv6 anycast gateway address blanked |
+| `name` / `description` / `enabled` / `mtu` | 0 of 147 | — |
 
 `interface_type` is the pair's widest single drift and it is entirely
 name-driven: the aruba_aoscx matrix declares

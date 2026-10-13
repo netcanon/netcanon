@@ -13,7 +13,7 @@ the render, diff the two canonical trees — rather than read off the mesh JSON.
 
 - Fixture cells: **12** (11 real captures + 1 synthetic kitchen-sink)
 - Render errors: **0** · re-parse errors: **0**
-- Interface records compared: **156** source → **156** target
+- Interface records compared: **155** source → **155** target
 - Retrieved: 2026-08-25
 
 > **No device-vendor documentation was consulted for this file.** Everything
@@ -43,7 +43,7 @@ dominant loss was structural: the interface list shrank 9 → 5 and *every*
 `interfaces[].*` sub-field was dragged to `lossy` with it. Here the interface
 inventory is **fully preserved**:
 
-- 156 interface records in, 156 out
+- 155 interface records in, 155 out
 - identical name sets on **all 12 cells** (no record missing, none added)
 
 So there is no structural collapse to absorb blame on this pair. Every
@@ -89,12 +89,12 @@ Record-level counts behind the three drifting rows:
 
 | key | drifting records | populated records |
 |---|---|---|
-| interfaces[].interface_type | 126 | 156 |
+| interfaces[].interface_type | 126 | 155 |
 | interfaces[].lag_member_of | 15 | 15 |
 | lags — renamed, record survives | 8 | 10 |
 | lags — record vanishes | 2 | 10 |
 
-## Loss 1 — `interfaces[].interface_type`, 126 of 156 records
+## Loss 1 — `interfaces[].interface_type`, 126 of 155 records
 
 The IANA interface-type hint degrades to `ianaift:other`:
 
@@ -106,9 +106,9 @@ The IANA interface-type hint degrades to `ianaift:other`:
 | `Bundle-Ether…` | `ianaift:ieee8023adLag` | `ianaift:other` | 10 |
 | `Loopback…` | `ianaift:softwareLoopback` | *(preserved)* | 18 |
 | `MgmtEth…` | `ianaift:ethernetCsmacd` | *(preserved)* | 10 |
-| `BVI…` / a `preconfigure` record | `ianaift:other` | *(preserved)* | 2 |
+| `BVI…` | `ianaift:other` | *(preserved)* | 1 |
 
-(126 drifted + 30 preserved = 156.)
+(126 drifted + 29 preserved = 155.)
 
 **Mechanism.** Neither codec stores the type; both *infer* it from the name
 prefix on parse. The `cisco_nxos` matrix says so directly: "NX-OS

@@ -25,7 +25,7 @@ hand, parsing each of the 12 fixtures with `cisco_iosxr` and rendering with
 
 `cisco_iosxr` in this corpus is a **service-provider edge/core router** — MPLS
 L3VPN PEs, iBGP route-reflectors, eBGP borders, SR/SRv6 lab nodes, plus one
-large real-world aggregation chassis (55 interfaces). `mikrotik_routeros` is a
+large real-world aggregation chassis (54 interfaces). `mikrotik_routeros` is a
 **small-router / ISP-edge OS** whose canonical surface is `/interface ethernet`,
 `/interface bridge`, `/interface vlan`, `/interface bonding`, `/ip address`,
 `/ip route`, `/user`, `/system identity` and `/system ntp client`.
@@ -46,7 +46,7 @@ copying it onto this pair would be wrong.**
 
 Measured across all 12 cells: **not one source interface is lost.** On 8 cells
 the count is identical (17→17, 16→16, 6→6, 5→5, 3→3). On the other 4 the list
-**grows by exactly two** — 15→17, 15→17, 55→57, 9→11 — and the two added
+**grows by exactly two** — 15→17, 15→17, 54→56, 9→11 — and the two added
 records are always the same pair, `bridge1` and `vlan<id>`:
 
 ```
@@ -98,21 +98,21 @@ them could never be evidenced by any cell.
 | anycast_gateway_mac | 0 | 0 | 12 |
 
 The `interfaces` row reading 12/12 drifted is the correlated-drift trap in its
-purest form: `interface_type` alone drifts on 146 of the 156 surviving interface
+purest form: `interface_type` alone drifts on 145 of the 155 surviving interface
 records, which is enough to mark the parent field drifted on every cell. It is
 **not** evidence that any other interface attribute is unsafe, and no sibling
 key may be cited as corroborating another.
 
 ## Sub-field drift, separated by cause
 
-Of the 156 interface records that survive the round-trip across the whole
+Of the 155 interface records that survive the round-trip across the whole
 corpus, exactly three attribute classes drift:
 
 | attribute | records affected | independent of the structural signal? |
 |---|---|---|
-| `interface_type` | 146 / 156 | **yes** — drifts on all 12 cells including the 8 with no count change |
-| `mtu` | 8 / 156 | **yes** — 2 of the 3 affected cells have no count change |
-| `description` | 3 / 156 | no — all 3 fall on VLAN-bearing cells |
+| `interface_type` | 145 / 155 | **yes** — drifts on all 12 cells including the 8 with no count change |
+| `mtu` | 8 / 155 | **yes** — 2 of the 3 affected cells have no count change |
+| `description` | 3 / 155 | no — all 3 fall on VLAN-bearing cells |
 
 **`interface_type`.** Both matrices declare `/interfaces/interface/config/type`
 lossy, and the target's reason is exact: *"RouterOS does not expose IANA ifType;
@@ -264,7 +264,7 @@ naming artefact. On this pair `lags` does not drift at all: 4 cells populate it,
 all 4 preserved, with `Bundle-Ether*` names, member lists and modes intact
 (`active` and `static` both round-trip, verified on
 `iosxr_design_cst_pa3_xr752.cfg` and `kitchen_sink.cfg`), and
-`interfaces[].lag_member_of` round-trips exactly — 5 members on the 55-interface
+`interfaces[].lag_member_of` round-trips exactly — 5 members on the 54-interface
 chassis, 2 on the kitchen sink.
 
 RouterOS declares `/lags/lag/mode` lossy for one specific case: a `passive`

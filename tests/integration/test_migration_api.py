@@ -2058,6 +2058,76 @@ class TestDroppedTier3SectionsWireThrough:
         # NOT in rendered (would mean we accidentally translated it).
         assert "access-list extended OUTSIDE_IN" not in rendered
 
+    #: What a parser read and did not translate: the source codec, a
+    #: target, the text, the row the job lists, and a word that the
+    #: output has when the thing is translated after all.
+    _LEFT_OUT = [
+        (
+            "cisco_iosxr", "arista_eos",
+            "!! IOS XR Configuration 7.5.2\nhostname xr1\n"
+            "interface GigabitEthernet0/0/0/1\n ipv4 address 10.0.0.1 255.255.255.0\n!\n"
+            "interface preconfigure TenGigE0/0/0/12\n description held\n!\nend\n",
+            "preconfigure: interface TenGigE0/0/0/12 "
+            "(held for an interface the source does not have; not translated)",
+            "preconfigure",
+        ),
+        (
+            "cisco_iosxe_cli", "arista_eos",
+            "hostname r1\n!\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n!\n"
+            "interface range GigabitEthernet0/1 - 2\n description typed-as-a-range\n!\nend\n",
+            "interface range GigabitEthernet0/1 - 2", "typed-as-a-range",
+        ),
+        (
+            "opnsense", "juniper_junos",
+            "<opnsense><system><hostname>fw1</hostname></system>"
+            "<interfaces><lan><if>em1</if><enable/><ipaddr>10.0.0.1</ipaddr><subnet>24</subnet></lan></interfaces>"
+            "<dhcpd><opt9><enable/><range><from>10.9.0.10</from><to>10.9.0.20</to></range></opt9></dhcpd>"
+            "</opnsense>",
+            "<dhcpd><opt9>: no <opt9> in <interfaces>, so its DHCP pool has no interface", "10.9.0.10",
+        ),
+    ]
+
+    @pytest.mark.parametrize(
+        ("source", "target", "text", "row", "word"), _LEFT_OUT,
+        ids=[case[0] for case in _LEFT_OUT],
+    )
+    def test_what_a_parser_left_out_is_listed(
+        self, client, source, target, text, row, word,
+    ):
+        """A parser may add a row of its own to the list: a stanza it
+        took out, a pool it had no interface for.  The job says it,
+        and the output has nothing of it."""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={"source": source, "target": target, "raw_text": text},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert row in body["dropped_tier3_sections"]
+        assert body["rendered"]
+        assert word not in body["rendered"]
+
+    def test_all_held_stanzas_is_not_completed(self, client):
+        """An IOS XR ``interface preconfigure`` stanza is configuration
+        for an interface the router does not have.  Its row is one a
+        statement the source held and did not run is given, and a
+        text with nothing else in it translated nothing."""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxr", "target": "arista_eos",
+                "raw_text": "interface preconfigure TenGigE0/0/0/1\n shutdown\n!\n",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "partial"
+        assert body["error"].startswith("No source constructs were recognized")
+        assert body["dropped_tier3_sections"] == [
+            "preconfigure: interface TenGigE0/0/0/1 "
+            "(held for an interface the source does not have; not translated)",
+        ]
+
 
 class TestPerPanePortNameParity:
     """(#16) Every per-pane endpoint must engage auto port-name translation

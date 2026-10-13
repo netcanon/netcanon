@@ -579,7 +579,12 @@ class CiscoIOSXRCodec(CodecBase):
         # Surface Tier-3 stanza headers the parser deliberately drops
         # (BGP / OSPF / IS-IS / MPLS / route-policy / prefix-set / ACLs /
         # l2vpn / evpn).  Notification-only — never read by render.
-        intent.dropped_tier3_sections = detect_tier3_sections_iosxr(raw)
+        # After them, what the parser itself read and left out: a
+        # row for each ``interface preconfigure`` stanza.
+        intent.dropped_tier3_sections = list(dict.fromkeys([
+            *detect_tier3_sections_iosxr(raw),
+            *intent.dropped_tier3_sections,
+        ]))
         return intent
 
     def render(self, tree: Any) -> str:

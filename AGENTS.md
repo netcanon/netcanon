@@ -1077,8 +1077,9 @@ tests use these exclusively — never CSS classes or element structure.  See
   config has been read.  The name is the one the config WRITES, the
   stanza's header line, not the one the parser reads from it: two
   parsers read `interface port-channel 1` and `interface
-  port-channel 2` as one name, and keyed by that name a trunk with
-  no list of its own would be given its neighbour's.  (2) **A default is given to what the config
+  port-channel 2` as one name (the NX-OS parser still does), and
+  keyed by that name a trunk with no list of its own would be given
+  its neighbour's.  (2) **A default is given to what the config
   STATES, never to what the parser inferred.**  The NX-OS and EOS
   parsers take a port for a trunk from a trunk line with no
   `switchport mode trunk`; filling "every VLAN" into a trunk the
@@ -1114,6 +1115,68 @@ tests use these exclusively — never CSS classes or element structure.  See
   native VLAN is one more thing the tree does not state, and the
   platforms differ; and on a port that is NOT a trunk an empty list
   is still two statements, `none` and no list at all.
+- **Never** put a word of the config where a port name goes, and never
+  make an interface record for a name the config configures nothing
+  under.  A parser that takes the first word after a keyword for a
+  name writes that word into every target's output, and the job says
+  `completed`: IOS XR `interface preconfigure TenGigE0/0/0/12` —
+  configuration the router holds for an interface it does not have —
+  was an interface called `preconfigure`; `interface ethernet 1/11`
+  was one called `ethernet`, and two such stanzas one name; `ip route
+  ... loopback 66 100` a route out `loopback` at distance 66; an
+  OPNsense pool under `<dhcpd><lan>` was on `interface lan` in a
+  Junos output; and `set interfaces irb unit 100` made an empty `irb`
+  that no platform has a name for.  In each chain the classifier
+  answering `unknown` was the one right thing, so such a name is not
+  mended by teaching a classifier to read it.  The PARSER has the
+  whole config: it resolves a keyword, a zone or a spaced name to the
+  port it stands for, or to nothing, and what is then not translated
+  is said in a row of `dropped_tier3_sections`, never left out in
+  silence.  Which row is not a detail: a stanza held for hardware
+  that is absent is a statement the device does not run, so its row
+  is a left-out row (the rule above on such statements — bounded,
+  and a text that is all such stanzas is not `completed`), while an
+  `interface range` or `interface breakout` header or an OPNsense
+  pool whose zone has no device is in force and not in the output, a
+  section.  And joining two words is itself a reading that can be
+  wrong: a second word is joined to a type only where it can be the
+  type's number, so a keyword is no type, and an address after a
+  type word (`ip route ... Dialer 10.0.0.1`) is the route's gateway.
+  Before making a record for the first word of a line, ask what the
+  config STATES under that name, not what the parser read of it.  A
+  Junos line under `unit N` configures `<name>.<N>` and states
+  nothing on the device the unit hangs off; a line on the device or
+  on its unit 0 makes the record whether or not any handler reads
+  it; and a name the classifier READS as a port or a LAG keeps its
+  record whatever the config says — which is not yet every port:
+  `xe-0/0/6:2`, `so-0/0/0` and `reth0` are names it does not read,
+  and with nothing but units above 0 they have no record.  The
+  first version of this mend asked whether the parser's own bucket
+  for the name was empty, and `set interfaces st0 unit 0 family
+  inet` — the usual unnumbered tunnel — made no record: jobs went
+  from `partial` to `completed` with the route to `st0.0` still in
+  the output.
+  And a record taken out is no longer there to be counted on:
+  re-measure what stood on it.  An empty `st0` was the only evidence
+  one declared loss had (the placeholder comment a RouterOS output
+  has for a tunnel with no description, read back as one).  And an
+  empty `irb`, which an EOS output has no line for, had made a
+  cell's interface COUNT differ, and a cell whose count differs is
+  not compared record by record: with the `irb` gone the comparison
+  showed that the EOS output for a Junos address with a virtual
+  gateway beside it — `ip address virtual <gateway>`, then `ip
+  address <own>` — reads back as two address records.
+  Still open, each a change of its own: IOS-XE `ip route ... dhcp`,
+  which keeps the keyword in the route's interface so that the line
+  is written back to IOS-XE as it was (a canonical route cannot say
+  "from DHCP"); an EOS DHCP pool's NAME where the pool's interface
+  goes; a VTEP's source ADDRESS in `vxlan_vnis[].source_interface`
+  on AOS-CX and VyOS; and the parsers that still read a spaced name
+  a word at a time (NX-OS headers, IOS XR and AOS-CX route lines).
+  Guarded by
+  `tests/unit/migration/test_a_word_is_not_a_name.py`, which sends
+  each form through the plan path onto every public codec and reads
+  the rendered output as text and with the target's own parser.
 - **Never** leave a port the config names with no record of its own.
   The tree states a port's VLANs and its LAG twice — in the VLAN's
   and the LAG's member lists, and on the port's interface record —

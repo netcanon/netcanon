@@ -483,6 +483,7 @@ def test_the_rest_is_counted_in_statements() -> None:
 def test_a_left_out_row_is_told_apart() -> None:
     assert is_left_out_row(left_out_row("inactive", ("interfaces", "ge-0/0/2")))
     assert is_left_out_row(left_out_row("delete", ("snmp",)))
+    assert is_left_out_row(left_out_row("preconfigure", ("interface", "TenGigE0/0/0/12")))
     assert not is_left_out_row("set firewall family inet filter PROTECT")
     assert not is_left_out_row("ip access-list extended INACTIVE")
 

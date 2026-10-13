@@ -17,14 +17,14 @@
 # READ THIS BEFORE COMPARING WITH `aruba_aoscx__arista_eos.yaml`: this pair is
 # the INVERSE of that one. There the dominant loss was structural — the
 # interface list shrank and every `interfaces[].*` sub-field went lossy with
-# it. Here the interface inventory is FULLY PRESERVED: 156 interface records
-# in, 156 out, identical name sets on all 12 cells. Every interface sub-field
+# it. Here the interface inventory is FULLY PRESERVED: 155 interface records
+# in, 155 out, identical name sets on all 12 cells. Every interface sub-field
 # that survives is therefore declared `good` on its own measurement rather
 # than dragged down by a vanishing parent, and the two that do not survive are
 # genuine per-attribute losses.
 #
 # There are exactly three losses on this pair: the IANA interface-type hint
-# (degraded to `ianaift:other` on 126 of 156 records), and the LAG surface —
+# (degraded to `ianaift:other` on 126 of 155 records), and the LAG surface —
 # `interfaces[].lag_member_of` plus `lags`, which are ONE mechanism and are
 # cross-referenced rather than counted twice.
 #
@@ -127,14 +127,14 @@ per_field_expectation:
 
   # -- Interfaces -- fully preserved inventory, two attribute losses ---------
   #
-  # 156 interface records in, 156 out, identical name sets on all 12 cells.
+  # 155 interface records in, 155 out, identical name sets on all 12 cells.
   # There is no structural collapse on this pair, so each sub-field below
   # stands on its own measurement.
 
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 12 of 12 cells — 156 records in, 156 out, no record
+      Preserved on 12 of 12 cells — 155 records in, 155 out, no record
       dropped and none invented.  Not a given: cisco_iosxr declares
       `/interfaces/interface/4th-port-segment` lossy because IOS-XR port
       names carry four segments (rack/slot/instance/port) while the
@@ -195,7 +195,7 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Degrades to `ianaift:other` on 126 of 156 records, on all 12 cells.
+      Degrades to `ianaift:other` on 126 of 155 records, on all 12 cells.
       Neither codec stores the type — both INFER it from the name prefix on
       parse, and the cisco_nxos matrix declares
       `/interfaces/interface/config/type` lossy for exactly this: "NX-OS

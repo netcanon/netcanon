@@ -579,9 +579,14 @@ class MigrationJob(BaseModel):
             only — never read by any render-side code or transform.
             A parser may also list a statement it read and left out
             on purpose (a Junos statement the source had
-            deactivated): a row that begins ``inactive: `` or
-            ``delete: `` is one, and is not a section
-            (``_tier3_detection.is_left_out_row``).
+            deactivated, an IOS XR stanza held for an interface the
+            router does not have): a row that begins ``inactive: ``,
+            ``delete: `` or ``preconfigure: `` is one, and is not a
+            section (``_tier3_detection.is_left_out_row``).  And a
+            parser may add a section of its own: an ``interface
+            range`` or ``interface breakout`` header in a text
+            read as IOS-XE or IOS XR, an OPNsense DHCP pool left
+            out because its zone has no device.
             See also ``scope_advisories``, which reports the TARGET
             platform rather than the source.
             Populated by every codec's ``parse()``; see
@@ -773,8 +778,9 @@ class MigrationJob(BaseModel):
     #: ``collect_port_names`` finds that :attr:`source_ports` does
     #: not hold.  A LAG, a VLAN interface, a loopback, a tunnel, a
     #: bridge -- and a reference that names no interface at all: a
-    #: static route to ``Null0`` or to the keyword ``dhcp``, a DHCP
-    #: pool keyed by a zone name, a VRRP track OBJECT number, a VTEP
+    #: static route to ``Null0`` or to the keyword ``dhcp``, the
+    #: NAME of a DHCP pool (the EOS parser keeps one where the
+    #: pool's interface goes), a VRRP track OBJECT number, a VTEP
     #: source address.  The translator sweeps those fields without
     #: asking what they hold, so an entry of ``port_rename_map``
     #: keyed by any name here is recorded, and applied where the
@@ -784,7 +790,7 @@ class MigrationJob(BaseModel):
     #: VLAN interface on a target that writes one from the VLAN
     #: (AOS-S by the VLAN's id; OS10, EOS, IOS-XE CLI and RouterOS
     #: beside the renamed one), a dropped loopback that a VXLAN
-    #: source line still names, the bare Junos ``irb``.
+    #: source line still names.
     #:
     #: Between two configs of one codec a name nobody mapped stands:
     #: no rename changes it and no warning quotes it, so without

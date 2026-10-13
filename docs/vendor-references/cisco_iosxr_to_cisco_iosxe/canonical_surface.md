@@ -62,10 +62,10 @@ parse/render/re-parse of all 12 fixtures:
 
 | surface | source records | surviving | outcome |
 |---|---|---|---|
-| interfaces (inventory) | 156 | 156 | preserved, **in identical order on every cell** |
+| interfaces (inventory) | 155 | 155 | preserved, **in identical order on every cell** |
 | interfaces[].description | 39 populated | 39 | preserved |
-| interfaces[].enabled | 156 | 156 identical | preserved |
-| interfaces[].interface_type | 156 | 156 identical | preserved |
+| interfaces[].enabled | 155 | 155 identical | preserved |
+| interfaces[].interface_type | 155 | 155 identical | preserved |
 | interfaces[].ipv4_addresses | 60 addresses | 60 | preserved |
 | interfaces[].ipv6_addresses | 11 addresses | 11 | preserved |
 | interfaces[].mtu | 11 populated | 0 | dropped |

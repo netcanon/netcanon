@@ -46,13 +46,13 @@ on all 12 cells:
 | batfish_ibgp_border01 | 17 | 17 |
 | batfish_ibgp_rr | 16 | 16 |
 | batfish_vpnv4_pe1 / pe2 / pe3 | 6 | 6 |
-| iosxr_design_cst_pa3_xr752 | 55 | 55 |
+| iosxr_design_cst_pa3_xr752 | 54 | 54 |
 | xrdtools_isis_r1 | 3 | 3 |
 | xrdtools_sr_xrd1 | 5 | 5 |
 | xrdtools_srv6_pe1 | 3 | 3 |
 | kitchen_sink | 9 | 9 |
 
-156 source interface records, 156 survivors. The 4-segment IOS-XR names
+155 source interface records, 155 survivors. The 4-segment IOS-XR names
 (`GigabitEthernet0/0/0/1.35`, `MgmtEth0/RP0/CPU0/0`) come back byte-identical,
 and so do description, admin state, MTU, IPv4 and IPv6 addressing and LAG
 membership — zero drift on every one of those, on every cell.
@@ -174,7 +174,7 @@ arrives untagged. That is a reachability change, and it is invisible in the
 
 ## `interfaces[].interface_type` — a dropped attribute, not a dropped record
 
-`interface_type` drifts on **156 of 156** interface records, on all 12 cells:
+`interface_type` drifts on **155 of 155** interface records, on all 12 cells:
 `ianaift:ethernetCsmacd`, `ianaift:softwareLoopback` and
 `ianaift:ieee8023adLag` all arrive as the empty string. OPNsense's
 `config.xml` `<interfaces>` block has no element that carries an ianaift type.
@@ -185,7 +185,7 @@ observation shows the target side empty, therefore a total drop, therefore
 `unsupported`" — reports `interfaces TOTAL` for this pair. That verdict is
 computed at the *parent* level and pools `interface_type`, `vrf` and
 `dot1q_vlan` together. At the sub-field level the interface **record** survives
-intact on all 156 rows with its name, addressing and admin state, so
+intact on all 155 rows with its name, addressing and admin state, so
 `unsupported` (which blocks: `compatible=False`) would overstate a migration
 that is otherwise clean on the interface plane. `lossy` warns and stays
 compatible, which is the truthful signal. Per netcanon #436 the rule is that a

@@ -21,6 +21,13 @@ left out with everything under it, and named in
 ``dropped_tier3_sections`` by a row that shows its path and never a
 secret (``_tier3_detection.left_out_rows``).
 
+An interface record is made for a name a line configures: ``set
+interfaces irb unit 100 ...`` configures ``irb.100`` and makes no
+``irb``; a line on the device itself or on its unit 0, read by a
+handler or not, makes the bare name (``_Found.stated``).  A name
+the classifier reads as a port or an ``ae`` has its record whatever
+the lines say (``_HAS_A_RECORD_UNSTATED``).
+
 Handles VXLAN switch-options globals (``set switch-options
 vtep-source-interface`` / ``vxlan-port``) by stashing on intent
 scratch attributes during dispatch and back-patching every
@@ -83,10 +90,12 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
+from ...canonical.port_names import HARDWARE_PORT_KINDS
 from ...limits import LimitExceeded, charge, tick, ticked
 from .._helpers import GrowingIndex, Uniques, unstated_trunk_list, vlan_id_run
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .port_names import classify_port_name
 
 logger = logging.getLogger(__name__)
 
@@ -506,6 +515,9 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                 continue
             own = ("interfaces", member)
             member_state = iface_state.setdefault(member, {})
+            # A ``member`` line puts the device under the range's
+            # statements: it is configured, whatever the range holds.
+            found.stated.add(member)
             range_membership[member] = rname
             # Shared scalars default when member-state doesn't
             # override.  member_state wins on conflict.
@@ -590,6 +602,37 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # Phantom LAG-name iface — only the aggregated-ether-options
             # line touched this name.  The CanonicalLAG record carries
             # the LAG identity; the iface list shouldn't double-count.
+            continue
+        if (
+            not state
+            and name not in found.stated
+            and classify_port_name(name).kind not in _HAS_A_RECORD_UNSTATED
+        ):
+            # ``_apply_interfaces`` makes a bucket for the first word
+            # of every line, so ``set interfaces irb unit 100 ...``
+            # leaves one for ``irb`` beside the one for ``irb.100``,
+            # and ``st0 unit 1`` or ``lo0 unit 1`` does the same.  No
+            # line configures that device: every line that names it
+            # is under a unit above 0, and configures the unit.  Made
+            # anyway, the record was an empty interface no target has
+            # a name for, written into the output under its Junos
+            # name -- and into this codec's own output as a ``set
+            # interfaces irb`` line the source never had.
+            #
+            # What decides is what the lines SAY, not what a handler
+            # here read of them: a line on the device itself (``irb
+            # mtu 9100``, ``irb gratuitous-arp-reply``, a bare ``set
+            # interfaces st0``) or on its unit 0, which is the bare
+            # name (``st0 unit 0 family inet``, the usual unnumbered
+            # tunnel a route to ``st0.0`` goes out of), puts the name
+            # in ``found.stated`` and the record is made, empty or
+            # not.  And a name the classifier reads as a port or an
+            # ``ae`` is hardware or a bundle its units ride on: it
+            # is there whatever the config says of it, so
+            # ``ge-0/0/3`` with only tagged units keeps its record.
+            # (A port the classifier does not read yet --
+            # ``xe-0/0/6:2``, ``so-0/0/0``, ``reth0`` -- is a name
+            # like any other here.)
             continue
         iface = CanonicalInterface(
             name=name,
@@ -932,24 +975,16 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
                     existing_addrs.add(pair)
         bound_vids.add(vid)
 
-    # 4. Prune the synthetic ``irb`` carrier and any ``irb.<vid>``
-    #    sub-interfaces that were folded onto a CanonicalVlan in
-    #    step 3.  ``bound_vids`` only contains vids that were
-    #    safely foldable (no VRF / description / v6 / LAG).
+    # 4. Prune any ``irb.<vid>`` sub-interface that was folded onto
+    #    a CanonicalVlan in step 3.  ``bound_vids`` only contains
+    #    vids that were safely foldable (no VRF / description / v6 /
+    #    LAG).  The bare ``irb`` is not pruned here: a record of that
+    #    name exists only when a line configures the device itself or
+    #    its unit 0 (``found.stated``), and what such a line states --
+    #    an MTU, an address on unit 0 -- is not a unit's to fold.
     pruned: list[CanonicalInterface] = []
     for iface in intent.interfaces:
-        if iface.name == "irb":
-            # The bare ``irb`` carrier — only prune when at least
-            # one bound vid was folded.  Otherwise keep it.
-            if (
-                bound_vids
-                and not iface.description
-                and not iface.ipv6_addresses
-                and not iface.lag_member_of
-                and not iface.vrf
-            ):
-                continue
-        elif iface.name.startswith("irb."):
+        if iface.name.startswith("irb."):
             try:
                 sub_vid = int(iface.name[4:])
             except ValueError:
@@ -1121,6 +1156,14 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
 # Tokeniser + dispatch
 # ---------------------------------------------------------------------------
 
+
+#: What the classifier calls a name whose interface record is made
+#: whether or not a line configures the device: a hardware port, and
+#: a LAG.  Its units ride on it, and it is there with nothing stated
+#: on it.  Every other name (``irb``, ``st0``, ``lo0``, ``vlan``, a
+#: tunnel device, a name the classifier does not read) is a record
+#: only where a line configures the device itself or its unit 0.
+_HAS_A_RECORD_UNSTATED: frozenset[str] = HARDWARE_PORT_KINDS | {"lag", "hw_aggregate"}
 
 #: A word of a line with no quote and no backslash in it.
 _PLAIN_WORD_RE = re.compile(r"[^ \t\r\n]+")
@@ -1719,7 +1762,11 @@ class _Found:
     static route by destination, next hop and VRF, a VNI by VLAN and
     number, an SNMPv3 user by name -- and, in ``once``, the values of
     the lists of ONE record that a line adds to (an interface's
-    addresses, a LAG's members, a VRF's route targets).
+    addresses, a LAG's members, a VRF's route targets).  And, in
+    ``stated``, the name of every interface a line configures: the
+    first word of an ``interfaces`` line on the device itself or on
+    its unit 0, ``<name>.<N>`` of a line under unit N, a member of an
+    interface-range.
 
     Each handler runs once per line.  Looking through the whole list
     each time (``next(...)``, ``any(...)``, ``value not in a_list``)
@@ -1742,6 +1789,7 @@ class _Found:
             lambda user: user.name,
         )
         self.once = Uniques()
+        self.stated: set[str] = set()
 
 
 def _dispatch_set(
@@ -1924,8 +1972,12 @@ def _apply_interfaces(  # noqa: C901
       VLAN SVI L3 address; captured into *irb_state* keyed by vid.
 
     ``found`` is the per-parse lookup (:class:`_Found`); its ``once``
-    appends a value to a list of one record unless the list has it.
-    A caller that has none may leave it out.
+    appends a value to a list of one record unless the list has it,
+    and its ``stated`` is given the name of the interface the line
+    configures -- the first word for a line on the device itself or
+    on its unit 0, ``<name>.<N>`` for a line under unit N -- whether
+    or not anything below reads the line.  A caller that has none
+    may leave it out.
     """
     if not tokens:
         return
@@ -1939,8 +1991,13 @@ def _apply_interfaces(  # noqa: C901
         _apply_interface_range(tokens[1:], range_state, found)
         return
     once = found.once if found is not None else Uniques()
+    stated = found.stated if found is not None else set()
     name = tokens[0]
     state = iface_state.setdefault(name, {})
+    if len(tokens) < 2 or tokens[1] != "unit":
+        # A line on the device itself.  (A line under a unit says
+        # which interface it configures where the unit is read.)
+        stated.add(name)
 
     if len(tokens) < 2:
         # bare ``set interfaces <name>`` — unusual but valid, ensures
@@ -2058,19 +2115,24 @@ def _apply_interfaces(  # noqa: C901
             unit_num = int(tokens[2])
         except ValueError:
             return
-        if len(tokens) < 4:
-            return
         # GAP 4: Units 1+ materialise as distinct CanonicalInterface
         # entries with compound name ``<parent>.<unit>`` — matches
         # Cisco's dot1Q sub-interface convention (e.g.
         # ``GigabitEthernet0/1.100``).  Unit 0 still collapses into
         # the parent because that's the non-tagged L3 pathway and
-        # every Junos interface has one.
+        # every Junos interface has one.  The line configures that
+        # interface whatever follows the unit's number, a bare ``set
+        # interfaces st0 unit 1`` included: the name is stated, and
+        # the unit has its bucket, before anything is read of it.
         if unit_num == 0:
             target_state = state
+            stated.add(name)
         else:
             sub_name = f"{name}.{unit_num}"
             target_state = iface_state.setdefault(sub_name, {})
+            stated.add(sub_name)
+        if len(tokens) < 4:
+            return
         # ``unit <N> family inet address <ip>/<prefix>`` and the
         # Wave-B/C extensions on the same line:
         #   * ``... virtual-gateway-address <vga>`` (Wave C anycast)
@@ -2289,9 +2351,8 @@ def _apply_interfaces(  # noqa: C901
                     # the IRB address.  Same trailer-token shape as
                     # the non-IRB branch; we re-use the per-group
                     # scratch dispatcher.  IRB VRRP groups live on
-                    # the IRB unit's CanonicalInterface (post-fold,
-                    # the bare ``irb`` carrier may be pruned; the
-                    # VLAN gets the addresses but the per-unit IRB
+                    # the IRB unit's CanonicalInterface (the VLAN gets
+                    # the addresses in the fold; the per-unit IRB
                     # iface carries the VRRP state until then).
                     if (
                         len(tokens) >= 9

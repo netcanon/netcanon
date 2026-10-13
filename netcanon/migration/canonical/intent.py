@@ -970,10 +970,16 @@ class CanonicalIntent(BaseModel):
             surface — render-side code MUST NOT read it.  A parser
             may also put here a row for a statement it read and
             left out on purpose -- the Junos parser, for one the
-            source had deactivated -- made by
+            source had deactivated; the IOS XR parser, for an
+            ``interface preconfigure`` stanza -- made by
             ``_tier3_detection.left_out_row``.  Such a row is not a
             section header, names no secret, and is told apart with
-            ``is_left_out_row``.
+            ``is_left_out_row``.  A parser may likewise add a
+            section of its own (an ``interface range`` or
+            ``interface breakout`` header in a text read as IOS-XE
+            or IOS XR, an OPNsense ``<dhcpd>`` zone that has no
+            device); the codec's ``parse()`` puts a parser's rows
+            after the detector's.
         source_vendor: ``vendor_id`` of the codec that produced this
             tree (metadata, populated by parse).
         source_format: ``input_format`` of the source codec

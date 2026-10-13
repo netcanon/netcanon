@@ -5,7 +5,7 @@
 #
 # cisco_iosxr in the committed corpus is a service-provider edge/core router
 # (MPLS L3VPN PEs, iBGP route-reflectors, eBGP borders, SR/SRv6 lab nodes, plus
-# one 55-interface aggregation chassis); mikrotik_routeros is a small-router /
+# one 54-interface aggregation chassis); mikrotik_routeros is a small-router /
 # ISP-edge OS whose canonical surface is `/interface ethernet`, `/interface
 # bridge`, `/interface vlan`, `/interface bonding`, `/ip address`, `/ip route`,
 # `/user` and `/system identity`.  The two classes overlap on exactly one thing
@@ -138,8 +138,8 @@ per_field_expectation:
   # -- Interfaces -- the surface that mostly survives ------------------------
   #
   # The `interfaces` field measures as drifted on 12 of 12 cells, which looks
-  # alarming and is not.  One attribute — `interface_type` — drifts on 146 of
-  # the 156 surviving interface records, which alone is enough to mark the
+  # alarming and is not.  One attribute — `interface_type` — drifts on 145 of
+  # the 155 surviving interface records, which alone is enough to mark the
   # parent drifted everywhere.  That is correlated drift, not independent
   # evidence: no key below may be cited as corroborating another.  Each of the
   # three keys that records a loss here was checked against surviving records
@@ -152,7 +152,7 @@ per_field_expectation:
       shrinks — the opposite of the AOS-CX-sourced pairs, so do not read this
       entry as covering vanished records.  Measured across all 12 cells, zero
       source interfaces are lost.  On the 4 VLAN-bearing cells the list gains
-      exactly two records (15->17, 15->17, 55->57, 9->11), always the same
+      exactly two records (15->17, 15->17, 54->56, 9->11), always the same
       pair: `bridge1` and `vlan<id>`, synthesised by the RouterOS renderer
       because RouterOS can only express a VLAN as an interface.  Recorded
       `lossy` rather than `unsupported` because nothing is blocked and nothing
@@ -176,7 +176,7 @@ per_field_expectation:
       lose their description because the render emits a sub-interface only as
       the target of an `/ip address` row, with no interface row to hang a
       comment on.  All three fall on the same VLAN-bearing cells — one root
-      cause with the count growth, not a second independent one.  The other 153
+      cause with the count growth, not a second independent one.  The other 152
       surviving records keep their description exactly.
     references: [iosxr-routeros-surface]
 
@@ -230,8 +230,8 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The one interface attribute that fails everywhere on its own merits, and
-      the reason the parent field measures drifted on all 12 cells: 146 of the
-      156 surviving interface records lose or change their IANA type, including
+      the reason the parent field measures drifted on all 12 cells: 145 of the
+      155 surviving interface records lose or change their IANA type, including
       on the 8 cells with no structural change.  Both matrices declare
       `/interfaces/interface/config/type` LOSSY, and the target's reason is
       exact — "RouterOS does not expose IANA ifType; the codec infers it from

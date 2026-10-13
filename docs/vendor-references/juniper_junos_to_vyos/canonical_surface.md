@@ -46,7 +46,7 @@ machinery.
 
 | measurement | source | after round-trip |
 |---|---|---|
-| interface records, all 11 cells | **151** | **151** |
+| interface records, all 11 cells | **147** | **147** |
 | cells where the interface name set differs | — | **0** |
 | VLAN records | **126** | **0** |
 | LAG records | **18** | **0** |
@@ -110,15 +110,15 @@ Fields trivially empty on all 11 cells: `timezone`,
 
 | sub-field | records affected | of total | shape |
 |---|---|---|---|
-| `interface_type` | 149 | 151 | value → empty string |
+| `interface_type` | 145 | 147 | value → empty string |
 | `lag_member_of` | 25 | 25 populated | value → null |
 | `ipv4_addresses` | 10 | 59 populated | anycast virtual-gateway attrs → empty |
 | `ipv6_addresses` | 6 | 18 populated | anycast virtual-gateway attrs → empty |
-| `description` / `enabled` / `mtu` | 0 | 151 | — |
+| `description` / `enabled` / `mtu` | 0 | 147 | — |
 
 `interface_type` drops uniformly across every IANA type Junos emits: **99**
-`ianaift:ethernetCsmacd`, **18** `ianaift:ieee8023adLag`, **16**
-`ianaift:l3ipvlan`, **13** `ianaift:softwareLoopback` and **3**
+`ianaift:ethernetCsmacd`, **18** `ianaift:ieee8023adLag`, **13**
+`ianaift:l3ipvlan`, **13** `ianaift:softwareLoopback` and **2**
 `ianaift:tunnel`. The two records that "survive" carried no type on the source
 side to begin with. Note that even `lo0` loses the hint: the VyOS codec
 re-derives `softwareLoopback` only from the exact name `lo`, and Junos names
@@ -329,7 +329,7 @@ apostrophes, because VyOS rejects embedded quotes in value strings even when
 escaped (vyos.dev/T1246). It is the right thing to check first when a
 description drifts on a VyOS target. Here it is not the cause of anything: of
 **84** populated interface descriptions across the corpus, **0** contain an
-embedded double quote, and `interfaces[].description` drifts on **0 of 151**
+embedded double quote, and `interfaces[].description` drifts on **0 of 147**
 records. `interfaces[].description` is `good` on measurement, not on
 assumption.
 

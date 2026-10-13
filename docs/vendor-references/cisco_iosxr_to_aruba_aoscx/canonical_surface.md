@@ -48,7 +48,7 @@ same shape:
 
 | cell | source interfaces | rendered + re-parsed |
 |---|---|---|
-| `iosxr_design_cst_pa3_xr752.cfg` | 55 | 55 |
+| `iosxr_design_cst_pa3_xr752.cfg` | 54 | 54 |
 | `batfish_vpnv4_pe1.txt` | 6 | 6 |
 | `kitchen_sink.cfg` (synthetic) | 9 | 9 |
 

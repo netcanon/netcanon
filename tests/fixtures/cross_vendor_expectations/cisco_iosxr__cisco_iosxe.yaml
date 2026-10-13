@@ -14,7 +14,7 @@
 # users, no SNMP.
 #
 # That splits the canonical surface cleanly in two with no middle ground:
-# everything inside the interfaces subtree round-trips PERFECTLY (156 of 156
+# everything inside the interfaces subtree round-trips PERFECTLY (155 of 155
 # interface records across 12 cells, in identical order, with description,
 # enabled, type, IPv4 and IPv6 intact), and everything outside it VANISHES.
 # Nothing on this pair arrives degraded-but-present.
@@ -146,8 +146,8 @@ per_field_expectation:
 
   # -- Interfaces -- the one subtree this target actually renders ------------
   #
-  # The interface inventory does NOT shrink on this pair: 156 source records
-  # across 12 cells, 156 survivors, in identical order on every cell.  That is
+  # The interface inventory does NOT shrink on this pair: 155 source records
+  # across 12 cells, 155 survivors, in identical order on every cell.  That is
   # unusual enough to be worth stating, because it means the `interfaces[].*`
   # sub-fields below carry INDEPENDENT signal — each `good` is a real
   # per-attribute observation, and each loss is a real per-attribute drop, not
@@ -156,7 +156,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on all 12 cells — 156 source interface records, 156 survivors,
+      Preserved on all 12 cells — 155 source interface records, 155 survivors,
       name-for-name in the same order.  IOS-XR 4-segment names
       (`GigabitEthernet0/0/0/1`), channelised sub-interfaces
       (`GigabitEthernet0/0/0/1.35`), `Bundle-Ether` bundles, `TenGigE`,
@@ -175,7 +175,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Preserved on all 12 cells — admin state matches on all 156 records,
+      Preserved on all 12 cells — admin state matches on all 155 records,
       including the shutdown ports IOS-XR enumerates with no other
       configuration.  The render emits `<enabled>` unconditionally.
     references: [iosxr-iosxe-surface]
@@ -228,7 +228,7 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: good
     note: >
-      Preserved on all 12 cells — the ianaift type string matches on all 156
+      Preserved on all 12 cells — the ianaift type string matches on all 155
       records, including `ianaift:ieee8023adLag` on Bundle-Ether records and
       `ianaift:softwareLoopback` on loopbacks.  Worth noting because
       cisco_iosxr declares `/interfaces/interface/config/type` LOSSY in its own

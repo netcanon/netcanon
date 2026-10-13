@@ -27,7 +27,8 @@ Netcanon translates the shared-network-function subset.
   IPv6 (`<ipaddrv6>`); track-interface forms
 - VLANs — `<vlans><vlan>` block (tagged form with parent interface
   binding)
-- DHCP server pools — `<dhcpd>` with per-zone configuration
+- DHCP server pools — `<dhcpd>` with per-zone configuration; a
+  pool is on the device its zone is assigned to
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats):
 
@@ -209,6 +210,38 @@ Provenance in
   `untranslated_ports` until an entry of `port_rename_map` gives it
   a name.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
+- **A DHCP pool goes with its zone's port.**  `<dhcpd>` is keyed
+  by zone (`<lan>`), and the pool's interface is the device
+  `<interfaces>` assigns to that zone (`<lan><if>igb1</if>`), so on
+  another platform the pool is bound to the port that device
+  became — and named after it, where the target names a pool after
+  its interface (`ip dhcp pool GigabitEthernet0_1`, Junos
+  `pool_ge_0_0_1`).  A pool whose zone `<interfaces>` does not have
+  has no interface to be on: it is left out, and the migrate banner
+  names the zone (`<dhcpd><opt9>: no <opt9> in <interfaces>, so its
+  DHCP pool has no interface`).  Two zones assigned to ONE device
+  are not handled: both pools are then on that port, and a target
+  that names a pool after its interface writes two pools of one
+  name (Junos reads its own two back as one).  OPNsense's own
+  output then has the device's tag twice under `<dhcpd>` (`<igb1>`,
+  and `<igb1>` again), where up to 0.7.7 it had the two zones'
+  (`<lan>`, `<opt1>`).  A real config is not expected to have that
+  — a device is assigned to one zone — which has not been checked
+  against OPNsense's own validation; look for it in a `config.xml`
+  edited by hand.  On an OPNsense TARGET a pool is written under
+  the zone of its interface.  One that names no interface (a pool
+  from IOS-XE or RouterOS, a Junos pool whose server group binds no
+  interface) is written under `<lan>`, and an EOS pool, whose own
+  name is where its interface goes, under a zone of that name
+  (`<users>`): either serves nothing unless the output has a zone
+  of that name, and read back such a pool is left out.  The
+  validation report lists `/dhcp-servers/pool` as lossy for every
+  pool written onto OPNsense, a bound one included.  Bind the pool
+  to an interface, or move it by hand.
+  ⚠️ Up to 0.7.7 the pool's interface was the zone's NAME: a Junos
+  output bound its DHCP server to `interface lan`, FortiOS wrote
+  `set interface "lan"`, and an OPNsense output had `<dhcpd><lan>`
+  beside an `<interfaces>` with no `<lan>` in it.
 - **A lagg's members onto a switch** — the members of a lagg are
   as a rule NICs assigned to nothing, so the config has no interface
   for them and Netcanon makes no port record for them.  A target

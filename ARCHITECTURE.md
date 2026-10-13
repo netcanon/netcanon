@@ -903,7 +903,10 @@ source but not translated" banner.  (The Junos codec hands its
 detector the set-form the parser read, since the patterns begin
 `set `, and puts ahead of the sections a bounded list of rows for
 the statements the parser read and left out — `inactive: ...` for
-one the source had deactivated.)  Output-only — a notification
+one the source had deactivated.  The IOS XR codec lists an
+`interface preconfigure` stanza, which the router holds for an
+interface it does not have, with a row of the same kind:
+`preconfigure: ...`.)  Output-only — a notification
 surface, never fed to the renderer or any transform — so the
 deliberate drop is surfaced honestly (the silent-drop-honesty
 discipline `docs/METHODOLOGY.md` treats as flagship).
@@ -1444,7 +1447,7 @@ device has a port of that name.
 A static route's or DHCP pool's interface, a VRRP track entry and a
 VTEP source are *references*: a real port named only there must be
 part of the mapping, but what those fields hold is not always an
-interface — a route to `Null0`, a pool keyed by a zone name, a VTEP
+interface — a route to `Null0`, an EOS pool's own name, a VTEP
 source address — so a reference counts only when the declared
 inventory lists it or the source codec's classifier positively calls
 it a hardware port.  From the evidence is taken what is not

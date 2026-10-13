@@ -5,7 +5,7 @@
 #
 # Asymmetric by device class. cisco_iosxr in the committed corpus is a
 # service-provider edge/core router — Batfish PE / RR / border fixtures, an
-# xrdtools ISIS/SR/SRv6 trio, one real 55-interface chassis and the synthetic
+# xrdtools ISIS/SR/SRv6 trio, one real 54-interface chassis and the synthetic
 # kitchen sink. cisco_iosxe_cli is a general-purpose enterprise/branch router.
 # The realistic migration is an SP edge router being re-homed onto IOS-XE, so
 # the shared surface is the ROUTED surface — interface addressing, admin state,
@@ -123,7 +123,7 @@ per_field_expectation:
     disposition: good
     note: >
       Preserved on all 12 cells, and the inventory does not shrink — source and
-      re-parsed target counts are equal on every cell (9/9, 17/17 and 55/55 on
+      re-parsed target counts are equal on every cell (9/9, 17/17 and 54/54 on
       the three largest) with zero dropped names.  IOS-XR's 4-segment names
       survive verbatim through the IOS-XE render: `TenGigE0/0/0/18`,
       `HundredGigE0/0/1/0`, `MgmtEth0/RP0/CPU0/0`,

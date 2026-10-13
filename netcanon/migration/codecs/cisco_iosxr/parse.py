@@ -18,7 +18,12 @@ Phase 1 surface (see ``docs/v0.2.0-planning/04-iosxr-codec/``):
   (CIDR).  Five name families: 4-segment physical
   (``GigabitEthernet0/0/0/0`` and speed variants), ``Loopback<n>``,
   ``MgmtEth0/RP0/CPU0/<p>``, ``Bundle-Ether<n>``, and ``<parent>.<unit>``
-  sub-interfaces.
+  sub-interfaces.  A type and its number written apart (``interface
+  Bundle-Ether 10``) are one name.  ``interface preconfigure <name>``
+  is configuration for an interface the system does not have: it makes
+  no interface, its body is read by nothing, and a row that names it
+  (``preconfigure: interface <name> ...``, a left-out row) is left on
+  ``dropped_tier3_sections`` for the codec's ``parse()``.
 * ``router static / address-family ipv4 unicast / <CIDR> <next-hop>+``
   (default VRF) → :class:`CanonicalStaticRoute`.
 
@@ -86,7 +91,14 @@ from ...canonical.intent import (
     CanonicalVlan,
 )
 from ...limits import ticked
-from .._helpers import Uniques, _is_link_local_v6, _mask_to_prefix
+from .._helpers import (
+    Uniques,
+    _is_link_local_v6,
+    _mask_to_prefix,
+    keyword_stanza_rows,
+    spaced_port_name,
+    without_keyword_stanzas,
+)
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
 from ..base import ParseError
@@ -138,7 +150,10 @@ _NTP_SERVER_LINE_RE = re.compile(
 #: Cisco codecs' ``_SYSLOG_LINE_RE``).
 _SYSLOG_LINE_RE = re.compile(r"^[^\S\n]*logging\s+(\S.*)$", re.IGNORECASE | re.MULTILINE)
 
-_IFACE_RE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+#: ``interface <name>``.  The second group is the word after the
+#: name: its number, when the type and the number are written apart
+#: (:func:`_header_name`).
+_IFACE_RE = re.compile(r"^interface\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
@@ -295,6 +310,22 @@ def parse_intent(raw: str) -> CanonicalIntent:
         source_format="cli-iosxr",
     )
 
+    # ``interface preconfigure <name>`` is configuration the router
+    # holds for an interface it does not have: applied when the line
+    # card is put in, and not before.  It is not translated.  Read as
+    # an interface it was one named ``preconfigure``, in every target's
+    # output; read as the port it names it is a second name for a cage
+    # the config may already have under another speed.  The stanza is
+    # taken out of the text every reader below is given, and a row of
+    # ``dropped_tier3_sections`` says so: a left-out row, as for any
+    # statement a device holds and does not run, so that a text with
+    # nothing else in it is not taken for a config that was read.
+    # (A header that begins with another word that is no type,
+    # ``range`` or ``breakout``, is taken out the same way; its row
+    # is the header line, a section.)
+    raw, headers = without_keyword_stanzas(raw)
+    intent.dropped_tier3_sections = keyword_stanza_rows(headers)
+
     intent.hostname = _extract_hostname(raw)
     intent.domain = _extract_domain(raw)
     intent.source_version = _extract_version(raw)
@@ -392,6 +423,13 @@ def _extract_version(raw: str) -> str:
         raw, re.MULTILINE,
     )
     return m.group(1) if m else ""
+
+
+def _header_name(m: re.Match[str]) -> str:
+    """The interface an :data:`_IFACE_RE` match names: its first word,
+    or the first two as one name when they are a type and its number
+    (``interface Bundle-Ether 10``; see ``spaced_port_name``)."""
+    return spaced_port_name(m.group(1), m.group(2))
 
 
 def _new_iface_scratch(name: str) -> dict:
@@ -492,7 +530,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     return scan_stanzas(
         raw.splitlines(),
         is_header=_IFACE_RE.match,
-        open_scratch=lambda m: _new_iface_scratch(m.group(1)),
+        open_scratch=lambda m: _new_iface_scratch(_header_name(m)),
         on_line=_on_line,
         build=_build_canonical_interface,
     )
@@ -862,7 +900,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
     for line in ticked(raw.splitlines()):
         m = _IFACE_RE.match(line)
         if m:
-            current_iface = m.group(1)
+            current_iface = _header_name(m)
             _note_header(current_iface)
             continue
         if current_iface is None:
@@ -871,7 +909,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
             current_iface = None
             m = _IFACE_RE.match(line)
             if m:
-                current_iface = m.group(1)
+                current_iface = _header_name(m)
                 _note_header(current_iface)
             continue
         bm = _BUNDLE_ID_RE.match(line)

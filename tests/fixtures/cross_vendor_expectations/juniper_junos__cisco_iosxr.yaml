@@ -15,7 +15,7 @@
 # The dominant loss is NOT the interface inventory.  That is the headline
 # difference from `aruba_aoscx__arista_eos.yaml`, and it is worth reading
 # before assuming the same shape: the interface list is preserved exactly —
-# 151 source records, 151 after parse -> render -> re-parse, 0 of 11 cells
+# 147 source records, 147 after parse -> render -> re-parse, 0 of 11 cells
 # with a differing interface-name set.  Junos-native names (`ge-0/0/0`,
 # `et-0/0/48`, `ae0`, `irb.100`, `lo0`, `fxp0`) survive the IOS-XR render
 # verbatim.  Every `interfaces[].*` disposition below therefore stands on its
@@ -129,14 +129,14 @@ per_field_expectation:
   # -- Interfaces -- preserved inventory, per-attribute losses ---------------
   #
   # Read the header note first: the interface list does NOT shrink on this
-  # pair (151 -> 151 records, 0 cells with a differing name set).  Each key
+  # pair (147 -> 147 records, 0 cells with a differing name set).  Each key
   # below therefore reports what happens to that attribute, and only that.
 
   "interfaces[].name":
     disposition: good
     note: >
       Preserved on all 11 cells — the load-bearing measurement for this whole
-      block.  151 source interface records round-trip to 151, and the name set
+      block.  147 source interface records round-trip to 147, and the name set
       is identical on every cell: `ge-0/0/0`, `et-0/0/48`, `xe-0/0/35`, `ae0`,
       `irb.100`, `ge-0/0/1.100`, `lo0`, `fxp0`, `em0` all survive verbatim.
       The render emits `interface ge-0/0/0`, not a translated
@@ -202,7 +202,7 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on 100% of records — 151 of 151, on all 11 cells — and it is the
+      Drifts on 100% of records — 147 of 147, on all 11 cells — and it is the
       direct price of `interfaces[].name` being preserved.  The IOS-XR parser
       infers interface type from the NAME PREFIX (`GigabitEthernet` ->
       ethernetCsmacd, `Loopback` -> softwareLoopback, `Bundle-Ether` ->

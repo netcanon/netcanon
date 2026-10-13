@@ -262,6 +262,34 @@ Provenance + per-fixture detail in
   trunks translated that way.  Not established from Cisco's pages: what
   `show running-config` prints for `none`.  The vendors' own
   sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
+- **A type and its number written apart** (CLI codec) —
+  `interface ethernet 1/11`, and in a route `ip route 0.0.0.0
+  0.0.0.0 loopback 66 100` — are one name, as IOS reads them, in
+  the letters the config has (`ethernet1/11`, `loopback66`); the
+  number after a route's interface is its distance, and an address
+  after a type word (`Dialer 10.0.0.1`) is the route's gateway, not
+  the type's number.  `show running-config` prints the two
+  together, so this is about typed and documentation-shaped text.
+  An `interface range ...` stanza names no interface, and neither
+  does an `interface breakout <port> map <profile>` line (OS10's,
+  in a text read as IOS-XE): it is not translated, and its header
+  is on the migrate banner, counted as a section.  ⚠️ Up to 0.7.7
+  the name was the first word alone: two `interface ethernet 1/N`
+  stanzas were one interface called `ethernet`, the route went out
+  `loopback` at distance 66, and a range or a breakout line was an
+  interface called `range` or `breakout`.
+- **`ip route <prefix> <mask> dhcp` keeps a word where a name
+  goes** (CLI codec).  The keyword says the next hop is the default
+  router a DHCP server hands out, and a translated route holds an
+  address or an interface name and nothing else, so `dhcp` is kept
+  as the route's interface.  From IOS-XE to IOS-XE the line is
+  written back as it was.  Onto another platform it is a route out
+  an interface called `dhcp` (`ip route 0.0.0.0/0 dhcp`, `set
+  device "dhcp"`, `gateway=dhcp`), and onto Junos the validation
+  report holds the job: write the target's own form for a
+  DHCP-learned route by hand.  After an interface (`ip route ...
+  GigabitEthernet1 dhcp`) the keyword is read past, and the route
+  is an ordinary one out that port.
 - **No `terminal length 0`.**  Netcanon uses `--More--`
   space-injection for paging.  This is a hard rule (see
   [`../../AGENTS.md`](../../AGENTS.md)) — don't try to bypass.

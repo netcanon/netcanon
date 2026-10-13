@@ -14,8 +14,8 @@
 # READ THIS BEFORE COMPARING WITH `aruba_aoscx__arista_eos.yaml`: this pair
 # is the INVERSE of that one. There, the dominant loss was structural — the
 # interface list shrank and every `interfaces[].*` sub-field went lossy with
-# it. Here the interface inventory is FULLY PRESERVED: 156 interface records
-# in, 156 out, identical name sets on all 12 cells. Every interface loss
+# it. Here the interface inventory is FULLY PRESERVED: 155 interface records
+# in, 155 out, identical name sets on all 12 cells. Every interface loss
 # below is therefore a genuine per-attribute loss that stands on its own
 # measurement, and the interface sub-fields that survive are declared `good`
 # rather than dragged down by a vanishing parent.
@@ -117,8 +117,8 @@ per_field_expectation:
 
   # -- Interfaces -- inventory intact, three attributes lost -----------------
   #
-  # The measured record count is the headline: 156 interface records across
-  # the 12 cells, 156 after the round-trip, with identical name sets on every
+  # The measured record count is the headline: 155 interface records across
+  # the 12 cells, 155 after the round-trip, with identical name sets on every
   # cell.  IOS-XR 4-segment names (GigabitEthernet0/0/0/1), channelized
   # sub-interfaces (…0/0/0/1.100), Bundle-Ether, BVI and MgmtEth0/RP0/CPU0/0
   # all survive the EOS render verbatim.  Nothing below is a knock-on effect
@@ -127,7 +127,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 12 of 12 cells: 156 source interface records, 156 after
+      Preserved on 12 of 12 cells: 155 source interface records, 155 after
       parse -> render -> re-parse, same names.  The EOS render does not
       re-shape IOS-XR's 4-segment naming, does not collapse channelized
       sub-interfaces, and does not drop management or BVI ports.
@@ -136,7 +136,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: lossy
     reason: >
-      Drifts on 2 of 156 interface records, on one cell
+      Drifts on 2 of 155 interface records, on one cell
       (`iosxr_design_cst_pa3_xr752.cfg`).  Both matrices declare
       `/interfaces/interface/config/description` supported and the loss is
       narrow: where the IOS-XR source wraps a description in literal double
@@ -151,7 +151,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 156 of 156 records — zero differing.  Both
+      Admin state preserved on 155 of 155 records — zero differing.  Both
       matrices declare `/interfaces/interface/config/enabled` supported.  A
       port that was `shutdown` on IOS-XR arrives shut on EOS.
     references: [iosxr-arista-surface]
@@ -159,7 +159,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 156 of 156 records; MTU is actually populated on 11 of
+      Preserved on 155 of 155 records; MTU is actually populated on 11 of
       them, and all 11 round-trip unchanged.  cisco_iosxr declares
       `/interfaces/interface/config/mtu` supported; arista_eos declares no
       path for it either way, so the coverage is thin — but the measurement
@@ -169,7 +169,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 156 of 156 records; IPv6 is populated on 11 of them and
+      Preserved on 155 of 155 records; IPv6 is populated on 11 of them and
       every address + prefix-length survives.  Both matrices declare
       `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
       supported.
@@ -178,7 +178,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 156 of 156 records, the widest-populated field on the
+      Preserved on 155 of 155 records, the widest-populated field on the
       pair.  Both matrices declare `/interfaces/interface/ipv4/address/ip`
       and `.../prefix-length` supported.  This is the field the migration
       most depends on and it is clean.
@@ -187,9 +187,9 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on all 12 cells: 138 of 156 records lose the IANA type hint
+      Drifts on all 12 cells: 137 of 155 records lose the IANA type hint
       entirely, going to the empty string.  The breakdown is uniform by
-      type — 126 `ianaift:ethernetCsmacd`, 10 `ianaift:ieee8023adLag` and 2
+      type — 126 `ianaift:ethernetCsmacd`, 10 `ianaift:ieee8023adLag` and 1
       `ianaift:other` all drop, while all 18 `ianaift:softwareLoopback`
       records survive, because EOS `interface Loopback<N>` re-derives the
       type from the name and `interface GigabitEthernet0/0/0/1` does not.
@@ -229,7 +229,7 @@ per_field_expectation:
       `/interfaces/interface/vrrp-groups/group/*` subtree unsupported — mode,
       priority, preempt, advertisement-interval, authentication, virtual-IPv6
       and description are all dropped at parse — so nothing reaches the
-      target.  Measured: 0 differing of 156 records, because both sides are
+      target.  Measured: 0 differing of 155 records, because both sides are
       empty on all of them.
       arista_eos declares `/interfaces/interface/vrrp-groups/group`
       SUPPORTED, so re-authoring first-hop redundancy on the EOS side will

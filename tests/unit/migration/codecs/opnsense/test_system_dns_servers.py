@@ -22,6 +22,7 @@ import pytest
 from netcanon.migration.canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
+    CanonicalInterface,
 )
 from netcanon.migration.codecs.opnsense.parse import parse_intent
 from netcanon.migration.codecs.opnsense.render import render_intent
@@ -70,6 +71,9 @@ def test_opnsense_dhcp_pool_dnsserver_unchanged() -> None:
     the ``<dhcpd>/<zone>/<dnsserver>`` comma-joined element — distinct
     from the new top-level ``<system>/<dnsserver>`` wire-form."""
     intent = CanonicalIntent()
+    # The pool's interface is an interface of the tree: read back, a
+    # pool under a zone <interfaces> does not have is left out.
+    intent.interfaces.append(CanonicalInterface(name="lan"))
     intent.dhcp_servers.append(
         CanonicalDHCPPool(
             interface="lan",

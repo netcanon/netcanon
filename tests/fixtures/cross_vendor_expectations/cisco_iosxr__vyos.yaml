@@ -16,7 +16,7 @@
 #
 # READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: the two
 # pairs share a source and a corpus, and the interface INVENTORY behaves
-# the same way — 156 interface records in, 156 out, identical name sets on
+# the same way — 155 interface records in, 155 out, identical name sets on
 # all 12 cells — so every interface loss below is a genuine per-attribute
 # loss standing on its own measurement, not a knock-on effect of a
 # vanishing parent. Where the two pairs diverge is credentials: on the EOS
@@ -137,8 +137,8 @@ per_field_expectation:
 
   # -- Interfaces -- inventory intact, four attributes lost ------------------
   #
-  # The measured record count is the headline: 156 interface records across
-  # the 12 cells, 156 after the round-trip, with identical name sets on
+  # The measured record count is the headline: 155 interface records across
+  # the 12 cells, 155 after the round-trip, with identical name sets on
   # every cell.  IOS-XR 4-segment names (GigabitEthernet0/0/0/1),
   # channelized sub-interfaces (…0/0/0/1.100), Bundle-Ether, BVI and
   # MgmtEth0/RP0/CPU0/0 all survive the VyOS render verbatim — the render
@@ -149,7 +149,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 12 of 12 cells: 156 source interface records, 156 after
+      Preserved on 12 of 12 cells: 155 source interface records, 155 after
       parse -> render -> re-parse, same names, zero cells with a differing
       name set.  The VyOS render does not re-shape IOS-XR's 4-segment
       naming, does not collapse channelized sub-interfaces, and does not
@@ -165,7 +165,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: lossy
     reason: >
-      Drifts on 2 of 156 interface records, on one cell
+      Drifts on 2 of 155 interface records, on one cell
       (`iosxr_design_cst_pa3_xr752.cfg`): `GigabitEthernet0/0/0/12` and
       `BVI500`.  The cause is the VyOS render's quote rewrite, and it
       matters which half of the string is affected — the TEXT survives
@@ -188,7 +188,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 156 of 156 records — zero differing on any
+      Admin state preserved on 155 of 155 records — zero differing on any
       cell.  Both matrices declare `/interfaces/interface/config/enabled`
       supported.  A port that was `shutdown` on IOS-XR arrives with the
       VyOS `disable` marker.
@@ -197,7 +197,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 156 of 156 records; MTU is actually populated on 11 of
+      Preserved on 155 of 155 records; MTU is actually populated on 11 of
       them, spread over the 4 cells that set it, and all 11 round-trip
       unchanged.  Both codecs declare `/interfaces/interface/config/mtu`
       supported.
@@ -206,7 +206,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 156 of 156 records; IPv6 is populated on 11 of them and
+      Preserved on 155 of 155 records; IPv6 is populated on 11 of them and
       every address + prefix-length survives.  Both matrices declare
       `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
       supported.
@@ -215,7 +215,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 156 of 156 records — populated on 60 of them, the
+      Preserved on 155 of 155 records — populated on 60 of them, the
       widest-populated field on the pair, and all 60 round-trip with
       address and prefix-length intact.  Both matrices declare
       `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
@@ -227,10 +227,10 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Drifts on all 12 cells and, unlike the arista_eos pair off the same
-      source, there are no survivors: ALL 156 records lose the IANA type
+      source, there are no survivors: ALL 155 records lose the IANA type
       hint to the empty string.  The breakdown is 126
       `ianaift:ethernetCsmacd`, 18 `ianaift:softwareLoopback`, 10
-      `ianaift:ieee8023adLag` and 2 `ianaift:other` — every one of them.
+      `ianaift:ieee8023adLag` and 1 `ianaift:other` — every one of them.
       Both matrices declare `/interfaces/interface/config/type` LOSSY in
       their own right, and the vyos declaration states the mechanism: VyOS
       config carries no IANA ifType, so the codec re-derives it from the

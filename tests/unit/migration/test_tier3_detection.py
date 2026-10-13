@@ -9,9 +9,13 @@ genuinely drops.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
+from netcanon.migration import _tier3_detection
 from netcanon.migration._tier3_detection import (
+    LEFT_OUT_ROWS_SHOWN,
     detect_tier3_sections_dellos10,
     detect_tier3_sections_fortios,
     detect_tier3_sections_iosxe_cli,
@@ -19,6 +23,9 @@ from netcanon.migration._tier3_detection import (
     detect_tier3_sections_junos,
     detect_tier3_sections_opnsense,
     detect_tier3_sections_routeros,
+    is_left_out_row,
+    left_out_row,
+    left_out_rows,
 )
 
 pytestmark = pytest.mark.unit
@@ -709,3 +716,54 @@ class TestAristaMLAG:
             "guard would pass vacuously"
         )
         assert not missed, f"MLAG silently dropped, no banner, in: {missed}"
+
+
+# ---------------------------------------------------------------------------
+# The rows for statements a parser read and left out
+# ---------------------------------------------------------------------------
+
+
+class TestRowsForStatementsLeftOut:
+    """Each kind of statement a device holds and does not run has a
+    row that begins with its own word.  Two readers tell such a row
+    from a section by that word: ``is_left_out_row`` and the migrate
+    page."""
+
+    _KINDS = sorted(_tier3_detection._LEFT_OUT)
+
+    def test_the_kinds(self) -> None:
+        assert self._KINDS == ["delete", "inactive", "preconfigure"]
+
+    @pytest.mark.parametrize("kind", _KINDS)
+    def test_a_row_of_each_kind_is_told_apart(self, kind: str) -> None:
+        row = left_out_row(kind, ("interface", "TenGigE0/0/0/12"))
+        assert row.startswith(f"{kind}: interface TenGigE0/0/0/12 (")
+        assert row.endswith("; not translated)")
+        assert is_left_out_row(row)
+
+    def test_a_header_line_is_a_section(self) -> None:
+        assert not is_left_out_row("interface preconfigure TenGigE0/0/0/12")
+        assert not is_left_out_row("interface range GigabitEthernet1/0/2 - 3")
+
+    def test_the_last_row_begins_as_asked(self) -> None:
+        """Past the bound one row counts the rest.  It begins with the
+        word of the kind the caller names, which for a config that has
+        no deactivated statement is not ``inactive:``."""
+        held = [("preconfigure", ("interface", f"TenGigE0/0/0/{n}")) for n in range(LEFT_OUT_ROWS_SHOWN + 3)]
+        rows = left_out_rows(held, rest="preconfigure")
+        assert len(rows) == LEFT_OUT_ROWS_SHOWN + 1
+        assert rows[-1] == "preconfigure: ... (3 more statements left out; not listed)"
+        assert left_out_rows(held)[-1] == "inactive: ... (3 more statements left out; not listed)"
+        assert all(is_left_out_row(row) for row in rows)
+
+    @pytest.mark.parametrize("kind", _KINDS)
+    def test_the_page_knows_each_kinds_word(self, kind: str) -> None:
+        """The page counts sections, and says of the other rows what
+        they are: a kind it does not know is counted as a section to
+        apply by hand."""
+        page = (
+            Path(__file__).resolve().parents[3] / "netcanon" / "templates" / "migrate.html"
+        ).read_text(encoding="utf-8")
+        prefix = _tier3_detection._LEFT_OUT[kind][0]
+        assert f"label.indexOf('{prefix}') === 0" in page
+        assert f"<code>{prefix.strip()}</code>" in page

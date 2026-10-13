@@ -11,8 +11,8 @@
 # opposite shape to the aruba_aoscx-source pairs.
 #
 # The structural finding is the INVERSE of `aruba_aoscx__arista_eos`: no
-# interface record vanishes on this pair. 151 source interface records
-# re-parse as 151 target records across all 11 cells, with empty
+# interface record vanishes on this pair. 147 source interface records
+# re-parse as 147 target records across all 11 cells, with empty
 # only_in_source / only_in_target sets. Every `interfaces[].*` sub-field
 # therefore carries INDEPENDENT signal and was judged on its own evidence —
 # four are `good`, and the two that drift do so for two unrelated reasons.
@@ -142,7 +142,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      151 source interface records re-parse as 151 target records across all
+      147 source interface records re-parse as 147 target records across all
       11 cells, with `only_in_source` and `only_in_target` both empty on
       every cell.  Junos names (`ge-`, `xe-`, `et-`, `ae`, `irb`, `lo0`,
       `em0`, `fxp0`) are carried through verbatim rather than translated to
@@ -218,7 +218,7 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      The widest drift on the pair: all 151 interface records on all 11
+      The widest drift on the pair: all 147 interface records on all 11
       cells.  aruba_aoscx declares `/interfaces/interface/config/type` lossy
       because AOS-CX carries no IANA ifType and the codec infers it from the
       interface-NAME shape (`1/1/1` -> ethernetCsmacd, `vlan N` ->
@@ -234,7 +234,7 @@ per_field_expectation:
   "interfaces[].lag_member_of":
     disposition: lossy
     reason: >
-      Drifts on 5 cells / 25 of 151 records, and every one of the 25 is a
+      Drifts on 5 cells / 25 of 147 records, and every one of the 25 is a
       pure `ae<N>` -> `lag <N>` rename with the membership intact — verified
       by round-trip, not inferred: `ae1[et-0/0/48, et-0/0/49]` re-parses as
       `lag 1[et-0/0/48, et-0/0/49]`, member for member.  The audit DOES

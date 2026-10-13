@@ -476,7 +476,12 @@ the policy locally:
   banner.  (Junos: the detector is given the set-form the parser
   read, not the text as it came; and `left_out_rows` makes the rows
   for statements the parser read and left out, which
-  `is_left_out_row` tells from a section.)  Output is NOTIFICATION-ONLY — never read by render or any
+  `is_left_out_row` tells from a section.  The IOS-XE CLI, IOS XR and
+  OPNsense parsers add rows of their own: a left-out row for an IOS
+  XR `interface preconfigure` stanza, which the router holds and
+  does not run, and a section row for an `interface range` header
+  and for a `<dhcpd>` zone that has no device, whose pool is left
+  out.)  Output is NOTIFICATION-ONLY — never read by render or any
   transform.  Patterns target stanzas the canonical schema doesn't
   model (firewall, NAT, QoS, route-maps, crypto/IPsec, OPNsense filter
   / NAT / VPN XML); supported stanzas are deliberately excluded so the
@@ -662,9 +667,11 @@ the policy locally:
     hands it every record it makes (`made`) and calls `settle()` when
     the config has been read; each record then has its interface's
     list.  The key a stanza parser gives is `TrunksByName.key(<header
-    line>)`, NOT the name it gives the record: two parsers read
+    line>)`, NOT the name it gives the record: the NX-OS parser reads
     `interface port-channel 1` and `interface port-channel 2` as the
-    one name `port-channel`, and those are two interfaces.  A stanza met
+    one name `port-channel` (the IOS-XE parser did, until it read a
+    type and its number written apart as one name), and those are two
+    interfaces.  A stanza met
     twice is one interface; a trunk that states no list has the
     platform's only where the interface says it is a trunk, and a
     trunk the parser inferred from a trunk line has nothing of it.
@@ -702,6 +709,29 @@ the policy locally:
     table what "no line" means on their platform.  (`aruba_aoscx` and
     `juniper_junos` have grammars of their own and call
     `trunk_list_says` / `is_every_vlan`.)
+
+* **`netcanon/migration/codecs/_helpers.py::spaced_port_name`** and
+  **`without_keyword_stanzas`** — two readings of a Cisco header
+  line that the IOS-XE CLI and IOS XR parsers share.
+  `spaced_port_name(first, second)` is the interface name two words
+  spell: IOS reads `interface ethernet 1/11` and `ip route 0.0.0.0
+  0.0.0.0 loopback 66` as one name, so a type on its own followed
+  by a number is joined to it, in the letters the config has.  A
+  parser that takes the first word for the name makes an interface
+  called `ethernet`.  `without_keyword_stanzas(raw)` takes out every
+  stanza whose header begins with a word that is no type
+  (`NOT_AN_INTERFACE_TYPE`: `preconfigure`, `range`, `breakout`) and
+  returns their header lines; the parser runs it before any reader,
+  so that nothing in such a stanza binds anything.
+  `keyword_stanza_rows(headers)` makes the rows of
+  `dropped_tier3_sections` from them, and the keywords are two
+  kinds of row: a `preconfigure` stanza is a statement the device
+  holds and does not run (a left-out row, as for a Junos `inactive:`
+  statement), a `range` stanza or a `breakout` line is in force and
+  not translated (its header, a section).  In a route, a word after
+  a type is joined to it only where it can be the type's number: an
+  address there is the gateway.  (`cisco_nxos`, `aruba_aoscx` and
+  `dell_os10` read their headers themselves.)
 
 * **LAG-name helpers (location note)** — two LAG-name helpers exist
   but are NOT shared cross-codec utilities and do NOT live in

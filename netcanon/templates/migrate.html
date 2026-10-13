@@ -1934,9 +1934,9 @@
    * detected stanza header with one entry per row carrying
    * data-testid="migrate-tier3-section-N".  When empty, the banner is
    * hidden.  Notification only — these stanzas are NOT translated.
-   * A row that begins "inactive: " or "delete: " names a statement
-   * the parser left out on purpose; it is listed, and not counted
-   * among the sections.
+   * A row that begins "inactive: ", "delete: " or "preconfigure: "
+   * names a statement the parser left out on purpose; it is listed,
+   * and not counted among the sections.
    */
   function renderTier3Banner(job) {
     if (!tier3Banner) return;
@@ -1948,13 +1948,22 @@
     }
     // A statement the parser read and left out is in this list too
     // (the Junos parser: one the source had deactivated, or one a
-    // load file marks for deletion; _tier3_detection.left_out_row
-    // makes the row).  It is not a section to apply by hand, so it
-    // is not counted as one, and the banner says what it is.
-    var leftOut = sections.filter(function(label) {
+    // load file marks for deletion; the IOS XR parser: a stanza held
+    // for an interface the router does not have;
+    // _tier3_detection.left_out_row makes the row).  It is not a
+    // section to apply by hand, so it is not counted as one, and the
+    // banner says what it is.  The two kinds have a sentence each:
+    // a deactivated statement is not for the target, and a held
+    // stanza is for a target that is to hold the same.
+    var deactivated = sections.filter(function(label) {
       label = String(label);
       return label.indexOf('inactive: ') === 0 || label.indexOf('delete: ') === 0;
     }).length;
+    var held = sections.filter(function(label) {
+      label = String(label);
+      return label.indexOf('preconfigure: ') === 0;
+    }).length;
+    var leftOut = deactivated + held;
     var tier3 = sections.length - leftOut;
     var rows = sections.map(function(label, idx) {
       return '<li data-testid="migrate-tier3-section-' + idx + '">'
@@ -1976,12 +1985,25 @@
             + 'Operator must apply them manually on the target device.  '
           : '')
       + (leftOut
-          ? '<span data-testid="migrate-tier3-inactive-note">A line that '
-            + 'begins <code>inactive:</code> is a statement the source had '
-            + 'deactivated, and one that begins <code>delete:</code> is a '
-            + 'statement a load file marks for deletion: it was not in '
-            + 'force there, and is left out here for that reason.  It is '
-            + 'not something to apply by hand.</span>'
+          ? '<span data-testid="migrate-tier3-inactive-note">'
+            + (deactivated
+                ? 'A line that '
+                  + 'begins <code>inactive:</code> is a statement the source had '
+                  + 'deactivated, and one that begins <code>delete:</code> is a '
+                  + 'statement a load file marks for deletion: it was not in '
+                  + 'force there, and is left out here for that reason.  It is '
+                  + 'not something to apply by hand.'
+                : '')
+            + (deactivated && held ? '  ' : '')
+            + (held
+                ? 'A line that begins <code>preconfigure:</code> is '
+                  + 'configuration an IOS XR router holds for an interface it '
+                  + 'does not have: it was not in force there, and is left out '
+                  + 'here for that reason.  Write it on the target by hand only '
+                  + 'if the target is to hold configuration for the same '
+                  + 'hardware.'
+                : '')
+            + '</span>'
           : '')
       + '</div>'
       + '<ul style="margin-top:.4rem">' + rows + '</ul>';
