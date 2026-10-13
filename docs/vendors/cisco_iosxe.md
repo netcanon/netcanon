@@ -262,6 +262,48 @@ Provenance + per-fixture detail in
   trunks translated that way.  Not established from Cisco's pages: what
   `show running-config` prints for `none`.  The vendors' own
   sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
+- **A trunk's native VLAN, and whether its allowed list names it**
+  (CLI codec).  `switchport trunk native vlan <N>` is a line of its
+  own, and the allowed line can name N or leave it out; either is
+  read as it is written and comes back so.  In the canonical tree
+  the list is what a trunk carries, so a native VLAN the list leaves
+  out is stated and not carried: it reaches AOS-S with no `untagged`
+  line, and a `; review:` line that says so, and OS10 as `no
+  switchport access vlan` under a `! review:` line (release 0.7.7
+  and earlier wrote the port untagged in that VLAN on both).  What
+  Cisco says of it: the native VLAN is VLAN 1
+  by default, and VLAN 1 can be taken off a trunk "so that no user
+  traffic (including spanning-tree advertisements) is sent or
+  received on VLAN 1."  For a native VLAN other than 1 there is no
+  sentence of Cisco's: that it is not carried either follows from
+  Cisco's rule that a trunk passes the VLANs its list allows, and is
+  an inference — one that two phrases of Cisco's command reference
+  read against.  As a target, an AOS-S port that is untagged in one
+  VLAN and tagged in others, and an OS10 trunk with an access VLAN,
+  are written with that VLAN on the allowed line beside the native
+  line (`switchport trunk native vlan 10`, `switchport trunk allowed
+  vlan 10,20,30`).  Release 0.7.7 and earlier left it off the
+  allowed line, in jobs that said `completed`: check the allowed
+  list of every trunk with a native line migrated then from AOS-S or
+  OS10.  A trunk that states no native VLAN is written none, and the
+  global `vlan dot1q tag native` is not read.  The VLAN pane's map
+  keeps to that reading.  Where a map would bring a native VLAN
+  that the list leaves out INTO the list, the native VLAN is
+  cleared if the map has merged it with a VLAN of the config that
+  the list names, and the new id is taken out of the list if the
+  list only covered that number with a range
+  (`switchport trunk native vlan 1000` beside `switchport trunk
+  allowed vlan 2-999,1001-4094`, and 1000 renumbered to 900); the
+  job says which, in a `vlan_rename:` warning
+  ([`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A trunk's
+  allowed list is not what I wrote").  It is done for a port
+  in any mode -- `switchport mode dynamic desirable`, or no mode
+  line -- since such a port can become a trunk and its trunk lines
+  are written here.  The short allowed list of such a port names
+  its VLANs as a trunk's does, declared or not: `native vlan 10`
+  beside `allowed vlan 500`, with 10 given the id 500, is a merge
+  in any mode.  The vendors' own
+  sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
 - **A type and its number written apart** (CLI codec) —
   `interface ethernet 1/11`, and in a route `ip route 0.0.0.0
   0.0.0.0 loopback 66 100` — are one name, as IOS reads them, in

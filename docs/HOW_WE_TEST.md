@@ -264,6 +264,42 @@ mend is in named sets, compared for equality with what is measured.
 It cannot see a membership the source parser never put in the tree:
 that is missing from both sides.
 
+**A convention of the tree is not checked by reading the tree that
+way.**  A trunk states which VLAN it carries untagged and which VLANs
+it carries, and the platforms differ on whether the second statement
+names the first: a native line beside an allowed line that may leave
+the VLAN out (IOS-XE, NX-OS, EOS, AOS-CX, Junos), an access VLAN
+beside a list of tagged VLANs (OS10), `untagged` ports listed VLAN by
+VLAN (AOS-S).  The tree kept each as its text had it, and every AOS-S
+and OS10 trunk with an untagged VLAN was written for the first five
+with a native line beside a list that left the VLAN out -- which on
+AOS-CX, by HPE's own sentence, drops the port's untagged traffic --
+in jobs that said `completed`.  The check above did not see it,
+because it read a native VLAN as a membership whatever the list
+said, on the source's tree and on the output parsed again: the two
+always agreed.  `test_the_list_holds_the_native_vlan.py` reads what
+a DEVICE carries untagged on a port, each side by its own platform's
+grammar, from a table written in the test by hand and compared with
+the one the codecs read; the output is read twice, parsed again and
+as text.  It runs every committed capture of a switch onto every
+switch, and small configs for each shape of trunk through every
+pair, with what the source carries written beside each by hand.
+Onto AOS-S, where a native VLAN the source's list leaves out has no
+line to be written as, it also looks for the `; review:` line that
+says so, in the stanza of that VLAN and for that port -- the line
+WHOLE, typed out in the test, and in the form for what the output
+makes of the name (a port, or a trunk group and a port on a `trunk`
+line): a review line pinned by a few of its words can gain a claim
+about a device that no page supports, and pass.  The VLAN pane's
+map is held to the same question by a test with no list of cases
+(`test_a_vlan_drop_and_a_trunks_list.py`): over every map of a few
+ids, no port comes to carry untagged a VLAN it did not carry
+untagged before.
+What it cannot see is in its docstring and in the known limitations:
+nothing is filled in that a text does not state, so a trunk that
+states no native VLAN carries none there, whatever its platform's
+default.
+
 **A status is checked against the output, not against the warning
 that should have moved it.**  With no devices declared, a job in
 which two source names ended on one name, a name was dropped because

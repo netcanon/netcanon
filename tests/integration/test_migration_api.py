@@ -501,17 +501,22 @@ class TestAPortOnlyAListNames:
     stanza: the config names it in a VLAN's list, or on a ``trunk``
     line.  A target that writes a port's VLANs on the port's own
     stanza used to have no line for it -- the VLANs and the SVIs came
-    out and not one access port -- in a job that said ``completed``."""
+    out and not one access port -- in a job that said ``completed``.
+
+    Port 4 is untagged in VLAN 10 and tagged in VLAN 20.  Where the
+    allowed line is the whole of what a trunk carries (NX-OS, AOS-CX)
+    it names VLAN 10 beside the native line; on OS10 it names the
+    tagged VLAN only, and the access line states the other."""
 
     @pytest.mark.parametrize(
         ("target", "access", "native", "allowed", "member"),
         [
             ("cisco_nxos", "switchport access vlan {}", "switchport trunk native vlan {}",
-             "switchport trunk allowed vlan {}", "channel-group 1 mode active"),
+             "switchport trunk allowed vlan 10,{}", "channel-group 1 mode active"),
             ("dell_os10", "switchport access vlan {}", "switchport access vlan {}",
              "switchport trunk allowed vlan {}", "channel-group 1 mode active"),
             ("aruba_aoscx", "vlan access {}", "vlan trunk native {}",
-             "vlan trunk allowed {}", "lag 1"),
+             "vlan trunk allowed 10,{}", "lag 1"),
         ],
     )
     def test_it_is_written_with_its_vlans(

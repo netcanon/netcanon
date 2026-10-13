@@ -138,6 +138,17 @@ verify:
       output shows `interface 21-24 / switchport mode trunk /
       switchport trunk allowed vlan 20` (bare numeric); verify if
       you have any multi-VLAN trunk patterns.
+- [ ] **A port that is untagged in one VLAN and tagged in others**
+      (none in this demo): it is written `switchport trunk native
+      vlan <N>` with N ALSO on the allowed line, because a trunk's
+      list is what it carries.  Release 0.7.7 and earlier left N off
+      the allowed line, in jobs that said `completed`; what an EOS
+      switch does with a native VLAN its list leaves out is not
+      established from Arista's pages, so on a switch migrated then,
+      add the native VLAN to the allowed list.  The demo's ports
+      21-24 are tagged only (`no untagged 1-24` took them out of
+      VLAN 1): they are written no native line, and an Arista trunk
+      that states none uses native VLAN 1.
 - [ ] **MLAG**: if you're consolidating to an Arista MLAG pair, the
       `Port-Channel` reconciliation will translate AOS-S `trk<N>` to
       `Port-Channel<N>`.  Plan the MLAG peer-link config natively

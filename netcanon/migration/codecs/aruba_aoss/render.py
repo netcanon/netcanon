@@ -22,6 +22,18 @@ Multi-VIP cross-vendor sources drop secondaries with ``; review:``
 comments (AOS-S supports one virtual IP per VRID).  Non-``vrrp``
 modes (HSRP / CARP) emit review comments and skip.
 
+A trunk whose native VLAN its allowed list does not hold states that
+VLAN and, in the tree, does not carry it (``trunk_untagged_vlan``):
+no VLAN lists the port ``untagged``, so no ``untagged`` line is
+written for it.  Left at that the output would say nothing of it, and
+by HPE's own sentences an AOS-S port is in the default VLAN until it
+is removed from it.  So the VLAN's stanza carries one ``; review:``
+line for each such name (:data:`_NATIVE_NOT_CARRIED_REVIEW`), which
+the parser passes over like any comment.  The line has two forms:
+for a port it says what those sentences say, and for a trunk group
+or a port that is in one -- of which no sentence was found -- that
+what it is in by default is not established.
+
 Internal helper re-exported from ``codec.py`` for tests that pin the
 renderer's port-range compression contract:
 
@@ -44,6 +56,7 @@ from ..._radius_secrets import (
 from ..._user_secrets import classify_hash, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent
+from ...canonical.transforms import trunk_untagged_vlan
 from ..base import RenderError
 from .parse import _lists_read_from, _members_read_from
 from .port_names import one_spelling, trunk_number
@@ -430,6 +443,102 @@ def _format_port_list(ports: list[str]) -> str:
     return ",".join(parts)
 
 
+#: Written in a VLAN's stanza for a trunk that states the VLAN as its
+#: native VLAN and leaves it out of its allowed list.  ``{native}``
+#: is the id the OUTPUT has for that VLAN -- a VLAN map can have
+#: renumbered it -- so the line does not call it the source's.  What
+#: the list leaves out is a fact of the text the trunk was read
+#: from; what the source switch does with such a VLAN is not said
+#: here, because not every vendor says it.  ``{switch}`` is what an
+#: AOS-S switch does with the name when no line makes it untagged,
+#: in one of the two forms below.
+_NATIVE_NOT_CARRIED_REVIEW = (
+    "; review: port {port} -- native VLAN {native} is stated for this "
+    "trunk and its allowed list leaves it out, so no untagged line is "
+    "written for this port; {switch} -- check what this port is to "
+    "carry untagged"
+)
+
+#: For a port: what HPE's two sentences say, and no more.  "In the
+#: factory default configuration, all ports are assigned to the
+#: default VLAN (DEFAULT_VLAN; VID=1)." and "Any ports not
+#: specifically removed from the default VLAN remain in the
+#: DEFAULT_VLAN, regardless of other port assignments."  Neither
+#: says tagged or untagged, and so neither does the line.
+_A_PORT_STAYS_IN_VLAN_1 = (
+    "in the factory default configuration an AOS-S port is in the "
+    "default VLAN (VID 1), and it remains there until it is removed"
+)
+
+#: For a trunk group (``Trk<n>``) and for a port that is in one.
+#: HPE's sentences speak of ports; none was found that says what a
+#: trunk group, or a port once it is in one, is in by default.
+_NOT_ESTABLISHED_FOR_A_GROUP = (
+    "which VLAN an AOS-S trunk group, or a port that is in one, is in "
+    "by default is not established"
+)
+
+
+def _native_not_carried_line(port: str, native: int, grouped: bool) -> str:
+    """:data:`_NATIVE_NOT_CARRIED_REVIEW` for one name of
+    :func:`_natives_not_carried`, in the form for a trunk group or a
+    port of one (*grouped*) or in the form for a port."""
+    return _NATIVE_NOT_CARRIED_REVIEW.format(
+        port=port, native=native,
+        switch=(
+            _NOT_ESTABLISHED_FOR_A_GROUP if grouped
+            else _A_PORT_STAYS_IN_VLAN_1
+        ),
+    )
+
+
+def _natives_not_carried(tree: CanonicalIntent) -> dict[int, dict[str, bool]]:
+    """The trunks that state a native VLAN their allowed list does
+    not hold, by that VLAN: the names
+    :data:`_NATIVE_NOT_CARRIED_REVIEW` is written for, each with
+    whether it is a trunk group or a port of one.
+
+    Every interface record that is such a trunk is one name, as it is
+    for a VLAN's ``tagged`` line: a LAG under its own name, and a
+    member port that states the same lines under its own.  Each name
+    is in the form the device writes it, once, in the order of the
+    records.
+
+    A name is a trunk group's where it has a trunk's form
+    (``Trk<n>``) or is a LAG of the tree, and a port is in one where
+    a LAG of the tree names it as a member: those are the ports the
+    ``trunk`` lines of the output are written for.  It is asked of
+    the tree, which those lines are written from, and not of the
+    output read back.
+
+    A port that some VLAN lists ``untagged`` is not among them: the
+    output states an untagged VLAN for it, and the line would say
+    otherwise.  (No parser makes such a tree: a trunk whose native
+    VLAN is outside its list is listed ``untagged`` nowhere.)
+    """
+    untagged = {
+        one_spelling(port)
+        for vlan in tree.vlans for port in vlan.untagged_ports
+    }
+    in_a_group = {one_spelling(lag.name) for lag in tree.lags} | {
+        one_spelling(port) for lag in tree.lags for port in lag.members
+    }
+    found: dict[int, dict[str, bool]] = {}
+    for iface in tree.interfaces:
+        native = iface.trunk_native_vlan
+        if iface.switchport_mode != "trunk" or native is None:
+            continue
+        if trunk_untagged_vlan(iface.trunk_allowed_vlans, native) is not None:
+            continue
+        name = one_spelling(iface.name)
+        if name in untagged:
+            continue
+        found.setdefault(native, {})[_as_the_device_writes(iface.name)] = (
+            trunk_number(iface.name) is not None or name in in_a_group
+        )
+    return found
+
+
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
@@ -704,6 +813,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for g in iface.vrrp_groups
     ):
         lines.append("router vrrp")
+    # The trunks whose native VLAN their list leaves out, by VLAN.
+    # Each is taken from here by the first stanza of its VLAN; what is
+    # left when the stanzas are written has no stanza to stand in.
+    not_carried = _natives_not_carried(tree)
     for vlan in tree.vlans:
         opens_at = len(lines)
         lines.append(f"vlan {vlan.id}")
@@ -721,6 +834,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             untagged, tagged = _lists_read_from("\n".join(lines[opens_at:]))
             given_back.update(_given_back(untagged, vlan.untagged_ports))
             given_back.update(_given_back(tagged, vlan.tagged_ports))
+        # After the lists, and after they were read back: a comment
+        # is no line of theirs.
+        for port, grouped in not_carried.pop(vlan.id, {}).items():
+            lines.append(
+                "   " + _native_not_carried_line(port, vlan.id, grouped)
+            )
         # SVI absorption — codepath 2 of 3.  See
         # ._svi_absorption for the full rule.  SVI address may live
         # on:
@@ -840,6 +959,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 lines.append("      enable")
                 lines.append("      exit")
         lines.append("   exit")
+    # A native VLAN that has no record has no stanza.  The parsers
+    # make a record for every native id a config states, so this is a
+    # tree no parser made; the line is written all the same, where
+    # the stanza would stand.
+    for native, ports in not_carried.items():
+        for port, grouped in ports.items():
+            lines.append(_native_not_carried_line(port, native, grouped))
 
     # OOBM (out-of-band management) — AOS-S has a top-level `oobm`
     # block that's NOT a regular interface stanza.  When the cross-

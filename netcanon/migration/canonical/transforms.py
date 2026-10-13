@@ -32,10 +32,17 @@ Public surface:
   lists on each :class:`CanonicalVlan`.  Called by Cisco-style codecs
   whose native config is per-port.  Told which VLAN ids its caller
   keeps (``keep``), it makes nothing the caller would then drop.
+* :func:`trunk_untagged_vlan` — the VLAN a trunk carries untagged:
+  its native VLAN where its allowed list holds it, and none where it
+  does not.  :func:`project_switchport_to_vlan` reads a trunk
+  through it, and :func:`project_vlan_to_switchport` makes a list
+  that holds the VLAN a port is untagged in, so the two halves of
+  the tree say the same thing of one port.
 * :func:`project_vlan_to_switchport` — the inverse: read VLAN-centric
   ``tagged_ports`` / ``untagged_ports`` lists and synthesise
   ``switchport_mode`` + ``access_vlan`` + ``trunk_allowed_vlans`` on each
-  :class:`CanonicalInterface`.
+  :class:`CanonicalInterface`.  A port tagged in some VLANs and
+  untagged in one is a trunk whose list holds all of them.
   Called by the one parser whose config states membership per VLAN
   (Aruba AOS-S), which first gives every listed port a record, and
   by three renderers (Arista EOS, Cisco IOS-XE CLI, Junos), where it
@@ -336,6 +343,57 @@ def is_every_vlan(allowed: Sequence[int]) -> bool:
     return _TRUNK_ALL_RANGE_FULL.issubset(allowed)
 
 
+def trunk_untagged_vlan(
+    allowed: Sequence[int], native: int | None,
+) -> int | None:
+    """The VLAN a trunk carries untagged: *native* where *allowed*
+    holds it, and ``None`` where it does not or none is stated.
+
+    On a trunk the allowed list is what the port carries, the native
+    VLAN among them, and the native VLAN says which of them goes
+    without a tag.  A native VLAN the list does not hold is stated
+    and not carried: that is what the text of the platforms whose
+    list decides it means (``NATIVE_VLAN_AND_THE_LIST`` in
+    ``codecs/_helpers.py``), and a parser of a platform that states
+    the untagged VLAN beside its list puts the VLAN in the list.  A
+    list of every id holds every native VLAN.
+
+    Read a trunk's untagged VLAN through this, never from
+    ``trunk_native_vlan`` alone.
+
+    Args:
+        allowed: The trunk's ``trunk_allowed_vlans``.
+        native: Its ``trunk_native_vlan``.
+    """
+    if native is None or native not in allowed:
+        return None
+    return native
+
+
+def _carried_untagged(
+    iface: CanonicalInterface, every: frozenset[int] | None,
+) -> int | None:
+    """:func:`trunk_untagged_vlan` of a trunk, for the projection.
+
+    Asked of *every* where the trunk's list has already been found to
+    be one of the two that are not expanded (:func:`_every_id`): a
+    set, so that the look does not read the 4,094 entries again."""
+    return trunk_untagged_vlan(
+        iface.trunk_allowed_vlans if every is None else every,
+        iface.trunk_native_vlan,
+    )
+
+
+def _stamps_in_words(trunks: int, vlans: int, across: int, singly: int) -> str:
+    """What the projection is about to stamp, for a refusal to say:
+    *across* memberships of *trunks* trunks of a whole list on
+    *vlans* VLANs, and *singly* stamped one at a time."""
+    if not across:
+        return "the VLANs that access and trunk ports name"
+    said = f"{trunks:,} trunks that allow every VLAN x {vlans:,} VLANs"
+    return said + (f" + {singly:,} listed" if singly else "")
+
+
 def _listed(allowed: list[int], keep: AbstractSet[int] | None) -> list[int]:
     """The ids of a trunk's list that are handed to a VLAN record.
 
@@ -376,12 +434,19 @@ def project_switchport_to_vlan(
               1 (``2-4094``), is not made into 4,094 VLANs: the
               iface goes onto the VLANs already declared that the
               list holds.
-            - if ``trunk_native_vlan`` is set:
+            - if ``trunk_native_vlan`` is set AND the list holds
+              it (:func:`trunk_untagged_vlan`; a list of every id
+              holds it, ``2-4094`` does not hold VLAN 1):
               append iface to ``vlans[native].untagged_ports`` AND
               remove it from ``tagged_ports`` on that same VLAN.
-              (Native VLAN traffic rides the trunk untagged; Cisco
-              permits listing the native vlan in ``allowed`` but it
-              never actually gets tagged.)
+              (The native VLAN rides the trunk untagged: the list
+              names it, and it is never tagged.)
+            - if ``trunk_native_vlan`` is set and the list does NOT
+              hold it: the port is made no member of that VLAN.  The
+              list is what the trunk carries, so a native VLAN
+              outside it is stated and not carried.  The VLAN's
+              record is still made, as for any stated id, and what
+              its lists already held is left as it was.
 
     Idempotent: an interface already present in a list is not added twice.
 
@@ -403,7 +468,8 @@ def project_switchport_to_vlan(
             kept -- on a 48-port switch, some 400 times what was kept
             and nearly all the memory the parse took.  Access and
             native VLANs are always made (they are in every caller's
-            set).  So is an id that is not a VLAN id at all, so that
+            set), a native VLAN whether or not its trunk's list holds
+            it.  So is an id that is not a VLAN id at all, so that
             the record still refuses it: ``1-200,5000`` fails with
             *keep* as it does without.
 
@@ -459,6 +525,13 @@ def project_switchport_to_vlan(
     # it that get a record (``listed``).
     whole: dict[int, frozenset[int]] = {}
     listed: dict[int, list[int]] = {}
+    # The VLAN each trunk carries untagged, by the id() of the trunk:
+    # its native VLAN where its list holds it.  The list is what the
+    # trunk carries, so a native VLAN it does not hold is stated and
+    # not carried, and the port is made no member of it.  (Asked of
+    # the whole list, not of the ids the caller keeps: a native id is
+    # always kept.)
+    untagged: dict[int, int] = {}
     # The stamps PASS 2 makes one at a time: an access VLAN, a native
     # VLAN, an id of a list.  (An upper bound: a port that a list names
     # twice is stamped once.)
@@ -478,8 +551,12 @@ def project_switchport_to_vlan(
                 for vid in ids:
                     _vlan(vid)
                 singly += len(ids)
-            if iface.trunk_native_vlan is not None:
-                _vlan(iface.trunk_native_vlan)
+            native = iface.trunk_native_vlan
+            if native is not None:
+                # The record is made for any native id that is stated.
+                _vlan(native)
+            if _carried_untagged(iface, every) is not None:
+                untagged[id(iface)] = native
                 singly += 1
 
     # PASS 2 — stamp membership; the trunk-all branch now sees the full set.
@@ -498,14 +575,10 @@ def project_switchport_to_vlan(
     # there is, so a thousand of each are a million memberships from a
     # text that holds no range.
     across = sum(len(onto[id(every)]) for every in whole.values())
-    if across:
-        said = (
-            f"{len(whole):,} trunks that allow every VLAN x "
-            f"{len(intent.vlans):,} VLANs"
-        ) + (f" + {singly:,} listed" if singly else "")
-    else:
-        said = "the VLANs that access and trunk ports name"
-    charge("memberships", across + singly, said)
+    charge(
+        "memberships", across + singly,
+        _stamps_in_words(len(whole), len(intent.vlans), across, singly),
+    )
     for iface in ticked(intent.interfaces):
         mode = iface.switchport_mode
         if mode is None:
@@ -543,7 +616,7 @@ def project_switchport_to_vlan(
             else:
                 for vid in listed[id(iface)]:
                     _add_unique(_vlan(vid).tagged_ports, iface.name)
-            native = iface.trunk_native_vlan
+            native = untagged.get(id(iface))
             if native is not None:
                 vlan = _vlan(native)
                 _add_unique(vlan.untagged_ports, iface.name)
@@ -595,7 +668,14 @@ def project_vlan_to_switchport(
           VLAN that becomes the native): set ``switchport_mode="trunk"``
           and append the vid to ``trunk_allowed_vlans``; if the iface
           also appears in ``untagged_ports`` on some VLAN, set that as
-          ``trunk_native_vlan``.
+          ``trunk_native_vlan`` AND put it in ``trunk_allowed_vlans``
+          too, where its record stands among the others'.  The list is
+          what the trunk carries, the VLAN it carries untagged among
+          them (:func:`trunk_untagged_vlan`); a target on which the
+          list decides what a trunk carries is then written a list
+          that names its native VLAN.  A native VLAN the record had
+          already, in which the lists do not name the port untagged,
+          is left out of the list: it is stated and not carried.
 
     When *synthesise_missing* is True (the default), port names
     referenced in VLAN membership lists but absent from
@@ -621,7 +701,11 @@ def project_vlan_to_switchport(
     # Build per-interface aggregated view: which vids as tagged, which as untagged.
     tagged: dict[str, list[int]] = {}
     untagged: dict[str, list[int]] = {}
+    # Where each VLAN's record stands, for putting a native VLAN
+    # among the tagged ones in the order of the records.
+    place: dict[int, int] = {}
     for vlan in ticked(intent.vlans):
+        place.setdefault(vlan.id, len(place))
         for name in vlan.tagged_ports:
             tagged.setdefault(name, []).append(vlan.id)
         for name in vlan.untagged_ports:
@@ -656,18 +740,30 @@ def project_vlan_to_switchport(
         t_vids = tagged.get(name, [])
         u_vids = untagged.get(name, [])
         if t_vids:
-            # Trunk: tagged list -> trunk_allowed_vlans, first untagged vid
-            # becomes the native.
+            # Trunk: the first untagged vid becomes the native, and the
+            # list is what the port carries -- the VLANs it is tagged
+            # in and the native one, where the port is untagged in it.
             iface.switchport_mode = "trunk"
+            if u_vids and iface.trunk_native_vlan is None:
+                iface.trunk_native_vlan = u_vids[0]
+            native = iface.trunk_native_vlan
+            carried = t_vids
+            if native in u_vids and native not in t_vids:
+                # Among the tagged VLANs in the order of the records:
+                # before the first one whose record comes later.
+                after = place[native]
+                at = next(
+                    (n for n, vid in enumerate(t_vids) if place[vid] > after),
+                    len(t_vids),
+                )
+                carried = [*t_vids[:at], native, *t_vids[at:]]
             # Looked for in a set, kept in the list: a port tagged in
             # 4,000 VLANs looked through its own list for each one.
             allowed = set(iface.trunk_allowed_vlans)
-            for vid in t_vids:
+            for vid in carried:
                 if vid not in allowed:
                     allowed.add(vid)
                     iface.trunk_allowed_vlans.append(vid)
-            if u_vids and iface.trunk_native_vlan is None:
-                iface.trunk_native_vlan = u_vids[0]
         elif u_vids:
             # Pure access: single untagged VLAN.  If multiple untagged
             # vlans appear (unusual), first wins and the rest are ignored

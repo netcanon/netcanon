@@ -166,7 +166,8 @@ source, plus configs exercising symmetric-IRB **L3VNI**, **VSX**, and
   AOS-CX form — HPE: when the last VLAN is removed from a trunk it
   trunks every VLAN — so for a source trunk that allows none
   (`switchport trunk allowed vlan none`, a Junos trunk with no
-  members, an OS10 trunk with no tagged VLAN) neither `vlan trunk`
+  members, an OS10 trunk with no tagged VLAN and no access VLAN)
+  neither `vlan trunk`
   line is written, and a `! review:` line in the stanza says what the
   source said and names its native VLAN.  The job does not report it:
   list the VLANs the port is to carry, or shut it down.  What IS
@@ -177,10 +178,38 @@ source, plus configs exercising symmetric-IRB **L3VNI**, **VSX**, and
   from a switch.  Release
   0.7.7 and earlier read `all` as an empty list, the value of a trunk
   that allows no VLAN, and wrote both as `vlan trunk allowed all` —
-  check trunks translated that way.  On AOS-CX a native VLAN is carried only if the allowed
-  list names it; an OS10 or AOS-S trunk's untagged VLAN is outside
-  its list, and is not added to the list written here.  The vendors'
+  check trunks translated that way.  The vendors'
   own sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
+- **A trunk's native VLAN has to be on its allowed list, and is
+  written there.**  HPE: "If the native VLAN is not included in the
+  allowed list, all untagged frames that ingress on the trunk
+  interface are dropped."  So the list written here is everything
+  the source trunk carries: an AOS-S port that is untagged in one
+  VLAN and tagged in others, and an OS10 trunk with an access VLAN,
+  are `vlan trunk native 5` beside `vlan trunk allowed 5,10,30` —
+  which is how HPE's own side-by-side of the AOS-S and AOS-CX
+  grammars writes it.  **Release 0.7.7 and earlier left the untagged
+  VLAN off the list**, in jobs that said `completed`: check every
+  trunk migrated then from AOS-S or OS10, and add its native VLAN to
+  `vlan trunk allowed`.  As a source, an AOS-CX trunk whose own list
+  leaves its native VLAN out is read as stating that VLAN and not
+  carrying it.  It comes back as it was, is written as it stands for
+  IOS-XE, NX-OS, EOS and Junos, reaches AOS-S with no `untagged`
+  line (it was written `untagged` in that VLAN) and a `; review:`
+  line that says so, and OS10 as `no switchport access vlan` under a
+  `! review:` line (it was written that VLAN as its access VLAN).
+  `vlan trunk native <N> tag` is read
+  as `vlan trunk native <N>`: the `tag` word is lost.  The VLAN
+  pane's map keeps to that reading.  Where a map would bring a
+  native VLAN that the list leaves out INTO the list, the native
+  VLAN is cleared if the map has merged it with a VLAN of the config
+  that the list names, and the new id is taken out of the list if
+  the list only covered that number with a range (`vlan trunk native
+  1000` beside `vlan trunk allowed 2-999,1001-4094`, and 1000
+  renumbered to 900); the job says which, in a `vlan_rename:`
+  warning ([`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A
+  trunk's allowed list is not what I wrote").  The vendors'
+  own sentences are in the [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
 - **AOS-CX is L3-by-default; `no routing` opts into L2.**  This is the
   **inverse** of NX-OS (where ports are L2 by default).  A physical
   port with no `no routing` is a routed interface; the switchport L2

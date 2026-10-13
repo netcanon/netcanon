@@ -14,7 +14,7 @@
 # only the MECHANISM prose for a loss the corpus exhibits.
 #
 # Measured: 6 fixture cells, 0 render errors, 0 re-parse errors.
-# Dispositions: {'unsupported': 13, 'good': 17, 'lossy': 16}
+# Dispositions: {'unsupported': 13, 'good': 16, 'lossy': 17}
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/arista_eos_to_dell_os10/
@@ -370,49 +370,70 @@ per_field_expectation:
       empty on 6.
     references: [eos-os10-surface]
 
+  # First of the VLAN keys on purpose.  A record that is not written
+  # drifts every sub-field of its row at once, and the audit files that
+  # one event under the first sub-field it meets: this is the key the
+  # event belongs to.
+  vlans[].id:
+    disposition: lossy
+    reason: >
+      One kind of record is not written. OS10 has no `vlan <id>`
+      stanza: a VLAN exists there through an `interface vlan<N>` SVI
+      or a port's membership, and the render writes an SVI only for a
+      VLAN that has a name or an address. A VLAN with neither, which
+      no port carries, has no line at all. The corpus has one: the
+      kitchen-sink's VLAN 1, which EOS never declares and which is in
+      the tree only because a trunk states `switchport trunk native
+      vlan 1` beside `allowed vlan 10,20,100,200`. The list is what a
+      trunk carries, so that trunk is no member of VLAN 1, and its
+      OS10 stanza says so in a `review:` line (`no switchport access
+      vlan`). Every other record keeps its id. Measured over 6 cells:
+      drifted on 1 (that one record), preserved on 3, both sides empty
+      on 2.
+    references: [eos-os10-surface]
+
   vlans[].description:
     disposition: good
     note: >
-      No cell populates this field on either side (6 of 6 trivially
-      empty), and neither codec declares the surface unsupported, so
-      nothing is claimed lost.
-    references: [eos-os10-surface]
-
-  vlans[].id:
-    disposition: good
-    note: >
-      Preserved on 4 of 6 cells; no cell drifts. Both codecs model
-      this surface.
+      No cell populates this field on either side, and neither codec
+      declares the surface unsupported, so nothing is claimed lost.
+      (On one cell the whole row of a VLAN is not written; that is
+      `vlans[].id` above.)
     references: [eos-os10-surface]
 
   vlans[].ipv4_addresses:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 6 cells: drifted on 2, preserved on 1, both
-      sides empty on 3.
+      trip. Measured over 6 cells: drifted on 2, both sides empty on 3;
+      on the sixth the `vlans` list drifts as a whole (`vlans[].id`).
     references: [eos-os10-surface]
 
   vlans[].name:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 6 cells: drifted on 3, preserved on 1, both
+      trip. Measured over 6 cells: drifted on 3 (on one of them with
+      the whole `vlans` list, `vlans[].id`), preserved on 1, both
       sides empty on 2.
     references: [eos-os10-surface]
 
   vlans[].tagged_ports:
     disposition: good
     note: >
-      Preserved on 3 of 6 cells; no cell drifts. Both codecs model
-      this surface.
+      Preserved on 2 of 6 cells, both sides empty on 3. On the sixth
+      the `vlans` list drifts as a whole (`vlans[].id`); the ports of
+      the records that are written are as they were. Both codecs
+      model this surface.
     references: [eos-os10-surface]
 
   vlans[].untagged_ports:
     disposition: good
     note: >
-      Preserved on 2 of 6 cells; no cell drifts. Both codecs model
-      this surface.
+      Preserved on 1 of 6 cells, both sides empty on 4. On the sixth
+      the `vlans` list drifts as a whole (`vlans[].id`); the ports of
+      the records that are written are as they were. Both codecs
+      model this surface.
     references: [eos-os10-surface]
 
   vxlan_vnis:

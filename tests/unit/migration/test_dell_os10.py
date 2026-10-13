@@ -379,13 +379,55 @@ class TestSwitchport:
         the port's L2 semantics on every downstream codec — the class of
         defect #239 fixed for Junos.  OS10 emits no `switchport trunk
         native vlan` line at all (measured: 0), so this is the only route
-        to a native VLAN."""
+        to a native VLAN.  And the trunk's list holds it: the allowed
+        line names the tagged VLANs, the list of the tree is what the
+        trunk carries."""
         intent = codec.parse(_DEVICE_DUMP)
         po = next(i for i in intent.interfaces if i.name == "port-channel100")
         assert po.switchport_mode == "trunk"
         assert po.trunk_native_vlan == 1
         assert po.access_vlan is None
-        assert po.trunk_allowed_vlans == [32, 34, 47, 461]
+        assert po.trunk_allowed_vlans == [1, 32, 34, 47, 461]
+
+    @pytest.mark.parametrize("lines,native,listed", [
+        # The access VLAN goes where it keeps a rising list rising.
+        (("switchport access vlan 40", "switchport trunk allowed vlan 32,34,47"), 40, [32, 34, 40, 47]),
+        (("switchport access vlan 900", "switchport trunk allowed vlan 32,34"), 900, [32, 34, 900]),
+        # No allowed line: the trunk carries its access VLAN alone.
+        (("switchport access vlan 40",), 40, [40]),
+        # No access line: nothing is added, and no default is filled in.
+        (("switchport trunk allowed vlan 32,34",), None, [32, 34]),
+        ((), None, []),
+        # A list that names the access VLAN itself is left as it is.
+        (("switchport access vlan 34", "switchport trunk allowed vlan 32,34"), 34, [32, 34]),
+        # Beside every other id it is the list of every VLAN.
+        (("switchport access vlan 1", "switchport trunk allowed vlan 2-4094"), 1, list(range(1, 4095))),
+    ])
+    def test_a_trunks_list_holds_its_access_vlan(self, codec, lines, native, listed):
+        raw = "\n".join(["interface ethernet1/1/1", " switchport mode trunk", *(f" {x}" for x in lines), "!", ""])
+        port = codec.parse(raw).interfaces[0]
+        assert (port.switchport_mode, port.trunk_native_vlan) == ("trunk", native)
+        assert port.trunk_allowed_vlans == listed
+
+    @pytest.mark.parametrize("lines,mode,access,native,listed", [
+        # On a trunk: no native VLAN, and the list is the allowed line's.
+        (("switchport mode trunk", "switchport access vlan 40", "no switchport access vlan",
+          "switchport trunk allowed vlan 32,34"), "trunk", None, None, [32, 34]),
+        (("switchport mode trunk", "no switchport access vlan"), "trunk", None, None, []),
+        # A line stated after it stands.
+        (("switchport mode trunk", "no switchport access vlan", "switchport access vlan 40"),
+         "trunk", None, 40, [40]),
+        # On a port that states no mode it takes the access VLAN back.
+        (("switchport access vlan 40", "no switchport access vlan"), None, None, None, []),
+    ])
+    def test_no_access_vlan_takes_it_back(self, codec, lines, mode, access, native, listed):
+        """`no switchport access vlan` is what this codec's renderer
+        writes for a trunk that carries no untagged VLAN; a parser that
+        passed it over would keep an access VLAN stated above it."""
+        raw = "\n".join(["interface ethernet1/1/1", *(f" {x}" for x in lines), "!", ""])
+        port = codec.parse(raw).interfaces[0]
+        assert (port.switchport_mode, port.access_vlan, port.trunk_native_vlan) == (mode, access, native)
+        assert port.trunk_allowed_vlans == listed
 
     def test_access_vlan_on_access_port_is_the_access_vlan(self, codec):
         intent = codec.parse(_DEVICE_DUMP)
@@ -412,7 +454,7 @@ class TestSwitchport:
         po = codec.parse(reversed_order).interfaces[0]
         assert po.trunk_native_vlan == 700
         assert po.access_vlan is None
-        assert po.trunk_allowed_vlans == list(range(701, 711))
+        assert po.trunk_allowed_vlans == list(range(700, 711))
 
     def test_routed_port_has_no_switchport_mode(self, codec):
         intent = codec.parse(_DEVICE_DUMP)
@@ -1003,12 +1045,95 @@ class TestRoundTrip:
         assert lag.members == ["ethernet1/1/5"]
 
 
+#: The line above `no switchport access vlan`, for native VLAN 10.
+#: Whole, and typed here: a line that says a word more is not it.
+_NATIVE_10_LEFT_OUT = (
+    "! review: native VLAN 10 is stated for this trunk and its allowed list leaves it out, so no untagged VLAN "
+    "is written for this port; Dell's pages disagree on whether the next line leaves an OS10 trunk with no "
+    "untagged VLAN or with VLAN 1 -- check what this port is to carry untagged"
+)
+
+
+def _trunk_lines(codec, native, listed, **more) -> list[str]:
+    """The lines OS10 writes for one trunk with that native VLAN and
+    that list, after `switchport mode trunk`."""
+    tree = CanonicalIntent(interfaces=[CanonicalInterface(
+        name="ethernet1/1/1", switchport_mode="trunk",
+        trunk_native_vlan=native, trunk_allowed_vlans=list(listed), **more,
+    )])
+    stanza = codec.render(tree).split("interface ethernet1/1/1\n")[1].split("\n!")[0]
+    lines = [line.strip() for line in stanza.splitlines()]
+    return lines[lines.index("switchport mode trunk") + 1:]
+
+
 class TestRenderForm:
     def test_native_vlan_uses_the_access_vlan_keyword(self, codec):
         out = codec.render(codec.parse(_DEVICE_DUMP))
         assert " switchport mode trunk" in out
         assert " switchport access vlan 1" in out
         assert "native vlan" not in out
+
+    def test_a_trunk_comes_back_as_written(self, codec):
+        """The list of the tree holds the access VLAN; the text does
+        not name it on the allowed line."""
+        out = codec.render(codec.parse(_DEVICE_DUMP))
+        stanza = out.split("interface port-channel100\n")[1].split("\n!")[0]
+        assert " switchport access vlan 1\n switchport trunk allowed vlan 32,34,47,461" in stanza
+
+    @pytest.mark.parametrize("native,listed,written", [
+        # In the list: the access line, and the allowed line without it.
+        (10, [10, 20, 30], ["switchport access vlan 10", "switchport trunk allowed vlan 20,30"]),
+        (30, [10, 20, 30], ["switchport access vlan 30", "switchport trunk allowed vlan 10,20"]),
+        # The list is the native VLAN alone: no tagged VLAN, no line.
+        (10, [10], ["switchport access vlan 10"]),
+        # No native VLAN stated: nothing is written for it.
+        (None, [20, 30], ["switchport trunk allowed vlan 20,30"]),
+        (None, [], []),
+    ])
+    def test_no_vlan_is_on_both_lines(self, codec, native, listed, written):
+        assert _trunk_lines(codec, native, listed) == written
+
+    def test_every_vlan_without_the_native_one(self, codec):
+        lines = _trunk_lines(codec, 10, range(1, 4095))
+        assert lines[0] == "switchport access vlan 10"
+        assert lines[1].startswith("! review: the source trunk allows every VLAN")
+        assert lines[2:] == ["switchport trunk allowed vlan 1-9,11-4094"]
+
+    @pytest.mark.parametrize("listed,allowed", [
+        ([20, 30], ["switchport trunk allowed vlan 20,30"]),
+        ([], []),
+        # A list written around the native VLAN: every id but it.
+        ([vid for vid in range(1, 4095) if vid != 10], ["switchport trunk allowed vlan 1-9,11-4094"]),
+    ])
+    def test_a_native_vlan_left_out_is_said(self, codec, listed, allowed):
+        """A native VLAN its list does not hold is, in the tree, stated
+        and not carried.  It is not written as the access VLAN, which
+        an OS10 trunk carries untagged; the line that takes the access
+        VLAN back stands in its place, under a line that says why and
+        what to check.
+
+        What that line leaves the trunk with is not established: Dell's
+        pages give two readings.  The review line says that they
+        DISAGREE and names both, and is held to it here WHOLE -- a line
+        that gave one reading as what the switch does, or that added a
+        third, would be a claim about the device that no page
+        supports.  It does not call the VLAN the source's: after a VLAN
+        map the id is the output's."""
+        lines = _trunk_lines(codec, 10, listed)
+        assert lines == [_NATIVE_10_LEFT_OUT, "no switchport access vlan", *allowed]
+
+    def test_a_shut_trunk_is_said_as_well(self, codec):
+        """A port that is shut states its VLANs all the same."""
+        lines = _trunk_lines(codec, 10, [20, 30], enabled=False)
+        assert lines[:3] == [_NATIVE_10_LEFT_OUT, "no switchport access vlan", "switchport trunk allowed vlan 20,30"]
+
+    def test_a_native_left_out_reads_back_none(self, codec):
+        tree = CanonicalIntent(interfaces=[CanonicalInterface(
+            name="ethernet1/1/1", switchport_mode="trunk",
+            trunk_native_vlan=10, trunk_allowed_vlans=[20, 30],
+        )])
+        port = codec.parse(codec.render(tree)).interfaces[0]
+        assert (port.switchport_mode, port.trunk_native_vlan, port.trunk_allowed_vlans) == ("trunk", None, [20, 30])
 
     def test_management_route_keeps_its_own_keyword(self, codec):
         out = codec.render(codec.parse(_DEVICE_DUMP))

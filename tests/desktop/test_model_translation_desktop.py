@@ -727,9 +727,11 @@ class TestModelTranslationServedByEmbeddedServer:
         names = switch["port_renames"]
         stanzas = _stanzas_of(switch["rendered"])
         assert stanzas[names["3"]] == ["no shutdown", "switchport access vlan 10"]
+        # Untagged in VLAN 10 and tagged in VLAN 20: the allowed line
+        # names both, so the native VLAN is one the trunk carries.
         assert stanzas[names["4"]] == [
             "no shutdown", "switchport mode trunk", "switchport trunk native vlan 10",
-            "switchport trunk allowed vlan 20",
+            "switchport trunk allowed vlan 10,20",
         ]
         assert stanzas[names["5"]] == ["no shutdown", "switchport access vlan 20"]
         assert "channel-group 1 mode active" in stanzas[names["1"]]

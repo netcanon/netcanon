@@ -24,6 +24,17 @@ reason the round-trip holds:
   access-vlan keyword.  Emitting it as anything else would round-trip
   into ``access_vlan`` and invert the port's L2 semantics.
 
+* **The allowed line is the list WITHOUT the native VLAN.**  In the
+  tree a trunk's list is everything the port carries, its native VLAN
+  among them; OS10's allowed line names the tagged VLANs and its
+  access line the untagged one, and one VLAN is never on both
+  (``BESIDE_THE_LIST`` in ``NATIVE_VLAN_AND_THE_LIST``,
+  :mod:`.._helpers`).  The parser puts the access VLAN back into the
+  list, so a trunk comes back as it went.  A native VLAN the list does
+  NOT hold is, in the tree, stated and not carried: no access VLAN is
+  written for it, and ``no switchport access vlan`` under a
+  ``! review:`` line stands in its place.
+
 * **A ``vrf="management"`` route re-emits as ``management route``**, not
   ``ip route vrf management`` — the inverse of the parse mapping, so the
   management-only default never lands in the global RIB.  An IPv6
@@ -71,6 +82,8 @@ from .._helpers import (
     same_vendor_version,
     switchport_trunk_allowed_value,
     trunk_list_says,
+    trunk_list_written,
+    trunk_untagged_vlan,
 )
 from . import port_names as _port_names
 
@@ -351,12 +364,26 @@ _EVERY_VLAN_REVIEW = (
 )
 
 
+#: Written above ``no switchport access vlan``, for a trunk whose
+#: native VLAN is outside its allowed list.  ``{native}`` is the id
+#: the OUTPUT has for that VLAN -- a VLAN map can have renumbered it
+#: -- so the line does not call it the source's.
+_NATIVE_NOT_CARRIED_REVIEW = (
+    " ! review: native VLAN {native} is stated for this trunk and its "
+    "allowed list leaves it out, so no untagged VLAN is written for "
+    "this port; Dell's pages disagree on whether the next line leaves "
+    "an OS10 trunk with no untagged VLAN or with VLAN 1 -- check what "
+    "this port is to carry untagged"
+)
+
+
 def _render_switchport_lines(iface: CanonicalInterface) -> list[str]:
     """The L2 switchport lines for an interface.
 
     Empty for the inherently-L3 kinds (SVI / loopback / management).
     The trunk branch re-emits the native VLAN with the ``access vlan``
-    keyword — OS10's only spelling for it (see module docstring).
+    keyword — OS10's only spelling for it (see module docstring) — and
+    the allowed line without it.
     """
     kind = _port_names.classify_port_name(iface.name).kind
     if kind in ("svi", "loopback", "mgmt"):
@@ -364,13 +391,24 @@ def _render_switchport_lines(iface: CanonicalInterface) -> list[str]:
     out: list[str] = []
     if iface.switchport_mode == "trunk":
         out.append(" switchport mode trunk")
-        if iface.trunk_native_vlan is not None:
-            out.append(f" switchport access vlan {iface.trunk_native_vlan}")
-        # The list means what it says.  No VLAN is no line: an OS10
-        # trunk carries no tagged VLAN until a line names one.  Any
-        # other list is written as ranges.
+        native = iface.trunk_native_vlan
+        untagged = trunk_untagged_vlan(iface.trunk_allowed_vlans, native)
+        if untagged is not None:
+            out.append(f" switchport access vlan {untagged}")
+        elif native is not None:
+            # Stated and not carried: the list leaves it out.  Written
+            # as the access VLAN it would be carried untagged, which
+            # is not what the tree says of it.
+            out.append(_NATIVE_NOT_CARRIED_REVIEW.format(native=native))
+            out.append(" no switchport access vlan")
+        # The allowed line names the TAGGED VLANs: the list without
+        # the native one.  No VLAN is no line: an OS10 trunk carries
+        # no tagged VLAN until a line names one.  Any other list is
+        # written as ranges.
         vlist = switchport_trunk_allowed_value(
-            "dell_os10", iface.trunk_allowed_vlans, coalesce=True,
+            "dell_os10",
+            trunk_list_written("dell_os10", iface.trunk_allowed_vlans, native),
+            coalesce=True,
         )
         if vlist is not None:
             if trunk_list_says(iface.trunk_allowed_vlans) == TRUNK_ALL:

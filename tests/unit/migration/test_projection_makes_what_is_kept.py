@@ -1,4 +1,4 @@
-"""The switchport projection makes what its caller keeps -- and what it gives is what it gave.
+"""The switchport projection makes what its caller keeps -- and gives what its rule says.
 
 ``project_switchport_to_vlan`` mirrors each port's VLANs onto the VLAN
 records.  For a trunk whose list is wide it made a record for every id
@@ -14,10 +14,13 @@ port list with two counts a name, and the lists of ids it reads are
 built from one shared tuple of ints.  None of that may change a tree.
 Four kinds of test:
 
-* **The same tree, the same errors.**  The projection as it was is
-  kept here, written with plain lists, and the one that ships is
-  compared with it over trees built to hold every way of writing a
-  trunk's list -- with the set a codec keeps and without it.
+* **The same tree, the same errors.**  The projection is written out
+  here with plain lists -- as it stood before it was told what its
+  caller keeps, with the one rule that has changed since: a trunk is
+  an untagged member of its native VLAN only where its list holds
+  that VLAN -- and the one that ships is compared with it over trees
+  built to hold every way of writing a trunk's list, with the set a
+  codec keeps and without it.
 * **The same reading of a text.**  Texts for each codec that prunes,
   and what each came to before the change: a digest of the ports and
   the VLANs, or the sentence the parse failed with.  A list wider than
@@ -67,15 +70,21 @@ pytestmark = pytest.mark.unit
 
 
 # ---------------------------------------------------------------------------
-# The projection as it was
+# The projection in plain lists
 # ---------------------------------------------------------------------------
 
 
-def _as_it_was(intent: CanonicalIntent) -> None:
-    """``project_switchport_to_vlan`` before it was told what its
-    caller keeps: a record for every id of a list that is not one of
-    the two whole ones, and every port looked for in the list it
-    joins.  Written with plain lists, and kept to be compared with."""
+def _in_plain_lists(intent: CanonicalIntent) -> None:
+    """``project_switchport_to_vlan`` as it stood before it was told
+    what its caller keeps: a record for every id of a list that is
+    not one of the two whole ones, and every port looked for in the
+    list it joins.  Written with plain lists, and kept to be compared
+    with.
+
+    Its rule for a native VLAN is the one that ships.  The list is
+    what a trunk carries: the port is untagged in its native VLAN
+    where the list holds that VLAN, and no member of it where the
+    list leaves it out.  The record is made either way."""
     by_id = {vlan.id: vlan for vlan in intent.vlans}
 
     def vlan_of(vid: int) -> CanonicalVlan:
@@ -112,7 +121,7 @@ def _as_it_was(intent: CanonicalIntent) -> None:
             else:
                 for vid in iface.trunk_allowed_vlans:
                     add(vlan_of(vid).tagged_ports, iface.name)
-            if iface.trunk_native_vlan is not None:
+            if iface.trunk_native_vlan is not None and iface.trunk_native_vlan in allowed:
                 vlan = vlan_of(iface.trunk_native_vlan)
                 add(vlan.untagged_ports, iface.name)
                 if iface.name in vlan.tagged_ports:
@@ -210,18 +219,18 @@ def _built(allowed: list[int], native: int | None, declared: tuple) -> Canonical
 class TestTheSameTreeAsBefore:
     @pytest.mark.parametrize("written", sorted(LISTS))
     def test_with_the_kept_set_and_without(self, written: str) -> None:
-        """Three calls that have to agree with the projection as it
-        was: the one a codec makes now (the set handed over), the one
-        it made (not handed over), and the one AOS-S makes (nothing
-        pruned)."""
+        """Three calls that have to agree with the projection in
+        plain lists: the one a codec makes now (the set handed over),
+        the one it made (not handed over), and the one AOS-S makes
+        (nothing pruned)."""
         for native in NATIVES:
             for declared in DECLARED:
                 tree = _built(LISTS[written], native, declared)
-                was_pruned = _outcome(_as_a_codec_calls(_as_it_was, tell=False), tree)
+                was_pruned = _outcome(_as_a_codec_calls(_in_plain_lists, tell=False), tree)
                 where = f"{written}, native {native}, {len(declared)} VLANs declared"
                 assert _outcome(_as_a_codec_calls(project_switchport_to_vlan, tell=True), tree) == was_pruned, where
                 assert _outcome(_as_a_codec_calls(project_switchport_to_vlan, tell=False), tree) == was_pruned, where
-                assert _outcome(project_switchport_to_vlan, tree) == _outcome(_as_it_was, tree), where
+                assert _outcome(project_switchport_to_vlan, tree) == _outcome(_in_plain_lists, tree), where
 
     def test_each_kind_of_outcome_is_among_them(self) -> None:
         """A table that only ever refused, or never did, would agree
@@ -270,9 +279,9 @@ class TestTheSameTreeAsBefore:
                 twin = tree.interfaces[0].model_copy(deep=True)
                 twin.trunk_native_vlan = rng.randrange(1, 90)
                 tree.interfaces.append(twin)
-            was_pruned = _outcome(_as_a_codec_calls(_as_it_was, tell=False), tree)
+            was_pruned = _outcome(_as_a_codec_calls(_in_plain_lists, tell=False), tree)
             assert _outcome(_as_a_codec_calls(project_switchport_to_vlan, tell=True), tree) == was_pruned, case
-            assert _outcome(project_switchport_to_vlan, tree) == _outcome(_as_it_was, tree), case
+            assert _outcome(project_switchport_to_vlan, tree) == _outcome(_in_plain_lists, tree), case
 
     def test_a_second_call_changes_nothing(self) -> None:
         for written in ("a wide range", "every id", "every id but 1", "a narrow list"):
@@ -364,8 +373,72 @@ class TestTheReverseProjection:
         )
         project_vlan_to_switchport(tree)
         one, two = tree.interfaces
-        assert (one.switchport_mode, one.trunk_allowed_vlans, one.trunk_native_vlan) == ("trunk", [30, 10, 30, 20], 40)
+        # (VLAN 40, which port 1 is untagged in, is in its list as well:
+        # the list is what the trunk carries.)
+        assert (one.switchport_mode, one.trunk_allowed_vlans, one.trunk_native_vlan) == (
+            "trunk", [30, 10, 30, 20, 40], 40,
+        )
         assert (two.switchport_mode, two.trunk_allowed_vlans) == ("trunk", [20, 10])
+
+    @pytest.mark.parametrize("untagged_in,tagged_in,listed,native", [
+        # Among the tagged VLANs, where its record stands among theirs.
+        ((10,), (20, 30), [10, 20, 30], 10),
+        ((20,), (10, 30), [10, 20, 30], 20),
+        ((30,), (10, 20), [10, 20, 30], 30),
+        # Untagged in two: the first is the native VLAN, and the only
+        # one of the two the trunk can carry untagged.
+        ((10, 20), (30,), [10, 30], 10),
+        # One VLAN both ways: it is in the list once.
+        ((10,), (10, 20), [10, 20], 10),
+        # Tagged only: no native VLAN, and nothing is added.
+        ((), (20, 30), [20, 30], None),
+    ])
+    def test_the_untagged_vlan_is_in_the_list(
+        self, untagged_in: tuple, tagged_in: tuple, listed: list[int], native: int | None,
+    ) -> None:
+        """A port tagged in some VLANs and untagged in one is a trunk
+        that carries all of them.  Its list left the untagged one out,
+        and a target on which the list decides what a trunk carries
+        was written a native VLAN it does not carry."""
+        tree = CanonicalIntent(vlans=[
+            CanonicalVlan(
+                id=vid,
+                tagged_ports=["1"] if vid in tagged_in else [],
+                untagged_ports=["1"] if vid in untagged_in else [],
+            )
+            for vid in (10, 20, 30)
+        ])
+        project_vlan_to_switchport(tree)
+        (port,) = tree.interfaces
+        assert (port.switchport_mode, port.trunk_allowed_vlans, port.trunk_native_vlan) == ("trunk", listed, native)
+
+    def test_a_native_vlan_it_had_already(self) -> None:
+        """A record that states a native VLAN the lists do not name it
+        untagged in keeps it, and it stays out of the list: stated,
+        and not carried.  One the lists do name it untagged in goes
+        into the list like any other."""
+        for had, listed in ((5, [20]), (10, [10, 20])):
+            tree = CanonicalIntent(
+                vlans=[CanonicalVlan(id=10, untagged_ports=["1"]), CanonicalVlan(id=20, tagged_ports=["1"])],
+                interfaces=[CanonicalInterface(name="1", trunk_native_vlan=had)],
+            )
+            project_vlan_to_switchport(tree)
+            (port,) = tree.interfaces
+            assert (port.trunk_native_vlan, port.trunk_allowed_vlans) == (had, listed)
+
+    def test_the_two_projections_agree(self) -> None:
+        """What one makes of a port, the other reads back as the same
+        memberships: untagged where the list holds the native VLAN."""
+        tree = CanonicalIntent(vlans=[
+            CanonicalVlan(id=10, untagged_ports=["1"]), CanonicalVlan(id=20, tagged_ports=["1"]),
+            CanonicalVlan(id=30, tagged_ports=["1"]),
+        ])
+        project_vlan_to_switchport(tree)
+        before = [(vlan.id, vlan.tagged_ports, vlan.untagged_ports) for vlan in tree.vlans]
+        for vlan in tree.vlans:
+            vlan.tagged_ports, vlan.untagged_ports = [], []
+        project_switchport_to_vlan(tree)
+        assert [(vlan.id, vlan.tagged_ports, vlan.untagged_ports) for vlan in tree.vlans] == before
 
 
 # ---------------------------------------------------------------------------
@@ -586,6 +659,15 @@ _TOO_LOW = "fails: id: Input should be greater than or equal to 1"
 #: which was read as an empty list and is read as every id, so the
 #: port is also among the tagged ports of each declared VLAN.
 #: ``TestATrunkThatStatesNoList`` below says the same in full.
+#:
+#: Seven more were changed on purpose, when a trunk's list became what
+#: the trunk carries.  "A wide list and a native VLAN nobody declared"
+#: on each of the six codecs, and Junos's "members by name beside a
+#: wide range": each has a trunk whose native VLAN its list leaves
+#: out, and that port is no longer among the untagged ports of that
+#: VLAN.  (On OS10, whose allowed line names tagged VLANs only, the
+#: access VLAN is in the trunk's list instead and the port is still
+#: untagged in it.)
 BEFORE: dict[str, str] = {
     "arista_eos: 128 ids": "8fa5a9d47dda",
     "arista_eos: 129 ids": "b720c7196755",
@@ -596,7 +678,7 @@ BEFORE: dict[str, str] = {
     "arista_eos: a wide list after a port that is fine": _TOO_HIGH,
     "arista_eos: a wide list and 4095": _TOO_HIGH,
     "arista_eos: a wide list and a declared native VLAN inside it": "c691f6aa6a4f",
-    "arista_eos: a wide list and a native VLAN nobody declared": "2b9a5e04fe76",
+    "arista_eos: a wide list and a native VLAN nobody declared": "7a7cd3a9e540",
     "arista_eos: a wide list and a number of 23 digits": _TOO_HIGH,
     "arista_eos: a wide list and an id past the last": _TOO_HIGH,
     "arista_eos: a wide list and an undeclared native VLAN inside it": "9c6674502d41",
@@ -616,7 +698,7 @@ BEFORE: dict[str, str] = {
     "aruba_aoscx: a wide list after a port that is fine": _TOO_HIGH,
     "aruba_aoscx: a wide list and 4095": _TOO_HIGH,
     "aruba_aoscx: a wide list and a declared native VLAN inside it": "15fbc947bafd",
-    "aruba_aoscx: a wide list and a native VLAN nobody declared": "6280e050abef",
+    "aruba_aoscx: a wide list and a native VLAN nobody declared": "f65d970a7b27",
     "aruba_aoscx: a wide list and a number of 23 digits": _TOO_HIGH,
     "aruba_aoscx: a wide list and an id past the last": _TOO_HIGH,
     "aruba_aoscx: a wide list and an undeclared native VLAN inside it": "a115a442ae2a",
@@ -636,7 +718,7 @@ BEFORE: dict[str, str] = {
     "cisco_iosxe_cli: a wide list after a port that is fine": _TOO_HIGH,
     "cisco_iosxe_cli: a wide list and 4095": _TOO_HIGH,
     "cisco_iosxe_cli: a wide list and a declared native VLAN inside it": "a8015c1f37d9",
-    "cisco_iosxe_cli: a wide list and a native VLAN nobody declared": "8218ee511361",
+    "cisco_iosxe_cli: a wide list and a native VLAN nobody declared": "d43ddd1addf7",
     "cisco_iosxe_cli: a wide list and a number of 23 digits": _TOO_HIGH,
     "cisco_iosxe_cli: a wide list and an id past the last": _TOO_HIGH,
     "cisco_iosxe_cli: a wide list and an undeclared native VLAN inside it": "53e1daa17ffe",
@@ -658,7 +740,7 @@ BEFORE: dict[str, str] = {
     "cisco_nxos: a wide list after a port that is fine": _TOO_HIGH,
     "cisco_nxos: a wide list and 4095": _TOO_HIGH,
     "cisco_nxos: a wide list and a declared native VLAN inside it": "334c03d2ce8f",
-    "cisco_nxos: a wide list and a native VLAN nobody declared": "f2a639023bf1",
+    "cisco_nxos: a wide list and a native VLAN nobody declared": "e623f701474f",
     "cisco_nxos: a wide list and a number of 23 digits": _TOO_HIGH,
     "cisco_nxos: a wide list and an id past the last": _TOO_HIGH,
     "cisco_nxos: a wide list and an undeclared native VLAN inside it": "53695a139d0d",
@@ -681,7 +763,7 @@ BEFORE: dict[str, str] = {
     "dell_os10: a wide list after a port that is fine": _TOO_HIGH,
     "dell_os10: a wide list and 4095": _TOO_HIGH,
     "dell_os10: a wide list and a declared native VLAN inside it": "2b6b73ba0597",
-    "dell_os10: a wide list and a native VLAN nobody declared": "c9c1d556fc56",
+    "dell_os10: a wide list and a native VLAN nobody declared": "d85e3d655aec",
     "dell_os10: a wide list and a number of 23 digits": _TOO_HIGH,
     "dell_os10: a wide list and an id past the last": _TOO_HIGH,
     "dell_os10: a wide list and an undeclared native VLAN inside it": "a5df138c8935",
@@ -701,14 +783,14 @@ BEFORE: dict[str, str] = {
     "juniper_junos: a wide list after a port that is fine": "583010b8e29f",
     "juniper_junos: a wide list and 4095": "9c653e656ffa",
     "juniper_junos: a wide list and a declared native VLAN inside it": "5ca0f6bc26a6",
-    "juniper_junos: a wide list and a native VLAN nobody declared": "b58828384fa7",
+    "juniper_junos: a wide list and a native VLAN nobody declared": "ecd49be1199f",
     "juniper_junos: a wide list and a number of 23 digits": "df365b67089e",
     "juniper_junos: a wide list and an id past the last": "9c653e656ffa",
     "juniper_junos: a wide list and an undeclared native VLAN inside it": "188d898b14ee",
     "juniper_junos: a wide list and then narrow ones, nothing declared": "4a6e7601f14b",
     "juniper_junos: an access VLAN nobody declared beside a wide list": "e8aab2c6e265",
     "juniper_junos: every way of writing a list, on one switch": "985d9440ef07",
-    "juniper_junos: members by name beside a wide range": "5a731bcdff1a",
+    "juniper_junos: members by name beside a wide range": "951656277886",
     "juniper_junos: narrow lists and then a wide one, nothing declared": "7b87835d9035",
     "juniper_junos: one range twice": "5f66a1cef95d",
     "juniper_junos: two trunks of 2-4000, nothing declared": "5a75958c2db9",
@@ -741,6 +823,22 @@ class TestTheSameReadingOfAText:
         assert [(vlan.id, vlan.tagged_ports, vlan.untagged_ports) for vlan in tree.vlans] == [
             (10, [port], []), (20, [], [port]), (3000, [port], []),
         ]
+
+    def test_a_native_vlan_left_out_in_full(self) -> None:
+        """And one of the seven readings that changed, in full: the
+        native VLAN has its record, and the trunk is no member of it.
+        On OS10 the same two lines put the VLAN in the trunk's list,
+        and the port is untagged in it."""
+        tree = get_codec("cisco_iosxe_cli").parse(_iosxe([10, 20], [_trunk("1-500", native=999)]))
+        port = "GigabitEthernet1/0/1"
+        assert [(vlan.id, vlan.tagged_ports, vlan.untagged_ports) for vlan in tree.vlans] == [
+            (10, [port], []), (20, [port], []), (999, [], []),
+        ]
+        assert tree.interfaces[0].trunk_native_vlan == 999 and 999 not in tree.interfaces[0].trunk_allowed_vlans
+        tree = get_codec("dell_os10").parse(_os10([10, 20], [_trunk("1-500", native=999)]))
+        assert [vlan.untagged_ports for vlan in tree.vlans if vlan.id == 999] == [["ethernet1/1/1"]]
+        trunk = next(iface for iface in tree.interfaces if iface.name == "ethernet1/1/1")
+        assert trunk.trunk_native_vlan == 999 and trunk.trunk_allowed_vlans == [*range(1, 501), 999]
 
 
 # ---------------------------------------------------------------------------

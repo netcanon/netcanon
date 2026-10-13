@@ -9,6 +9,8 @@ Cached measurement backing
 - Render errors: **0** · re-parse errors: **0**
 - Retrieved: 2026-09-21
 
+> **Update 2026-10-13 — one VLAN row moved, and the six `vlans[]` rows below are re-measured.**  A trunk's allowed list is now what the trunk carries, so a native VLAN its list leaves out makes the port no member of that VLAN.  The kitchen-sink's `Ethernet3` states `switchport trunk native vlan 1` beside `allowed vlan 10,20,100,200`, and VLAN 1 is in the tree for that line alone.  OS10 has a VLAN through an SVI or a port's membership, and this one now has neither, so its record is not written: `vlans[].id` is `lossy` for that one kind of record.  The other rows of this file are as retrieved.
+
 > **No device-vendor documentation was consulted for this file.** Everything below is derived from in-repo artefacts: the two codecs' `CapabilityMatrix` declarations and the measured mesh run. Where a disposition rests on a declaration rather than an observed round-trip, the YAML says so explicitly.
 
 ## Why the dispositions could not be written in advance
@@ -23,8 +25,8 @@ Across the 6 cells, 169 source interface records produce 173 re-parsed records �
 
 | Disposition | Fields |
 |---|---|
-| `good` | 17 |
-| `lossy` | 16 |
+| `good` | 16 |
+| `lossy` | 17 |
 | `unsupported` | 13 |
 | `not_applicable` | 0 |
 
@@ -70,12 +72,12 @@ Across the 6 cells, 169 source interface records produce 173 re-parsed records �
 | `static_routes` | good | 5 | 0 | 1 |
 | `syslog_servers` | unsupported | 0 | 1 | 5 |
 | `timezone` | unsupported | 0 | 0 | 6 |
-| `vlans[].description` | good | 0 | 0 | 6 |
-| `vlans[].id` | good | 4 | 0 | 2 |
-| `vlans[].ipv4_addresses` | lossy | 1 | 2 | 3 |
+| `vlans[].description` | good | 0 | 1 | 5 |
+| `vlans[].id` | lossy | 3 | 1 | 2 |
+| `vlans[].ipv4_addresses` | lossy | 0 | 3 | 3 |
 | `vlans[].name` | lossy | 1 | 3 | 2 |
-| `vlans[].tagged_ports` | good | 3 | 0 | 3 |
-| `vlans[].untagged_ports` | good | 2 | 0 | 4 |
+| `vlans[].tagged_ports` | good | 2 | 1 | 3 |
+| `vlans[].untagged_ports` | good | 1 | 1 | 4 |
 | `vxlan_vnis` | unsupported | 0 | 4 | 2 |
 | `vxlan_vnis[].mcast_group` | unsupported | 0 | 4 | 2 |
 | `vxlan_vnis[].vlan_id` | unsupported | 0 | 4 | 2 |
@@ -211,9 +213,13 @@ Drifted on 0 of 6 cells (preserved on 0, both sides empty on 6).
 
 > Phase 1 parses no `clock timezone` stanza; intent.timezone is dropped.
 
+### `vlans[].id` — lossy
+
+Drifted on 1 of 6 cells (preserved on 3, both sides empty on 2): the one record described in the update note at the head of this file.  It is the owner of that cell's structural drift, so `vlans[].description`, `vlans[].tagged_ports` and `vlans[].untagged_ports` each show one drifted cell above and stay `good`.
+
 ### `vlans[].ipv4_addresses` — lossy
 
-Drifted on 2 of 6 cells (preserved on 1, both sides empty on 3).
+Drifted on 3 of 6 cells (both sides empty on 3); on one of the three with the whole `vlans` list.
 
 ### `vlans[].name` — lossy
 
