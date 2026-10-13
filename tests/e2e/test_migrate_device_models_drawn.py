@@ -2880,24 +2880,45 @@ def _port_rows(page: Page, first: list[str]) -> list[str]:
     return page.evaluate(_PORT_ROWS)
 
 
+#: A stanza for port 30, after the capture's one stanza (port 1).
+_A_STANZA_FOR_PORT_30 = 'interface 30\n   name "late"\n   exit\n'
+
+
+@pytest.fixture()
+def aoss_with_a_late_stanza(page: Page, live_server_url: str) -> MigratePage:
+    """The 2930F config with a second ``interface`` stanza, translated
+    AOS-S to AOS-S, modal open."""
+    mp = _translate(
+        page, live_server_url, "aruba_aoss", "aruba_aoss", CAPTURE_2930F + _A_STANZA_FOR_PORT_30,
+    )
+    page.locator(_tid("migrate-rename-open-btn")).click()
+    expect(page.locator(_tid("migrate-rename-modal"))).to_be_visible()
+    return mp
+
+
 class TestTheTableBeforeApplyIsInPortOrder:
-    """An AOS-S config names its ports VLAN by VLAN, and the job lists
-    them as the config first mentions them: 1, 48-52, 35-47, 2...  That
-    was the table's order until Apply, for fifty-two ports.  Where the
-    source device is declared the rows are in its port order."""
+    """The job lists an AOS-S config's ports in the order of its
+    interface records: the ports that have an ``interface`` stanza as
+    their stanzas come, then every other port the VLANs' lists name,
+    in port order -- 1, 30, 2, 3... for a switch with a stanza for
+    ports 1 and 30.  (It used to list them as the config first
+    mentions them, VLAN by VLAN: 1, 48-52, 35-47, 2...)  That is the
+    table's order until Apply.  Where the source device is declared
+    the rows are in its port order."""
 
     def test_a_declared_source_puts_the_rows_in_its_port_order(
-        self, aoss_2930f: MigratePage, page: Page,
+        self, aoss_with_a_late_stanza: MigratePage, page: Page,
     ) -> None:
         # The source device is read from the config: 52 ports, 1 to 52.
         expect(page.locator(_tid("migrate-device-source-note-ports"))).to_contain_text("52 ports")
         numbered = [str(n) for n in range(1, 53)]
         assert _port_rows(page, ["1", "2", "3"]) == numbered
-        # Not declared, the order is the job's: as the config first
-        # mentions them.
+        # Not declared, the order is the job's: the two ports with a
+        # stanza, then the rest as an operator counts them.
         source = page.locator(_tid("migrate-device-source-model-select"))
         source.select_option(value="")
-        as_named = _port_rows(page, ["1", "48", "49"])
+        as_named = _port_rows(page, ["1", "30", "2"])
+        assert as_named == ["1", "30", *(str(n) for n in range(2, 53) if n != 30)]
         assert sorted(as_named, key=int) == numbered and as_named != numbered
         # A device with fewer ports: its own in its order, and the names
         # it does not have after them, in the order they had.

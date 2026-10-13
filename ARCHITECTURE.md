@@ -818,7 +818,15 @@ stability.  The forward helper guards the list of every id
 (`range(1,4095)`: Junos `vlan members all`, AOS-CX `vlan trunk allowed
 all`, a Cisco or Arista trunk that states no list) to avoid
 synthesising 4094 phantom VLANs: such a trunk goes onto the VLANs
-already declared.
+already declared.  The two directions are not equally read: most
+render paths write a port — its VLANs and its LAG — from the port's
+own record and never look at the lists.  So a parser whose config
+states membership per VLAN (AOS-S, where the device prints an
+`interface` stanza only for a port with a setting of its own) gives
+every port one of its lists names an interface record before it
+mirrors, and
+[`tests/unit/migration/test_vlan_members_reach_the_output.py`](tests/unit/migration/test_vlan_members_reach_the_output.py)
+looks for each port's VLANs in the output of every target.
 
 **What a trunk's allowed list says**
 (`TRUNK_THAT_STATES_NO_LIST` in `netcanon/migration/codecs/_helpers.py`;

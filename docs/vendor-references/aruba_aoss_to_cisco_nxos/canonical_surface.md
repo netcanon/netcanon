@@ -1,5 +1,7 @@
 # Aruba AOS-S -> Cisco NX-OS: measured canonical surface
 
+> **Update 2026-10-12 — the interface counts in this document have changed, and so has everything said here about VLAN port membership and about the kitchen sink's second LAG.**  The AOS-S parser now gives an interface record to every port a VLAN's `untagged` / `tagged` list or a `trunk` line names.  It used to make one only for an `interface` stanza, and a switch's own config has a stanza only for a port with a setting of its own — so most ports of a real capture had no record, and a target that writes a port's VLANs and its LAG from the port's record had no line for them.  After the change the source trees hold several times the interface records, and every one comes back.  `vlans[].tagged_ports` and `vlans[].untagged_ports` are preserved whole on every cell that populates them — every member token, where few came back — and both keys are now `good`.  `lags`: every bundle arrives, the kitchen sink's `trk2` (members `A3`, `A4`) among them; what still drifts is the name, `trk<N>` -> `port-channel<N>`.  `interfaces[].interface_type` drifts on every cell that populates interfaces, for every record that is a port or a LAG (an SVI keeps its type).  Any statement below that a VLAN's member list comes back short, that membership survives only for a port that already has an interface record, that `trk2` vanishes, or that counts interface records or member tokens, describes the trees before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoss__cisco_nxos.yaml`.
+
 <!-- secret-gate-461 -->
 > **Update 2026-09-15 (#461) — the local-user behaviour described in this document has changed.**  The NX-OS render now calls the shared `is_migratable()` gate.  Measured after the change: **1 of 5** local accounts now arrive across the 3 cells that populate users. 4 are refused for a secret NX-OS cannot consume (4 AOS-S `sha1:` digest): the render emits a `review:` comment naming the account and no user entry. Surviving secrets are re-wrapped into the target's native form (1 plaintext password as `password 0`); the credential itself is unchanged.  Any statement below that a secret is carried verbatim, or rendered behind `password 0`, the NX-OS cleartext marker, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoss__cisco_nxos.yaml`.
 
@@ -23,9 +25,9 @@ membership, LAG bundles whose members are not themselves interface records,
 and the administrative privilege of local users.
 
 The mesh path is a bare `parse -> render -> parse`
-(`tools/run_full_mesh.process_cell`): no port-rename mesh, no
-`project_vlan_to_switchport` reprojection, no orchestrator overrides. It
-scores PRESERVATION of canonical content, not target-syntax validity.
+(`tools/run_full_mesh.process_cell`): no port-name translation and no
+overrides. It scores PRESERVATION of canonical content, not target-syntax
+validity.
 
 ## Per-field measurement (7 cells)
 
@@ -109,10 +111,10 @@ not survive at all.
   tagged 45-48`) and lands directly on the canonical VLAN record. The NX-OS
   render emits `vlan <id> / name <name>` plus the SVIs, and expresses port
   membership ONLY as per-interface `switchport access vlan N` /
-  `switchport trunk allowed vlan ...` lines. On the bare mesh path no
-  reprojection runs, so membership survives only for ports that already exist
-  as `CanonicalInterface` records (those with explicit per-port AOS-S config).
-  Everything else is dropped. Measured on
+  `switchport trunk allowed vlan ...` lines. Membership therefore survives
+  only for a port that has a `CanonicalInterface` record — which, when this
+  was measured, was a port with an `interface` stanza of its own.
+  Everything else was dropped. Measured on
   `hpe_community_2930f_wc1607_intervlan.cfg`: 12 VLANs re-render with **every**
   tagged/untagged list emptied except a single port on VLAN 2. On
   `hpe_community_2920_wb1608_dhcp_snooping.cfg` VLAN 1 goes from 48 untagged

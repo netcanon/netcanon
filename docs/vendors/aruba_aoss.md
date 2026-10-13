@@ -193,12 +193,48 @@ pipeline — they just aren't pinned by a fixture yet").
   VLAN you add afterwards), and a trunk of no VLAN is tagged in none.
   Release 0.7.7 and earlier
   tagged a Cisco trunk with no list, and an AOS-CX `all`, in nothing.
+- **A port with no `interface` stanza is a port all the same.**  An
+  AOS-S switch prints an `interface` stanza only for a port with a
+  setting of its own — a name, `disable`, an address.  Every other
+  port is in the config through the `untagged` / `tagged` lists of
+  its VLANs, or as a member on a `trunk` line; a switch's own config
+  can have no `interface` stanza at all.  Netcanon reads each such
+  port as a port: enabled, with the VLANs the lists give it and the
+  LAG its `trunk` line gives it.  Onto another vendor it is written
+  with its own stanza — `switchport access vlan`, `vlan trunk
+  allowed`, `channel-group` — like a port that had one.
+
+  **Release 0.7.7 and earlier wrote no line for such a port** on a
+  target that writes a port from the port's own stanza: onto NX-OS,
+  AOS-CX, OS10 and IOS-XR the output had none of those ports, and so
+  none of their VLANs, in a job that could say `completed`; a `trunk`
+  member with no stanza was no member of its LAG on those four and
+  on EOS, IOS-XE CLI and Junos.  If you
+  migrated an AOS-S switch with one of those releases, compare the
+  output with the source's `vlan` and `trunk` lines port by port.
+
+  As a target, AOS-S output follows the device: a port that has
+  nothing to say in a stanza of its own — enabled, no name, no
+  address — and that a VLAN's list or a `trunk` line names gets no
+  `interface` stanza.  A port that is disabled, named or addressed
+  has one, and so has a port no other line names.  So has a port
+  under a name the switch does not use (`Ethernet1`), and a port
+  whose line would not read back as it was written: Netcanon reads
+  each `trunk` line and VLAN list back as it writes it, and a
+  `trunk` line with a member whose name has a space in it, or a
+  list that would write `01` as `1`, leaves its ports their
+  stanzas.  The output is a
+  whole configuration: read into a switch that already has one, a
+  port left out here keeps whatever that switch had for it.
 - **A port range that names ports the switch does not have is
   refused.**  `tagged 1-1001` is 1,001 ports to everything downstream.
   One range is read up to 1,025 ports; the DIFFERENT ports that ranges
   name, and the ports that only a VLAN's or a LAG's list names, are
   held to the server's config size limit (`ports`), and the job says
-  `refused:` with the range that passed it.  See
+  `refused:` with the range that passed it.  Each of those ports is
+  then an interface, and counts toward `interfaces` with the ports
+  that have a stanza.  An AOS-S OUTPUT is held to the same count of
+  the ports its ranges name, where it is written.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § H.
 - **`include-credentials` mode** affects how hashes appear in
   running-config — Netcanon parses + preserves both forms.
@@ -215,8 +251,9 @@ pipeline — they just aren't pinned by a fixture yet").
   them apart.  But no other vendor models a letter-slot module, so
   every target that formats a `stack/port` pair renders both as one
   name — `ge-1/0/1` on Junos, `Ethernet1/0/1` on NX-OS, `port1` on
-  FortiGate, and so on for 9 of the 11 targets.  The two ports merge,
-  and so do their VLAN memberships.
+  FortiGate, and so on for most targets.  The two ports end on one
+  name: a target that writes a stanza for each port writes two under
+  it, each with its own port's VLANs, and a device reads one port.
 
   Since #482 this is **reported** in the job's warnings; before that
   it was silent, and silent specifically on the captures most likely

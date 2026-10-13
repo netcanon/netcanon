@@ -18,7 +18,7 @@
 # READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: there the
 # interface inventory was fully preserved and every interface loss stood on
 # its own measurement.  Here the inventory does not shrink either — it GROWS,
-# 85 source records to 86, with ZERO source names missing.  The extra record
+# 259 source records to 260, with ZERO source names missing.  The extra record
 # is a phantom LAG stanza.  Because the count moves on 1 of 7 cells, the
 # audit routes that cell's `interfaces` compare to STRUCTURAL_ONLY and lets
 # `interfaces[].name` carry the signal, which is why several interface
@@ -26,7 +26,7 @@
 # into `lossy` by their parent.
 #
 # The real losses on this pair are the VLAN database (a total record drop),
-# the interface type hint (85 of 85 records), the local-user role (which
+# the interface type hint (259 of 259 records), the local-user role (which
 # fails OPEN), SNMP trap destinations, RADIUS, and — path-dependently — the
 # LAG surface.
 #
@@ -138,7 +138,7 @@ per_field_expectation:
   # -- Interfaces -- inventory intact, two attributes lost --------------------
   #
   # The measured record count is the headline, and it moves the OPPOSITE way
-  # from most pairs: 85 source interface records across the 7 cells, 86 after
+  # from most pairs: 259 source interface records across the 7 cells, 260 after
   # the round-trip, with ZERO source names missing.  Every AOS-S port —
   # `1/25`, `A1`, `23`, `Vlan10`, `trk1` — survives the VyOS render verbatim.
   # The extra record is a phantom LAG stanza (see `lags`).
@@ -148,20 +148,19 @@ per_field_expectation:
     reason: >
       The interface record SET drifts on 1 of 7 cells, and the direction is
       unusual enough to state plainly: nothing is lost, something is added.
-      `aruba_central_5memberstack_rendered.cfg` goes 49 -> 50 records; all 85
+      `aruba_central_5memberstack_rendered.cfg` goes 49 -> 50 records; all 259
       source names are present in the target on every cell.  The extra record
       is that config's AOS-S trunk (`trk1`) materialising as a bare
       `ethernet trk1 { }` stanza, because the vyos renderer only treats a
       name matching `^bond\d+$` as a bonding interface — everything else
       falls through to `ethernet <name>`.  Re-parsing that empty stanza
       yields a plain interface record.
-      `kitchen_sink.cfg` carries two trunks and gains nothing (13 -> 13).
+      `kitchen_sink.cfg` carries two trunks and gains nothing (34 -> 34).
       Each has an `interface Trk<N>` stanza of its own in the source, which
       the AOS-S parser files under the one name its `trunk` line gave the
       LAG, so the stanza the LAG falls through to is a record the source
       already has.  (Before the parser gave a LAG one name, the two
-      spellings were two records: that cell went 13 -> 15 and the pair
-      85 -> 88.)
+      spellings were two records and that cell gained two.)
       Recorded `lossy`, NOT `unsupported`: no source interface vanishes and
       every attribute of every source port survives, so the migration stays
       compatible; the operator simply inherits one phantom netdev per trunk
@@ -182,7 +181,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: good
     note: >
-      Preserved on 39 of 39 populated records — zero drift across all 85
+      Preserved on 39 of 39 populated records — zero drift across all 259
       matched records.  Both matrices declare
       `/interfaces/interface/config/description` supported.
       Worth stating because the opposite is easy to assume on a vyos target:
@@ -196,7 +195,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 85 of 85 records — zero differing.  The 3
+      Admin state preserved on 259 of 259 records — zero differing.  The 3
       administratively-down ports on this corpus (`1/47`, `1/48`, `21`) all
       render as `disable` and come back down.  Both matrices declare
       `/interfaces/interface/config/enabled` supported.
@@ -205,7 +204,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Zero drift on 85 of 85 records — but the honest reading is that this
+      Zero drift on 259 of 259 records — but the honest reading is that this
       field is untested here, not proven.  NO source record on any of the 7
       cells carries an MTU, so both sides are empty everywhere and the
       measurement is trivially clean.  The disposition therefore rests on
@@ -217,7 +216,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 85 of 85 records; IPv6 is populated on 2 of them
+      Preserved on 259 of 259 records; IPv6 is populated on 2 of them
       (`kitchen_sink.cfg` uplinks A1 and A2) carrying 3 addresses, and every
       address, prefix-length AND scope survives — including the `fe80::/64`
       link-local, which matters because vyos declares
@@ -228,7 +227,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 85 of 85 records — 20 populated records, 20 addresses, all
+      Preserved on 259 of 259 records — 20 populated records, 20 addresses, all
       round-tripping through `address "<ip>/<plen>"`.  Both matrices declare
       `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
       supported.
@@ -242,9 +241,9 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      A clean sweep: all 85 of 85 records lose the IANA type hint entirely,
+      A clean sweep: all 259 of 259 records lose the IANA type hint entirely,
       going to the empty string.  Zero records keep it.  The breakdown is
-      uniform by type — 65 `ianaift:ethernetCsmacd`, 18 `ianaift:l3ipvlan`
+      uniform by type — 239 `ianaift:ethernetCsmacd`, 18 `ianaift:l3ipvlan`
       and 2 `ianaift:ieee8023adLag` all drop.
       Both matrices declare `/interfaces/interface/config/type` LOSSY in
       their own right, and vyos states exactly why: it declares no IANA
@@ -263,15 +262,15 @@ per_field_expectation:
   "interfaces[].lag_member_of":
     disposition: lossy
     reason: >
-      The membership pointer is null after the round-trip on all 4 records
-      that carry one: `1/25`, `1/26` on the Central stack and `23`, `24` on
-      the kitchen sink.  While the kitchen sink's interface record count
-      moved, all 4 sat on cells whose whole `interfaces` signal the audit
-      attributes to `interfaces[].name`, and this key was recorded `good`
-      with the measurement stated, because a loss declared here could not
-      be evidenced.  That cell's count no longer moves (see
-      `interfaces[].name`), its 2 records are compared one by one, and the
-      loss IS evidenced: 2 of 2 null.  The Central stack's 2 remain under
+      The membership pointer is null after the round-trip on all 6 records
+      that carry one: `1/25`, `1/26` on the Central stack and `23`, `24`,
+      `A3`, `A4` on the kitchen sink.  While the kitchen sink's interface
+      record count moved, its records sat on a cell whose whole `interfaces`
+      signal the audit attributes to `interfaces[].name`, and this key was
+      recorded `good` with the measurement stated, because a loss declared
+      here could not be evidenced.  That cell's count no longer moves (see
+      `interfaces[].name`), its 4 records are compared one by one, and the
+      loss IS evidenced: 4 of 4 null.  The Central stack's 2 remain under
       the structural signal.
       It is the same finding as the vanished LAG record and the phantom
       `ethernet trk1` stanza — ONE mechanism, the trunk name not matching
@@ -288,7 +287,7 @@ per_field_expectation:
   "interfaces[].vrrp_groups":
     disposition: good
     note: >
-      No committed cell exercises this — 0 of 85 source records carry a VRRP
+      No committed cell exercises this — 0 of 259 source records carry a VRRP
       group, so zero drift is measured and there is no round-trip to point
       at.  Recorded `good` because the key's only drift signal on this pair
       is its parent list's count moving, which `interfaces[].name` already

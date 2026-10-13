@@ -957,15 +957,29 @@ What still says `completed`, and is yours to check:
   source address).  `ip route 10.50.0.0 255.255.0.0 Null0` onto
   RouterOS is `gateway=Null0`, in a job that can be `completed`.
   Read a finished job's warnings for that line.
-* **A port with VLAN membership and no stanza of its own** — every
-  access port of an AOS-S config that only lists it under `vlan` —
-  is in no line of the output on AOS-CX, IOS-XR, NX-OS and OS10, in
-  a job that can be `completed`: those renderers write a port from
-  its interface stanza, and it has none.  (EOS, IOS-XE CLI and
-  Junos write it.)  `port_renames` still lists the port, under a
-  name the output does not have; and a job that is `partial` for
-  two such ports on one name names a port the output does not have
-  either.  Compare the port count of the output with the source.
+* **A LAG member the config has no interface for.**  The members
+  of an OPNsense lagg are as a rule NICs assigned to nothing, and a
+  FortiGate aggregate can name a member that has no `edit` stanza.
+  Those two parsers make no interface record for such a member, and
+  a target that writes a LAG on each member's own stanza — EOS,
+  AOS-CX, IOS-XE CLI, IOS-XR, NX-OS, OS10, Junos — writes the LAG
+  with no member, in a job that can be `completed`.  (AOS-S, FortiOS,
+  RouterOS and OPNsense write the member list.  So does VyOS for a
+  LAG it writes as `bond<N>`; one left under a name it does not read
+  as a LAG — a FortiGate `agg1` — comes out an `ethernet` interface
+  with no member, in a `partial` job that lists it.)  Compare each
+  LAG's members in the output with the source.  An AOS-S port that
+  a config names only in a VLAN's list or on a `trunk` line was such
+  a port too, VLAN membership included, in release 0.7.7 and
+  earlier; its parser now gives it a record
+  (see [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md)).
+* **A port on AOS-CX under a name AOS-CX cannot read as a port.**
+  That renderer writes a port's VLANs only where the port's name
+  reads as a port or a LAG.  A port left under its source name, or
+  given a name of your own in the port map (`{"3": "uplink-x"}`),
+  has its stanza and no `vlan access` / `vlan trunk` line in it.
+  A name that was left is listed (`untranslated_ports`); a name you
+  chose is not, and that job can be `completed`.
 * **A Junos next hop that names a unit keeps the old name across
   vendors.**  `next-hop ge-0/0/0.0` onto EOS is `ip route
   10.9.0.0/16 ge-0/0/0.0`, beside a `ge-0/0/0` that became
@@ -1225,8 +1239,9 @@ Ports pane choose the *Source device* and the *Target device*.
   did not arrive, and Apply sends the device for the server to compile
   itself.
 * Before Apply the table lists the ports the config uses, in the
-  declared source device's port order (undeclared: in the order the
-  config first mentions them).
+  declared source device's port order (undeclared: in the order of
+  the config's interface stanzas; an AOS-S port that has no stanza
+  comes after those that have one, in port order).
 * **Apply** pairs the ports.  The table then shows, per source port,
   the target port and the position that decided it ("uplink 1"), and
   a row for every name with no place on the target.
@@ -1973,7 +1988,7 @@ a job too, since there is no job to make of a request nobody read:
 
 | Limit | What is counted | `small` | `standard` | `large` |
 |---|---|---:|---:|---:|
-| `vlan_ids` | VLAN ids that lists and ranges name (`2-4000`, `all`, `except 7`); the 4,094 of a trunk that states no allowed list, where that is every VLAN (IOS-XE, NX-OS, EOS, AOS-CX) | 1,048,576 | 16,777,216 | 67,108,864 |
+| `vlan_ids` | VLAN ids that lists and ranges name (`2-4000`, `all`, `except 7`); the 4,094 of a trunk that states no allowed list, where that is every VLAN (IOS-XE, NX-OS, EOS, AOS-CX); on AOS-S, one for each VLAN a port is tagged in (never more than the `memberships` those lines are) | 1,048,576 | 16,777,216 | 67,108,864 |
 | `memberships` | one port in one VLAN's port list, or in one LAG | 50,000 | 1,000,000 | 4,000,000 |
 | `ports` | different ports that port ranges name; ports that only a VLAN's or a LAG's list names | 2,048 | 8,192 | 32,768 |
 | `interfaces` | interface records, wherever one is made | 2,500 | 50,000 | 200,000 |

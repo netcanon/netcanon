@@ -1624,8 +1624,8 @@ class TestTheReadBackItself:
         assert not _right_as_it_stands("Vlan20", tree, aoss, eos, text)
         # nor one the source parser read as something else.
         tree = aoss.parse(_AOSS_VLAN_ADDRESS)
-        tree.interfaces[-1].interface_type = "ianaift:softwareLoopback"
-        assert tree.interfaces[-1].name == "Vlan20"
+        (svi,) = [iface for iface in tree.interfaces if iface.name == "Vlan20"]
+        svi.interface_type = "ianaift:softwareLoopback"
         assert not _right_as_it_stands("Vlan20", tree, aoss, eos, text)
         ios = get_codec("cisco_iosxe_cli")
         tree = ios.parse(_IOS_UNREAD)

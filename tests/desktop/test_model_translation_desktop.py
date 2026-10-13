@@ -124,6 +124,67 @@ interface Ethernet1
 end
 """
 
+#: An OPNsense lagg.  Its members are NICs assigned to nothing: the
+#: config has an interface for ``lagg0`` and none for ``igb0`` or
+#: ``igb1``, and the parser makes no record for them.
+_OPNSENSE_LAGG = """<?xml version="1.0"?>
+<opnsense>
+  <system>
+    <hostname>fw</hostname>
+  </system>
+  <interfaces>
+    <lan>
+      <if>lagg0</if>
+      <enable>1</enable>
+      <ipaddr>10.0.0.2</ipaddr>
+      <subnet>24</subnet>
+    </lan>
+  </interfaces>
+  <laggs>
+    <lagg>
+      <members>igb0,igb1</members>
+      <laggif>lagg0</laggif>
+      <proto>lacp</proto>
+    </lagg>
+  </laggs>
+</opnsense>
+"""
+
+#: An AOS-S config with no ``interface`` stanza: every port is named
+#: by a VLAN's list or by the ``trunk`` line alone.
+_AOSS_NO_STANZA = """; JL259A Configuration Editor; Created on release #WC.16.11.0003
+hostname "sw"
+trunk 1-2 trk1 lacp
+vlan 1
+   name "DEFAULT_VLAN"
+   no untagged 3-5
+   exit
+vlan 10
+   name "users"
+   untagged 3-4
+   exit
+vlan 20
+   name "voice"
+   untagged 5
+   tagged 4,Trk1
+   exit
+"""
+
+
+def _stanzas_of(rendered: str) -> dict[str, list[str]]:
+    """``interface`` header -> the indented lines under it."""
+    out: dict[str, list[str]] = {}
+    name = None
+    for line in rendered.splitlines():
+        if line.startswith("interface "):
+            name = line[len("interface "):].strip()
+            out[name] = []
+        elif name is not None and line[:1] in (" ", "\t"):
+            out[name].append(line.strip())
+        else:
+            name = None
+    return out
+
 
 class TestModelTranslationServedByEmbeddedServer:
     def test_families_inventory_and_a_declared_plan(
@@ -601,18 +662,32 @@ class TestModelTranslationServedByEmbeddedServer:
                     "port_rename_map": {"Ethernet1": "bridge-uplink"},
                 })
                 # ...and so is a placed port the config has no interface
-                # for -- an AOS-S trunk member -- that an entry names.
+                # for -- a member of an OPNsense lagg, a NIC assigned to
+                # nothing -- that an entry names.
                 loose = _post(port, "/api/v1/migration/plan", {
+                    "source": "opnsense", "target": "mikrotik_routeros",
+                    "raw_text": _OPNSENSE_LAGG,
+                    "source_profile": "opnsense/Protectli-FW4B-IGB",
+                    "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+                    "port_rename_map": {"igb0": "up-a"},
+                })
+                # An AOS-S port has no stanza either unless it has a
+                # setting of its own, and its parser gives it a record:
+                # a trunk member an entry names is found by its hardware,
+                listed = _post(port, "/api/v1/migration/plan", {
                     "source": "aruba_aoss", "target": "mikrotik_routeros",
-                    "raw_text": (
-                        "; JL259A Configuration Editor; Created on release #WC.16.11.0003\n"
-                        'hostname "sw"\ntrunk 1-2 trk1 lacp\n'
-                    ),
+                    "raw_text": _AOSS_NO_STANZA,
                     "source_deployment": {
                         "mode": "standalone", "members": [{"model": "JL259A"}],
                     },
                     "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
                     "port_rename_map": {"1": "up-a"},
+                })
+                # and with no devices declared every port a VLAN lists
+                # is in the output of a port-centric target, on its VLANs.
+                switch = _post(port, "/api/v1/migration/plan", {
+                    "source": "aruba_aoss", "target": "cisco_nxos",
+                    "raw_text": _AOSS_NO_STANZA,
                 })
                 status, refused = _post_raw(
                     port, "/api/v1/migration/plan",
@@ -641,8 +716,25 @@ class TestModelTranslationServedByEmbeddedServer:
         assert unbound["status"] == "partial"
 
         assert "slaves=up-a,sfp-sfpplus2" in loose["rendered"]
-        assert loose["port_mapping_plan"]["unbound_ports"] == {"1": "sfp-sfpplus1"}
+        assert loose["port_mapping_plan"]["unbound_ports"] == {"igb0": "sfp-sfpplus1"}
         assert loose["status"] == "partial"
+
+        assert "set [ find default-name=sfp-sfpplus1 ] name=up-a" in listed["rendered"]
+        assert "slaves=up-a,sfp-sfpplus2" in listed["rendered"]
+        assert listed["port_mapping_plan"]["unbound_ports"] == {}
+        assert listed["port_mapping_plan"]["target_hardware"] == {"1": "sfp-sfpplus1"}
+
+        names = switch["port_renames"]
+        stanzas = _stanzas_of(switch["rendered"])
+        assert stanzas[names["3"]] == ["no shutdown", "switchport access vlan 10"]
+        assert stanzas[names["4"]] == [
+            "no shutdown", "switchport mode trunk", "switchport trunk native vlan 10",
+            "switchport trunk allowed vlan 20",
+        ]
+        assert stanzas[names["5"]] == ["no shutdown", "switchport access vlan 20"]
+        assert "channel-group 1 mode active" in stanzas[names["1"]]
+        assert "channel-group 1 mode active" in stanzas[names["2"]]
+        assert switch["status"] == "completed"
 
         assert status == 422
         assert refused["detail"][0]["loc"] == ["body", "port_rename_map"]

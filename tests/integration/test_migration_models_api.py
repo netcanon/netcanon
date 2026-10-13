@@ -892,6 +892,8 @@ end
 """
 
 
+#: An AOS-S config with no ``interface`` stanza: two LAG members and
+#: two ports a VLAN lists.  The parser gives each of them a record.
 _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA = """; JL259A Configuration Editor; Created on release #WC.16.11.0003
 hostname "sw"
 trunk 1-2 trk1 lacp
@@ -900,6 +902,32 @@ vlan 1
    untagged 3-4
    ip address 10.0.0.2 255.255.255.0
    exit
+"""
+
+#: An OPNsense lagg.  Its members are NICs assigned to nothing: the
+#: config has an interface for ``lagg0`` and none for ``igb0`` or
+#: ``igb1``, and the parser makes no record for them.
+_OPNSENSE_LAGG = """<?xml version="1.0"?>
+<opnsense>
+  <system>
+    <hostname>fw</hostname>
+  </system>
+  <interfaces>
+    <lan>
+      <if>lagg0</if>
+      <enable>1</enable>
+      <ipaddr>10.0.0.2</ipaddr>
+      <subnet>24</subnet>
+    </lan>
+  </interfaces>
+  <laggs>
+    <lagg>
+      <members>igb0,igb1</members>
+      <laggif>lagg0</laggif>
+      <proto>lacp</proto>
+    </lagg>
+  </laggs>
+</opnsense>
 """
 
 
@@ -950,22 +978,54 @@ class TestEveryPlacedPortIsFoundByItsHardware:
     def test_a_named_port_the_config_has_no_interface_for_is_reported(
         self, client: TestClient,
     ) -> None:
-        """An AOS-S trunk member has no ``interface`` stanza.  Named
-        by an entry, it is written into ``slaves=`` under a name no
-        line defines; that used to be ``completed``."""
+        """The members of an OPNsense lagg are NICs assigned to
+        nothing: the config has no interface for them.  Named by an
+        entry, one is written into ``slaves=`` under a name no line
+        defines; that used to be ``completed``."""
+        request = {
+            "source": "opnsense", "target": "mikrotik_routeros",
+            "raw_text": _OPNSENSE_LAGG,
+            "source_profile": "opnsense/Protectli-FW4B-IGB",
+            "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
+        }
+        job = client.post("/api/v1/migration/plan", json=request).json()
+        assert "slaves=sfp-sfpplus1,sfp-sfpplus2" in job["rendered"]
+        assert job["status"] == "completed"
+        job = client.post("/api/v1/migration/plan", json={
+            **request, "port_rename_map": {"igb0": "up-a"},
+        }).json()
+        plan = job["port_mapping_plan"]
+        assert "slaves=up-a,sfp-sfpplus2" in job["rendered"]
+        assert plan["unbound_ports"] == {"igb0": "sfp-sfpplus1"}
+        assert plan["off_target"] == []
+        assert job["status"] == "partial"
+        assert "1 port(s) are not looked up by their hardware in the output" in job["error"]
+
+    def test_an_aoss_port_only_a_list_names(
+        self, client: TestClient,
+    ) -> None:
+        """An AOS-S config has no stanza for a port with no setting of
+        its own; the parser gives it a record all the same.  A trunk
+        member and a port in a VLAN's list are each looked up by the
+        hardware they were paired with, under the name an entry gives
+        them."""
         job = client.post("/api/v1/migration/plan", json={
             "source": "aruba_aoss", "target": "mikrotik_routeros",
             "raw_text": _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA,
             "source_deployment": {"mode": "standalone", "members": [{"model": "JL259A"}]},
             "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
-            "port_rename_map": {"1": "up-a"},
+            "port_rename_map": {"1": "up-a", "3": "srv"},
         }).json()
         plan = job["port_mapping_plan"]
+        assert _find_lines(job) == [
+            "set [ find default-name=sfp-sfpplus1 ] name=up-a disabled=no",
+            "set [ find default-name=sfp-sfpplus2 ] disabled=no",
+            "set [ find default-name=sfp-sfpplus3 ] name=srv disabled=no",
+            "set [ find default-name=sfp-sfpplus4 ] disabled=no",
+        ]
         assert "slaves=up-a,sfp-sfpplus2" in job["rendered"]
-        assert plan["unbound_ports"] == {"1": "sfp-sfpplus1"}
-        assert plan["off_target"] == []
-        assert job["status"] == "partial"
-        assert "1 port(s) are not looked up by their hardware in the output" in job["error"]
+        assert (plan["unbound_ports"], plan["off_target"]) == ({}, [])
+        assert plan["target_hardware"] == {"1": "sfp-sfpplus1", "3": "sfp-sfpplus3"}
 
     @pytest.mark.parametrize("name", ["my port", "a,b"])
     def test_and_so_is_one_under_a_name_that_cannot_be_read_back(
@@ -975,16 +1035,16 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         space or a comma in it is not read back whole.  The port is
         reported all the same; this used to be ``completed``."""
         resp = client.post("/api/v1/migration/plan", json={
-            "source": "aruba_aoss", "target": "mikrotik_routeros",
-            "raw_text": _AOSS_TRUNK_MEMBERS_WITH_NO_STANZA,
-            "source_deployment": {"mode": "standalone", "members": [{"model": "JL259A"}]},
+            "source": "opnsense", "target": "mikrotik_routeros",
+            "raw_text": _OPNSENSE_LAGG,
+            "source_profile": "opnsense/Protectli-FW4B-IGB",
             "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
-            "port_rename_map": {"1": name},
+            "port_rename_map": {"igb0": name},
         })
         assert resp.headers["X-Netcanon-Job-Status"] == "partial"
         job = resp.json()
         assert f"slaves={name},sfp-sfpplus2" in job["rendered"]
-        assert job["port_mapping_plan"]["unbound_ports"] == {"1": "sfp-sfpplus1"}
+        assert job["port_mapping_plan"]["unbound_ports"] == {"igb0": "sfp-sfpplus1"}
         assert job["port_mapping_plan"]["off_target"] == []
 
     def test_a_port_no_line_of_the_output_finds_is_reported(

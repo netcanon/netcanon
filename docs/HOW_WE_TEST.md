@@ -232,6 +232,38 @@ handed each form they must tell apart, and a new codec fails the
 module until it says what a trunk with no list carries on its
 platform.
 
+**A port's VLANs are looked for in the output, not in the tree.**
+The canonical tree states a port's VLAN membership twice — on the
+VLAN and on the port — and two trees that agree with each other say
+nothing about a line.  An AOS-S config names most of its ports only
+in its VLANs' lists; the parser made no interface record for them,
+most renderers write a port's VLANs from its record, and a switch's
+access ports came out on NX-OS with no line at all, in a job that
+said `completed`, while the validation report counted the
+membership as supported and the cross-mesh audit held the drift as
+an expected loss.  `test_vlan_members_reach_the_output.py` runs
+every committed capture onto every codec as `POST /plan` runs it and
+looks for each membership the source tree holds in the OUTPUT, three
+ways: with the target's parser; as text, with a reader the test owns
+for each grammar that puts a VLAN on a port, and the two readings
+must agree; and by the port's name in a line, which asks no grammar
+at all.  A membership may be missing only where the job lists the
+port, where the port's own stanza says so in a `review:` line, or —
+on a target that writes no port VLANs at all — where the validation
+report lists a path that states that membership; anything else
+fails, and so does a membership the output has and the source does
+not.  What such a report accounts for is the membership and not the
+port: on those targets too the port's name is looked for in a line,
+or a renderer that wrote no stanza for a port with nothing it can
+say of it would lose the port in a job whose report had not moved.
+The parsers are held to the shape the renderers rely on: a
+port that a VLAN's list or a LAG's member list names has a record,
+on every capture, and on a config typed for each grammar that states
+a LAG's members in a list.  What the module knows of and does not
+mend is in named sets, compared for equality with what is measured.
+It cannot see a membership the source parser never put in the tree:
+that is missing from both sides.
+
 **A status is checked against the output, not against the warning
 that should have moved it.**  With no devices declared, a job in
 which two source names ended on one name, a name was dropped because

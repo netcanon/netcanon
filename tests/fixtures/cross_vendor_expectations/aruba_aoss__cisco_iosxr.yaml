@@ -16,8 +16,8 @@
 # 5->0; zero `vlan` stanzas in the render).  Note the direction is the
 # OPPOSITE of aruba_aoscx__arista_eos — there the interface inventory shrank
 # and the VLANs survived.  Here the interface inventory is preserved
-# completely (49->49, 9->9, 10->10, 4->4, 13->13 on the populated cells) and
-# it is the VLANs that vanish.
+# completely (49->49, 49->49, 61->61, 14->14, 52->52, 34->34 on the populated
+# cells) and it is the VLANs that vanish.
 #
 # Because the VLAN drift is a wholesale list-length signal, every `vlans[].*`
 # sub-field measures as drifted.  The reconciler collapses that to ONE
@@ -128,8 +128,8 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on all 5 cells that carry interfaces, and the inventory does
-      not shrink: 49->49, 9->9, 10->10, 4->4, 13->13 records.  This is the
+      Preserved on all 6 cells that carry interfaces, and the inventory does
+      not shrink: 49->49, 49->49, 61->61, 14->14, 52->52, 34->34 records.  This is the
       structural opposite of `aruba_aoscx__arista_eos`, where the interface
       list was the thing that collapsed — do not carry that pair's intuition
       across.  Note the names arrive in AOS-S form (`1/25`, `23`, `A1`),
@@ -147,7 +147,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on all 5 populated cells; declared supported on
+      Admin state preserved on all 6 populated cells; declared supported on
       both sides.  A port administratively down on AOS-S arrives shut on XR
       rather than silently absent.
     references: [aoss-iosxr-surface]
@@ -184,7 +184,7 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on all 5 cells that carry interfaces, and on every record of
+      Drifts on all 6 cells that carry interfaces, and on every record of
       those cells: `ianaift:ethernetCsmacd` -> `ianaift:other` throughout,
       plus `ianaift:l3ipvlan` -> `ianaift:other` and `ianaift:ieee8023adLag`
       -> `ianaift:other` on `kitchen_sink.cfg`.  The mechanism is declared:
@@ -213,9 +213,7 @@ per_field_expectation:
       `Bundle-Ether<N>` returns None and the comparison falls back to raw
       equality.  The canonical VALUE genuinely does not round-trip, which is
       why this is declared a loss; the underlying membership is not lost
-      here.  The real membership loss on this pair lives in `lags` and is a
-      different fixture and a different cause — do not read this key as
-      corroborating it.
+      here.
     references: [aoss-iosxr-surface]
 
   "interfaces[].vrrp_groups":
@@ -422,23 +420,24 @@ per_field_expectation:
   lags:
     disposition: lossy
     reason: >
-      A partial degradation, not a vanish, verified by round-tripping both
-      LAG-bearing fixtures rather than inferred from the drift shape.
+      A rename, not a vanish, verified by round-tripping both LAG-bearing
+      fixtures rather than inferred from the drift shape.
       On `aruba_central_5memberstack_rendered.cfg` the LAG survives intact:
       `trk1` with members `1/25` and `1/26` renders as `bundle id 1 mode on`
       on both member ports and re-parses as `Bundle-Ether1` with the same two
       members — the drift there is only the vendor-correct rename, which the
       audit's `_LAG_NAME_RE` does not cover for `Bundle-Ether<N>`.
-      On `kitchen_sink.cfg` there is a real loss underneath: the source
-      carries `trk1` (members `23`, `24`) and `trk2` (members `A3`, `A4`) and
-      the re-parse yields only `Bundle-Ether1`.  `trk2` is gone because the
-      renderer emits bundle membership from `CanonicalInterface.lag_member_of`
-      and NOT from `CanonicalLAG.members`, and that fixture has no interface
-      records named `A3` / `A4` for the membership to hang on.
-      `lossy` rather than `unsupported` because one bundle demonstrably
-      survives and cisco_iosxr declares `/lags/lag/name`, `/lags/lag/members`
-      and `/lags/lag/mode` all supported.  Re-check the member list of every
-      port-channel after cutover.
+      On `kitchen_sink.cfg` both bundles arrive the same way: `trk1`
+      (members `23`, `24`) and `trk2` (members `A3`, `A4`) re-parse as
+      `Bundle-Ether1` and `Bundle-Ether2` with their members.  `trk2` used to
+      be lost: the renderer emits bundle membership from
+      `CanonicalInterface.lag_member_of` and NOT from `CanonicalLAG.members`,
+      and `A3` / `A4`, which the config names only on its `trunk` line, had
+      no interface record for the membership to hang on.  The AOS-S parser
+      now gives every member a record.
+      `lossy` rather than `unsupported` because every bundle survives under
+      another name and cisco_iosxr declares `/lags/lag/name`,
+      `/lags/lag/members` and `/lags/lag/mode` all supported.
     references: [aoss-iosxr-surface]
 
   # -- Identity --------------------------------------------------------------

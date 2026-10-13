@@ -460,6 +460,89 @@ class TestPlanEndpoint:
         assert "ge-1/0/1" in (with_vlan["rendered"] or "")
 
 
+#: An AOS-S config as a switch prints it: no ``interface`` stanza,
+#: every port named by a VLAN's list or by the ``trunk`` line alone.
+_AOSS_NO_STANZA = """; JL259A Configuration Editor; Created on release #WC.16.11.0003
+hostname "sw"
+trunk 1-2 trk1 lacp
+vlan 1
+   name "DEFAULT_VLAN"
+   no untagged 3-5
+   exit
+vlan 10
+   name "users"
+   untagged 3-4
+   exit
+vlan 20
+   name "voice"
+   untagged 5
+   tagged 4,Trk1
+   exit
+"""
+
+
+def _stanzas_of(rendered: str) -> dict[str, list[str]]:
+    """``interface`` header -> the indented lines under it."""
+    out: dict[str, list[str]] = {}
+    name = None
+    for line in rendered.splitlines():
+        if line.startswith("interface "):
+            name = line[len("interface "):].strip()
+            out[name] = []
+        elif name is not None and line[:1] in (" ", "\t"):
+            out[name].append(line.strip())
+        else:
+            name = None
+    return out
+
+
+class TestAPortOnlyAListNames:
+    """An AOS-S port with no setting of its own has no ``interface``
+    stanza: the config names it in a VLAN's list, or on a ``trunk``
+    line.  A target that writes a port's VLANs on the port's own
+    stanza used to have no line for it -- the VLANs and the SVIs came
+    out and not one access port -- in a job that said ``completed``."""
+
+    @pytest.mark.parametrize(
+        ("target", "access", "native", "allowed", "member"),
+        [
+            ("cisco_nxos", "switchport access vlan {}", "switchport trunk native vlan {}",
+             "switchport trunk allowed vlan {}", "channel-group 1 mode active"),
+            ("dell_os10", "switchport access vlan {}", "switchport access vlan {}",
+             "switchport trunk allowed vlan {}", "channel-group 1 mode active"),
+            ("aruba_aoscx", "vlan access {}", "vlan trunk native {}",
+             "vlan trunk allowed {}", "lag 1"),
+        ],
+    )
+    def test_it_is_written_with_its_vlans(
+        self, client, target: str, access: str, native: str, allowed: str, member: str,
+    ) -> None:
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "aruba_aoss", "target": target, "raw_text": _AOSS_NO_STANZA,
+        }).json()
+        names = job["port_renames"]
+        assert set(names) >= {"1", "2", "3", "4", "5"}
+        stanzas = _stanzas_of(job["rendered"])
+        assert access.format(10) in stanzas[names["3"]]
+        assert access.format(20) in stanzas[names["5"]]
+        assert native.format(10) in stanzas[names["4"]]
+        assert allowed.format(20) in stanzas[names["4"]]
+        assert member in stanzas[names["1"]] and member in stanzas[names["2"]]
+        assert job["source_ports"] == ["1", "2", "3", "4", "5"]
+
+    def test_and_aoss_gets_back_no_stanza(self, client) -> None:
+        """AOS-S onto AOS-S: the ports are in the lists that named
+        them, and the output has no ``interface`` stanza the source
+        did not have."""
+        job = client.post("/api/v1/migration/plan", json={
+            "source": "aruba_aoss", "target": "aruba_aoss", "raw_text": _AOSS_NO_STANZA,
+        }).json()
+        assert job["status"] == "completed"
+        assert _stanzas_of(job["rendered"]) == {}
+        assert "   untagged 3-4\n" in job["rendered"] and "   tagged 4,Trk1\n" in job["rendered"]
+        assert "trunk 1-2 trk1 lacp\n" in job["rendered"]
+
+
 class TestPlanPortsEndpoint:
     """``POST /api/v1/migration/plan/ports`` — first per-pane override
     endpoint.  Establishes the pattern that future category-specific

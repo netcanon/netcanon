@@ -22,11 +22,11 @@
 # always emits the sibling interface stanza the NX-OS renderer needs, so the
 # address is preserved on all 4 cells that carry one.  It is declared `good`.
 #
-# The mesh path is a bare parse -> render -> parse: no port-rename mesh, no
-# `project_vlan_to_switchport` reprojection, no orchestrator overrides.  It
-# scores PRESERVATION of canonical content, not target-syntax validity — a
-# field can be `good` here and still need operator work on the target (see the
-# `local_users[].role` and `local_users[].hashed_password` notes).
+# The mesh path is a bare parse -> render -> parse: no port-name translation
+# and no overrides.  It scores PRESERVATION of canonical content, not
+# target-syntax validity — a field can be `good` here and still need operator
+# work on the target (see the `local_users[].role` and
+# `local_users[].hashed_password` notes).
 #
 # Schema spec: tests/fixtures/cross_vendor_expectations/README.md
 # Vendor reference cache: docs/vendor-references/aruba_aoss_to_cisco_nxos/
@@ -39,11 +39,11 @@ meta:
     5400R access switch replaced by (or re-cabled behind) a Cisco Nexus 9000.
     The shared surface is the L2/L3 access core — hostname, DNS, NTP, VLANs
     and their SVIs, interface addressing and switchport state, static routes,
-    SNMP, local users.  The losses that remain are concentrated in the three
-    places AOS-S models differently from NX-OS: VLAN-centric port membership
-    (NX-OS carries membership per interface, not per VLAN), LAG bundles whose
-    members are not themselves interface records, and the administrative
-    privilege of local users.
+    SNMP, local users.  The losses that remain are in the places AOS-S NAMES
+    things differently from NX-OS: the type an interface is given from the
+    shape of its name, the name of a LAG, and the administrative privilege of
+    local users.  VLAN port membership -- per VLAN on AOS-S, per interface on
+    NX-OS -- is carried, and so are a LAG's members.
   certainty: medium
   references:
     - id: aoss-nxos-surface
@@ -133,7 +133,7 @@ per_field_expectation:
       Names are carried verbatim by design — the mesh scores name STABILITY,
       and native translation (`1/25` -> `Ethernet1/25`) belongs to the
       orchestrator's port-rename layer, which this bare path does not engage.
-      Preserved on all 5 cells that populate interfaces.
+      Preserved on all 6 cells that populate interfaces.
     references: [aoss-nxos-surface]
 
   "interfaces[].description":
@@ -149,14 +149,14 @@ per_field_expectation:
     disposition: lossy
     reason: >
       `ianaift:ethernetCsmacd` degrades to `ianaift:other` on every physical
-      port — 4 of the 5 cells that populate interfaces, and all 49 interface
-      records on the 5-member stack capture.  NX-OS infers the IANA ifType
+      port, and `ianaift:ieee8023adLag` on every trunk — all 6 cells that
+      populate interfaces, 241 of their 259 records.  NX-OS infers the IANA ifType
       from the name prefix (`Ethernet` -> ethernetCsmacd, `Vlan` -> l3ipvlan,
       `port-channel` -> ieee8023adLag), and AOS-S port names are bare numerics
       or module-lettered (`1`, `1/1`, `A1`), so the inference falls through.
       Cosmetic in isolation — the port, its addressing and its switchport
       state all survive — and it self-heals once the port-rename mesh gives
-      the ports NX-OS-shaped names.  The one preserving cell carries only
+      the ports NX-OS-shaped names.  The 18 records that keep their type are
       SVIs, whose `Vlan<N>` names NX-OS does recognise.
     references: [aoss-nxos-surface]
 
@@ -190,9 +190,9 @@ per_field_expectation:
   "interfaces[].access_vlan":
     disposition: good
     note: >
-      Access-VLAN state carried ON an interface record survives.  Membership
-      carried on the VLAN record instead does not — see
-      `vlans[].untagged_ports`.
+      Access-VLAN state survives on every port, the ports an AOS-S config
+      names only in a VLAN's `untagged` list among them: the AOS-S parser
+      gives each of those an interface record (see `vlans[].untagged_ports`).
     references: [aoss-nxos-surface]
 
   "interfaces[].trunk_allowed_vlans":
@@ -261,8 +261,8 @@ per_field_expectation:
   # losing the advertisement interval and the group description.  Re-audit
   # both keys as soon as a fixture exercises them.
 
-  # -- VLANs.  Sub-field keys only: the VLAN record itself (id, name, SVI
-  # addressing) survives everywhere; the loss is port membership. --
+  # -- VLANs.  Sub-field keys only: the VLAN record (id, name, SVI
+  # addressing) and its port membership survive everywhere. --
 
   "vlans[].id":
     disposition: good
@@ -287,31 +287,33 @@ per_field_expectation:
     references: [aoss-nxos-surface]
 
   "vlans[].tagged_ports":
-    disposition: lossy
-    reason: >
-      Trunk membership carried on the VLAN record is dropped for every port
-      that is not itself an interface record — 3 of the 5 cells that populate
-      tagged ports.  On `hpe_community_2930f_wc1607_intervlan.cfg` all 11
-      VLANs re-render with an EMPTY tagged list.  Re-create the trunk
-      membership on the Nexus as per-interface `switchport trunk allowed
-      vlan <list>`, or run the migration through the orchestrator's
-      `project_vlan_to_switchport` reprojection, which closes this on the
-      deploy path.
+    disposition: good
+    note: >
+      Preserved on all 5 cells that populate tagged ports — 161 of 161 member
+      tokens.  AOS-S states trunk membership on the VLAN (`vlan 2 / tagged
+      45-48`) and NX-OS only per interface (`switchport trunk allowed vlan
+      <list>`), so the membership travels on the port's interface record.
+      The AOS-S parser makes that record for every port a VLAN's list names,
+      whether or not the config has an `interface` stanza for it: the device
+      prints a stanza only for a port with a setting of its own.  Until it
+      did, a port with no stanza had no record and this list came back short
+      on 3 of the 5 cells (all 11 VLANs of
+      `hpe_community_2930f_wc1607_intervlan.cfg` re-rendered with an empty
+      tagged list).
     references: [aoss-nxos-surface]
 
   "vlans[].untagged_ports":
-    disposition: lossy
-    reason: >
-      The largest loss on this pair — 5 of the 6 cells that populate untagged
-      ports.  AOS-S membership is VLAN-centric (`vlan 2 / untagged 1-24`) and
-      NX-OS expresses membership ONLY as per-interface `switchport access
-      vlan N`, so on the bare path a port survives in its VLAN only if it
-      already exists as an interface record.  Measured: 48 untagged ports ->
-      8 on `hpe_community_2920_wb1608_dhcp_snooping.cfg`, 12 -> 1 on the
-      kitchen sink, and every list emptied on
-      `hpe_community_2930f_wc1610_dhcp_server.cfg`.  A Nexus cut over from
-      this render alone would leave the access ports in VLAN 1.  Same fix as
-      `vlans[].tagged_ports`.
+    disposition: good
+    note: >
+      Preserved on all 6 cells that populate untagged ports — 196 of 196
+      member tokens — by the same route as `vlans[].tagged_ports`: the access
+      VLAN rides the port's interface record and NX-OS writes it as
+      `switchport access vlan N`.  This was the largest loss on the pair
+      while a port named only in a VLAN's list had no record: 48 untagged
+      ports came back as 8 on `hpe_community_2920_wb1608_dhcp_snooping.cfg`,
+      and every list was emptied on
+      `hpe_community_2930f_wc1610_dhcp_server.cfg`, whose config has no
+      `interface` stanza at all.
     references: [aoss-nxos-surface]
 
   "vlans[].ipv4_addresses":
@@ -390,16 +392,17 @@ per_field_expectation:
       sub-field: 0 preserved / 2 drifted across the cells that populate LAGs.
       The NX-OS render emits NO `interface port-channel<N>` stanza — a bundle
       exists on the target only as `channel-group <N> mode <mode>` lines on
-      its member ports.  Two consequences.  (1) The bundle is renamed: AOS-S
-      `trk1` re-parses as `port-channel1`, with members and LACP mode intact.
-      (2) A bundle whose members are NOT themselves interface records leaves
-      no trace at all — on the kitchen sink `trk2` (members `A3`, `A4`, which
-      have no interface record) vanishes and the LAG count drifts 2 -> 1.
+      its member ports.  One consequence: the bundle is renamed.  AOS-S
+      `trk1` re-parses as `port-channel1`, with members and LACP mode intact,
+      on both cells and for all 3 bundles.  (A bundle whose members the
+      config names only on its `trunk` line used to leave no trace -- the
+      kitchen sink's `trk2`, members `A3` and `A4`, vanished and the LAG
+      count drifted 2 -> 1 -- because such a member had no interface record
+      to carry the `channel-group` line.  The AOS-S parser now gives every
+      member a record, and both bundles arrive.)
       Lossy rather than unsupported because NX-OS models port-channels fully
-      (its matrix declares `/lags/*` supported with no caveats); the failure
-      is that this source hands it membership the render has nowhere to put.
-      Re-create the missing bundles on the Nexus and re-check every member
-      list.
+      (its matrix declares `/lags/*` supported with no caveats); what drifts
+      is the name.
     references: [aoss-nxos-surface]
 
   # -- Local users.  Sub-field keys: name, hash and role all survive; the

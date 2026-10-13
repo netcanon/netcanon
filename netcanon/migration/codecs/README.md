@@ -533,12 +533,26 @@ the policy locally:
   adopt this; re-deriving a local keep-set is how the rule drifts.
 
 * **`netcanon/migration/canonical/transforms.py::project_vlan_to_switchport`**
-  — the symmetric direction.  Materialises port-centric switchport
-  state from VLAN-centric membership lists.  Cisco IOS-XE CLI and
-  Junos render paths call this so cross-vendor renders from codecs
-  that emit no per-port stanzas (Aruba's `vlan N / untagged 1/1-1/47`
-  form, OPNsense's `<vlans>`-only) still produce L2 config on the
-  target side.
+  — the symmetric direction.  Fills port-centric switchport state
+  from VLAN-centric membership lists.  The AOS-S parser calls it at
+  the end of `parse()`, once every port its lists name has a record
+  (`synthesise_missing=False`).  The Arista EOS, Cisco IOS-XE CLI and
+  Junos render paths call it too, with the default: for a tree that
+  holds a port in a VLAN's list and has no record for it, it makes
+  one.  **Do not rely on that from a parser.**  Every other render
+  path writes a port — its VLANs and its LAG — from the port's own
+  record alone, and the record the projection makes has no interface
+  type.  **A parser gives a record to every
+  port one of its lists names** (a VLAN's `tagged_ports` /
+  `untagged_ports`, a LAG's `members`), and it is the record its own
+  empty stanza makes, so that a config and its own rendering parse
+  alike.  AOS-S is the worked example
+  (`aruba_aoss/parse.py::_a_record_for_every_port_named`): its device
+  prints an `interface` stanza only for a port with a setting of its
+  own, so most ports of a real capture are named by the lists alone.
+  `tests/unit/migration/test_vlan_members_reach_the_output.py` holds
+  every public parser to it on the committed captures, and looks for
+  each port's VLANs in the output of every target.
 
 * **`netcanon/migration/canonical/transforms.py::project_svi_to_vlan`**
   — synthesises `CanonicalVlan` records from L3 SVI interfaces

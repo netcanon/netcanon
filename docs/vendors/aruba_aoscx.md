@@ -203,6 +203,14 @@ source, plus configs exercising symmetric-IRB **L3VNI**, **VSX**, and
   `interface 1/1/1.54` with its address and no `encapsulation
   dot1q`, in a job that is `completed` with no warning.  Compare the
   sub-interfaces of an AOS-CX to AOS-CX output with the source.
+- **A port under a name AOS-CX cannot read gets no VLAN line.**  As
+  a target, AOS-CX writes a port's `vlan access` / `vlan trunk`
+  lines only where the port's name reads as a port or a LAG
+  (`1/1/3`, `lag 1`).  A port left under its source name, or given a
+  name of your own in the port map (`{"3": "uplink-x"}`), has its
+  `interface` stanza and no VLAN in it.  A name that was left is
+  listed by the job; a name you chose is not.  See
+  [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
 - **`active-gateway` is the anycast, not VRRP.**  The supported
   distributed-gateway surface is `active-gateway ip` / `active-gateway
   ip mac`; classic VRRP (`vrrp <vrid>`) is a later phase and drops.

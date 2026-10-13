@@ -77,10 +77,12 @@ interface 2
 ```
 
 This is the canonical-intermediate-model paying off: AOS-S's
-VLAN-centric `untagged 1-20` projects through the canonical
-`CanonicalVlan.untagged_ports` list, then re-projects into Arista's
-per-port `switchport access vlan` directives via the
-`project_vlan_to_switchport` transform.
+VLAN-centric `untagged 1-20` is read into the canonical
+`CanonicalVlan.untagged_ports` list and onto a record for each of
+the twenty ports — AOS-S prints no `interface` stanza for a port
+with nothing of its own to say, and the parser gives it a record all
+the same — and Arista writes each record as per-port `switchport
+access vlan` directives.
 
 **Note on port naming:** the demo emits bare numeric port names
 (`interface 1`, `interface 2`, ...) — Arista accepts both bare-
