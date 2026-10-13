@@ -9,7 +9,10 @@ Note: probe is in :mod:`.codec`; this module assumes input has already
 been classified as Cisco IOS-XE CLI.
 
 Handles hostname, interfaces (physical / SVI / Loopback / Port-channel /
-Tunnel), VLANs (top-level + SVI-synthesised), static routes,
+Tunnel; a type and its number written apart, ``interface ethernet
+1/11``, are one name), VLANs (top-level + SVI-synthesised), static routes
+(what follows the destination is read by
+:func:`_route_after_destination`),
 ``ip default-gateway``, SNMP (community / location / contact / trap-host
 / v3 USM), local users, DHCP pools, RADIUS servers (modern named
 stanza + legacy one-liner), LAGs (``Port-channelN`` declarations +
@@ -42,6 +45,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+from collections.abc import Callable
 from typing import Any
 
 from ...canonical.intent import (
@@ -68,6 +72,9 @@ from .._helpers import (
     _mask_to_prefix,
     _normalise_mac_to_colon_hex,
     address_key,
+    keyword_stanza_rows,
+    spaced_port_name,
+    without_keyword_stanzas,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -80,7 +87,10 @@ logger = logging.getLogger(__name__)
 # CLI parser internals
 # ---------------------------------------------------------------------------
 
-_IFACE_RE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+#: ``interface <name>``.  The second group is the word after the
+#: name: its number, when the type and the number are written apart
+#: (:func:`_header_name`).
+_IFACE_RE = re.compile(r"^interface\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _IP_RE = re.compile(
     r"^\s+ip\s+address\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)"
@@ -306,6 +316,15 @@ _NVE_MEMBER_VNI_RE = re.compile(
     r"(?:\s+\S.*)?$",
     re.IGNORECASE,
 )
+
+
+def _header_name(m: re.Match[str]) -> str:
+    """The interface an :data:`_IFACE_RE` match names: its first word,
+    or the first two as one name when they are a type and its number
+    (``interface ethernet 1/11``; see ``spaced_port_name``)."""
+    return spaced_port_name(m.group(1), m.group(2))
+
+
 def _is_ipv4_literal(token: str) -> bool:
     """True if ``token`` parses as a bare IPv4 address (a static-route
     next-hop gateway).  Disambiguates the two-token ``ip route <dest> <mask>
@@ -553,6 +572,15 @@ def parse_intent(raw: str) -> CanonicalIntent:
         source_vendor="cisco_iosxe",
         source_format="cli-ios",
     )
+
+    # A stanza whose header begins with a keyword (``interface range
+    # ...``, ``interface breakout ...``) names no interface: read as
+    # one it was an interface called ``range`` or ``breakout``.  It is
+    # taken out of the text every reader below is given and is not
+    # translated, and its header line is a row of
+    # ``dropped_tier3_sections``.
+    raw, headers = without_keyword_stanzas(raw)
+    intent.dropped_tier3_sections = keyword_stanza_rows(headers)
 
     # System-level fields
     intent.hostname = _extract_hostname(raw)
@@ -914,7 +942,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     trunks = TrunksByName("cisco_iosxe_cli")
 
     def _open(m: re.Match[str]) -> dict[str, Any] | None:
-        iface_name = m.group(1)
+        iface_name = _header_name(m)
         # VTEP (``interface nve1``) is a VXLAN-EVPN overlay container, not a
         # routed/switched port: its source-interface + member-vni sub-commands
         # are harvested by :func:`_parse_vxlan`.  Returning None leaves the
@@ -1512,7 +1540,7 @@ def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
     for line in ticked(raw.splitlines()):
         m = _IFACE_RE.match(line)
         if m:
-            current_iface = m.group(1)
+            current_iface = _header_name(m)
             if current_iface.lower().startswith("port-channel"):
                 # Canonicalise stub-header casing to the channel-group-
                 # synthesised form (``Port-channel<N>``) so a case-variant
@@ -1566,6 +1594,90 @@ def _lag_sort_key(name: str) -> tuple[str, int, str]:
     return ("", 0, name)
 
 
+def _is_an_address(word: str) -> bool:
+    """Whether *word* is an IPv4 or an IPv6 address.
+
+    What follows a type word in a route is its number or the
+    gateway, and an address begins with a digit as a number does:
+    ``Dialer 10.0.0.1`` joined was a route out ``Dialer10.0.0.1``
+    with no gateway.  Both families are asked, whichever the line
+    is: an address of the other family is no number either.
+    """
+    return _is_ipv4_literal(word) or _is_ipv6_literal(word)
+
+
+def _route_after_destination(
+    words: list[str], is_address: Callable[[str], bool],
+) -> tuple[str, str, int, str]:
+    """Read what follows the destination of an ``ip route`` or
+    ``ipv6 route`` line.
+
+    IOS writes ``{address | interface [address]} [dhcp] [distance]
+    [name <NAME>] [tag <T>] [track <N>] [permanent]``.  The first word
+    is the next hop: an address, an interface, or the keyword
+    ``dhcp``.
+
+    * An interface may be a type and its number written apart
+      (``loopback 66``).  The two are one name, and the number after
+      them is the distance: taken a word at a time the interface was
+      ``loopback`` and the distance 66 (``spaced_port_name``).  An
+      address is no number: in ``Dialer 10.0.0.1`` the second word is
+      the gateway, and the interface is the first word alone.
+    * After an interface, an address is the gateway
+      (``<iface> <gateway>``); the first bare number is the
+      administrative distance, kept on ``metric``, and a second is
+      read past; ``name <NAME>`` is kept on ``description``; ``tag``
+      and ``track`` are read past with their values.
+    * ``dhcp`` in the first place is kept where an interface goes, as
+      the config has it, and after an interface it is read past.  It
+      is no interface: it says the next hop is the default router a
+      DHCP server hands out, and the canonical route has no way to
+      say that.  Kept in the name field the line is written back to
+      IOS-XE as it was, and onto a platform that cannot say it the
+      validation report holds the job.  The word is never joined to
+      a distance after it (``dhcp 200`` is not ``dhcp200``).
+
+    Args:
+        words: The words of the line after the destination; at least
+            one.
+        is_address: Whether a word is an address of the line's family.
+
+    Returns:
+        ``(gateway, interface, distance, name)``.
+    """
+    first, tail = words[0], words[1:]
+    gateway = ""
+    iface = ""
+    if is_address(first):
+        gateway = first
+    elif first.lower() == "dhcp":
+        iface = first
+    else:
+        number = tail[0] if tail and not _is_an_address(tail[0]) else None
+        iface = spaced_port_name(first, number)
+        if iface != first:
+            tail = tail[1:]
+    metric = 0
+    description = ""
+    t = 0
+    while t < len(tail):
+        tok = tail[t].lower()
+        if tok == "name" and t + 1 < len(tail):
+            description = tail[t + 1]
+            t += 2
+        elif tok in ("tag", "track") and t + 1 < len(tail):
+            t += 2  # keyword + its value — not modelled
+        elif gateway == "" and is_address(tail[t]):
+            gateway = tail[t]
+            t += 1
+        elif tail[t].isdigit() and metric == 0:
+            metric = int(tail[t])
+            t += 1
+        else:
+            t += 1
+    return gateway, iface, metric, description
+
+
 def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     """Extract ``ip route`` and ``ip default-gateway`` lines from IOS config text.
 
@@ -1573,10 +1685,10 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     (``ip route vrf <NAME> <dest> <mask> <gw>``).  The VRF name lands on
     :attr:`CanonicalStaticRoute.vrf` and round-trips through render
     (v0.2.0 — graduated the per-VRF static-route surface from
-    ``unsupported`` to ``supported`` on this codec).  Trailing tokens
-    (administrative distance, ``name <X>``, the ``global`` next-hop-leak
-    keyword) are not modelled and parse-and-ignore — same as the
-    global-table form.
+    ``unsupported`` to ``supported`` on this codec).
+    What follows the destination is read by
+    :func:`_route_after_destination`; the ``global`` next-hop-leak
+    keyword is not modelled and is read past.
     """
     routes: list[CanonicalStaticRoute] = []
     for line in ticked(raw.splitlines()):
@@ -1584,37 +1696,9 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
         if m6:
             vrf = m6.group(1) or ""
             dest = m6.group(2)  # already <prefix>/<len> form
-            gw_or_iface = m6.group(3)
-            gateway = ""
-            iface = ""
-            try:
-                ipaddress.IPv6Address(gw_or_iface)
-                gateway = gw_or_iface
-            except ipaddress.AddressValueError:
-                iface = gw_or_iface
-            metric = 0
-            description = ""
-            tail = (m6.group(4) or "").split()
-            t = 0
-            while t < len(tail):
-                tok = tail[t].lower()
-                if tok == "name" and t + 1 < len(tail):
-                    description = tail[t + 1]
-                    t += 2
-                elif tok in ("tag", "track") and t + 1 < len(tail):
-                    t += 2  # keyword + its value — not modelled
-                elif gateway == "" and _is_ipv6_literal(tail[t]):
-                    # Two-token next-hop ``<iface> <gateway>``: group(3) was
-                    # the egress interface, so this trailing IPv6 literal is
-                    # the gateway.  Pre-fix it hit the ``else`` arm and the
-                    # next-hop was silently discarded (HEAD-review L1-8).
-                    gateway = tail[t]
-                    t += 1
-                elif tail[t].isdigit() and metric == 0:
-                    metric = int(tail[t])
-                    t += 1
-                else:
-                    t += 1
+            gateway, iface, metric, description = _route_after_destination(
+                [m6.group(3), *(m6.group(4) or "").split()], _is_ipv6_literal,
+            )
             routes.append(CanonicalStaticRoute(
                 destination=dest,
                 gateway=gateway,
@@ -1632,46 +1716,9 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             gw_or_iface = m.group(4)
             prefix_len = _mask_to_prefix(mask, vendor="cisco_iosxe_cli")
             dest = f"{dest_ip}/{prefix_len}"
-            # Gateway could be an IP or an interface name.
-            gateway = ""
-            iface = ""
-            try:
-                ipaddress.IPv4Address(gw_or_iface)
-                gateway = gw_or_iface
-            except ipaddress.AddressValueError:
-                iface = gw_or_iface
-            # Trailing tokens (run3 audit): IOS-XE permits an optional
-            # administrative distance (a bare 1-254 integer) and a
-            # ``name <NAME>`` route label after the next-hop, plus
-            # ``tag``/``track``/``permanent``.  Previously parse-and-
-            # ignored, so a cisco→cisco round-trip silently reset the
-            # admin distance and dropped the route name.  Harvest the
-            # distance onto ``metric`` (render emits it) and the name onto
-            # ``description`` (render drops it on this codec, so the loss
-            # is declared lossy — but cross-vendor targets can carry it).
-            metric = 0
-            description = ""
-            tail = (m.group(5) or "").split()
-            t = 0
-            while t < len(tail):
-                tok = tail[t].lower()
-                if tok == "name" and t + 1 < len(tail):
-                    description = tail[t + 1]
-                    t += 2
-                elif tok in ("tag", "track") and t + 1 < len(tail):
-                    t += 2  # keyword + its value — not modelled
-                elif gateway == "" and _is_ipv4_literal(tail[t]):
-                    # Two-token next-hop ``<iface> <gateway>``: group(4) was
-                    # the egress interface, so this trailing dotted-quad is the
-                    # gateway.  Pre-fix it hit the ``else`` arm and the next-hop
-                    # was silently discarded (HEAD-review L1-8).
-                    gateway = tail[t]
-                    t += 1
-                elif tail[t].isdigit() and metric == 0:
-                    metric = int(tail[t])
-                    t += 1
-                else:
-                    t += 1
+            gateway, iface, metric, description = _route_after_destination(
+                [gw_or_iface, *(m.group(5) or "").split()], _is_ipv4_literal,
+            )
             routes.append(CanonicalStaticRoute(
                 destination=dest,
                 gateway=gateway,

@@ -40,11 +40,11 @@ The interface inventory does **not** shrink on this pair — it **grows**, and
 that inversion is the single most important thing to know before reading the
 drift numbers.
 
-Corpus-wide: **156 interface records in, 160 out. Zero lost, four added.**
+Corpus-wide: **155 interface records in, 159 out. Zero lost, four added.**
 
 The four additions are on the four cells that carry a canonical VLAN
 (`batfish_ebgp_border01`, `batfish_ebgp_border02`,
-`iosxr_design_cst_pa3_xr752`, `kitchen_sink`): 15 → 16, 15 → 16, 55 → 56,
+`iosxr_design_cst_pa3_xr752`, `kitchen_sink`): 15 → 16, 15 → 16, 54 → 55,
 9 → 10. The FortiOS renderer synthesises an 802.1Q child interface for every
 canonical VLAN —
 
@@ -83,7 +83,7 @@ Two consequences worth acting on before pushing a render:
 `interfaces[].vrf` is the largest genuine per-record loss on this pair and it
 has **no key of its own** in the expectation YAML, so it is recorded here.
 
-Measured by direct round-trip: **16 of the 156 interface records arrive with a
+Measured by direct round-trip: **16 of the 155 interface records arrive with a
 non-empty `vrf` emptied**, across 8 of the 12 cells —
 
 | cell | records losing `vrf` |
@@ -133,19 +133,19 @@ sub-field, `radius_servers`, every `vxlan_vnis[].*` sub-field,
 
 ### Interface sub-fields, measured on records present on both sides
 
-| sub-field | drifting records (of 156) |
+| sub-field | drifting records (of 155) |
 |---|---|
 | enabled | 0 |
 | mtu | 0 |
 | ipv4_addresses | 0 |
 | ipv6_addresses | 0 |
 | lag_member_of | 0 |
-| interface_type | 2 |
+| interface_type | 1 |
 | description | 4 |
 | vrf | 16 |
 
 The `description` and `interface_type` drift is real but **comparator-invisible
-on this corpus**: all 6 records are on `iosxr_design_cst_pa3_xr752.cfg`, which
+on this corpus**: all 5 records are on `iosxr_design_cst_pa3_xr752.cfg`, which
 is also one of the 4 count-drift cells, so the mesh never emits a per-record
 slice for them.
 
@@ -155,7 +155,7 @@ slice for them.
   is the first 25 characters of the source. fortigate_cli declares
   `/interfaces/interface/config/description` lossy for exactly this reason
   ("FortiOS limits alias to 25 characters").
-- **interface_type** — 2 records, `BVI500` and a `preconfigure` record, both
+- **interface_type** — 1 record, `BVI500`,
   `ianaift:other` → `ianaift:ethernetCsmacd`. All 18 `ianaift:softwareLoopback`
   records in the corpus survive with their type intact.
 

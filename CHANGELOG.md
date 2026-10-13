@@ -328,6 +328,119 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A word of the config is no longer written into the output as an
+  interface's name.**  A field that holds a port name is given a port
+  name or nothing, and an interface is made only for a name the
+  config configures something under.  Four parsers broke one half of
+  that or the other, each in every release up to and including 0.7.7
+  (IOS XR since the codec shipped), and each in jobs that could say
+  `completed`:
+
+  - *IOS XR `interface preconfigure <name>`.*  The stanza is
+    configuration the router holds for an interface it does not have
+    until the line card is put in.  It was read as an interface
+    called `preconfigure`, and every target's output had one
+    (`interface preconfigure`, `edit "preconfigure"`, `ethernet
+    preconfigure {`), IOS XR's own included.  It makes no interface
+    now, nothing in the stanza is read (a `bundle id` there no longer
+    adds a member to the bundle, an `encapsulation dot1q` no longer
+    adds a VLAN), and the job lists it as it lists every statement a
+    source held and did not run: `preconfigure: interface <name>
+    (held for an interface the source does not have; not
+    translated)`.  Such a row is not counted as a section, the rows
+    are bounded, and a text that is nothing but such stanzas is
+    `partial`, not `completed`.  Nor is the stanza read as the port
+    it names: on the committed capture that has one, that port is a
+    cage the config already has under another speed, and seven
+    targets would write the two under one name.
+  - *A type and its number written apart* (IOS-XE and IOS XR:
+    `interface ethernet 1/11`, `interface Bundle-Ether 10`).  IOS
+    reads the two words as one name, and `show running-config` prints
+    them together, so the form is in typed and documentation-shaped
+    text.  The name was the first word alone: two such stanzas made
+    one interface called `ethernet`, written twice.  The two words
+    are one name now, in the letters the config has (`ethernet1/11`).
+    A keyword is not a type: an `interface range ...` stanza was an
+    interface called `range`, and an `interface breakout <port> map
+    <profile>` line — OS10's, in a text read as IOS-XE or IOS XR —
+    one called `breakout`.  Neither makes an interface now, neither
+    is translated, and the header line of each is listed, as a
+    section.
+  - *IOS-XE `ip route 0.0.0.0 0.0.0.0 loopback 66 100`.*  A route out
+    an interface written the same way was a route out `loopback` at
+    distance 66, the 100 lost.  It is `loopback66` at distance 100,
+    in `ip route` and `ipv6 route` alike.  A type word with an
+    address after it (`ip route 0.0.0.0 0.0.0.0 Dialer 10.0.0.1`) is
+    read as it was: the address is the gateway.
+  - *OPNsense `<dhcpd><lan>`.*  A DHCP pool is keyed by a zone, and
+    the zone's NAME was put where the pool's interface goes: Junos
+    bound its DHCP server to `interface lan`, FortiOS wrote `set
+    interface "lan"`, and OPNsense's own output had `<dhcpd><lan>`
+    beside an `<interfaces>` with no `<lan>` in it.  The pool is on
+    the device the zone is assigned to (`<interfaces><lan><if>`),
+    and follows that port where it is renamed.  A target that names
+    a pool after its interface names it after the port now: `ip dhcp
+    pool lan` is `ip dhcp pool GigabitEthernet0_0`, and Junos
+    `pool_lan` is `pool_ge_0_0_0`.  A pool whose zone `<interfaces>`
+    does not have has no interface to be on: it is left out, and the
+    job lists the zone (`<dhcpd><opt9>: no <opt9> in <interfaces>,
+    so its DHCP pool has no interface`).
+  - *Junos `set interfaces irb unit 100 ...`.*  The line configures
+    the unit, and an empty interface `irb` was made beside `irb.100`
+    (and `st0` beside `st0.1`, `lo0` beside `lo0.1`).  No platform
+    has a name for it, so it was written under its Junos name
+    (`interface irb`, `edit "irb"`) and held the job as a name left
+    as the source has it; Junos onto Junos gained a `set interfaces
+    irb` line the source did not have.  An interface is made for a
+    name a line configures: the first word of a line on the device
+    itself or on its unit 0, whether or not the parser reads the
+    rest of the line (`irb mtu 9100`, `irb gratuitous-arp-reply`, a
+    bare `set interfaces st0`, `st0 unit 0 family inet` — the
+    unnumbered tunnel a route to `st0.0` goes out of), and
+    `<name>.<N>` for a line under unit N.  A name the port
+    classifier reads as a port or as an `ae` bundle keeps its
+    record whatever the config says of it (`ge-0/0/3` with only
+    tagged units).  That is not yet every port: a channelized
+    `xe-0/0/6:2`, a `so-0/0/0` or a `reth0` is a name it does not
+    read, and with nothing but units above 0 has its units and no
+    record of its own.  A bare `set interfaces st0 unit 1`, which
+    made `st0` and no `st0.1`, makes `st0.1`.  And a device that has
+    a record is no longer discarded when a unit beside it is folded
+    onto its VLAN — an MTU or a unit-0 address on `irb` was lost
+    that way, and nothing said so.
+
+  **If a config with one of these forms was translated with release
+  0.7.7 or earlier, look in the output for an interface called
+  `preconfigure`, `ethernet`, `range`, `breakout`, `loopback`,
+  `lan`, `irb` or `st0`.**  The list of what was not translated has
+  three new kinds of row: `preconfigure: interface <name> (...)`,
+  which like an `inactive:` row is not a section; and an `interface
+  range` or `interface breakout` header and `<dhcpd><zone>: ...` for
+  a pool left out, each counted as a section.  A translation onto
+  OPNsense reports `/dhcp-servers/pool` as lossy from now on: a pool
+  is written under the zone of its interface, one that names no
+  interface under `<lan>`, and a pool under a zone the output has no
+  interface for serves nothing there (read back, it is left out).
+  Over the
+  committed captures: four OPNsense configs have their pool on the
+  device of its zone (in one of them a placeholder the capture
+  itself uses, `mismatch0`; two of them had `interface lan` in a
+  `completed` Junos job), and two Junos jobs that were `partial` for
+  the empty `irb` alone are `completed`.  Not mended here, each
+  older than this release: IOS-XE `ip route <prefix> <mask> dhcp`
+  still keeps the keyword where the route's interface goes — the
+  line is written back to IOS-XE as it was, other platforms are
+  given a route out an interface called `dhcp`, and onto Junos the
+  validation report holds the job; NX-OS still reads `interface
+  port-channel 1` as `port-channel`; an IOS XR `router static` line
+  and an AOS-CX `ip route` line still read a spaced interface a word
+  at a time (AOS-CX writes `loopback 77` itself, and reads its own
+  line back as distance 77); an EOS DHCP pool's NAME is still where
+  the pool's interface goes; and a Junos output never has the line
+  `set interfaces st0 unit 0 family inet` itself — for an empty
+  `st0` it has a bare `set interfaces st0` where the config has a
+  unit of it too or a routing instance names it, and no line where
+  it stands alone.
 - **A trunk that allows no VLAN no longer comes out allowing every
   VLAN, and a trunk of every VLAN no longer comes out carrying
   none.**  The canonical tree had one value, an empty list, for three
@@ -1448,13 +1561,13 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  211 of the 603 jobs that said `completed` are `partial`.  69 of
-  them list a shared name, 64 a hardware port that was dropped, 29 a
-  logical name that was dropped and 107 a name left as the source
-  has it (84 of those a hardware port); 48 list more than one kind.
+  209 of the 603 jobs that said `completed` are `partial`.  69 of
+  them list a shared name, 65 a hardware port that was dropped, 29 a
+  logical name that was dropped and 104 a name left as the source
+  has it (84 of those a hardware port); 47 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
-  and none to or from `failed`; 400 jobs that were already `partial`
-  carry the sentence as well.  Each of the 211 is `completed` again,
+  and none to or from `failed`; 395 jobs that were already `partial`
+  carry the sentence as well.  Each of the 209 is `completed` again,
   with one more request, once every listed name has an entry.
 
   **To settle such a job**, decide each name with an entry of
@@ -1510,9 +1623,9 @@ timestamp if your timezone matters for an audit.
   an aggregate, a tunnel — is not listed where the target itself
   writes exactly that name for the same kind of thing: the
   `Vlan<id>` interface of an AOS-S VLAN's address is `interface
-  Vlan10` on EOS, IOS-XE and NX-OS.  Over the captures that is 75
+  Vlan10` on EOS, IOS-XE and NX-OS.  Over the captures that is 74
   names in 16 jobs: 56 `Vlan<id>` onto EOS, NX-OS and the two
-  IOS-XE codecs, and 19 names of IOS-XE from its CLI codec to its
+  IOS-XE codecs, and 18 names of IOS-XE from its CLI codec to its
   NETCONF one.  Never a
   hardware port: which port of another device a port is, is what a
   declared device answers.  Never onto FortiOS or RouterOS, where
@@ -1851,10 +1964,11 @@ timestamp if your timezone matters for an audit.
   that can be `completed`.  The warning says the two spellings "do
   not end together"; give each the same entry.
 - **A name left as the source has it is listed whether or not the
-  output has a line for it.**  The bare Junos `irb`, which holds
-  nothing, is listed onto EOS, where no line is written for it; so
-  is a port the target's renderer writes nothing for.  Keeping such
-  a name keeps nothing: look for it in the output first.
+  output has a line for it.**  A Junos `irb` that has only a
+  description is listed onto RouterOS, where no line is written for
+  it; so is a port the target's renderer writes nothing for.
+  Keeping such a name keeps nothing: look for it in the output
+  first.
 - **An AOS-S VLAN's address holds a job on every target that calls
   its interface something else.**  The codec carries the address on
   an interface named `Vlan<id>`, which the AOS-S classifier does
@@ -1882,15 +1996,16 @@ timestamp if your timezone matters for an audit.
   `port_drops` and warns about nothing; the output shows it only
   where the target writes that interface by that name.  With every
   such name of the committed inputs renamed and dropped in turn,
-  each config onto its own vendor, the output showed both for 343
-  of 497.  Not shown: a VLAN interface on AOS-S (the output does
-  not change by a byte: AOS-S writes a VLAN's address in the `vlan`
-  stanza, by its id); a VLAN interface on OS10, EOS and RouterOS,
+  each config onto its own vendor, the output showed both for most
+  of them and not for all.  Not shown: a VLAN interface on AOS-S
+  (the output does not change by a byte: AOS-S writes a VLAN's
+  address in the `vlan` stanza, by its id); a VLAN interface on
+  OS10, EOS and RouterOS,
   and some on IOS-XE CLI (the target writes one from the VLAN
   itself, so a renamed one is written under both names and a
   dropped one comes back; on RouterOS the renamed one also takes
-  its VLAN id from its new name); a dropped loopback that a VXLAN
-  source line still names (EOS, NX-OS); and the bare Junos `irb`.
+  its VLAN id from its new name); and a dropped loopback that a
+  VXLAN source line still names (EOS, NX-OS).
   This is not new to the API, which answered the same request the
   same way before; the rows are new.  Read the output after such an
   entry.  To move or remove a VLAN interface, renumber or drop its

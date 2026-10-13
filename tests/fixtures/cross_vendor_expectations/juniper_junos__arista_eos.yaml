@@ -269,8 +269,26 @@ per_field_expectation:
     note: "Both accept integer MTU. Junos 'set interfaces X mtu N' maps to Arista 'mtu N' directly."
 
   interfaces[].ipv4_addresses:
-    disposition: good
-    note: "Junos 'set interfaces X unit 0 family inet address Y/N' maps to Arista 'ip address Y/N' on the bare interface. Multiple addresses per unit flatten to a list. Junos's irb sub-interface family addresses transpose to CanonicalVlan.ipv4_addresses via the l3-interface link."
+    disposition: lossy
+    reason: >
+      Junos 'set interfaces X unit 0 family inet address Y/N' maps to
+      Arista 'ip address Y/N' on the bare interface, and reads back as it
+      was.  What drifts is an address with a virtual gateway beside it
+      ('address 172.16.100.3/24 virtual-gateway-address 172.16.100.100'),
+      which is ONE address record on the Junos side.  The output has two
+      lines for it, 'ip address virtual 172.16.100.100/24' and then
+      'ip address 172.16.100.3/24', and this codec reads its own two
+      lines back as TWO records: the gateway with no address of its own,
+      and the address with no gateway.  Two committed captures have
+      such an address.  batfish_evpntype5 is the one whose cell is
+      compared record by record: its four IRB units (irb.100, irb.200,
+      irb.300, irb.400) are each one record in and two out.
+      ksator_labmgmt_qfx10k2 has six such units and the same two lines
+      for each, in a cell that is not compared record by record because
+      its interface count differs.  Both addresses are in configuration
+      lines of the output; nothing here establishes that an interface
+      holds the two together.  Check on the device, after loading, that
+      each such interface has both its own address and the gateway.
     references: [junos-iface-fundamentals, arista-iface-cg]
 
   interfaces[].ipv6_addresses:

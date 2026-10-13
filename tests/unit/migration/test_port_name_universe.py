@@ -342,7 +342,9 @@ _APPLY_GROUPS = "carries Junos apply-groups, whose verbatim bodies a rename clea
 _NOT_EXERCISED: dict[str, str] = {
     "aruba_aoss/hpe_community_5406rzl2_kb1515.cfg": _NO_TWO,
     "cisco_iosxe/batfish_cisco_aaa.txt": _NO_TWO,
-    "cisco_iosxe/batfish_cisco_interface.txt": _NO_TWO,
+    # (batfish_cisco_interface.txt was here while its two `interface
+    # ethernet 1/1N` stanzas were read as one port called `ethernet`;
+    # read as `ethernet1/11` and `ethernet1/12` they are exchanged.)
     "cisco_iosxe/batfish_cisco_ip_route.txt": _NO_TWO,
     "cisco_iosxe/batfish_cisco_logging.txt": _NO_TWO,
     "cisco_iosxe/batfish_cisco_snmp.txt": _NO_TWO,
@@ -509,6 +511,10 @@ _CAUGHT_ON_A_CAPTURE: frozenset[str] = frozenset({
     "lags[].name",
     "lags[].members",
     "static_routes[].interface",
+    # Since an OPNsense pool is on the device of its zone: the two
+    # CARP captures move the port a pool is on.  (While the field
+    # held the zone's name, `lan`, no capture had a port in it.)
+    "dhcp_servers[].interface",
 })
 
 _ROUTEROS_NEXT_HOPS = """/interface ethernet
@@ -595,7 +601,8 @@ end
 """
 
 #: For each place no committed capture catches: a small config that
-#: fills it, and the names to exchange in it.
+#: fills it, and the names to exchange in it.  (And the one of
+#: :data:`_KEPT`, which a capture has come to catch as well.)
 _SMALL_CONFIGS: dict[str, tuple[str, str, dict[str, str]]] = {
     "static_routes[].gateway": (
         "mikrotik_routeros", _ROUTEROS_NEXT_HOPS, {"ether1": "ether2", "ether2": "ether1"},
@@ -614,6 +621,11 @@ _SMALL_CONFIGS: dict[str, tuple[str, str, dict[str, str]]] = {
         "arista_eos", _EOS_VTEP, {"Loopback0": "Loopback1", "Loopback1": "Loopback0"},
     ),
 }
+
+
+#: Small configs kept for a place a committed capture catches as
+#: well.  The DHCP one was written when no capture caught its place.
+_KEPT: frozenset[str] = frozenset({"dhcp_servers[].interface"})
 
 
 def _holds(value: Any, moves: dict[str, str]) -> bool:
@@ -704,14 +716,17 @@ class TestWhatTheExperimentReaches:
             f"{place}: caught on a committed capture is {on_a_capture}; "
             f"the pinned list says {place in _CAUGHT_ON_A_CAPTURE}"
         )
-        if not on_a_capture:
+        if place in _SMALL_CONFIGS:
             codec_name, text, moves = _SMALL_CONFIGS[place]
             assert _what_did_not_follow(get_codec(codec_name), text, moves), (
                 f"{place}: nothing notices a translator that skips it"
             )
 
     def test_every_place_no_capture_catches_has_a_small_config(self) -> None:
-        assert set(_SMALL_CONFIGS) == set(_PLACES) - _CAUGHT_ON_A_CAPTURE
+        """A place a capture has come to catch keeps the small config
+        it had (:data:`_KEPT`), which still has to notice."""
+        assert set(_SMALL_CONFIGS) - _KEPT == set(_PLACES) - _CAUGHT_ON_A_CAPTURE
+        assert _CAUGHT_ON_A_CAPTURE & set(_SMALL_CONFIGS) == _KEPT
 
     @pytest.mark.parametrize("place", sorted(_SMALL_CONFIGS))
     def test_the_small_configs_pass_on_the_real_translator(self, place: str) -> None:

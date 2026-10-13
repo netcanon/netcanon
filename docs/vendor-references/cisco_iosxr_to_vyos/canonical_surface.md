@@ -45,8 +45,8 @@ There is no campus L2 surface on either side of this pair to migrate.
 
 | measurement | value |
 |---|---|
-| source interface records, all 12 cells | **156** |
-| records after parse → render → re-parse | **156** |
+| source interface records, all 12 cells | **155** |
+| records after parse → render → re-parse | **155** |
 | cells where the interface name set differs | **0** |
 
 IOS-XR 4-segment names, channelized sub-interfaces (`…0/0/0/1.100`),
@@ -105,11 +105,11 @@ keys, `radius_servers`, all three `vxlan_vnis[].*` keys, `evpn_type5_routes`,
 
 | sub-field | records affected | of total | shape |
 |---|---|---|---|
-| `interface_type` | 156 | 156 | value → empty string |
+| `interface_type` | 155 | 155 | value → empty string |
 | `lag_member_of` | 15 | 15 populated | value → null |
 | `dot1q_vlan` | 4 | 4 populated | value → null |
-| `description` | 2 | 156 | embedded `"` → `'` |
-| `enabled` | 0 | 156 | — |
+| `description` | 2 | 155 | embedded `"` → `'` |
+| `enabled` | 0 | 155 | — |
 | `mtu` | 0 | 11 populated | — |
 | `ipv4_addresses` | 0 | 60 populated | — |
 | `ipv6_addresses` | 0 | 11 populated | — |
@@ -117,8 +117,8 @@ keys, `radius_servers`, all three `vxlan_vnis[].*` keys, `evpn_type5_routes`,
 `interface_type` has **no survivors**, which is the sharp difference from the
 `cisco_iosxr → arista_eos` pair off the same corpus. There, 18
 `ianaift:softwareLoopback` records survive because EOS re-derives the type from
-`interface Loopback<N>`. Here all 156 drop: 126 `ianaift:ethernetCsmacd`, 18
-`ianaift:softwareLoopback`, 10 `ianaift:ieee8023adLag`, 2 `ianaift:other`. The
+`interface Loopback<N>`. Here all 155 drop: 126 `ianaift:ethernetCsmacd`, 18
+`ianaift:softwareLoopback`, 10 `ianaift:ieee8023adLag`, 1 `ianaift:other`. The
 vyos codec re-derives ifType from the **Linux device-name shape** (`ethN` →
 ethernetCsmacd, `lo`/`dumN` → softwareLoopback, `bondN` → ieee8023adLag), and
 because the render preserved IOS-XR names verbatim, not one rendered name

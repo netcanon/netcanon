@@ -360,11 +360,12 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
             )
 
     # DHCP pools (Tier 2).  OPNsense keys DHCP config by interface
-    # zone; use the canonical pool's ``interface`` field as the
-    # zone tag, falling back to ``lan`` if unset (single-zone
-    # default).  Foreign canonical pools (from other vendors that
-    # don't carry an OPNsense-style zone name) get a sanitised
-    # tag via the same _zone_tag_for helper used for interfaces.
+    # zone.  A pool's ``interface`` holds a port name -- this
+    # codec's own parser puts the device of the pool's zone there,
+    # not the zone -- so the tag is made of it by the same
+    # _zone_tag_for helper that makes an interface's, and the pool
+    # is under its interface's zone.  A pool that names no
+    # interface is written under ``lan``.
     if intent.dhcp_servers:
         dhcpd_el = ET.SubElement(root, "dhcpd")
         for pool in intent.dhcp_servers:

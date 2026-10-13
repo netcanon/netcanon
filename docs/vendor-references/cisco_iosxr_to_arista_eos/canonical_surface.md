@@ -45,8 +45,8 @@ at fault.
 
 | measurement | value |
 |---|---|
-| source interface records, all 12 cells | **156** |
-| records after parse → render → re-parse | **156** |
+| source interface records, all 12 cells | **155** |
+| records after parse → render → re-parse | **155** |
 | cells where the interface name set differs | **0** |
 
 IOS-XR 4-segment names, channelized sub-interfaces (`…0/0/0/1.100`),
@@ -88,13 +88,13 @@ Fields trivially empty on all 12 cells: `dns_servers`, `timezone`,
 
 | sub-field | records affected | of total | shape |
 |---|---|---|---|
-| `interface_type` | 138 | 156 | value → empty string |
+| `interface_type` | 137 | 155 | value → empty string |
 | `lag_member_of` | 15 | 15 populated | value → null |
-| `description` | 2 | 156 | surrounding `"` characters stripped |
-| `enabled` / `mtu` / `ipv4_addresses` / `ipv6_addresses` / `vrrp_groups` | 0 | 156 | — |
+| `description` | 2 | 155 | surrounding `"` characters stripped |
+| `enabled` / `mtu` / `ipv4_addresses` / `ipv6_addresses` / `vrrp_groups` | 0 | 155 | — |
 
 `interface_type` breaks down cleanly by type: **126** `ianaift:ethernetCsmacd`,
-**10** `ianaift:ieee8023adLag` and **2** `ianaift:other` all drop, while all
+**10** `ianaift:ieee8023adLag` and **1** `ianaift:other` all drop, while all
 **18** `ianaift:softwareLoopback` records survive. EOS re-derives the type from
 `interface Loopback<N>`; it cannot re-derive it from
 `interface GigabitEthernet0/0/0/1`, because EOS names do not encode speed.

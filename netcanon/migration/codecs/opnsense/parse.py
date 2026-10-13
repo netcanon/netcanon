@@ -50,7 +50,8 @@ Internal element-level helpers:
 * :func:`_parse_interface_zone` — legacy dict-shape variant retained
   for the dict-tree round-trip path used by older tests.
 * :func:`_parse_opnsense_dhcp_zone` — one ``<dhcpd>/<zone>`` element
-  to :class:`CanonicalDHCPPool`.
+  to :class:`CanonicalDHCPPool`, on the device the zone is assigned
+  to.
 
 The constant ``_OPNSENSE_PROTO_TO_CANONICAL`` (LAG proto strings to
 canonical mode) lives here; the inverse ``_CANONICAL_MODE_TO_OPNSENSE_PROTO``
@@ -365,7 +366,8 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # Build the OPNsense logical-name → canonical-iface-name alias map
     # while walking the zones.  OPNsense's <virtualip>/<vip>/<interface>
     # element names a LOGICAL zone (e.g. "lan", "opt1", "vlan10"), NOT
-    # the underlying BSD device.  The canonical interface name we hand
+    # the underlying BSD device, and so does the tag of each child of
+    # <dhcpd>.  The canonical interface name we hand
     # to <CanonicalInterface.name> is the <if> child's value (e.g.
     # "ixl0", "vlan0.10") so any VIP back-pointer must be translated
     # through this map.  See docs/v0.2.0-planning/01-vrrp-canonical/
@@ -442,9 +444,24 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     dhcpd_el = root.find("dhcpd")
     if dhcpd_el is not None:
         for zone_el in dhcpd_el:
-            pool = _parse_opnsense_dhcp_zone(zone_el)
-            if pool is not None:
-                intent.dhcp_servers.append(pool)
+            pool = _parse_opnsense_dhcp_zone(zone_el, iface_alias_to_canonical)
+            if pool is None:
+                continue
+            if not pool.interface:
+                # The zone is assigned to no device, so the pool has
+                # no interface to be on.  It is left out, and the
+                # codec's parse() hands this row on with the sections
+                # it lists.  Kept with an empty interface it was a
+                # pool bound to nothing on other platforms, and this
+                # codec's own renderer writes such a pool under
+                # ``<lan>``: a second ``<dhcpd><lan>`` where the
+                # config has a zone of that name.
+                intent.dropped_tier3_sections.append(
+                    f"<dhcpd><{zone_el.tag}>: no <{zone_el.tag}> in "
+                    f"<interfaces>, so its DHCP pool has no interface"
+                )
+                continue
+            intent.dhcp_servers.append(pool)
 
     # ----- <laggs> block (Tier 2 LAGs) -----
     laggs_el = root.find("laggs")
@@ -798,15 +815,33 @@ def _parse_interface_zone(el: ET.Element) -> dict[str, Any] | None:
     return iface
 
 
-def _parse_opnsense_dhcp_zone(zone_el: ET.Element) -> CanonicalDHCPPool | None:
+def _parse_opnsense_dhcp_zone(
+    zone_el: ET.Element,
+    iface_alias_to_canonical: dict[str, str],
+) -> CanonicalDHCPPool | None:
     """Parse a single ``<dhcpd>/<zone>`` element into a CanonicalDHCPPool.
 
-    OPNsense keys DHCP config by interface zone (wan/lan/optN).  We
-    preserve the zone name on the pool's ``interface`` field so
-    renderers can re-emit under the right zone.  Enabled-flag is
-    implicit via the presence of an ``<enable/>`` element; we treat
-    a zone block as present-but-disabled as a valid pool, since the
-    intent (serve this network) is preserved.
+    OPNsense keys DHCP config by interface zone (wan/lan/optN), and a
+    zone is not a port: ``<lan>`` is whichever device ``<interfaces>
+    <lan><if>`` names.  The pool's ``interface`` is that device, the
+    name the interface record itself has, so that the pool follows
+    its port when the port is renamed.  Left as the zone's name, a
+    Junos output bound its DHCP server to ``interface lan`` and this
+    codec's own output wrote ``<dhcpd><lan>`` beside an
+    ``<interfaces>`` that had no ``<lan>``.  A zone that
+    ``<interfaces>`` does not have gives the pool no interface, and
+    the caller leaves such a pool out of the tree and lists its zone.
+    Enabled-flag is implicit via the presence of an ``<enable/>``
+    element; we treat a zone block as present-but-disabled as a valid
+    pool, since the intent (serve this network) is preserved.
+
+    Args:
+        zone_el: One child of ``<dhcpd>``; its tag is the zone.
+        iface_alias_to_canonical: Zone tag to the name of the
+            interface record made for it, from ``<interfaces>``.
+
+    Returns:
+        The pool, or ``None`` for a zone block that states nothing.
     """
     range_el = zone_el.find("range")
     start_ip = ""
@@ -840,7 +875,7 @@ def _parse_opnsense_dhcp_zone(zone_el: ET.Element) -> CanonicalDHCPPool | None:
         return None
 
     return CanonicalDHCPPool(
-        interface=zone_el.tag,
+        interface=iface_alias_to_canonical.get(zone_el.tag, ""),
         start_ip=start_ip,
         end_ip=end_ip,
         gateway=gateway,

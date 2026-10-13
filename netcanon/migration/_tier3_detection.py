@@ -13,7 +13,11 @@ returning its parsed intent, populating
 :attr:`CanonicalIntent.dropped_tier3_sections` with a list of
 human-readable section labels.  The migrate page renders these as a
 "Detected in source but not translated" banner so operators see what
-was dropped.
+was dropped.  (The detectors here are not the list's only writers:
+a parser that reads something and does not translate it adds a row
+itself -- the IOS-XE CLI and IOS XR parsers for a stanza a keyword
+opens, the OPNsense parser for a DHCP pool with no interface -- and
+its codec's ``parse()`` puts those rows after the detector's.)
 
 Public functions:
     * :func:`detect_tier3_sections_iosxe_cli` — IOS-XE / Arista CLI shape
@@ -29,9 +33,10 @@ Public functions:
     * :func:`left_out_row` / :func:`left_out_rows` /
       :func:`is_left_out_row` — the row for a statement a parser
       read and left out on purpose (a Junos statement the source
-      had deactivated), the rows for all of them (bounded, and
-      one row for statements that read alike), and the test that
-      tells such a row from a section header.
+      had deactivated, an IOS XR stanza held for an interface the
+      router does not have), the rows for all of them (bounded,
+      and one row for statements that read alike), and the test
+      that tells such a row from a section header.
 
 Each returns a list of section labels like::
 
@@ -421,10 +426,16 @@ def detect_tier3_sections_iosxe_xml(raw: str) -> list[str]:
 #: Kind of statement to what its row begins with and why it is there.
 #: Such a row is in the list because the statement is not in the
 #: output; it is not a section the parser has no model for, and it is
-#: not something to apply by hand.
+#: not something to apply by hand.  (A ``preconfigure`` stanza is,
+#: where the target is to hold configuration for the same hardware,
+#: and there alone: the migrate page gives that kind its own words.)
 _LEFT_OUT: dict[str, tuple[str, str]] = {
     "inactive": ("inactive: ", "deactivated in the source; not translated"),
     "delete": ("delete: ", "marked for deletion in a load file; not translated"),
+    "preconfigure": (
+        "preconfigure: ",
+        "held for an interface the source does not have; not translated",
+    ),
 }
 
 #: A word of a path that names a secret.  What follows it is the
@@ -460,8 +471,10 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
     it (:func:`shown_words`), and the cut is marked ``...``.
 
     Args:
-        kind: ``"inactive"`` (deactivated in the source) or
-            ``"delete"`` (under a load file's ``delete:``).
+        kind: ``"inactive"`` (deactivated in the source),
+            ``"delete"`` (under a load file's ``delete:``) or
+            ``"preconfigure"`` (an IOS XR ``interface preconfigure``
+            stanza: configuration for an interface that is not there).
         path: The words of the statement's path, outermost first.
 
     Returns:
@@ -482,7 +495,9 @@ def left_out_row(kind: str, path: Sequence[str]) -> str:
 LEFT_OUT_ROWS_SHOWN = 200
 
 
-def left_out_rows(statements: Iterable[tuple[str, Sequence[str]]]) -> list[str]:
+def left_out_rows(
+    statements: Iterable[tuple[str, Sequence[str]]], rest: str = "inactive",
+) -> list[str]:
     """The rows for the statements a parser read and left out.
 
     Statements whose rows read alike share one, which says how
@@ -494,6 +509,8 @@ def left_out_rows(statements: Iterable[tuple[str, Sequence[str]]]) -> list[str]:
     Args:
         statements: ``(kind, path)`` for each, in the order the
             rows are to have (see :func:`left_out_row`).
+        rest: The kind whose prefix the last row begins with when
+            it counts statements that are not listed.
 
     Returns:
         The rows, each one :func:`is_left_out_row` knows.
@@ -507,9 +524,9 @@ def left_out_rows(statements: Iterable[tuple[str, Sequence[str]]]) -> list[str]:
         for row, count in counts.items()
     ]
     if len(rows) > LEFT_OUT_ROWS_SHOWN:
-        rest = sum(list(counts.values())[LEFT_OUT_ROWS_SHOWN:])
+        unlisted = sum(list(counts.values())[LEFT_OUT_ROWS_SHOWN:])
         rows[LEFT_OUT_ROWS_SHOWN:] = [
-            f"{_LEFT_OUT['inactive'][0]}... ({rest} more statements left out; not listed)"
+            f"{_LEFT_OUT[rest][0]}... ({unlisted} more statements left out; not listed)"
         ]
     return rows
 
@@ -520,7 +537,8 @@ def is_left_out_row(label: str) -> bool:
     A reader of ``dropped_tier3_sections`` that takes a row for a sign
     that the parser recognised something has to ask this first: a
     deactivated statement is named whether or not any handler would
-    have read a line of it.
+    have read a line of it, and so is a stanza held for an interface
+    that is not there.
     """
     return label.startswith(tuple(prefix for prefix, _why in _LEFT_OUT.values()))
 

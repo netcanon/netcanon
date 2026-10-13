@@ -159,6 +159,28 @@ bridge-groups, ACL, QoS) is welcomed via
 - **SP routing is Tier-3.**  BGP / OSPF / IS-IS / MPLS / route-policy
   are surfaced on the migrate banner but never auto-rendered — every
   fixture's routing stanzas show up there.
+- **`interface preconfigure <name>` is not translated.**  IOS XR
+  holds such a stanza for an interface it does not have until the
+  line card is put in, and applies it then.  It makes no interface
+  here — neither one called `preconfigure` nor the port it names —
+  nothing in it is read, and the migrate banner lists it as a
+  statement the source held and did not run (`preconfigure:
+  interface <name> (held for an interface the source does not
+  have; not translated)`).  Such a row is not counted with the
+  sections, the rows are bounded, and a text that is nothing but
+  such stanzas is `partial`: nothing of it was translated.  A job
+  from IOS XR to IOS XR does not write the stanza back.  ⚠️ Up to
+  0.7.7 it was an interface called `preconfigure` in every target's
+  output: look for one in a config translated then.
+- **A type and its number written apart** (`interface Bundle-Ether
+  10`, `interface Loopback 0`) are one name, as the router reads
+  them.  ⚠️ Up to 0.7.7 the name was the first word alone, and two
+  such stanzas were one interface.  An interface written that way
+  inside a `router static` line is still read a word at a time.  A
+  header that begins `interface range` or `interface breakout`
+  names no interface: it is not translated, and is listed on the
+  migrate banner as a section (up to 0.7.7 it was an interface
+  called `range` or `breakout`).
 
 ## See also
 

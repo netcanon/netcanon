@@ -497,8 +497,10 @@ per_field_expectation:
       OPNsense, not stored on the pool record.  Lease time units
       differ (Arista d/h/m triple ↔ OPNsense seconds).  The
       ``CanonicalDHCPPool.interface`` field carries the operator-
-      chosen pool name on Arista but the zone label on OPNsense,
-      so cross-pair render needs operator-driven mapping.
+      chosen pool name on Arista but the device of the pool's zone
+      on OPNsense, so an Arista pool is written under a zone the
+      OPNsense output has no interface for, and is left out when
+      that output is read back: bind the pool by hand.
       OPNsense codec does not currently advertise ``/dhcp/pool``
       in its capability matrix; cross-pair render is partial
       pending wire-up.

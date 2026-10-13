@@ -46,10 +46,29 @@ whether the output has what you expected of the group or the
 interface-range that would have filled it: under a deactivated path
 that is left out too.
 
+A row that begins `preconfigure:` is an IOS XR `interface
+preconfigure <name>` stanza: configuration the router holds for an
+interface it does not have yet.  It was not in force there either,
+and is left out for that reason.  **Action:** none, unless the
+target is to hold configuration for the same hardware — then write
+it there by hand.
+
+Some rows are sections the parser itself took out, and are in no
+output: an `interface range ...` header in a text read as IOS-XE or
+IOS XR (configure the ports it covers by hand), an `interface
+breakout <port> map <profile>` line in the same (split the port on
+the target by hand, if it is to be split there), and
+`<dhcpd><zone>: no <zone> in <interfaces>, so its DHCP pool has no
+interface` for an OPNsense DHCP pool whose zone is assigned to no
+device (bind the pool to a zone that has one, or write it on the
+target by hand).  See
+[`CAPABILITIES.md`](CAPABILITIES.md#b-tier-3-sections-detected-banner).
+
 A job that is `partial` with "No source constructs were recognized"
-and rows that all begin `inactive:` read nothing else: every
-statement it understood was deactivated in the source, or the text
-is not a Junos config.
+and rows that all begin `inactive:`, `delete:` or `preconfigure:`
+read nothing else: every statement it understood was one the
+source held and did not run, or the text is not a config of the
+vendor chosen.
 
 **A pasted Junos `show configuration` came out empty or was
 refused.**  Read are the hierarchical form as a device prints it and

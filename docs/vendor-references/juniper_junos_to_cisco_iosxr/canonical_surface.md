@@ -51,8 +51,8 @@ inventory shrank 9 → 5, which dragged every `interfaces[].*` sub-field into
 
 | measurement | value |
 |---|---|
-| source interface records, all 11 cells | **151** |
-| records after parse → render → re-parse | **151** |
+| source interface records, all 11 cells | **147** |
+| records after parse → render → re-parse | **147** |
 | cells where the interface name set differs | **0** |
 
 Junos-native names survive the IOS-XR render verbatim — `ge-0/0/0`,
@@ -208,7 +208,7 @@ addressing — the same bundle under two names in one config.
 
 ### 2. `interfaces[].interface_type` drifts on 100% of records
 
-151 of 151, on every cell. The mechanism is the direct consequence of the
+147 of 147, on every cell. The mechanism is the direct consequence of the
 structural finding above: because the render preserves Junos-native interface
 names, and the IOS-XR parser infers interface type **from the name prefix**
 (`GigabitEthernet` → `ethernetCsmacd`, `Loopback` → `softwareLoopback`,

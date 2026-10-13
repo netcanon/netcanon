@@ -862,13 +862,21 @@ def test_each_record_has_a_list_of_its_own() -> None:
 
 
 #: Two port-channels written with a space before the number, as an
-#: operator types them.  The IOS-XE and NX-OS parsers read both
-#: headers as one name, `Port-channel` (an older fault of theirs: the
-#: name is the header's first word).  They are two interfaces all the
-#: same, and what one states is not the other's.
+#: operator types them.  The NX-OS parser reads both headers as one
+#: name, `port-channel` (an older fault: the name is the header's
+#: first word).  The IOS-XE parser did the same until it read a type
+#: and its number written apart as the one name they are; it is kept
+#: here because, read as one name or as two, they are two interfaces
+#: and what one states is not the other's.
 _TWO_PORTS_ONE_NAME = {
     "cisco_iosxe_cli": ("interface Port-channel {n}", " ", ("!",)),
     "cisco_nxos": ("interface port-channel {n}", "  ", ("",)),
+}
+
+#: The names each parser reads the two headers as.
+_READ_AS = {
+    "cisco_iosxe_cli": ["Port-channel1", "Port-channel2"],
+    "cisco_nxos": ["port-channel", "port-channel"],
 }
 
 
@@ -894,7 +902,11 @@ def test_two_ports_read_as_one_name_are_two(source: str) -> None:
     ):
         parsed = get_codec(source).parse(_two_port_channels(source, (_MODE, f"{_ALLOWED} 10"), second))
         trunks = _trunks(parsed)
-        assert len({iface.name for iface in trunks}) == 1, "the fault this test is about has been mended: rewrite it"
+        # Pinned, so that a parser that comes to read the headers
+        # another way says so here.  (IOS-XE read one name,
+        # `Port-channel`, and the line below stood on that; the
+        # lists were the interfaces' own then as they are now.)
+        assert [iface.name for iface in trunks] == _READ_AS[source], source
         assert [set(iface.trunk_allowed_vlans) for iface in trunks] == [{10}, listed], (source, second)
 
 

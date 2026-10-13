@@ -307,7 +307,7 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Drops on the one cell that uses it: `jnprautomate_mnha_vsrx_a_junos`
-      carries `tunnel_type="ipsec"` on `st0`, `st0.100` and `st0.200`, and the
+      carries `tunnel_type="ipsec"` on `st0.100` and `st0.200`, and the
       target returns `""`.  The NX-OS matrix declares
       `/interfaces/interface/tunnel-type` lossy for exactly this case -- `gre`
       and `ipip` round-trip via `tunnel mode gre ip` / `tunnel mode ipip`, but

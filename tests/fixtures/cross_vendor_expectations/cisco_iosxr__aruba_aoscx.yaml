@@ -14,7 +14,7 @@
 # The dominant loss is NOT structural on this pair, and that is the result worth
 # stating first because the neighbouring AOS-CX-sourced pairs ARE structural and
 # the shape does not transfer.  The interface inventory is preserved exactly
-# (55 -> 55, 6 -> 6, 9 -> 9 on the three cells round-tripped by hand), so
+# (54 -> 54, 6 -> 6, 9 -> 9 on the three cells round-tripped by hand), so
 # `interfaces[].name`, `.description`, `.enabled`, `.mtu`, `.ipv4_addresses` and
 # `.ipv6_addresses` are all `good`.  Only two interface attributes drift, and
 # each is declared lossy on its own merits.
@@ -138,7 +138,7 @@ per_field_expectation:
   #
   # Read this block against the AOS-CX-sourced pairs, where the interface list
   # shrinks and every sub-field is lossy by consequence.  That does NOT happen
-  # here.  Hand round-trips: 55 -> 55, 6 -> 6, 9 -> 9 interfaces, zero
+  # here.  Hand round-trips: 54 -> 54, 6 -> 6, 9 -> 9 interfaces, zero
   # vanishing records.  The six `good` declarations below are measured, not
   # assumed from the matrices.
 

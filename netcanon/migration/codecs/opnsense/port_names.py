@@ -19,10 +19,17 @@ OPNsense presents interfaces at two levels of naming:
 * **Zone aliases** — ``wan``, ``lan``, ``opt<N>``.  Operator-facing
   aliases that resolve to a specific BSD device via
   ``<interfaces><wan><if>igb0</if>…``.  The codec's parser resolves
-  these to BSD form before the canonical tree, so we rarely see
-  aliases here; if one leaks through we classify as ``unknown``
-  because we can't resolve the alias->device map without the full
-  config.xml in hand.
+  a zone to its device in each place config.xml refers to one: an
+  interface's own name (``<interfaces>``), a virtual IP's
+  ``<interface>`` and a DHCP pool's zone under ``<dhcpd>``.  So no
+  field of the canonical tree that holds a port name holds a zone;
+  the pool of a ``<dhcpd>`` zone that ``<interfaces>`` does not have
+  is left out of the tree and listed with what was not translated.
+  (A zone with no ``<if>`` is named by its own
+  tag, in all three places alike.)  A zone name that is handed to
+  the classifier all the same -- typed into a rename map, say --
+  answers ``unknown``: which device a zone is on cannot be told
+  from its name.
 
 VLAN subinterfaces use the ``<parent>.<vlan_id>`` form (e.g.
 ``igb0.10``, ``lagg0.100``) and classify as ``svi``.
@@ -84,8 +91,8 @@ def classify_port_name(name: str) -> PortIdentity:
       4. ``lo<N>`` → loopback.
       5. ``(wg|gif|gre|ovpns|ovpnc)<N>`` → tunnel with
          ``opnsense_tunnel_kind`` meta.
-      6. Anything else → unknown (zone aliases that leaked through,
-         user-named VLANs, etc.).
+      6. Anything else → unknown (a zone alias, user-named VLANs,
+         etc.).
 
     Args:
         name: Source-side OPNsense interface name.
@@ -145,8 +152,7 @@ def classify_port_name(name: str) -> PortIdentity:
             original=name,
         )
 
-    # Zone alias that leaked through, user-named VLAN, or anything
-    # else unrecognised.
+    # A zone alias, a user-named VLAN, or anything else unrecognised.
     return PortIdentity(kind="unknown", original=name)
 
 

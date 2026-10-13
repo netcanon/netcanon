@@ -24,7 +24,7 @@ render.
 
 `cisco_iosxr` in this corpus is a **service-provider edge/core router** — seven
 Batfish PE/RR/border fixtures, an `xrdtools` ISIS/SR/SRv6 trio, one real
-`iosxr_design` chassis (55 interfaces) and the synthetic kitchen sink.
+`iosxr_design` chassis (54 interfaces) and the synthetic kitchen sink.
 `cisco_iosxe_cli` is a **general-purpose enterprise/branch router** reading and
 writing IOS-XE CLI text.
 
@@ -35,7 +35,7 @@ is not shared and is not lost either — IOS-XR simply never populates it.
 ## The structural finding — and it is the *opposite* of the AOS-CX pair
 
 **The interface inventory does not shrink on this pair.** Source and re-parsed
-target interface counts are equal on **12 of 12 cells** (9/9, 17/17, 55/55 on
+target interface counts are equal on **12 of 12 cells** (9/9, 17/17, 54/54 on
 the three largest), and no interface name is dropped on any cell.
 
 That matters because it is the inverse of the `aruba_aoscx__arista_eos`

@@ -258,10 +258,32 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   devices declared such a job is `partial` until the unit has a
   loopback of its own, and lists the pair in `fused_ports`; a mere
   reference to unit 0 (`lo0.0`) is the loopback itself and is not
-  counted.  Names the port translator does not read — a bare `irb`,
-  `vme`, `st0` and its units, a channelized `xe-0/0/6:2` — are left
-  as they are on the target, and such a job lists them in
-  `untranslated_ports` until each has an entry.  ⚠️ Up to
+  counted.  Names the port translator does not read — `vme`, the
+  units of `st0`, a channelized `xe-0/0/6:2`, and a bare `irb` or
+  `st0` that a line configures — are left as they are on the
+  target, and such a job lists them in `untranslated_ports` until
+  each has an entry.  An interface is a name some line configures:
+  `set interfaces irb unit 100 ...` configures `irb.100` and makes
+  no `irb`, and `lo0 unit 1` alone makes `lo0.1` and no `lo0`.  The
+  bare name is made by a line on the device itself or on its unit
+  0, whether or not the rest of the line is read — a description,
+  an MTU, `gratuitous-arp-reply`, a bare `set interfaces st0`, or
+  `set interfaces st0 unit 0 family inet`, the unnumbered tunnel a
+  route to `st0.0` goes out of.  A name the port translator reads
+  as a port or as an `ae` bundle keeps its record whatever the
+  config says of it: `ge-0/0/3` with only tagged units keeps its
+  record.  (Not yet every port is read as one: with only units
+  above 0 and no line of its own, a channelized `xe-0/0/6:2`, a
+  `so-0/0/0` or a `reth0` has its units and no record.)  For an
+  empty `st0` a Junos output has a bare `set interfaces st0` where
+  the config has a unit of it too or a routing instance names it,
+  and no line where it stands alone: an unnumbered `st0` is listed
+  onto other platforms, and alone it is not written back to Junos.
+  ⚠️ Up to 0.7.7 an empty `irb` (or `st0`, or `lo0`) was made beside
+  its units, written into other platforms' output under that name
+  and into a Junos output as a `set interfaces irb` line the source
+  did not have; and an MTU or a unit-0 address on `irb` was lost
+  where a unit beside it was folded onto its VLAN.  ⚠️ Up to
   0.7.7 a unit was written ONTO its port, also in a translation from
   Junos to Junos, where `fxp0` and `me0` also came back as `em0`;
   translate such a config again.  `vlan-tagging` on the parent port
@@ -281,11 +303,12 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   TO Junos from a non-Junos source, configs come out flat (no
   apply-groups inheritance).
 - **Renaming or dropping the bare `irb` in the rename modal does
-  nothing to its units.**  A translation from Junos to Junos lists
-  `irb` under *Other names in the config* beside each `irb.<unit>`.
-  An entry on an `irb.<unit>` row is shown by the output; one on
-  the bare `irb` is recorded by the job and the units stay under
-  `irb`.  See
+  nothing to its units.**  Where a line configures the IRB device
+  itself (a description, an MTU), a translation from
+  Junos to Junos lists `irb` under *Other names in the config*
+  beside each `irb.<unit>`.  An entry on an `irb.<unit>` row is
+  shown by the output; one on the bare `irb` moves or removes what
+  the device states, and the units stay under `irb`.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § F.
 - **Root authentication** (`set system root-authentication
   encrypted-password`) is parse-and-ignore — root auth is

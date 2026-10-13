@@ -382,6 +382,7 @@ output.
 | `/routing/static-route` (and `gateway` / `metric` / `description` / `interface`) | Unsupported | The parser harvests routes from `<gateways>` + `<staticroutes>`, so OPNsense-as-**source** translates outward fine — but the `config.xml` renderer emits neither block, so a route translated **into** OPNsense does not survive at all.  A record that vanishes is unsupported, not lossy: validation reports `block`, and an X→OPNsense plan tells the operator to re-create routing on the target rather than warning them past it. |
 | `/routing/static-route/vrf` | Unsupported | Separate rationale from the render gap above: OPNsense's `config.xml` has no VRF model at all, so a per-VRF binding parses-and-ignores and stays unsupported even once `<staticroutes>` rendering lands. |
 | `/interfaces/interface/config/description` | Lossy | OPNsense imposes no length limit on description text; other vendors (Cisco 240 chars, Juniper 900) may truncate on render. |
+| `/dhcp-servers/pool` | Lossy | A pool is keyed by the zone of its interface.  A pool whose interface is no interface of the output serves nothing there (an EOS pool, whose own name is where its interface goes, is written under a zone of that name, `<users>`); one that names no interface (a pool from IOS-XE or RouterOS, a Junos pool whose server group binds no interface) is written under `<lan>`, a zone the output has only if an interface is called that.  Read back, such a pool is left out.  The report lists this path for every pool written onto OPNsense, a bound one included.  As a **source**, a pool is on the device its zone is assigned to, and a pool whose zone `<interfaces>` does not have is left out and listed. |
 | `/filter/rule` | Unsupported | `<filter>` is Tier 3. |
 | `/nat/outbound` | Unsupported | `<nat>` is Tier 3. |
 | `/snmp/v3-user` | Unsupported | OPNsense's SNMPv3 lives in raw `snmpd.conf` — Tier 3. |
@@ -557,7 +558,12 @@ statement the source had **deactivated** (`deactivate <path>` in
 set-form, `inactive:` in the hierarchical form) is not in force on
 the device, so it is left out of the translation and listed here as
 `inactive: <path>`; a statement under a load file's `delete:` is
-listed as `delete: <path>`.  The banner counts only the sections,
+listed as `delete: <path>`; and an IOS XR `interface preconfigure
+<name>` stanza, which is configuration the router holds for an
+interface it does not have until the line card is put in, is listed
+as `preconfigure: interface <name>`.  No interface is made of such
+a stanza, neither one called `preconfigure` nor the port it names,
+and nothing in it is read.  The banner counts only the sections,
 says in a sentence of its own what the other rows are, and is
 headed "Statements the source held and did not run" when it holds
 nothing else.  A same-vendor Junos job does not write the statement
@@ -574,7 +580,24 @@ section is the stanza header as the config has it.
 A job whose only rows are of this kind, and which recognised
 nothing else, is `partial`: a statement is named whether or not
 anything under it would have been read, so the row is not a sign
-that the text was a config.
+that the text was a config.  The rows of this kind are bounded:
+past the bound, one last row counts the statements not listed.
+
+Rows a parser adds itself are sections, counted with the others
+and true of the same sentence — they are not in the output:
+
+* **`interface range ...`** (IOS-XE, IOS XR) — the header of a
+  stanza that configures several ports at once.  It names no
+  interface, so no interface is made of it and nothing in it is
+  read.  Configure the ports it covers on the target by hand.
+* **`interface breakout <port> map <profile>`** (IOS-XE, IOS XR)
+  — OS10's line for splitting a port into lanes, in a text read as
+  one of those two.  It names no interface either: one row a line,
+  and nothing of it in the output.
+* **`<dhcpd><zone>: no <zone> in <interfaces>, so its DHCP pool has
+  no interface`** (OPNsense) — a DHCP pool keyed by a zone no
+  device is assigned to.  It has no interface to be on, and is
+  left out.
 
 Per-vendor detection patterns
 ([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):
@@ -953,8 +976,9 @@ What still says `completed`, and is yours to check:
   DHCP pool, a tracking entry or a VXLAN source that the translator
   cannot read is left as it is, with the same `could not classify`
   warning, and holds no job: what those places hold is not always
-  an interface (a route to `Null0`, the keyword `dhcp`, a zone, a
-  source address).  `ip route 10.50.0.0 255.255.0.0 Null0` onto
+  an interface (a route to `Null0`, the keyword `dhcp` of an IOS-XE
+  route, an EOS DHCP pool's own name, a source address).  `ip route
+  10.50.0.0 255.255.0.0 Null0` onto
   RouterOS is `gateway=Null0`, in a job that can be `completed`.
   Read a finished job's warnings for that line.
 * **A port with VLAN membership and no stanza of its own** — every
@@ -995,8 +1019,9 @@ What still says `completed`, and is yours to check:
   can be `completed`.  Decide such names before you pair.
 * **A name the output has no line for.**  A name left as the source
   has it is listed whether or not the target's renderer wrote
-  anything for it (a bare Junos `irb`): keeping it then keeps
-  nothing.  Look for the name in the output before you keep it.
+  anything for it (a Junos `irb` that has only a description, onto
+  RouterOS): keeping it then keeps nothing.  Look for the name in
+  the output before you keep it.
 
 ### D2. Scope advisories (target-platform notices)
 
@@ -2258,7 +2283,13 @@ into routinely:
   renders `ip address virtual`.  Junos per-unit
   `virtual-gateway-v4-mac` collapses to Arista's chassis-wide
   `ip virtual-router mac-address` (review banner if multiple
-  distinct per-unit MACs appear in the source).
+  distinct per-unit MACs appear in the source).  A unit that has
+  an address of its own beside the gateway is written as two
+  lines, `ip address virtual <gateway>` and then
+  `ip address <own>`; nothing here establishes that an EOS
+  interface holds the two together, so check on the device after
+  loading that it has both (the same two lines are written from an
+  AOS-CX `active-gateway` and an NX-OS anycast SVI).
 * **Junos → FortiGate anycast.**  DROPS the data with a review
   banner.  FortiGate has no anycast grammar; the canonical
   `virtual_gateway_address` field is declared `unsupported` on

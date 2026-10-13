@@ -185,7 +185,8 @@ Full rules and limitations in the sanitiser's module docstring at
   form) is left out by the parser, so the sanitised config does not
   have it, and nothing in it says it was there.  If the bug is about
   such a statement, say so in the report and write the statement out
-  by hand, with its values changed.
+  by hand, with its values changed.  The same goes for an IOS XR
+  `interface preconfigure` stanza, which the parser leaves out too.
 - **FQDN host targets redacted; unmodelled host references not.**  The
   modelled host fields (NTP / syslog / SNMP-trap / RADIUS targets) now
   redact an FQDN to a stable `host-N.example.test` placeholder so the org

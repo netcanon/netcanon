@@ -115,6 +115,14 @@ Canonical mapping:
   IS the anycast intent.
 - VARP source-NAT (`ip address virtual source-nat ...`) is Tier-3 and
   not modelled.
+- **An interface's own address beside a shared gateway is two
+  lines.**  From a source that has both on one interface (a Junos
+  `virtual-gateway-address`, an AOS-CX `active-gateway`, an NX-OS
+  anycast SVI) the output has `ip address virtual <gateway>` and
+  then `ip address <own>`.  This codec reads those two lines back
+  as two address records, and nothing here establishes that an
+  EOS interface holds the two together: check on the device after
+  loading that it has both.
 
 ### Cross-references
 

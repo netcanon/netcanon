@@ -14,7 +14,7 @@ claim rests on a single sampled drift entry.
 
 - Fixture cells: **12** (11 real captures + the synthetic kitchen sink)
 - Render errors: **0** · re-parse errors: **0**
-- Source interface records across all cells: **156**
+- Source interface records across all cells: **155**
 - Retrieved: 2026-08-25
 
 > **No device-vendor documentation was consulted for this file.** Everything
@@ -42,13 +42,13 @@ populated from this source and cannot be lost by Junos.
 
 This is the load-bearing difference from the campus pairs, and it is worth
 stating first because it inverts the usual authoring trap. **The interface
-inventory does not shrink.** All 156 source interface records survive by name
+inventory does not shrink.** All 155 source interface records survive by name
 on all 12 cells; the target list is the same length on every cell (15 → 15,
-17 → 17, 55 → 55, …).
+17 → 17, 54 → 54, …).
 
 So the `interfaces[].*` sub-fields are genuinely independent here. Where one
 is `good`, that is a measurement of the attribute itself, not a record that
-happened to survive. Per-record comparison across all 156 records finds **zero**
+happened to survive. Per-record comparison across all 155 records finds **zero**
 mismatches on `name`, `description`, `enabled`, `mtu`, `ipv4_addresses` and
 `ipv6_addresses`.
 
@@ -137,9 +137,9 @@ fixed by a codec change:
 ### 1. `interface_type` survives only for loopbacks
 
 `interfaces[].interface_type` drifts on all 12 cells — but the shape matters.
-Of 156 records, **18 preserve the type and all 18 are `ianaift:softwareLoopback`**.
-The 138 that drift to `""` break down as 126 `ianaift:ethernetCsmacd`,
-10 `ianaift:ieee8023adLag` and 2 `ianaift:other`. So the Junos render carries
+Of 155 records, **18 preserve the type and all 18 are `ianaift:softwareLoopback`**.
+The 137 that drift to `""` break down as 126 `ianaift:ethernetCsmacd`,
+10 `ianaift:ieee8023adLag` and 1 `ianaift:other`. So the Junos render carries
 the loopback type through and emits nothing the re-parse can use to recover a
 physical or bundle type. `cisco_iosxr` independently declares
 `/interfaces/interface/config/type` lossy in its own matrix, which agrees.

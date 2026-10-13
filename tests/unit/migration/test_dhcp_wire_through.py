@@ -101,6 +101,7 @@ class TestOPNsenseDHCPParseRender:
     def test_parse_lan_zone(self):
         raw = """\
 <opnsense>
+<interfaces><lan><if>em0</if></lan></interfaces>
 <dhcpd>
 <lan>
 <enable/>
@@ -116,13 +117,38 @@ class TestOPNsenseDHCPParseRender:
         intent = OPNsenseCodec().parse(raw)
         assert len(intent.dhcp_servers) == 1
         p = intent.dhcp_servers[0]
-        assert p.interface == "lan"
+        # The device the zone `lan` is assigned to.  This line read
+        # "lan" while the parser put the zone's NAME in a field that
+        # holds a port name, and the text had no <interfaces>: a pool
+        # whose zone has no device is left out of the tree now
+        # (test_a_zone_with_no_device_is_left_out, below).
+        assert p.interface == "em0"
         assert p.start_ip == "192.168.1.100"
         assert p.end_ip == "192.168.1.199"
         assert p.gateway == "192.168.1.1"
         assert p.dns_servers == ["1.1.1.1", "8.8.8.8"]
         assert p.domain_name == "example.com"
         assert p.lease_time == 7200
+
+    def test_a_zone_with_no_device_is_left_out(self):
+        """A pool keyed by a zone <interfaces> does not have has no
+        interface to be on: it is not in the tree, and the tree says
+        which zone."""
+        raw = """\
+<opnsense>
+<dhcpd>
+<lan>
+<enable/>
+<range><from>192.168.1.100</from><to>192.168.1.199</to></range>
+</lan>
+</dhcpd>
+</opnsense>
+"""
+        intent = OPNsenseCodec().parse(raw)
+        assert intent.dhcp_servers == []
+        assert intent.dropped_tier3_sections == [
+            "<dhcpd><lan>: no <lan> in <interfaces>, so its DHCP pool has no interface",
+        ]
 
     def test_empty_zone_skipped(self):
         """Upstream config.xml.sample has empty <wan>/<lan> zones used
@@ -162,6 +188,7 @@ class TestOPNsenseDHCPParseRender:
     def test_round_trip(self):
         raw = """\
 <opnsense>
+<interfaces><lan><if>em0</if></lan></interfaces>
 <dhcpd>
 <lan>
 <range><from>10.0.0.100</from><to>10.0.0.199</to></range>
@@ -174,6 +201,7 @@ class TestOPNsenseDHCPParseRender:
         c = OPNsenseCodec()
         first = c.parse(raw)
         second = c.parse(c.render(first))
+        assert first.dhcp_servers[0].interface == second.dhcp_servers[0].interface == "em0"
         assert first.dhcp_servers[0].gateway == second.dhcp_servers[0].gateway
         assert first.dhcp_servers[0].start_ip == second.dhcp_servers[0].start_ip
         assert first.dhcp_servers[0].end_ip == second.dhcp_servers[0].end_ip

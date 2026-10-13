@@ -17,7 +17,7 @@
 # enter the canonical intent and Junos cannot lose them.
 #
 # Unlike the campus pairs, the dominant loss on this pair is NOT structural.
-# The interface inventory does not shrink: all 156 source interface records
+# The interface inventory does not shrink: all 155 source interface records
 # survive by name on all 12 cells, and per-record comparison finds zero
 # mismatches on name, description, enabled, mtu, ipv4_addresses and
 # ipv6_addresses. Every `interfaces[].*` key below is therefore an independent
@@ -132,9 +132,9 @@ per_field_expectation:
     disposition: good
     note: >
       The interface inventory does NOT shrink on this pair — the finding that
-      makes every sibling key below an independent measurement.  All 156 source
+      makes every sibling key below an independent measurement.  All 155 source
       interface records survive by name across all 12 cells (15 -> 15,
-      17 -> 17, 55 -> 55, ...), including 4-segment IOS-XR names
+      17 -> 17, 54 -> 54, ...), including 4-segment IOS-XR names
       (`TenGigE0/0/0/18`), dotted subinterfaces
       (`GigabitEthernet0/0/0/1.100`) and BVIs.
     references: [iosxr-junos-surface]
@@ -142,7 +142,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: good
     note: >
-      Preserved on all 9 cells that populate it, and on every one of the 156
+      Preserved on all 9 cells that populate it, and on every one of the 155
       records compared individually.  Declared supported on both sides.
     references: [iosxr-junos-surface]
 
@@ -164,7 +164,7 @@ per_field_expectation:
     note: >
       Preserved on all 3 cells that carry IPv6 on an interface.  Measured
       independently rather than inherited from the IPv4 result: per-record
-      comparison across all 156 records finds zero IPv6 mismatches.
+      comparison across all 155 records finds zero IPv6 mismatches.
     references: [iosxr-junos-surface]
 
   "interfaces[].ipv4_addresses":
@@ -180,9 +180,9 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Drifts on 12 of 12 cells, and the shape matters more than the count.  Of
-      the 156 records, 18 preserve the type and all 18 are
-      `ianaift:softwareLoopback`; the 138 that drift to `""` are 126
-      `ianaift:ethernetCsmacd`, 10 `ianaift:ieee8023adLag` and 2
+      the 155 records, 18 preserve the type and all 18 are
+      `ianaift:softwareLoopback`; the 137 that drift to `""` are 126
+      `ianaift:ethernetCsmacd`, 10 `ianaift:ieee8023adLag` and 1
       `ianaift:other`.  The Junos render carries the loopback type through and
       emits nothing a re-parse can use to recover a physical or bundle type.
       cisco_iosxr independently declares

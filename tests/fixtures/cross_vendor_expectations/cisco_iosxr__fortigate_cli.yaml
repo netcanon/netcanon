@@ -17,7 +17,7 @@
 # READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: on that pair
 # the interface inventory is fully preserved and the LAG surface is dropped
 # outright.  Here it is the other way round on BOTH counts.  The LAGs survive
-# byte-identical, and the interface list GROWS — 156 records in, 160 out, ZERO
+# byte-identical, and the interface list GROWS — 155 records in, 159 out, ZERO
 # lost, 4 added — because the FortiOS renderer synthesises an 802.1Q child
 # interface `vlan<id>` for every canonical VLAN and the re-parse reads each one
 # back as a new interface record.  The comparator sees a record-count change on
@@ -147,7 +147,7 @@ per_field_expectation:
   # is the whole story, so that no key is read as corroborating another.
   #
   # One loss inside this list has no key of its own and is recorded in the
-  # reference doc instead: `interfaces[].vrf` is emptied on 16 of the 156
+  # reference doc instead: `interfaces[].vrf` is emptied on 16 of the 155
   # records, across 8 cells.  That is the same event as
   # `routing_instances[].name` — the target models no VRF, so the instance and
   # every binding to it go together — and it is declared once, there.
@@ -156,7 +156,7 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Measured across all 12 cells: ZERO interface records are lost and 4 are
-      added — 15 -> 16 on `batfish_ebgp_border01` and `..._border02`, 55 -> 56
+      added — 15 -> 16 on `batfish_ebgp_border01` and `..._border02`, 54 -> 55
       on `iosxr_design_cst_pa3_xr752.cfg`, 9 -> 10 on `kitchen_sink.cfg`, and
       the interface set is identical on the other 8 cells.  Surviving names
       come back verbatim: IOS-XR 4-segment naming, channelized and dot1q
@@ -181,7 +181,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: good
     note: >
-      152 of 156 records round-trip byte-identical.  The 4 that do not are all
+      151 of 155 records round-trip byte-identical.  The 4 that do not are all
       on `iosxr_design_cst_pa3_xr752.cfg` and all fail the same way —
       truncated to exactly 25 characters (`Bundle-Ether500` 30 -> 25,
       `GigabitEthernet0/0/0/12` 58 -> 25, `TenGigE0/0/0/25` 33 -> 25, `BVI500`
@@ -203,7 +203,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state is identical on every one of the 156 records present on both
+      Admin state is identical on every one of the 155 records present on both
       sides — 0 drifting, measured across all 12 cells.  A port that was
       `shutdown` on IOS-XR arrives `set status down` on the FortiGate.  This
       key drifts on 4 cells only because the parent record list grows
@@ -231,7 +231,7 @@ per_field_expectation:
     note: >
       0 records drift on the address list, measured on every record present on
       both sides.  Coverage is thin and that is worth knowing: IPv6 is
-      populated on a small minority of the 156 records, rendering as `set
+      populated on a small minority of the 155 records, rendering as `set
       ip6-address <addr>/<len>`.  Worth knowing for planning rather than for
       reading this result — fortigate_cli declares
       `/interfaces/interface/ipv6/address/scope` lossy (parse hardcodes
@@ -244,7 +244,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      0 records drift, measured on all 156 records present on both sides —
+      0 records drift, measured on all 155 records present on both sides —
       the widest-populated field on the pair and the one the migration most
       depends on.  IOS-XR `ipv4 address A.B.C.D/N` renders as `set ip A.B.C.D
       <dotted-mask> / set mode static` and the prefix comes back intact.
@@ -257,10 +257,10 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: good
     note: >
-      154 of 156 records keep their IANA type hint, including all 18
-      `ianaift:softwareLoopback` records.  The 2 that do not are both on
-      `iosxr_design_cst_pa3_xr752.cfg` — `BVI500` and a `preconfigure` record,
-      each `ianaift:other` -> `ianaift:ethernetCsmacd`.  Both matrices declare
+      154 of 155 records keep their IANA type hint, including all 18
+      `ianaift:softwareLoopback` records.  The one that does not is on
+      `iosxr_design_cst_pa3_xr752.cfg` — `BVI500`,
+      `ianaift:other` -> `ianaift:ethernetCsmacd`.  Both matrices declare
       `/interfaces/interface/config/type` lossy in their own right, and
       fortigate_cli states the mechanism ("FortiOS has no IANA ifType; inferred
       from 'type vlan' sub-setting or name shape") — an IOS-XR BVI has neither
@@ -276,7 +276,7 @@ per_field_expectation:
   "interfaces[].lag_member_of":
     disposition: good
     note: >
-      All 156 records come back with an identical `lag_member_of`, on all 12
+      All 155 records come back with an identical `lag_member_of`, on all 12
       cells — 0 drifting.  The audit applies LAG-name canonicalisation to this
       key, but it never engages here: the names match literally, `Bundle-Ether1`
       to `Bundle-Ether1`.  Read this alongside `lags`, which is also preserved:
@@ -289,7 +289,7 @@ per_field_expectation:
   "interfaces[].vrrp_groups":
     disposition: good
     note: >
-      0 differing of 156 records, because both sides are empty on every one.
+      0 differing of 155 records, because both sides are empty on every one.
       That is a source-side gap rather than a success: cisco_iosxr declares the
       whole `/interfaces/interface/vrrp-groups/group/*` subtree unsupported —
       mode, priority, preempt, advertisement-interval, authentication,
