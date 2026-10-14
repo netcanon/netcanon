@@ -52,7 +52,11 @@ from ..._usm_keys import (
     user_usm_kind,
 )
 from ...canonical.intent import CanonicalIntent
-from .._helpers import charge_id_lines, switchport_trunk_allowed_value
+from .._helpers import (
+    charge_id_lines,
+    switchport_trunk_allowed_value,
+    switchport_trunk_native_value,
+)
 from ..base import RenderError
 
 # Arista-local emit-form vocabulary: maps the algorithm tokens
@@ -671,10 +675,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # Cisco IOS-XE here (Arista EOS User Manual,
             # "Switchport Configuration" — ``switchport trunk native
             # vlan <vlan-id>``).
-            if iface.trunk_native_vlan is not None:
-                out.append(
-                    f"   switchport trunk native vlan {iface.trunk_native_vlan}"
-                )
+            # No native line for VLAN 1 on a trunk whose list holds
+            # it: that is the platform's default, and no real capture
+            # prints the line.  A native VLAN the list leaves out is
+            # written whatever its id (stated, and not carried).
+            native_vlan = switchport_trunk_native_value(
+                "arista_eos", iface.trunk_allowed_vlans,
+                iface.trunk_native_vlan,
+            )
+            if native_vlan is not None:
+                out.append(f"   switchport trunk native vlan {native_vlan}")
             # The list means what it says.  No VLAN is ``none``.
             # Every VLAN is no line at all: it is the default, and
             # EOS's own form for it is the absence of the statement.

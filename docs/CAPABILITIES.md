@@ -2206,8 +2206,17 @@ matter; the matrix is honest about both.
     trunk** by `cisco_nxos` and `arista_eos`, though a port of
     either platform is an access port until it is told otherwise.
     Such a port is a trunk of the VLANs its lines name, or of no
-    VLAN — never of every VLAN: the platform's default is given only
-    to a port that says it is a trunk.
+    VLAN — never of every VLAN: the platform's defaults are a
+    trunk's, and are given only to a port that says it is one.
+    That holds for the default native VLAN as well: VLAN 1 on such
+    a port's list is a tagged VLAN of it, and no output states
+    VLAN 1 untagged for it.  The EOS parser reads an allowed line
+    below an access line as making the port a trunk, and drops
+    its access VLAN, even under `switchport mode access`; the NX-OS
+    parser takes the first of the two lines.  (What the switches
+    do is not stated here: this is how the two parsers read it.)  Look for such ports in the source: take the
+    trunk lines off an access port, or add `switchport mode trunk`
+    to a trunk.
   * **A trunk whose list is stated where the parser does not read it
     is a trunk of every VLAN:** a port-channel member that states
     the mode and leaves the list to its port-channel, and a port
@@ -2268,14 +2277,52 @@ matter; the matrix is honest about both.
   The sentences are in the
   [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
   These limits remain:
-  * **A trunk that states no native VLAN gets none.**  No platform's
-    default is filled in on the way in, and none is written on the
-    way out, though the defaults differ (native VLAN 1 on IOS-XE,
-    NX-OS, EOS and AOS-CX; the switch's default VLAN on OS10; on
-    AOS-S a port is in the default VLAN, VLAN 1, until it is removed
-    from it; none on Junos).  A
-    Cisco trunk with no native line whose list names VLAN 1 reaches
-    Junos, OS10 and AOS-S with VLAN 1 TAGGED.  And an AOS-S or OS10
+  * **A port that carries no VLAN untagged gets a default on four
+    targets.**  A trunk that states no native VLAN has its
+    platform's own: VLAN 1 on IOS-XE, NX-OS, EOS and AOS-CX, none on
+    Junos.  On the way IN that is read, for a port that says it is
+    a trunk (`switchport mode trunk`; on AOS-CX a `vlan trunk`
+    line): such a trunk of the four has native VLAN 1 where its
+    allowed list holds VLAN 1, and reaches Junos, OS10 and AOS-S
+    with VLAN 1 untagged (release 0.7.7 and earlier wrote it
+    tagged).  Where its list leaves VLAN 1 out nothing is filled
+    in.  On the way OUT it is not: a port with no untagged VLAN --
+    a Junos trunk with no `native-vlan-id`, an AOS-S port that is
+    only `tagged`, a trunk whose native VLAN the VLAN pane's map
+    cleared -- is written for those four as a trunk with no native
+    line, and where its list holds VLAN 1 the switch then carries
+    VLAN 1 untagged on it, by its own default.  The job points at
+    it in one case only: where the map DROPS the native VLAN of a
+    trunk whose list is every VLAN, the warning says that an output
+    written as a trunk of every VLAN still allows the VLAN ([`TROUBLESHOOTING.md`](TROUBLESHOOTING.md)
+    § "A trunk's allowed list is not what I wrote").  No form is
+    written yet for "this trunk carries no VLAN untagged": decide
+    what such a trunk is to carry untagged on the target, and
+    state it there.
+  * **`vlan members all` beside `native-vlan-id` on Junos.**  A
+    trunk of every VLAN that carries a VLAN untagged is written
+    `vlan members all` and `native-vlan-id <N>`.  Juniper's page
+    asks for the logical interface to be a member of the native
+    VLAN, and its procedure names that VLAN on `vlan members`;
+    whether `all` takes the native VLAN in is not established.
+    Check on the switch that such a trunk receives untagged frames
+    into its native VLAN, or name the VLAN on `vlan members`.
+  * **A VLAN map that merges a trunk's untagged VLAN with a VLAN
+    it carries tagged puts the port on both lines of an AOS-S
+    VLAN.**  The six targets that write the port's own lines carry
+    the merged VLAN untagged.  AOS-S is written from the VLANs'
+    member lists, which the map joins: the merged VLAN's stanza has
+    `untagged <port>` and `tagged <port>`, in a job that says only
+    `multiple source VLANs mapped to <N> — tagged/untagged port
+    lists merged`.  What a switch makes of the two lines is not
+    established: take the port off the one that is not meant.
+  * **The default of OS10 and of AOS-S is not read and not
+    written.**  An OS10 trunk's native VLAN is the default VLAN of
+    its switch when it states no access VLAN, by Dell's page; which
+    id that is is a setting no trunk states, so such a trunk is
+    read as carrying no VLAN untagged.  On AOS-S a port is in the
+    default VLAN, VLAN 1, until it is removed from it.  As targets,
+    an AOS-S or OS10
     port that is written no untagged VLAN is left to the switch's
     own default: no line of the output takes it out of VLAN 1, and
     on AOS-S only a trunk that stated a native VLAN outside its list
@@ -2287,11 +2334,15 @@ matter; the matrix is honest about both.
     membership (to VLAN 1); Dell's procedure for a trunk uses it to
     remove the membership.  The line is written under a `! review:`
     line that says so: check what the port carries untagged.  It is
-    read back as no untagged VLAN, which the tree cannot tell from
-    "not stated": an OS10 config that has the line comes back onto
-    OS10 without it.
+    read back as no untagged VLAN, which is what the tree has for a
+    trunk with no such line as well: an OS10 config that has the
+    line comes back onto OS10 without it.
   * **`fortigate_cli`, `mikrotik_routeros` and `opnsense` write the
     untagged VLAN as a tagged VLAN device**, like any other VLAN.
+    That includes VLAN 1 of a Cisco, Arista or AOS-CX trunk that
+    states no native VLAN: it is such a trunk's untagged VLAN by
+    its platform's default, and reaches these three as a tagged
+    VLAN 1 device.
     Their matrices declare the native VLAN unsupported; nothing in
     the output marks which device was untagged at the source.  On
     `mikrotik_routeros` every VLAN device of an output is on ONE

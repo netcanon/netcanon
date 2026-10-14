@@ -38,6 +38,7 @@ from .._helpers import (
     _coalesce_vlan_ids,
     same_vendor_version,
     switchport_trunk_allowed_value,
+    switchport_trunk_native_value,
 )
 from . import port_names as _port_names
 
@@ -511,10 +512,15 @@ def _render_switchport_lines(iface) -> list[str]:
             out.append("  switchport mode access")
     elif iface.switchport_mode == "trunk":
         out.append("  switchport mode trunk")
-        if iface.trunk_native_vlan is not None:
-            out.append(
-                f"  switchport trunk native vlan {iface.trunk_native_vlan}"
-            )
+        # No native line for VLAN 1 on a trunk whose list holds it:
+        # that is the platform's default, and no real capture prints
+        # the line.  A native VLAN the list leaves out is written
+        # whatever its id (stated, and not carried).
+        native_vlan = switchport_trunk_native_value(
+            "cisco_nxos", iface.trunk_allowed_vlans, iface.trunk_native_vlan,
+        )
+        if native_vlan is not None:
+            out.append(f"  switchport trunk native vlan {native_vlan}")
         # The list means what it says.  No VLAN is ``none``.  Every
         # VLAN is no line at all: it is the default and what the
         # device prints, and ``1-4094`` names the ids NX-OS keeps for

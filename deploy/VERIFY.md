@@ -440,9 +440,10 @@ take:
 IP=<ip> KEY=<key> python3 - <<'PY'
 import json, os, threading, urllib.request
 
-# every limit of `small` at once: 256 trunks that allow every VLAN, 195 VLANs,
+# every limit of `small` at once: 256 trunks that allow every VLAN, 193 VLANs
+# (and VLAN 1, which a trunk that states no native VLAN carries untagged),
 # 2,244 one-line interfaces, and static routes up to the proxy's two megabytes
-text = "hostname T\n!\n" + "".join(f"vlan {v}\n name V{v}\n!\n" for v in range(2, 197)) + "".join(
+text = "hostname T\n!\n" + "".join(f"vlan {v}\n name V{v}\n!\n" for v in range(2, 195)) + "".join(
     f"interface GigabitEthernet{i // 48 + 1}/0/{i % 48 + 1}\n switchport mode trunk\n"
     " switchport trunk allowed vlan all\n!\n" for i in range(256)) + "".join(
     f"interface Gi{i + 100}\n" for i in range(2244)) + "".join(
@@ -497,7 +498,7 @@ that reads every body first.  Twenty at once, of the request of proof 15
 IP=<ip> KEY=<key> python3 - <<'PY'
 import json, os, threading, time, urllib.error, urllib.request
 
-text = "hostname T\n!\n" + "".join(f"vlan {v}\n name V{v}\n!\n" for v in range(2, 197)) + "".join(
+text = "hostname T\n!\n" + "".join(f"vlan {v}\n name V{v}\n!\n" for v in range(2, 195)) + "".join(
     f"interface GigabitEthernet{i // 48 + 1}/0/{i % 48 + 1}\n switchport mode trunk\n"
     " switchport trunk allowed vlan all\n!\n" for i in range(256)) + "".join(
     f"interface Gi{i + 100}\n" for i in range(2244)) + "".join(
@@ -567,7 +568,7 @@ HOST, KEY = os.environ["IP"], os.environ["KEY"]
 def plan(text, target):
     return json.dumps({"source": "cisco_iosxe_cli", "target": target, "raw_text": text}).encode()
 
-text = "hostname T\n!\n" + "".join(f"vlan {v}\n name V{v}\n!\n" for v in range(2, 197)) + "".join(
+text = "hostname T\n!\n" + "".join(f"vlan {v}\n name V{v}\n!\n" for v in range(2, 195)) + "".join(
     f"interface GigabitEthernet{i // 48 + 1}/0/{i % 48 + 1}\n switchport mode trunk\n"
     " switchport trunk allowed vlan all\n!\n" for i in range(256)) + "".join(
     f"interface Gi{i + 100}\n" for i in range(2244)) + "".join(

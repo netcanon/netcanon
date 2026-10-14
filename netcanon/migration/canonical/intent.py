@@ -233,9 +233,16 @@ class CanonicalInterface(BaseModel):
             later, or empty.
         trunk_native_vlan: Native (untagged) VLAN ID on trunk: which
             of the VLANs of ``trunk_allowed_vlans`` goes without a
-            tag.  ``None`` is "not stated"; no platform's default is
-            filled in.  It is carried only where the list holds it,
-            so a trunk's untagged VLAN is read with
+            tag.  In a tree a parser made, ``None`` says the port
+            carries NO VLAN untagged, as far as its platform's text
+            AND its platform's default go: a parser whose platform
+            gives a trunk a native VLAN when it states none puts
+            that VLAN here, for a port that says it is a trunk and
+            whose list holds it
+            (``TRUNK_THAT_STATES_NO_NATIVE`` in
+            ``codecs/_helpers.py``).  There is no value for "not
+            stated".  A native VLAN is carried only where the list
+            holds it, so a trunk's untagged VLAN is read with
             ``trunk_untagged_vlan`` (``canonical/transforms.py``),
             never from this field alone.
         voice_vlan: Voice VLAN ID for IP phone traffic.

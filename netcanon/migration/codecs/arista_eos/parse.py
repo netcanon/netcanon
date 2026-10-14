@@ -64,6 +64,8 @@ from .._helpers import (
     Uniques,
     _mask_to_prefix,
     merge_trunk_allowed,
+    tags_every_native_vlan,
+    tags_its_native_vlan,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -847,8 +849,13 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     # What each interface states about its trunk, by its name (this
     # parser keeps one record a name).  A trunk that states no list
     # gets its platform's once the scan is over -- where the
-    # interface says it is a trunk.
+    # interface says it is a trunk.  Such a trunk, where it states no
+    # native VLAN, gets the platform's then, too, unless the text
+    # says the native VLAN is sent tagged: ``vlan dot1q tag native``
+    # for every trunk, ``switchport trunk native vlan tag`` for one.
     trunks = TrunksByName("arista_eos", parse_ids=_expand_vlan_list)
+    if tags_every_native_vlan(raw):
+        trunks.native_is_tagged()
     # GAP-EVPN-2: switch-level VXLAN settings are captured inside
     # ``interface Vxlan1`` but apply globally to every CanonicalVxlan
     # record produced from that stanza.  Stash them as parse-time
@@ -962,7 +969,11 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     # this parser took for a trunk from a trunk line alone, with no
     # ``switchport mode trunk``, is given nothing from the platform's
     # list: EOS keeps such a line on an access port without acting on
-    # it.
+    # it.  And a trunk that states no native VLAN has the platform's,
+    # VLAN 1, where its list holds it: given after the list, and
+    # before the ports are put on the VLANs' member lists.  The
+    # default is a trunk's as well: a port taken for a trunk from a
+    # trunk line alone is given none.
     for iface in iface_by_name.values():
         trunks.made(iface.name, iface)
     trunks.settle()
@@ -1430,7 +1441,13 @@ def _apply_iface_subcommand(  # noqa: C901
             iface.trunk_native_vlan = int(line.split()[-1])
             iface.switchport_mode = "trunk"
         except ValueError:
-            pass
+            # ``switchport trunk native vlan tag`` is no id: the
+            # native VLAN is sent tagged, and none is filled in.
+            # (A line that states an id needs no word to ``trunks``:
+            # this parser keeps one record a name, and the record
+            # holds the native VLAN its interface states.)
+            if trunks is not None and tags_its_native_vlan(line):
+                trunks.native_is_tagged(iface.name)
         return
     if line == "switchport mode trunk":
         iface.switchport_mode = "trunk"

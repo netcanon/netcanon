@@ -262,7 +262,31 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   VLAN is lost, and the job does not say so.  A Junos trunk with no
   `native-vlan-id` has no untagged VLAN (Juniper: "By default, the
   untagged packets are dropped on trunk interfaces."), and is
-  written none.  The VLAN pane's map keeps to that
+  written none.  **As a target, a Cisco, Arista or AOS-CX trunk that
+  states no native VLAN and has VLAN 1 on its list is written
+  `native-vlan-id 1`**, with the port a member of VLAN 1 and a `set
+  vlans VLAN-1 vlan-id 1` line where the source declared no VLAN 1:
+  on those platforms such a trunk has native VLAN 1, and carries it
+  untagged.  Release 0.7.7 and earlier wrote the port a member of
+  VLAN 1 with no `native-vlan-id`, a tagged VLAN: check such trunks
+  migrated then.  Where the source trunk is every VLAN -- it states
+  no allowed list -- the output is `vlan members all` beside
+  `native-vlan-id 1`.  Juniper asks for the logical interface to be
+  a member of the native VLAN ("The logical interface on which
+  untagged packets are to be received must be configured with the
+  same VLAN ID as the native VLAN ID configured on the physical
+  interface."), and whether `all` takes the native VLAN in is not
+  established: check on the switch that such a trunk receives
+  untagged frames into VLAN 1, or name the VLAN on `vlan members`
+  as Juniper's procedure does.  **As a source, one thing is not
+  mended.**  A Junos
+  trunk with no `native-vlan-id` and VLAN 1 among its members (or
+  `vlan members all`) is written for IOS-XE, NX-OS, EOS and AOS-CX
+  as a trunk with no native line, and on those four a trunk with no
+  native line has native VLAN 1: it carries VLAN 1 untagged there,
+  where this trunk drops untagged packets.  No form is written yet
+  for "no untagged VLAN" (the limits in [`CAPABILITIES.md`](../CAPABILITIES.md)).
+  The VLAN pane's map keeps to that
   reading.  Where a map would bring a native VLAN that the list
   leaves out INTO the list, the native VLAN is cleared if the map
   has merged it with a VLAN of the config that the list names, and

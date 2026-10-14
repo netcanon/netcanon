@@ -16,6 +16,14 @@ VLAN, on all three.
 
 One IOS-XE config with a trunk of each kind, written in both orders,
 onto each target; the OUTPUT is read as text for the parent it gives.
+
+A trunk of every VLAN here states no native VLAN, which on IOS-XE is
+native VLAN 1: the port carries VLAN 1 untagged, VLAN 1 has a record
+though the config declares none, and each of the three targets
+writes a VLAN device for it as for any VLAN -- a TAGGED one, which is
+how these targets write every untagged VLAN (a known limitation: the
+source sends VLAN 1 without a tag).  Where it is put is read below
+like the others'.
 """
 
 from __future__ import annotations
@@ -90,15 +98,27 @@ def _fortios_parents(rendered: str) -> dict[int, str]:
 _READ = {"opnsense": _opnsense_parents, "mikrotik_routeros": _routeros_parents, "fortigate_cli": _fortios_parents}
 
 
+def _has_a_default_trunk(text: str) -> bool:
+    """Whether a port of *text* says it is a trunk and states neither
+    an allowed list nor a native VLAN: every VLAN, VLAN 1 untagged."""
+    for stanza in re.split(r"(?m)^interface ", text)[1:]:
+        lines = [line.strip() for line in stanza.splitlines()[1:]]
+        if "switchport mode trunk" in lines and not any(line.startswith("switchport trunk ") for line in lines):
+            return True
+    return False
+
+
 def _parents(target: str, text: str) -> tuple[dict[int, str], dict[str, str]]:
     """``(VLAN id -> the parent the output gives it, source port name ->
-    its name in the output)``."""
+    its name in the output)``.  The VLANs are the two the config
+    declares, and VLAN 1 where a trunk of every VLAN carries it
+    untagged."""
     job = run_plan_with_overrides(
         get_codec("cisco_iosxe_cli"), get_codec(target), text, port_rename_map={}, force=True,
     )
     assert job.rendered, f"{target}: nothing rendered ({job.status})"
     parents = _READ[target](job.rendered)
-    assert set(parents) == {100, 999}, (target, parents)
+    assert set(parents) == ({1, 100, 999} if _has_a_default_trunk(text) else {100, 999}), (target, parents)
     return parents, dict(job.port_renames)
 
 
@@ -131,6 +151,30 @@ def test_opnsense_the_rest_ride_every_vlan(order: str) -> None:
     first, second = BOTH_ORDERS[order]
     parents, renamed = _parents("opnsense", _iosxe((_port(1), first), (_port(2), second)))
     assert parents[999] == renamed[_port(1) if first is EVERY_VLAN else _port(2)], (order, parents)
+
+
+@pytest.mark.parametrize("order", sorted(BOTH_ORDERS))
+def test_opnsense_vlan_one_rides_its_trunk(order: str) -> None:
+    """VLAN 1 is carried by the trunk of every VLAN alone, untagged by
+    its default, and that trunk is its parent on OPNsense -- not the
+    trunk that names VLAN 100, which does not carry it."""
+    first, second = BOTH_ORDERS[order]
+    parents, renamed = _parents("opnsense", _iosxe((_port(1), first), (_port(2), second)))
+    assert parents[1] == renamed[_port(1) if first is EVERY_VLAN else _port(2)], (order, parents)
+
+
+def test_no_default_trunk_no_vlan_one() -> None:
+    """...and it is that trunk which brings VLAN 1: with a native VLAN
+    stated, or a list that leaves VLAN 1 out, no target writes it."""
+    stated = ("switchport mode trunk", "switchport trunk native vlan 100")
+    left_out = ("switchport mode trunk", "switchport trunk allowed vlan 2-4094")
+    assert _has_a_default_trunk(_iosxe((_port(1), EVERY_VLAN)))
+    for lines in (stated, left_out, NAMES_100, NO_VLAN):
+        text = _iosxe((_port(1), lines))
+        assert not _has_a_default_trunk(text), lines
+        for target in TARGETS:
+            parents, _renamed = _parents(target, text)
+            assert 1 not in parents, (target, lines)
 
 
 @pytest.mark.parametrize("order", sorted(BOTH_ORDERS))

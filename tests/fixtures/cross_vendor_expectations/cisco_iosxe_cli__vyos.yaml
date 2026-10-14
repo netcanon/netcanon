@@ -306,16 +306,17 @@ per_field_expectation:
   "vlans[].id":
     disposition: unsupported
     reason: >
-      The campus VLAN database is dropped whole: 22 VLAN records across 4
+      The campus VLAN database is dropped whole: 23 VLAN records across 5
       cells (9 on `batfish_cisco_interface.txt`, 6 on
       `user_contrib_cat9300_iosxe1712.txt`, 4 on `kitchen_sink.txt`, 3 on
-      `ciscolive_brkops1104_evpn_leaf_iosxe1715.txt`) become 0 on all 4.
+      `ciscolive_brkops1104_evpn_leaf_iosxe1715.txt`, 1 on
+      `cml_saumur_iosxe1712_pvrstp.txt`) become 0 on all 5.
       `vyos` declares `/vlans/vlan/id` unsupported and gives the
       mechanism: "VyOS has no top-level VLAN database; 802.1Q VLANs are
       modelled as `vif <vid>` sub-interfaces (rendered as `ethN.<vid>`
       CanonicalInterfaces), which ARE supported."
-      This is a real loss and not an empty-corpus artifact — those 22
-      records carry a name on 6, tagged ports on 9, untagged ports on 6
+      This is a real loss and not an empty-corpus artifact — those 23
+      records carry a name on 6, tagged ports on 17, untagged ports on 8
       and VLAN-SVI IPv4 on 6.  `cisco_iosxe_cli` declares
       `/vlans/vlan/id` supported, so nothing on the source side explains
       it.
@@ -329,7 +330,7 @@ per_field_expectation:
   "vlans[].name":
     disposition: good
     note: >
-      6 of the 22 source VLAN records carry a name (`Servers`, `USERS`
+      6 of the 23 source VLAN records carry a name (`Servers`, `USERS`
       and siblings).  This key measures what happens to the VALUE when
       the record survives — and on this pair no VLAN record survives at
       all, so there is no surviving record on which the name could
@@ -342,7 +343,7 @@ per_field_expectation:
     disposition: good
     note: >
       Same accounting as `vlans[].name`: VLAN-SVI addressing is populated
-      on 6 of the 22 source records, and the loss of those records is
+      on 6 of the 23 source records, and the loss of those records is
       claimed once under `vlans[].id`.  Note separately that `vyos`
       declares `/vlans/vlan/ipv4/address/secondary-ip` and the two
       anycast virtual-gateway paths unsupported in their own right —
@@ -353,7 +354,7 @@ per_field_expectation:
   "vlans[].untagged_ports":
     disposition: good
     note: >
-      Populated on 6 of the 22 source records.  Same accounting: the
+      Populated on 8 of the 23 source records.  Same accounting: the
       record-level loss belongs to `vlans[].id`.  Related but distinct,
       and recorded on the interface side rather than here: `vyos`
       declares `/interfaces/interface/switchport-mode`, `/access-vlan`,
@@ -364,7 +365,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: good
     note: >
-      The most-populated VLAN sub-field on this corpus — 9 of the 22
+      The most-populated VLAN sub-field on this corpus — 17 of the 23
       source records carry trunk membership — and the same accounting
       applies: the records themselves vanish, and that is claimed once
       under `vlans[].id`.  VyOS expresses tagging as `vif <vid>`
@@ -377,7 +378,7 @@ per_field_expectation:
     note: >
       Doubly safe to record `good`: not only does the record-level loss
       belong to `vlans[].id`, but this sub-field is populated on 0 of the
-      22 source VLAN records, so it is never exercised on this pair at
+      23 source VLAN records, so it is never exercised on this pair at
       all.  `cisco_iosxe_cli` declares `/vlans/vlan/description` lossy on
       its own side, which would matter for a corpus that set one.
     references: [iosxecli-vyos-surface]

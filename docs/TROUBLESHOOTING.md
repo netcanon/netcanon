@@ -285,9 +285,11 @@ its own form for it.  What you may see:
   for either.  No line of the output takes the port out of VLAN 1.
   **Action:** decide what the port is to carry untagged, look at
   what the switch has it in, and write `untagged` or `no untagged`
-  for it.  (A source trunk that states no native VLAN at all is
-  written no `untagged` line either, and has no review line: see
-  the limits in [`CAPABILITIES.md`](CAPABILITIES.md).)
+  for it.  (A source trunk that has no untagged VLAN in the tree --
+  one that states no native VLAN where its platform has no default,
+  or where its list leaves the default VLAN out -- is written no
+  `untagged` line either, and has no review line: see the limits in
+  [`CAPABILITIES.md`](CAPABILITIES.md).)
 * **`! review: the source trunk allows no VLAN ...`** in an AOS-CX
   interface stanza, and no `vlan trunk` line.  AOS-CX has no form
   for a trunk that carries nothing: a trunk left with no allowed
@@ -334,6 +336,33 @@ it).  If that is not what you meant, keep one of its VLANs, or drop
 the port as well.  A trunk of every VLAN is not touched by a drop or
 a renumber: it is still every VLAN.
 
+When you drop the VLAN a trunk carries untagged:
+
+```
+vlan_rename: interface 'GigabitEthernet1/0/1' had native VLAN 1 which was dropped — native VLAN cleared; the port allows every VLAN, and an output that writes it as a trunk of every VLAN still allows VLAN 1
+```
+
+The trunk's native VLAN was dropped, so it has none and is written
+no native line.  (A Cisco, Arista or AOS-CX trunk that states no
+native VLAN has VLAN 1 for one where its list holds VLAN 1, so
+dropping VLAN 1 gives this warning for each such trunk.)  The
+words after the semicolon are
+there when the trunk's allowed list is every VLAN -- it stated no
+allowed line, or `all`.  Such a list is left as it stands, so an
+output that writes the port as a trunk of every VLAN still
+allows the VLAN you dropped.  And on IOS-XE, NX-OS, EOS
+and AOS-CX a trunk that is written no native line has native VLAN
+1: where the VLAN you dropped is VLAN 1, the trunk still carries it
+UNTAGGED there, by the target's own default (a limit, in
+[`CAPABILITIES.md`](CAPABILITIES.md)).  **Action:** if the trunk is
+not to carry that VLAN, give it an allowed list on the target that
+leaves the VLAN out (for IOS-XE, NX-OS and AOS-CX the vendors' own
+sentences say such a trunk carries no user traffic on that VLAN;
+for EOS what a trunk does with a native VLAN its list leaves out
+is not established, so check it on the switch).  Beside a list that names its VLANs the
+warning ends at `native VLAN cleared`: the VLAN is taken out of the
+list as well.
+
 When you give one VLAN the id of another:
 
 ```
@@ -347,9 +376,11 @@ would carry UNTAGGED what it carried tagged.  So its native VLAN is
 cleared and the VLAN stays tagged (the job is not failed by it).
 The same is done when the map gives VLAN 20 the id 10, and said as
 `the map merges VLAN 20, which the trunk carries tagged, into it`.
-The trunk then states no native VLAN, and the target's own default
-applies (VLAN 1 on IOS-XE, NX-OS, EOS and AOS-CX).  If untagged is
-what you meant, set the native VLAN on the target.  Before this
+The trunk then has no native VLAN, and is written no native line:
+on IOS-XE, NX-OS, EOS and AOS-CX the target's own default then
+applies, VLAN 1, where the trunk's list holds it (a limit, in
+[`CAPABILITIES.md`](CAPABILITIES.md)).  State on the target what
+the trunk is to carry untagged.  Before this
 the merged VLAN was written as the trunk's native VLAN, and the job
 said only that two VLANs were merged.
 

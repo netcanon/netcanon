@@ -668,12 +668,22 @@ _TOO_LOW = "fails: id: Input should be greater than or equal to 1"
 #: VLAN.  (On OS10, whose allowed line names tagged VLANs only, the
 #: access VLAN is in the trunk's list instead and the port is still
 #: untagged in it.)
+#:
+#: And every text of the four codecs whose trunk has a default native
+#: VLAN was changed on purpose where a trunk states no native VLAN and
+#: its list holds VLAN 1 (IOS-XE, NX-OS, EOS, AOS-CX; OS10 and Junos
+#: not at all).  Such a port has native VLAN 1 in the tree and is an
+#: UNTAGGED member of VLAN 1, where it was a tagged one -- and VLAN 1
+#: has a record with no name where the text declares none, the wide
+#: lists among them: a default is a single VLAN, as a native line is.
+#: Nothing else about any of those trees is other than it was
+#: (``TestADefaultNativeVlan`` below says one in full).
 BEFORE: dict[str, str] = {
-    "arista_eos: 128 ids": "8fa5a9d47dda",
-    "arista_eos: 129 ids": "b720c7196755",
-    "arista_eos: VLAN 1 declared under every id but 1": "20431e560098",
-    "arista_eos: a list cut with remove": "616eba7170a7",
-    "arista_eos: a list that goes on with add": "a3d03c5d2e91",
+    "arista_eos: 128 ids": "41ac02c43ffb",
+    "arista_eos: 129 ids": "ad426963f10b",
+    "arista_eos: VLAN 1 declared under every id but 1": "008624ef2c13",
+    "arista_eos: a list cut with remove": "a6dc5658da08",
+    "arista_eos: a list that goes on with add": "823d8ef3000c",
     "arista_eos: a narrow list that is an id past the last": _TOO_HIGH,
     "arista_eos: a wide list after a port that is fine": _TOO_HIGH,
     "arista_eos: a wide list and 4095": _TOO_HIGH,
@@ -682,18 +692,18 @@ BEFORE: dict[str, str] = {
     "arista_eos: a wide list and a number of 23 digits": _TOO_HIGH,
     "arista_eos: a wide list and an id past the last": _TOO_HIGH,
     "arista_eos: a wide list and an undeclared native VLAN inside it": "9c6674502d41",
-    "arista_eos: a wide list and then narrow ones, nothing declared": "4edd17fcf043",
+    "arista_eos: a wide list and then narrow ones, nothing declared": "72a1fa030835",
     "arista_eos: add that brings an id past the last": _TOO_HIGH,
-    "arista_eos: all, none and except": "94d12e57db8a",
-    "arista_eos: an access VLAN nobody declared beside a wide list": "4edac30770f9",
-    "arista_eos: every way of writing a list, on one switch": "e05f74670579",
-    "arista_eos: narrow lists and then a wide one, nothing declared": "f011febc416b",
+    "arista_eos: all, none and except": "b8edc291a0d7",
+    "arista_eos: an access VLAN nobody declared beside a wide list": "8e21f67dfff4",
+    "arista_eos: every way of writing a list, on one switch": "c748cd23554e",
+    "arista_eos: narrow lists and then a wide one, nothing declared": "ba972aae1a75",
     "arista_eos: one range twice": "870f7ab849bc",
     "arista_eos: two trunks of 2-4000, nothing declared": "95276150441a",
     "arista_eos: zero and then a wide list": _TOO_LOW,
-    "aruba_aoscx: 128 ids": "e518f7daa3fe",
-    "aruba_aoscx: 129 ids": "167d3681b456",
-    "aruba_aoscx: VLAN 1 declared under every id but 1": "844682cb2195",
+    "aruba_aoscx: 128 ids": "fedb1a6797ee",
+    "aruba_aoscx: 129 ids": "8ff40fd096a0",
+    "aruba_aoscx: VLAN 1 declared under every id but 1": "25cf9123979c",
     "aruba_aoscx: a narrow list that is an id past the last": _TOO_HIGH,
     "aruba_aoscx: a wide list after a port that is fine": _TOO_HIGH,
     "aruba_aoscx: a wide list and 4095": _TOO_HIGH,
@@ -702,18 +712,18 @@ BEFORE: dict[str, str] = {
     "aruba_aoscx: a wide list and a number of 23 digits": _TOO_HIGH,
     "aruba_aoscx: a wide list and an id past the last": _TOO_HIGH,
     "aruba_aoscx: a wide list and an undeclared native VLAN inside it": "a115a442ae2a",
-    "aruba_aoscx: a wide list and then narrow ones, nothing declared": "7ca763a2646f",
-    "aruba_aoscx: an access VLAN nobody declared beside a wide list": "42edc7abb9d7",
-    "aruba_aoscx: every way of writing a list, on one switch": "9debadc48543",
-    "aruba_aoscx: narrow lists and then a wide one, nothing declared": "24934079ba7c",
+    "aruba_aoscx: a wide list and then narrow ones, nothing declared": "91d23ba28359",
+    "aruba_aoscx: an access VLAN nobody declared beside a wide list": "e26b5041c061",
+    "aruba_aoscx: every way of writing a list, on one switch": "7fc0cd8dffe9",
+    "aruba_aoscx: narrow lists and then a wide one, nothing declared": "ccdeb7c8f1c9",
     "aruba_aoscx: one range twice": "3ea30c295a65",
     "aruba_aoscx: two trunks of 2-4000, nothing declared": "a0914c53fca5",
     "aruba_aoscx: zero and then a wide list": _TOO_LOW,
-    "cisco_iosxe_cli: 128 ids": "ab186c867a21",
-    "cisco_iosxe_cli: 129 ids": "f4ac4557dce5",
-    "cisco_iosxe_cli: VLAN 1 declared under every id but 1": "381a0c860028",
-    "cisco_iosxe_cli: a list cut with remove": "a719840aa726",
-    "cisco_iosxe_cli: a list that goes on with add": "0fb3c7f04331",
+    "cisco_iosxe_cli: 128 ids": "c3b346a588ce",
+    "cisco_iosxe_cli: 129 ids": "cfa411d31c5c",
+    "cisco_iosxe_cli: VLAN 1 declared under every id but 1": "96af86704781",
+    "cisco_iosxe_cli: a list cut with remove": "85df43fa2b46",
+    "cisco_iosxe_cli: a list that goes on with add": "650217b3e3e6",
     "cisco_iosxe_cli: a narrow list that is an id past the last": _TOO_HIGH,
     "cisco_iosxe_cli: a wide list after a port that is fine": _TOO_HIGH,
     "cisco_iosxe_cli: a wide list and 4095": _TOO_HIGH,
@@ -722,20 +732,20 @@ BEFORE: dict[str, str] = {
     "cisco_iosxe_cli: a wide list and a number of 23 digits": _TOO_HIGH,
     "cisco_iosxe_cli: a wide list and an id past the last": _TOO_HIGH,
     "cisco_iosxe_cli: a wide list and an undeclared native VLAN inside it": "53e1daa17ffe",
-    "cisco_iosxe_cli: a wide list and then narrow ones, nothing declared": "bd49040c5c54",
+    "cisco_iosxe_cli: a wide list and then narrow ones, nothing declared": "0c0137371015",
     "cisco_iosxe_cli: add that brings an id past the last": _TOO_HIGH,
-    "cisco_iosxe_cli: all, none and except": "9897324c91a9",
-    "cisco_iosxe_cli: an access VLAN nobody declared beside a wide list": "9f1da1eac996",
-    "cisco_iosxe_cli: every way of writing a list, on one switch": "e8a9c4d4268e",
-    "cisco_iosxe_cli: narrow lists and then a wide one, nothing declared": "0b6405f75663",
+    "cisco_iosxe_cli: all, none and except": "4cbe41d72760",
+    "cisco_iosxe_cli: an access VLAN nobody declared beside a wide list": "4976d4a992e4",
+    "cisco_iosxe_cli: every way of writing a list, on one switch": "bcef6218de63",
+    "cisco_iosxe_cli: narrow lists and then a wide one, nothing declared": "68952f454893",
     "cisco_iosxe_cli: one range twice": "10711d3b14d2",
     "cisco_iosxe_cli: two trunks of 2-4000, nothing declared": "c8d9c8e86a78",
     "cisco_iosxe_cli: zero and then a wide list": _TOO_LOW,
-    "cisco_nxos: 128 ids": "468d7e2b21a3",
-    "cisco_nxos: 129 ids": "c1a5264d97fd",
-    "cisco_nxos: VLAN 1 declared under every id but 1": "d0e87699e00c",
-    "cisco_nxos: a list cut with remove": "62a4fb94bb2d",
-    "cisco_nxos: a list that goes on with add": "b44bf1206bfc",
+    "cisco_nxos: 128 ids": "613589687578",
+    "cisco_nxos: 129 ids": "5f402bb3bcb8",
+    "cisco_nxos: VLAN 1 declared under every id but 1": "dea7856b584e",
+    "cisco_nxos: a list cut with remove": "cc24da4397f3",
+    "cisco_nxos: a list that goes on with add": "1d74e69a4bb9",
     "cisco_nxos: a narrow list that is an id past the last": _TOO_HIGH,
     "cisco_nxos: a wide list after a port that is fine": _TOO_HIGH,
     "cisco_nxos: a wide list and 4095": _TOO_HIGH,
@@ -744,13 +754,13 @@ BEFORE: dict[str, str] = {
     "cisco_nxos: a wide list and a number of 23 digits": _TOO_HIGH,
     "cisco_nxos: a wide list and an id past the last": _TOO_HIGH,
     "cisco_nxos: a wide list and an undeclared native VLAN inside it": "53695a139d0d",
-    "cisco_nxos: a wide list and then narrow ones, nothing declared": "4d593ed6a522",
+    "cisco_nxos: a wide list and then narrow ones, nothing declared": "efa2bdc8c72b",
     "cisco_nxos: add that brings an id past the last": _TOO_HIGH,
-    "cisco_nxos: all, none and except": "c3ce77e32b34",
-    "cisco_nxos: an access VLAN nobody declared beside a wide list": "456aab34a596",
-    "cisco_nxos: every VLAN declared in one line": "02d79f94e6e3",
-    "cisco_nxos: every way of writing a list, on one switch": "25ec53dd04d4",
-    "cisco_nxos: narrow lists and then a wide one, nothing declared": "5eacaaba968f",
+    "cisco_nxos: all, none and except": "61c3fe6a5292",
+    "cisco_nxos: an access VLAN nobody declared beside a wide list": "61d79337a951",
+    "cisco_nxos: every VLAN declared in one line": "009a3b813c31",
+    "cisco_nxos: every way of writing a list, on one switch": "7454ebbca130",
+    "cisco_nxos: narrow lists and then a wide one, nothing declared": "0863a603ad11",
     "cisco_nxos: one range twice": "0ef9fe5ea6fe",
     "cisco_nxos: two trunks of 2-4000, nothing declared": "fc265cc28dd9",
     "cisco_nxos: zero and then a wide list": _TOO_LOW,
@@ -839,6 +849,49 @@ class TestTheSameReadingOfAText:
         assert [vlan.untagged_ports for vlan in tree.vlans if vlan.id == 999] == [["ethernet1/1/1"]]
         trunk = next(iface for iface in tree.interfaces if iface.name == "ethernet1/1/1")
         assert trunk.trunk_native_vlan == 999 and trunk.trunk_allowed_vlans == [*range(1, 501), 999]
+
+
+class TestADefaultNativeVlan:
+    """A trunk that states no native VLAN, on a platform whose trunk
+    then has native VLAN 1: the readings that changed, in full."""
+
+    def test_a_wide_list_makes_vlan_one_and_no_other(self) -> None:
+        """``1-129`` is too wide to declare its VLANs, and still does
+        not: the one record it makes is VLAN 1, which the trunk
+        carries untagged by default.  A list as wide that leaves
+        VLAN 1 out makes none."""
+        port = "GigabitEthernet1/0/1"
+        tree = get_codec("cisco_iosxe_cli").parse(_iosxe([5], [_trunk("1-129")]))
+        assert [(vlan.id, vlan.name, vlan.tagged_ports, vlan.untagged_ports) for vlan in tree.vlans] == [
+            (5, "V5", [port], []), (1, "", [], [port]),
+        ]
+        assert tree.interfaces[0].trunk_native_vlan == 1
+        tree = get_codec("cisco_iosxe_cli").parse(_iosxe([5], [_trunk("2-130")]))
+        assert [(vlan.id, vlan.tagged_ports, vlan.untagged_ports) for vlan in tree.vlans] == [(5, [port], [])]
+        assert tree.interfaces[0].trunk_native_vlan is None
+
+    def test_a_declared_vlan_one_changes_hands(self) -> None:
+        """VLAN 1 declared, a trunk of ``2-4094`` and a trunk of every
+        id: the second is an untagged member of VLAN 1, where it was a
+        tagged one, and the first is no member of it."""
+        tree = get_codec("cisco_nxos").parse(_nxos([1, 10], [_trunk("2-4094"), _trunk("1-4094")]))
+        assert [(vlan.id, vlan.tagged_ports, vlan.untagged_ports) for vlan in tree.vlans] == [
+            (1, [], ["Ethernet1/2"]), (10, ["Ethernet1/1", "Ethernet1/2"], []),
+        ]
+        assert [port.trunk_native_vlan for port in tree.interfaces] == [None, 1]
+
+    @pytest.mark.parametrize("codec", ["dell_os10", "juniper_junos"])
+    def test_where_there_is_no_default_nothing_moves(self, codec: str) -> None:
+        """An OS10 trunk's default VLAN is its switch's, which no trunk
+        states, and a Junos trunk has none: neither parser fills one
+        in, for any list."""
+        for title, (source, text) in TEXTS.items():
+            if source != codec or BEFORE[title].startswith("fails: "):
+                continue
+            tree = get_codec(codec).parse(text)
+            stated = "native" in text or "access vlan" in text
+            if not stated:
+                assert not [port.name for port in tree.interfaces if port.trunk_native_vlan is not None], title
 
 
 # ---------------------------------------------------------------------------

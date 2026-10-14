@@ -80,6 +80,7 @@ from .._helpers import (
     _prefix_to_mask,
     charge_id_lines,
     switchport_trunk_allowed_value,
+    switchport_trunk_native_value,
     trunk_list_says,
 )
 from ..base import RenderError
@@ -480,11 +481,20 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             body.append(
                 f" switchport voice vlan {iface.voice_vlan}"
             )
-        if iface.trunk_native_vlan is not None:
-            body.append(
-                f" switchport trunk native vlan "
-                f"{iface.trunk_native_vlan}"
+        # No native line for VLAN 1 on a TRUNK whose list holds it:
+        # that is the platform's default, and no real capture prints
+        # the line.  A native VLAN the list leaves out is written
+        # whatever its id (stated, and not carried).  On a port in
+        # another mode the line is written as it stands: the parser
+        # puts no default for a port that does not say it is a
+        # trunk, so a line left out there would not come back.
+        native_vlan = iface.trunk_native_vlan
+        if iface.switchport_mode == "trunk":
+            native_vlan = switchport_trunk_native_value(
+                "cisco_iosxe_cli", iface.trunk_allowed_vlans, native_vlan,
             )
+        if native_vlan is not None:
+            body.append(f" switchport trunk native vlan {native_vlan}")
         if iface.switchport_mode == "trunk":
             # On a trunk the list means what it says.  No VLAN is
             # ``none``.  Every VLAN is no line at all: it is the

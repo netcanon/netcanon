@@ -75,6 +75,8 @@ from .._helpers import (
     _parse_vlan_list,
     address_key,
     sole_vlan_id,
+    tags_every_native_vlan,
+    tags_its_native_vlan,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -756,8 +758,12 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     """
     # What each interface states about its trunk, by the name its
     # header writes: a stanza can be met twice, and the list is the
-    # interface's.
+    # interface's.  So is its native VLAN, and the words that say a
+    # native VLAN is sent tagged: ``vlan dot1q tag native`` for every
+    # trunk, ``switchport trunk native vlan tag`` for one.
     trunks = TrunksByName("cisco_nxos")
+    if tags_every_native_vlan(raw):
+        trunks.native_is_tagged()
 
     def _open(m: re.Match[str]) -> dict | None:
         # VTEP (``interface nve1``) is a VXLAN config container, not a
@@ -931,6 +937,10 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
         if tnm:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
             current["trunk_native"] = int(tnm.group(1))
+            trunks.native_line(current["trunk_key"])
+            return
+        if tags_its_native_vlan(line):
+            trunks.native_is_tagged(current["trunk_key"])
             return
 
         cgm = _CHANNEL_GROUP_RE.match(line)
@@ -960,6 +970,11 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     # so.  An empty list is a trunk that allows NO VLAN (``switchport
     # trunk allowed vlan none``, or a ``remove`` that left nothing).
     # A port that is not a trunk and states no list has none to keep.
+    # And a trunk that states no native VLAN has the platform's, VLAN
+    # 1, where its list holds it: given after the list, and before
+    # the ports are put on the VLANs' member lists.  The default is
+    # a trunk's as well: a port taken for a trunk from a trunk line
+    # alone, with no ``switchport mode trunk``, is given none.
     trunks.settle()
     return interfaces
 

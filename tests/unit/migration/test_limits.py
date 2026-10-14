@@ -561,7 +561,11 @@ class TestEveryExpanderCountsFirst:
     def test_a_product_is_counted_before_one_stamp(self) -> None:
         """Forty trunks that allow every VLAN and sixty VLANs: no
         range anywhere in the text.  The product is refused before
-        the first membership is stamped: no VLAN has a port."""
+        the first membership is stamped: no VLAN has a port.  (Sixty-
+        one VLANs, counted: each trunk states no native VLAN, which
+        on NX-OS is native VLAN 1, so VLAN 1 has a record beside the
+        sixty, and each trunk's untagged place in it is one stamp
+        more.)"""
         text = nxos_trunks(40, "all", 60)
         seen: list[int] = []
         real = L._Meter.charge
@@ -575,9 +579,9 @@ class TestEveryExpanderCountsFirst:
         with pytest.MonkeyPatch.context() as patched:
             patched.setattr(L._Meter, "charge", watching)
             exc = _refused("cisco_nxos", text, limits)
-        assert (exc.kind, exc.asked, exc.exact) == ("memberships", 40 * 60, False)
-        assert "(at: 40 trunks that allow every VLAN x 60 VLANs)" in str(exc)
-        assert seen == [2_400], "the product was not counted whole, once"
+        assert (exc.kind, exc.asked, exc.exact) == ("memberships", 40 * 61 + 40, False)
+        assert "(at: 40 trunks that allow every VLAN x 61 VLANs + 40 listed)" in str(exc)
+        assert seen == [2_480], "the product was not counted whole, once"
 
     def test_the_projection_counts_what_it_stamps(self) -> None:
         """What is charged is what is then stamped, for a tree with
@@ -1316,8 +1320,11 @@ _ODD_IDS = ",".join(str(vid) for vid in range(1, 4094, 2))
 EACH_LIMIT: dict[str, tuple[str, str, Callable[[], str], Callable[[], str], int]] = {
     "vlan_ids": ("arista_eos", "cisco_nxos", lambda: eos_trunks(256, "all"), lambda: eos_trunks(257, "all"),
                  20_000_000),
-    "memberships": ("cisco_nxos", "aruba_aoss", lambda: nxos_trunks(125, "all", 400),
-                    lambda: nxos_trunks(126, "all", 400), 12_000_000),
+    # (A trunk is on the 400 VLANs and on VLAN 1, its native VLAN by
+    # default, which is counted as a VLAN of its list and once more
+    # as the untagged one: 402 a trunk.)
+    "memberships": ("cisco_nxos", "aruba_aoss", lambda: nxos_trunks(124, "all", 400),
+                    lambda: nxos_trunks(125, "all", 400), 12_000_000),
     "ports": ("aruba_aoss", "aruba_aoss", lambda: aoss_ranges(2), lambda: aoss_ranges(3), 2_000_000),
     "interfaces": ("cisco_iosxe_cli", "juniper_junos", lambda: iosxe_stanzas(2_500), lambda: iosxe_stanzas(2_501),
                    20_000_000),
@@ -1428,20 +1435,27 @@ class TestTheTextsThatWereMeasured:
         """118 KB with no range in it; a million memberships.  That
         is the standard limit exactly, and is read; one trunk more is
         refused, and so is the text itself under the demo's limits --
-        before one membership is stamped."""
-        text = nxos_trunks(1000, "all", 1000)
+        before one membership is stamped.
+
+        The thousand VLANs are 998 declared and VLAN 1: a trunk that
+        states no native VLAN has native VLAN 1 on NX-OS, and carries
+        it untagged.  Its place there is counted as a VLAN of its
+        list and once more as the untagged one, which is what makes
+        the million."""
+        text = nxos_trunks(1000, "all", 998)
         assert len(text) < 130_000
         with L.limits_scope("standard"):
             tree = get_codec("cisco_nxos").parse(text)
-        assert sum(len(vlan.tagged_ports) for vlan in tree.vlans) == 1_000_000
+        assert sum(len(vlan.tagged_ports) for vlan in tree.vlans) == 998_000
+        assert [len(vlan.untagged_ports) for vlan in tree.vlans if vlan.id == 1] == [1_000]
         del tree
-        over = _refused("cisco_nxos", nxos_trunks(1001, "all", 1000), "standard")
+        over = _refused("cisco_nxos", nxos_trunks(1001, "all", 998), "standard")
         assert (over.kind, over.asked, over.exact) == ("memberships", 1_001_000, False)
         caught: list[L.LimitExceeded] = []
         tight = replace(L.STANDARD, name="tight", memberships=L.SMALL.memberships)
         held = _peak(lambda: caught.append(_refused("cisco_nxos", text, tight)))
         assert (caught[0].kind, caught[0].asked, caught[0].exact) == ("memberships", 1_000_000, False)
-        assert "(at: 1,000 trunks that allow every VLAN x 1,000 VLANs)" in str(caught[0])
+        assert "(at: 1,000 trunks that allow every VLAN x 999 VLANs + 1,000 listed)" in str(caught[0])
         # The lists of ids the ports state are 33 MB; a million memberships more are another 45.
         assert held < 50_000_000, f"{held:,} bytes were held on the way to the refusal"
         # The demo's limits stop sooner still: at the 257th port that says "all".

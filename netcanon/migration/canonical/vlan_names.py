@@ -406,10 +406,22 @@ def translate_vlan_ids(  # noqa: C901
         )
         if iface.trunk_native_vlan is not None:
             if iface.trunk_native_vlan in drops:
+                # A list of every id is left as it stands (below),
+                # so the port still allows the id that was dropped.
+                # "Cleared" alone reads as "no longer carried".  The
+                # pass does not know the target, so the words say
+                # what holds for any output that writes the port as
+                # a trunk of every VLAN, and no more.
+                still_held = (
+                    f"; the port allows every VLAN, and an output that "
+                    f"writes it as a trunk of every VLAN still allows "
+                    f"VLAN {iface.trunk_native_vlan}"
+                    if is_every_vlan(iface.trunk_allowed_vlans) else ""
+                )
                 result.warnings.append(
                     f"vlan_rename: interface {iface.name!r} had native VLAN "
                     f"{iface.trunk_native_vlan} which was dropped — "
-                    f"native VLAN cleared"
+                    f"native VLAN cleared{still_held}"
                 )
                 iface.trunk_native_vlan = None
             elif iface.trunk_native_vlan in renames:

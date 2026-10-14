@@ -254,7 +254,7 @@ per_field_expectation:
   "vlans[].id":
     disposition: good
     note: >
-      Preserved on all 4 cells that populate VLANs.  The render emits a
+      Preserved on all 5 cells that populate VLANs.  The render emits a
       `vlan <id>` stanza per record, so the VLAN database itself arrives
       intact — it just arrives with no members (see `vlans[].untagged_ports`).
     references: [iosxecli-aoscx-surface]
@@ -284,8 +284,9 @@ per_field_expectation:
   "vlans[].untagged_ports":
     disposition: lossy
     reason: >
-      Drifts to `[]` on all 4 cells that populate VLANs, and the aggregate is
-      stark: 95 port-to-VLAN bindings in the source corpus, 0 on the target.
+      Drifts to `[]` on all 5 cells that populate VLANs, and the aggregate is
+      stark: 112 port-to-VLAN bindings in the source corpus, 37 of them
+      untagged, and 0 on the target.
       Cause is the name-shape gate — `aruba_aoscx/render.py` emits the L2
       block (`no routing` + `vlan access` / `vlan trunk`) only when
       `classify_port_name(name).kind` is `physical` or `lag`, and every

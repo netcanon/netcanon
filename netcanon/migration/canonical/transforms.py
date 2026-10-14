@@ -189,9 +189,12 @@ def access_and_native_vlan_ids(intent: CanonicalIntent) -> set[int]:
     """VIDs a per-port switchport config *unambiguously* declares as real.
 
     Returns every ``access_vlan`` and ``trunk_native_vlan`` referenced by
-    any interface.  Both are single VIDs an operator explicitly bound a
-    port to, so — unlike a wide ``trunk_allowed_vlans`` range that can span
-    thousands of VIDs — they are never phantom-range inflation.
+    any interface.  Both are single VIDs a port is bound to -- by a line
+    of the config, or, for a native VLAN, by the platform's default for
+    a trunk that states none, which its parser has put
+    (``TRUNK_THAT_STATES_NO_NATIVE`` in ``codecs/_helpers.py``) -- so,
+    unlike a wide ``trunk_allowed_vlans`` range that can span thousands
+    of VIDs, they are never phantom-range inflation.
 
     A VLAN that exists only because a port is an access or native member
     of it — with no ``vlan <N>`` stanza and no SVI (the exact shape of a
@@ -269,7 +272,9 @@ def switchport_declared_vlan_ids(intent: CanonicalIntent) -> set[int]:
     The anti-inflation rationale the old rule rested on is still honoured
     — it just applies to *wide* lists, which is the case it was written
     for.  A ``switchport trunk allowed vlan 1-4094`` still synthesises
-    nothing.
+    nothing by its ids.  (One VLAN can come with such a trunk all the
+    same, through :func:`access_and_native_vlan_ids`: its native VLAN,
+    which on four platforms is VLAN 1 when the trunk states none.)
 
     Note this reads the EXPANDED ``trunk_allowed_vlans`` list, so it needs
     no provenance about how the operator wrote it; ``701-710`` and

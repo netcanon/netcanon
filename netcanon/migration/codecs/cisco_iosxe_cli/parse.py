@@ -74,6 +74,8 @@ from .._helpers import (
     address_key,
     keyword_stanza_rows,
     spaced_port_name,
+    tags_every_native_vlan,
+    tags_its_native_vlan,
     without_keyword_stanzas,
 )
 from .._input_shape import detect_input_shape
@@ -938,8 +940,12 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     """Extract interface stanzas from IOS config text."""
     # What each interface states about its trunk, by the name its
     # header writes: a stanza can be met twice, and the list is the
-    # interface's.
+    # interface's.  So is its native VLAN, and the words that say a
+    # native VLAN is sent tagged: ``vlan dot1q tag native`` for every
+    # trunk, ``switchport trunk native vlan tag`` for one.
     trunks = TrunksByName("cisco_iosxe_cli")
+    if tags_every_native_vlan(raw):
+        trunks.native_is_tagged()
 
     def _open(m: re.Match[str]) -> dict[str, Any] | None:
         iface_name = _header_name(m)
@@ -990,6 +996,19 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             # NX-OS / IOS-XE SD-Access mirror semantic).
             "fabric_forwarding_anycast": False,
         }
+
+    def _native_line(line: str, current: dict[str, Any]) -> bool:
+        """``switchport trunk native vlan N``, or the words that say
+        the native VLAN is sent tagged.  ``True`` if *line* was one."""
+        nm = _SWITCHPORT_TRUNK_NATIVE_RE.match(line)
+        if nm:
+            current["trunk_native"] = int(nm.group(1))
+            trunks.native_line(current["trunk_key"])
+            return True
+        if tags_its_native_vlan(line):
+            trunks.native_is_tagged(current["trunk_key"])
+            return True
+        return False
 
     def _on_line(line: str, current: dict[str, Any]) -> None:
         dm = _DESC_RE.match(line)
@@ -1133,9 +1152,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             )
             return
 
-        nm = _SWITCHPORT_TRUNK_NATIVE_RE.match(line)
-        if nm:
-            current["trunk_native"] = int(nm.group(1))
+        if _native_line(line, current):
             return
 
         cgm = _CHANNEL_GROUP_RE.match(line)
@@ -1210,6 +1227,10 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     # so.  An empty list is a trunk that allows NO VLAN (``switchport
     # trunk allowed vlan none``, or a ``remove`` that left nothing).
     # A port that is not a trunk and states no list has none to keep.
+    # And a trunk that states no native VLAN has the platform's, VLAN
+    # 1, where its list holds it: given after the list, and before
+    # the ports are put on the VLANs' member lists.  A port in
+    # another mode is given none, whatever trunk lines it keeps.
     trunks.settle()
     return interfaces
 

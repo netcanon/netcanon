@@ -69,6 +69,11 @@ def test_parse_phantom_vlan_guard_drops_wide_trunk_allowed_range() -> None:
     The per-port ``trunk_allowed_vlans`` attribute is still carried
     on the interface — the L2 attribute round-trips through canonical
     unchanged; only the synthesised top-level VLAN entries are pruned.
+
+    One record is no phantom of the range: VLAN 1.  The trunk states
+    no native VLAN, which on EOS is native VLAN 1, and its list holds
+    VLAN 1, so the port carries it untagged and is its untagged
+    member.  A range that leaves VLAN 1 out makes no record at all.
     """
     cfg = (
         "hostname sw1\n"
@@ -77,11 +82,15 @@ def test_parse_phantom_vlan_guard_drops_wide_trunk_allowed_range() -> None:
         "   switchport trunk allowed vlan 1-4094\n"
     )
     intent = parse_intent(cfg)
-    assert intent.vlans == [], (
-        "an allow-everything range must synthesise no VLAN records"
-    )
+    assert [(v.id, v.name, v.tagged_ports, v.untagged_ports) for v in intent.vlans] == [
+        (1, "", [], ["Ethernet3"]),
+    ], "an allow-everything range must synthesise no VLAN record but its native VLAN's"
     iface = next(i for i in intent.interfaces if i.name == "Ethernet3")
     assert iface.trunk_allowed_vlans == list(range(1, 4095))
+    assert iface.trunk_native_vlan == 1
+    intent = parse_intent(cfg.replace("vlan 1-4094", "vlan 2-4094"))
+    assert intent.vlans == [], "a range that leaves VLAN 1 out must synthesise no VLAN records"
+    assert intent.interfaces[0].trunk_native_vlan is None
 
 
 def test_parse_keeps_a_specific_trunk_allowed_vid() -> None:

@@ -733,12 +733,19 @@ What the texts measured above do now:
   `standard` (32 MB of ids); written id by id it is 19 MB of output, which
   is counted from the lengths of the lists before a character of it is
   written.  Under `small` it is refused at the 263rd trunk.
-* 1,000 trunks that allow every VLAN and 1,000 declared VLANs (118 KB): a
+* 1,000 trunks that allow every VLAN and 998 declared VLANs (118 KB): a
   million memberships, which is the `standard` limit exactly.  One trunk
   more is refused before the first membership is stamped: the product is
   known as soon as the two counts are.  (A trunk allows every VLAN by
   saying `all`, or, where a trunk carries every VLAN by default, by
-  stating no allowed line at all.)
+  stating no allowed line at all.  Such a trunk is on VLAN 1 as well,
+  whether or not the config declares it: where it states no native VLAN
+  it has its platform's default, which is VLAN 1 on IOS-XE, NX-OS, EOS
+  and AOS-CX (the vendors' sentences are in
+  `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md`),
+  and it carries that VLAN untagged.  That is a VLAN beside the 998, and
+  the port's untagged place in it is counted beside the tagged one it
+  replaces.)
 * 10,000 IOS-XE trunks that state no allowed list (0.6 MB): each carries
   every VLAN there, and the tree says so with the 4,094 ids, some 35 KB a
   trunk.  It is counted as the word `all` is, before its list is made --
