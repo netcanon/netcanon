@@ -161,10 +161,11 @@ per_field_expectation:
     reason: >
       FortiOS has no native VLAN on a routed port; the fortigate_cli matrix
       declares `/interfaces/interface/trunk-native-vlan` unsupported and the
-      render drops it.  Only two cells carry the field and both are
-      list-count-drift cells, so the corpus never isolates its behaviour — the
-      declaration, not a measurement, is what stands behind this row.  Untagged
-      traffic on a migrated trunk will need an explicit child interface.
+      render drops it.  Three cells carry the field.  Two are
+      list-count-drift cells; the third isolates it: `1` -> `null` on the three
+      trunks of every VLAN of the akarneliuk leaf, which state no native VLAN
+      and have NX-OS's default.  Untagged traffic on a migrated trunk will
+      need an explicit child interface.
     references: [nxos-fortigate-surface]
 
   "interfaces[].voice_vlan":

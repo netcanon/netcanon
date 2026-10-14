@@ -35,8 +35,14 @@ pytestmark = pytest.mark.unit
 
 def test_cisco_trunk_allowed_does_not_inflate_vlans() -> None:
     """``switchport trunk allowed vlan 1-4094`` with only ONE explicit
-    ``vlan <N> / name X`` stanza must produce ``len(tree.vlans) == 1``
-    (just the explicit one), not 4094 phantom synthesised records.
+    ``vlan <N> / name X`` stanza must produce the explicit one and
+    VLAN 1, not 4094 phantom synthesised records.
+
+    VLAN 1 is no phantom of the range.  The trunk states no native
+    VLAN, which on IOS-XE is native VLAN 1, and its list holds VLAN
+    1: the port carries it untagged, and a single VLAN a port is
+    bound to has a record, as an access VLAN and a stated native VLAN
+    have.  A range that leaves VLAN 1 out makes no such record.
 
     The per-port ``trunk_allowed_vlans`` attribute carries the full
     1-4094 list as parsed — that's the L2 wire form and must
@@ -56,15 +62,22 @@ def test_cisco_trunk_allowed_does_not_inflate_vlans() -> None:
         "end\n"
     )
     tree = parse_intent(cfg)
-    # Only the explicit ``vlan 10`` stanza survives.
-    assert len(tree.vlans) == 1
-    assert tree.vlans[0].id == 10
-    assert tree.vlans[0].name == "FOO"
+    # The explicit ``vlan 10`` stanza survives, and VLAN 1 has a
+    # record with no name and the trunk as its untagged port.
+    assert [(v.id, v.name, v.tagged_ports, v.untagged_ports) for v in tree.vlans] == [
+        (10, "FOO", ["GigabitEthernet0/0/0"], []),
+        (1, "", [], ["GigabitEthernet0/0/0"]),
+    ]
     # Per-port attribute carries the full range as parsed.
     iface = next(
         i for i in tree.interfaces if i.name == "GigabitEthernet0/0/0"
     )
     assert iface.trunk_allowed_vlans == list(range(1, 4095))
+    assert iface.trunk_native_vlan == 1
+    # ``2-4094`` leaves VLAN 1 out: the explicit stanza alone.
+    tree = parse_intent(cfg.replace("vlan 1-4094", "vlan 2-4094"))
+    assert [(v.id, v.name) for v in tree.vlans] == [(10, "FOO")]
+    assert tree.interfaces[0].trunk_native_vlan is None
 
 
 def test_cisco_trunk_allowed_with_explicit_subset_keeps_explicit() -> None:

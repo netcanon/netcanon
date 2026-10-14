@@ -233,6 +233,24 @@ def _native(says: str) -> int | None:
     return 999 if "native 999" in says else None
 
 
+#: The platforms whose trunk has native VLAN 1 when its text states
+#: none (the vendor reference has each vendor's sentence).  By hand:
+#: the codecs read their own table.
+_NATIVE_ONE_UNSTATED = frozenset({"arista_eos", "aruba_aoscx", "cisco_iosxe_cli", "cisco_nxos"})
+
+
+def _native_meant(source: str, says: str) -> int | None:
+    """The native VLAN of the source's trunk: the one its text states
+    (VLAN 999 in some statements; AOS-CX's "nothing" is `vlan trunk
+    native 1`), and otherwise the platform's own -- VLAN 1 on four
+    platforms, where the trunk's list holds it, which among these
+    statements is where the list is every VLAN."""
+    stated = _native(says) or (1 if "native 1" in SOURCES[(source, says)] else None)
+    if stated is not None:
+        return stated
+    return 1 if source in _NATIVE_ONE_UNSTATED and _means(source, says) == ALL else None
+
+
 # ``WRITES_A_TRUNKS_VLANS``: the targets whose output says which VLANs a
 # trunk carries.  The rest (routers, firewalls, the NETCONF stub) write
 # none, for any list.  The set is the one of the module it is imported
@@ -546,7 +564,7 @@ def test_each_source_parses_as_it_is_meant() -> None:
         listed = set(trunk.trunk_allowed_vlans)
         means = {ALL: EVERY_ID, NONE: set(), ONLY_UNTAGGED: {999}}[_means(source, says)]
         assert listed == means, (source, says, len(listed))
-        assert trunk.trunk_native_vlan == (1 if "native 1" in text else _native(says)), (source, says)
+        assert trunk.trunk_native_vlan == _native_meant(source, says), (source, says)
 
 
 def test_the_statements_reach_both_meanings() -> None:
@@ -631,11 +649,13 @@ def test_os10_says_so_beside_every_vlan(source: str, says: str) -> None:
     """OS10 cannot be told "every VLAN".  The range it is given is
     written under a line that tells the operator why it will not do.
     It is every id but the trunk's untagged VLAN, which stands on the
-    access line: no VLAN is on both."""
+    access line: no VLAN is on both.  (It has one where the source
+    states one, or has VLAN 1 by its platform's default -- a trunk of
+    every VLAN holds VLAN 1.  A Junos trunk of every VLAN has none.)"""
     trunk = _the_trunk("dell_os10", _job(source, says, "dell_os10").rendered)
     (at,) = [n for n, line in enumerate(trunk) if line.startswith(_ALLOWED + " ")]
     untagged = _untagged_stated("dell_os10", trunk)
-    assert untagged == (1 if "native 1" in SOURCES[(source, says)] else _native(says)), trunk
+    assert untagged == _native_meant(source, says), trunk
     assert _ids(trunk[at].removeprefix(_ALLOWED + " ")) == EVERY_ID - {untagged}, trunk[at][:60]
     review = trunk[at - 1]
     assert review.startswith("! review: "), trunk

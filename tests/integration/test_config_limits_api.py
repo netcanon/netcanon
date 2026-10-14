@@ -217,12 +217,14 @@ class TestTheServersSettingDecides:
         self, client: TestClient, small_client: TestClient,
     ) -> None:
         """240 trunks that allow every VLAN and 500 VLANs: 120,000
-        memberships, where the demo's limit is 50,000."""
+        memberships and more, where the demo's limit is 50,000.  (And
+        more: each trunk carries VLAN 1 untagged as well, its native
+        VLAN where it states none, which is a VLAN beside the 500.)"""
         body = {"source": "cisco_nxos", "target": "aruba_aoss", "raw_text": trunk_all(240, 500)}
         assert client.post("/api/v1/migration/plan", json=body).json()["refusal"] is None
         job = small_client.post("/api/v1/migration/plan", json=body).json()
         _refused(job, "memberships", "small")
-        assert "(at: 240 trunks that allow every VLAN x 500 VLANs)" in job["error"]
+        assert "(at: 240 trunks that allow every VLAN x 501 VLANs + 240 listed)" in job["error"]
 
     def test_the_demo_limit_names_no_setting(self, small_client: TestClient) -> None:
         """A visitor to the public demo cannot set an environment
@@ -1637,7 +1639,7 @@ class TestAnAnswerNobodyReads:
     #: reports each membership: nine megabytes of answer, which no
     #: socket buffer of a loopback connection takes whole.
     LARGE = json.dumps({"source": "cisco_nxos", "target": "opnsense", "raw_text": trunk_all(100, 480)}).encode()
-    LENGTH = 9_138_696
+    LENGTH = 9_169_771
 
     @staticmethod
     def _client_that_does_not_read(port: int) -> socket.socket:
@@ -1683,7 +1685,7 @@ class TestAnAnswerNobodyReads:
         assert len(lines) == 1, lines
         said = re.fullmatch(
             r"an answer from /api/v1/migration/plan had not gone out when its request's 4 seconds \(small "
-            r"limits\) were up, and was abandoned: (\d+) of 9,138,696 bytes had been handed to the client; the "
+            r"limits\) were up, and was abandoned: (\d+) of 9,169,771 bytes had been handed to the client; the "
             r"rest was let go and the connection closed", lines[0],
         )
         assert said, lines[0]

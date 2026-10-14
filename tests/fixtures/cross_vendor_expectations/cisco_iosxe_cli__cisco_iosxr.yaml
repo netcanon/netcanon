@@ -247,17 +247,19 @@ per_field_expectation:
   "vlans[].id":
     disposition: unsupported
     reason: >
-      The VLAN database is emptied.  Four of the five drifting cells lose the
+      The VLAN database is emptied.  Five of the six drifting cells lose the
       whole list and the render contains no `vlan` line at all:
       `batfish_cisco_interface.txt` 9 -> 0, `user_contrib_cat9300` 6 -> 0,
-      `kitchen_sink` 4 -> 0, `ciscolive_brkops1104_evpn_leaf` 3 -> 0.  This is
+      `kitchen_sink` 4 -> 0, `ciscolive_brkops1104_evpn_leaf` 3 -> 0,
+      `cml_saumur_iosxe1712_pvrstp` 1 -> 0 (its one record is VLAN 1, which
+      its trunks carry untagged by IOS-XE's default native VLAN).  This is
       consistent with IOS-XR having no campus L2 model — the XR matrix
       declares switchport-mode, access-vlan, trunk-allowed-vlans,
       trunk-native-vlan and voice-vlan all unsupported, reason "IOS-XR is
       SP-routing with no L2 switchport model (L2VPN is Tier-3)" — though note
       the matrix does NOT say the top-level `vlans` list goes with them; the
       measurement is the authority for that.
-      The fifth drifting cell moves the OTHER way: `ntc_carrier_interfaces.txt`
+      The sixth drifting cell moves the OTHER way: `ntc_carrier_interfaces.txt`
       has 0 source VLANs and 1 after the round-trip, because the XR render
       writes `encapsulation dot1q 2234` on its sub-interfaces and re-parsing
       that line materialises a VLAN record the source never had.  A fabricated
@@ -271,7 +273,7 @@ per_field_expectation:
     disposition: good
     note: >
       `good` deliberately, and it needs reading carefully.  This key DOES show
-      drift on 5 cells — but that drift is entirely its parent list changing
+      drift on 6 cells — but that drift is entirely its parent list changing
       length, which `vlans[].id` above already claims.  This key is about what
       happens to the VLAN NAME when a VLAN record survives, and no record on
       this pair survives to degrade it.  A loss declared here could never be

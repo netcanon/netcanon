@@ -257,7 +257,10 @@ per_field_expectation:
   "interfaces[].trunk_native_vlan":
     disposition: unsupported
     reason: >
-      Drifts on 2 of 13 cells: `999` -> `null`.
+      Drifts on 3 of 13 cells: `999` -> `null` on one, and `1` -> `null` on
+      two -- a native VLAN 1 that is stated beside a list that leaves it
+      out, and the `1` that the three trunks of every VLAN of the akarneliuk
+      leaf have by NX-OS's default for a trunk that states no native VLAN.
       `/interfaces/interface/trunk-native-vlan` is declared unsupported.
       Losing a non-default native VLAN silently reverts untagged traffic on
       that trunk to VLAN 1 — re-declare it.

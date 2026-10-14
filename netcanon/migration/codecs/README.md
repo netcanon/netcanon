@@ -346,6 +346,24 @@ for the reference pattern).
    (`trunk_list_read`).  Add the vendor's sentence for what a
    native VLAN outside the list does -- or "not established" -- to
    the second table of that vendor-reference page.
+   **And say what a trunk has for a native VLAN when it states
+   none.**  An unset `trunk_native_vlan` means no untagged VLAN, so
+   a platform's default is the parser's to put, like the list.  Add
+   the codec's row to `TRUNK_THAT_STATES_NO_NATIVE` (`_helpers.py`,
+   below) -- the id, or that there is none, or that the text does
+   not give it -- with the vendor's sentence in the table "And when
+   the config states no untagged VLAN at all" of the same page; tell
+   `TrunksByName` each native line an interface states
+   (`native_line`; a parser that keeps one record a name has the
+   native VLAN on the record and need not), when a port SAYS it is
+   a trunk (`says_trunk` / `mode_line`), and the platform's words
+   for a native VLAN that is sent tagged, if the parser does not
+   read them into the tree (`native_is_tagged`): `settle()` then
+   gives a trunk that says it is one and states no native VLAN the
+   default, where its list holds it.  The default is a trunk's: a
+   port the parser takes for a trunk from a trunk line alone gets
+   none.  A test fails for a codec that is in one of the three
+   tables and not in all of them.
 3. **Write `render()`** against the same synthetic fixtures, driving
    toward round-trip stability (`parse(render(parse(raw))) == parse(raw)`
    at the canonical level).  **A trunk's list is one of three
@@ -768,6 +786,54 @@ the policy locally:
   AOS-S is in neither table: it is told VLAN by VLAN, and its port
   records are made by `project_vlan_to_switchport`, which puts the
   VLAN a port is untagged in into the port's list.
+
+* **`netcanon/migration/codecs/_helpers.py::TRUNK_THAT_STATES_NO_NATIVE`**
+  — what a trunk has for a native VLAN when its config states NONE,
+  by codec: VLAN 1 on `arista_eos`, `aruba_aoscx`, `cisco_iosxe_cli`
+  and `cisco_nxos`; `NATIVE_NONE` on `juniper_junos`;
+  `NATIVE_OF_THE_SWITCH` on `dell_os10`, the default VLAN of the
+  switch, which is a setting no trunk states and is not filled in.
+  The ONE place it is written, with the same codecs as the two tables
+  above and no other; the vendors' sentences are in the same
+  vendor-reference page, and so is what is not established.  In a
+  tree a parser made, an
+  unset `trunk_native_vlan` says the port carries no VLAN untagged,
+  as far as the platform's text AND its default go.  Its readers,
+  all in `_helpers.py`:
+  * **`unstated_native_vlan(codec, allowed)`** — the native VLAN a
+    parser puts for a trunk that states none: the platform's
+    default where it is an id and the trunk's list holds it, `None`
+    otherwise.  `TrunksByName.settle()` asks it for a record that
+    is a trunk, of an interface that SAYS it is one (`switchport
+    mode trunk`; on AOS-CX a `vlan trunk` line), after the record
+    has its list -- a trunk with no allowed line holds the default
+    by the platform's list.  A port in another mode that keeps
+    trunk lines, and a port the parser took for a trunk from a
+    trunk line alone, are given none: the same test `settle()`
+    makes before it gives the platform's LIST.  It does not ask
+    for an interface that states a native VLAN in any of its
+    stanzas (`native_line`), nor for one whose text says the
+    native VLAN is sent tagged (`native_is_tagged`;
+    `tags_every_native_vlan(raw)` and `tags_its_native_vlan(line)`
+    find the words of the `switchport` grammar).  The parser then
+    mirrors ports onto the VLANs' member lists as before, so the
+    default VLAN has a record and the trunk is its untagged member
+    -- and a renderer that writes a `vlan` line for every VLAN of
+    the tree writes one for it.
+  * **`switchport_trunk_native_value(codec, allowed, native)`** —
+    what follows `switchport trunk native vlan`, or `None` for no
+    line.  Used by the renderers of `arista_eos`, `cisco_iosxe_cli`
+    and `cisco_nxos` for a port they write as a TRUNK: no line for
+    the platform's default where the trunk's list holds it (no real
+    capture of the three prints one), the line for any other
+    native VLAN and for the default itself where the list leaves it
+    out.  The IOS-XE renderer also writes the trunk lines of a port
+    in another mode, and writes the native line of such a port as
+    it stands: the parser puts no default back for it.
+    (`aruba_aoscx` writes `vlan trunk native 1`, as its captures
+    do; `juniper_junos`, `dell_os10` and `aruba_aoss` write the
+    untagged VLAN they are given.)
+  Callers: `grep -rn "unstated_native_vlan\|switchport_trunk_native_value" netcanon/migration`.
 
 * **`netcanon/migration/codecs/_helpers.py::spaced_port_name`** and
   **`without_keyword_stanzas`** — two readings of a Cisco header

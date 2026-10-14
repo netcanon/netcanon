@@ -208,7 +208,14 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   older fault of the parser.  Such a port is given nothing from the
   default: it is a trunk of the VLANs its lines name, or of NO VLAN
   (`switchport trunk native vlan 999` alone comes back with
-  `switchport trunk allowed vlan none`), never of every VLAN.  The
+  `switchport trunk allowed vlan none`), never of every VLAN, and
+  it is given no default native VLAN either: VLAN 1 on its list is
+  a tagged VLAN of it.  The last of its lines decides what it is
+  read as: `switchport access vlan 10` followed by `switchport
+  trunk allowed vlan 1,10,20` is a trunk with NO access VLAN, and
+  the two lines the other way round are an access port in VLAN 10
+  that keeps the list.  Take the trunk lines off an access port
+  before translating, or add `switchport mode trunk` to a trunk.  The
   vendors' own sentences are in the
   [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunk-that-states-no-allowed-list-platform-by-platform).
 - **A trunk's native VLAN, and whether its allowed list names it.**
@@ -230,10 +237,34 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   vlan 10`, `switchport trunk allowed vlan 10,20,30`).  Release
   0.7.7 and earlier left it off the allowed line, in jobs that said
   `completed`: check the allowed list of every trunk with a native
-  line migrated then from AOS-S or OS10.  A trunk that states no
-  native VLAN is written none (Arista: "The default native VLAN for
-  all interfaces is VLAN 1."), and `switchport trunk native vlan
-  tag` is not read.  The VLAN pane's map keeps to that
+  line migrated then from AOS-S or OS10.  **A trunk that states no
+  native VLAN has native VLAN 1** (Arista: "The default native VLAN
+  for all interfaces is VLAN 1.").  Where its allowed list holds
+  VLAN 1 -- the list names it, or there is no allowed line -- a
+  port that says `switchport mode trunk` is read as carrying VLAN 1
+  untagged, and Junos, OS10 and AOS-S are written so
+  (`native-vlan-id 1`; `switchport access vlan 1`; `untagged`).
+  Release 0.7.7 and earlier wrote VLAN 1 TAGGED on those three, in
+  jobs that said nothing: check such trunks migrated then.  Where
+  the list leaves VLAN 1 out nothing is filled in.  That is a
+  native VLAN outside its list, and what an EOS switch does with
+  one is not established (above): the trunk is read as having no
+  untagged VLAN, which says nothing about the switch.  As a
+  target, no `switchport trunk native vlan 1` line is written for
+  a trunk whose list holds VLAN 1: it is the default, and no real
+  EOS capture prints the line.  A `vlan 1` line IS written where a
+  trunk of the source carries VLAN 1 untagged by its platform's
+  default, though the source may have no word for VLAN 1 and no
+  real EOS capture prints the line: the tree has the VLAN, and
+  every VLAN of the tree is declared.  One thing is not
+  mended: a port that carries NO VLAN untagged at its source and has
+  VLAN 1 on its list (a Junos trunk of `vlan members all` with no
+  `native-vlan-id`, say) is written a trunk with no native line as
+  well, and so carries VLAN 1 untagged here by that default; no form
+  is written yet for "no untagged VLAN" (the limits in
+  [`CAPABILITIES.md`](../CAPABILITIES.md)).  `switchport trunk native vlan tag` is not
+  read, except that a trunk under it is given no default.  The VLAN
+  pane's map keeps to that
   reading.  Where a map would bring a native VLAN that the list
   leaves out INTO the list, the native VLAN is cleared if the map
   has merged it with a VLAN of the config that the list names, and

@@ -1180,12 +1180,57 @@ tests use these exclusively — never CSS classes or element structure.  See
   memberships, each side read by its own row, the output twice;
   each shape of trunk through every pair, with what its source
   carries written beside it by hand; each check handed the defect it
-  is for; and a codec that is in one of the two trunk tables and not
-  the other fails.  Still open, and in the CHANGELOG's known
-  limitations: a trunk that states NO native VLAN is "not stated" in
-  the tree, which is the defect of the rule above with its mending
-  still to do -- the platforms' defaults differ, and VLAN 1 can come
-  out tagged.
+  is for; and a codec that is in one of the three trunk tables and
+  not in all of them fails.
+  (3) **A native VLAN that is not stated is the defect of the rule
+  above, and was mended the same way.**  A trunk that states no
+  native VLAN has its platform's default -- VLAN 1 on IOS-XE, NX-OS,
+  EOS and AOS-CX, none on Junos -- and the tree had "not stated"
+  for it: VLAN 1 of such a trunk was a tagged VLAN like any other,
+  and came out TAGGED on Junos, OS10 and AOS-S, in jobs that said
+  nothing.  The parser puts the default
+  (`TRUNK_THAT_STATES_NO_NATIVE` in `codecs/_helpers.py`), for an
+  interface, AFTER its list is resolved -- a trunk with no allowed
+  line holds VLAN 1 by the platform's list and not by a line -- and
+  before the ports are mirrored onto the VLANs.  In a tree a parser
+  made, no native VLAN is no untagged VLAN.  What it cost to get
+  there.  A default belongs to what it is the default OF: this
+  one is a trunk's, and is put only for a port that SAYS it is a
+  trunk.  Given to any port that had a list (caught before
+  release), it made an untagged VLAN 1 of an access port that
+  keeps a trunk line -- which two parsers already took for a
+  trunk -- and the guard, which read the source through the same
+  parser, agreed: who says it is a trunk is now read from the
+  TEXT, in the test.  A default is put only where the text does
+  not say otherwise in words the parser does not read: under `vlan
+  dot1q tag native` a native VLAN in the tree would be read as
+  untagged, so nothing is filled in.  Where the id of a default is
+  not in the
+  text (an OS10 switch's default VLAN, a setting) nothing is filled
+  in either, and the table says so rather than guess 1.  And a
+  renderer leaves out the line its device does not print -- but
+  what a device prints is read from the captures, in a test, never
+  recalled: no real capture of IOS-XE, NX-OS or EOS prints
+  `switchport trunk native vlan 1`, every AOS-CX trunk of the
+  captures states `vlan trunk native 1`.  And where the new VLAN 1
+  record puts a `vlan 1` line into an IOS-XE output whose capture
+  has none, the line is left in and SAID: the tree does not keep
+  whether the text had it, and a rule that rebuilds that from the
+  tree departs from the text in both directions.
+  **The blind spot that hid it:** both readings of an output left
+  the default out, the target's parser and the reader of text, so
+  they agreed with each other and with the source's tree, which
+  left it out as well.  A reader of text applies the platform's
+  default itself, typed in the test and compared with the table,
+  and a tree is held to its platform's default before anything is
+  compared.
+  Still open, and in the CHANGELOG's known limitations: the
+  TARGET's half.  A port that carries NO VLAN untagged, written for
+  a platform whose trunk has a default native VLAN, is given that
+  default by the switch (a Junos trunk of `vlan members all` onto
+  the four), and no renderer has a form for "this trunk carries no
+  VLAN untagged": the guard pins those cells one by one, compared
+  for equality, so the change that mends one takes its pin out.
 - **Never** put a word of the config where a port name goes, and never
   make an interface record for a name the config configures nothing
   under.  A parser that takes the first word after a keyword for a

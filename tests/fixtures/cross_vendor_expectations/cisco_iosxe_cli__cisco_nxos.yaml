@@ -196,7 +196,7 @@ per_field_expectation:
       The mirror of the access-VLAN case: on ports whose active mode is
       `access`, the source's `switchport trunk native vlan <N>` is dropped
       (`100 -> null`) because the NX-OS render emits no trunk grammar for an
-      access port.  1 of the 3 cells carrying a native VLAN.  Re-enter it
+      access port.  1 of the 4 cells carrying a native VLAN.  Re-enter it
       before converting a migrated access port to a trunk.
     references: [iosxecli-nxos-surface]
 
@@ -306,7 +306,7 @@ per_field_expectation:
   vlans:
     disposition: good
     note: >
-      Preserved on all 4 cells that define VLANs -- id, name, tagged and
+      Preserved on all 5 cells that define VLANs -- id, name, tagged and
       untagged port lists, and the L3 address carried on the VLAN record
       itself (the SVI-on-VLAN shape), which the NX-OS render mounts onto
       `interface Vlan<N>`.  The target matrix declares the VLAN `description`

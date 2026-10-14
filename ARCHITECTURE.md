@@ -886,8 +886,22 @@ What a switch does with a native VLAN its list leaves out is
 established for some of these platforms and not for others; the
 vendors' sentences are in
 [`docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md`](docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
-A trunk that states NO native VLAN is still "not stated" in the tree:
-no platform's default is filled in, and none is written.
+A trunk that states NO native VLAN has its platform's default, and
+the parser puts it, as it puts the list of a trunk that states none
+(`TRUNK_THAT_STATES_NO_NATIVE` in the same module; `TrunksByName`
+gives it to an interface when the whole config has been read, after
+its list): VLAN 1 on IOS-XE, NX-OS, EOS and AOS-CX, for a port that
+says it is a trunk and whose list holds VLAN 1; nothing on Junos,
+and nothing on OS10, whose default is a setting of the switch.  A
+port that keeps trunk lines without saying it is a trunk is given
+none, as it is given nothing of the platform's list.  So an unset
+`trunk_native_vlan`
+in a tree a parser made is no untagged VLAN, and the tree has no
+value for "not stated" here either.  The `switchport` renderers
+write no native line for the VLAN that is their platform's default.
+The other direction is open: no renderer has a form for "this trunk
+carries no VLAN untagged", so such a port takes the target's default
+on those four (the CHANGELOG's known limitations).
 [`tests/unit/migration/test_the_list_holds_the_native_vlan.py`](tests/unit/migration/test_the_list_holds_the_native_vlan.py)
 reads what a device carries untagged on each side of every job by
 its own platform's grammar, and does not read the tree by the

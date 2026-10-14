@@ -13,7 +13,7 @@ Three things are held together here:
   ``standard`` and ``large``.  Every document is searched for such
   rows, so a table added somewhere else is found too.
 * **the sentences that follow from a number** -- "4,096 ports that each
-  allow every VLAN", "refused at the ninth range", "256 trunks ... 195
+  allow every VLAN", "refused at the ninth range", "256 trunks ... 193
   VLANs" -- written here FROM the numbers, and looked for in the
   document.  Change a number and the sentence this test looks for
   changes with it.
@@ -124,7 +124,13 @@ def _sentences() -> dict[str, list[str]]:
     per_range = 1001
     ninth = standard.ports // per_range + 1
     trunk = small.vlan_ids // 3999 + 1
-    worst = (small.vlan_ids // every, small.memberships // (small.vlan_ids // every))
+    # The most trunks that say `all`, and the most VLANs a config of
+    # them may declare.  Each trunk states no native VLAN, which is
+    # native VLAN 1 where a trunk says `all`: it is on VLAN 1 too --
+    # a VLAN more than the config declares -- and its untagged place
+    # there is counted beside the tagged one it replaces.  Two fewer
+    # declared VLANs fit than the limit divided by the trunks.
+    worst = (small.vlan_ids // every, small.memberships // (small.vlan_ids // every) - 2)
     ordinal = {9: "ninth"}[ninth]
     # A trunk that states no allowed list is every VLAN on four
     # platforms, and is counted as the 4,094 ids it is.

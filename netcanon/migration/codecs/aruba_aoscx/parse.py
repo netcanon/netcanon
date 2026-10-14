@@ -625,6 +625,10 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
             current["trunk_native"] = int(tnm.group(1))
             trunks.says_trunk(current["trunk_key"])
+            # (With ``tag`` after it or without: the word is on the
+            # line that states the id, so a port that has it states
+            # its native VLAN.)
+            trunks.native_line(current["trunk_key"])
             return
         tam = _VLAN_TRUNK_ALLOWED_RE.match(line)
         if tam:
@@ -670,7 +674,10 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     # N`` alone) carries what the platform's trunk carries by default:
     # on AOS-CX every VLAN -- the switch runs ``vlan trunk allowed
     # all`` itself when a native VLAN is defined.  A port that is not
-    # a trunk and states no list has none to keep.
+    # a trunk and states no list has none to keep.  And a trunk that
+    # states no native VLAN (``vlan trunk allowed`` alone) has the
+    # platform's, VLAN 1, where its list holds it: given after the
+    # list, and before the ports are put on the VLANs' member lists.
     trunks.settle()
     return interfaces
 

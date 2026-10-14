@@ -99,6 +99,10 @@ here:
   vendor's sentence, its source and what is not established:
   [`cisco_iosxe_cli_to_juniper_junos/vlans.md`](cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
   It backs `NATIVE_VLAN_AND_THE_LIST` in the same module.
+- **What a trunk that states no native VLAN has for one**, platform
+  by platform, with each vendor's sentence and its source, in the
+  second table of the same section.  It backs
+  `TRUNK_THAT_STATES_NO_NATIVE` in the same module.
 
 ## See also
 

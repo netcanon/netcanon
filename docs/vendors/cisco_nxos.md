@@ -204,7 +204,16 @@ source are the highest-value contributions — see
   as a trunk, though an NX-OS port is an access port until it is told
   otherwise.  That is an older fault of the parser.  Such a port is
   given nothing from the default: it is a trunk of the VLANs its
-  lines name, or of NO VLAN, never of every VLAN.  A port that says
+  lines name, or of NO VLAN, never of every VLAN, and it is given
+  no default native VLAN either: VLAN 1 on its list is a tagged
+  VLAN of it.  The first of its lines decides what it is read as:
+  `switchport trunk allowed vlan 1,10,20` followed by `switchport
+  access vlan 10` is a trunk that keeps the access VLAN beside its
+  list, and the two lines the other way round, or under
+  `switchport mode access`, are an access port that keeps the
+  list.  Take the trunk lines off an access port before
+  translating, or add `switchport mode trunk` to a trunk.  A port
+  that says
   `switchport mode trunk` and takes its list from `inherit
   port-profile`, which is not read, is a trunk of every VLAN; so is a
   port-channel member that states the mode and leaves the list to its
@@ -232,8 +241,31 @@ source are the highest-value contributions — see
   Cisco's own example on that page does.  Release 0.7.7 and earlier
   left it off the allowed line, in jobs that said `completed`: check
   the allowed list of every trunk with a native line migrated then
-  from AOS-S or OS10.  A trunk that states no native VLAN is written
-  none.  The VLAN pane's map keeps to that
+  from AOS-S or OS10.  **A trunk that states no native VLAN has
+  native VLAN 1.**  Cisco: "If you do not configure a native VLAN
+  ID, the trunk port uses the default VLAN.", and on the same
+  page: "The default VLAN is VLAN1."  Where the trunk's allowed
+  list holds VLAN 1 -- the list names it, or there is no allowed
+  line -- a port that says `switchport mode trunk` is read as
+  carrying VLAN 1 untagged, and Junos, OS10 and AOS-S are written
+  so (`native-vlan-id 1`; `switchport access vlan 1`; `untagged`).
+  Release 0.7.7 and earlier wrote VLAN 1 TAGGED on those three, in
+  jobs that said nothing: check such trunks migrated then.  Where
+  the list leaves VLAN 1 out nothing is filled in, and the trunk is
+  read as having no untagged VLAN (Cisco: "When you remove VLAN1,
+  all data traffic for VLAN1 on this port is blocked, but the
+  control traffic continues to move on the port.").  As a target,
+  no `switchport trunk native vlan 1` line is written for a trunk
+  whose list holds VLAN 1: it is the default, and no real NX-OS
+  capture prints the line.  One
+  thing is not mended: a port that carries NO VLAN untagged at its
+  source and has VLAN 1 on its list (a Junos trunk of `vlan members
+  all` with no `native-vlan-id`, say) is written a trunk with no
+  native line as well, and so has the default here; no form is
+  written yet for "no untagged VLAN" (the limits in
+  [`CAPABILITIES.md`](../CAPABILITIES.md)).  `vlan dot1q tag native` and `switchport
+  trunk native vlan tag` are not read, except that a trunk under
+  either is given no default.  The VLAN pane's map keeps to that
   reading.  Where a map would bring a native VLAN that the list
   leaves out INTO the list, the native VLAN is cleared if the map
   has merged it with a VLAN of the config that the list names, and

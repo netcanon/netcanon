@@ -87,7 +87,7 @@ tests besides: that does not move the memory, and it does move the seconds.
 | 32,000 addresses on one Junos unit (2.0 MB) | translated in 1.6–1.6 s | 141 → 143 MB | 5 |
 | The largest committed capture (1.1 MB), sanitised as the page does it: the audit, then the output | sanitised, 0.26–0.43 s a request | 95 → 102 MB | 6 |
 | the same two requests at once | both sanitised, in turn; 0.6–0.7 s in all | 98 → 104 MB | 6 |
-| **Every limit at once** in a 1.98 MB body — 256 trunks that allow every VLAN, 195 VLANs, 2,244 one-line interfaces, static routes to fill — translated to OPNsense | translated in 1.6–2.0 s, a 38 MB answer | 169 → 215 MB | 34; stopped rising (last rise in round 22) |
+| **Every limit at once** in a 1.98 MB body — 256 trunks that allow every VLAN, 193 VLANs, 2,244 one-line interfaces, static routes to fill — translated to OPNsense | translated in 1.6–2.0 s, a 38 MB answer | 169 → 215 MB | 34; stopped rising (last rise in round 22) |
 | the same text, translated to Junos | translated in 1.5–2.1 s, a 7 MB answer | 169 → 175 MB | 27; stopped rising (last rise in round 15) |
 | the same text, sanitised: the audit | 1.5–1.8 s | 164 → 170 MB | 33; stopped rising (last rise in round 21) |
 | the same text, sanitised: the text itself (7 MB) | 1.9–2.2 s | 182 → 188 MB | 30; stopped rising (last rise in round 18) |

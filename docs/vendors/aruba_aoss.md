@@ -235,8 +235,20 @@ pipeline — they just aren't pinned by a fixture yet").
   was read from states and no more: what the source switch did with
   that VLAN is each vendor's to say, and not every vendor says it.
   The VLAN in it is the output's: after a VLAN map, the new id.  A
-  trunk that states no native VLAN is written `untagged` in no VLAN
-  either, and has no such line: it left nothing out.  No line of
+  trunk that has no untagged VLAN in the tree -- a Junos trunk with
+  no `native-vlan-id`, a Cisco or Arista trunk that states no
+  native VLAN and whose list leaves VLAN 1 out -- is written
+  `untagged` in no VLAN either, and has no such line: it left
+  nothing out.  (A Cisco, Arista or AOS-CX trunk that states no
+  native VLAN and has VLAN 1 on its list carries VLAN 1 untagged by
+  its platform's default, and is written `untagged` in VLAN 1.
+  Release 0.7.7 and earlier wrote it `tagged` there: check such
+  ports migrated then.  And where the VLAN pane's map merges such a
+  trunk's untagged VLAN with a VLAN it carries tagged -- VLAN 10
+  given the id 1, say -- the merged VLAN's stanza lists the port
+  on its `untagged` AND its `tagged` line, in a job that says only
+  that port lists were merged: take the port off the one that is
+  not meant.)  No line of
   the output takes either port out of VLAN 1 (see below).  So
   decide what the port is to carry untagged, look at what the
   switch has it in, and write `untagged` or `no untagged` for it.

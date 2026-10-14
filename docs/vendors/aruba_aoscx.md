@@ -198,6 +198,21 @@ source, plus configs exercising symmetric-IRB **L3VNI**, **VSX**, and
   line (it was written `untagged` in that VLAN) and a `; review:`
   line that says so, and OS10 as `no switchport access vlan` under a
   `! review:` line (it was written that VLAN as its access VLAN).
+  **A trunk that states no native VLAN has native VLAN 1** (HPE: "By
+  default, VLAN ID 1 is assigned as the native VLAN ID for all trunk
+  interfaces.").  A trunk stated by `vlan trunk allowed` alone is
+  read so where its list holds VLAN 1, and comes back with `vlan
+  trunk native 1` beside it, the line every trunk of the committed
+  captures has; Junos, OS10 and AOS-S are written VLAN 1 untagged
+  for it, where release 0.7.7 and earlier wrote it tagged.  As a
+  target, a Cisco or Arista trunk that states no native VLAN and
+  has VLAN 1 on its list is written `vlan trunk native 1`.  One
+  thing is not mended: a port that carries NO VLAN untagged at its
+  source and has VLAN 1 on its list (a Junos trunk of `vlan members
+  all` with no `native-vlan-id`, say) is written `vlan trunk
+  allowed` with no native line, and so carries VLAN 1 untagged here
+  by that default; no form is written yet for "no untagged VLAN"
+  (the limits in [`CAPABILITIES.md`](../CAPABILITIES.md)).
   `vlan trunk native <N> tag` is read
   as `vlan trunk native <N>`: the `tag` word is lost.  The VLAN
   pane's map keeps to that reading.  Where a map would bring a

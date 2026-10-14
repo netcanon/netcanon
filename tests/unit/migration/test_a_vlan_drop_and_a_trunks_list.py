@@ -84,6 +84,7 @@ from tests.unit.migration.test_a_trunk_says_none_nothing_or_all import (
     _says_in_text,
 )
 from tests.unit.migration.test_the_list_holds_the_native_vlan import (
+    HAVE_A_DEFAULT,
     PORT_FORM,
     SAID_OF_A_PORT,
     SAID_ON_OS10,
@@ -225,24 +226,26 @@ def test_the_job_says_a_trunk_was_emptied(title: str, target: str) -> None:
 _NOWHERE = "VLAN 555 is present nowhere in the parsed config"
 
 
-@pytest.mark.parametrize("trunk,reported", [
+@pytest.mark.parametrize("trunk,reported,native_one", [
     # Every VLAN, and so no VLAN in particular: 555 is nowhere.
-    ((), True),
-    ((f"{_ALLOWED} all",), True),
-    ((f"{_ALLOWED} 1-4094",), True),
+    ((), True, True),
+    ((f"{_ALLOWED} all",), True, True),
+    ((f"{_ALLOWED} 1-4094",), True, True),
     # A list like any other names its ids: 555 is on the trunk, and
     # the drop takes it off.
-    ((f"{_ALLOWED} 2-4094",), False),
-    ((f"{_ALLOWED} 10,555",), False),
-    ((f"{_ALLOWED} 10",), True),
-    ((f"{_ALLOWED} none",), True),
+    ((f"{_ALLOWED} 2-4094",), False, False),
+    ((f"{_ALLOWED} 10,555",), False, False),
+    ((f"{_ALLOWED} 10",), True, False),
+    ((f"{_ALLOWED} none",), True, False),
 ])
-def test_a_map_entry_for_a_vlan_nowhere(trunk: tuple[str, ...], reported: bool) -> None:
+def test_a_map_entry_for_a_vlan_nowhere(trunk: tuple[str, ...], reported: bool, native_one: bool) -> None:
     """The pane's map can name a VLAN the config does not have (a
     typed id, a map kept from another config).  The job says so --
     and one trunk that states no allowed list, which is a trunk of
     every VLAN, does not make every id there is a VLAN of the
-    config."""
+    config.  It makes ONE: the trunk states no native VLAN, which on
+    IOS-XE is native VLAN 1, so where its list holds VLAN 1 the port
+    carries it untagged and the pane offers it."""
     job = run_plan_with_overrides(
         get_codec(SOURCE), get_codec("juniper_junos"), _source(*trunk),
         port_rename_map={}, vlan_rename_map={555: None}, force=True,
@@ -252,7 +255,8 @@ def test_a_map_entry_for_a_vlan_nowhere(trunk: tuple[str, ...], reported: bool) 
     if reported:
         assert said[0].endswith("entry ignored"), said
     # And the VLANs the pane offers are the config's own, not 4,094.
-    assert set(job.source_vlans) - {555} == {10, _ACCESS, 100, 999}, (trunk, len(job.source_vlans))
+    own = {10, _ACCESS, 100, 999} | ({1} if native_one else set())
+    assert set(job.source_vlans) - {555} == own, (trunk, len(job.source_vlans))
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +348,15 @@ class TestThePass:
 # ---------------------------------------------------------------------------
 
 _CLEARED = "native VLAN cleared"
+
+#: The warning for a port whose native VLAN the map DROPS, whole; and
+#: what it ends with where the port's list is every VLAN, which the
+#: pass leaves as it stands.  Typed here, and taken from no code.
+_DROPPED = "vlan_rename: interface {port!r} had native VLAN {vid} which was dropped — native VLAN cleared"
+_STILL_HELD = (
+    "; the port allows every VLAN, and an output that writes it as a trunk"
+    " of every VLAN still allows VLAN {vid}"
+)
 _OUTSIDE = "outside its allowed list"
 _TAKEN_OUT = "is taken out of the list"
 
@@ -483,13 +496,35 @@ class TestANativeVlanMergedIntoTheList:
         ], result.warnings
 
     def test_a_drop_has_its_own_warning(self) -> None:
-        """Its own warning, as before, and not this one."""
-        tree = _native(10, [20, 30])
+        """Its own warning, as before, and not this one.  The line is
+        held WHOLE: beside a list that names its VLANs, which the
+        drop is taken out of as well, it says no more than this."""
+        for allowed, after in (([20, 30], [20, 30]), ([10, 20, 30], [20, 30]), ([], [])):
+            tree = _native(10, allowed)
+            result = translate_vlan_ids(tree, {10: None})
+            assert _after(tree) == (None, after)
+            assert [text for text in result.warnings if _CLEARED in text] == [
+                _DROPPED.format(port="Port1", vid=10),
+            ], allowed
+
+    def test_a_drop_beside_every_vlan_says_the_list_holds_it(self) -> None:
+        """A list of every id is the statement "every VLAN", and is
+        left as it stands: it still holds the id that was dropped.
+        "Native VLAN cleared" alone reads as "no longer carried",
+        so the warning says what the list still holds.  The line,
+        whole -- and the tree it speaks of."""
+        for every in (list(range(1, 4095)), list(range(4094, 0, -1))):
+            tree = _native(10, list(every))
+            result = translate_vlan_ids(tree, {10: None})
+            assert _after(tree) == (None, every)
+            assert [text for text in result.warnings if _CLEARED in text] == [
+                _DROPPED.format(port="Port1", vid=10) + _STILL_HELD.format(vid=10),
+            ]
+        # Every id but the one dropped is a list like any other: the
+        # line as it was.
+        tree = _native(10, _ALL_BUT_10)
         result = translate_vlan_ids(tree, {10: None})
-        assert _after(tree) == (None, [20, 30])
-        assert [text for text in result.warnings if _CLEARED in text] == [
-            "vlan_rename: interface 'Port1' had native VLAN 10 which was dropped — native VLAN cleared",
-        ]
+        assert [text for text in result.warnings if _CLEARED in text] == [_DROPPED.format(port="Port1", vid=10)]
 
     @pytest.mark.parametrize("vlan_map", [{10: 20}, {20: 10}, {10: 4000}])
     def test_every_vlan_held_it_before(self, vlan_map: dict[int, int | None]) -> None:
@@ -1048,3 +1083,45 @@ def test_a_trunks_short_list_makes_it_a_merge() -> None:
         f"vlan_rename: interface {final!r} had native VLAN 10 {_OUTSIDE}, and the map merges it into VLAN 500, "
         f"which the trunk carries tagged — {_CLEARED}",
     ], job.warnings
+
+
+# ---------------------------------------------------------------------------
+# A native VLAN the map DROPS, through jobs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("target", SWITCHES)
+@pytest.mark.parametrize("trunk,vid,every", [
+    # VLAN 1, which an IOS-XE trunk that states no native VLAN has by
+    # its platform's default: beside no list (every VLAN), beside
+    # `all`, and beside a list that names its VLANs.
+    ((), 1, True),
+    ((f"{_ALLOWED} all",), 1, True),
+    ((f"{_ALLOWED} 1,10,100",), 1, False),
+    # A native VLAN the trunk states.
+    (("switchport trunk native vlan 10",), 10, True),
+    (("switchport trunk native vlan 10", f"{_ALLOWED} 10,100"), 10, False),
+])
+def test_the_job_says_what_a_dropped_native_vlan_leaves(
+    trunk: tuple[str, ...], vid: int, every: bool, target: str,
+) -> None:
+    """The pane's map drops the VLAN a trunk carries untagged.  The
+    job's one warning for it, WHOLE, in both its forms: ``native VLAN
+    cleared``, and -- where the trunk's list is every VLAN, which the
+    pass leaves as it stands -- that an output writing the port as a
+    trunk of every VLAN still allows the VLAN.  A job that said only
+    "cleared" there said the contrary of its own output on the
+    targets whose trunk has a default native VLAN."""
+    job, final = _job_of(SOURCE, _source(*trunk), _TRUNK, target, {vid: None})
+    want = _DROPPED.format(port=final, vid=vid) + (_STILL_HELD.format(vid=vid) if every else "")
+    assert [str(text) for text in job.warnings if _CLEARED in str(text)] == [want], job.warnings
+    assert job.status == MigrationJobStatus.completed, (target, job.status)
+    if every and vid == 1 and target in HAVE_A_DEFAULT:
+        # What the warning is for.  The output's trunk is written no
+        # native line, as a trunk of every VLAN (no allowed line; on
+        # AOS-CX `vlan trunk allowed all`), and on these four that is
+        # a trunk of every VLAN with native VLAN 1: it carries the
+        # dropped VLAN untagged still, by the target's own default
+        # (the half that is open, in the CHANGELOG's limitations).
+        by_text, by_parser = _on_the_trunk(target, job, final)
+        assert (by_text.untagged, by_text.by_default, by_parser.untagged) == (1, True, 1), (target, by_text)

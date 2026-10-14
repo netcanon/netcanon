@@ -295,10 +295,20 @@ map is held to the same question by a test with no list of cases
 (`test_a_vlan_drop_and_a_trunks_list.py`): over every map of a few
 ids, no port comes to carry untagged a VLAN it did not carry
 untagged before.
+A trunk that states no native VLAN is read by its platform's default
+there: the guard holds every tree, the source's and the output's
+parsed again, to having VLAN 1 as the native VLAN of such a trunk of
+IOS-XE, NX-OS, EOS or AOS-CX whose list holds VLAN 1 -- and to NOT
+having it on a port that does not say it is a trunk, which it reads
+from the text and from no parser -- and its own readers add that
+default to an output's text, which states less than the switch
+does.  The half that is not mended -- a port with no
+untagged VLAN that one of those four targets then gives its default
+-- is pinned cell by cell and compared for equality, so the change
+that mends a cell has to take its pin out.
 What it cannot see is in its docstring and in the known limitations:
-nothing is filled in that a text does not state, so a trunk that
-states no native VLAN carries none there, whatever its platform's
-default.
+the default VLAN of an OS10 switch, which no trunk states, and what
+an AOS-S port is in when no `untagged` line names it.
 
 **A status is checked against the output, not against the warning
 that should have moved it.**  With no devices declared, a job in

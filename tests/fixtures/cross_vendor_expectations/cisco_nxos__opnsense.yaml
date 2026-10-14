@@ -163,8 +163,10 @@ per_field_expectation:
   "interfaces[].trunk_native_vlan":
     disposition: unsupported
     reason: >
-      Drifts to `null` wherever populated (4 record-occurrences; `999` ->
-      `null`).  OPNsense has no native-VLAN concept — untagged frames are
+      Drifts to `null` wherever populated (7 record-occurrences: `999` ->
+      `null` on three, and `1` -> `null` on four, three of them trunks that
+      state no native VLAN and have NX-OS's default).  OPNsense has no
+      native-VLAN concept — untagged frames are
       simply the parent NIC's own traffic — so the matrix declares
       `/interfaces/interface/trunk-native-vlan` unsupported and the render
       drops it.  Untagged traffic on a migrated trunk needs an explicit

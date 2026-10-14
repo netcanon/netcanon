@@ -23,7 +23,11 @@ and ``trunk_allowed_vlans`` (mode ``trunk``).  A trunk's list is what
 it carries: its native VLAN is an untagged membership where the list
 holds it, and no membership at all where the list leaves it out (a
 native VLAN stated and not carried).  Untagged stands where a tree
-says both.  Nothing is filled in that a tree does not state.  A
+says both.  Nothing is filled in that a tree does not state: a
+parser puts its platform's default native VLAN for a trunk that
+states none (VLAN 1 on IOS-XE, EOS, NX-OS and AOS-CX, where the list
+holds it), so a tree has it, and a TEXT does not -- the readers of
+text below add it, from a table typed here.  A
 trunk of every id, and a list longer than 128 ids, are a statement and
 not thousands of memberships: they are compared over the VLAN ids the
 SOURCE tree knows (declared, or named by a membership), the same ids
@@ -51,7 +55,11 @@ What may become of a source membership
 
 Anything else fails.  So does a membership of the output that no source
 membership accounts for, and one that changed between tagged and
-untagged.
+untagged -- but for one thing, which is pinned cell by cell
+(:data:`BY_THE_TARGETS_DEFAULT`): a trunk the source carries no VLAN
+untagged on, written for a platform whose trunk has a default native
+VLAN, with no native line and a list that holds VLAN 1, carries
+VLAN 1 untagged there by the target's own default.
 
 How the output is read
 ----------------------
@@ -154,6 +162,38 @@ NAME_STANDS_IN_A_RANGE = frozenset({"aruba_aoss"})
 #: of its ``vlan trunk`` lines.  Compared for equality.
 SAID_IN_THE_STANZA: dict[tuple[str, str], int] = {}
 
+#: The native VLAN of a trunk whose text states none, by hand, from
+#: the vendors' sentences (the vendor reference's table "And when the
+#: config states no untagged VLAN at all"): the readers of TEXT below
+#: add it, where the trunk's list holds it.  A Junos trunk has none,
+#: and the default VLAN of an OS10 switch is a setting no trunk
+#: states.
+NATIVE_WITH_NO_LINE = {"arista_eos": 1, "aruba_aoscx": 1, "cisco_iosxe_cli": 1, "cisco_nxos": 1}
+
+#: (capture, target) -> VLAN 1 memberships that are untagged in the
+#: output by the TARGET's own default and are not the source's: a
+#: trunk written with no native line beside a list that holds VLAN 1,
+#: for a source port that carries no VLAN untagged.  Every one is a
+#: Junos trunk of ``vlan members all`` with no ``native-vlan-id``,
+#: which drops untagged packets by Juniper's sentence.  No renderer
+#: has a form yet for "this trunk carries no VLAN untagged"; a known
+#: limitation, in the CHANGELOG, and pinned port by port in
+#: ``test_the_list_holds_the_native_vlan.py`` as well.  Compared for
+#: EQUALITY with what is measured: the change that writes such a form
+#: empties this.
+#: (Counted by port of the OUTPUT: where a job lists two source LAGs
+#: as fused under one name, as two cells below do, that is one.)
+BY_THE_TARGETS_DEFAULT: dict[tuple[str, str], int] = {
+    ("real/junos/ksator_labmgmt_qfx5100_junos173.set", "arista_eos"): 2,
+    ("real/junos/ksator_labmgmt_qfx5100_junos173.set", "aruba_aoscx"): 2,
+    ("real/junos/ksator_labmgmt_qfx5100_junos173.set", "cisco_iosxe_cli"): 1,
+    ("real/junos/ksator_labmgmt_qfx5100_junos173.set", "cisco_nxos"): 1,
+    ("real/junos/saidvandeklundert_snmpv3_junos172.set", "arista_eos"): 3,
+    ("real/junos/saidvandeklundert_snmpv3_junos172.set", "aruba_aoscx"): 3,
+    ("real/junos/saidvandeklundert_snmpv3_junos172.set", "cisco_iosxe_cli"): 3,
+    ("real/junos/saidvandeklundert_snmpv3_junos172.set", "cisco_nxos"): 3,
+}
+
 #: Targets on which a port under a name the OPERATOR chose (an entry of
 #: the port map that is no port name of the target) is written with no
 #: VLAN line and nothing said.  AOS-CX writes a port's VLANs only where
@@ -227,15 +267,24 @@ class Reading:
         self.every: set[str] = set()
         self.wide: dict[str, frozenset[int]] = {}
         self.declared: set[int] = set()
+        #: (vid, port) that no line states untagged: the platform's
+        #: default native VLAN, added by a reader of text.
+        self.by_default: set[tuple[int, str]] = set()
 
     def say(self, vid: int, port: str, mode: str, *xpaths: str) -> None:
         self.stated.setdefault((vid, port, mode), set()).update(xpaths)
 
-    def trunk(self, name: str, allowed: Any, native: int | None, *xpaths: str) -> None:
+    def trunk(self, name: str, allowed: Any, native: int | None, *xpaths: str, default: int | None = None) -> None:
         """A trunk: *allowed* is the word ``"all"`` or a list of ids,
         and it is what the trunk carries.  The native VLAN is untagged
         where the list holds it; where the list leaves it out it is
-        stated and not carried, and is no membership."""
+        stated and not carried, and is no membership.  *default* is
+        the native VLAN of a trunk that states none, for a reader of
+        text: untagged where the list holds it, and nothing where the
+        list leaves it out."""
+        if native is None and default is not None and (allowed == "all" or default in allowed):
+            native = default
+            self.by_default.add((default, name))
         if native is not None and (allowed == "all" or native in allowed):
             self.say(native, name, "u", *xpaths)
         if allowed == "all" or len(set(allowed)) >= EVERY:
@@ -321,8 +370,15 @@ def _read_ios_like(text: str, codec: str) -> Reading:
     ``switchport access vlan``: a statement beside the allowed line,
     which names tagged VLANs only, so the trunk carries it whatever
     that line says (and ``no switchport access vlan`` takes it
-    back)."""
+    back).  On the other three a trunk with no native line has the
+    platform's own -- an INTERFACE that states none: a text can hold
+    an interface's stanza twice, and a native line in either is the
+    interface's."""
     r = Reading()
+    states_native = {
+        name for name, body in _stanzas(text, "interface ")
+        if any(line.startswith("switchport trunk native vlan ") for line in body)
+    }
     for name, body in _stanzas(text, "interface "):
         mode = access = native = None
         allowed: Any = None
@@ -345,7 +401,8 @@ def _read_ios_like(text: str, codec: str) -> Reading:
                 carried = tagged if tagged == "all" or access is None else [*tagged, access]
                 r.trunk(name, carried, access)
             else:
-                r.trunk(name, allowed if allowed is not None else "all", native)
+                default = None if name in states_native else NATIVE_WITH_NO_LINE[codec]
+                r.trunk(name, allowed if allowed is not None else "all", native, default=default)
         elif access is not None:
             r.say(access, name, "u")
     return r
@@ -367,7 +424,8 @@ def _read_aoscx(text: str) -> Reading:
                 trunk = True
                 allowed = "all" if m.group(1) == "all" else _ids(m.group(1))
         if trunk:
-            r.trunk(name, allowed if allowed is not None else "all", native)
+            # (Every stanza of a trunk an AOS-CX output writes has its native line.)
+            r.trunk(name, allowed if allowed is not None else "all", native, default=NATIVE_WITH_NO_LINE["aruba_aoscx"])
         elif access is not None:
             r.say(access, name, "u")
     return r
@@ -484,6 +542,9 @@ def _in_a_line(name: str, text: str) -> bool:
     return re.search(r"(?<![\w/.:-])" + spelled + r"(?![\w/.:-])", text) is not None
 
 
+TARGETS_DEFAULT = "untagged by the target's own default"
+
+
 def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
     """What became of every membership the source tree of *raw* holds,
     in *job*'s output.  Counts, and a sentence for each thing that may
@@ -505,8 +566,10 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
     _READ["jobs"] += 1
     _READ["memberships"] += len(want)
 
+    by_default: set[tuple[int, str]] = set()
     if target.name in READ_AS_TEXT:
         text = read_text(job.rendered, target.name)
+        by_default = {(vid, key(port)) for vid, port in text.by_default}
         by_text = {(vid, key(port), mode) for (vid, port, mode) in text.memberships(universe)}
         _READ["by_text"] += len(by_text)
         for vid, port, mode in sorted(set(have) ^ by_text):
@@ -543,6 +606,10 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
         in_a_line[port] = final
         if (vid, key(final), mode) in have:
             tally["kept"] += 1
+        elif mode == "t" and (vid, key(final)) in by_default and (vid, key(final), "u") in have:
+            # Tagged on the source, and untagged in the output by a
+            # default no line states: pinned, cell by cell.
+            tally[TARGETS_DEFAULT] += 1
         elif (vid, key(final), other) in have:
             tally["mode changed"] += 1
             wrong.append(f"VLAN {vid} on {port!r} ({final!r}) was {mode} and is {other}")
@@ -558,6 +625,11 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
             wrong.append(f"VLAN {vid} {mode} on {port!r} ({final!r}) is not in the output: {why}")
     for (vid, port, mode), name in sorted(have.items()):
         if (vid, port, mode) not in matched:
+            if mode == "u" and (vid, port) in by_default:
+                # The same default, for a VLAN the source does not
+                # know: a trunk of every VLAN on a switch with no VLAN 1.
+                tally[TARGETS_DEFAULT] += 1
+                continue
             tally["gained"] += 1
             wrong.append(f"VLAN {vid} {mode} on {name!r} is in the output and in no source membership")
 
@@ -654,6 +726,16 @@ def test_every_listed_port_has_a_record(codec: str) -> None:
 
 def test_no_membership_goes_unaccounted(every_job: dict) -> None:
     assert not any(v["wrong"] for v in every_job.values()), _shown(every_job)
+
+
+def test_what_a_targets_default_makes_is_pinned(every_job: dict) -> None:
+    made = {
+        (label, target): verdict["tally"][TARGETS_DEFAULT]
+        for (_source, label, target), verdict in every_job.items()
+        if verdict["tally"][TARGETS_DEFAULT]
+    }
+    assert made == BY_THE_TARGETS_DEFAULT
+    assert {target for _label, target in made} <= set(NATIVE_WITH_NO_LINE)
 
 
 def test_what_a_stanza_says_is_as_pinned(every_job: dict) -> None:
@@ -985,6 +1067,44 @@ class TestTheCheckItself:
         job.validation.unsupported_paths = listed
         assert len(self._judge(job)["wrong"]) == 1
 
+    def test_the_targets_default_is_counted_apart(self) -> None:
+        """A Junos trunk of every VLAN with no native VLAN, onto NX-OS,
+        is written a trunk with no native line: VLAN 1 is untagged
+        there by a default no line states.  Counted apart, and pinned
+        by cell.  The same VLAN untagged by a LINE is a membership
+        the source does not have, and so is the default once another
+        stanza of the interface states a native VLAN."""
+        text = "set system host-name sw1\n" + _TYPED["juniper_junos"][0]
+        source, target = get_codec("juniper_junos"), get_codec("cisco_nxos")
+        job = _run("juniper_junos", "cisco_nxos", text)
+        verdict = judge(source, target, text, job)
+        assert verdict["wrong"] == [] and verdict["tally"][TARGETS_DEFAULT] == 1
+        final = job.port_renames["ge-0/0/3"]
+        stanza = f"interface {final}\n  no shutdown\n  switchport mode trunk\n"
+        assert job.rendered.count(stanza) == 1, job.rendered
+        written = job.rendered
+        job.rendered = written.replace(stanza, stanza + "  switchport trunk native vlan 1\n")
+        verdict = judge(source, target, text, job)
+        assert verdict["wrong"] == [f"VLAN 1 u on {final!r} is in the output and in no source membership"]
+        assert TARGETS_DEFAULT not in verdict["tally"]
+        # A reader that added the default to every trunk with no
+        # native line of its own would read VLAN 1 untagged here too.
+        job.rendered = written + f"interface {final}\n  switchport trunk native vlan 20\n"
+        assert (1, final) not in read_text(job.rendered, "cisco_nxos").by_default
+        assert (1, final) in read_text(written, "cisco_nxos").by_default
+        # And where the source DECLARES VLAN 1 and its trunks carry it
+        # tagged, the membership changes hands instead of appearing:
+        # the same default, counted the same way, on both such trunks.
+        switching = "set interfaces ge-0/0/5 unit 0 family ethernet-switching "
+        declared = text + (
+            "set vlans ONE vlan-id 1\n" + switching + "interface-mode trunk\n"
+            + switching + "vlan members ONE\n" + switching + "vlan members USERS\n"
+        )
+        job = _run("juniper_junos", "cisco_nxos", declared)
+        verdict = judge(source, target, declared, job)
+        assert verdict["wrong"] == [] and verdict["tally"][TARGETS_DEFAULT] == 2, verdict["wrong"]
+        assert "mode changed" not in verdict["tally"] and "gained" not in verdict["tally"]
+
     def test_the_vlan_declared_is_not_enough(self) -> None:
         """On a target that writes no port VLANs the report has to list
         a path that states the membership; one that lists other paths
@@ -1045,6 +1165,8 @@ _TYPED = {
         "interface Ethernet1/1\n  switchport access vlan 10\n"
         "interface Ethernet1/2\n  switchport mode trunk\n  switchport trunk native vlan 10\n"
         "  switchport trunk allowed vlan 10,20-21\n"
+        # No native line and no list: every VLAN, and VLAN 1 untagged
+        # by the platform's default.
         "interface Ethernet1/3\n  switchport mode trunk\n"
         # A native VLAN the list leaves out is no membership.
         "interface Ethernet1/4\n  switchport mode trunk\n  switchport trunk native vlan 10\n"
@@ -1052,7 +1174,7 @@ _TYPED = {
         # ... and beside no list (every VLAN) it is one.
         "interface Ethernet1/5\n  switchport mode trunk\n  switchport trunk native vlan 21\n",
         {(10, "Ethernet1/1", "u"), (10, "Ethernet1/2", "u"), (20, "Ethernet1/2", "t"), (21, "Ethernet1/2", "t"),
-         (10, "Ethernet1/3", "t"), (20, "Ethernet1/3", "t"), (21, "Ethernet1/3", "t"),
+         (1, "Ethernet1/3", "u"), (10, "Ethernet1/3", "t"), (20, "Ethernet1/3", "t"), (21, "Ethernet1/3", "t"),
          (20, "Ethernet1/4", "t"),
          (10, "Ethernet1/5", "t"), (20, "Ethernet1/5", "t"), (21, "Ethernet1/5", "u")},
     ),
@@ -1075,7 +1197,7 @@ _TYPED = {
         "interface 1/1/3\n    no routing\n    vlan trunk allowed all\n"
         "interface 1/1/4\n    no routing\n    vlan trunk native 10\n    vlan trunk allowed 20\n",
         {(10, "1/1/1", "u"), (10, "lag 1", "u"), (20, "lag 1", "t"), (21, "lag 1", "t"),
-         (10, "1/1/3", "t"), (20, "1/1/3", "t"), (21, "1/1/3", "t"), (20, "1/1/4", "t")},
+         (1, "1/1/3", "u"), (10, "1/1/3", "t"), (20, "1/1/3", "t"), (21, "1/1/3", "t"), (20, "1/1/4", "t")},
     ),
     "aruba_aoss": (
         "vlan 10\n   untagged 1-2,A1\n   exit\nvlan 20\n   tagged 2,Trk1\n   untagged A1\n   exit\n"

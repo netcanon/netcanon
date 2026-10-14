@@ -374,8 +374,16 @@ native VLAN, and an access port with no access VLAN stated.  It is
 not written again for a tree that came from OS10's own text -- the
 tree cannot tell "no untagged VLAN, stated" from "not stated" -- so
 an OS10 config that has the line comes back without it.  A trunk that
-states no access VLAN is written none: by Dell's page it then
-carries the switch's default VLAN untagged.  `interface range` is
+states no access VLAN is read as carrying no VLAN untagged, and is
+written no access line.  Dell: "By default, native VLAN of a port is
+the default VLAN ID of the switch."  Which id that is is a setting of
+the switch that no trunk states, so nothing is filled in for it, as a
+source or as a target (no committed capture has such a trunk).  As a
+target, a Cisco, Arista or AOS-CX trunk that states no native VLAN and
+has VLAN 1 on its list -- its platform's default native VLAN -- is
+written `switchport access vlan 1` with VLAN 1 off the allowed line;
+release 0.7.7 and earlier wrote VLAN 1 ON the allowed line, tagged,
+and no access line: check such trunks migrated then.  `interface range` is
 not read, so a trunk stated that way has no VLANs in any output.  The
 vendors' own sentences are in the
 [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).

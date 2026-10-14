@@ -310,7 +310,7 @@ per_field_expectation:
 
   interfaces[].trunk_native_vlan:
     disposition: lossy
-    reason: "Junos's 'set interfaces X native-vlan-id N' lives at the parent-interface hierarchy (not the unit); Arista's 'switchport trunk native vlan N' lives in the interface stanza. Different syntax, identical semantics — round-trip preserves the integer."
+    reason: "Junos's 'set interfaces X native-vlan-id N' lives at the parent-interface hierarchy (not the unit); Arista's 'switchport trunk native vlan N' lives in the interface stanza. A STATED native VLAN keeps its integer by the two parse and render paths; no committed fixture on this pair states one. The loss the corpus shows is for a trunk that states NONE. It is written with no native line, which on EOS is native VLAN 1, and it reads back as 1 where its list holds VLAN 1: null -> 1 on 'ae0' and 'ae1' of 'ksator_labmgmt_qfx5100_junos173' and on 'ae111', 'ae201' and 'ae202' of 'saidvandeklundert_snmpv3_junos172', all trunks of 'vlan members all' (2 of 11 cells). The 1 is EOS's own default for a trunk that states no native VLAN, not a value the render wrote. See vlans[].id for what it means on the switch."
 
   interfaces[].voice_vlan:
     disposition: not_applicable
@@ -332,8 +332,8 @@ per_field_expectation:
   # ── Tier 1 — VLANs ──
 
   vlans[].id:
-    disposition: good
-    note: "Junos 'set vlans <name> vlan-id N' maps to Arista 'vlan N' directly."
+    disposition: lossy
+    reason: "Junos 'set vlans <name> vlan-id N' maps to Arista 'vlan N' directly, and no VLAN the source declares is lost: preserved on 5 of the 7 cells that define VLANs. On the other two a VLAN the source does not have ARRIVES -- VLAN 1 ('ksator_labmgmt_qfx5100_junos173' 16 -> 17, 'saidvandeklundert_snmpv3_junos172' 87 -> 88). Each has trunks of 'vlan members all' that state no 'native-vlan-id'. Such a trunk is written 'switchport mode trunk' with no native line; on EOS the default native VLAN for all interfaces is VLAN 1 (Arista's sentence, in docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md), so read back the port is an untagged member of VLAN 1, which then has a record. The Junos trunk drops untagged packets (Juniper's sentence, on the same page); the EOS trunk associates them with VLAN 1. No form is written yet for 'this trunk carries no VLAN untagged': a known limitation, in the CHANGELOG. Check what each such trunk is to carry untagged before deploying."
     references: [junos-vlans-statement, arista-vlan-cg]
 
   vlans[].name:

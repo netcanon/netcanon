@@ -285,8 +285,40 @@ Provenance + per-fixture detail in
   vlan 10,20,30`).  Release 0.7.7 and earlier left it off the
   allowed line, in jobs that said `completed`: check the allowed
   list of every trunk with a native line migrated then from AOS-S or
-  OS10.  A trunk that states no native VLAN is written none, and the
-  global `vlan dot1q tag native` is not read.  The VLAN pane's map
+  OS10.  **A trunk that states no native VLAN has native VLAN 1**
+  (Cisco: "The native VLAN is VLAN 1 by default.").  Where its
+  allowed list holds VLAN 1 -- the list names it, or there is no
+  allowed line -- a port that says `switchport mode trunk` is read
+  as carrying VLAN 1 untagged, and Junos, OS10 and AOS-S are written
+  so (`native-vlan-id 1`; `switchport access vlan 1`; `untagged`).
+  Release 0.7.7 and earlier wrote VLAN 1 TAGGED on those three, in
+  jobs that said nothing: check such trunks migrated then.  Where
+  the list leaves VLAN 1 out nothing is filled in, and the trunk is
+  read as having no untagged VLAN (Cisco, of taking VLAN 1 off a
+  trunk: "so that no user traffic (including spanning-tree
+  advertisements) is sent or received on VLAN 1.").  The default is
+  a trunk's: a port in another mode -- `switchport mode dynamic
+  auto`, `switchport mode access`, or no mode line -- keeps its
+  trunk lines and is given no native VLAN.  As a target, no
+  `switchport trunk native vlan 1` line is written for a trunk
+  whose list holds VLAN 1: it is the default, and no real IOS-XE
+  capture prints the line.  (A port that is not `switchport mode
+  trunk` keeps a `native vlan 1` line it states.)  A `vlan 1` line
+  IS written where a trunk of the source carries VLAN 1 untagged by
+  its platform's default, though the source may have no word for
+  VLAN 1 and no real IOS-XE capture prints the line: the tree has
+  the VLAN, and every VLAN of the tree is declared.  So a config
+  with such a trunk and no word for VLAN 1 comes back onto IOS-XE
+  with a `vlan 1` line it did not have.  One thing is not mended: a
+  port that carries NO
+  VLAN untagged at its source and has VLAN 1 on its list (a Junos
+  trunk of `vlan members all` with no `native-vlan-id`, say) is
+  written a trunk with no native line as well, and so carries VLAN 1
+  untagged here by that default; no form is written yet for "no
+  untagged VLAN" (the limits in [`CAPABILITIES.md`](../CAPABILITIES.md)).
+  The global `vlan dot1q tag native` and `switchport trunk native
+  vlan tag` are not read, except that a trunk under either is given
+  no default.  The VLAN pane's map
   keeps to that reading.  Where a map would bring a native VLAN
   that the list leaves out INTO the list, the native VLAN is
   cleared if the map has merged it with a VLAN of the config that
