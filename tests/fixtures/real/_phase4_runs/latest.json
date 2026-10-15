@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-10-14T02:23:32+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261014T022330Z.json",
-  "mesh_run_started_utc": "2026-10-14T02:23:18+00:00",
+  "started_utc": "2026-10-15T03:54:17+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20261015T035415Z.json",
+  "mesh_run_started_utc": "2026-10-15T03:54:08+00:00",
   "cells_total": 1456,
   "expectation_yamls_loaded": 156,
   "covered_codecs": [
@@ -598,19 +598,19 @@
   ],
   "cells_without_expectation_yaml": [],
   "aggregate": {
-    "ALIGNED": 9314,
+    "ALIGNED": 9345,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 4216,
+    "EXPECTED_LOSSY": 4196,
     "EXPECTED_UNSUPPORTED": 2683,
-    "METHODOLOGY_ISSUE_under": 1950,
+    "METHODOLOGY_ISSUE_under": 1943,
     "METHODOLOGY_ISSUE_over": 21,
-    "STRUCTURAL_ONLY": 4531,
-    "TRIVIAL_EMPTY": 35274,
+    "STRUCTURAL_ONLY": 4511,
+    "TRIVIAL_EMPTY": 35290,
     "fields_total": 57994,
     "severity_high": 5,
     "severity_medium": 287,
-    "severity_low": 6215,
-    "severity_ok": 51487
+    "severity_low": 6188,
+    "severity_ok": 51514
   },
   "severity_matrix": {
     "arista_eos": {
@@ -2646,7 +2646,7 @@
         },
         "interfaces[].trunk_native_vlan": {
           "actual": "trivially_preserved",
-          "expected": "lossy",
+          "expected": "good",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
@@ -2676,7 +2676,7 @@
         },
         "vlans[].id": {
           "actual": "trivially_preserved",
-          "expected": "lossy",
+          "expected": "good",
           "variance": "TRIVIAL_EMPTY",
           "severity": "ok"
         },
