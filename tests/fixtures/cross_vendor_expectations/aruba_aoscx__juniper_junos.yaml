@@ -293,14 +293,18 @@ per_field_expectation:
   "vlans[].untagged_ports":
     disposition: lossy
     reason: >
-      Drifts on all 7 cells, with a clean split: membership entries naming a
+      Drifts on 5 of 7 cells, with a clean split: membership entries naming a
       PHYSICAL port survive, membership entries naming a LAG do not.  The
       cause is the interface-name tokenisation described in
       `interfaces[].name` seen from the VLAN side — the port name `lag 101` is
       destroyed by the same first-token read.  Unambiguous on
       `aoscx_dcn_arch4_core1_2.cfg`, where VLAN 1 carries 24 physical ports
       plus 5 LAG entries untagged: all 24 physical ports arrive, all 5 LAG
-      entries are gone.  Re-apply aggregate VLAN membership on the target.
+      entries are gone.  Re-apply aggregate VLAN membership on the target.  The
+      two cells that preserve it are the two `aoscx_dcn_arch3_*leaf1a`
+      captures, whose VLAN 1 has one port, a LAG of `vlan trunk native 1
+      tag` -- which sends VLAN 1 tagged and takes no untagged frame -- so
+      VLAN 1 has no untagged port on either side.
     references: [aoscx-junos-surface]
 
   "vlans[].tagged_ports":

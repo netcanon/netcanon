@@ -25,8 +25,11 @@ three renderers that leave out the native line no capture of theirs
 prints.  Jobs through every pair, and the committed captures, are in
 ``test_the_list_holds_the_native_vlan.py``.
 
-What is not here: OS10 and Junos fill nothing in, and nothing is
-filled in under the words that say a native VLAN is sent tagged.
+What is not here: OS10 and Junos fill nothing in.  Under the words
+that say a native VLAN is sent tagged nothing is filled in, and a
+native VLAN the trunk states is not kept: such a trunk carries no
+VLAN untagged.  And the four renderers write their form for that
+(section 4).
 """
 
 from __future__ import annotations
@@ -38,8 +41,12 @@ import pytest
 from netcanon.migration.canonical.intent import CanonicalIntent, CanonicalInterface
 from netcanon.migration.codecs._helpers import (
     TrunksByName,
+    every_native_vlan_tagged,
+    native_vlan_stated,
     tags_every_native_vlan,
     tags_its_native_vlan,
+    untags_its_native_vlan,
+    wants_no_untagged_vlan,
 )
 from netcanon.migration.codecs.registry import get_codec
 
@@ -170,9 +177,9 @@ class TestWhereTheListHoldsVlanOne:
 @pytest.mark.parametrize("codec", SWITCHPORT)
 class TestTheWordsThatTagIt:
     """``vlan dot1q tag native`` and ``switchport trunk native vlan
-    tag`` say the native VLAN is sent TAGGED.  They are not read into
-    the tree, and a native VLAN put there would be read as untagged:
-    nothing is filled in under them."""
+    tag`` say the native VLAN is sent TAGGED: the trunk carries no
+    VLAN untagged, and has no native VLAN in the tree -- not the
+    default, and not one it states."""
 
     def test_for_every_trunk_of_the_config(self, codec: str) -> None:
         text = config(codec, (*TRUNK[codec], allowed(codec, "1,10,20")), TRUNK[codec], top=("vlan dot1q tag native",))
@@ -188,24 +195,86 @@ class TestTheWordsThatTagIt:
         assert ports == [("trunk", None, True), ("trunk", 1, True)]
         assert one == ([port(codec, 1)], [port(codec, 2)])
 
+    def test_a_stated_native_sent_tagged(self, codec: str) -> None:
+        """Under the line for every trunk, and beside the trunk's own
+        ``tag`` (on EOS: before it, the one argument's last word)."""
+        lines = (*TRUNK[codec], native(codec, 10), allowed(codec, "1,10,20"))
+        ports, one, _tree = read(codec, config(codec, lines, top=("vlan dot1q tag native",)))
+        want = [("trunk", 10 if codec == EOS else None, True)]      # EOS: the id is the port's own word
+        assert ports == want, ports
+        ports, one, _tree = read(codec, config(codec, (*lines, "switchport trunk native vlan tag")))
+        assert ports == [("trunk", None, True)] and one == ([port(codec)], [])
+
     def test_the_words_are_whole_lines(self, codec: str) -> None:
         assert tags_its_native_vlan("  switchport trunk native vlan tag") and tags_its_native_vlan(
             "switchport trunk native vlan tag\r")
         for line in (" switchport trunk native vlan 10", " description switchport trunk native vlan tag",
                      " no switchport trunk native vlan tag", " switchport trunk native vlan tagged"):
             assert not tags_its_native_vlan(line), line
-        for text in ("description vlan dot1q tag native\n", "no vlan dot1q tag native\n", "vlan dot1q tag native x\n"):
+        assert untags_its_native_vlan(" no switchport trunk native vlan tag") and untags_its_native_vlan(
+            "no  switchport trunk native vlan tag\r")
+        for line in (" switchport trunk native vlan tag", " no switchport trunk native vlan 10",
+                     " description no switchport trunk native vlan tag"):
+            assert not untags_its_native_vlan(line), line
+        for text in ("description vlan dot1q tag native\n", "no vlan dot1q tag native\n", "vlan dot1q tag native x\n",
+                     "vlan dot1q tag native exclude\n", " vlan dot1q tag native exclude control\n"):
             assert not tags_every_native_vlan(text), text
         assert tags_every_native_vlan("hostname a\r\nvlan dot1q tag native\r\ninterface X\r\n")
+        assert tags_every_native_vlan("hostname a\r\nvlan dot1q tag native exclude control\r\ninterface X\r\n")
 
 
-def test_aoscx_tag_is_on_the_native_line() -> None:
-    """AOS-CX writes ``tag`` after a native VLAN's id, so a port that
-    has the word states its native VLAN: it is read as before, and
-    nothing is filled in beside it."""
+@pytest.mark.parametrize("codec", [IOSXE, NXOS])
+def test_a_trunk_that_leaves_the_line(codec: str) -> None:
+    """``no switchport trunk native vlan tag``, the per-port word Cisco
+    documents for a trunk that leaves ``vlan dot1q tag native``: that
+    trunk's native VLAN is untagged again, and it has the default as
+    any trunk does; the next trunk is still under the line.  Without
+    the line the word changes nothing."""
+    lines = (*TRUNK[codec], allowed(codec, "1,10,20"))
+    out = "no switchport trunk native vlan tag"
+    text = config(codec, (out, *lines), lines, top=("vlan dot1q tag native",))
+    ports, one, _tree = read(codec, text)
+    assert ports == [("trunk", 1, True), ("trunk", None, True)] and one == ([port(codec, 2)], [port(codec)])
+    ports, _one, _tree = read(codec, config(codec, (out, native(codec, 10), *lines), top=("vlan dot1q tag native",)))
+    assert ports == [("trunk", 10, True)]
+    ports, _one, _tree = read(codec, config(codec, (out, *lines)))
+    assert ports == [("trunk", 1, True)]
+    # ... and the line said again under the port puts it back.
+    ports, _one, _tree = read(codec, config(codec, (out, "switchport trunk native vlan tag", *lines)))
+    assert ports == [("trunk", None, True)]
+
+
+@pytest.mark.parametrize("codec", SWITCHPORT)
+def test_the_line_with_exclude_control(codec: str) -> None:
+    """``vlan dot1q tag native exclude control`` is read as the line
+    for every trunk, too: the native VLAN's data traffic tagged.  That
+    is netcanon's reading and not a Cisco sentence.  Cisco's sentence
+    for the two words is on a Nexus 7000 page: "Excludes untagged
+    control traffic on the native VLAN in a trunk."  What the line
+    does to control traffic is not modelled."""
+    lines = (*TRUNK[codec], allowed(codec, "1,10,20"))
+    ports, one, _tree = read(codec, config(codec, lines, top=("vlan dot1q tag native exclude control",)))
+    assert ports == [("trunk", None, True)] and one == ([port(codec)], [])
+
+
+def test_aoscx_tag_sends_it_tagged() -> None:
+    """AOS-CX writes ``tag`` after a native VLAN's id: the native VLAN
+    is sent tagged and untagged frames are dropped, so the trunk
+    carries no VLAN untagged -- no native VLAN in the tree, and none
+    filled in.  The id is not kept.  What a later native line without
+    the word does to the tagging is not established: it is read as
+    leaving the tagging on, because HPE documents the ``no`` form as
+    the way tagging is removed."""
     for vid in (1, 10):
-        ports, _one, _tree = read(AOSCX, config(AOSCX, (f"vlan trunk native {vid} tag", allowed(AOSCX, "1,10,20"))))
-        assert ports == [("trunk", vid, True)]
+        ports, one, _tree = read(AOSCX, config(AOSCX, (f"vlan trunk native {vid} tag", allowed(AOSCX, "1,10,20"))))
+        assert ports == [("trunk", None, True)] and one == ([port(AOSCX)], []), vid
+    for lines in (
+        ("vlan trunk native 10", "vlan trunk native 10 tag"), ("vlan trunk native 10 tag", "vlan trunk native 10"),
+    ):
+        ports, _one, _tree = read(AOSCX, config(AOSCX, (*lines, allowed(AOSCX, "1,10,20"))))
+        assert ports == [("trunk", None, True)], lines
+    ports, _one, _tree = read(AOSCX, config(AOSCX, ("vlan trunk native 10 tag",)))
+    assert ports == [("trunk", None, True)]                 # no allowed line: every VLAN
 
 
 class TestAPortThatDoesNotSayItIsATrunk:
@@ -305,6 +374,34 @@ class TestAnInterfaceNotAStanza:
             written = [line for line in _lines(AOSCX, text) if line.startswith("vlan trunk native")]
             assert written == ["vlan trunk native 20"], order
 
+    @pytest.mark.parametrize("target", [EOS, IOSXE, NXOS])
+    def test_no_form_in_the_other_stanza(self, target: str) -> None:
+        """...and on the three ``switchport`` targets: one stanza
+        states native VLAN 10, the other says trunk with a list that
+        holds VLAN 1 and 10.  The record of the second has no native
+        VLAN, and is written no form for "no VLAN untagged" -- no
+        ``tag`` on EOS, no review line on IOS-XE or NX-OS -- since the
+        interface has a native VLAN.  (EOS's parser keeps one record a
+        name, so the two records come from an IOS-XE text there.)
+        Read back, the interface's native VLAN is the one it states."""
+        source = IOSXE if target == EOS else target
+        stated = (*TRUNK[source], native(source, 10))
+        listed = (*TRUNK[source], allowed(source, "1,10"))
+        for order in ((stated, listed), (listed, stated)):
+            tree = get_codec(source).parse(config(source, *order, names=(port(source), port(source))))
+            assert [iface.trunk_allowed_vlans for iface in tree.interfaces] == [[1, 10], [1, 10]], order
+            assert sorted(str(iface.trunk_native_vlan) for iface in tree.interfaces) == ["10", "None"], order
+            rendered = get_codec(target).render(tree)
+            out = [line.strip() for line in rendered.splitlines()]
+            assert "switchport trunk native vlan tag" not in out, (order, out)
+            assert "vlan dot1q tag native" not in out, (order, out)
+            assert not [line for line in out if line.startswith("! review")], (order, out)
+            back = get_codec(target).parse(rendered).interfaces
+            if target == EOS:
+                assert [iface.trunk_native_vlan for iface in back] == [10], order
+            else:
+                assert sorted(str(iface.trunk_native_vlan) for iface in back) == ["10", "None"], order
+
     def test_the_words_in_the_other_stanza(self) -> None:
         lines = (*TRUNK[IOSXE], allowed(IOSXE, "1,10,20"))
         text = config(IOSXE, lines, ("switchport trunk native vlan tag",), names=(port(IOSXE), port(IOSXE)))
@@ -329,6 +426,14 @@ class TestAnInterfaceNotAStanza:
 
         for codec in FOUR:
             assert settled(codec).trunk_native_vlan == 1, codec                 # no list: every VLAN
+            # The interface's own word against the line for every
+            # trunk, in either order; the last word of the interface
+            # stands.
+            assert settled(codec, ("native_is_tagged",), ("native_is_tagged", "a", False)).trunk_native_vlan == 1
+            assert settled(codec, ("native_is_tagged", "a", False), ("native_is_tagged",)).trunk_native_vlan == 1
+            assert settled(
+                codec, ("native_is_tagged", "a", False), ("native_is_tagged", "a"),
+            ).trunk_native_vlan is None, codec
             assert settled(codec, ("allowed_is", "a", [1, 10])).trunk_native_vlan == 1, codec
             assert settled(codec, ("allowed_is", "a", [10])).trunk_native_vlan is None, codec
             assert settled(codec, ("native_line", "a")).trunk_native_vlan is None, codec
@@ -355,6 +460,21 @@ class TestAnInterfaceNotAStanza:
         iface = trunks.made("a", CanonicalInterface(name="a", switchport_mode="trunk", trunk_native_vlan=30))
         trunks.settle()
         assert iface.trunk_native_vlan == 30
+
+    def test_a_tagged_native_is_not_kept(self) -> None:
+        """...unless it is sent tagged: then the trunk carries no VLAN
+        untagged.  A port in another mode keeps its line."""
+        for said, mode, kept in (
+            ((None,), "trunk", None), (("a",), "trunk", None), (("another",), "trunk", 30),
+            ((None,), "access", 30), ((None, ("a", False)), "trunk", 30),
+        ):
+            trunks = TrunksByName(NXOS)
+            trunks.says_trunk("a")
+            for what in said:
+                trunks.native_is_tagged(*(what if isinstance(what, tuple) else (what,)))
+            iface = trunks.made("a", CanonicalInterface(name="a", switchport_mode=mode, trunk_native_vlan=30))
+            trunks.settle()
+            assert iface.trunk_native_vlan == kept, (said, mode)
 
 
 @pytest.mark.parametrize("codec,text", [
@@ -468,3 +588,101 @@ def test_no_vlan_one_where_no_trunk_carries_it(codec: str) -> None:
     assert "vlan 1" not in _lines(codec, config(codec, (*TRUNK[codec], allowed(codec, "10,20"))))
     if codec == IOSXE:
         assert "vlan 1" not in _lines(codec, config(codec, ("switchport mode dynamic auto", allowed(codec, "1-4094"))))
+
+
+# ---------------------------------------------------------------------------
+# 4. A trunk that carries no VLAN untagged, written
+# ---------------------------------------------------------------------------
+
+
+def _trunk(name: str, allowed: list[int], native: int | None = None, mode: str | None = "trunk") -> CanonicalInterface:
+    return CanonicalInterface(name=name, switchport_mode=mode, trunk_allowed_vlans=allowed, trunk_native_vlan=native)
+
+
+def test_who_wants_a_form_by_hand() -> None:
+    """No native VLAN in the tree and the platform's default on the
+    list.  A list that leaves VLAN 1 out wants nothing (the default is
+    then off the list), nor does a native VLAN the tree states, nor a
+    platform whose default is no id."""
+    for codec in FOUR:
+        assert wants_no_untagged_vlan(codec, [1, 10, 20], None), codec
+        assert wants_no_untagged_vlan(codec, list(range(1, 4095)), None), codec
+        assert not wants_no_untagged_vlan(codec, [10, 20], None), codec
+        assert not wants_no_untagged_vlan(codec, [], None), codec
+        assert not wants_no_untagged_vlan(codec, [1, 10, 20], 10), codec
+        assert not wants_no_untagged_vlan(codec, [10, 20], 1), codec
+    for codec in ("juniper_junos", "dell_os10"):
+        assert not wants_no_untagged_vlan(codec, [1, 10, 20], None), codec
+    with pytest.raises(KeyError):
+        wants_no_untagged_vlan("a_codec_nobody_listed", [1], None)
+
+
+def test_the_line_for_every_trunk_by_hand() -> None:
+    """Which ports the line for every trunk is decided over: a trunk
+    that wants it, the ports in trunk mode, the ports with trunk
+    lines and no mode, and the ports in a mode no mode line is
+    written for (dynamic, private-vlan, dot1q-tunnel, fex-fabric and
+    the like).  A port with no mode and no trunk line is
+    not counted: on a Catalyst such a port is in dynamic auto by
+    default, and should it become a trunk the line tags its native
+    VLAN as well."""
+    wants = _trunk("a", [1, 10, 20])
+    assert every_native_vlan_tagged(IOSXE, [wants])
+    # An access port, a port in no mode with no trunk line (not
+    # counted, a member that states only its LAG among them), a trunk
+    # whose native VLAN is off its list, and one whose list leaves
+    # VLAN 1 out: no obstacle.
+    for beside in (
+        _trunk("b", [], mode="access"), _trunk("b", [], mode=None), _trunk("b", [20, 30], 10),
+        _trunk("b", [10, 20]), _trunk("Port-channel1", [1, 10, 20]),
+    ):
+        assert every_native_vlan_tagged(IOSXE, [wants, beside]), beside
+    # A trunk that carries a VLAN untagged; a port in a mode no line is
+    # written for, which is left in the switch's default mode; a port
+    # in no mode that holds trunk lines: each is an obstacle.
+    for beside in (
+        _trunk("b", [1, 10, 20], 1), _trunk("b", [10, 20], 10), _trunk("b", [], mode="dynamic"),
+        _trunk("b", [1, 10], mode=None), _trunk("b", [], 10, mode=None), _trunk("b", [], mode="private-vlan"),
+    ):
+        assert not every_native_vlan_tagged(IOSXE, [wants, beside]), beside
+    # Nothing that wants it: no line.  And a record of an interface
+    # whose other record states a native VLAN is not one that wants it.
+    assert not every_native_vlan_tagged(IOSXE, [])
+    assert not every_native_vlan_tagged(IOSXE, [_trunk("b", [10, 20]), _trunk("c", [], mode="access")])
+    assert not every_native_vlan_tagged(NXOS, [wants, _trunk("a", [1, 10, 20], 30)])
+    assert native_vlan_stated([wants, _trunk("a", [1, 10, 20], 30), _trunk("c", [1])]) == {"a"}
+
+
+@pytest.mark.parametrize("codec", FOUR)
+def test_each_platform_writes_its_form(codec: str) -> None:
+    """A trunk whose text says its native VLAN is sent tagged, and whose
+    list holds VLAN 1, onto its own platform: AOS-CX ``vlan trunk
+    native 1 tag``, EOS the port's ``tag``, IOS-XE and NX-OS the line
+    for every trunk (this config has no other trunk) -- and the tree
+    read back is the tree written."""
+    if codec == AOSCX:
+        lines, form = ("vlan trunk native 1 tag", allowed(AOSCX, "1,10,20")), "vlan trunk native 1 tag"
+        text = config(AOSCX, lines)
+    else:
+        lines = (*TRUNK[codec], "switchport trunk native vlan tag", allowed(codec, "1,10,20"))
+        text = config(codec, lines)
+        form = "switchport trunk native vlan tag" if codec == EOS else "vlan dot1q tag native"
+    rendered = get_codec(codec).render(get_codec(codec).parse(text))
+    out = [line.strip() for line in rendered.splitlines()]
+    assert out.count(form) == 1, out
+    assert not [line for line in out if line.startswith("! review")], out
+    assert read(codec, rendered)[0] == read(codec, text)[0] == [("trunk", None, True)]
+
+
+@pytest.mark.parametrize("codec", [IOSXE, NXOS])
+def test_beside_an_untagged_trunk(codec: str) -> None:
+    """...and beside a trunk that carries VLAN 10 untagged, IOS-XE and
+    NX-OS write no line for every trunk, and a review line where the
+    native line would be."""
+    tagged = (*TRUNK[codec], allowed(codec, "1,10,20"), "switchport trunk native vlan tag")
+    text = config(codec, tagged, (*TRUNK[codec], native(codec, 10), allowed(codec, "10,20")))
+    out = _lines(codec, text)
+    assert "vlan dot1q tag native" not in out
+    reviews = [line for line in out if line.startswith("! review: this trunk carries no VLAN untagged")]
+    assert len(reviews) == 1, out
+    assert out.index(reviews[0]) < out.index("switchport trunk native vlan 10"), out     # in the first stanza

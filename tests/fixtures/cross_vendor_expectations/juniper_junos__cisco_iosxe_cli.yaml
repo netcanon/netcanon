@@ -381,21 +381,28 @@ per_field_expectation:
       ``switchport trunk allowed vlan 100,200``.
 
   interfaces[].trunk_native_vlan:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Junos's ``native-vlan-id N`` lives at the parent-interface
       hierarchy; Cisco's ``switchport trunk native vlan N`` lives
       inline.  A STATED native VLAN keeps its integer by the two
       parse and render paths; the structural difference is internal
       to each codec's render path, and no committed fixture on this
-      pair states one.  The loss the corpus shows is for a trunk
-      that states NONE.  It is written with no native line, which on
-      IOS-XE is native VLAN 1, and it reads back as ``1`` where its
-      list holds VLAN 1: ``null -> 1`` on ``ae0`` and ``ae1`` of the
-      qfx5100 capture and on ``ae111``, ``ae201`` and ``ae202`` of
-      ``saidvandeklundert_snmpv3_junos172``, all trunks of ``vlan
-      members all`` (2 of 11 cells).  See ``vlans[].id`` for what it
-      means on the switch.
+      pair states one.  A trunk that states NONE carries no VLAN
+      untagged (Juniper: untagged packets are dropped), and is
+      written so: the output says ``vlan dot1q tag native``, the
+      line for every 802.1Q trunk of the switch, where no port of it
+      that the check reads blocks it (a trunk that carries a VLAN
+      untagged, a port in a mode no mode line is written for, trunk
+      lines in no mode) -- as on both cells that have
+      such trunks (``ae0`` and ``ae1`` of the qfx5100 capture,
+      ``ae111``, ``ae201`` and ``ae202`` of
+      ``saidvandeklundert_snmpv3_junos172``, all of ``vlan members
+      all``) -- and reads back with no native VLAN.  Beside a trunk
+      that does carry one it would be written no native line under
+      a review line, and read back as native VLAN 1; no cell of this
+      pair has that.  Two cells drift on the interface count, which
+      is ``interfaces[].name``'s.
     references: [junos-vlans-statement, cisco-vlan-cg]
 
   interfaces[].voice_vlan:
@@ -443,26 +450,18 @@ per_field_expectation:
   # ── Tier 1 — VLANs ──
 
   vlans[].id:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Junos's ``set vlans <name> vlan-id N`` maps to Cisco's
-      ``vlan N`` for explicit per-VLAN bindings, and no VLAN the
-      source declares is lost: preserved on 5 of the 7 cells that
-      define VLANs.  On the other two a VLAN the source does not
-      have ARRIVES -- VLAN 1 (the qfx5100 capture 16 -> 17,
-      ``saidvandeklundert_snmpv3_junos172`` 87 -> 88).  Each has
-      aggregated-Ethernet trunks of ``vlan members all`` that state
-      no ``native-vlan-id``.  Such a trunk is written ``switchport
-      mode trunk`` with no native line; on IOS-XE the native VLAN is
-      VLAN 1 by default (Cisco's sentence, in
+      ``vlan N`` for explicit per-VLAN bindings: preserved on all 7
+      cells that define VLANs, no VLAN lost and none added.  Two of
+      them have aggregated-Ethernet trunks of ``vlan members all``
+      that state no ``native-vlan-id``.  Their outputs say ``vlan
+      dot1q tag native``, which tags the native VLAN of every 802.1Q
+      trunk (Cisco's sentence, in
       ``docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md``),
-      so read back the port is an untagged member of VLAN 1, which
-      then has a record.  The Junos trunk drops untagged packets
-      (Juniper's sentence, on the same page); the IOS-XE trunk takes
-      them into VLAN 1.  No form is written yet for "this trunk
-      carries no VLAN untagged": a known limitation, in the
-      CHANGELOG.  Check what each such trunk is to carry untagged
-      before deploying.  (The all-VLANs shorthand itself does not
+      so read back such a trunk is an untagged member of no VLAN,
+      and no VLAN 1 record is made for it.  (The all-VLANs shorthand itself does not
       expand into this list: it surfaces on
       ``interfaces[].trunk_allowed_vlans``, which carries its own
       per-pair disposition.)

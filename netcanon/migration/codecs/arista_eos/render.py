@@ -54,8 +54,10 @@ from ..._usm_keys import (
 from ...canonical.intent import CanonicalIntent
 from .._helpers import (
     charge_id_lines,
+    native_vlan_stated,
     switchport_trunk_allowed_value,
     switchport_trunk_native_value,
+    wants_no_untagged_vlan,
 )
 from ..base import RenderError
 
@@ -598,6 +600,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for name in v.untagged_ports:
             vlan_member_names.add(name)
 
+    # Interfaces with a native VLAN in some record: no other record of
+    # theirs is written the form for "no VLAN untagged".
+    stated = native_vlan_stated(tree.interfaces)
     for iface in [*tree.interfaces, *synth_svis]:
         has_renderable_attr = (
             bool(iface.description)
@@ -685,6 +690,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             )
             if native_vlan is not None:
                 out.append(f"   switchport trunk native vlan {native_vlan}")
+            elif iface.name not in stated and wants_no_untagged_vlan(
+                "arista_eos", iface.trunk_allowed_vlans,
+                iface.trunk_native_vlan,
+            ):
+                # No VLAN untagged, on a list that holds VLAN 1, which
+                # a trunk with no native line has for its native VLAN.
+                # ``tag`` takes the place of the id: the port then
+                # drops all untagged frames (Arista's sentence, on the
+                # vendor reference's VLAN page; what it sends for VLAN
+                # 1 is not on Arista's page).
+                out.append("   switchport trunk native vlan tag")
             # The list means what it says.  No VLAN is ``none``.
             # Every VLAN is no line at all: it is the default, and
             # EOS's own form for it is the absence of the statement.

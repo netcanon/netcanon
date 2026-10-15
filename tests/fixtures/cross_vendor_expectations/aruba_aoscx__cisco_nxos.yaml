@@ -28,7 +28,10 @@
 # `netcanon.migration.canonical.port_names.translate_port_names` (the planner's
 # rename path, empty rename map, 0 dropped records) closes ALL of the naming
 # drift — 0 renamed records, 0 duplicate names, LAG membership identical, 34/34
-# LAGs, 64/64 untagged and 32/32 tagged members intact.  Two losses survive
+# LAGs.  Of the VLAN members (51 untagged, 126 tagged) every one arrives but
+# two: the LAGs of `vlan trunk native 1 tag` on two captures whose other
+# trunks carry VLAN 1 untagged, which NX-OS is written with a review line and
+# reads back as untagged in VLAN 1, by its own default.  Two losses survive
 # that translation and are therefore the real ones: every active-gateway
 # virtual address (15 -> 0 across the corpus) and every VLAN description
 # (6 -> 0).
@@ -305,7 +308,7 @@ per_field_expectation:
   "vlans[].untagged_ports":
     disposition: lossy
     reason: >
-      Drifts on all 7 cells.  The mechanism is the interface-name collapse,
+      Drifts on 5 of 7 cells.  The mechanism is the interface-name collapse,
       measured directly: VLAN 1's untagged list `["lag 1","lag 2","lag 101",
       "lag 102","lag 256"]` comes back as `["lag"]` because all five member
       names mangle to the same token and the list de-duplicates.  On the
@@ -313,8 +316,13 @@ per_field_expectation:
       LAG names collapsing to 1.  Members named as physical ports survive
       verbatim.
       Native-VLAN assignment therefore has to be re-applied for LAG uplinks
-      after a bare-path render.  On the `translate_port_names` path all 64
-      untagged members across the corpus survive with NX-OS-native names.
+      after a bare-path render.  On the `translate_port_names` path all 51
+      untagged members across the corpus survive with NX-OS-native names, and
+      two more arrive: see `vlans[].tagged_ports`.  The two cells that
+      preserve it are the two `aoscx_dcn_arch3_*leaf1a`
+      captures, whose VLAN 1 has one port, a LAG of `vlan trunk native 1
+      tag` -- which sends VLAN 1 tagged and takes no untagged frame -- so
+      VLAN 1 has no untagged port on either side.
     references: [aoscx-nxos-surface]
 
   "vlans[].tagged_ports":
@@ -324,8 +332,14 @@ per_field_expectation:
       `vlans[].untagged_ports`.  Every cell trunks at least one LAG (the
       synthetic kitchen sink among them: its physical-port members survive
       and its `lag 1` collapses).  Trunk membership survives exactly
-      where the member is not a LAG.  All 122 tagged members survive on the
-      `translate_port_names` path.
+      where the member is not a LAG.  On the `translate_port_names` path 124
+      of the 126 tagged members survive.  The other two are the LAGs of `vlan
+      trunk native 1 tag` on `canu_csm17_spine001_ipv6_vrf` and
+      `netutils_aoscx_snmpv3_glcx1009`, tagged in VLAN 1: their outputs have
+      other trunks that carry VLAN 1 untagged, so `vlan dot1q tag native`,
+      which would tag every trunk, is not written, and the LAG is written no
+      native line under a review line -- and reads back as untagged in VLAN
+      1, by NX-OS's default.
     references: [aoscx-nxos-surface]
 
   "vlans[].description":

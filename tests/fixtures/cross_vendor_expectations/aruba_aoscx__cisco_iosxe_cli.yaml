@@ -311,7 +311,7 @@ per_field_expectation:
   "vlans[].untagged_ports":
     disposition: lossy
     reason: >
-      Drifts on all 7 cells.  The membership itself is not lost — the port
+      Drifts on 5 of 7 cells.  The membership itself is not lost — the port
       NAMES are, along with the identities they distinguish.  Measured on
       `aoscx_dcn_arch4_core1_2.cfg`, VLAN 1: 29 untagged ports in, 25 out; the
       24 physical `1/1/x` ports all survive and the five distinct entries
@@ -319,7 +319,11 @@ per_field_expectation:
       entry `lag`.  Every LAG on that VLAN becomes indistinguishable from
       every other.  With port-name translation engaged the same cell
       round-trips the full list.  Re-apply access/native VLAN assignment per
-      port-channel on the target and verify it explicitly.
+      port-channel on the target and verify it explicitly.  The two cells
+      that preserve it are the two `aoscx_dcn_arch3_*leaf1a`
+      captures, whose VLAN 1 has one port, a LAG of `vlan trunk native 1
+      tag` -- which sends VLAN 1 tagged and takes no untagged frame -- so
+      VLAN 1 has no untagged port on either side.
     references: [aoscx-iosxecli-surface]
 
   "vlans[].tagged_ports":

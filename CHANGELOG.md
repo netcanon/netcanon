@@ -384,6 +384,132 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A trunk that carries no VLAN untagged was written for IOS-XE,
+  NX-OS, EOS and AOS-CX as one that carries VLAN 1 untagged.**  On
+  those four a trunk with no native line has native VLAN 1 (the
+  vendors' sentences are in the entry below).  A port that carries
+  NO VLAN untagged at its source and has VLAN 1 on its list was
+  written a trunk with no native line, so the switch made VLAN 1 its
+  untagged VLAN: a VLAN the source carried TAGGED.  Such a port is a
+  Junos trunk with no
+  `native-vlan-id` (Juniper: "By default, the untagged packets are
+  dropped on trunk interfaces.") whose members hold VLAN 1 or are
+  `vlan members all`; an AOS-S port only `tagged` in VLAN 1; a
+  trunk whose native VLAN the VLAN pane's map dropped or merged;
+  and a Cisco, Arista or AOS-CX trunk whose native VLAN is sent
+  tagged.  The job said nothing, but for one warning on a map drop
+  beside every VLAN.  Over the committed captures that was the five
+  Junos trunks of `vlan members all` onto each of the four -- 20
+  ports of outputs, in jobs `partial` for other reasons -- and the
+  four AOS-CX LAGs below onto IOS-XE, NX-OS and EOS.  It has been so
+  for as long as each pair has existed.
+
+  Each of the four is now written its own form for a trunk that
+  carries no VLAN untagged, where the tree gives the trunk no native
+  VLAN and its list holds VLAN 1.  **AOS-CX:** `vlan trunk native 1
+  tag` before the allowed line (HPE: "Only incoming packets that are
+  tagged with the matching VLAN ID are accepted. Incoming packets
+  that are untagged are dropped except for BPDUs. Egress packets are
+  tagged.").  **EOS:** `switchport trunk native vlan tag` (Arista:
+  "tag interface drops all untagged frames."; what the interface
+  sends for VLAN 1 is not on Arista's page).  **IOS-XE and NX-OS:**
+  `vlan dot1q tag native`, the one form Cisco documents for it on
+  the Catalyst 9300 and the Nexus 9000 -- and it is the switch's,
+  not the port's (Cisco, of IOS-XE: "To enable tagging of native
+  VLAN frames on all IEEE 802.1Q trunk ports, use the vlan dot1q tag
+  native command in global configuration mode."; of NX-OS: "This
+  configuration is global; trunk ports on the device either do or
+  do not retain the tagging for the native VLAN.").  So it is
+  written, once, before the interfaces, only where no port the check
+  reads blocks it.  The check reads the ports written in trunk mode,
+  the ports with trunk lines and no mode, and the ports in a mode no
+  mode line is written for (dynamic, private-vlan, dot1q-tunnel,
+  fex-fabric and the like): the line is written where no trunk
+  carries a VLAN untagged, at least one trunk the tree gives no
+  native VLAN holds VLAN 1, and no port is in such a mode or holds
+  trunk lines in no mode.  A port written with no mode and no trunk
+  line is not counted: on a Catalyst such a port is in dynamic auto
+  by default, and should it become a trunk the line tags its native
+  VLAN as well.  Otherwise each such trunk is written no native line
+  and, where the native line would be, a review line:
+
+  ```
+  ! review: this trunk carries no VLAN untagged in the translated config; on IOS-XE a trunk with no native line has native VLAN 1, and this one's allowed list holds VLAN 1; vlan dot1q tag native would tag it, and tags the native VLAN of every 802.1Q trunk of the switch -- check what this port is to carry untagged
+  ```
+
+  (on NX-OS: `on NX-OS a trunk with no native line uses the default
+  VLAN, VLAN 1, ...`, and `changes the native VLAN of every trunk of
+  the device`).  The job adds nothing else.  Over the committed
+  captures the five Junos trunks are written the line on IOS-XE and
+  NX-OS and the port's form on EOS and AOS-CX.  Of the four AOS-CX
+  LAGs, two (on the two `aoscx_dcn_arch3_*leaf1a` captures) are
+  written the line on IOS-XE and NX-OS; the other two are on
+  captures whose other trunks carry VLAN 1 untagged, and are written
+  the review line there -- in jobs that say `completed` on NX-OS,
+  and `partial` on IOS-XE for a port the job drops.  Junos, OS10
+  and AOS-S are not changed as targets.
+
+  **The words that say a native VLAN is sent tagged are read.**
+  AOS-CX `vlan trunk native <N> tag` was read as native VLAN N
+  UNTAGGED, the word thrown away.  The committed captures have four
+  such lines, each `vlan trunk native 1 tag` beside `vlan trunk
+  allowed all` on a LAG (two in Aruba's published sample
+  configurations, two in configurations made by tools), and every
+  target was written VLAN 1 untagged for them: Junos `native-vlan-id
+  1`, OS10 `switchport access vlan 1`, AOS-S `untagged`, AOS-CX
+  `vlan trunk native 1` (the word lost onto its own platform), and
+  the other three by their default -- since AOS-CX was added, in
+  0.1.6.  Such a trunk now has no native VLAN in the tree, a trunk that carries
+  none untagged: Junos `vlan members all` with no `native-vlan-id`,
+  AOS-S `tagged` in VLAN 1, OS10 no access line with VLAN 1 on its
+  allowed line (what OS10 then carries untagged is a limitation,
+  below), and the forms above.  The id is not kept: such a trunk
+  takes only tagged frames and tags what it sends, so `native 20
+  tag` and `native 1 tag` beside one list carry the same VLANs, and
+  it comes back onto AOS-CX as `vlan trunk native 1 tag` where its
+  list holds VLAN 1 and with no native line where it does not.  On
+  IOS-XE and NX-OS `vlan dot1q tag native exclude control` (a form
+  Cisco documents for the Nexus 7000) was not recognised, and a
+  trunk under it was given native VLAN 1; it is read now.  `no
+  switchport trunk native vlan tag` on a port -- by which, on a
+  Catalyst 9500 High Performance switch, a trunk leaves `vlan dot1q
+  tag native` -- gives that trunk its default again.  A native VLAN
+  a trunk states under the line, or beside its own `tag`, is sent
+  tagged, and is no longer kept in the tree (it was written as the
+  trunk's untagged VLAN on every target).  On EOS the id and `tag`
+  are one argument of one line, and the one met last stands.  No
+  committed capture has the Cisco words.
+
+  Onto its own platform every committed capture comes back byte for
+  byte as before, but the four AOS-CX captures, which now come back
+  with their `vlan trunk native 1 tag`.  A Cisco config under `vlan
+  dot1q tag native` comes back with the line where at least one
+  trunk under the line holds VLAN 1 and no port the check reads
+  blocks it (`exclude control` is not kept).  Where a port blocks
+  it -- a trunk that carries a VLAN untagged (a trunk that leaves
+  the line by `no switchport trunk native vlan tag` and holds VLAN 1
+  is one), a port in a mode no mode line is written for, trunk lines
+  in no mode -- the trunks under the line that hold VLAN 1 come back
+  with review lines.  Where no trunk under the line holds VLAN 1 it
+  comes back without the line, and those trunks without a native
+  line: the same VLANs, by Cisco's sentence for a trunk whose list
+  leaves VLAN 1 out.  An EOS trunk with
+  `switchport trunk native vlan tag` comes back with it where its
+  list holds VLAN 1; where the list leaves VLAN 1 out it comes back
+  with no native line, and what EOS does with untagged frames on
+  such a trunk is not established (a limitation, below).
+
+  **If a switch was migrated onto IOS-XE, NX-OS, EOS or AOS-CX with
+  release 0.7.7 or earlier, look at every trunk that was written no
+  native line and has VLAN 1 on its allowed list, or no allowed
+  line, where the source trunk was a Junos trunk with no
+  `native-vlan-id`, an AOS-S port tagged in VLAN 1, a trunk whose
+  native VLAN was sent tagged, or one whose native VLAN you dropped
+  or merged in the VLAN pane: the switch carries VLAN 1 untagged on
+  it, and the source did not.  And a trunk migrated FROM AOS-CX
+  with `vlan trunk native <N> tag` was written VLAN N untagged on
+  every target.**
+
 - **VLAN 1 of a Cisco, Arista or AOS-CX trunk that states no native
   VLAN was written TAGGED on Junos, OS10 and AOS-S.**  A trunk with
   no `switchport trunk native vlan` line (on AOS-CX, no `vlan trunk
@@ -444,9 +570,9 @@ timestamp if your timezone matters for an audit.
   platform's list (the limitation on such a port, below).  All 32
   trunks of the captures say they are trunks.  Nothing is filled
   in where the text says the native VLAN is sent tagged (`vlan
-  dot1q tag native`, `switchport trunk native vlan tag`): those
-  words are still not read into the tree, and a native VLAN put
-  there would be read as untagged.  OS10 and Junos are not
+  dot1q tag native`, `switchport trunk native vlan tag`): a native
+  VLAN put there would be read as untagged.  (What else those
+  words now make of a trunk is in the entry above.)  OS10 and Junos are not
   changed.  A Junos trunk has no default, and an OS10 trunk's is the
   default VLAN of its switch, a setting no trunk states (no
   committed capture has an OS10 trunk without an access VLAN line).
@@ -2268,40 +2394,56 @@ timestamp if your timezone matters for an audit.
   `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md`.
   What remains:
 
-  - *A port that carries no VLAN untagged, on a target whose trunk
-    has a default.*  The source's half of this is mended (the first
-    entry under Fixed): a trunk of IOS-XE, NX-OS, EOS or AOS-CX that
-    states no native VLAN has VLAN 1 in the tree where its list
-    holds VLAN 1, and "no native VLAN" there means no untagged VLAN.
-    The target's half is open.  A trunk is written no native line
-    for a port that has no native VLAN, and on IOS-XE, NX-OS, EOS
-    and AOS-CX a trunk with no native line has native VLAN 1.  So a
-    port that carries NOTHING untagged at its source and has VLAN 1
-    on its list -- a Junos trunk of `vlan members all` with no
-    `native-vlan-id`, which by Juniper's sentence drops untagged
-    packets; an AOS-S port that is `tagged` in VLAN 1; a trunk whose
-    native VLAN the VLAN pane's map cleared; a Cisco trunk under
-    `vlan dot1q tag native` -- carries VLAN 1 UNTAGGED on those four
-    targets.  The job points at it in one case only: where the VLAN
-    pane's map DROPS the native VLAN of a trunk whose list is every
-    VLAN, the warning ends `native VLAN cleared; the port allows
-    every VLAN, and an output that writes it as a trunk of every
-    VLAN still allows VLAN <N>`.  On these four such a trunk is
-    written no native line, as a trunk of every VLAN (no allowed
-    line; on AOS-CX `vlan trunk allowed all`), which there has
-    native VLAN 1: where <N> is 1 it still carries the dropped VLAN
-    untagged.  (Beside a list that names
-    its VLANs the dropped VLAN is taken out of the list as well, and
-    the warning ends at `native VLAN cleared`.)  In every other case
-    the job says nothing of the target's default.  Over the
-    committed captures the open half is 20 ports of outputs, the
-    five Junos trunks of `vlan members all` on each of the four, all
-    in jobs that are `partial` for another reason; a test pins them
-    cell by cell.  No
-    form is written yet for "this trunk carries no VLAN untagged",
-    and what that form is on each platform has not been read from
-    its vendor.  Until it is, decide what such a trunk is to carry
-    untagged on the target, and state it there.
+  - *A port that carries no VLAN untagged, on IOS-XE or NX-OS
+    beside a trunk that carries one.*  Both halves of this are
+    mended for IOS-XE, NX-OS, EOS and AOS-CX (the first two entries
+    under Fixed), but for one case.  The one form those two document
+    for such a trunk on the Catalyst 9300 and the Nexus 9000, `vlan
+    dot1q tag native`, tags the native VLAN of every trunk of the
+    switch.  Where another trunk of the output carries a VLAN
+    untagged -- or a port is in a mode no mode line is written for
+    (dynamic, private-vlan, dot1q-tunnel, fex-fabric and the like),
+    or holds trunk lines in no mode -- the line is not written: the
+    port is written no native line under a `! review:` line that
+    says so, and the switch carries VLAN 1 untagged on it by its
+    own default.  A port written with no mode and no trunk line is
+    not counted: on a Catalyst such a port is in dynamic auto by
+    default, and should it become a trunk the line tags its native
+    VLAN as well.  Over the committed captures that is one AOS-CX LAG
+    of `vlan trunk native 1 tag` on each of two captures, onto each
+    of the two (the NX-OS jobs say `completed`); a test pins them cell
+    by cell, and holds each to its line.  The job reports nothing
+    else.  The per-port `switchport trunk native vlan tag` that
+    Cisco documents for the Catalyst 9500 High Performance models,
+    under the line, is not written: it needs to know that the target
+    is such a model.  Decide on the switch what such a trunk is to
+    carry untagged.  On NX-OS, Cisco lists "Tagging of native VLAN
+    traffic" among the parameters that "must be configured
+    identically on both devices of the vPC Peer-Link"; the line is
+    decided for one output at a time, so two vPC peers translated
+    apart can differ -- one written the line, the other review
+    lines.  Compare the two peers' outputs.
+  - *What the forms do is not all established.*  EOS `switchport
+    trunk native vlan tag`: Arista's page has the receive half
+    (untagged frames dropped), not what the interface sends for
+    VLAN 1.  An EOS trunk of `switchport trunk native vlan tag`
+    whose allowed list leaves VLAN 1 out is written -- onto EOS as
+    well -- with no native line, as is any trunk with no native VLAN
+    whose list leaves VLAN 1 out; what EOS does with untagged frames
+    on such a trunk is not established, so whether it still drops
+    them is not known.  NX-OS `vlan dot1q tag native`: the send
+    half is settled (tagged); what it does with an untagged frame it
+    receives, Cisco's pages disagree on, and Cisco recommends
+    leaving the line off where the connected switch does not have
+    it.  IOS-XE `vlan dot1q tag native`: what it does with control
+    traffic is not established on a Catalyst 9300 or 9500, and Cisco
+    documents that dot1x reauthentication fails on trunk ports under
+    it.  How an AOS-CX switch prints `vlan trunk native 1 tag` in a
+    running config is not established.  `vlan dot1q tag native
+    exclude control` comes back -- where the line comes back at all
+    (the entry under Fixed says where) -- as `vlan dot1q tag native`,
+    and the id of a native VLAN sent tagged is not kept.  Each vendor's
+    sentence is in the vendor reference.
   - *The default of OS10 and of AOS-S is not read and not
     written.*  Dell: "By default, native VLAN of a port is the
     default VLAN ID of the switch."  Which id that is is a setting
@@ -2313,7 +2455,18 @@ timestamp if your timezone matters for an audit.
     the parser reads a port that no VLAN lists `untagged` as
     carrying nothing untagged.  The same holds for them as targets:
     a port that is written no untagged VLAN is left to the switch's
-    own default.  So the 20 interfaces of outputs that are no longer
+    own default, and neither is written a form for a trunk that
+    carries no VLAN untagged.  (The four AOS-CX LAGs of `vlan trunk
+    native 1 tag` are such ports now: OS10 is written them with no
+    access line and VLAN 1 on `1-4094`, and AOS-S `tagged` in VLAN
+    1.)  **A trunk written for OS10 with no access line whose allowed
+    line holds VLAN 1** -- those four, and a Junos trunk of `vlan
+    members all` -- has the switch's default VLAN for its native
+    VLAN by Dell's sentence above, and Dell also says "An interface
+    cannot be an access and trunk member of the same VLAN.": check
+    on the switch whether it takes such a trunk's allowed line, and
+    what the trunk then carries untagged.  So the 20 interfaces of
+    outputs that are no longer
     WRITTEN `untagged` in VLAN 1 (on OS10, with it as their access
     VLAN) -- those of the entry under Fixed on the untagged VLAN of
     an AOS-S or OS10 trunk, "the other way round" -- are not
@@ -2369,18 +2522,6 @@ timestamp if your timezone matters for an audit.
     a source, a trunk in the older grammar is read as an ELS one and
     its `native-vlan-id` under the unit is not read at all: its
     untagged VLAN is lost, and the job does not say so.
-  - *The `tag` word.*  EOS `switchport trunk native vlan tag`,
-    AOS-CX `vlan trunk native <N> tag` and IOS-XE's global `vlan
-    dot1q tag native` leave nothing in the tree.  (The IOS-XE,
-    NX-OS and EOS parsers look for the two `switchport`-grammar
-    forms for one purpose: a trunk under them is given no default
-    native VLAN.)  On AOS-CX and
-    IOS-XE that is a native VLAN sent tagged, with untagged frames
-    dropped (on AOS-CX all but BPDUs), by HPE's and Cisco's pages.
-    Of EOS, Arista's page says that such an interface drops all
-    untagged frames; what it sends is not established.  The port is
-    written as an ordinary trunk with that native VLAN, or with
-    none.
   - *A VLAN nothing carries has no line on OS10.*  OS10 has a VLAN
     through an SVI or a port's membership.  A VLAN that is in the
     tree only as a trunk's native VLAN outside its list, with no
@@ -2449,10 +2590,12 @@ timestamp if your timezone matters for an audit.
   for it.  That is fewer VLANs than a trunk carries, never
   more.  It is still WRITTEN as a trunk where the switch has an
   access port -- with `switchport mode trunk` on IOS-XE, NX-OS and
-  EOS, and with a `vlan trunk` line on AOS-CX, where a trunk that
-  is written no native line and has VLAN 1 on its list carries
-  VLAN 1 untagged by the target's own default (the limitation on a
-  target's default, above).  **In an NX-OS or EOS source, look for
+  EOS, and with a `vlan trunk` line on AOS-CX.  Such a trunk has no
+  native VLAN in the tree, and where its list holds VLAN 1 the four
+  targets with a default are written their form for a trunk that
+  carries no VLAN untagged (on IOS-XE and NX-OS the line for every
+  trunk where no port the check reads blocks it, and a review line
+  where one does).  **In an NX-OS or EOS source, look for
   a port with a `switchport trunk` line and no `switchport mode
   trunk` line.  If it is an access port, take its trunk lines out
   before translating; if it is meant to be a trunk, add `switchport

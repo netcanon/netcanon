@@ -1,5 +1,7 @@
 # Juniper Junos -> Cisco NX-OS: measured canonical surface
 
+> **Update 2026-10-14 — `vlans[].id` is preserved on every cell again.**  Such a trunk (below) is now written under `vlan dot1q tag native`, NX-OS's line for every trunk, since no port of either output blocks it (no other trunk carries a VLAN untagged, and no port is in a mode no mode line is written for or holds trunk lines in no mode); read back it has no native VLAN, and no VLAN 1 record is made.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/juniper_junos__cisco_nxos.yaml`.
+>
 > **Update 2026-10-13 — `vlans[].id` drifts on two cells, and the statement below that it never does describes the parsers before this change.**  A Junos trunk of `vlan members all` that states no `native-vlan-id` is written for NX-OS as a trunk with no native line.  The NX-OS parser now gives such a trunk its platform's default native VLAN, so the output read back has the port untagged in a VLAN 1 that the source does not declare: `ksator_labmgmt_qfx5100_junos173` 16 -> 17 VLANs, `saidvandeklundert_snmpv3_junos172` 87 -> 88, and `interfaces[].trunk_native_vlan` `null -> 1` on their five such trunks.  No VLAN the source declares is lost.  On those two cells the other `vlans[]` sub-fields are compared as a change of the list's length.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/juniper_junos__cisco_nxos.yaml`.
 
 <!-- snmpv3-key-gate-464 -->

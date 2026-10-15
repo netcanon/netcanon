@@ -290,7 +290,10 @@ table, `NATIVE_VLAN_AND_THE_LIST` in
 `netcanon/migration/codecs/_helpers.py`.  This is where its rows come
 from, and where what each vendor says of the case is kept.  Retrieved
 2026-10-13; every quoted sentence was matched, as a string, against
-the text of the page fetched that day.
+the text of the page fetched that day.  The sources of a trunk that
+carries no VLAN untagged (C6-C11, T1, N4, N5, N8, X1, A2, H9, H12,
+H13, and H4's second example) were fetched on 2026-10-13 and matched
+again against pages fetched on 2026-10-14.
 
 | Platform | Where its text states the untagged VLAN | A native VLAN the list leaves out | That stands on | Row of the table |
 |---|---|---|---|---|
@@ -305,17 +308,19 @@ the text of the page fetched that day.
 
 And when the config states no untagged VLAN at all (the rows of
 `TRUNK_THAT_STATES_NO_NATIVE` in the same module; AOS-S is not in it,
-being told VLAN by VLAN):
+being told VLAN by VLAN), and the form each target is written for a
+trunk that is to carry NO VLAN untagged and whose list holds that
+default (`wants_no_untagged_vlan`, same module):
 
-| Platform | A trunk that states no native VLAN | Source |
-|---|---|---|
-| Cisco IOS-XE | native VLAN 1 | C4 |
-| Cisco NX-OS | the default VLAN, which the same page names VLAN1: native VLAN 1 | N3 |
-| Arista EOS | native VLAN 1 | A1 |
-| Aruba AOS-CX | native VLAN 1 | H8 |
-| Junos | none: untagged packets are dropped | J2 |
-| Dell OS10 | the switch's default VLAN | D5 |
-| Aruba AOS-S | a port is in the default VLAN (VID 1) in the factory default configuration, and remains in it until it is removed; tagged or untagged is not in the sentences, and nothing was found for a trunk group or a port that is in one | H7 |
+| Platform | A trunk that states no native VLAN | Source | Written for a trunk that carries no VLAN untagged, its list holding VLAN 1 | Source |
+|---|---|---|---|---|
+| Cisco IOS-XE | native VLAN 1 | C4 | `vlan dot1q tag native`, a line for every 802.1Q trunk of the switch, where no port the check reads blocks it: no port in trunk mode carries a VLAN untagged, and no port is in a mode no mode line is written for (dynamic, private-vlan, dot1q-tunnel, fex-fabric and the like) or holds trunk lines in no mode (`every_native_vlan_tagged`; a port with no mode and no trunk line is not counted); otherwise no native line, under a `! review:` line | C7, C8 |
+| Cisco NX-OS | the default VLAN, which the same page names VLAN1: native VLAN 1 | N3 | the same | N4 |
+| Arista EOS | native VLAN 1 | A1 | `switchport trunk native vlan tag` -- for the receive half; what is sent is not on Arista's page | A2 |
+| Aruba AOS-CX | native VLAN 1 | H8 | `vlan trunk native 1 tag` | H9, H4 |
+| Junos | none: untagged packets are dropped | J2 | nothing: no `native-vlan-id` is that form | J2 |
+| Dell OS10 | the switch's default VLAN | D5 | not changed: no access line, which leaves the port to the switch's default (not established what that is for a trunk) | D5, D6 |
+| Aruba AOS-S | a port is in the default VLAN (VID 1) in the factory default configuration, and remains in it until it is removed; tagged or untagged is not in the sentences, and nothing was found for a trunk group or a port that is in one | H7 | not changed: no `untagged` line, and no `no untagged` | H7 |
 
 ### Sources
 
@@ -409,6 +414,131 @@ being told VLAN by VLAN):
   <https://arubanetworking.hpe.com/techdocs/AOS-CX/10.16/HTML/l2_bridging_6300-6400/Content/Chp_vlans/vlan_cmds/vla-tru-nat.htm>.
   "By default, VLAN ID 1 is assigned as the native VLAN ID for all
   trunk interfaces."
+- **C6** -- Cisco, *Command Reference, Cisco IOS XE Dublin 17.12.x
+  (Catalyst 9500 Switches)*, Layer 2/3 Commands, `switchport trunk`:
+  <https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9500/software/release/17-12/command_reference/b_1712_9500_cr/layer_2_3_commands.html>
+  (the same in the 17.3 and 17.18 editions).  The one per-port form:
+  "The keyword native vlan tag is supported only on Cisco Catalyst
+  9500 Series Switches - High Performance."; "Enables native VLAN
+  tagging on a particular trunk port."; and "vlan dot1q tag native
+  global command needs to be enabled to execute the switchport trunk
+  native vlan tag command."  The 9500 models filed as High
+  Performance are the C9500-32C, -32QC, -24Y4C and -48Y4C (C13).
+- **C7** -- Cisco, the C5 page (*Command Reference, Cisco IOS XE
+  Dublin 17.12.x (Catalyst 9300 Switches)*, VLAN Commands), `vlan
+  dot1q tag native`: "To enable tagging of native VLAN frames on all
+  IEEE 802.1Q trunk ports, use the vlan dot1q tag native command in
+  global configuration mode."  Its default: "The IEEE 802.1Q native
+  VLAN tagging is disabled."  And: "When enabled, native VLAN packets
+  going out of all IEEE 802.1Q trunk ports are tagged."  The 9300's
+  `switchport trunk` takes no `tag` keyword, in this chapter or in
+  its Layer 2/3 Commands chapter.
+- **C8** -- Cisco, *Layer 2 Configuration Guide, Cisco IOS XE Dublin
+  17.12.x (Catalyst 9300 Switches)*, Configuring IEEE 802.1Q
+  Tunneling:
+  <https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/17-12/configuration_guide/lyr2/b_1712_lyr2_9300_cg/configuring_ieee_802_1q_tunneling.html>.
+  On receive, section "Native VLANs": "If the switch is configured to
+  tag native VLAN packets on all IEEE 802.1Q trunks, the switch drops
+  untagged packets, and sends and receives only tagged packets."  And
+  of a port's mode: "By default, IEEE 802.1Q tunneling is disabled
+  because the default switchport mode is dynamic auto. Tagging of IEEE
+  802.1Q native VLAN packets on all IEEE 802.1Q trunk ports is also
+  disabled."  **C9**, the Catalyst 9500 edition of the same chapter
+  (`.../catalyst9500/software/release/17-12/configuration_guide/lyr2/b_1712_lyr2_9500_cg/configuring_ieee_802_1q_tunneling.html`),
+  has the same receive sentence.
+- **C10** -- Cisco, *Layer 2 Configuration Guide, Cisco IOS XE Dublin
+  17.12.x (Catalyst 9500 Switches)*, Configuring VLAN Mapping:
+  <https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9500/software/release/17-12/configuration_guide/lyr2/b_1712_lyr2_9500_cg/configuring_vlan_mapping.html>.
+  The per-port way out of the global line, for a 9500 High
+  Performance model: "If the native VLAN tagging global command is
+  enabled on the switch, you should disable the tagging of native
+  VLAN packets on the QinQ enabled trunk ports using the command no
+  switchport trunk native vlan tag command."
+- **C11** -- Cisco, *Security Configuration Guide, Cisco IOS XE Dublin
+  17.12.x (Catalyst 9300 Switches)*, Configuring IEEE 802.1x
+  Port-Based Authentication, restrictions:
+  <https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/17-12/configuration_guide/sec/b_1712_sec_9300_cg/configuring_ieee_802_1x_port_based_authentication.html>.
+  "If the dot1q tag vlan native command is configured globally, the
+  dot1x reauthentication will fail on trunk ports."  (The words are
+  Cisco's, in that order.)
+- **C13** -- Cisco, *Cisco Catalyst 9500 Series Switches Hardware
+  Installation Guide*, Product Overview, the switch-models table:
+  <https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9500/hardware/install/b_catalyst_9500_hig/9500_product-overview.html>.
+- **T1** -- Cisco TechNote 217726, *Configure and Troubleshoot QinQ
+  and L2PT on Catalyst 9000 Switches* (updated September 17, 2024):
+  <https://www.cisco.com/c/en/us/support/docs/switches/catalyst-9300-switch/217726-configure-and-verify-and-troubleshoot-qi.html>.
+  "The vlan dot1q tag native enables 802.1Q native VLAN to be tagged
+  on all trunk interfaces by default, but this can be disabled at the
+  interface level with no switchport trunk native vlan tag
+  configuration."  A TechNote, not a guide or a command reference,
+  and its lab is a C9500-12Q, which C13 does not file as a High
+  Performance model.
+- **N4** -- Cisco, the N3 page (*Cisco Nexus 9000 Series NX-OS
+  Interfaces Configuration Guide, Release 10.6(x)*, Configuring
+  Layer 2 Interfaces).  "This configuration is global; trunk ports on
+  the device either do or do not retain the tagging for the native
+  VLAN."  "The vlan dot1q tag native global command changes the
+  behavior of all native VLAN ID interfaces on all trunks on the
+  device."  Sent: "With vlan dot1Q tag native enabled, untagged
+  frames will have a native VLAN tag added to transmitted frames."
+  Received, under the command's step: "Modifies the behavior of a
+  802.1Q trunked native VLAN ID interface. The interface maintains the
+  taggings for all packets that enter with a tag that matches the
+  value of the native VLAN ID and drops all untagged traffic. The
+  control traffic is still carried on the native VLAN."  And of the
+  neighbour: "Therefore, it is recommended to have the vlan dot1q tag
+  native command disabled in case the connected switch does not have
+  it configured."
+- **N5** -- Cisco, the same 10.6(x) guide, Configuring Q-in-Q VLAN
+  Tunnels:
+  <https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/106x/configuration/interfaces/cisco-nexus-9000-series-nx-os-interfaces-configuration-guide-release-106x/m_configuring_q-in-q_vlan_tunnels_9x.html>.
+  Section "Native VLAN Hazards": "If the switch is configured to tag
+  native VLAN packets on all 802.1Q trunks, the switch accepts
+  untagged packets but sends only tagged packets."  Against it, the
+  same chapter's "Guidelines and Limitations for Q-in-Q Tunneling and
+  Layer 2 Protocol Tunneling": "You should enter the vlan dot1Q tag
+  native command to maintain the tagging on the native VLAN and drop
+  untagged traffic."
+- **N8** -- Cisco, the same 10.6(x) guide, Configuring vPCs, section
+  "Configuration Parameters That Must Be Identical":
+  <https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/106x/configuration/interfaces/cisco-nexus-9000-series-nx-os-interfaces-configuration-guide-release-106x/m_configuring_vpcs_9x.html>.
+  The parameters that "must be configured identically on both devices
+  of the vPC Peer-Link" include, under "Trunk mode per channel:",
+  "Native VLAN", "VLANs allowed on trunk" and "Tagging of native VLAN
+  traffic".
+- **X1** -- Cisco, *Cisco Nexus 7000 Series NX-OS Interfaces Command
+  Reference*, V Commands, `vlan dot1q tag native`, a Nexus 7000 page:
+  <https://www.cisco.com/c/en/us/td/docs/switches/datacenter/nexus7000/sw/interfaces/command/cisco_nexus7000_interfaces_command_ref/v_commands.html>.
+  Of `exclude control`: "Excludes untagged control traffic on the
+  native VLAN in a trunk."
+- **A2** -- Arista, the A1 page (*EOS User Manual*, Virtual LANs
+  (VLANs), titled "EOS 4.36.2F"), entry `switchport trunk native
+  vlan`, whose one argument is a VLAN number or `tag`: "Trunk mode
+  interfaces can also be configured to drop untagged frames.", and of
+  the option: "tag interface drops all untagged frames."  The `no` and
+  `default` forms "restore vlan 1 as the trunk mode native VLAN".  No
+  sentence of the page speaks of frames the interface SENDS under
+  `tag`, and the VLAN chapter lists no line for every trunk.
+- **H9** -- HPE, the H4 guide, `vlan trunk native tag`:
+  <https://arubanetworking.hpe.com/techdocs/AOS-CX/10.16/HTML/l2_bridging_6300-6400/Content/Chp_vlans/vlan_cmds/vla-tru-nat-tag.htm>.
+  "Enables tagging on a native VLAN."  "Only incoming packets that are
+  tagged with the matching VLAN ID are accepted. Incoming packets that
+  are untagged are dropped except for BPDUs. Egress packets are
+  tagged."  "The no form of this command removes tagging on a native
+  VLAN."  And H4's "Example 2: Native tagged VLAN": "An ingress
+  untagged frame arrives on interface 1/1/13. The switch drops this
+  frame since the interface is configured as native tagged (all
+  untagged frames a dropped in such a configuration)."
+- **H12** -- HPE, the same guide, "Assigning a native VLAN ID to a
+  trunk interface":
+  <https://arubanetworking.hpe.com/techdocs/AOS-CX/10.16/HTML/l2_bridging_6300-6400/Content/Chp_vlans/asi-nat-vla-id-tru-int.htm>.
+  "Allow traffic tagged with the native VLAN ID to be transported by
+  the trunk using the command vlan trunk allowed."
+- **H13** -- HPE, the same guide, "Assigning a VLAN ID to a trunk
+  interface":
+  <https://arubanetworking.hpe.com/techdocs/AOS-CX/10.16/HTML/l2_bridging_6300-6400/Content/Chp_vlans/asi-vla-id-tru-int.htm>.
+  "With trunk configuration, when native membership is not specified,
+  the port automatically becomes a native member of VLAN 1."
 - **D2** -- Dell KB 000137464, above.  "The Native VLAN (untagged) is
   configured as access VLAN."  And: "An interface cannot be an access
   and trunk member of the same VLAN. The vlan must first be removed
@@ -485,8 +615,30 @@ being told VLAN by VLAN):
 - **OS10**: the id of "the default VLAN ID of the switch" (D5) for a
   given switch.  It is a setting, and no trunk's stanza states it;
   the codec fills nothing in.
-- **Every platform that has a default native VLAN**: its form for a
-  trunk that is to carry NO VLAN untagged.  None has been read.
+- **A trunk that is to carry NO VLAN untagged.**  Each platform with
+  a default native VLAN has a form for it (C6-C8, N4, A2, H9), and
+  these parts of them are not established:
+  - *EOS*: what an interface under `tag` sends for its native VLAN,
+    which VLAN is native while `tag` is set, and whether EOS has a
+    line for every trunk (none in its VLAN chapter).  A2 has the
+    receive half only.
+  - *NX-OS*: what the line for every trunk does with an untagged frame
+    it receives -- Cisco's pages disagree (N4 and N5's guideline:
+    dropped; N5's "Native VLAN Hazards": accepted).  The send half is
+    settled: tagged.  Its default in 10.x (no 10.x page prints one),
+    and whether `exclude control` exists on a Nexus 9000 (X1 is a
+    Nexus 7000 page).
+  - *IOS-XE*: what control traffic does under the line for every
+    trunk, on a Catalyst 9300 or 9500.  And the per-port form of the
+    9500 High Performance models (C6): its default under the line, and
+    how a running config prints it, rest on a TechNote whose lab is
+    not such a model (T1).
+  - *AOS-CX*: how a switch prints `vlan trunk native N tag` in its
+    running config.  HPE's examples show it typed; the committed
+    captures print one line beside `vlan trunk allowed all`, in two of
+    Aruba's published sample configurations and in two configurations
+    made by tools.
+  - *OS10 and AOS-S*: their form for it.  Not read here.
 - **Every platform**: what its CLI does on entry when one statement
   meets the other, and what happens to control and spanning-tree
   traffic of a native VLAN other than 1 that is off the list.
@@ -581,12 +733,59 @@ being told VLAN by VLAN):
   platform prints one.  No sentence quoted on this page says what
   either switch does with a `vlan 1` line, or that VLAN 1 is there
   without one: nothing is claimed for it.
-- Nothing is filled in under the words that say a native VLAN is
-  sent tagged (`vlan dot1q tag native`; `switchport trunk native
-  vlan tag`).  Those words are not read into the tree.
-- The other way is not mended.  A port that carries no VLAN untagged
-  (a Junos trunk with no `native-vlan-id`: J2) is written for IOS-XE,
-  NX-OS, EOS and AOS-CX as a trunk with no native line, and where
-  its list holds VLAN 1 the target's default makes VLAN 1 its
-  untagged VLAN.  No form for "no untagged VLAN" is written, and
-  none has been read from a vendor.
+- Under the words that say a native VLAN is sent tagged the trunk
+  carries NO VLAN untagged, and has no native VLAN in the tree: not
+  the default, and not one it states.  The words are `vlan dot1q tag
+  native`, with `exclude control` or without (IOS-XE, NX-OS; the EOS
+  parser reads them as well), `switchport trunk native vlan tag`, and
+  on AOS-CX `vlan trunk native N tag` (H9, H4).  An IOS-XE or NX-OS
+  trunk that states `no switchport trunk native vlan tag` leaves the
+  line for every trunk, and has the default again (C10, T1).  On EOS
+  the id and `tag` are one argument, so the one met last stands.  The
+  id of a native VLAN sent tagged is not kept.  By HPE's sentences
+  such an AOS-CX trunk accepts only tagged frames and tags what it
+  sends, so `native 20 tag` and `native 1 tag` beside one list carry
+  the same VLANs (H12 asks for the native VLAN to be on the list for
+  its traffic to pass): it comes back as `vlan trunk native 1 tag`
+  where its list holds VLAN 1, and with no native line where it does
+  not.
+- A trunk that carries no VLAN untagged and whose list holds VLAN 1
+  is written each target's form for that, since written no native
+  line it would carry VLAN 1 untagged there by the target's default
+  (the table above).  AOS-CX: `vlan trunk native 1 tag`, before the
+  allowed line, which HPE's sentences give both directions of (H9).
+  EOS: `switchport trunk native vlan tag`; Arista's sentence is that
+  the interface then drops all untagged frames (A2), and what it
+  sends for VLAN 1 is not established.  IOS-XE and NX-OS: the one
+  form documented for both the Catalyst 9300 and the Nexus 9000 is
+  `vlan dot1q tag native`, which tags the native VLAN of EVERY trunk
+  (C7, N4).  So it is written, once, before the VLANs and the
+  interfaces, where no port the check reads blocks it.  The check
+  reads the ports written in trunk mode, the ports with trunk lines
+  and no mode, and the ports in a mode no mode line is written for
+  (dynamic, private-vlan, dot1q-tunnel, fex-fabric and the like):
+  the line is written where no trunk of the output carries a VLAN
+  untagged, and no port is in such a mode or holds trunk lines in no
+  mode.  A port written with no mode and no trunk line is not
+  counted: on a Catalyst such a port is in dynamic auto by default
+  (C8), and should it become a trunk the line tags its native VLAN
+  as well (C7).  Otherwise each such trunk is written no native
+  line and a `! review:` line where the native line would be, which
+  says that the trunk carries no VLAN untagged in the translated
+  config, that on this platform a trunk with no native line has
+  native VLAN 1, and that the line that would tag it tags every
+  trunk.  The per-port form of the Catalyst 9500 High Performance
+  models (C6) is not written: it needs the line for every trunk, and
+  knowing that the target is such a model.  On IOS-XE the line for
+  every trunk has a side effect Cisco documents: the dot1x
+  reauthentication of trunk ports fails (C11).  On NX-OS Cisco
+  recommends leaving it off where the neighbour does not have it
+  (N4), and lists "Tagging of native VLAN traffic" among the
+  parameters that must be configured identically on both vPC peers
+  (N8); the line is decided for one output at a time, so the outputs
+  of two vPC peers translated apart can differ, one with the line and
+  the other with review lines -- compare them.
+- A list that leaves VLAN 1 out needs no form: the default native
+  VLAN is then off the list, which is how a native VLAN that is not
+  carried is written (the first table).  A record of an interface
+  whose other stanza states a native VLAN is given none either.

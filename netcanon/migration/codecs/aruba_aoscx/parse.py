@@ -146,10 +146,11 @@ _VRF_ATTACH_RE = re.compile(r"^\s+vrf\s+attach\s+(\S+)\s*$", re.IGNORECASE)
 # inverted): a port carrying an IP keeps ``switchport_mode=None`` (routed).
 _NO_ROUTING_RE = re.compile(r"^\s+no\s+routing\s*$", re.IGNORECASE)
 _VLAN_ACCESS_RE = re.compile(r"^\s+vlan\s+access\s+(\d+)\s*$", re.IGNORECASE)
-#: ``vlan trunk native <N> [tag]`` — the ``tag`` modifier (tag the native
-#: VLAN) is consumed but not modelled in v1.
+#: ``vlan trunk native <N> [tag]``.  With ``tag`` the native VLAN is
+#: sent tagged and untagged frames are dropped (BPDUs aside): the trunk
+#: carries no VLAN untagged, and is read as having no native VLAN.
 _VLAN_TRUNK_NATIVE_RE = re.compile(
-    r"^\s+vlan\s+trunk\s+native\s+(\d+)(?:\s+tag)?\s*$", re.IGNORECASE,
+    r"^\s+vlan\s+trunk\s+native\s+(\d+)(\s+tag)?\s*$", re.IGNORECASE,
 )
 #: ``vlan trunk allowed <list|all>`` — ``all`` is every id, 1-4094
 #: (the render writes ``all`` for that list and for no other).
@@ -623,12 +624,26 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         tnm = _VLAN_TRUNK_NATIVE_RE.match(line)
         if tnm:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
-            current["trunk_native"] = int(tnm.group(1))
             trunks.says_trunk(current["trunk_key"])
             # (With ``tag`` after it or without: the word is on the
             # line that states the id, so a port that has it states
-            # its native VLAN.)
+            # its native VLAN, and is owed no default.)
             trunks.native_line(current["trunk_key"])
+            if tnm.group(2):
+                # Sent tagged: the trunk carries no VLAN untagged.  The
+                # id is not kept -- the tree has no field for a native
+                # VLAN sent tagged, and none is needed: such a trunk
+                # takes only tagged frames and tags what it sends, so
+                # the id says nothing its list does not (HPE's
+                # sentences, on the vendor reference's VLAN page).
+                # What a later ``vlan trunk native N`` without the word
+                # does to the tagging is not established.  It is read
+                # as leaving the tagging on, because HPE documents the
+                # ``no`` form as the way tagging is removed.
+                current["trunk_native"] = None
+                trunks.native_is_tagged(current["trunk_key"])
+            else:
+                current["trunk_native"] = int(tnm.group(1))
             return
         tam = _VLAN_TRUNK_ALLOWED_RE.match(line)
         if tam:

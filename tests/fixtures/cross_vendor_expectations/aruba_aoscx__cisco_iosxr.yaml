@@ -319,7 +319,7 @@ per_field_expectation:
       Same structural cause, declared once at `vlans[].id`.  For the operator
       the consequence is worth naming even though the disposition is `good`:
       IOS-XR has no per-port access VLAN at all — it declares
-      `/interfaces/interface/access-vlan` unsupported — so the 64 untagged
+      `/interfaces/interface/access-vlan` unsupported — so the 51 untagged
       membership entries in this corpus have no target-side equivalent to be
       lossy about.  Access-port assignment is a redesign, not a migration.
     references: [aoscx-iosxr-surface]
@@ -327,7 +327,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: good
     note: >
-      Same as `vlans[].untagged_ports` — 32 tagged membership entries, no
+      Same as `vlans[].untagged_ports` — 126 tagged membership entries, no
       IOS-XR trunk allow-list to hold them
       (`/interfaces/interface/trunk-allowed-vlans` unsupported).  The
       record-level loss is declared at `vlans[].id`.

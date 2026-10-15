@@ -257,15 +257,37 @@ source are the highest-value contributions — see
   control traffic continues to move on the port.").  As a target,
   no `switchport trunk native vlan 1` line is written for a trunk
   whose list holds VLAN 1: it is the default, and no real NX-OS
-  capture prints the line.  One
-  thing is not mended: a port that carries NO VLAN untagged at its
-  source and has VLAN 1 on its list (a Junos trunk of `vlan members
-  all` with no `native-vlan-id`, say) is written a trunk with no
-  native line as well, and so has the default here; no form is
-  written yet for "no untagged VLAN" (the limits in
-  [`CAPABILITIES.md`](../CAPABILITIES.md)).  `vlan dot1q tag native` and `switchport
-  trunk native vlan tag` are not read, except that a trunk under
-  either is given no default.  The VLAN pane's map keeps to that
+  capture prints the line.  A port that carries NO VLAN untagged
+  at its source and has VLAN 1 on its list (a Junos trunk of `vlan
+  members all` with no `native-vlan-id`, say) would have the default
+  here if it were written no native line.  The one form Cisco
+  documents for it on the Nexus 9000 is `vlan dot1q tag native`,
+  and it is the device's: "This configuration is global; trunk ports
+  on the device either do or do not retain the tagging for the
+  native VLAN."  So it is written, once, before the VLANs, where no
+  port the check reads blocks it: no port in trunk mode carries a
+  VLAN untagged, and no port is in a mode no mode line is written
+  for (dynamic, private-vlan, dot1q-tunnel, fex-fabric and the like)
+  or holds trunk lines in no mode.  A port written with no mode and
+  no trunk line is not counted; should it become a trunk, the line
+  tags its native VLAN as well.  Otherwise
+  such a trunk is written no native line under a
+  `! review:` line that says so
+  ([`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A trunk's allowed
+  list is not what I wrote").  Its send half is settled (tagged);
+  what it does with an untagged frame it receives, Cisco's pages
+  disagree on.  Cisco recommends leaving it off where the connected
+  switch does not have it.  **vPC:** Cisco lists "Tagging of native
+  VLAN traffic" among the parameters that "must be configured
+  identically on both devices of the vPC Peer-Link".  The line is
+  decided for one output at a time, so two vPC peers translated
+  apart can differ -- one written the line, the other review lines.
+  Compare the two peers' outputs.  As a source, `vlan dot1q tag native`
+  (with `exclude control` or without) and `switchport trunk native
+  vlan tag` are read: a trunk under either carries no VLAN
+  untagged, and has no native VLAN in the tree, a stated one
+  included; `no switchport trunk native vlan tag` takes a trunk out
+  of the line for every trunk.  The VLAN pane's map keeps to that
   reading.  Where a map would bring a native VLAN that the list
   leaves out INTO the list, the native VLAN is cleared if the map
   has merged it with a VLAN of the config that the list names, and

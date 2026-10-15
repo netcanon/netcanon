@@ -1224,13 +1224,26 @@ tests use these exclusively — never CSS classes or element structure.  See
   default itself, typed in the test and compared with the table,
   and a tree is held to its platform's default before anything is
   compared.
-  Still open, and in the CHANGELOG's known limitations: the
-  TARGET's half.  A port that carries NO VLAN untagged, written for
-  a platform whose trunk has a default native VLAN, is given that
-  default by the switch (a Junos trunk of `vlan members all` onto
-  the four), and no renderer has a form for "this trunk carries no
-  VLAN untagged": the guard pins those cells one by one, compared
-  for equality, so the change that mends one takes its pin out.
+  (4) **The TARGET's half: a port that carries NO VLAN untagged**,
+  written for a platform whose trunk has a default native VLAN, is
+  given that default by the switch unless the output says
+  otherwise.  IOS-XE, NX-OS, EOS and AOS-CX are written their own
+  form for it (`wants_no_untagged_vlan`), and the parsers read the
+  same words back: a trunk whose native VLAN is sent tagged has no
+  native VLAN in the tree, a stated one included.  Where a form
+  says it of the whole switch (`vlan dot1q tag native`) it is
+  written only where no port the check reads blocks it
+  (`every_native_vlan_tagged`: the ports in trunk mode, the ports
+  with trunk lines and no mode, and the ports in a mode no mode line
+  is written for -- dynamic, private-vlan, dot1q-tunnel, fex-fabric
+  and the like; a port with no mode and no trunk line is not
+  counted, though on a Catalyst it is in dynamic auto by default and
+  the line would tag it should it become a trunk), and otherwise the
+  port gets a review line -- a line for one port is not a line for
+  the switch.  The guard holds each such cell to its review line,
+  whole, compared for equality.  Open, and in the CHANGELOG's known
+  limitations: OS10 and AOS-S as targets (a trunk written no
+  untagged VLAN is left to the switch's default there).
 - **Never** put a word of the config where a port name goes, and never
   make an interface record for a name the config configures nothing
   under.  A parser that takes the first word after a keyword for a

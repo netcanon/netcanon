@@ -302,10 +302,13 @@ IOS-XE, NX-OS, EOS or AOS-CX whose list holds VLAN 1 -- and to NOT
 having it on a port that does not say it is a trunk, which it reads
 from the text and from no parser -- and its own readers add that
 default to an output's text, which states less than the switch
-does.  The half that is not mended -- a port with no
-untagged VLAN that one of those four targets then gives its default
--- is pinned cell by cell and compared for equality, so the change
-that mends a cell has to take its pin out.
+does.  A port with no untagged VLAN is written each of those four
+targets' form for that, and is read back by the same readers, which
+know each platform's words for a native VLAN sent tagged.  Where an
+IOS-XE or NX-OS output cannot say it of every trunk, the port is
+left to the target's default under a review line: those cells are
+pinned one by one and compared for equality, and the guard holds
+each to having that line, whole, and no other port to having one.
 What it cannot see is in its docstring and in the known limitations:
 the default VLAN of an OS10 switch, which no trunk states, and what
 an AOS-S port is in when no `untagged` line names it.

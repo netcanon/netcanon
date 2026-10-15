@@ -1437,16 +1437,20 @@ def _apply_iface_subcommand(  # noqa: C901
         # tagged_ports under :func:`project_switchport_to_vlan`.
         # Arista EOS accepts the same syntax as Cisco IOS-XE here
         # (Arista EOS User Manual, "Switchport Configuration").
+        # The id and ``tag`` are one argument of one command on EOS
+        # (``switchport trunk native vlan VLAN_ID``, whose options
+        # are a VLAN number or ``tag``): the line met last stands.
         try:
             iface.trunk_native_vlan = int(line.split()[-1])
             iface.switchport_mode = "trunk"
+            if trunks is not None:
+                trunks.native_is_tagged(iface.name, tagged=False)
         except ValueError:
             # ``switchport trunk native vlan tag`` is no id: the
-            # native VLAN is sent tagged, and none is filled in.
-            # (A line that states an id needs no word to ``trunks``:
-            # this parser keeps one record a name, and the record
-            # holds the native VLAN its interface states.)
+            # native VLAN is sent tagged, and the trunk carries no
+            # VLAN untagged -- no native VLAN, and none filled in.
             if trunks is not None and tags_its_native_vlan(line):
+                iface.trunk_native_vlan = None
                 trunks.native_is_tagged(iface.name)
         return
     if line == "switchport mode trunk":

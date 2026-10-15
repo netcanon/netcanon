@@ -256,6 +256,48 @@ its own form for it.  What you may see:
   source trunk said so itself -- only a source with a native line of
   its own can -- and it is written as it stood.  If that was not
   meant on the source either, add the VLAN to the list on both.
+* **`vlan dot1q tag native`**, one line before the interfaces, on
+  IOS-XE or NX-OS; **`switchport trunk native vlan tag`** on an EOS
+  trunk; **`vlan trunk native 1 tag`** on an AOS-CX trunk.  The
+  source trunk carries no VLAN untagged -- a Junos trunk with no
+  `native-vlan-id`, an AOS-S port only `tagged` in VLAN 1, a Cisco
+  or AOS-CX trunk whose native VLAN is sent tagged, a trunk whose
+  native VLAN you dropped or merged in the VLAN pane -- and its
+  list holds VLAN 1, which a trunk with no native line has for its
+  native VLAN on these four.  Each line is that platform's form for
+  a trunk that carries none.  On IOS-XE and NX-OS it is a line for
+  EVERY trunk of the switch, written only where no port the check
+  reads blocks it: no trunk carries a VLAN untagged, and no port is
+  in a mode no mode line is written for (dynamic, private-vlan,
+  dot1q-tunnel, fex-fabric and the like) or holds trunk lines in no
+  mode.  A port written with no mode and no trunk line is not
+  counted: on a Catalyst such a port is in dynamic auto by default,
+  and should it become a trunk the line tags its native VLAN as
+  well.
+  **Action:** on NX-OS, Cisco recommends leaving the line off where
+  the connected switch does not have it; on IOS-XE, Cisco documents
+  that dot1x reauthentication fails on trunk ports under it; on
+  EOS, what the port sends for VLAN 1 is not on Arista's page.
+  Check the neighbour, and those, before deploying.
+* **`! review: this trunk carries no VLAN untagged in the
+  translated config; ...`** where the native line would be, on an
+  IOS-XE or NX-OS trunk.  The same trunk, in an output where
+  another trunk carries a VLAN untagged (or a port is in a mode no
+  mode line is written for -- dynamic, private-vlan, dot1q-tunnel,
+  fex-fabric and the like -- or holds trunk lines in no mode): the
+  line for every trunk would tag that port too, and is not
+  written.  As written,
+  the port has native VLAN 1, and its list holds VLAN 1, so it
+  carries VLAN 1 UNTAGGED, which the source did not.  The line says
+  so, and that the line for every trunk would tag it.
+  **Action:** decide what the port is to carry untagged on the
+  switch, and state it: a native VLAN its allowed list leaves out
+  (Cisco's sentences say a trunk whose list leaves VLAN 1 out
+  carries no user traffic on VLAN 1 -- its tagged traffic in VLAN 1
+  included), or the line for every trunk where every trunk can take
+  it.  On a Catalyst 9500 High Performance switch Cisco documents a
+  per-port `switchport trunk native vlan tag`, under the line for
+  every trunk.  The job does not count this line.
 * **`! review: native VLAN <N> is stated for this trunk and its
   allowed list leaves it out ...`** above `no switchport access
   vlan`, on OS10.  The source trunk states a native VLAN its own
@@ -350,11 +392,13 @@ words after the semicolon are
 there when the trunk's allowed list is every VLAN -- it stated no
 allowed line, or `all`.  Such a list is left as it stands, so an
 output that writes the port as a trunk of every VLAN still
-allows the VLAN you dropped.  And on IOS-XE, NX-OS, EOS
-and AOS-CX a trunk that is written no native line has native VLAN
-1: where the VLAN you dropped is VLAN 1, the trunk still carries it
-UNTAGGED there, by the target's own default (a limit, in
-[`CAPABILITIES.md`](CAPABILITIES.md)).  **Action:** if the trunk is
+allows the VLAN you dropped.  On IOS-XE, NX-OS, EOS and AOS-CX
+such a trunk, with no native VLAN and VLAN 1 on its list, is written
+that target's form for a trunk that carries no VLAN untagged (the
+list above): where the VLAN you dropped is VLAN 1, the trunk still
+carries it, TAGGED -- or, on IOS-XE and NX-OS where another port
+blocks the line for every trunk (the list above), untagged by the
+target's default, under a `! review:` line.  **Action:** if the trunk is
 not to carry that VLAN, give it an allowed list on the target that
 leaves the VLAN out (for IOS-XE, NX-OS and AOS-CX the vendors' own
 sentences say such a trunk carries no user traffic on that VLAN;
@@ -376,11 +420,11 @@ would carry UNTAGGED what it carried tagged.  So its native VLAN is
 cleared and the VLAN stays tagged (the job is not failed by it).
 The same is done when the map gives VLAN 20 the id 10, and said as
 `the map merges VLAN 20, which the trunk carries tagged, into it`.
-The trunk then has no native VLAN, and is written no native line:
-on IOS-XE, NX-OS, EOS and AOS-CX the target's own default then
-applies, VLAN 1, where the trunk's list holds it (a limit, in
-[`CAPABILITIES.md`](CAPABILITIES.md)).  State on the target what
-the trunk is to carry untagged.  Before this
+The trunk then has no native VLAN, and is written as a trunk that
+carries none untagged: where its list holds VLAN 1, on IOS-XE,
+NX-OS, EOS and AOS-CX, by that target's form for it (the list
+above), so that the target's own default does not make VLAN 1 its
+untagged VLAN.  Before this
 the merged VLAN was written as the trunk's native VLAN, and the job
 said only that two VLANs were merged.
 
