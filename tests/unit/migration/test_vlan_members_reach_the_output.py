@@ -57,9 +57,11 @@ Anything else fails.  So does a membership of the output that no source
 membership accounts for, and one that changed between tagged and
 untagged -- but for one thing, which is pinned cell by cell
 (:data:`BY_THE_TARGETS_DEFAULT`): a trunk the source carries no VLAN
-untagged on, written for a platform whose trunk has a default native
-VLAN, with no native line and a list that holds VLAN 1, carries
-VLAN 1 untagged there by the target's own default.
+untagged on, written for IOS-XE or NX-OS with no native line and a
+list that holds VLAN 1 -- where the output cannot say of EVERY trunk
+that its native VLAN is sent tagged, and the port has a review line
+instead -- carries VLAN 1 untagged there by the target's own
+default.
 
 How the output is read
 ----------------------
@@ -165,33 +167,33 @@ SAID_IN_THE_STANZA: dict[tuple[str, str], int] = {}
 #: The native VLAN of a trunk whose text states none, by hand, from
 #: the vendors' sentences (the vendor reference's table "And when the
 #: config states no untagged VLAN at all"): the readers of TEXT below
-#: add it, where the trunk's list holds it.  A Junos trunk has none,
-#: and the default VLAN of an OS10 switch is a setting no trunk
-#: states.
+#: add it, where the trunk's list holds it -- and not where the text
+#: says its native VLAN is sent tagged (:func:`_sent_tagged`).  A
+#: Junos trunk has none, and the default VLAN of an OS10 switch is a
+#: setting no trunk states.
 NATIVE_WITH_NO_LINE = {"arista_eos": 1, "aruba_aoscx": 1, "cisco_iosxe_cli": 1, "cisco_nxos": 1}
+
+#: The line for every trunk that says its native VLAN is sent tagged,
+#: with ``exclude control`` after it or without.
+_EVERY_NATIVE_TAGGED = re.compile(r"(?m)^vlan dot1q tag native(?: exclude control)?[ \t]*$")
 
 #: (capture, target) -> VLAN 1 memberships that are untagged in the
 #: output by the TARGET's own default and are not the source's: a
 #: trunk written with no native line beside a list that holds VLAN 1,
-#: for a source port that carries no VLAN untagged.  Every one is a
-#: Junos trunk of ``vlan members all`` with no ``native-vlan-id``,
-#: which drops untagged packets by Juniper's sentence.  No renderer
-#: has a form yet for "this trunk carries no VLAN untagged"; a known
-#: limitation, in the CHANGELOG, and pinned port by port in
-#: ``test_the_list_holds_the_native_vlan.py`` as well.  Compared for
-#: EQUALITY with what is measured: the change that writes such a form
-#: empties this.
-#: (Counted by port of the OUTPUT: where a job lists two source LAGs
-#: as fused under one name, as two cells below do, that is one.)
+#: for a source port that carries no VLAN untagged.  Each is an AOS-CX
+#: LAG of ``vlan trunk native 1 tag`` written for IOS-XE or NX-OS,
+#: whose form for such a trunk is a line for EVERY trunk of the
+#: switch, in an output where another trunk carries a VLAN untagged:
+#: the port has a review line instead (held whole in
+#: ``test_the_list_holds_the_native_vlan.py``, which pins the same
+#: ports).  Compared for EQUALITY with what is measured.
+#: (Counted by port of the OUTPUT: where a job lists two source ports
+#: as fused under one name, that is one.)
 BY_THE_TARGETS_DEFAULT: dict[tuple[str, str], int] = {
-    ("real/junos/ksator_labmgmt_qfx5100_junos173.set", "arista_eos"): 2,
-    ("real/junos/ksator_labmgmt_qfx5100_junos173.set", "aruba_aoscx"): 2,
-    ("real/junos/ksator_labmgmt_qfx5100_junos173.set", "cisco_iosxe_cli"): 1,
-    ("real/junos/ksator_labmgmt_qfx5100_junos173.set", "cisco_nxos"): 1,
-    ("real/junos/saidvandeklundert_snmpv3_junos172.set", "arista_eos"): 3,
-    ("real/junos/saidvandeklundert_snmpv3_junos172.set", "aruba_aoscx"): 3,
-    ("real/junos/saidvandeklundert_snmpv3_junos172.set", "cisco_iosxe_cli"): 3,
-    ("real/junos/saidvandeklundert_snmpv3_junos172.set", "cisco_nxos"): 3,
+    ("real/aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg", "cisco_iosxe_cli"): 1,
+    ("real/aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg", "cisco_nxos"): 1,
+    ("real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg", "cisco_iosxe_cli"): 1,
+    ("real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg", "cisco_nxos"): 1,
 }
 
 #: Targets on which a port under a name the OPERATOR chose (an entry of
@@ -364,6 +366,36 @@ def _stanzas(text: str, opener: str):
         yield name, body
 
 
+def _sent_tagged(text: str, codec: str) -> tuple[bool, dict[str, bool]]:
+    """(the line for every trunk is there, {interface: what its own
+    lines say, the last of them}) of whether the native VLAN is sent
+    TAGGED, by each grammar: on IOS-XE and NX-OS a port's ``switchport
+    trunk native vlan tag`` and ``no switchport trunk native vlan
+    tag``; on EOS that line and an id, which are one argument; on
+    AOS-CX ``vlan trunk native N tag``, which a later line without the
+    word is read as leaving on (what that line does to the tagging is
+    not established; HPE documents the ``no`` form as the way tagging
+    is removed).  Names with their white space taken out.
+    A trunk whose native VLAN is sent tagged carries none untagged."""
+    own: dict[str, bool] = {}
+    for name, body in _stanzas(text, "interface "):
+        key = re.sub(r"\s+", "", re.sub(r"\s+multi-chassis.*$", "", name))
+        for line in body:
+            if codec == "aruba_aoscx":
+                if re.fullmatch(r"vlan trunk native \d+ tag", line):
+                    own[key] = True
+            elif codec == "dell_os10":
+                continue
+            elif line == "switchport trunk native vlan tag":
+                own[key] = True
+            elif (line == "no switchport trunk native vlan tag" and codec != "arista_eos") or (
+                codec == "arista_eos" and re.fullmatch(r"switchport trunk native vlan \d+", line)
+            ):
+                own[key] = False
+    every = codec not in ("aruba_aoscx", "dell_os10") and _EVERY_NATIVE_TAGGED.search(text) is not None
+    return every, own
+
+
 def _read_ios_like(text: str, codec: str) -> Reading:
     """NX-OS, IOS-XE, EOS, OS10.  A trunk with no allowed line is every
     VLAN -- none on OS10, where a trunk's untagged VLAN is its
@@ -372,12 +404,16 @@ def _read_ios_like(text: str, codec: str) -> Reading:
     that line says (and ``no switchport access vlan`` takes it
     back).  On the other three a trunk with no native line has the
     platform's own -- an INTERFACE that states none: a text can hold
-    an interface's stanza twice, and a native line in either is the
-    interface's."""
+    an interface's stanza twice, and a native line of an id in either
+    is the interface's (a ``tag`` line is read by :func:`_sent_tagged`
+    alone).  Not under the words that say the native VLAN is
+    sent tagged (:func:`_sent_tagged`): such a trunk carries none
+    untagged, the one it states included."""
     r = Reading()
+    every_tagged, own_tagged = _sent_tagged(text, codec)
     states_native = {
         name for name, body in _stanzas(text, "interface ")
-        if any(line.startswith("switchport trunk native vlan ") for line in body)
+        if any(re.fullmatch(r"switchport trunk native vlan \d+", line) for line in body)
     }
     for name, body in _stanzas(text, "interface "):
         mode = access = native = None
@@ -400,6 +436,8 @@ def _read_ios_like(text: str, codec: str) -> Reading:
                 tagged = allowed if allowed is not None else []
                 carried = tagged if tagged == "all" or access is None else [*tagged, access]
                 r.trunk(name, carried, access)
+            elif own_tagged.get(re.sub(r"\s+", "", name), every_tagged):
+                r.trunk(name, allowed if allowed is not None else "all", None)
             else:
                 default = None if name in states_native else NATIVE_WITH_NO_LINE[codec]
                 r.trunk(name, allowed if allowed is not None else "all", native, default=default)
@@ -410,6 +448,7 @@ def _read_ios_like(text: str, codec: str) -> Reading:
 
 def _read_aoscx(text: str) -> Reading:
     r = Reading()
+    _every, sent_tagged = _sent_tagged(text, "aruba_aoscx")
     for name, body in _stanzas(text, "interface "):
         name = re.sub(r"\s+multi-chassis.*$", "", name)
         access = native = None
@@ -423,7 +462,10 @@ def _read_aoscx(text: str) -> Reading:
             elif m := re.fullmatch(r"vlan trunk allowed (\S+)", line):
                 trunk = True
                 allowed = "all" if m.group(1) == "all" else _ids(m.group(1))
-        if trunk:
+        if trunk and sent_tagged.get(re.sub(r"\s+", "", name), False):
+            # ``vlan trunk native N tag``: no VLAN untagged, and no default.
+            r.trunk(name, allowed if allowed is not None else "all", None)
+        elif trunk:
             # (Every stanza of a trunk an AOS-CX output writes has its native line.)
             r.trunk(name, allowed if allowed is not None else "all", native, default=NATIVE_WITH_NO_LINE["aruba_aoscx"])
         elif access is not None:
@@ -735,7 +777,7 @@ def test_what_a_targets_default_makes_is_pinned(every_job: dict) -> None:
         if verdict["tally"][TARGETS_DEFAULT]
     }
     assert made == BY_THE_TARGETS_DEFAULT
-    assert {target for _label, target in made} <= set(NATIVE_WITH_NO_LINE)
+    assert {target for _label, target in made} <= {"cisco_iosxe_cli", "cisco_nxos"}
 
 
 def test_what_a_stanza_says_is_as_pinned(every_job: dict) -> None:
@@ -1069,9 +1111,10 @@ class TestTheCheckItself:
 
     def test_the_targets_default_is_counted_apart(self) -> None:
         """A Junos trunk of every VLAN with no native VLAN, onto NX-OS,
-        is written a trunk with no native line: VLAN 1 is untagged
-        there by a default no line states.  Counted apart, and pinned
-        by cell.  The same VLAN untagged by a LINE is a membership
+        beside a trunk that carries VLAN 10 untagged, is written a
+        trunk with no native line, under a review line: VLAN 1 is
+        untagged there by a default no line states.  Counted apart,
+        and pinned by cell.  The same VLAN untagged by a LINE is a membership
         the source does not have, and so is the default once another
         stanza of the interface states a native VLAN."""
         text = "set system host-name sw1\n" + _TYPED["juniper_junos"][0]

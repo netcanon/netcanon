@@ -36,11 +36,29 @@ from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from .._helpers import (
     _coalesce_vlan_ids,
+    every_native_vlan_tagged,
+    native_vlan_stated,
     same_vendor_version,
     switchport_trunk_allowed_value,
     switchport_trunk_native_value,
+    wants_no_untagged_vlan,
 )
 from . import port_names as _port_names
+
+#: Written where a native line would be, on a trunk that carries no
+#: VLAN untagged and whose list holds VLAN 1, in an output that cannot
+#: say ``vlan dot1q tag native`` of every trunk
+#: (:func:`.._helpers.every_native_vlan_tagged`).  What it says of
+#: NX-OS is Cisco's (the vendor reference's VLAN page): a trunk with no
+#: native VLAN ID uses the default VLAN, which is VLAN1, and the global
+#: line changes the native VLAN of all trunks on the device.
+_NO_UNTAGGED_REVIEW = (
+    "  ! review: this trunk carries no VLAN untagged in the translated "
+    "config; on NX-OS a trunk with no native line uses the default VLAN, "
+    "VLAN 1, and this one's allowed list holds VLAN 1; vlan dot1q tag "
+    "native would tag it, and changes the native VLAN of every trunk of "
+    "the device -- check what this port is to carry untagged"
+)
 
 #: Canonical algorithm token -> NX-OS ``password <type>`` digit.  Keys mirror
 #: ``_TARGET_ACCEPTS["cisco_nxos"]`` exactly (guarded).  Type 0 is NX-OS's
@@ -156,6 +174,17 @@ def render_intent(tree: CanonicalIntent) -> str:
     if default_vrf_routes:
         lines.append("")
 
+    # ── Native VLANs sent tagged ──
+    # A trunk that carries no VLAN untagged and whose list holds VLAN 1
+    # is said so by the one form Cisco documents for it on the Nexus
+    # 9000 (the vendor reference's VLAN page) -- which says it of EVERY
+    # trunk of the device, and so is written only where it is true of
+    # every one.  Elsewhere such a trunk has a review line.
+    tag_every_native = every_native_vlan_tagged("cisco_nxos", tree.interfaces)
+    if tag_every_native:
+        lines.append("vlan dot1q tag native")
+        lines.append("")
+
     # ── VLANs (coalesced id-list + per-name / vn-segment stanzas) ──
     # A VLAN gets a body stanza when it has a name and/or a VXLAN VNI
     # (``vn-segment``).  VXLAN vlan-ids that lack a top-level vlan record
@@ -208,8 +237,14 @@ def render_intent(tree: CanonicalIntent) -> str:
 
     # ── Interfaces (NX-OS sort order) ──
     lag_mode_by_name = {lag.name: lag.mode for lag in tree.lags}
+    # A trunk may be given the review line where the output does not
+    # say the line for every trunk, and no record of its interface
+    # has a native VLAN.
+    stated = native_vlan_stated(tree.interfaces)
     for iface in _sort_interfaces_nxos(tree.interfaces):
-        lines.extend(_render_interface(iface, lag_mode_by_name))
+        lines.extend(_render_interface(
+            iface, lag_mode_by_name, not tag_every_native and iface.name not in stated,
+        ))
 
     # ── VTEP (interface nve1) — Phase 4 VXLAN-EVPN ──
     lines.extend(_render_nve(tree))
@@ -493,9 +528,14 @@ def _render_nve(tree: CanonicalIntent) -> list[str]:
     return block
 
 
-def _render_switchport_lines(iface) -> list[str]:
+def _render_switchport_lines(iface, may_review: bool = False) -> list[str]:
     """The L2 switchport config lines for an interface (empty for the
     inherently-L3 kinds: SVI / loopback / mgmt / VTEP / tunnel).
+
+    *may_review*: the output does not say ``vlan dot1q tag native``,
+    and no record of this interface has a native VLAN
+    (:func:`.._helpers.native_vlan_stated`), so a trunk that carries no
+    VLAN untagged and whose list holds VLAN 1 is given a review line.
 
     Extracted from ``_render_interface`` to keep it under the cyclomatic-
     complexity gate.  Physical, LAG, and unknown cross-vendor names default
@@ -521,6 +561,10 @@ def _render_switchport_lines(iface) -> list[str]:
         )
         if native_vlan is not None:
             out.append(f"  switchport trunk native vlan {native_vlan}")
+        elif may_review and wants_no_untagged_vlan(
+            "cisco_nxos", iface.trunk_allowed_vlans, iface.trunk_native_vlan,
+        ):
+            out.append(_NO_UNTAGGED_REVIEW)
         # The list means what it says.  No VLAN is ``none``.  Every
         # VLAN is no line at all: it is the default and what the
         # device prints, and ``1-4094`` names the ids NX-OS keeps for
@@ -537,8 +581,9 @@ def _render_switchport_lines(iface) -> list[str]:
     return out
 
 
-def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
-    """Render one interface stanza.
+def _render_interface(iface, lag_mode_by_name: dict, may_review: bool = False) -> list[str]:
+    """Render one interface stanza (*may_review*: see
+    :func:`_render_switchport_lines`).
 
     Switchport handling is kind-aware: only physical / LAG ports take
     ``switchport`` config.  A routed physical/LAG port (no switchport
@@ -569,7 +614,7 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
         elif _tt == "ipip":
             block.append("  tunnel mode ipip")
 
-    block.extend(_render_switchport_lines(iface))
+    block.extend(_render_switchport_lines(iface, may_review))
 
     if iface.vrf:
         block.append(f"  vrf member {iface.vrf}")

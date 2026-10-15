@@ -79,15 +79,33 @@ from .._helpers import (
     TRUNK_ALL,
     _prefix_to_mask,
     charge_id_lines,
+    every_native_vlan_tagged,
+    native_vlan_stated,
     switchport_trunk_allowed_value,
     switchport_trunk_native_value,
     trunk_list_says,
+    wants_no_untagged_vlan,
 )
 from ..base import RenderError
 
 #: The line that carries a port's allowed list, up to its first id
 #: (or the word that stands for the list: ``none``, ``all``).
 _ALLOWED_VLAN_LEAD = " switchport trunk allowed vlan "
+
+#: Written where a native line would be, on a trunk that carries no
+#: VLAN untagged and whose list holds VLAN 1, in an output that cannot
+#: say ``vlan dot1q tag native`` of every trunk
+#: (:func:`.._helpers.every_native_vlan_tagged`).  What it says of
+#: IOS-XE is Cisco's (the vendor reference's VLAN page): the native
+#: VLAN is VLAN 1 by default, and the global line tags the native VLAN
+#: on all 802.1Q trunk ports.
+_NO_UNTAGGED_REVIEW = (
+    " ! review: this trunk carries no VLAN untagged in the translated "
+    "config; on IOS-XE a trunk with no native line has native VLAN 1, "
+    "and this one's allowed list holds VLAN 1; vlan dot1q tag native "
+    "would tag it, and tags the native VLAN of every 802.1Q trunk of "
+    "the switch -- check what this port is to carry untagged"
+)
 
 
 def render_intent(tree: Any) -> str:  # noqa: C901
@@ -114,6 +132,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         synthesize_svis_from_vlan_l3,
     )
     project_vlan_to_switchport(tree)
+
+    # A trunk that carries no VLAN untagged and whose list holds VLAN 1
+    # is said so by the form Cisco documents for it on the Catalyst 9300
+    # and the 9500 alike (the vendor reference's VLAN page) -- which
+    # says it of EVERY trunk, and so is written only where it is true
+    # of every one.  Elsewhere such a trunk has a review line.
+    tag_every_native = every_native_vlan_tagged("cisco_iosxe_cli", tree.interfaces)
+    stated = native_vlan_stated(tree.interfaces)
 
     # Inverse SVI fold: materialise ``interface Vlan<N>`` SVIs for VLANs
     # carrying L3 (``ipv4_addresses``) but with no sibling ``Vlan<N>``
@@ -284,6 +310,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             for rt in rt_exports:
                 out.append(f"  route-target export {rt}")
             out.append(" exit-address-family")
+        out.append("!")
+
+    if tag_every_native:
+        out.append("vlan dot1q tag native")
         out.append("!")
 
     # --- interfaces ---
@@ -495,6 +525,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             )
         if native_vlan is not None:
             body.append(f" switchport trunk native vlan {native_vlan}")
+        elif (
+            iface.switchport_mode == "trunk" and not tag_every_native
+            and iface.name not in stated and wants_no_untagged_vlan(
+                "cisco_iosxe_cli", iface.trunk_allowed_vlans,
+                iface.trunk_native_vlan,
+            )
+        ):
+            body.append(_NO_UNTAGGED_REVIEW)
         if iface.switchport_mode == "trunk":
             # On a trunk the list means what it says.  No VLAN is
             # ``none``.  Every VLAN is no line at all: it is the

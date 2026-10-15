@@ -326,11 +326,11 @@ per_field_expectation:
     disposition: unsupported
     reason: >
       A total drop, and proven independently of any record-count effect —
-      there is none on this pair.  Measured: 64 untagged-port entries across 13
+      there is none on this pair.  Measured: 51 untagged-port entries across 11
       VLAN records become 0 on the target, AND 64 interface records that exist
       on BOTH sides lose their entire switchport surface (`switchport_mode` on
-      64 records, `access_vlan` on 30, `trunk_allowed_vlans` on 23,
-      `trunk_native_vlan` on 34).  opnsense declares
+      64 records, `access_vlan` on 30, `trunk_allowed_vlans` on 34,
+      `trunk_native_vlan` on 30).  opnsense declares
       `/vlans/vlan/untagged-ports` unsupported ("OPNsense binds a VLAN to a
       single parent sub-interface; multi-port untagged membership is dropped on
       render") and all four per-interface twins unsupported as well —

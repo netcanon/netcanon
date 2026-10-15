@@ -57,8 +57,7 @@ meta:
 # pair is every list parent except `local_users`, because the identity
 # sub-fields (`interfaces[].name`, `vlans[].id`, `lags[].members`,
 # `routing_instances[].name`, `static_routes[].destination`) are preserved on
-# every cell but two, where a VLAN ARRIVES (`vlans[].id`): no interface, VLAN,
-# bundle, VRF or route disappears.
+# every cell: no interface, VLAN, bundle, VRF or route disappears.
 # ---------------------------------------------------------------------------
 
 per_field_expectation:
@@ -249,21 +248,25 @@ per_field_expectation:
     references: [junos-nxos-surface]
 
   "interfaces[].trunk_native_vlan":
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Both codecs model a STATED native VLAN -- Junos `set interfaces <name>
       native-vlan-id <N>` at the parent-interface hierarchy, NX-OS `switchport
       trunk native vlan <N>` -- and no committed fixture on this pair sets
       one, so that much rests on the two parse/render paths rather than an
       observed round-trip.  What the corpus shows is the other case, a Junos
-      trunk that states NONE.  It has no native VLAN in the tree and is
-      written with no native line, and it reads back as `1` where its list
-      holds VLAN 1: `null -> 1` on `ae0` and `ae1` of
-      `ksator_labmgmt_qfx5100_junos173` and on `ae111`, `ae201` and `ae202`
-      of `saidvandeklundert_snmpv3_junos172`, all trunks of `vlan members
-      all` (2 of 11 cells).  The `1` is NX-OS's own default for a trunk that
-      states no native VLAN, not a value the render wrote.  See `vlans[].id`
-      for what it means on the switch.
+      trunk that states NONE: `ae0` and `ae1` of
+      `ksator_labmgmt_qfx5100_junos173`, `ae111`, `ae201` and `ae202` of
+      `saidvandeklundert_snmpv3_junos172`, all of `vlan members all`.  It
+      carries no VLAN untagged, and is written so: the output says `vlan
+      dot1q tag native`, the line for every trunk of the device, where no
+      port of it that the check reads blocks it (a trunk that carries a
+      VLAN untagged, a port in a mode no mode line is written for, trunk
+      lines in no mode) -- as on both those cells --
+      and reads back with no native VLAN (11 of 11 cells empty on both
+      sides).  Beside a trunk that does carry one it would be written no
+      native line under a review line, and read back as native VLAN 1 by
+      NX-OS's default; no cell of this pair has that.
     references: [junos-nxos-surface]
 
   "interfaces[].voice_vlan":
@@ -358,39 +361,28 @@ per_field_expectation:
       authentication against the source.
     references: [junos-nxos-surface]
 
-  # -- VLANs.  Top-level key omitted: no VLAN record is dropped on any cell
-  # (on two, one is added -- `vlans[].id`); only the SVI-on-VLAN address
-  # mount moves. --
+  # -- VLANs.  Top-level key omitted: no VLAN record is dropped or added on
+  # any cell; only the SVI-on-VLAN address mount moves. --
 
   "vlans[].id":
-    disposition: lossy
-    reason: >
-      `set vlans <name> vlan-id <N>` maps to `vlan <N>`, and no VLAN the
-      source declares is lost: preserved on 5 of the 7 cells that define
-      VLANs.  On the other two a VLAN the source does not have ARRIVES --
-      VLAN 1 (`ksator_labmgmt_qfx5100_junos173` 16 -> 17,
-      `saidvandeklundert_snmpv3_junos172` 87 -> 88).  Each has trunks of
-      `vlan members all` that state no `native-vlan-id`.  Such a trunk is
-      written `switchport mode trunk` with no native line; on NX-OS a trunk
-      that configures no native VLAN uses the default VLAN, which is VLAN1
-      (Cisco's two sentences, in
-      `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md`),
-      so read back the port is an untagged member of
-      VLAN 1, which then has a record.  The Junos trunk drops untagged
-      packets (Juniper's sentence, on the same page); the NX-OS trunk has a
-      native VLAN.  No form is written yet for "this trunk carries no VLAN
-      untagged": a known limitation, in the CHANGELOG.  Check what each such
-      trunk is to carry untagged before deploying.
+    disposition: good
+    note: >
+      `set vlans <name> vlan-id <N>` maps to `vlan <N>`: preserved on all 7
+      cells that define VLANs, no VLAN lost and none added.  Two of them have
+      trunks of `vlan members all` that state no `native-vlan-id`.  Their
+      outputs say `vlan dot1q tag native`, which changes the native VLAN of
+      every trunk of the device (Cisco's sentence, in
+      `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md`), so
+      read back such a trunk is an untagged member of no VLAN, and no VLAN 1
+      record is made for it.
     references: [junos-nxos-surface]
 
   "vlans[].name":
     disposition: good
     note: >
       Junos keys its VLANs BY name, so every VLAN arrives named and the name
-      round-trips into `vlan <N> / name <name>`; preserved on the 5 populated
-      cells whose list keeps its length.  On the other two the list gains a
-      record (`vlans[].id`), and what is compared there is the lists'
-      lengths, not this field.  (The reverse direction is lossy for the
+      round-trips into `vlan <N> / name <name>`; preserved on the 7 populated
+      cells.  (The reverse direction is lossy for the
       mirror-image reason -- an unnamed NX-OS VLAN has to have a name
       synthesised for it.)
     references: [junos-nxos-surface]
@@ -408,11 +400,9 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: good
     note: >
-      The VLAN-centric tagged-port list round-trips on the 4 cells that
-      populate it and keep their list's length; NX-OS transposes it back to
-      per-interface `switchport trunk allowed vlan` on render.  The other two
-      that populate it gain a VLAN record (`vlans[].id`), and what is compared
-      there is the lists' lengths.
+      The VLAN-centric tagged-port list round-trips on the 6 cells that
+      populate it; NX-OS transposes it back to per-interface `switchport
+      trunk allowed vlan` on render.
     references: [junos-nxos-surface]
 
   "vlans[].untagged_ports":
@@ -421,10 +411,10 @@ per_field_expectation:
       Same projection as `tagged_ports`, built from access-mode ports.  No
       committed fixture on this pair has a Junos access port, so the list is
       empty on the source everywhere and this rests on the shared projection
-      path rather than an observed round-trip.  On the two cells whose list
-      gains VLAN 1 (`vlans[].id`) the target's VLAN 1 names the trunks of
-      `vlan members all` as its untagged ports -- by NX-OS's default for a
-      trunk that states no native VLAN, not by a line the render wrote.
+      path rather than an observed round-trip.  It is empty on the target
+      too, on all 11 cells: the trunks of `vlan members all` that state no
+      `native-vlan-id` are written under `vlan dot1q tag native`, and are
+      untagged members of no VLAN.
     references: [junos-nxos-surface]
 
   "vlans[].ipv4_addresses":

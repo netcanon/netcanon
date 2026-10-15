@@ -256,15 +256,22 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   trunk of the source carries VLAN 1 untagged by its platform's
   default, though the source may have no word for VLAN 1 and no
   real EOS capture prints the line: the tree has the VLAN, and
-  every VLAN of the tree is declared.  One thing is not
-  mended: a port that carries NO VLAN untagged at its source and has
-  VLAN 1 on its list (a Junos trunk of `vlan members all` with no
-  `native-vlan-id`, say) is written a trunk with no native line as
-  well, and so carries VLAN 1 untagged here by that default; no form
-  is written yet for "no untagged VLAN" (the limits in
-  [`CAPABILITIES.md`](../CAPABILITIES.md)).  `switchport trunk native vlan tag` is not
-  read, except that a trunk under it is given no default.  The VLAN
-  pane's map keeps to that
+  every VLAN of the tree is declared.  A port that carries NO VLAN
+  untagged at its source and has VLAN 1 on its list (a Junos trunk
+  of `vlan members all` with no `native-vlan-id`, say) is written
+  `switchport trunk native vlan tag` (Arista: "tag interface drops
+  all untagged frames."), where it was written no native line and
+  carried VLAN 1 untagged by that default.  What such an interface
+  SENDS for VLAN 1 is not on Arista's page: check it on the switch.
+  As a source, `switchport trunk native vlan tag` is read as no
+  untagged VLAN, and comes back as it went where the trunk's list
+  holds VLAN 1.  Where the list leaves VLAN 1 out it comes back with
+  no native line, and what EOS does with untagged frames on such a
+  trunk is not established.  The id and `tag` are one argument of
+  the line, so the one met last stands.  The
+  Cisco line `vlan dot1q tag native` is read as well, as words, and
+  is not written: no line for every trunk is in Arista's VLAN
+  pages.  The VLAN pane's map keeps to that
   reading.  Where a map would bring a native VLAN that the list
   leaves out INTO the list, the native VLAN is cleared if the map
   has merged it with a VLAN of the config that the list names, and

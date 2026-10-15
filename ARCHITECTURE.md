@@ -899,9 +899,19 @@ none, as it is given nothing of the platform's list.  So an unset
 in a tree a parser made is no untagged VLAN, and the tree has no
 value for "not stated" here either.  The `switchport` renderers
 write no native line for the VLAN that is their platform's default.
-The other direction is open: no renderer has a form for "this trunk
-carries no VLAN untagged", so such a port takes the target's default
-on those four (the CHANGELOG's known limitations).
+The other direction: a trunk with no native VLAN whose list holds
+the default is written its target's form for "this trunk carries no
+VLAN untagged" (`wants_no_untagged_vlan`) -- AOS-CX `vlan trunk
+native 1 tag`, EOS `switchport trunk native vlan tag`, and on IOS-XE
+and NX-OS `vlan dot1q tag native`, a line for every trunk of the
+switch, written only where no port the check reads blocks it
+(`every_native_vlan_tagged`: the ports in trunk mode, the ports with
+trunk lines and no mode, and the ports in a mode no mode line is
+written for -- dynamic, private-vlan, dot1q-tunnel, fex-fabric and
+the like; a port with no mode and no trunk line is not counted);
+otherwise such a port has a `! review:` line and the target's
+default.  OS10 and AOS-S are written no such form (the CHANGELOG's
+known limitations).
 [`tests/unit/migration/test_the_list_holds_the_native_vlan.py`](tests/unit/migration/test_the_list_holds_the_native_vlan.py)
 reads what a device carries untagged on each side of every job by
 its own platform's grammar, and does not read the tree by the

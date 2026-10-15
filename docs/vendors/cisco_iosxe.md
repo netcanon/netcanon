@@ -309,16 +309,43 @@ Provenance + per-fixture detail in
   VLAN 1 and no real IOS-XE capture prints the line: the tree has
   the VLAN, and every VLAN of the tree is declared.  So a config
   with such a trunk and no word for VLAN 1 comes back onto IOS-XE
-  with a `vlan 1` line it did not have.  One thing is not mended: a
-  port that carries NO
+  with a `vlan 1` line it did not have.  A port that carries NO
   VLAN untagged at its source and has VLAN 1 on its list (a Junos
-  trunk of `vlan members all` with no `native-vlan-id`, say) is
-  written a trunk with no native line as well, and so carries VLAN 1
-  untagged here by that default; no form is written yet for "no
-  untagged VLAN" (the limits in [`CAPABILITIES.md`](../CAPABILITIES.md)).
-  The global `vlan dot1q tag native` and `switchport trunk native
-  vlan tag` are not read, except that a trunk under either is given
-  no default.  The VLAN pane's map
+  trunk of `vlan members all` with no `native-vlan-id`, say) would
+  carry VLAN 1 untagged here by that default if it were written no
+  native line.  The form Cisco documents for it on the Catalyst 9300
+  and 9500 alike is `vlan dot1q tag native`, which tags the native
+  VLAN of EVERY 802.1Q trunk of the switch (Cisco: "When enabled,
+  native VLAN packets going out of all IEEE 802.1Q trunk ports are
+  tagged.").  So it is written, once, before the interfaces, where
+  no port the check reads blocks it: no port in trunk mode carries a
+  VLAN untagged, and no port is in a mode no mode line is written
+  for (dynamic, private-vlan, dot1q-tunnel, fex-fabric and the like)
+  or holds trunk lines in no mode.  A port written with no mode and
+  no trunk line is not counted: on a Catalyst such a port is in
+  dynamic auto by default, and should it become a trunk the line
+  tags its native VLAN as well.  Otherwise
+  such a trunk is written no native line under a
+  `! review:` line that says so
+  ([`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A trunk's allowed
+  list is not what I wrote").  Under the line, Cisco documents, dot1x
+  reauthentication fails on trunk ports.  The per-port `switchport
+  trunk native vlan tag` of the Catalyst 9500 High Performance
+  models is not written.  As a source, `vlan dot1q tag native` (with
+  `exclude control` or without) and `switchport trunk native vlan
+  tag` are read: a trunk under either carries no VLAN untagged, and
+  has no native VLAN in the tree, a stated one included; a trunk
+  that states `no switchport trunk native vlan tag` leaves the line
+  for every trunk, and has its default again.  Such a config comes
+  back onto IOS-XE with the line where at least one trunk under the
+  line holds VLAN 1 and no port the check reads blocks it.  Where a
+  port blocks it -- a trunk that carries a VLAN untagged (one that
+  leaves the line and holds VLAN 1 among them), a port in a mode no
+  mode line is written for, trunk lines in no mode -- the trunks
+  under the line that hold VLAN 1 come back with review lines; where
+  no trunk under the line holds VLAN 1, it comes back without the
+  line, and those trunks without a native line
+  ([vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md)).  The VLAN pane's map
   keeps to that reading.  Where a map would bring a native VLAN
   that the list leaves out INTO the list, the native VLAN is
   cleared if the map has merged it with a VLAN of the config that

@@ -391,8 +391,15 @@ per_field_expectation:
   vlans[].id:
     disposition: good
     note: >
-      Preserved on 7 of 7 cells; no cell drifts. Both codecs model
-      this surface.
+      Preserved on 5 of 7 cells. Both codecs model this surface.
+      The other two, the `aoscx_dcn_arch3_*leaf1a` captures, read back
+      one VLAN short (2 -> 1), a drift of the record count: VLAN 1, which
+      they declare, has one port, a LAG of `vlan trunk native 1 tag` that
+      carries it tagged, written for OS10 as a trunk of `1-4094` with no
+      access line.  OS10 declares a VLAN through an SVI or a port's
+      membership, so no `interface vlan1` is written, and the OS10 parser
+      makes no VLAN record for an id only so wide a list names.  VLAN 1
+      is on that list in the output.
     references: [aoscx-os10-surface]
 
   vlans[].ipv4_addresses:
@@ -406,14 +413,15 @@ per_field_expectation:
       codec does not synthesize an SVI from the VLAN record. Declared
       lossy so validate_against surfaces the loss instead of reporting
       severity:ok (blind-audit 3ec11f3 T0-2). Measured over 7 cells:
-      drifted on 5, preserved on 0, both sides empty on 2.
+      drifted on 7, preserved on 0, both sides empty on 0 -- two of
+      them on the record count only (see vlans[].id).
     references: [aoscx-os10-surface]
 
   vlans[].name:
     disposition: good
     note: >
-      Preserved on 7 of 7 cells; no cell drifts. Both codecs model
-      this surface.
+      Preserved on 5 of 7 cells; the other two drift on the record
+      count only (see vlans[].id). Both codecs model this surface.
     references: [aoscx-os10-surface]
 
   vlans[].tagged_ports:

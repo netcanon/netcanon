@@ -59,9 +59,12 @@ from ...canonical.intent import CanonicalIntent
 from .._helpers import (
     TRUNK_ALL,
     TRUNK_NONE,
+    TRUNK_THAT_STATES_NO_NATIVE,
     _coalesce_vlan_ids,
+    native_vlan_stated,
     same_vendor_version,
     trunk_list_says,
+    wants_no_untagged_vlan,
 )
 
 #: Synthesised AOS-CX release stamped into the ``!Version`` banner when the
@@ -136,9 +139,10 @@ def render_intent(tree: CanonicalIntent) -> str:
 
     # ── Interfaces (AOS-CX show-output order) ──
     lag_mode_by_name = {lag.name: lag.mode for lag in tree.lags}
+    stated = native_vlan_stated(tree.interfaces)
     for iface in _sort_interfaces(tree.interfaces):
         lines.extend(_render_interface(
-            iface, lag_mode_by_name, tree.anycast_gateway_mac,
+            iface, lag_mode_by_name, tree.anycast_gateway_mac, stated,
         ))
 
     # ── VTEP (interface vxlan 1) — Phase 4 VXLAN-EVPN ──
@@ -317,9 +321,10 @@ def _render_static_route(route) -> str:
 
 
 def _render_interface(
-    iface, lag_mode_by_name: dict, anycast_mac: str = "",
+    iface, lag_mode_by_name: dict, anycast_mac: str = "", stated: frozenset[str] = frozenset(),
 ) -> list[str]:
-    """Render one interface stanza.
+    """Render one interface stanza.  *stated*: the interfaces that have a
+    native VLAN in some record (:func:`.._helpers.native_vlan_stated`).
 
     Switchport handling is kind-aware: only physical / LAG ports take the
     L2 ``no routing`` + ``vlan access`` / ``vlan trunk`` surface.  A
@@ -381,6 +386,17 @@ def _render_interface(
                     block.append(
                         f"    vlan trunk native {iface.trunk_native_vlan}"
                     )
+                elif iface.name not in stated and wants_no_untagged_vlan(
+                    "aruba_aoscx", iface.trunk_allowed_vlans, None,
+                ):
+                    # No VLAN untagged, on a list that holds VLAN 1:
+                    # with no native line VLAN 1 would be this trunk's
+                    # native VLAN, and untagged.  ``tag`` sends it
+                    # tagged and drops untagged frames, BPDUs aside
+                    # (HPE's sentences, on the vendor reference's VLAN
+                    # page).
+                    default = TRUNK_THAT_STATES_NO_NATIVE["aruba_aoscx"]
+                    block.append(f"    vlan trunk native {default} tag")
                 if says == TRUNK_ALL:
                     # Every VLAN is the word for it, and only that
                     # list is: ``1-4094`` reads back as 4,094 VLANs.

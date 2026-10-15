@@ -239,11 +239,15 @@ per_field_expectation:
   "vlans[].untagged_ports":
     disposition: lossy
     reason: >
-      Drifts on all 7 cells.  VLAN port membership is expressed per-port on
+      Drifts on 5 of 7 cells.  VLAN port membership is expressed per-port on
       AOS-CX (`vlan access <id>` under the interface) and is rebuilt from the
       interface list on render — so the interface records that vanish
       (`interfaces[].name`) take their VLAN membership with them.  Access-port
-      assignment must be re-applied on the target.
+      assignment must be re-applied on the target.  The two cells that
+      preserve it are the two `aoscx_dcn_arch3_*leaf1a`
+      captures, whose VLAN 1 has one port, a LAG of `vlan trunk native 1
+      tag` -- which sends VLAN 1 tagged and takes no untagged frame -- so
+      VLAN 1 has no untagged port on either side.
     references: [aoscx-arista-surface]
 
   "vlans[].tagged_ports":

@@ -76,6 +76,7 @@ from .._helpers import (
     spaced_port_name,
     tags_every_native_vlan,
     tags_its_native_vlan,
+    untags_its_native_vlan,
     without_keyword_stanzas,
 )
 from .._input_shape import detect_input_shape
@@ -942,7 +943,8 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     # header writes: a stanza can be met twice, and the list is the
     # interface's.  So is its native VLAN, and the words that say a
     # native VLAN is sent tagged: ``vlan dot1q tag native`` for every
-    # trunk, ``switchport trunk native vlan tag`` for one.
+    # trunk, ``switchport trunk native vlan tag`` for one -- and ``no
+    # switchport trunk native vlan tag``, by which one leaves the first.
     trunks = TrunksByName("cisco_iosxe_cli")
     if tags_every_native_vlan(raw):
         trunks.native_is_tagged()
@@ -999,7 +1001,8 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
 
     def _native_line(line: str, current: dict[str, Any]) -> bool:
         """``switchport trunk native vlan N``, or the words that say
-        the native VLAN is sent tagged.  ``True`` if *line* was one."""
+        whether the native VLAN is sent tagged.  ``True`` if *line*
+        was one."""
         nm = _SWITCHPORT_TRUNK_NATIVE_RE.match(line)
         if nm:
             current["trunk_native"] = int(nm.group(1))
@@ -1007,6 +1010,9 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             return True
         if tags_its_native_vlan(line):
             trunks.native_is_tagged(current["trunk_key"])
+            return True
+        if untags_its_native_vlan(line):
+            trunks.native_is_tagged(current["trunk_key"], tagged=False)
             return True
         return False
 

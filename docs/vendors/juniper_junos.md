@@ -278,14 +278,22 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   interface."), and whether `all` takes the native VLAN in is not
   established: check on the switch that such a trunk receives
   untagged frames into VLAN 1, or name the VLAN on `vlan members`
-  as Juniper's procedure does.  **As a source, one thing is not
-  mended.**  A Junos
-  trunk with no `native-vlan-id` and VLAN 1 among its members (or
-  `vlan members all`) is written for IOS-XE, NX-OS, EOS and AOS-CX
-  as a trunk with no native line, and on those four a trunk with no
-  native line has native VLAN 1: it carries VLAN 1 untagged there,
-  where this trunk drops untagged packets.  No form is written yet
-  for "no untagged VLAN" (the limits in [`CAPABILITIES.md`](../CAPABILITIES.md)).
+  as Juniper's procedure does.  **As a source**, a Junos trunk with
+  no `native-vlan-id` and VLAN 1 among its members (or `vlan members
+  all`) drops untagged packets, and is written so on the four
+  targets whose trunk would otherwise have native VLAN 1: AOS-CX
+  `vlan trunk native 1 tag`, EOS `switchport trunk native vlan tag`,
+  and on IOS-XE and NX-OS `vlan dot1q tag native`, a line for every
+  trunk of the switch, where no port of the output that the check
+  reads blocks it (a trunk that carries a VLAN untagged, a port in a
+  mode no mode line is written for, trunk lines in no mode) -- or,
+  where one does, no native line under a `! review:` line, with VLAN 1
+  untagged by the target's default
+  ([`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A trunk's
+  allowed list is not what I wrote").  Release 0.7.7 and earlier
+  wrote it no native line on all four, and it carried VLAN 1
+  untagged there.  OS10 and AOS-S are still written no form for it
+  (the limits in [`CAPABILITIES.md`](../CAPABILITIES.md)).
   The VLAN pane's map keeps to that
   reading.  Where a map would bring a native VLAN that the list
   leaves out INTO the list, the native VLAN is cleared if the map

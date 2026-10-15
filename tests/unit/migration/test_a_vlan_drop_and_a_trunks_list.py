@@ -1110,18 +1110,18 @@ def test_the_job_says_what_a_dropped_native_vlan_leaves(
     cleared``, and -- where the trunk's list is every VLAN, which the
     pass leaves as it stands -- that an output writing the port as a
     trunk of every VLAN still allows the VLAN.  A job that said only
-    "cleared" there said the contrary of its own output on the
-    targets whose trunk has a default native VLAN."""
+    "cleared" there said less than its own output does on the targets
+    whose trunk has a default native VLAN."""
     job, final = _job_of(SOURCE, _source(*trunk), _TRUNK, target, {vid: None})
     want = _DROPPED.format(port=final, vid=vid) + (_STILL_HELD.format(vid=vid) if every else "")
     assert [str(text) for text in job.warnings if _CLEARED in str(text)] == [want], job.warnings
     assert job.status == MigrationJobStatus.completed, (target, job.status)
     if every and vid == 1 and target in HAVE_A_DEFAULT:
-        # What the warning is for.  The output's trunk is written no
-        # native line, as a trunk of every VLAN (no allowed line; on
-        # AOS-CX `vlan trunk allowed all`), and on these four that is
-        # a trunk of every VLAN with native VLAN 1: it carries the
-        # dropped VLAN untagged still, by the target's own default
-        # (the half that is open, in the CHANGELOG's limitations).
+        # What the warning is for.  The output's trunk is a trunk of
+        # every VLAN (no allowed line; on AOS-CX `vlan trunk allowed
+        # all`) with no VLAN untagged, written the target's form for
+        # that -- on IOS-XE and NX-OS the line for every trunk, this
+        # output's other port being an access port: it still allows the
+        # dropped VLAN, and carries it tagged.
         by_text, by_parser = _on_the_trunk(target, job, final)
-        assert (by_text.untagged, by_text.by_default, by_parser.untagged) == (1, True, 1), (target, by_text)
+        assert (by_text.untagged, by_parser.untagged, by_text.carries_tagged(1)) == (None, None, True), by_text

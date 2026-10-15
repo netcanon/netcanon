@@ -357,10 +357,11 @@ for the reference pattern).
    (`native_line`; a parser that keeps one record a name has the
    native VLAN on the record and need not), when a port SAYS it is
    a trunk (`says_trunk` / `mode_line`), and the platform's words
-   for a native VLAN that is sent tagged, if the parser does not
-   read them into the tree (`native_is_tagged`): `settle()` then
-   gives a trunk that says it is one and states no native VLAN the
-   default, where its list holds it.  The default is a trunk's: a
+   for a native VLAN that is sent tagged (`native_is_tagged`, with
+   `tagged=False` for a port's own word that it is not): `settle()`
+   then gives a trunk that says it is one and states no native VLAN
+   the default, where its list holds it, and gives a trunk whose
+   native VLAN is sent tagged none at all.  The default is a trunk's: a
    port the parser takes for a trunk from a trunk line alone gets
    none.  A test fails for a codec that is in one of the three
    tables and not in all of them.
@@ -379,7 +380,14 @@ for the reference pattern).
    allowed line WITHOUT the native VLAN (`trunk_list_written`), and writes
    the untagged VLAN only where the list holds it
    (`trunk_untagged_vlan`): a native VLAN outside the list is, in
-   the tree, stated and not carried.
+   the tree, stated and not carried.  A renderer whose platform has
+   a default native VLAN writes its form for a trunk that carries
+   none where the tree gives a trunk no native VLAN and its list
+   holds the default (`wants_no_untagged_vlan`): written no native
+   line, it would carry the default untagged.  Where the form is a
+   line for the whole switch, decide it over every port
+   (`every_native_vlan_tagged`), and say what is not written in a
+   `! review:` line.
    `tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py`
    fails for a public codec that is neither in the table nor named,
    with its reason, in that module's `NO_ALLOWED_LIST`; and a codec
@@ -814,8 +822,10 @@ the policy locally:
     for an interface that states a native VLAN in any of its
     stanzas (`native_line`), nor for one whose text says the
     native VLAN is sent tagged (`native_is_tagged`;
-    `tags_every_native_vlan(raw)` and `tags_its_native_vlan(line)`
-    find the words of the `switchport` grammar).  The parser then
+    `tags_every_native_vlan(raw)`, `tags_its_native_vlan(line)` and
+    `untags_its_native_vlan(line)` find the words of the
+    `switchport` grammar); a trunk of that interface is given no
+    native VLAN at all, a stated one included.  The parser then
     mirrors ports onto the VLANs' member lists as before, so the
     default VLAN has a record and the trunk is its untagged member
     -- and a renderer that writes a `vlan` line for every VLAN of
@@ -833,7 +843,21 @@ the policy locally:
     (`aruba_aoscx` writes `vlan trunk native 1`, as its captures
     do; `juniper_junos`, `dell_os10` and `aruba_aoss` write the
     untagged VLAN they are given.)
-  Callers: `grep -rn "unstated_native_vlan\|switchport_trunk_native_value" netcanon/migration`.
+  * **`wants_no_untagged_vlan(codec, allowed, native)`** -- whether a
+    trunk is to be written its target's form for "no VLAN
+    untagged": no native VLAN in the tree, and the platform's
+    default id on its list.  `aruba_aoscx` writes `vlan trunk native
+    1 tag`, `arista_eos` `switchport trunk native vlan tag`.  Asked
+    only for a record of an interface no record of which has a
+    native VLAN (`native_vlan_stated(interfaces)`).
+  * **`every_native_vlan_tagged(codec, interfaces)`** -- whether an
+    IOS-XE or NX-OS output says `vlan dot1q tag native`, a line for
+    every trunk: where a trunk wants the form, no trunk carries a
+    VLAN untagged, and no port is in a mode no line is written for
+    or holds trunk lines in no mode (a port with no mode and no
+    trunk line is not counted).  Otherwise each such trunk has a
+    `! review:` line.
+  Callers: `grep -rn "unstated_native_vlan\|switchport_trunk_native_value\|wants_no_untagged_vlan" netcanon/migration`.
 
 * **`netcanon/migration/codecs/_helpers.py::spaced_port_name`** and
   **`without_keyword_stanzas`** — two readings of a Cisco header

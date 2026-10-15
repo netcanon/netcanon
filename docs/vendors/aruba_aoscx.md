@@ -206,15 +206,26 @@ source, plus configs exercising symmetric-IRB **L3VNI**, **VSX**, and
   captures has; Junos, OS10 and AOS-S are written VLAN 1 untagged
   for it, where release 0.7.7 and earlier wrote it tagged.  As a
   target, a Cisco or Arista trunk that states no native VLAN and
-  has VLAN 1 on its list is written `vlan trunk native 1`.  One
-  thing is not mended: a port that carries NO VLAN untagged at its
-  source and has VLAN 1 on its list (a Junos trunk of `vlan members
-  all` with no `native-vlan-id`, say) is written `vlan trunk
-  allowed` with no native line, and so carries VLAN 1 untagged here
-  by that default; no form is written yet for "no untagged VLAN"
-  (the limits in [`CAPABILITIES.md`](../CAPABILITIES.md)).
-  `vlan trunk native <N> tag` is read
-  as `vlan trunk native <N>`: the `tag` word is lost.  The VLAN
+  has VLAN 1 on its list is written `vlan trunk native 1`.  **`vlan
+  trunk native <N> tag` is read as what it is** (HPE: "Only incoming
+  packets that are tagged with the matching VLAN ID are accepted.
+  Incoming packets that are untagged are dropped except for BPDUs.
+  Egress packets are tagged."): a trunk that carries no VLAN
+  untagged, with no native VLAN in the tree.  It was read as native
+  VLAN N untagged, the word `tag` dropped -- so an AOS-CX source
+  written for any target carried VLAN N untagged there, and came
+  back onto AOS-CX without the word.  The id is not kept: such a
+  trunk takes only tagged frames and tags what it sends, so it
+  comes back as `vlan trunk native 1 tag` where its list holds VLAN
+  1 and with no native line where it does not.  And a port of any
+  source that carries no VLAN untagged and has VLAN 1 on its list (a
+  Junos trunk of `vlan members all` with no `native-vlan-id`, say)
+  is written `vlan trunk native 1 tag` before its allowed line,
+  where it was written no native line and carried VLAN 1 untagged
+  by that default.  The committed captures that have the line are
+  two of Aruba's published sample configurations and two
+  configurations made by tools.  How a switch prints it is not
+  established ([vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md)).  The VLAN
   pane's map keeps to that reading.  Where a map would bring a
   native VLAN that the list leaves out INTO the list, the native
   VLAN is cleared if the map has merged it with a VLAN of the config

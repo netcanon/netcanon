@@ -357,7 +357,11 @@ NATIVE_OF_THE_SWITCH = "the switch's default VLAN"
 #: the list, only for a port that SAYS it is a trunk.  And the
 #: ``switchport`` renderers write no native line for the VLAN that is
 #: their platform's default (:func:`switchport_trunk_native_value`):
-#: no real capture of the three prints one.
+#: no real capture of the three prints one.  The other way, a trunk
+#: that carries NO VLAN untagged and whose list holds the default is
+#: owed a form that says so on a target that has a default
+#: (:func:`wants_no_untagged_vlan`): written no native line, it would
+#: carry the default VLAN untagged there.
 #:
 #: * IOS-XE, EOS, AOS-CX: VLAN 1, in each vendor's own sentence.
 #: * NX-OS: VLAN 1, in two sentences of one Cisco page: such a
@@ -586,10 +590,137 @@ def switchport_trunk_native_value(
     return native
 
 
-#: ``vlan dot1q tag native``, a line of its own at the left margin:
-#: the native VLAN of every trunk of the config is sent tagged.
+def wants_no_untagged_vlan(
+    codec: str, allowed: Sequence[int], native: int | None,
+) -> bool:
+    """Whether a TRUNK whose list is *allowed* and whose native VLAN
+    is *native* is to be written *codec*'s form for "this trunk
+    carries no VLAN untagged".
+
+    So it is where the tree gives the port no native VLAN -- in a
+    tree a parser made that is a port that carries no VLAN untagged
+    -- and its list holds the platform's default native VLAN
+    (:data:`TRUNK_THAT_STATES_NO_NATIVE`, where that is an id).
+    Written no native line, such a trunk has the default as its
+    native VLAN on the target, and carries it untagged: a VLAN the
+    source carried tagged.
+
+    Nothing is wanted where the list leaves the default out: the
+    default native VLAN is then off the list, which is how a native
+    VLAN that is not carried is written.  Nor where the tree states
+    a native VLAN: a line for it is written, and the default is not
+    in force.  Nor on a platform whose default is no id (Junos has
+    none; OS10's is a setting of the switch).
+
+    Asked for a port written as a trunk, of an interface that has no
+    native VLAN in any record (:func:`native_vlan_stated`).
+
+    Args:
+        codec: A codec of :data:`TRUNK_THAT_STATES_NO_NATIVE`.
+        allowed: The port's ``trunk_allowed_vlans``.
+        native: Its ``trunk_native_vlan``.
+
+    Raises:
+        KeyError: *codec* is not in the table.
+    """
+    default = TRUNK_THAT_STATES_NO_NATIVE[codec]
+    return native is None and isinstance(default, int) and default in allowed
+
+
+def native_vlan_stated(interfaces: Iterable[CanonicalInterface]) -> frozenset[str]:
+    """The names of *interfaces* that have a native VLAN in some record.
+
+    A config can hold the stanza of one interface more than once, and
+    a parser that makes a record a stanza gives the native VLAN to the
+    record whose stanza states it, and to no other
+    (:meth:`TrunksByName.native_line`).  The other records of that
+    interface have none, which says nothing of what the interface
+    carries untagged: none of them is written the form for "no VLAN
+    untagged" (:func:`wants_no_untagged_vlan`).
+    """
+    return frozenset(iface.name for iface in interfaces if iface.trunk_native_vlan is not None)
+
+
+#: The modes a ``switchport`` renderer writes a mode line for.  A
+#: port the tree has in another (``dynamic``, ``private-vlan``) is
+#: written none, and is left in its target's own default mode.
+_MODES_WRITTEN = frozenset({"access", "trunk"})
+
+
+def every_native_vlan_tagged(
+    codec: str, interfaces: Iterable[CanonicalInterface],
+) -> bool:
+    """Whether an output of *codec* whose ports are *interfaces* is
+    to state that the native VLAN of EVERY trunk is sent tagged
+    (``vlan dot1q tag native``, a line for the whole switch): the form
+    for "this trunk carries no VLAN untagged" that Cisco documents for
+    the Catalyst 9300 and the Nexus 9000 alike.  (Cisco's sentences,
+    for it and for a Catalyst port's default mode, are on the vendor
+    reference's VLAN page.)
+
+    It is a statement about every trunk of the switch.  It is decided
+    over the ports in trunk mode, the ports that hold trunk lines in
+    no mode, and the ports in a mode that negotiates (``dynamic``) or
+    another mode the renderer writes no line for; it is written where:
+
+    * at least one trunk wants it (:func:`wants_no_untagged_vlan`);
+    * no port in trunk mode carries a VLAN untagged
+      (:func:`trunk_untagged_vlan`).  A trunk whose native VLAN its
+      list leaves out carries none, and is no obstacle.  A LAG is a
+      port like the others, and so is a member that repeats its
+      LAG's lines; a member that states only its membership has no
+      mode of its own, and is the LAG's;
+    * no port is in a mode the renderer writes no line for, or holds
+      trunk lines in no mode at all.  Such a port is left in its
+      target's default mode -- on a Catalyst a port that can become
+      a trunk -- and its tree says nothing of what it would carry
+      untagged then: a native VLAN is filled in only for a port
+      that says it is a trunk.
+
+    A port in access mode is not looked at.  Nor is a port in no mode
+    with no trunk line (a member that states only its LAG among
+    them): it is not counted.  On a Catalyst such a port is in
+    dynamic auto by default, and should it become a trunk the line
+    tags its native VLAN as well.
+
+    Where this is ``False`` and a trunk wants the form, the renderer
+    writes a review line on that port instead.
+
+    Args:
+        codec: The renderer's codec (:data:`TRUNK_THAT_STATES_NO_NATIVE`).
+        interfaces: Every port the output writes.
+
+    Raises:
+        KeyError: *codec* is not in the table.
+    """
+    interfaces = list(interfaces)
+    stated = native_vlan_stated(interfaces)
+    wanted = False
+    for iface in interfaces:
+        mode = iface.switchport_mode
+        if mode == "trunk":
+            allowed, native = iface.trunk_allowed_vlans, iface.trunk_native_vlan
+            if trunk_untagged_vlan(allowed, native) is not None:
+                return False
+            wanted = wanted or (iface.name not in stated and wants_no_untagged_vlan(codec, allowed, native))
+        elif mode is None:
+            if iface.trunk_allowed_vlans or iface.trunk_native_vlan is not None:
+                return False
+        elif mode not in _MODES_WRITTEN:
+            return False
+    return wanted
+
+
+#: ``vlan dot1q tag native``, a line of its own at the left margin,
+#: with ``exclude control`` after it or without: the native VLAN of
+#: every trunk of the config is sent tagged.  (``exclude control``
+#: is on a Cisco page for the Nexus 7000: "Excludes untagged control
+#: traffic on the native VLAN in a trunk."  The line with it is read
+#: as the line for every trunk, the native VLAN's data traffic
+#: tagged: that is netcanon's reading, not a Cisco sentence.  What it
+#: does to control traffic is not modelled.)
 _TAGS_EVERY_NATIVE_RE = re.compile(
-    r"^vlan[ \t]+dot1q[ \t]+tag[ \t]+native[ \t]*\r?$",
+    r"^vlan[ \t]+dot1q[ \t]+tag[ \t]+native(?:[ \t]+exclude[ \t]+control)?[ \t]*\r?$",
     re.IGNORECASE | re.MULTILINE,
 )
 #: ``switchport trunk native vlan tag``, under an interface: the
@@ -597,19 +728,25 @@ _TAGS_EVERY_NATIVE_RE = re.compile(
 _TAGS_ITS_NATIVE_RE = re.compile(
     r"^\s*switchport\s+trunk\s+native\s+vlan\s+tag\s*$", re.IGNORECASE,
 )
+#: ``no switchport trunk native vlan tag``, under an interface: that
+#: trunk's native VLAN is NOT sent tagged, the line for every trunk
+#: notwithstanding.
+_UNTAGS_ITS_NATIVE_RE = re.compile(
+    r"^\s*no\s+switchport\s+trunk\s+native\s+vlan\s+tag\s*$", re.IGNORECASE,
+)
 
 
 def tags_every_native_vlan(raw: str) -> bool:
     """Whether the text of a config in the ``switchport`` grammar
-    holds ``vlan dot1q tag native`` as a line of its own.
+    holds ``vlan dot1q tag native`` as a line of its own (or
+    ``vlan dot1q tag native exclude control``).
 
-    The words are looked for, and no more is read from them: which
-    platform has the line, and what ``no switchport trunk native
-    vlan tag`` then does on one port, is not decided here.  A parser
-    that finds them fills no default native VLAN in
-    (:meth:`TrunksByName.native_is_tagged`): a VLAN put as the
-    port's native VLAN is one the tree reads as untagged, and the
-    text says it is not.
+    The words are looked for, and which platform has the line is not
+    decided here.  A parser that finds them gives no trunk of the
+    config a native VLAN (:meth:`TrunksByName.native_is_tagged`): a
+    VLAN put as the port's native VLAN is one the tree reads as
+    untagged, and the text says it is sent tagged -- except on a
+    port whose own text says it is not (:func:`untags_its_native_vlan`).
     """
     return _TAGS_EVERY_NATIVE_RE.search(raw) is not None
 
@@ -619,6 +756,15 @@ def tags_its_native_vlan(line: str) -> bool:
     trunk native vlan tag`` (:func:`tags_every_native_vlan` says
     what is made of it)."""
     return _TAGS_ITS_NATIVE_RE.match(line) is not None
+
+
+def untags_its_native_vlan(line: str) -> bool:
+    """Whether *line*, a line under an interface, is ``no switchport
+    trunk native vlan tag``: the port's native VLAN is not sent
+    tagged, whatever the line for every trunk says.  (Cisco documents
+    it for the Catalyst 9500 High Performance models, as the way one
+    trunk leaves ``vlan dot1q tag native``.)"""
+    return _UNTAGS_ITS_NATIVE_RE.match(line) is not None
 
 
 def trunk_list_says(allowed: Sequence[int]) -> str:
@@ -1016,10 +1162,11 @@ class TrunksByName:
     be written as the untagged VLAN of a port whose text does not
     say it is a trunk.  It is given AFTER the list, since a trunk
     with no allowed line holds the default by the platform's list
-    and not by a line.  Not where the text says the native VLAN is
-    sent tagged (:meth:`native_is_tagged`): those words are not read
-    into the tree, and a native VLAN put there would be read as
-    untagged.
+    and not by a line.  And where the text says the native VLAN is
+    sent tagged (:meth:`native_is_tagged`), a trunk is given NO native
+    VLAN: not the default, and not one its interface states.  Such a
+    trunk carries no VLAN untagged, which is what ``None`` says, and
+    the tree has no field for the id of a native VLAN sent tagged.
 
     What this makes from few bytes is counted before it is made, as
     VLAN ids (:func:`...limits.charge`).  The platform's list is
@@ -1064,11 +1211,11 @@ class TrunksByName:
         # part of what the lines come to.
         self._from_nothing: dict[str, list[int]] = {}
         self._said_trunk: set[str] = set()
-        # The interfaces that state a native VLAN, and those whose
-        # text says the native VLAN is sent tagged (``None``: every
-        # one of the config).
+        # The interfaces that state a native VLAN; and whether the
+        # text says the native VLAN is sent tagged, by interface
+        # (``None``: the line for every trunk of the config).
         self._native_stated: set[str] = set()
-        self._native_tagged: set[str | None] = set()
+        self._native_tagged: dict[str | None, bool] = {}
         # The interfaces that have stated an allowed line since a
         # record of them was last made: in the stanza being read.
         self._in_this_stanza: set[str] = set()
@@ -1114,13 +1261,23 @@ class TrunksByName:
         record a name has it on the record."""
         self._native_stated.add(key)
 
-    def native_is_tagged(self, key: str | None = None) -> None:
+    def native_is_tagged(self, key: str | None = None, tagged: bool = True) -> None:
         """The text says the native VLAN is sent TAGGED: on interface
-        *key* (``switchport trunk native vlan tag``), or, with no
-        key, on every trunk of the config (``vlan dot1q tag
-        native``).  No default native VLAN is then filled in
-        (:meth:`settle`)."""
-        self._native_tagged.add(key)
+        *key* (``switchport trunk native vlan tag``; on AOS-CX ``vlan
+        trunk native N tag``), or, with no key, on every trunk of the
+        config (``vlan dot1q tag native``).  With *tagged* false the
+        interface's own text says it is NOT (``no switchport trunk
+        native vlan tag``), and the line for every trunk does not
+        overrule it.  What an interface says last stands.
+
+        A trunk whose native VLAN is sent tagged is given no native
+        VLAN (:meth:`settle`)."""
+        self._native_tagged[key] = tagged
+
+    def _sent_tagged(self, key: str) -> bool:
+        """Whether the native VLAN of interface *key* is sent tagged:
+        its own word, or else the line for every trunk."""
+        return self._native_tagged.get(key, self._native_tagged.get(None, False))
 
     def allowed_is(self, key: str, allowed: list[int]) -> list[int]:
         """Interface *key* states its list outright, as *allowed*
@@ -1243,15 +1400,18 @@ class TrunksByName:
                 allowed = list(allowed)
             handed.add(id(allowed))
             iface.trunk_allowed_vlans = allowed
+            if iface.switchport_mode == "trunk" and self._sent_tagged(key):
+                # Its native VLAN is sent tagged: it carries no VLAN
+                # untagged, whatever id its text states.
+                iface.trunk_native_vlan = None
             # The default native VLAN is a trunk's: for a record
             # that is a trunk, of an interface that says it is one
             # (the test made above for the platform's list).
-            if (
+            elif (
                 iface.switchport_mode == "trunk"
                 and key in self._said_trunk
                 and iface.trunk_native_vlan is None
                 and key not in self._native_stated
-                and not self._native_tagged.intersection((key, None))
             ):
                 iface.trunk_native_vlan = unstated_native_vlan(
                     self._codec, allowed,
