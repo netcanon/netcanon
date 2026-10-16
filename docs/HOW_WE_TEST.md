@@ -309,9 +309,16 @@ IOS-XE or NX-OS output cannot say it of every trunk, the port is
 left to the target's default under a review line: those cells are
 pinned one by one and compared for equality, and the guard holds
 each to having that line, whole, and no other port to having one.
-What it cannot see is in its docstring and in the known limitations:
-the default VLAN of an OS10 switch, which no trunk states, and what
-an AOS-S port is in when no `untagged` line names it.
+OS10 and AOS-S are written their own forms too: `no switchport
+access vlan` under a review line, and `no untagged` in VLAN 1.  The
+readers of text give each its default: an OS10 trunk with neither an
+access line nor that line is an untagged member of the switch's
+default VLAN, and an AOS-S port tagged somewhere, untagged nowhere
+and on no line of VLAN 1 is in VLAN 1.  What it cannot see is in its
+docstring and in the known limitations: which id an OS10 switch's
+default VLAN has, what `no switchport access vlan` leaves an OS10
+trunk with, and an AOS-S trunk that carries nothing, which AOS-S has
+no form for.
 
 **A status is checked against the output, not against the warning
 that should have moved it.**  With no devices declared, a job in

@@ -366,19 +366,41 @@ of the list -- the trunk then written as above -- if the list only
 covered that number with a range; the job says which, see
 [`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A trunk's allowed
 list is not what I wrote".)  Dell's page for that command says it resets the
-access VLAN membership, and gives VLAN 1; Dell's procedure for a
-trunk uses it to remove the membership; which a switch does is not
-established, so check what the port carries untagged.  As a source,
+access VLAN membership, and gives VLAN 1 ("The no version of this
+command resets access VLAN membership on a L2 access or trunk port
+to VLAN 1."); Dell's VLAN-stacking configuration notes (10.5.5 to
+10.6.1) describe the trunk the same chapter's procedure makes with it
+as "pure trunk ports without any access VLAN membership", which "drop
+any untagged or tagged (with other than configured TPID) traffic on
+those ports"; which a switch does is not established, so check what
+the port carries untagged.  As a source,
 that line is read on any switched port: a trunk is left with no
-native VLAN, and an access port with no access VLAN stated.  It is
-not written again for a tree that came from OS10's own text -- the
-tree cannot tell "no untagged VLAN, stated" from "not stated" -- so
-an OS10 config that has the line comes back without it.  A trunk that
-states no access VLAN is read as carrying no VLAN untagged, and is
-written no access line.  Dell: "By default, native VLAN of a port is
-the default VLAN ID of the switch."  Which id that is is a setting of
-the switch that no trunk states, so nothing is filled in for it, as a
-source or as a target (no committed capture has such a trunk).  As a
+native VLAN, and an access port with no access VLAN stated.  A trunk
+that states no access VLAN is read the same way, as carrying no VLAN
+untagged -- the reading that carries fewer.  Dell: "By default,
+native VLAN of a port is the default VLAN ID of the switch."  Which id
+that is is a setting of the switch (`default vlan-id`) that no trunk
+states, and that no Dell example and no capture prints as
+configuration, so nothing is filled in for it (no committed capture
+has such a trunk).  As a target, a trunk with NO native VLAN in the
+tree -- one that carries no VLAN untagged, whatever its list, the
+empty one included -- is written `no switchport access vlan` after
+`switchport mode trunk`, under its own review line: `! review: no
+untagged VLAN is stated for this trunk; an OS10 trunk with neither an
+access line nor the next line is an untagged member of the switch's
+default VLAN, and Dell's pages disagree on whether the next line
+leaves it with no untagged VLAN or with VLAN 1 -- check what this
+port is to carry untagged`.  Where the allowed line written below it
+holds VLAN 1 the line adds `; no Dell page shows VLAN 1 on an OS10
+trunk's allowed line` before the dash.  An interface another record
+of which states its untagged VLAN -- a native VLAN, or an access VLAN
+-- is not written the line: OS10 applies an interface's stanzas in
+turn, and the line would take that VLAN back.  Release 0.7.7 and earlier
+wrote such a trunk with no access line, which the switch makes an
+untagged member of its default VLAN.  The tree
+cannot tell "no untagged VLAN, stated" from "not stated", so an OS10
+trunk with neither line comes back onto OS10 with the line, and one
+that has it keeps it.  As a
 target, a Cisco, Arista or AOS-CX trunk that states no native VLAN and
 has VLAN 1 on its list -- its platform's default native VLAN -- is
 written `switchport access vlan 1` with VLAN 1 off the allowed line;

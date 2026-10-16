@@ -292,8 +292,13 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   ([`TROUBLESHOOTING.md`](../TROUBLESHOOTING.md) § "A trunk's
   allowed list is not what I wrote").  Release 0.7.7 and earlier
   wrote it no native line on all four, and it carried VLAN 1
-  untagged there.  OS10 and AOS-S are still written no form for it
-  (the limits in [`CAPABILITIES.md`](../CAPABILITIES.md)).
+  untagged there.  OS10 is written `no switchport access vlan` for it,
+  under a `! review:` line (Dell's pages disagree on what that line
+  leaves a trunk with), and AOS-S `tagged` in VLAN 1 where its members
+  hold VLAN 1 or are `all` -- in a `vlan 1` stanza of its own where the
+  Junos config declares no VLAN 1 -- and otherwise `no untagged` in
+  VLAN 1 (see [`aruba_aoss.md`](aruba_aoss.md) and the limits in
+  [`CAPABILITIES.md`](../CAPABILITIES.md)).
   The VLAN pane's map keeps to that
   reading.  Where a map would bring a native VLAN that the list
   leaves out INTO the list, the native VLAN is cleared if the map

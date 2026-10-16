@@ -663,13 +663,37 @@ def test_os10_says_so_beside_every_vlan(source: str, says: str) -> None:
         assert words in review, (words, review)
 
 
+#: The review line above an OS10 trunk's ``no switchport access vlan``
+#: where the tree gives the trunk no native VLAN, whole, as it is typed
+#: here: with neither line the trunk would be an untagged member of
+#: the switch's default VLAN, and Dell's pages disagree on what the
+#: line leaves it with.  ``{vlan_1}`` is the clause for an allowed line
+#: that holds VLAN 1.
+_NO_UNTAGGED_ON_OS10 = (
+    "! review: no untagged VLAN is stated for this trunk; an OS10 trunk with neither an access line nor the next "
+    "line is an untagged member of the switch's default VLAN, and Dell's pages disagree on whether the next line "
+    "leaves it with no untagged VLAN or with VLAN 1{vlan_1} -- check what this port is to carry untagged"
+)
+
+
+def _no_untagged_on_os10(stanza: list[str]) -> str:
+    """:data:`_NO_UNTAGGED_ON_OS10` for *stanza*'s allowed line."""
+    holds_1 = any(1 in _ids(line.removeprefix(_ALLOWED + " ")) for line in stanza if line.startswith(_ALLOWED + " "))
+    return _NO_UNTAGGED_ON_OS10.format(
+        vlan_1="; no Dell page shows VLAN 1 on an OS10 trunk's allowed line" if holds_1 else "",
+    )
+
+
 @pytest.mark.parametrize("source,says", sorted(key for key in SOURCES if _means(*key) != ALL))
 def test_os10_says_nothing_of_the_rest(source: str, says: str) -> None:
-    """...but for one thing.  A native VLAN beside a list that leaves
+    """...but for two things.  A native VLAN beside a list that leaves
     it out is, in the tree, stated and not carried: OS10 is not
     written it as an access VLAN, which its trunk carries untagged,
     and the line that takes the access VLAN back stands under a line
-    that says why -- the whole of it, as it is typed here."""
+    that says why -- the whole of it, as it is typed here.  And a
+    trunk with no native VLAN, which carries none untagged, is written
+    the same line under a line of its own: with neither line OS10
+    makes it an untagged member of its switch's default VLAN."""
     trunk = _the_trunk("dell_os10", _job(source, says, "dell_os10").rendered)
     reviews = [n for n, line in enumerate(trunk) if "review" in line]
     if _means(source, says) == NONE and _native(says):
@@ -681,6 +705,10 @@ def test_os10_says_nothing_of_the_rest(source: str, says: str) -> None:
         ), trunk
         assert trunk[at + 1] == "no switchport access vlan", trunk
         assert _untagged_stated("dell_os10", trunk) is None, trunk
+    elif _native_meant(source, says) is None:
+        (at,) = reviews
+        assert trunk[at] == _no_untagged_on_os10(trunk), trunk
+        assert trunk[at - 1:at + 2] == ["switchport mode trunk", trunk[at], "no switchport access vlan"], trunk
     else:
         assert not reviews, trunk
 
@@ -1181,18 +1209,20 @@ def test_eos_access_port_with_a_trunk_line() -> None:
 
 @pytest.mark.parametrize("listed", ["10,100", "10", "2-4094"])
 def test_os10_says_nothing_above_some_list(listed: str) -> None:
-    """The review line is for a trunk of every VLAN and for no other.
-    (`2-4094` names ids OS10 does not have as well, and VLANs the
-    output does not declare: it is written as it always was, with no
-    line -- the older half of `CANNOT_BE_TOLD_ALL`, in Known
-    limitations.)"""
+    """The review line for every VLAN is for a trunk of every VLAN and
+    for no other.  (`2-4094` names ids OS10 does not have as well, and
+    VLANs the output does not declare: it is written as it always was,
+    with no such line -- the older half of `CANNOT_BE_TOLD_ALL`, in
+    Known limitations.)  None of these lists holds VLAN 1, so the
+    IOS-XE trunk carries no VLAN untagged, and its one review line is
+    the one above `no switchport access vlan`."""
     job = run_plan_with_overrides(
         get_codec("cisco_iosxe_cli"), get_codec("dell_os10"), _iosxe(f"{_ALLOWED} {listed}"),
         port_rename_map={}, force=True,
     )
     trunk = _the_trunk("dell_os10", job.rendered)
     assert [line for line in trunk if line.startswith(_ALLOWED)] == [f"{_ALLOWED} {listed}"], trunk
-    assert not [line for line in trunk if "review" in line], trunk
+    assert [line for line in trunk if "review" in line] == [_no_untagged_on_os10(trunk)], trunk
 
 
 def test_os10_first_line_add_on_each_target() -> None:

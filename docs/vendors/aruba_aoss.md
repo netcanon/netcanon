@@ -211,35 +211,71 @@ pipeline — they just aren't pinned by a fixture yet").
   trunk whose own list leaves its native VLAN out is written
   `untagged` in no VLAN (it was written `untagged` in that one), and
   a `; review:` line in that VLAN's stanza names the port and says
-  so.  For a port: `; review: port 5 -- native VLAN 10 is stated for
-  this trunk and its allowed list leaves it out, so no untagged line
-  is written for this port; in the factory default configuration an
-  AOS-S port is in the default VLAN (VID 1), and it remains there
-  until it is removed -- check what this port is to carry
-  untagged`.  That is what HPE says of a port, and all it says --
-  "In the factory default configuration, all ports are assigned to
-  the default VLAN (DEFAULT_VLAN; VID=1).", and "Any ports not
-  specifically removed from the default VLAN remain in the
-  DEFAULT_VLAN, regardless of other port assignments." -- neither
-  sentence says whether that membership is tagged or untagged, and
-  the line does not either.  A LAG has its line under `Trk<n>`, and
-  a member port that states the same lines under its own name.  No
-  sentence of HPE's was found for a trunk group, or for a port once
-  it is in one, so the line for a `Trk<n>` name, and for a port the
-  same output puts on a `trunk` line, says that instead: `; review:
-  port Trk1 -- native VLAN 10 is stated for this trunk and its
-  allowed list leaves it out, so no untagged line is written for
-  this port; which VLAN an AOS-S trunk group, or a port that is in
-  one, is in by default is not established -- check what this port
-  is to carry untagged`.  Either line says what the text the trunk
+  so.  A port is in the default VLAN until a line takes it out of it
+  -- HPE: "In the factory default configuration, all ports are
+  assigned to the default VLAN (DEFAULT_VLAN; VID=1).", and "Any
+  ports not specifically removed from the default VLAN remain in the
+  DEFAULT_VLAN, regardless of other port assignments." -- so VLAN 1's
+  stanza takes such a port out with `no untagged` where the output
+  tags it in some VLAN (below), and the line says so: `; review: port
+  5 -- native VLAN 10 is stated for this trunk and its allowed list
+  leaves it out, so no untagged line is written for this port and it
+  is taken out of the default VLAN -- check what this port is to
+  carry untagged`.  Where no line takes it out -- a trunk that
+  carries nothing, or one tagged in VLAN 1 -- the line for a port
+  says what HPE says of one, and all it says: `; review: port 5 --
+  native VLAN 10 is stated for this trunk and its allowed list
+  leaves it out, so no untagged line is written for this port; in
+  the factory default configuration an AOS-S port is in the default
+  VLAN (VID 1), and it remains there until it is removed -- check
+  what this port is to carry untagged`.  Neither of HPE's sentences
+  says whether that membership is tagged or untagged, and the line
+  does not either.  A LAG has its line under `Trk<n>`, and a member
+  port that states the same lines under its own name.  For a
+  `Trk<n>` name, and for a port the same output puts on a `trunk`
+  line, the line gives HPE's sentences for a trunk group instead
+  (2530, 2930F/M and 3810/5400R management guides: "Creating a new
+  trunk automatically places the trunk in the DEFAULT_VLAN,
+  regardless of whether the ports in the trunk were in another
+  VLAN.", "You can configure a static trunk in the same way that you
+  configure a port for membership in any VLAN.", and of the ports of
+  a trunk, "configuration for all ports in a trunk is done at the
+  trunk level"): `; review: port Trk1 -- native VLAN 10 is stated
+  for this trunk and its allowed list leaves it out, so no untagged
+  line is written for this port; a new AOS-S trunk group is placed in
+  the default VLAN (VID 1), a static one is configured for VLAN
+  membership as a port is, and the VLANs of a port that is in one are
+  the group's -- check what this port is to carry untagged`.  The
+  groups written are static (`trunk <ports> trk<n> lacp`; HPE's table
+  has "TrkX (Static)" beside "DynX (Dynamic)"), so what HPE says of a
+  dynamic LACP trunk -- that it "operates only in the default VLAN"
+  -- does not bear on them.  Each line says what the text the trunk
   was read from states and no more: what the source switch did with
   that VLAN is each vendor's to say, and not every vendor says it.
-  The VLAN in it is the output's: after a VLAN map, the new id.  A
-  trunk that has no untagged VLAN in the tree -- a Junos trunk with
-  no `native-vlan-id`, a Cisco or Arista trunk that states no
-  native VLAN and whose list leaves VLAN 1 out -- is written
-  `untagged` in no VLAN either, and has no such line: it left
-  nothing out.  (A Cisco, Arista or AOS-CX trunk that states no
+  The VLAN in it is the output's: after a VLAN map, the new id.
+
+  **A port or trunk group that carries no VLAN untagged is taken out
+  of VLAN 1.**  VLAN 1's stanza is written `no untagged <names>` for
+  every name the output tags in some VLAN, lists untagged in none,
+  and names on no line of VLAN 1 -- after the `name` line and before
+  `untagged` and `tagged`, the order of HPE's examples from 15.14 on
+  (`name`, `no untagged`, `untagged`, `ip address`).  A trunk group is named
+  `Trk<n>`, as the other lines name it.  A tree with no VLAN 1 record
+  (a source that declares none) is written a `vlan 1` stanza for it,
+  first among the VLANs and with no `name` line, and a trunk that
+  carries VLAN 1 tagged -- a Junos trunk of `vlan members all` -- is
+  written `tagged` there.  Such a port is a Junos trunk with no
+  `native-vlan-id`, a Cisco or Arista trunk that states no native
+  VLAN and whose list leaves VLAN 1 out, an OS10 trunk with no access
+  VLAN, an AOS-CX trunk of `vlan trunk native <N> tag`, and a trunk
+  whose native VLAN its list leaves out.  Release 0.7.7 and earlier
+  wrote no such line, and such a port stayed in VLAN 1, in jobs that
+  said nothing.  The AOS-S parser reads the line, above the lists,
+  as removing nothing: on lists that share no name that is the tree
+  the output was written from.  A trunk that carries nothing -- on no
+  VLAN line at all -- has no AOS-S form (HPE: "a port must always be
+  a tagged or untagged member of at least one port-based VLAN."), and
+  stays in VLAN 1.  (A Cisco, Arista or AOS-CX trunk that states no
   native VLAN and has VLAN 1 on its list carries VLAN 1 untagged by
   its platform's default, and is written `untagged` in VLAN 1.
   Release 0.7.7 and earlier wrote it `tagged` there: check such
@@ -248,10 +284,8 @@ pipeline — they just aren't pinned by a fixture yet").
   given the id 1, say -- the merged VLAN's stanza lists the port
   on its `untagged` AND its `tagged` line, in a job that says only
   that port lists were merged: take the port off the one that is
-  not meant.)  No line of
-  the output takes either port out of VLAN 1 (see below).  So
-  decide what the port is to carry untagged, look at what the
-  switch has it in, and write `untagged` or `no untagged` for it.
+  not meant.)  For a trunk of nothing, decide what the port is to
+  carry, look at what the switch has it in, and write its lines.
   The VLAN pane's map keeps to the same reading: where it would
   bring a native VLAN that the list leaves out INTO the list, the
   native VLAN is cleared if the map has merged it with a VLAN of the
@@ -376,9 +410,13 @@ pipeline — they just aren't pinned by a fixture yet").
   The 2930F and 2930M series are modelled; a 3810M can be declared
   through its target profile; a switch with neither cannot be declared
   yet.  Only the port names are translated: a config that removes
-  ports from VLAN 1 with `no untagged` does not get that line back, so
-  on a factory-default target those ports stay untagged members of
-  VLAN 1 unless another VLAN claims them — check VLAN 1 on the result.
+  ports from VLAN 1 with `no untagged` gets that line back for the
+  ports the output tags in some VLAN and lists untagged in none; a
+  port it lists untagged in another VLAN gets none, and leaves VLAN 1
+  by that line (HPE: "You can remove all ports from the default VLAN
+  by placing them in another port-based VLAN").  A port the source
+  removes and puts in no other VLAN gets no line, and stays in VLAN 1
+  on a factory-default target — check VLAN 1 on the result.
   See [`../CAPABILITIES.md`](../CAPABILITIES.md) § G.
 - **Hash portability** — `sha1` hashes don't translate to all
   targets cleanly; review-comment surfaces in the rendered output

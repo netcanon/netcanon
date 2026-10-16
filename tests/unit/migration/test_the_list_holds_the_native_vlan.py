@@ -110,6 +110,20 @@ is left to the default and its stanza has a review line that says so
 (:data:`BY_THE_TARGETS_DEFAULT`), and on any other target such a
 port is a fault.
 
+OS10 and AOS-S have a default of their own, and their readers of
+text apply it.  An OS10 trunk with neither an access line nor ``no
+switchport access vlan`` is an untagged member of its switch's
+default VLAN, whose id no text gives (:data:`THE_SWITCHS_DEFAULT`);
+OS10 is written ``no switchport access vlan`` for such a trunk,
+under a review line held whole (:data:`SAID_OF_NONE_ON_OS10`), which
+says that Dell's pages disagree on what the line leaves it with.  An
+AOS-S port that a VLAN tags, that no VLAN lists untagged, and that is
+on no line of VLAN 1 is in VLAN 1 by default; AOS-S is written ``no
+untagged`` in VLAN 1's stanza for it, and a trunk that carries VLAN 1
+tagged on VLAN 1's ``tagged`` line.  What remains is a trunk that
+carries nothing, which AOS-S has no form for: pinned cell by cell
+(:data:`ON_NO_VLAN_LINE_OF_AOSS`).
+
 What may not be
 ---------------
 * **a VLAN on both lines of an OS10 trunk**: its access line and its
@@ -144,10 +158,14 @@ What may not be
   so.  (By HPE's sentences an AOS-S port is in the default VLAN until
   it is removed from it, so an output that says nothing is not known
   to be one that carries nothing.)  The line is held WHOLE, in the
-  two forms typed below (:data:`SAID_OF_A_PORT`,
-  :data:`SAID_OF_A_GROUP`): a line that says a word more is not the
-  line, and neither is the form for a port on a trunk group or on a
-  port the output's own ``trunk`` line names.
+  three forms typed below (:data:`SAID_TAKEN_OUT`,
+  :data:`SAID_OF_A_PORT`, :data:`SAID_OF_A_GROUP`): a line that says
+  a word more is not the line, and neither is the form for a port on
+  a trunk group or on a port the output's own ``trunk`` line names,
+  nor the form for a name VLAN 1's ``no untagged`` line takes out on
+  one it does not, or the other way;
+* **an OS10 ``no switchport access vlan`` under no review line,
+  whole**.
 
 A port the output states nothing for is not judged here: every
 membership of every port is accounted for, one by one, in
@@ -165,11 +183,12 @@ written VLAN 1 untagged.
 
 What this cannot see
 --------------------
-The default VLAN of an OS10 switch is a setting no trunk states: a
-trunk that states no access VLAN carries no untagged VLAN here, on
-either side, and neither parser nor reader fills one in.  So does an
-AOS-S port that no ``untagged`` line names, though by HPE's sentences
-a port is in the default VLAN, VLAN 1, until it is removed from it.
+The default VLAN of an OS10 switch is a setting no trunk states: no
+parser fills it in, so a SOURCE trunk that states no access VLAN is
+read from its tree as carrying none (the reading that carries fewer);
+the reader of text names it, with no id, and the shapes that have it
+are pinned (:data:`BY_THE_SWITCHS_DEFAULT`).  An AOS-S source port
+on no line of VLAN 1 is read from its tree the same way.
 What a trunk under the words that tag its native VLAN does with its
 control traffic, and which id it sends tagged, is read by nobody
 here: the tree keeps no such id, and the readers keep none either.
@@ -293,13 +312,14 @@ class Port(NamedTuple):
 
 
 def _port(
-    how: str, mode: str | None, access: int | None, native: int | None, allowed: Any, default: int | None = None,
+    how: str, mode: str | None, access: int | None, native: int | None, allowed: Any, default: Any = None,
 ) -> Port | None:
     """One port's statements, read by its platform's row.  *allowed* is
     ``ALL`` or a set of ids: what the allowed line names, or what the
     platform's trunk carries with no such line.  *default* is the
     native VLAN of a trunk that states none, for a reader of TEXT: a
-    tree is read with none, because its parser has put it."""
+    tree is read with none, because its parser has put it (or, on
+    OS10, because no id can be put: :data:`THE_SWITCHS_DEFAULT`)."""
     if mode == "access":
         return Port(access, None, frozenset())
     if mode != "trunk":
@@ -572,26 +592,36 @@ def says_tagged(text: str, codec: str) -> tuple[bool, dict[str, bool]]:
     return every, own
 
 
+#: What a reader of OS10 TEXT gives a trunk that has neither an access
+#: line nor ``no switchport access vlan``: its switch's default VLAN,
+#: untagged, by default ("By default, native VLAN of a port is the
+#: default VLAN ID of the switch."; the vendor reference).  Which id
+#: that is no text gives: the reader names it so, and no tree holds it.
+THE_SWITCHS_DEFAULT = NO_ID
+
+
 def _read_switchport(text: str, codec: str) -> dict[str, Port]:
     """IOS-XE, EOS, NX-OS and OS10.  On OS10 the untagged VLAN of a
     trunk is its ``switchport access vlan``, which ``no switchport
-    access vlan`` takes back.  On the other three a trunk with no
-    native line has the platform's own, unless the text says the
-    native VLAN is tagged.  A stanza that is in the text twice is one
-    interface: its lines are applied in the order they are met.  A
-    trunk whose native VLAN is sent tagged (:func:`says_tagged`)
-    carries none untagged, the one it states included."""
+    access vlan`` takes back; a trunk with neither line is an untagged
+    member of the switch's default VLAN (:data:`THE_SWITCHS_DEFAULT`,
+    by default).  On the other three a trunk with no native line has
+    the platform's own, unless the text says the native VLAN is
+    tagged.  A stanza that is in the text twice is one interface: its
+    lines are applied in the order they are met.  A trunk whose
+    native VLAN is sent tagged (:func:`says_tagged`) carries none
+    untagged, the one it states included."""
     every_tagged, own_tagged = says_tagged(text, codec)
-    stated: dict[str, tuple[Any, Any, Any, Any]] = {}
+    stated: dict[str, tuple[Any, Any, Any, Any, bool]] = {}
     for name, body in _stanzas(text, "interface "):
-        mode, access, native, allowed = stated.get(name, (None, None, None, None))
+        mode, access, native, allowed, taken_back = stated.get(name, (None, None, None, None, False))
         for line in body:
             if line in ("switchport mode trunk", "switchport mode access"):
                 mode = line.rsplit(" ", 1)[1]
             elif m := re.fullmatch(r"switchport access vlan (\d+)", line):
-                access = int(m.group(1))
+                access, taken_back = int(m.group(1)), False
             elif line == "no switchport access vlan":
-                access = None
+                access, taken_back = None, True
             elif m := re.fullmatch(r"switchport trunk native vlan (\d+)", line):
                 native = int(m.group(1))
             elif m := re.fullmatch(r"switchport trunk allowed vlan (add )?(\S+)", line):
@@ -601,22 +631,22 @@ def _read_switchport(text: str, codec: str) -> dict[str, Port]:
                     allowed = ALL
                 else:
                     allowed = _listed(more | (allowed or set()) if m.group(1) else more)
-        stated[name] = (mode, access, native, allowed)
+        stated[name] = (mode, access, native, allowed, taken_back)
     out: dict[str, Port] = {}
-    for name, (mode, access, native, allowed) in stated.items():
+    for name, (mode, access, native, allowed, taken_back) in stated.items():
         if mode is None and access is not None:
             mode = "access"            # EOS, NX-OS and OS10 print no mode line for one
+        default = _default_native(codec)
         if codec == "dell_os10":
             if mode == "trunk":
                 native, allowed = access, allowed if allowed is not None else frozenset()
+                default = None if taken_back else THE_SWITCHS_DEFAULT
         elif allowed is None:
             allowed = ALL
         tagged = own_tagged.get(_unspaced(name), every_tagged)
         if tagged and mode == "trunk":
             native = None
-        port = _port(
-            HOW_IT_IS_STATED[codec], mode, access, native, allowed, None if tagged else _default_native(codec),
-        )
+        port = _port(HOW_IT_IS_STATED[codec], mode, access, native, allowed, None if tagged else default)
         if port is not None:
             out[name] = port
     return out
@@ -702,8 +732,20 @@ def _aoss_ports(listed: str) -> list[str]:
 
 
 def _read_aoss(text: str) -> dict[str, Port]:
+    """AOS-S, VLAN by VLAN: a port is untagged in the VLAN whose
+    ``untagged`` line names it last, and ``no untagged`` takes back an
+    ``untagged`` above it in the same VLAN.  A port that is tagged
+    somewhere, untagged nowhere, and on no line of VLAN 1 -- not
+    ``untagged``, not ``tagged``, not ``no untagged`` -- is in VLAN 1
+    by default ("Any ports not specifically removed from the default
+    VLAN remain in the DEFAULT_VLAN, regardless of other port
+    assignments.").  HPE's sentence says "in", not which way; it is
+    read here as untagged, which is where the full configs of HPE's
+    guides put a port that is in VLAN 1 and not tagged there.  A name
+    in no VLAN's list is no port here."""
     untagged: dict[str, int] = {}     # a port is untagged in ONE VLAN: the last that says so
     tagged: dict[str, set[int]] = collections.defaultdict(set)
+    on_vlan_1: set[str] = set()       # on a line of VLAN 1, any of the three
     for name, body in _stanzas(text, "vlan "):
         if not name.isdigit():
             continue
@@ -715,25 +757,52 @@ def _read_aoss(text: str) -> dict[str, Port]:
                         tagged[port].add(vid)
                     else:
                         untagged[port] = vid
+                    if vid == 1:
+                        on_vlan_1.add(port)
             elif m := re.fullmatch(r"no untagged (\S+)", line):
                 for port in _aoss_ports(m.group(1)):
                     if untagged.get(port) == vid:
                         del untagged[port]
-    return {
-        name: Port(untagged.get(name), None, frozenset(tagged.get(name, ())))
-        for name in set(untagged) | set(tagged)
-    }
+                    if vid == 1:
+                        on_vlan_1.add(port)
+    out: dict[str, Port] = {}
+    for name in set(untagged) | set(tagged):
+        if name not in untagged and name not in on_vlan_1:
+            out[name] = Port(1, None, frozenset(tagged[name]), True)
+        else:
+            out[name] = Port(untagged.get(name), None, frozenset(tagged.get(name, ())))
+    return out
+
+
+def out_of_vlan_1(text: str) -> set[str]:
+    """The ports an AOS-S output names on a ``no untagged`` line of
+    VLAN 1's stanza, as it writes them.  Read from the text."""
+    found: set[str] = set()
+    for name, body in _stanzas(text, "vlan "):
+        if name == "1":
+            for line in body:
+                if m := re.fullmatch(r"no untagged (\S+)", line):
+                    found.update(_aoss_ports(m.group(1)))
+    return found
 
 
 #: The ``; review:`` line of an AOS-S output for a trunk whose list
-#: leaves its native VLAN out, WHOLE, in its two forms.  Typed here
+#: leaves its native VLAN out, WHOLE, in its three forms.  Typed here
 #: and taken from no renderer, so that a line which says a word more
-#: is not this line.  What they say of the switch is all that was
-#: found: for a port, HPE's two sentences (a port is in the default
-#: VLAN, and remains in it until it is removed -- neither says
-#: "untagged"); for a trunk group and for a port that is in one,
-#: nothing, and the line says "not established".  Neither calls the
-#: VLAN the source's: after a VLAN map the id is the output's.
+#: is not this line.  Where the output's VLAN 1 stanza takes the name
+#: out of VLAN 1 (``no untagged``), the line says so, and no more.
+#: Otherwise it says what HPE's sentences say: for a port, that it is
+#: in the default VLAN and remains in it until it is removed (neither
+#: sentence says "untagged"); for a trunk group and for a port that is
+#: in one, that a new trunk group is placed in the default VLAN, a
+#: static one is configured for VLAN membership as a port is, and a
+#: port in one is configured at the group.  None calls the VLAN the
+#: source's: after a VLAN map the id is the output's.
+SAID_TAKEN_OUT = (
+    "; review: port {port} -- native VLAN {native} is stated for this trunk and its allowed list leaves it out, "
+    "so no untagged line is written for this port and it is taken out of the default VLAN -- check what this port "
+    "is to carry untagged"
+)
 SAID_OF_A_PORT = (
     "; review: port {port} -- native VLAN {native} is stated for this trunk and its allowed list leaves it out, "
     "so no untagged line is written for this port; in the factory default configuration an AOS-S port is in the "
@@ -741,8 +810,9 @@ SAID_OF_A_PORT = (
 )
 SAID_OF_A_GROUP = (
     "; review: port {port} -- native VLAN {native} is stated for this trunk and its allowed list leaves it out, "
-    "so no untagged line is written for this port; which VLAN an AOS-S trunk group, or a port that is in one, is "
-    "in by default is not established -- check what this port is to carry untagged"
+    "so no untagged line is written for this port; a new AOS-S trunk group is placed in the default VLAN (VID 1), "
+    "a static one is configured for VLAN membership as a port is, and the VLANs of a port that is in one are the "
+    "group's -- check what this port is to carry untagged"
 )
 
 #: ...and the line of an OS10 output, which stands above ``no
@@ -754,8 +824,29 @@ SAID_ON_OS10 = (
     "untagged VLAN or with VLAN 1 -- check what this port is to carry untagged"
 )
 
+#: ...and the line of an OS10 output above ``no switchport access
+#: vlan`` for a trunk that has NO native VLAN: it carries none
+#: untagged.  WHOLE, typed here: what an OS10 trunk with neither line
+#: is (Dell's sentence), that Dell's pages disagree on what the next
+#: line leaves it with, and -- where the allowed line written below it
+#: holds VLAN 1 -- that no Dell page shows VLAN 1 there.
+SAID_OF_NONE_ON_OS10 = (
+    "! review: no untagged VLAN is stated for this trunk; an OS10 trunk with neither an access line nor the next "
+    "line is an untagged member of the switch's default VLAN, and Dell's pages disagree on whether the next line "
+    "leaves it with no untagged VLAN or with VLAN 1{vlan_1} -- check what this port is to carry untagged"
+)
+_VLAN_1_ON_OS10 = "; no Dell page shows VLAN 1 on an OS10 trunk's allowed line"
+
+
+def said_of_none_on_os10(vlan_1: bool) -> str:
+    """:data:`SAID_OF_NONE_ON_OS10`, for an allowed line that holds
+    VLAN 1 (*vlan_1*) or does not."""
+    return SAID_OF_NONE_ON_OS10.format(vlan_1=_VLAN_1_ON_OS10 if vlan_1 else "")
+
+
 PORT_FORM, GROUP_FORM = "a port", "a trunk group or a port of one"
-_FORMS = ((PORT_FORM, SAID_OF_A_PORT), (GROUP_FORM, SAID_OF_A_GROUP))
+TAKEN_OUT_FORM = "a name the output takes out of VLAN 1"
+_FORMS = ((PORT_FORM, SAID_OF_A_PORT), (GROUP_FORM, SAID_OF_A_GROUP), (TAKEN_OUT_FORM, SAID_TAKEN_OUT))
 
 _A_REVIEW_OF_A_PORT = re.compile(r"; review: port (.+?) -- native VLAN (\d+) ")
 
@@ -844,6 +935,35 @@ def said_of_no_untagged(text: str, codec: str) -> dict[str, list[list[bool]]]:
     return found
 
 
+_A_NATIVE_LEFT_OUT_ON_OS10 = re.compile(r"! review: native VLAN (\d+) is stated for this trunk ")
+
+
+def unsaid_on_os10(text: str) -> tuple[int, list[str]]:
+    """(how many ``no switchport access vlan`` lines of an OS10 output
+    stand under their review line, whole; the interfaces of those that
+    do not).  The line above is :data:`SAID_ON_OS10` for the native
+    VLAN it names, or :func:`said_of_none_on_os10` for an allowed line
+    of the stanza that holds VLAN 1 or does not."""
+    said, unsaid = 0, []
+    for name, body in _stanzas(text, "interface "):
+        holds_1 = any(
+            1 in _ids(line.rsplit(" ", 1)[1]) for line in body if line.startswith("switchport trunk allowed vlan ")
+        )
+        for at, line in enumerate(body):
+            if line != "no switchport access vlan":
+                continue
+            above = body[at - 1] if at else ""
+            native = _A_NATIVE_LEFT_OUT_ON_OS10.match(above)
+            whole = (
+                SAID_ON_OS10.format(native=native.group(1)) if native else said_of_none_on_os10(holds_1)
+            )
+            if above == whole:
+                said += 1
+            else:
+                unsaid.append(name)
+    return said, unsaid
+
+
 def is_a_trunk_group(name: str) -> bool:
     """``Trk1``, in any letter case: the name AOS-S has for a LAG."""
     return re.fullmatch(r"trk\d+", name, re.IGNORECASE) is not None
@@ -897,6 +1017,10 @@ DEFAULT_NOT_SAID = "untagged by the target's own default, and no review line, wh
 NO_FORM_WRITTEN = "untagged by the target's own default, on a target that has a form for none"
 SAID_OF_ANOTHER = "a review line for no untagged VLAN on a port that is not left to the default"
 BOTH_LINES = "a VLAN on the access line and on the allowed line"
+SAID_ON_OS10_WHOLE = "`no switchport access vlan` under its review line, whole"
+UNSAID_ON_OS10 = "`no switchport access vlan` under no review line, whole"
+ON_NO_VLAN_LINE = "a trunk that carries no VLAN untagged, on no VLAN line of the AOS-S output"
+NONE_ON_BOTH = "a trunk that states no native VLAN, and carries none untagged on both sides"
 SAID = "left out, and said on AOS-S"
 NOT_SAID = "left out of its list, and the AOS-S output does not say so"
 NOT_THE_LINE = "a review line that is neither form of the line, whole"
@@ -933,6 +1057,13 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
     both = on_both_lines(job.rendered) if target.name == "dell_os10" else []
     tally += collections.Counter({BOTH_LINES: len(both)})
     wrong.extend(f"interface {name}: {BOTH_LINES}" for name in both)
+    if target.name == "dell_os10":
+        # Every `no switchport access vlan` of an OS10 output stands
+        # under its review line, whole: Dell's pages disagree on what
+        # it leaves a trunk with.
+        said_os10, unsaid = unsaid_on_os10(job.rendered)
+        tally += collections.Counter({SAID_ON_OS10_WHOLE: said_os10})
+        wrong.extend(f"interface {name}: {UNSAID_ON_OS10}" for name in unsaid)
     for name in sorted(set(by_parser) | set(by_text)):
         one, two = by_parser.get(name), by_text.get(name)
         if (one and (one.untagged, one.left_out)) != (two and (two.untagged, two.left_out)):
@@ -941,43 +1072,13 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
 
     dropped = set(job.port_drops)
     fused = {name for names in job.fused_ports.values() for name in names}
-    # Onto AOS-S, a native VLAN the source's list leaves out is said:
-    # one line, in that VLAN's stanza, for each port the output has.
-    # (A port the job dropped for want of a name is not in the output,
-    # and the job lists it.)
     if target.name in VLAN_BY_VLAN:
-        said = {(vid, key(port)): count for (vid, port), count in said_on_aoss(job.rendered).items()}
-        asked: set[tuple[int, str]] = set()
-        for name, had in sorted(src.items()):
-            if had.left_out is None or name in dropped or name in job.unresolved_ports:
-                continue
-            where = (had.left_out, key(job.port_renames.get(name, name)))
-            asked.add(where)
-            if said.get(where, 0) == 1:
-                tally[SAID] += 1
-            else:
-                wrong.append(f"native VLAN {had.left_out} of {name!r}, {said.get(where, 0)} lines: {NOT_SAID}")
-        for vid, port in sorted(set(said) - asked):
-            wrong.append(
-                f"VLAN {vid}, port {port!r}: {said[(vid, port)]} review lines for a port whose source left nothing out"
-            )
-        # ... and each line is one of the two forms, whole, and the
-        # form for what the OUTPUT makes of the name: a trunk group
-        # by its name, a port of one by the output's own `trunk`
-        # lines.  (The renderer decides it from the tree.)
-        grouped = {key(port) for port in in_a_trunk_line(job.rendered)}
-        for _stanza, vid, port, form in said_how(job.rendered):
-            want = GROUP_FORM if is_a_trunk_group(port) or key(port) in grouped else PORT_FORM
-            if form is None:
-                wrong.append(f"VLAN {vid}, port {port!r}: {NOT_THE_LINE}")
-            elif form != want:
-                wrong.append(f"VLAN {vid}, port {port!r}: the line is the one for {form}, and {WRONG_FORM} {want}")
-            else:
-                tally[f"said in the form for {form}"] += 1
+        _said_on_aoss_as_it_should_be(src, job, key, dropped, tally, wrong)
     # On IOS-XE and NX-OS a port left to the default has a review line
     # in its stanza, whole, and no other port has one.
     reviewed = {key(name): lines for name, lines in said_of_no_untagged(job.rendered, target.name).items()}
     left_to_it: set[str] = set()
+    trunks = {iface.name for iface in source_tree.interfaces if iface.switchport_mode == "trunk"}
     for name, had in sorted(src.items()):
         if name in dropped:
             tally["dropped by the job"] += 1
@@ -986,6 +1087,11 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
         has = by_text.get(key(final))
         if has is None:
             tally["nothing stated for the port"] += 1
+            if target.name in VLAN_BY_VLAN and name in trunks and had.untagged is None:
+                # A trunk that carries no VLAN untagged, on no VLAN line
+                # of an AOS-S output: AOS-S has no form for a port in
+                # no VLAN.  Counted, and pinned cell by cell.
+                tally[ON_NO_VLAN_LINE] += 1
             continue
         if had.untagged == has.untagged:
             tally["the same"] += 1
@@ -993,6 +1099,8 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
                 tally["carried by both"] += 1
             elif had.left_out is not None:
                 tally["left out, and not carried"] += 1
+            elif name in trunks:
+                tally[NONE_ON_BOTH] += 1
             continue
         if had.untagged is None and has.by_default:
             # The source carries no VLAN untagged on this port; the
@@ -1030,6 +1138,48 @@ def judge(source: Any, target: Any, raw: str, job: Any) -> dict[str, Any]:
         if any(stanzas) and port not in left_to_it
     )
     return {"tally": tally, "wrong": wrong, "status": job.status.value}
+
+
+def _said_on_aoss_as_it_should_be(
+    src: dict[str, Port], job: Any, key: Any, dropped: set[str], tally: collections.Counter[str], wrong: list[str],
+) -> None:
+    """Onto AOS-S, a native VLAN the source's list leaves out is said:
+    one line, in that VLAN's stanza, for each port the output has.  (A
+    port the job dropped for want of a name is not in the output, and
+    the job lists it.)  *key* folds a name as the judgement does."""
+    said = {(vid, key(port)): count for (vid, port), count in said_on_aoss(job.rendered).items()}
+    asked: set[tuple[int, str]] = set()
+    for name, had in sorted(src.items()):
+        if had.left_out is None or name in dropped or name in job.unresolved_ports:
+            continue
+        where = (had.left_out, key(job.port_renames.get(name, name)))
+        asked.add(where)
+        if said.get(where, 0) == 1:
+            tally[SAID] += 1
+        else:
+            wrong.append(f"native VLAN {had.left_out} of {name!r}, {said.get(where, 0)} lines: {NOT_SAID}")
+    for vid, port in sorted(set(said) - asked):
+        wrong.append(
+            f"VLAN {vid}, port {port!r}: {said[(vid, port)]} review lines for a port whose source left nothing out"
+        )
+    # ... and each line is one of the three forms, whole, and the form
+    # for what the OUTPUT makes of the name: one its VLAN 1 stanza
+    # takes out of VLAN 1, by that stanza's `no untagged` line; a trunk
+    # group by its name, a port of one by the output's own `trunk`
+    # lines.  (The renderer decides it from the tree.)
+    grouped = {key(port) for port in in_a_trunk_line(job.rendered)}
+    taken_out = {key(port) for port in out_of_vlan_1(job.rendered)}
+    for _stanza, vid, port, form in said_how(job.rendered):
+        want = (
+            TAKEN_OUT_FORM if key(port) in taken_out
+            else GROUP_FORM if is_a_trunk_group(port) or key(port) in grouped else PORT_FORM
+        )
+        if form is None:
+            wrong.append(f"VLAN {vid}, port {port!r}: {NOT_THE_LINE}")
+        elif form != want:
+            wrong.append(f"VLAN {vid}, port {port!r}: the line is the one for {form}, and {WRONG_FORM} {want}")
+        else:
+            tally[f"said in the form for {form}"] += 1
 
 
 def _left_to_the_default(target: str, stanzas: list[list[bool]], tally: collections.Counter[str]) -> str:
@@ -1131,6 +1281,19 @@ BY_THE_TARGETS_DEFAULT: dict[tuple[str, str], int] = {
     ("real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg", "cisco_nxos"): 1,
 }
 
+#: (capture, target) -> the source trunks that carry no VLAN untagged
+#: and that the AOS-S output names on no VLAN line at all: a trunk
+#: that carries nothing.  AOS-S has no form for a port in no VLAN (a
+#: port is a member of at least one), so the output leaves it as it
+#: is, and by HPE's sentence it stays in the DEFAULT_VLAN -- the one
+#: cell of that class this target still has.  None on the committed
+#: captures; a small config has one
+#: (``TestTheCheckItself.test_a_trunk_of_nothing_onto_aoss``).
+#: Compared for EQUALITY with what is measured.  (Onto OS10 every
+#: trunk with no native VLAN is written ``no switchport access vlan``:
+#: no cell, and the readers' default there counts zero.)
+ON_NO_VLAN_LINE_OF_AOSS: dict[tuple[str, str], int] = {}
+
 
 @pytest.fixture(scope="module")
 def every_job() -> dict[tuple[str, str, str], dict[str, Any]]:
@@ -1191,6 +1354,19 @@ def test_what_a_targets_default_makes_is_pinned(every_job: dict) -> None:
     } == {"aruba_aoscx"}
 
 
+def test_what_aoss_leaves_on_no_vlan_line_is_pinned(every_job: dict) -> None:
+    """Onto OS10 and AOS-S the readers of text give a trunk with no
+    form for "no VLAN untagged" its switch's default VLAN, and none is
+    left to it (above).  What remains of the class is a trunk that
+    carries nothing, which AOS-S has no form for."""
+    left = {
+        (label, target): verdict["tally"][ON_NO_VLAN_LINE]
+        for (_source, label, target), verdict in every_job.items() if verdict["tally"][ON_NO_VLAN_LINE]
+    }
+    assert left == ON_NO_VLAN_LINE_OF_AOSS
+    assert {target for _label, target in left} <= {"aruba_aoss"}
+
+
 def test_no_tree_leaves_its_default_out(every_job: dict) -> None:
     """Not the source's tree and not the output's, parsed again: on
     every capture, onto every target.  And none has the default on
@@ -1239,10 +1415,20 @@ def test_it_read_what_it_says_it_read(every_job: dict) -> None:
     # the form for what it is.  (Nine names of four outputs -- one
     # port, and eight trunk groups whose members AOS-S has no name
     # for, so that the output makes none of them; two more are ports
-    # AOS-S has no name for, which the job drops and lists.)
+    # AOS-S has no name for, which the job drops and lists.  Each is
+    # tagged in some VLAN, and the output takes it out of VLAN 1: the
+    # forms that say it stays there are held on the shapes below.)
     assert _total(every_job, SAID) == _total(every_job, SAID, None, "aruba_aoss") >= 9
-    assert _total(every_job, f"said in the form for {PORT_FORM}") >= 1
-    assert _total(every_job, f"said in the form for {GROUP_FORM}") >= 8
+    assert _total(every_job, f"said in the form for {TAKEN_OUT_FORM}") >= 9
+    # ... and the class the readers of OS10 and AOS-S text give their
+    # switch's default VLAN to: trunks that carry no VLAN untagged,
+    # which reach both, and none of which is left to that default.
+    for target in ("dell_os10", "aruba_aoss"):
+        assert _total(every_job, NONE_ON_BOTH, None, target) >= 50, target
+        assert _total(every_job, TARGETS_DEFAULT, None, target) == 0, target
+    # ... each written onto OS10 the line that takes its access VLAN
+    # away, under its review line, whole.
+    assert _total(every_job, SAID_ON_OS10_WHOLE, None, "dell_os10") >= 50
 
 
 def test_the_captures_have_such_trunks() -> None:
@@ -1646,6 +1832,24 @@ def _carried(port: Port | None) -> tuple[int | None, frozenset[int]]:
     return port.untagged, frozenset(tagged - {port.untagged}) | ({port.untagged} & _EVERY)
 
 
+#: (source codec, shape) whose TEXT the reader gives the switch's
+#: default VLAN, by default, where the tree has none: an OS10 trunk
+#: with neither an access line nor ``no switchport access vlan``.  Its
+#: parser reads the fewer -- no untagged VLAN, as it must where the id
+#: is not in the text -- and :data:`CARRIES` holds that reading, which
+#: every output is held to.  Compared for EQUALITY with the shapes the
+#: reader does it for.
+BY_THE_SWITCHS_DEFAULT = frozenset({("dell_os10", "c")})
+
+
+def _as_the_tree_reads(port: Port | None) -> Port | None:
+    """*port* as a tree of its text reads it: the switch's default
+    VLAN, which has no id, is no untagged VLAN there."""
+    if port is None or not (port.by_default and port.untagged == THE_SWITCHS_DEFAULT):
+        return port
+    return Port(None, port.left_out, port.tagged)
+
+
 def _shape_job(source: str, shape: str, target: str) -> tuple[Any, str]:
     """The job, and the name its output has for the trunk.  AOS-S has
     no name of its own for the ports of three of the sources, so onto
@@ -1682,8 +1886,13 @@ def test_each_source_reads_as_it_is_written(source: str, shape: str) -> None:
     assert ports[access].untagged == 20
     # ... and the text of the source, by this module's own reader of
     # its grammar, says the same: the tree holds what the platform's
-    # default adds, and no more.
-    assert _carried(read_text(SHAPES[(source, shape)], source).get(trunk)) == CARRIES[(source, shape)], (source, shape)
+    # default adds, and no more -- but for the default that has no id,
+    # which the reader names and no tree can hold.
+    by_text = read_text(SHAPES[(source, shape)], source).get(trunk)
+    assert (by_text is not None and by_text.untagged == THE_SWITCHS_DEFAULT) == (
+        (source, shape) in BY_THE_SWITCHS_DEFAULT
+    ), (source, shape, by_text)
+    assert _carried(_as_the_tree_reads(by_text)) == CARRIES[(source, shape)], (source, shape)
     assert left_unfilled(tree, source, SHAPES[(source, shape)]) == []
 
 
@@ -2011,8 +2220,11 @@ def test_the_same_text_comes_back(source: str, shape: str) -> None:
     """Onto its own codec a trunk is written as it was: a native VLAN
     outside its list stays outside it, an access VLAN of an OS10 trunk
     stays off its allowed line, and AOS-S gets its lists back.  (The
-    one exception is the OS10 text that names its access VLAN on the
-    allowed line as well, which comes back with the VLAN on one.)
+    exceptions: the OS10 text that names its access VLAN on the
+    allowed line as well, which comes back with the VLAN on one; the
+    OS10 trunk with no access line, which comes back with ``no
+    switchport access vlan``; and AOS-S's ``no untagged`` in VLAN 1,
+    which comes back for the ports it alone takes out of VLAN 1.)
     A trunk that sends its native VLAN tagged comes back saying so
     where its list holds VLAN 1, in its platform's one form for it:
     on IOS-XE and NX-OS the line for every trunk (no other port of
@@ -2056,7 +2268,15 @@ def test_the_same_text_comes_back(source: str, shape: str) -> None:
     if source == "aruba_aoscx" and shape == "w":
         want.remove("vlan trunk native 20 tag")            # VLAN 1 is off the list, and nothing is untagged
     if source == "aruba_aoss":
-        want.remove("no untagged 1-2")            # nothing lists the ports there: no line
+        want.remove("no untagged 1-2")            # VLAN 1's line names the ports no other line names untagged:
+        if shape == "e2":                         # port 1, tagged in 20 and 30 alone (port 2 is untagged in 20)
+            want.append("no untagged 1")
+    if (source, shape) == ("dell_os10", "c"):
+        # A trunk with no access line is read as one that carries no
+        # VLAN untagged, and is written so: the line that takes the
+        # access VLAN away, under its review line.  (The OS10 tree has
+        # one reading for both texts.)
+        want += [said_of_none_on_os10(False), "no switchport access vlan"]
     assert lines(job.rendered) == sorted(want), (source, shape)
     # The line for every trunk: where the trunk sends its native VLAN
     # tagged and its list holds VLAN 1.
@@ -2118,13 +2338,15 @@ TWO_TRUNKS: dict[str, str] = {
 }
 
 #: The form each target writes on the first trunk: a line of its
-#: stanza, or ``None`` for a target whose trunk has no default (and
-#: which writes none).
+#: stanza.  Junos, whose trunk has no default, writes none.  AOS-S
+#: writes its form in VLAN 1's stanza, not the port's: the trunk
+#: carries VLAN 1 tagged, and is on VLAN 1's ``tagged`` line.
 _ITS_FORM = {
     "arista_eos": "switchport trunk native vlan tag",
     "aruba_aoscx": "vlan trunk native 1 tag",
     "cisco_iosxe_cli": SAID_OF_NO_UNTAGGED["cisco_iosxe_cli"],
     "cisco_nxos": SAID_OF_NO_UNTAGGED["cisco_nxos"],
+    "dell_os10": "no switchport access vlan",
 }
 
 
@@ -2150,8 +2372,11 @@ def test_the_beside_sources_read_as_written(source: str) -> None:
     text = TWO_TRUNKS[source]
     tagged = _EVERY if source == "juniper_junos" else frozenset({20, 30})
     for ports in (read_tree(get_codec(source).parse(text), source), read_text(text, source)):
-        assert _carried(ports[trunk]) == (None, tagged), (source, ports[trunk])
+        # (The OS10 text's first trunk has neither access line: the
+        # reader gives it the switch's default VLAN, the tree none.)
+        assert _carried(_as_the_tree_reads(ports[trunk])) == (None, tagged), (source, ports[trunk])
         assert _carried(ports[_THIRD[source]]) == (10, _EVERY), (source, ports[_THIRD[source]])
+    assert (read_text(text, source)[trunk].untagged == THE_SWITCHS_DEFAULT) == (source == "dell_os10")
 
 
 @pytest.mark.parametrize("target", SWITCHES)
@@ -2174,6 +2399,11 @@ def test_beside_a_trunk_that_carries_one(source: str, target: str) -> None:
         stanzas = dict(_stanzas(job.rendered, "interface "))
         assert stanzas[first].count(_ITS_FORM[target]) == 1, stanzas[first]
         assert _ITS_FORM[target] not in stanzas[third], stanzas[third]
+    if target == "aruba_aoss":
+        one = dict(_stanzas(job.rendered, "vlan "))["1"]
+        on_tagged = [port for line in one if line.startswith("tagged ") for port in _aoss_ports(line.split()[1])]
+        assert first in on_tagged and third not in on_tagged, one
+        assert first not in out_of_vlan_1(job.rendered) and third not in out_of_vlan_1(job.rendered), one
 
 
 # ---------------------------------------------------------------------------
@@ -2216,15 +2446,19 @@ def test_junos_is_a_member_of_the_native(source: str, shape: str) -> None:
 def test_a_native_vlan_left_out_stays_out(source: str) -> None:
     """The other way.  Shape (b) onto the two targets that state the
     untagged VLAN apart: AOS-S is written no ``untagged`` for the
-    port, and a line in VLAN 10's stanza that says so; OS10 the line
-    that takes the access VLAN back, under a line that says so."""
+    port, ``no untagged`` in VLAN 1's stanza -- written for this tree,
+    which has no VLAN 1, first and with no name -- and a line in VLAN
+    10's stanza that says both; OS10 the line that takes the access
+    VLAN back, under a line that says so."""
     job, final = _shape_job(source, "b", "aruba_aoss")
     assert not [
         line for line in job.rendered.splitlines()
         if line.strip().startswith("untagged") and final in _aoss_ports(line.split(None, 1)[1])
     ], job.rendered
-    ten = dict(_stanzas(job.rendered, "vlan "))["10"]
-    assert ten == ['name "ten"', SAID_OF_A_PORT.format(port=final, native=10), "exit"], ten
+    stanzas = list(_stanzas(job.rendered, "vlan "))
+    assert stanzas[0] == ("1", [f"no untagged {final}", "exit"]), stanzas[0]
+    ten = dict(stanzas)["10"]
+    assert ten == ['name "ten"', SAID_TAKEN_OUT.format(port=final, native=10), "exit"], ten
     job, final = _shape_job(source, "b", "dell_os10")
     stanza = dict(_stanzas(job.rendered, "interface "))[final]
     at = stanza.index("no switchport access vlan")
@@ -2457,15 +2691,28 @@ class TestTheCheckItself:
         verdict = self._judge("cisco_iosxe_cli", "b", "aruba_aoss", job)
         assert verdict["wrong"] == [f"VLAN 10 untagged on 'GigabitEthernet1/0/1' ({final!r}): {GAINED}"]
 
-    def _said_job(self) -> tuple[Any, str, str]:
-        """IOS-XE (b) onto AOS-S, and the one line of its output that
-        says native VLAN 10 was left out of the trunk's list."""
-        job, final = _shape_job("cisco_iosxe_cli", "b", "aruba_aoss")
-        verdict = self._judge("cisco_iosxe_cli", "b", "aruba_aoss", job)
+    #: IOS-XE: native VLAN 10 beside a list of NO VLAN.  Onto AOS-S the
+    #: port is on no VLAN line, so nothing takes it out of VLAN 1, and
+    #: the line in VLAN 10's stanza is the one for a port that stays
+    #: there.
+    KEPT_IN = _iosxe("switchport trunk native vlan 10", "switchport trunk allowed vlan none")
+
+    def _said_job(self, kept_in: bool = False) -> tuple[Any, str, str]:
+        """IOS-XE (b) onto AOS-S -- or :data:`KEPT_IN`, with *kept_in*
+        -- and the one line of its output that says native VLAN 10 was
+        left out of the trunk's list."""
+        text = self.KEPT_IN if kept_in else SHAPES[("cisco_iosxe_cli", "b")]
+        job, final = _job_of_a_port("cisco_iosxe_cli", text, "aruba_aoss")
+        verdict = judge(get_codec("cisco_iosxe_cli"), get_codec("aruba_aoss"), text, job)
         assert verdict["wrong"] == [] and verdict["tally"][SAID] == 1
+        assert verdict["tally"][f"said in the form for {PORT_FORM if kept_in else TAKEN_OUT_FORM}"] == 1
         lines = [line for line in job.rendered.splitlines(keepends=True) if "; review: port " in line]
         assert len(lines) == 1 and lines[0].startswith(f"   ; review: port {final} -- "), lines
         return job, final, lines[0]
+
+    def _judge_said(self, job: Any, kept_in: bool = False) -> dict[str, Any]:
+        text = self.KEPT_IN if kept_in else SHAPES[("cisco_iosxe_cli", "b")]
+        return judge(get_codec("cisco_iosxe_cli"), get_codec("aruba_aoss"), text, job)
 
     def test_a_vlan_left_out_and_not_said(self) -> None:
         """The output that was written before the line was: tagged in
@@ -2486,53 +2733,68 @@ class TestTheCheckItself:
         assert verdict["wrong"] == [f"native VLAN 10 of 'GigabitEthernet1/0/1', 0 lines: {NOT_SAID}"]
 
     def test_said_of_another_port_or_twice(self) -> None:
-        job, final, line = self._said_job()
+        job, final, line = self._said_job(kept_in=True)
         other = line.replace(f"port {final} -- ", "port 2 -- ")
         said_of_two = job.rendered.replace(line, line + other)
         job.rendered = said_of_two
-        verdict = self._judge("cisco_iosxe_cli", "b", "aruba_aoss", job)
+        verdict = self._judge_said(job, kept_in=True)
         assert verdict["wrong"] == ["VLAN 10, port '2': 1 review lines for a port whose source left nothing out"]
         job.rendered = said_of_two.replace(other, line)
-        verdict = self._judge("cisco_iosxe_cli", "b", "aruba_aoss", job)
+        verdict = self._judge_said(job, kept_in=True)
         assert verdict["wrong"] == [f"native VLAN 10 of 'GigabitEthernet1/0/1', 2 lines: {NOT_SAID}"]
 
-    def test_a_line_that_says_a_word_more(self) -> None:
+    @pytest.mark.parametrize("kept_in,old,new", [
+        (True, "leaves it out, so no", "leaves it out (the source switch forwards no untagged frame on it), so no"),
+        (True, "until it is removed -- ", "until it is removed, and a trunk group does the same -- "),
+        (True, "default VLAN (VID 1)", "default VLAN (VID 1), untagged"),
+        (False, "leaves it out, so no", "leaves it out (the source switch forwards no untagged frame on it), so no"),
+        (False, "default VLAN -- ", "default VLAN, untagged and tagged -- "),
+        (False, "taken out of the default VLAN", "taken out of the default VLAN (VID 1)"),
+    ])
+    def test_a_line_that_says_a_word_more(self, kept_in: bool, old: str, new: str) -> None:
         """The line with a claim added about the source switch, and
-        with one added about the AOS-S switch: neither is the line,
-        so the VLAN is not said."""
-        for old, new in (
-            ("leaves it out, so no", "leaves it out (the source switch forwards no untagged frame on it), so no"),
-            ("until it is removed -- ", "until it is removed, and a trunk group does the same -- "),
-            ("default VLAN (VID 1)", "default VLAN (VID 1), untagged"),
-        ):
-            job, final, line = self._said_job()
-            assert old in line
-            job.rendered = job.rendered.replace(line, line.replace(old, new))
-            verdict = self._judge("cisco_iosxe_cli", "b", "aruba_aoss", job)
-            assert verdict["wrong"] == [
-                f"native VLAN 10 of 'GigabitEthernet1/0/1', 0 lines: {NOT_SAID}",
-                f"VLAN 10, port {final!r}: {NOT_THE_LINE}",
-            ], (new, verdict["wrong"])
+        with one added about the AOS-S switch or the output: neither
+        is the line, so the VLAN is not said -- in the form for a port
+        that stays in VLAN 1 and in the form for one taken out."""
+        job, final, line = self._said_job(kept_in)
+        assert old in line
+        job.rendered = job.rendered.replace(line, line.replace(old, new))
+        verdict = self._judge_said(job, kept_in)
+        assert verdict["wrong"] == [
+            f"native VLAN 10 of 'GigabitEthernet1/0/1', 0 lines: {NOT_SAID}",
+            f"VLAN 10, port {final!r}: {NOT_THE_LINE}",
+        ], (new, verdict["wrong"])
 
     def test_the_form_for_another_kind_of_name(self) -> None:
-        """The line for a trunk group said of a port, and the line
-        for a port said of a port that the output's own ``trunk``
-        line puts in a group."""
-        job, final, line = self._said_job()
+        """The line for a trunk group said of a port, the line for a
+        port said of a port that the output's own ``trunk`` line puts
+        in a group, and the line for a name taken out of VLAN 1 said of
+        one that is not, and the other way."""
+        job, final, line = self._said_job(kept_in=True)
         assert line.strip() == SAID_OF_A_PORT.format(port=final, native=10)
-        job.rendered = job.rendered.replace(line, "   " + SAID_OF_A_GROUP.format(port=final, native=10) + "\n")
-        verdict = self._judge("cisco_iosxe_cli", "b", "aruba_aoss", job)
-        assert verdict["wrong"] == [
-            f"VLAN 10, port {final!r}: the line is the one for {GROUP_FORM}, and {WRONG_FORM} {PORT_FORM}",
-        ]
-        job, final, line = self._said_job()
+        for form, whole in ((GROUP_FORM, SAID_OF_A_GROUP), (TAKEN_OUT_FORM, SAID_TAKEN_OUT)):
+            job.rendered = job.rendered.replace(line, "   " + whole.format(port=final, native=10) + "\n")
+            verdict = self._judge_said(job, kept_in=True)
+            assert verdict["wrong"] == [
+                f"VLAN 10, port {final!r}: the line is the one for {form}, and {WRONG_FORM} {PORT_FORM}",
+            ]
+            job, final, line = self._said_job(kept_in=True)
         assert not in_a_trunk_line(job.rendered) and final == "1"
         job.rendered = job.rendered.replace("vlan 10\n", "trunk 1,7 trk1 lacp\nvlan 10\n", 1)
         assert in_a_trunk_line(job.rendered) == {"1", "7"}
-        verdict = self._judge("cisco_iosxe_cli", "b", "aruba_aoss", job)
+        verdict = self._judge_said(job, kept_in=True)
         assert f"VLAN 10, port '1': the line is the one for {PORT_FORM}, and {WRONG_FORM} {GROUP_FORM}" in (
             verdict["wrong"]
         )
+        # Taken out of VLAN 1, by the output's own `no untagged` line.
+        job, final, line = self._said_job()
+        assert line.strip() == SAID_TAKEN_OUT.format(port=final, native=10)
+        assert out_of_vlan_1(job.rendered) == {final}
+        job.rendered = job.rendered.replace(line, "   " + SAID_OF_A_PORT.format(port=final, native=10) + "\n")
+        verdict = self._judge_said(job)
+        assert verdict["wrong"] == [
+            f"VLAN 10, port {final!r}: the line is the one for {PORT_FORM}, and {WRONG_FORM} {TAKEN_OUT_FORM}",
+        ]
 
     def test_said_where_the_vlan_is_carried(self) -> None:
         """IOS-XE (a): the list names VLAN 10, the port is untagged
@@ -2540,7 +2802,7 @@ class TestTheCheckItself:
         job, final = _shape_job("cisco_iosxe_cli", "a", "aruba_aoss")
         verdict = self._judge("cisco_iosxe_cli", "a", "aruba_aoss", job)
         assert verdict["wrong"] == [] and SAID not in verdict["tally"]
-        _job, _final, line = self._said_job()
+        _job, _final, line = self._said_job(kept_in=True)
         job.rendered = job.rendered.replace('vlan 10\n   name "ten"\n', 'vlan 10\n   name "ten"\n' + line)
         verdict = self._judge("cisco_iosxe_cli", "a", "aruba_aoss", job)
         assert verdict["wrong"] == [
@@ -2564,6 +2826,99 @@ class TestTheCheckItself:
         job.rendered = job.rendered.replace("allowed vlan 20,30", "allowed vlan 10,20,30")
         verdict = self._judge("aruba_aoss", "e1", "dell_os10", job)
         assert verdict["wrong"] == [f"interface {final}: {BOTH_LINES}"]
+
+    # -- a trunk that carries no VLAN untagged, onto OS10 and AOS-S ---
+
+    #: IOS-XE (c): no native line, and a list that leaves VLAN 1 out --
+    #: a trunk that carries no VLAN untagged.
+    C = ("cisco_iosxe_cli", "c")
+
+    def test_the_os10_line_taken_out(self) -> None:
+        """The defect, as it was written onto OS10: the trunk with
+        neither access line, which the switch makes an untagged member
+        of its default VLAN.  The reader of text says so, the parser
+        does not, and the trunk is left to the target's default."""
+        job, final = _shape_job(*self.C, "dell_os10")
+        verdict = self._judge(*self.C, "dell_os10", job)
+        assert verdict["wrong"] == [] and verdict["tally"][SAID_ON_OS10_WHOLE] == 1
+        lines = f" {said_of_none_on_os10(False)}\n no switchport access vlan\n"
+        assert job.rendered.count(lines) == 1, job.rendered
+        job.rendered = job.rendered.replace(lines, "")
+        verdict = self._judge(*self.C, "dell_os10", job)
+        port = final.casefold()
+        assert verdict["wrong"] == [
+            f"{port!r}: the parser reads Port(untagged=None, left_out=None, tagged=frozenset({{20, 30}}), "
+            f"by_default=False) and the text Port(untagged={THE_SWITCHS_DEFAULT!r}, left_out=None, "
+            f"tagged=frozenset({{20, 30}}), by_default=True)",
+            f"VLAN {THE_SWITCHS_DEFAULT} untagged on 'GigabitEthernet1/0/1' ({final!r}): {NO_FORM_WRITTEN}",
+        ], verdict["wrong"]
+        assert verdict["tally"][TARGETS_DEFAULT] == 1
+
+    def test_the_os10_line_without_its_review(self) -> None:
+        """...and the line with its review line taken out, with a word
+        more, or in the form for an allowed line it does not stand
+        beside."""
+        job, final = _shape_job(*self.C, "dell_os10")
+        review = f" {said_of_none_on_os10(False)}\n"
+        for new in (
+            "",
+            review.replace("disagree on", "disagree (10.5.5 and 10.6.1) on"),
+            f" {said_of_none_on_os10(True)}\n",
+        ):
+            text = job.rendered
+            job.rendered = text.replace(review, new)
+            verdict = self._judge(*self.C, "dell_os10", job)
+            assert verdict["wrong"] == [f"interface {final}: {UNSAID_ON_OS10}"], (new, verdict["wrong"])
+            job.rendered = text
+        # ... and where the allowed line holds VLAN 1, the form that
+        # says so is the line, and the other is not.
+        job, final = _shape_job("juniper_junos", "g", "dell_os10")
+        assert self._judge("juniper_junos", "g", "dell_os10", job)["wrong"] == []
+        assert job.rendered.count(f" {said_of_none_on_os10(True)}\n no switchport access vlan\n") == 1
+        job.rendered = job.rendered.replace(said_of_none_on_os10(True), said_of_none_on_os10(False))
+        assert self._judge("juniper_junos", "g", "dell_os10", job)["wrong"] == [f"interface {final}: {UNSAID_ON_OS10}"]
+
+    def test_the_aoss_line_taken_out(self) -> None:
+        """The defect, as it was written onto AOS-S: tagged in 20 and
+        30, untagged nowhere, and no line takes the port out of VLAN 1
+        -- in which, by HPE's sentence, it remains."""
+        job, final = _shape_job(*self.C, "aruba_aoss")
+        assert self._judge(*self.C, "aruba_aoss", job)["wrong"] == []
+        stanza = f"vlan 1\n   no untagged {final}\n   exit\n"
+        assert job.rendered.count(stanza) == 1, job.rendered
+        job.rendered = job.rendered.replace(stanza, "")
+        verdict = self._judge(*self.C, "aruba_aoss", job)
+        assert verdict["wrong"] == [
+            f"{final!r}: the parser reads Port(untagged=None, left_out=None, tagged=frozenset({{20, 30}}), "
+            f"by_default=False) and the text Port(untagged=1, left_out=None, tagged=frozenset({{20, 30}}), "
+            f"by_default=True)",
+            f"VLAN 1 untagged on 'GigabitEthernet1/0/1' ({final!r}): {NO_FORM_WRITTEN}",
+        ], verdict["wrong"]
+
+    def test_the_aoss_tagged_line_taken_out(self) -> None:
+        """Junos (g), a trunk of every VLAN, onto AOS-S, from a tree
+        with no VLAN 1: the output's `vlan 1` stanza has the trunk on
+        its `tagged` line.  Without the stanza the trunk is tagged in
+        10, 20 and 30, untagged nowhere, and in VLAN 1 by default."""
+        job, final = _shape_job("juniper_junos", "g", "aruba_aoss")
+        assert self._judge("juniper_junos", "g", "aruba_aoss", job)["wrong"] == []
+        stanzas = list(_stanzas(job.rendered, "vlan "))
+        assert stanzas[0] == ("1", [f"tagged {final}", "exit"]), stanzas
+        job.rendered = job.rendered.replace(f"vlan 1\n   tagged {final}\n   exit\n", "")
+        verdict = self._judge("juniper_junos", "g", "aruba_aoss", job)
+        assert f"VLAN 1 untagged on 'ge-0/0/1' ({final!r}): {NO_FORM_WRITTEN}" in verdict["wrong"], verdict["wrong"]
+        assert verdict["tally"][TARGETS_DEFAULT] == 1
+
+    def test_a_trunk_of_nothing_onto_aoss(self) -> None:
+        """Junos (d): native VLAN 10 and no member line, a trunk that
+        carries nothing.  AOS-S has no form for a port in no VLAN: the
+        port is on no VLAN line, counted apart, and its review line is
+        the one for a port that stays in VLAN 1."""
+        job, final = _shape_job("juniper_junos", "d", "aruba_aoss")
+        verdict = self._judge("juniper_junos", "d", "aruba_aoss", job)
+        assert verdict["wrong"] == [] and verdict["tally"][ON_NO_VLAN_LINE] == 1, verdict
+        assert verdict["tally"][f"said in the form for {PORT_FORM}"] == 1
+        assert not out_of_vlan_1(job.rendered) and "vlan 1" not in job.rendered.splitlines()
 
     def test_a_fused_port_is_counted_apart(self, onto_nxos: Any) -> None:
         """...and what is counted there is pinned by cell."""
@@ -2593,13 +2948,22 @@ class TestTheCheckItself:
         assert verdict["wrong"] == [f"VLAN 1 untagged on 'GigabitEthernet1/0/1' ({final!r}): {TAGGED_INSTEAD}"]
 
     def test_vlan_one_tagged_on_os10(self) -> None:
-        """...on OS10: VLAN 1 on the allowed line, and no access line."""
+        """...on OS10: VLAN 1 on the allowed line, and no access line --
+        which makes the trunk an untagged member of the switch's
+        default VLAN as well, an id no text gives: the parser reads it
+        otherwise, and that is another untagged VLAN than the source's."""
         job, final = self._onto("dell_os10")
         was = " switchport access vlan 1\n switchport trunk allowed vlan 20,30\n"
         assert job.rendered.count(was) == 1, job.rendered
         job.rendered = job.rendered.replace(was, " switchport trunk allowed vlan 1,20,30\n")
         verdict = self._judge(*self.F, "dell_os10", job)
-        assert verdict["wrong"] == [f"VLAN 1 untagged on 'GigabitEthernet1/0/1' ({final!r}): {TAGGED_INSTEAD}"]
+        assert verdict["wrong"] == [
+            f"{final!r}: the parser reads Port(untagged=None, left_out=None, tagged=frozenset({{1, 20, 30}}), "
+            f"by_default=False) and the text Port(untagged={THE_SWITCHS_DEFAULT!r}, left_out=None, "
+            f"tagged=frozenset({{1, 20, 30}}), by_default=True)",
+            f"VLAN 1 untagged on 'GigabitEthernet1/0/1' ({final!r}): {TAGGED_INSTEAD}",
+            f"VLAN {THE_SWITCHS_DEFAULT} untagged on 'GigabitEthernet1/0/1' ({final!r}): {ANOTHER}",
+        ], verdict["wrong"]
 
     def test_vlan_one_tagged_on_aoss(self) -> None:
         """...and on AOS-S: ``tagged`` in VLAN 1."""
@@ -2981,15 +3345,26 @@ class TestTheCheckItself:
             1, None, frozenset({20}), True,
         )
         assert read_text("interface 1/1/1\n    vlan trunk allowed 20\n", "aruba_aoscx")["1/1/1"].untagged is None
-        # Junos has no default, and OS10's has no id.
+        # Junos has no default, and OS10's has no id: a trunk with
+        # neither access line is in the switch's default VLAN, so the
+        # reader says, and one that takes the access VLAN back is not
+        # -- whichever line came first.
         junos = read_text(
             "set vlans one vlan-id 1\nset interfaces a unit 0 family ethernet-switching interface-mode trunk\n"
             "set interfaces a unit 0 family ethernet-switching vlan members one\n", "juniper_junos",
         )["a"]
         assert junos == Port(None, None, frozenset({1}))
         assert read_text(bare + " switchport trunk allowed vlan 1,20\n", "dell_os10")["X"] == Port(
-            None, None, frozenset({1, 20}),
+            THE_SWITCHS_DEFAULT, None, frozenset({1, 20}), True,
         )
+        assert read_text(bare, "dell_os10")["X"] == Port(THE_SWITCHS_DEFAULT, None, frozenset(), True)
+        taken = read_text(bare + " no switchport access vlan\n switchport trunk allowed vlan 1,20\n", "dell_os10")
+        assert taken["X"] == Port(None, None, frozenset({1, 20}))
+        again = read_text(bare + " no switchport access vlan\n switchport access vlan 10\n", "dell_os10")
+        assert again["X"] == Port(10, None, frozenset())
+        # ... and in a second stanza of the interface, as OS10 applies it.
+        twice = read_text(bare + " switchport access vlan 10\ninterface X\n no switchport access vlan\n", "dell_os10")
+        assert twice["X"] == Port(None, None, frozenset())
         # AOS-S: the last `untagged` stands, and `no untagged` takes it back.
         aoss = read_text(
             "vlan 1\n   untagged 1-3\n   exit\nvlan 10\n   untagged 2\n   tagged 1\n   no untagged 3\n   exit\n"
@@ -2997,3 +3372,21 @@ class TestTheCheckItself:
         )
         assert aoss["1"] == Port(1, None, frozenset({10, 20})) and aoss["2"] == Port(10, None, frozenset({20}))
         assert "3" not in aoss
+        # ... and a port tagged somewhere, untagged nowhere and on no
+        # line of VLAN 1 is in VLAN 1 by default; one VLAN 1 takes out,
+        # or tags, is not -- above its other lines or below them, a port
+        # or a trunk group -- and a name on no VLAN line is no port here.
+        aoss = read_text(
+            "vlan 1\n   no untagged 4,Trk1\n   untagged 9\n   tagged 6\n   no untagged 7\n   exit\n"
+            "vlan 10\n   tagged 3-8,Trk1-Trk2\n   exit\n", "aruba_aoss",
+        )
+        tagged = frozenset({10})
+        assert {name: aoss[name] for name in ("3", "5", "Trk2")} == {
+            name: Port(1, None, tagged, True) for name in ("3", "5", "Trk2")
+        }
+        assert {name: aoss[name] for name in ("4", "7", "8", "Trk1")} == {
+            "4": Port(None, None, tagged), "7": Port(None, None, tagged), "8": Port(1, None, tagged, True),
+            "Trk1": Port(None, None, tagged),
+        }
+        assert aoss["6"] == Port(None, None, frozenset({1, 10})) and aoss["9"] == Port(1, None, frozenset())
+        assert "2" not in aoss

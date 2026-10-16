@@ -319,8 +319,8 @@ default (`wants_no_untagged_vlan`, same module):
 | Arista EOS | native VLAN 1 | A1 | `switchport trunk native vlan tag` -- for the receive half; what is sent is not on Arista's page | A2 |
 | Aruba AOS-CX | native VLAN 1 | H8 | `vlan trunk native 1 tag` | H9, H4 |
 | Junos | none: untagged packets are dropped | J2 | nothing: no `native-vlan-id` is that form | J2 |
-| Dell OS10 | the switch's default VLAN | D5 | not changed: no access line, which leaves the port to the switch's default (not established what that is for a trunk) | D5, D6 |
-| Aruba AOS-S | a port is in the default VLAN (VID 1) in the factory default configuration, and remains in it until it is removed; tagged or untagged is not in the sentences, and nothing was found for a trunk group or a port that is in one | H7 | not changed: no `untagged` line, and no `no untagged` | H7 |
+| Dell OS10 | the switch's default VLAN, whose id is a setting (`default vlan-id`) that no trunk states | D5, D8 | `no switchport access vlan` after `switchport mode trunk`, under a `! review:` line -- for every trunk with no native VLAN, whatever its list holds, but one of an interface another record of which states its untagged VLAN (a native VLAN, or an access VLAN), which the line would take back: the default is no id, so whether the list holds it cannot be asked.  Dell's pages disagree on what the line leaves a trunk with (D6, D7), and the review line says so; where the allowed line holds VLAN 1 it says too that no Dell page shows that | D5, D6, D7 |
+| Aruba AOS-S | a port is in the default VLAN (VID 1) in the factory default configuration, and remains in it until it is removed; tagged or untagged is not in the sentences.  A new trunk group is placed in it, and a static one is configured for VLAN membership as a port is | H7, H15 | `no untagged <names>` in VLAN 1's stanza, after `name` and before the lists (the order of HPE's examples from 15.14 on, H14), for every name the output tags in some VLAN, lists untagged in none and names on no line of VLAN 1; a trunk that carries VLAN 1 tagged is `tagged` there, in a `vlan 1` stanza of its own where the tree has no VLAN 1 record.  A trunk that carries nothing has no form: a port is a member of at least one VLAN (H16) | H7, H14, H16 |
 
 ### Sources
 
@@ -539,6 +539,60 @@ default (`wants_no_untagged_vlan`, same module):
   <https://arubanetworking.hpe.com/techdocs/AOS-CX/10.16/HTML/l2_bridging_6300-6400/Content/Chp_vlans/asi-vla-id-tru-int.htm>.
   "With trunk configuration, when native membership is not specified,
   the port automatically becomes a native member of VLAN 1."
+- **H14** -- HPE, the order of lines in a printed `vlan 1` stanza
+  (examples, no sentence).  Full configs created on K.14.54C to
+  K.15.10 print `no untagged` last: `name`, `untagged`, `ip address`,
+  [`tagged`], `no untagged` (*Basic Operation Guide for AOS-S 16.10*
+  pp.88, 113; *2930F / 2930M Management and Configuration Guide 16.09*
+  p.150).  Configs created on YB.15.14, KA.15.18 and every 16.x
+  release shown (WC.16.02, WC.16.05, KB.16.04), and the 2930F
+  (JL254A / JL255A) examples that name no release, print it first:
+  `name`, `no untagged`, `untagged`, `ip address` (the 2930F/M guide
+  16.09 pp.554, 566; *3810 / 5400R Management and Configuration Guide
+  16.09* p.348; *2930F / 2930M Multicast and Routing Guide 16.09*
+  pp.26, 167; *3810M / 5400R Multicast and Routing Guide 16.09*
+  pp.45, 140, 427-434; *2930F / 2930M Access Security Guide 16.09*
+  p.671).  The guides:
+  <https://arubanetworking.hpe.com/techdocs/AOS-Switch/16.10/Aruba%20Basic%20Operation%20Guide%20for%20AOS-S%20Switch%2016.10.pdf>,
+  <https://www.arubanetworks.com/techdocs/AOS-Switch/16.09/Aruba%202930F%20_%202930M%20Management%20and%20Configuration%20Guide%20for%20ArubaOS-Switch%2016.09.pdf>,
+  <https://www.arubanetworks.com/techdocs/AOS-Switch/16.09/Aruba%203810%20_%205400R%20Management%20and%20Configuration%20Guide%20for%20ArubaOS-Switch%2016.09.pdf>,
+  <https://www.arubanetworks.com/techdocs/AOS-Switch/16.09/Aruba%202930F%26M%20Multicast%20and%20Routing%20Guide%20for%20AOS-S%20Switch%2016.09.pdf>,
+  <https://www.arubanetworks.com/techdocs/AOS-Switch/16.09/Aruba%203810M%265400R%20Multicast%20and%20Routing%20Guide%20for%20ArubaOS-Switch%2016.09.pdf>,
+  <https://www.arubanetworks.com/techdocs/AOS-Switch/16.09/Aruba%202930F%26M%20Access%20Security%20Guide%20for%20AOS-S%20Switch%2016.09.pdf>.
+  In every full config HPE's 16.09-16.11 guides print, a port that
+  another VLAN names is on one of `vlan 1`'s lines, and those lines
+  never share a port; a per-interface view
+  (`show config interface <ports>`) prints a removed port with no
+  line for VLAN 1.  Where a 16.x switch prints a `tagged` line in
+  `vlan 1` no HPE example shows.  The committed AOS-S
+  captures of WC.16.07, WC.16.10 and WC.16.11 print the second order.
+- **H15** -- HPE, *Aruba 2930F / 2930M Management and Configuration
+  Guide for ArubaOS-Switch 16.09* (5200-5906a, February 2020),
+  pp.130, 131, 134, 141, 145:
+  <https://www.arubanetworks.com/techdocs/AOS-Switch/16.09/Aruba%202930F%20_%202930M%20Management%20and%20Configuration%20Guide%20for%20ArubaOS-Switch%2016.09.pdf>;
+  the same sentences in its 16.11 HTML edition (topics `sta-tru`,
+  `vla-dyn-lac`,
+  `https://arubanetworking.hpe.com/techdocs/AOS-S/16.11/MCG/WC/content/common%20files/<topic>.htm`),
+  in the 3810 / 5400R guide 16.09 and in the 2530 edition.  "Creating
+  a new trunk automatically places the trunk in the DEFAULT_VLAN,
+  regardless of whether the ports in the trunk were in another VLAN."
+  "You can configure a static trunk in the same way that you configure
+  a port for membership in any VLAN."  "For spanning-tree or VLAN
+  operation, configuration for all ports in a trunk is done at the
+  trunk level."  "A dynamic LACP trunk operates only in the default
+  VLAN (unless you have enabled GVRP on the switch and use Forbid to
+  prevent the ports from joining the default VLAN)."  p.134's table
+  has "TrkX (Static)" and "DynX (Dynamic)", and `trunk < port-list > <
+  trk1 ... trk60 > {<trunk | lacp>}` "Configures the specified static
+  trunk type."  The groups netcanon writes are `Trk<n>`, the static
+  kind, so the limit of a dynamic LACP trunk does not bear on them.
+- **H16** -- HPE, *AOS-S 16.11 Advanced Traffic Management Guide*,
+  HTML (2530), "VLAN operating notes"
+  (`https://arubanetworking.hpe.com/techdocs/AOS-S/16.11/ATMG/YAYB/content/common%20files/vla-ope-not.htm`):
+  "Also, a port must always be a tagged or untagged member of at least
+  one port-based VLAN."  And the H7 guide, p.54: "You can remove all
+  ports from the default VLAN by placing them in another port-based
+  VLAN, but this VLAN remains and cannot be deleted from the switch."
 - **D2** -- Dell KB 000137464, above.  "The Native VLAN (untagged) is
   configured as access VLAN."  And: "An interface cannot be an access
   and trunk member of the same VLAN. The vlan must first be removed
@@ -567,6 +621,32 @@ default (`wants_no_untagged_vlan`, same module):
   individual interface."  The procedure for a trunk
   (`.../configure-trunk-port?guid=guid-b6d5f654-5ecb-4525-b5d5-eb04355037f7&lang=en-us`)
   has the same line as the step "Remove access VLAN membership."
+- **D7** -- Dell, *SmartFabric OS10 User Guide*, Releases 10.5.5,
+  10.5.6, 10.6.0 and 10.6.1 (the same text in each), VLAN stacking,
+  "Configuration notes"
+  (`.../configuration-notes?guid=guid-fbdee4bf-6cdb-41cc-836c-f119901fdf70&lang=en-us`):
+  "Configure the ports between the PE and Provider Core as pure trunk
+  ports without any access VLAN membership. This configuration is to
+  drop any untagged or tagged (with other than configured TPID)
+  traffic on those ports."  The same chapter's "Configure trunk port"
+  (the D6 procedure) reaches that state with step "7. Remove access
+  VLAN membership." -- `no switchport access vlan`.  And `switchport
+  trunk tpid`: "The action that is taken on untagged packets is based
+  on the port access membership."  The note is written for a VLAN
+  stacking port, which has a TPID as well; it is general in form.
+  Against it stands D6's command page ("... to VLAN 1").
+- **D8** -- Dell, the same guides, `default vlan-id`
+  (`.../default-vlan-id?guid=guid-966d250a-d5e0-471b-8fe0-c6d00d6f3e64&lang=en-us`):
+  "Reconfigures the VLAN ID of the default VLAN."; Default "VLAN1";
+  "The command reconfigures the access VLAN ID, the default VLAN, of
+  all ports in Switchport Acess mode." (Dell's spelling).  No sentence
+  says what the command does to a trunk (its Usage Information names
+  trunks only in "By default, VLAN1 serves as the default VLAN for
+  switching untagged L2 traffic on OS10 ports in Trunk or Access
+  mode.").  No Dell example prints the line as configuration --
+  the command's own example cuts its `show running-configuration` at
+  "..." -- and no committed capture has it: the codec does not read
+  it.
 - **J2**, **J3** -- Juniper, the two pages above.  J2: "By default,
   the untagged packets are dropped on trunk interfaces."  J3, of the
   ELS grammar: "The logical interface on which untagged packets are
@@ -603,18 +683,30 @@ default (`wants_no_untagged_vlan`, same module):
   VLAN in.
 - **Junos, older grammar**: anything beyond the one archived article.
 - **OS10**: what `no switchport access vlan` leaves a trunk with --
-  no untagged VLAN, or VLAN 1.  Dell's pages do not agree (D6).  And
-  the text of the refusal D2 implies: no page shows it.
+  no untagged VLAN, or VLAN 1.  Dell's pages do not agree: the
+  command page says VLAN 1 (D6), the VLAN-stacking notes describe the
+  trunk the same line makes as one "without any access VLAN
+  membership" that drops untagged traffic (D7).  And the text of the
+  refusal D2 implies: no page shows it.  Nor does any Dell example
+  put VLAN 1 on the allowed line of a trunk, with an access VLAN or
+  without.
 - **AOS-S**: a vendor's sentence for the send direction.  HPE's
   examples assume it.  Whether a port's membership of the default
   VLAN is tagged or untagged: H7's two sentences say that all ports
-  are assigned to it and remain in it, and no more.  And what a
-  trunk group (`Trk<n>`), or a port once it is in one, is in by
-  default: H7's sentences speak of ports, and none was found for
-  either.
+  are assigned to it and remain in it, and no more.  That a static
+  trunk group's own membership of the default VLAN is untagged: H15
+  says it is placed there, and one HPE example (K.15.10; *Basic
+  Operation Guide for AOS-S 16.10* pp.112-113, H14) prints a `Trk1`
+  on `vlan 1`'s `untagged` line.  An HPE-printed full config
+  with `no untagged Trk<n>`: the line is in HPE's hand-written
+  listings only.  And where a 16.x switch prints a `tagged` line in
+  `vlan 1` (H14).
 - **OS10**: the id of "the default VLAN ID of the switch" (D5) for a
-  given switch.  It is a setting, and no trunk's stanza states it;
-  the codec fills nothing in.
+  given switch.  It is a setting (D8), and no trunk's stanza states
+  it; the codec fills nothing in, and does not read `default
+  vlan-id`, which no Dell example prints as configuration.  What a
+  trunk's untagged VLAN becomes when that id is changed: the sentence
+  of D8 on what the command reconfigures names access ports only.
 - **A trunk that is to carry NO VLAN untagged.**  Each platform with
   a default native VLAN has a form for it (C6-C8, N4, A2, H9), and
   these parts of them are not established:
@@ -638,7 +730,13 @@ default (`wants_no_untagged_vlan`, same module):
     captures print one line beside `vlan trunk allowed all`, in two of
     Aruba's published sample configurations and in two configurations
     made by tools.
-  - *OS10 and AOS-S*: their form for it.  Not read here.
+  - *OS10*: what `no switchport access vlan` leaves a trunk with
+    (above).  *AOS-S*: whether the order of VLAN 1's lines matters to
+    a switch when a config is typed or downloaded (the output is
+    written in the order of HPE's examples from 15.14 on; older
+    examples print `no untagged` last): the lists share no port, so
+    neither order takes out what another line put in (an inference,
+    H14).
 - **Every platform**: what its CLI does on entry when one statement
   meets the other, and what happens to control and spanning-tree
   traffic of a native VLAN other than 1 that is off the list.
@@ -664,11 +762,14 @@ default (`wants_no_untagged_vlan`, same module):
 - The other way, a native VLAN the source's list leaves out is not
   carried by the source trunk as the tree reads it.  AOS-S is written
   no `untagged` for it, and a `review:` line in that VLAN's stanza
-  that says so.  For a port the line says what H7's two sentences
-  say of one, and no more: it is in the default VLAN, and remains
-  there until it is removed.  For a trunk group, and for a port the
-  same output puts on a `trunk` line, it says that what such a name
-  is in by default is not established.  OS10 is written `no
+  that says so.  Where VLAN 1's `no untagged` line takes the name out
+  of the default VLAN (the port is tagged elsewhere: the last bullet
+  of these notes) the line says that, and no more.  Otherwise, for a port
+  it says what H7's two sentences say of one: it is in the default
+  VLAN, and remains there until it is removed; for a trunk group,
+  and for a port the same output puts on a `trunk` line, it gives
+  H15: a new trunk group is placed in the default VLAN, and a static
+  one is configured as a port is.  OS10 is written `no
   switchport access vlan` under a `review:` line, because Dell's
   pages do not agree on what that line leaves (D6).  Neither line
   calls the VLAN the source's: its id is the output's.
@@ -789,3 +890,29 @@ default (`wants_no_untagged_vlan`, same module):
   VLAN is then off the list, which is how a native VLAN that is not
   carried is written (the first table).  A record of an interface
   whose other stanza states a native VLAN is given none either.
+- OS10 and AOS-S have a default for a port that the output gives no
+  untagged VLAN as well, and are written their form for "no VLAN
+  untagged" by asking another question.  OS10's default is the
+  switch's default VLAN (D5), an id no text gives (D8), so no "does
+  the list hold it" can be asked: every trunk the tree gives no
+  native VLAN -- whatever its list, the empty one included -- is
+  written `no switchport access vlan` after `switchport mode trunk`
+  (but not one of an interface another record of which states its
+  untagged VLAN, a native VLAN or an access VLAN, which the line
+  would take back), the line with which D6's procedure reaches D7's
+  "pure trunk ports without any access VLAN membership", under a
+  `! review:` line that says the
+  pages disagree (D6, D7) and, where the allowed line holds VLAN 1,
+  that no Dell page shows that.  The parser reads the line and its
+  absence as one tree, so an OS10 trunk with neither comes back with
+  it.  AOS-S is asked VLAN by VLAN, of the member lists the output is
+  written from: a name some VLAN tags, none lists untagged, and no
+  line of VLAN 1 names stays in the DEFAULT_VLAN (H7), so VLAN 1's
+  stanza says `no untagged` for it, after `name` and before the
+  lists (H14's later order); a trunk that carries VLAN 1 tagged, in a
+  tree with no VLAN 1 record (a trunk of every VLAN is put only on
+  the VLANs a tree declares), is written `tagged` in a `vlan 1`
+  stanza written for it, first and with no `name` line.  The AOS-S
+  parser reads a `no untagged` line above the lists as removing
+  nothing, which on lists that share no port is the tree they came
+  from.  A trunk that carries nothing has no AOS-S form (H16).

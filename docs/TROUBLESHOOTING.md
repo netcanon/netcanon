@@ -310,28 +310,52 @@ its own form for it.  What you may see:
   what the port carries untagged on the switch; if untagged traffic
   was meant to pass on the source, write `switchport access vlan
   <N>` instead.
+* **`! review: no untagged VLAN is stated for this trunk ...`** above
+  `no switchport access vlan`, on OS10.  The trunk has no native
+  VLAN in the tree: it carries no VLAN untagged (a Junos trunk with
+  no `native-vlan-id`, a Cisco or Arista trunk whose list leaves
+  VLAN 1 out, an AOS-S port only `tagged`, an OS10 trunk with no
+  access line, a trunk whose native VLAN is sent tagged).  With
+  neither an access line nor `no switchport access vlan` an OS10
+  trunk is an untagged member of the switch's default VLAN, so the
+  line is written; the review line says that Dell's pages disagree
+  on whether it then leaves the trunk with no untagged VLAN or with
+  VLAN 1, and -- where the allowed line holds VLAN 1 -- that no Dell
+  page shows VLAN 1 on an OS10 trunk's allowed line.  **Action:**
+  check what the port carries untagged on the switch, and whether
+  it takes the allowed line.
 * **`; review: port <P> -- native VLAN <N> is stated for this trunk
   and its allowed list leaves it out ...`** in the `vlan <N>`
   stanza, on AOS-S.  The same case: the source trunk states a
   native VLAN its own list leaves out.  The port is tagged in the
   VLANs the list names, and no `untagged` line is written for it.
-  That is not known to be a port that carries nothing untagged, and
-  the rest of the line says what is known.  For a port: `in the
-  factory default configuration an AOS-S port is in the default
-  VLAN (VID 1), and it remains there until it is removed` -- what
-  HPE's guide says of a port, and all it says: not whether that
-  membership is tagged or untagged.  For a trunk group (`Trk<n>`),
-  and for a port that the same output puts on a `trunk` line:
-  `which VLAN an AOS-S trunk group, or a port that is in one, is in
-  by default is not established` -- no sentence of HPE's was found
-  for either.  No line of the output takes the port out of VLAN 1.
+  Where it is tagged in some VLAN and not in VLAN 1, VLAN 1's stanza
+  takes it out of the default VLAN with `no untagged`, and the line
+  ends `... and
+  it is taken out of the default VLAN`.  Otherwise the rest of the
+  line says what is known.  For a port: `in the factory default
+  configuration an AOS-S port is in the default VLAN (VID 1), and it
+  remains there until it is removed` -- what HPE's guide says of a
+  port, and all it says: not whether that membership is tagged or
+  untagged.  For a trunk group (`Trk<n>`), and for a port that the
+  same output puts on a `trunk` line: `a new AOS-S trunk group is
+  placed in the default VLAN (VID 1), a static one is configured for
+  VLAN membership as a port is, and the VLANs of a port that is in
+  one are the group's` -- HPE's sentences for a trunk group.
   **Action:** decide what the port is to carry untagged, look at
   what the switch has it in, and write `untagged` or `no untagged`
-  for it.  (A source trunk that has no untagged VLAN in the tree --
-  one that states no native VLAN where its platform has no default,
-  or where its list leaves the default VLAN out -- is written no
-  `untagged` line either, and has no review line: see the limits in
-  [`CAPABILITIES.md`](CAPABILITIES.md).)
+  for it.
+* **`no untagged <ports>` in `vlan 1`, on AOS-S, that the source did
+  not have.**  Each port on it is tagged in some VLAN of the output
+  and untagged in none: it carries no VLAN untagged, and an AOS-S
+  port stays in the default VLAN until a line takes it out.  A
+  source with no VLAN 1 gets a `vlan 1` stanza for it, with no
+  `name` line, and a trunk of every VLAN is `tagged` there.
+  **Action:** none, unless the port is meant to carry VLAN 1
+  untagged; then write `untagged` for it in VLAN 1.  A trunk that
+  carries nothing is on no VLAN line and stays in VLAN 1: AOS-S has
+  no form for a port in no VLAN (see the limits in
+  [`CAPABILITIES.md`](CAPABILITIES.md)).
 * **`! review: the source trunk allows no VLAN ...`** in an AOS-CX
   interface stanza, and no `vlan trunk` line.  AOS-CX has no form
   for a trunk that carries nothing: a trunk left with no allowed

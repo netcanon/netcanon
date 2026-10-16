@@ -192,14 +192,24 @@ def test_cisco_to_junos_native_vlan_preserved() -> None:
 
 def test_cisco_to_aruba_kitchen_sink_vlan_set_stable() -> None:
     """``kitchen_sink`` round-trips through Aruba AOS-S must preserve
-    the explicit four VLAN ids without inflation or loss."""
+    the explicit four VLAN ids without inflation or loss.  The one
+    record added is VLAN 1, with no member: the source declares none,
+    and the output takes its three trunks that carry no VLAN untagged
+    out of it -- an AOS-S port stays in the default VLAN until a line
+    removes it -- in a ``vlan 1`` stanza written for that alone."""
     src = _load("tests/fixtures/synthetic/cisco_iosxe_cli/kitchen_sink.txt")
     intent_src = cisco_parse(src)
     rendered = aruba_render(intent_src)
     intent_rt = aruba_parse(rendered)
     src_ids = sorted(v.id for v in intent_src.vlans)
     rt_ids = sorted(v.id for v in intent_rt.vlans)
-    assert src_ids == rt_ids == [10, 20, 30, 40]
+    assert src_ids == [10, 20, 30, 40]
+    assert rt_ids == [1, *src_ids]
+    one = next(v for v in intent_rt.vlans if v.id == 1)
+    assert (one.untagged_ports, one.tagged_ports) == ([], [])
+    assert (
+        "vlan 1\n   no untagged Port-channel2,TenGigabitEthernet1/0/3,TenGigabitEthernet1/0/4\n   exit\n"
+    ) in rendered
 
 
 # ---------------------------------------------------------------------------

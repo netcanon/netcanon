@@ -33,7 +33,16 @@ reason the round-trip holds:
   list, so a trunk comes back as it went.  A native VLAN the list does
   NOT hold is, in the tree, stated and not carried: no access VLAN is
   written for it, and ``no switchport access vlan`` under a
-  ``! review:`` line stands in its place.
+  ``! review:`` line stands in its place.  So does a trunk with NO
+  native VLAN, which carries no VLAN untagged: with neither line an
+  OS10 trunk is an untagged member of the switch's default VLAN, and
+  Dell's pages disagree on what the ``no`` line leaves it with, which
+  its review line says.  The parser reads a trunk with the line and
+  one with neither as the same tree, so the line comes back for both.
+  An interface another record of which states its untagged VLAN -- a
+  native VLAN, or an access VLAN -- is not written the line: OS10
+  applies an interface's stanzas in turn, and the line would take
+  that VLAN back.
 
 * **A ``vrf="management"`` route re-emits as ``management route``**, not
   ``ip route vrf management`` — the inverse of the parse mapping, so the
@@ -79,6 +88,7 @@ from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalInterface
 from .._helpers import (
     TRUNK_ALL,
+    native_vlan_stated,
     same_vendor_version,
     switchport_trunk_allowed_value,
     trunk_list_says,
@@ -183,8 +193,9 @@ def render_intent(tree: CanonicalIntent) -> str:
 
     # ── Interfaces ──
     lag_mode_by_name = {lag.name: lag.mode for lag in tree.lags}
+    untagged_stated = _untagged_stated(tree.interfaces)
     for iface in _sort_interfaces(_interfaces_to_render(tree)):
-        lines.extend(_render_interface(iface, lag_mode_by_name))
+        lines.extend(_render_interface(iface, lag_mode_by_name, untagged_stated))
         lines.append("!")
 
     # ── Static routes ──
@@ -338,6 +349,26 @@ def _interfaces_to_render(tree: CanonicalIntent) -> list[CanonicalInterface]:
     return list(tree.interfaces) + synthesised
 
 
+def _untagged_stated(interfaces: list[CanonicalInterface]) -> frozenset[str]:
+    """The names whose untagged VLAN some record of the tree states: a
+    trunk record with a native VLAN (:func:`.._helpers.native_vlan_stated`),
+    or an ACCESS record with an access VLAN.
+
+    A config can hold one interface's stanza more than once, and OS10
+    applies the stanzas in turn: ``switchport access vlan 10`` in one
+    and ``switchport mode trunk`` in the next leave a trunk whose
+    untagged VLAN is 10.  A trunk record of such a name that has no
+    native VLAN is written no ``no switchport access vlan``, which would
+    take that VLAN back.  Only an access record counts: the access VLAN
+    a TRUNK record holds beside its own lines is not that trunk's
+    untagged VLAN in the tree.
+    """
+    return native_vlan_stated(interfaces) | frozenset(
+        iface.name for iface in interfaces
+        if iface.switchport_mode == "access" and iface.access_vlan is not None
+    )
+
+
 def _sort_interfaces(interfaces: list[CanonicalInterface]):
     """Return *interfaces* in OS10 show-output order."""
 
@@ -377,13 +408,53 @@ _NATIVE_NOT_CARRIED_REVIEW = (
 )
 
 
-def _render_switchport_lines(iface: CanonicalInterface) -> list[str]:
+#: Written above ``no switchport access vlan``, for a trunk that has no
+#: native VLAN in the tree: one that carries no VLAN untagged.  Left
+#: with neither an access line nor that line, an OS10 trunk is an
+#: untagged member of its switch's default VLAN ("By default, native
+#: VLAN of a port is the default VLAN ID of the switch.", Dell's "L2
+#: mode configuration").  Dell's VLAN-stacking notes reach "pure trunk
+#: ports without any access VLAN membership", which "drop any untagged
+#: ... traffic", with that line; its command page says the line
+#: "resets access VLAN membership on a L2 access or trunk port to VLAN
+#: 1".  The line names both readings.  ``{vlan_1}`` is
+#: :data:`_VLAN_1_ON_THE_LIST` where the allowed line written below
+#: holds VLAN 1, and empty otherwise.
+_NO_UNTAGGED_VLAN_REVIEW = (
+    " ! review: no untagged VLAN is stated for this trunk; an OS10 "
+    "trunk with neither an access line nor the next line is an untagged "
+    "member of the switch's default VLAN, and Dell's pages disagree on "
+    "whether the next line leaves it with no untagged VLAN or with VLAN "
+    "1{vlan_1} -- check what this port is to carry untagged"
+)
+
+#: ...and what it adds where the allowed line holds VLAN 1: no Dell
+#: example in the 10.5.5-10.6.1 user guides puts VLAN 1 on an allowed
+#: line, so what such a trunk does is not established either.
+_VLAN_1_ON_THE_LIST = (
+    "; no Dell page shows VLAN 1 on an OS10 trunk's allowed line"
+)
+
+
+def _render_switchport_lines(
+    iface: CanonicalInterface, untagged_stated: frozenset[str] = frozenset(),
+) -> list[str]:
     """The L2 switchport lines for an interface.
 
     Empty for the inherently-L3 kinds (SVI / loopback / management).
     The trunk branch re-emits the native VLAN with the ``access vlan``
     keyword — OS10's only spelling for it (see module docstring) — and
     the allowed line without it.
+
+    Args:
+        iface: The interface.
+        untagged_stated: The names whose untagged VLAN some record of
+            the tree states, as a native VLAN or in an access record
+            (:func:`_untagged_stated`).  A trunk record of such a name
+            that has no native VLAN is another stanza of an interface
+            that states one, and is written no ``no switchport access
+            vlan``: OS10 applies the stanzas in turn, and the line would
+            take that VLAN back.
     """
     kind = _port_names.classify_port_name(iface.name).kind
     if kind in ("svi", "loopback", "mgmt"):
@@ -393,6 +464,7 @@ def _render_switchport_lines(iface: CanonicalInterface) -> list[str]:
         out.append(" switchport mode trunk")
         native = iface.trunk_native_vlan
         untagged = trunk_untagged_vlan(iface.trunk_allowed_vlans, native)
+        written = trunk_list_written("dell_os10", iface.trunk_allowed_vlans, native)
         if untagged is not None:
             out.append(f" switchport access vlan {untagged}")
         elif native is not None:
@@ -401,14 +473,25 @@ def _render_switchport_lines(iface: CanonicalInterface) -> list[str]:
             # is not what the tree says of it.
             out.append(_NATIVE_NOT_CARRIED_REVIEW.format(native=native))
             out.append(" no switchport access vlan")
+        elif iface.name not in untagged_stated:
+            # No native VLAN: in a tree a parser made, a trunk that
+            # carries no VLAN untagged.  With no access line OS10 would
+            # make it an untagged member of the switch's default VLAN;
+            # the line that takes the access VLAN away is written, under
+            # a line that says what Dell's pages say of it -- unless
+            # another record of the name states its untagged VLAN.  (The
+            # OS10 parser reads both texts as this tree: the line comes
+            # back for a trunk that had neither.)
+            out.append(_NO_UNTAGGED_VLAN_REVIEW.format(
+                vlan_1=_VLAN_1_ON_THE_LIST if 1 in written else "",
+            ))
+            out.append(" no switchport access vlan")
         # The allowed line names the TAGGED VLANs: the list without
         # the native one.  No VLAN is no line: an OS10 trunk carries
         # no tagged VLAN until a line names one.  Any other list is
         # written as ranges.
         vlist = switchport_trunk_allowed_value(
-            "dell_os10",
-            trunk_list_written("dell_os10", iface.trunk_allowed_vlans, native),
-            coalesce=True,
+            "dell_os10", written, coalesce=True,
         )
         if vlist is not None:
             if trunk_list_says(iface.trunk_allowed_vlans) == TRUNK_ALL:
@@ -434,11 +517,13 @@ def _render_switchport_lines(iface: CanonicalInterface) -> list[str]:
 
 def _render_interface(
     iface: CanonicalInterface, lag_mode_by_name: dict,
+    untagged_stated: frozenset[str] = frozenset(),
 ) -> list[str]:
     """Render one interface stanza.
 
     ``ip vrf forwarding`` precedes ``ip address`` because changing an
-    interface's VRF clears its addresses on commit.
+    interface's VRF clears its addresses on commit.  *untagged_stated*
+    is :func:`_render_switchport_lines`' argument of that name.
     """
     block = [f"interface {iface.name}"]
     if iface.description:
@@ -453,7 +538,7 @@ def _render_interface(
             )
             block.append(f" channel-group {ident.index} mode {mode}")
 
-    block.extend(_render_switchport_lines(iface))
+    block.extend(_render_switchport_lines(iface, untagged_stated))
 
     if iface.mtu is not None:
         block.append(f" mtu {iface.mtu}")

@@ -1241,9 +1241,20 @@ tests use these exclusively — never CSS classes or element structure.  See
   the line would tag it should it become a trunk), and otherwise the
   port gets a review line -- a line for one port is not a line for
   the switch.  The guard holds each such cell to its review line,
-  whole, compared for equality.  Open, and in the CHANGELOG's known
-  limitations: OS10 and AOS-S as targets (a trunk written no
-  untagged VLAN is left to the switch's default there).
+  whole, compared for equality.  OS10 and AOS-S are asked another
+  way.  OS10's default VLAN has no id the list can be asked about, so
+  an OS10 trunk with no native VLAN is written `no switchport access
+  vlan` under a review line -- unless another record of the interface
+  states its untagged VLAN (a native VLAN, or an access VLAN), which
+  the line would take back.  AOS-S is told VLAN by VLAN, so each name
+  the output tags somewhere, lists untagged nowhere and names on no
+  line of VLAN 1 is taken out of VLAN 1 with `no untagged` (a trunk
+  that carries VLAN 1 tagged is written `tagged` there).  The readers
+  of text give each target's default itself.  Open, and in the
+  CHANGELOG's known limitations: an AOS-S trunk that carries nothing
+  (AOS-S has no form for a port in no VLAN, and it stays in VLAN 1),
+  what `no switchport access vlan` leaves an OS10 trunk with, and
+  whether OS10 takes VLAN 1 on the allowed line of such a trunk.
 - **Never** put a word of the config where a port name goes, and never
   make an interface record for a name the config configures nothing
   under.  A parser that takes the first word after a keyword for a

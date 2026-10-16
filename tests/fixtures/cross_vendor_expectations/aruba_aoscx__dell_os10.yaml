@@ -395,8 +395,9 @@ per_field_expectation:
       The other two, the `aoscx_dcn_arch3_*leaf1a` captures, read back
       one VLAN short (2 -> 1), a drift of the record count: VLAN 1, which
       they declare, has one port, a LAG of `vlan trunk native 1 tag` that
-      carries it tagged, written for OS10 as a trunk of `1-4094` with no
-      access line.  OS10 declares a VLAN through an SVI or a port's
+      carries it tagged, written for OS10 as a trunk of `1-4094` with
+      `no switchport access vlan` under its review line (the trunk
+      carries no VLAN untagged).  OS10 declares a VLAN through an SVI or a port's
       membership, so no `interface vlan1` is written, and the OS10 parser
       makes no VLAN record for an id only so wide a list names.  VLAN 1
       is on that list in the output.

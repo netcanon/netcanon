@@ -20,9 +20,10 @@
 #   * Hash formats ($1$/$5$/$6$ vs sha1/bcrypt) do not overlap;
 #     re-keying always required.
 #
-# The keyword-stable surface (vlan id, hostname, snmp community,
-# radius-server host, static routes) maps cleanly through canonical
-# when both sides have a parse / render path.
+# The keyword-stable surface (hostname, snmp community, radius-server
+# host, static routes, and every vlan id -- to which VLAN 1 can be
+# added) maps cleanly through canonical when both sides have a parse /
+# render path.
 
 meta:
   source_vendor: juniper_junos
@@ -356,14 +357,12 @@ per_field_expectation:
       Explicit ``vlan members [ v100 v200 ]`` lists round-trip
       cleanly via Aruba's per-VLAN ``tagged <port>`` projection.
       The Junos shorthand ``set interfaces ae0 unit 0 family
-      ethernet-switching vlan members all`` is parsed as a
-      canonical sentinel expansion to ``range(1, 4095)``; Aruba's
-      render path drops the 4094-entry trunk-allowed list (no
-      first-class all-VLANs trunk shorthand on AOS-S), so
-      cross-vendor round-trip on Junos sources carrying ``vlan
-      members all`` loses the trunk-allowed projection entirely.
-      Either keep ``all`` as a canonical sentinel or accept the
-      drop on Aruba targets.
+      ethernet-switching vlan members all`` is parsed as every id
+      (``range(1, 4095)``).  AOS-S has no word for every VLAN: such
+      a trunk is written ``tagged`` in each VLAN the output declares
+      -- VLAN 1 among them, in a ``vlan 1`` stanza of its own where
+      the tree has no VLAN 1 record -- and comes back as a trunk of
+      those VLANs, not of every id.
     references: [junos-vlans-statement, aruba-vlans]
 
   interfaces[].trunk_native_vlan:
@@ -415,10 +414,26 @@ per_field_expectation:
   # ── Tier 1 — VLANs ──
 
   vlans[].id:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Junos's ``set vlans <name> vlan-id N`` populates
-      ``CanonicalVlan.id``; Aruba render emits ``vlan N`` directly.
+      ``CanonicalVlan.id``; Aruba render emits ``vlan N`` directly,
+      and every id the Junos tree has comes back.  One record can be
+      added: VLAN 1, where the Junos tree has none.  An AOS-S
+      port is in the default VLAN (VID 1) until a line takes it out,
+      so a port the output tags in some VLAN and lists untagged in
+      none is written ``no untagged <port>`` under ``vlan 1``, and a
+      trunk of ``vlan members all`` -- which carries VLAN 1 tagged --
+      ``tagged <port>`` there.  For a tree with no VLAN 1 record that
+      ``vlan 1`` stanza is written all the same, and the AOS-S parser
+      reads it back as a VLAN 1 record the source did not have.  So
+      a capture with such a port drifts by one record, and on those
+      cells the count drift stands for every sub-field of ``vlans``:
+      a per-record drift of another sub-field in the same cell is
+      reported under it (see ``vlans[].ipv4_addresses``).  A capture
+      with no such port gains no record, and its cell aligns
+      (METHODOLOGY_ISSUE_under against this disposition), as
+      ``batfish_evpntype5_router1_junos2541.set`` does.
     references: [junos-vlans-statement, aruba-vlans]
 
   vlans[].name:
@@ -463,7 +478,19 @@ per_field_expectation:
       X/N`` + ``set vlans <name> l3-interface irb.100`` lands on
       ``CanonicalVlan.ipv4_addresses``; Aruba render emits the
       address inline inside the VLAN stanza
-      (``vlan 100 / ip address X/N``).
+      (``vlan 100 / ip address X/N``).  On
+      ``ksator_labmgmt_qfx10k2_junos173.set`` an address comes back
+      on a VLAN (2031) whose record in the Junos tree holds none --
+      a drift of this sub-field.  That cell also gains the VLAN 1
+      record of ``vlans[].id``, and the reconciliation then reports
+      the cell's VLANs as one count drift, under ``vlans[].id``: the
+      address is not shown apart, and is not mended.  That drift is a
+      defect of this pair, and the reconciliation reported it as this
+      key's CODEC_BUG.  With the VLAN 1 record it reclassifies
+      STRUCTURAL_ONLY under the count drift, so the CODEC_BUG is
+      hidden, not fixed: the mesh's CODEC_BUG count is one lower for
+      that reason alone.  Should the VLAN 1 record go, the CODEC_BUG
+      comes back.
     references: [junos-bridging-overview, aruba-vlans]
 
   # ── Tier 1 — static routes ──

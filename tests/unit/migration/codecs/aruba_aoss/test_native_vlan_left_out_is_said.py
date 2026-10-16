@@ -12,18 +12,24 @@ the default VLAN until it is removed from it (the sentences are in
 So the stanza of that VLAN carries one ``; review:`` line for each such
 name.  What is held here:
 
-* the line, WHOLE, in its two forms, typed out below and taken from no
-  renderer: the port, the VLAN by the id the OUTPUT has for it, that
+* the line, WHOLE, in its three forms, typed out below and taken from
+  no renderer: the port, the VLAN by the id the OUTPUT has for it, that
   the allowed list leaves it out (a fact of the text the trunk was read
   from -- what the source switch does with such a VLAN is not the same
   sentence for every vendor, and is not said), that no ``untagged``
-  line is written, what an AOS-S switch does, and what to check.  For a
-  port that is what HPE's two sentences say and no more: it is in the
-  default VLAN, and remains there until it is removed.  ("Untagged" is
-  in neither sentence, and is not in the line.)  For a trunk group
-  (``Trk<n>``), and for a port the same output puts on a ``trunk``
-  line, no sentence was found, and the line says "not established";
-* which names get which form, decided from the tree's LAGs;
+  line is written, what the output or an AOS-S switch does, and what to
+  check.  A name the output tags in some VLAN is taken out of VLAN 1 by
+  ``no untagged`` in VLAN 1's stanza, and the line says so and no
+  more.  For a port no line takes out, it is what HPE's two sentences
+  say: it is in the default VLAN, and remains there until it is
+  removed.  ("Untagged" is in neither sentence, and is not in the
+  line.)  For a trunk group (``Trk<n>``), and for a port the same
+  output puts on a ``trunk`` line, it is HPE's sentences for a trunk
+  group: a new one is placed in the default VLAN, a static one is
+  configured for VLAN membership as a port is, and a port in one is
+  configured at the group;
+* which names get which form, decided from the tree's LAGs and from
+  the VLAN lists the output is written from;
 * where it stands and in which order, and for which names: every
   interface record that is such a trunk, as for a ``tagged`` line -- a
   LAG under ``Trk<n>`` and a member port that states the same lines
@@ -61,8 +67,11 @@ from tests.unit.migration.test_the_list_holds_the_native_vlan import (
     PORT_FORM,
     SAID_OF_A_GROUP,
     SAID_OF_A_PORT,
+    SAID_TAKEN_OUT,
+    TAKEN_OUT_FORM,
     in_a_trunk_line,
     is_a_trunk_group,
+    out_of_vlan_1,
     read_tree,
     said_how,
     said_on_aoss,
@@ -72,8 +81,15 @@ pytestmark = pytest.mark.unit
 
 _REVIEW = "; review: port "
 
-#: The line for port 5 and VLAN 10, and the one for the trunk group
-#: Trk1, each as the output has it in a stanza.  Typed in full, here.
+#: The line for port 5 and VLAN 10 where the output takes the port out
+#: of VLAN 1, where it does not, and the one for the trunk group Trk1
+#: where it does not -- each as the output has it in a stanza.  Typed
+#: in full, here.
+_TAKEN_OUT_5 = (
+    "   ; review: port 5 -- native VLAN 10 is stated for this trunk and its allowed list leaves it out, so no "
+    "untagged line is written for this port and it is taken out of the default VLAN -- check what this port is to "
+    "carry untagged"
+)
 _OF_PORT_5 = (
     "   ; review: port 5 -- native VLAN 10 is stated for this trunk and its allowed list leaves it out, so no "
     "untagged line is written for this port; in the factory default configuration an AOS-S port is in the "
@@ -81,8 +97,9 @@ _OF_PORT_5 = (
 )
 _OF_TRK1 = (
     "   ; review: port Trk1 -- native VLAN 10 is stated for this trunk and its allowed list leaves it out, so no "
-    "untagged line is written for this port; which VLAN an AOS-S trunk group, or a port that is in one, is in "
-    "by default is not established -- check what this port is to carry untagged"
+    "untagged line is written for this port; a new AOS-S trunk group is placed in the default VLAN (VID 1), a "
+    "static one is configured for VLAN membership as a port is, and the VLANs of a port that is in one are the "
+    "group's -- check what this port is to carry untagged"
 )
 
 #: Every id but VLAN 10: what ``allowed vlan except 10``, ``remove
@@ -122,31 +139,50 @@ def _of_a_group(port: str, native: int = 10) -> str:
     return "   " + SAID_OF_A_GROUP.format(port=port, native=native)
 
 
+def _taken_out(port: str, native: int = 10) -> str:
+    return "   " + SAID_TAKEN_OUT.format(port=port, native=native)
+
+
 @pytest.fixture(scope="module")
 def codec():
     return get_codec("aruba_aoss")
 
 
 class TestTheLine:
+    def test_what_it_says_of_a_name_taken_out(self, codec) -> None:
+        """Whole.  Port 5 is tagged in 20 and 30: the output's VLAN 1
+        stanza takes it out of VLAN 1 -- this tree has no VLAN 1, so
+        the stanza is written first, with no name -- and the line says
+        so, and no more."""
+        out = codec.render(_tree(_trunk("5", 10, [20, 30])))
+        assert _said(out) == [_TAKEN_OUT_5]
+        assert out.splitlines().index("vlan 1") < out.splitlines().index("vlan 10")
+        assert _stanza(out, 1) == ["   no untagged 5"] and out_of_vlan_1(out) == {"5"}
+
     def test_what_it_says_of_a_port(self, codec) -> None:
-        """Whole.  The switch's part is HPE's two sentences and no
-        more: in the default VLAN, and there until it is removed."""
-        assert _said(codec.render(_tree(_trunk("5", 10, [20, 30])))) == [_OF_PORT_5]
+        """Whole.  Port 5 carries nothing, and no line takes it out of
+        VLAN 1 (AOS-S has no form for a port in no VLAN): the switch's
+        part is HPE's two sentences and no more -- in the default
+        VLAN, and there until it is removed."""
+        out = codec.render(_tree(_trunk("5", 10, [])))
+        assert _said(out) == [_OF_PORT_5]
+        assert "vlan 1" not in out.splitlines()
 
     def test_what_it_says_of_a_trunk_group(self, codec) -> None:
-        """Whole.  No sentence of HPE's was found for a trunk group:
-        the line says "not established", and nothing of a port."""
-        assert _said(codec.render(_tree(_trunk("trk1", 10, [20, 30])))) == [_OF_TRK1]
+        """Whole.  HPE's sentences for a trunk group, and nothing of a
+        port."""
+        assert _said(codec.render(_tree(_trunk("trk1", 10, [])))) == [_OF_TRK1]
 
-    def test_the_guard_holds_these_two(self) -> None:
-        """The module that holds every job to its line types the two
+    def test_the_guard_holds_these_three(self) -> None:
+        """The module that holds every job to its line types the three
         forms as well: they are these."""
         assert _of_a_port("5") == _OF_PORT_5 and _of_a_group("Trk1") == _OF_TRK1
-        assert _of_a_group("5") != _OF_PORT_5
+        assert _taken_out("5") == _TAKEN_OUT_5
+        assert len({_of_a_group("5"), _OF_PORT_5, _TAKEN_OUT_5}) == 3
 
     def test_it_stands_in_that_vlans_stanza(self, codec) -> None:
         out = codec.render(_tree(_trunk("5", 10, [20, 30])))
-        assert _stanza(out, 10) == [_OF_PORT_5]
+        assert _stanza(out, 10) == [_TAKEN_OUT_5]
         assert _stanza(out, 20) == ["   tagged 5"] and _stanza(out, 30) == ["   tagged 5"]
         # ... and no line makes the port untagged.
         assert not [line for line in out.splitlines() if line.strip().startswith("untagged")]
@@ -157,14 +193,20 @@ class TestTheLine:
         out = codec.render(_tree(
             _trunk("5", 10, [20, 30]), _trunk("6", 10, [10, 20]), _trunk("7", 20, [10, 20]),
         ))
-        assert _stanza(out, 10) == ["   untagged 6", "   tagged 7", _OF_PORT_5]
+        assert _stanza(out, 10) == ["   untagged 6", "   tagged 7", _TAKEN_OUT_5]
         assert said_on_aoss(out) == {(10, "5"): 1}
+        # Port 7 is untagged in VLAN 20, port 6 in VLAN 10: VLAN 1 takes
+        # out port 5 alone.
+        assert _stanza(out, 1) == ["   no untagged 5"]
 
     def test_the_lines_of_a_stanza_keep_the_order_of_the_records(self, codec) -> None:
         """Three ports of one VLAN, in an order that is neither rising
-        nor falling: one line each, as the records stand."""
+        nor falling: one line each, as the records stand -- two taken
+        out of VLAN 1, and one that carries nothing."""
         out = codec.render(_tree(_trunk("7", 10, [20]), _trunk("5", 10, [20, 30]), _trunk("6", 10, [])))
-        assert _stanza(out, 10) == [_of_a_port("7"), _of_a_port("5"), _of_a_port("6")]
+        assert _stanza(out, 10) == [_taken_out("7"), _taken_out("5"), _of_a_port("6")]
+        # ... and VLAN 1's line names them in port order.
+        assert _stanza(out, 1) == ["   no untagged 5,7"]
 
     @pytest.mark.parametrize("native,allowed", [
         (10, [10, 20, 30]),             # carried: the list names it
@@ -210,12 +252,16 @@ class TestTheLine:
         out = codec.render(_tree(_trunk("5", 10, _ALL_BUT_10)))
         assert _stanza(out, 10) == [_OF_PORT_5]
         assert _stanza(out, 20) == ["   tagged 5"] and _stanza(out, 30) == ["   tagged 5"]
+        # The list holds VLAN 1, and the tree has no record of it: the
+        # port is tagged there, in a stanza of its own, and not taken
+        # out of it -- so the line says it stays.
+        assert _stanza(out, 1) == ["   tagged 5"]
 
     def test_a_trunk_that_is_shut(self, codec) -> None:
         """A port that is shut states its VLANs all the same, and
         carries them when it is brought up."""
         out = codec.render(_tree(_trunk("5", 10, [20, 30], enabled=False)))
-        assert _stanza(out, 10) == [_OF_PORT_5]
+        assert _stanza(out, 10) == [_TAKEN_OUT_5]
         assert "   disable" in out.splitlines()
 
     def test_the_vlan_is_the_outputs(self) -> None:
@@ -231,41 +277,61 @@ class TestTheLine:
             get_codec("cisco_iosxe_cli"), get_codec("aruba_aoss"), text,
             port_rename_map={"GigabitEthernet1/0/1": "5"}, vlan_rename_map={10: 40},
         )
-        assert _said(job.rendered) == [_of_a_port("5", 40)]
-        assert _stanza(job.rendered, 40) == [_of_a_port("5", 40)]
+        assert _said(job.rendered) == [_taken_out("5", 40)]
+        assert _stanza(job.rendered, 40) == [_taken_out("5", 40)]
         assert "source" not in _said(job.rendered)[0] and "vlan 10" not in job.rendered.splitlines()
 
 
 class TestWhichNames:
+    @staticmethod
+    def _lag_tree(listed: list[int]) -> CanonicalIntent:
+        """A LAG, its two members, a port untagged in VLAN 10 and a
+        port in no group -- each of the four that state VLAN 10 off
+        their list with *listed* for its list."""
+        tree = _tree(
+            _trunk("trk1", 10, listed),
+            _trunk("1/1", 10, listed, lag_member_of="trk1"),
+            _trunk("1/2", 10, listed, lag_member_of="trk1"),
+            _trunk("1/3", 10, [10, 20, 30]),
+            _trunk("1/4", 10, listed),
+        )
+        tree.lags.append(CanonicalLAG(name="trk1", members=["1/1", "1/2"], mode="active"))
+        return tree
+
     def test_a_lag_and_its_members(self, codec) -> None:
         """One line a name the output uses, as the ``tagged`` line of
         VLAN 20 names them: the LAG in the form the device writes it
-        outside its ``trunk`` line, each member under its own.  All
-        three are in the form for a trunk group -- the output's own
-        ``trunk`` line names the two ports -- and a port that is in no
-        group is in the form for a port."""
-        tree = _tree(
-            _trunk("trk1", 10, [20, 30]),
-            _trunk("1/1", 10, [20, 30], lag_member_of="trk1"),
-            _trunk("1/2", 10, [20, 30], lag_member_of="trk1"),
-            _trunk("1/3", 10, [10, 20, 30]),
-            _trunk("1/4", 10, [20, 30]),
-        )
-        tree.lags.append(CanonicalLAG(name="trk1", members=["1/1", "1/2"], mode="active"))
-        out = codec.render(tree)
+        outside its ``trunk`` line, each member under its own.  Each is
+        tagged in 20 and 30 and untagged nowhere, and is taken out of
+        VLAN 1 -- in VLAN 1's one line, in port order -- and its line
+        says so."""
+        out = codec.render(self._lag_tree([20, 30]))
+        assert _stanza(out, 10) == [
+            "   untagged 1/3", _taken_out("Trk1"), _taken_out("1/1"), _taken_out("1/2"), _taken_out("1/4"),
+        ]
+        assert _stanza(out, 20) == ["   tagged 1/1,1/2,1/3,1/4,Trk1"]
+        assert _stanza(out, 1) == ["   no untagged 1/1,1/2,1/4,Trk1"]
+        # What the tree says of the two ports, the output's text says.
+        assert in_a_trunk_line(out) == {"1/1", "1/2"}
+
+    def test_a_lag_and_its_members_that_carry_nothing(self, codec) -> None:
+        """The same names with nothing on their lists: no line takes
+        them out of VLAN 1.  The LAG and its two members are in the
+        form for a trunk group -- the output's own ``trunk`` line names
+        the two ports -- and a port that is in no group is in the form
+        for a port."""
+        out = codec.render(self._lag_tree([]))
         assert _stanza(out, 10) == [
             "   untagged 1/3", _OF_TRK1, _of_a_group("1/1"), _of_a_group("1/2"), _of_a_port("1/4"),
         ]
-        assert _stanza(out, 20) == ["   tagged 1/1,1/2,1/3,1/4,Trk1"]
-        # What the tree says of the two ports, the output's text says.
-        assert in_a_trunk_line(out) == {"1/1", "1/2"}
+        assert not out_of_vlan_1(out) and "vlan 1" not in out.splitlines()
 
     def test_a_member_is_one_by_the_lags_own_list(self, codec) -> None:
         """What puts a port on a ``trunk`` line is the LAG's list of
         members.  Port 1 is on that list, and its own record does not
         say so; port 3's record names a LAG that does not list it, and
         no ``trunk`` line of the output has port 3."""
-        tree = _tree(_trunk("1", 10, [20]), _trunk("3", 10, [20], lag_member_of="trk1"))
+        tree = _tree(_trunk("1", 10, []), _trunk("3", 10, [], lag_member_of="trk1"))
         tree.lags.append(CanonicalLAG(name="trk1", members=["1", "2"], mode="active"))
         out = codec.render(tree)
         assert in_a_trunk_line(out) == {"1", "2"}
@@ -275,7 +341,7 @@ class TestWhichNames:
         """A LAG whose members the target has no name for has no
         ``trunk`` line, and the output says so.  Its name is a trunk
         group's all the same: nothing is said of it as of a port."""
-        tree = _tree(_trunk("trk101", 10, [20, 30]))
+        tree = _tree(_trunk("trk101", 10, []))
         tree.lags.append(CanonicalLAG(name="trk101", members=[], mode="active"))
         out = codec.render(tree)
         assert "; LAG trk101 declared without members — cannot emit without ports" in out.splitlines()
@@ -285,7 +351,7 @@ class TestWhichNames:
     def test_a_lag_under_a_name_that_is_not_a_trunks(self, codec) -> None:
         """A tree whose names were not translated: the LAG is a LAG by
         the tree's own list, whatever it is called."""
-        tree = _tree(_trunk("Port-channel1", 10, [20]))
+        tree = _tree(_trunk("Port-channel1", 10, []))
         tree.lags.append(CanonicalLAG(name="Port-channel1", members=["1", "2"], mode="active"))
         assert [(port, form) for _stanza_of, _vid, port, form in said_how(codec.render(tree))] == [
             ("Port-channel1", GROUP_FORM),
@@ -293,14 +359,15 @@ class TestWhichNames:
 
     def test_another_letter_case_is_one_name(self, codec) -> None:
         """``TRK1`` and ``trk1`` are one port of the device, written
-        ``Trk1``: one line."""
+        ``Trk1``: one line, and one name on VLAN 1's line."""
         out = codec.render(_tree(_trunk("TRK1", 10, [20]), _trunk("trk1", 10, [20])))
-        assert _stanza(out, 10) == [_OF_TRK1]
+        assert _stanza(out, 10) == [_taken_out("Trk1")]
+        assert _stanza(out, 1) == ["   no untagged Trk1"]
 
     def test_each_port_under_its_own_native_vlan(self, codec) -> None:
         out = codec.render(_tree(_trunk("5", 10, [20, 30]), _trunk("6", 30, [10, 20]), _trunk("7", 10, [20])))
         assert said_on_aoss(out) == {(10, "5"): 1, (10, "7"): 1, (30, "6"): 1}
-        assert _stanza(out, 30)[-1] == _of_a_port("6", 30)
+        assert _stanza(out, 30)[-1] == _taken_out("6", 30)
 
     @pytest.mark.parametrize("named,listed", [("5", "5"), ("Trk1", "trk1"), ("trk1", "Trk1"), ("TRK1", "trk1")])
     def test_a_port_listed_untagged_has_none(self, codec, named: str, listed: str) -> None:
@@ -328,9 +395,9 @@ class TestAVlanWithNoRecord:
         out = codec.render(tree)
         lines = out.splitlines()
         # The line whole, at the margin: it is in no stanza.
-        assert _said(out) == [_OF_PORT_5.strip()]
+        assert _said(out) == [_TAKEN_OUT_5.strip()]
         # After the last VLAN stanza, before the port's own.
-        at = lines.index(_OF_PORT_5.strip())
+        at = lines.index(_TAKEN_OUT_5.strip())
         assert lines[at - 1] == "   exit" and "vlan 30" in lines[:at]
         assert lines.index("interface 5") > at
         assert "vlan 10" not in lines
@@ -374,14 +441,25 @@ class TestAVlanWithNoRecord:
         job = run_plan_with_checked_names(
             get_codec(source), get_codec("aruba_aoss"), text, port_rename_map={port: "5"},
         )
-        assert _said(job.rendered) == [_of_a_port("5", 77)], job.rendered
-        assert _stanza(job.rendered, 77)[-1] == _of_a_port("5", 77)
+        assert _said(job.rendered) == [_taken_out("5", 77)], job.rendered
+        assert _stanza(job.rendered, 77)[-1] == _taken_out("5", 77)
 
 
 def _a_lag_and_its_members() -> CanonicalIntent:
     tree = _tree(
         _trunk("trk1", 10, [20, 30]), _trunk("1/1", 10, [20, 30], lag_member_of="trk1"),
         _trunk("1/2", 10, [20, 30], lag_member_of="trk1"), _trunk("1/4", 10, [20]),
+    )
+    tree.lags.append(CanonicalLAG(name="trk1", members=["1/1", "1/2"], mode="active"))
+    return tree
+
+
+def _each_form() -> CanonicalIntent:
+    """A LAG and a member that carry nothing, a port that carries
+    nothing, and a port tagged in VLAN 20: a line of each form."""
+    tree = _tree(
+        _trunk("trk1", 10, []), _trunk("1/1", 10, [], lag_member_of="trk1"), _trunk("1/4", 10, []),
+        _trunk("1/5", 10, [20]),
     )
     tree.lags.append(CanonicalLAG(name="trk1", members=["1/1", "1/2"], mode="active"))
     return tree
@@ -396,11 +474,14 @@ class TestItIsAComment:
             _trunk("1/3", 10, [10, 20, 30]),
         ),
         _a_lag_and_its_members(),
+        _each_form(),
         CanonicalIntent(
             vlans=[CanonicalVlan(id=20, tagged_ports=["5"])],
             interfaces=[_trunk("5", 10, [20], description="uplink")],
         ),
-    ], ids=["one port", "an empty list", "a LAG and ports", "a LAG with its members", "no record of the VLAN"])
+    ], ids=[
+        "one port", "an empty list", "a LAG and ports", "a LAG with its members", "each form", "no record of the VLAN",
+    ])
     def test_it_reads_back_the_same_without_it(self, codec, tree: CanonicalIntent) -> None:
         out = codec.render(tree)
         said = _said(out)
@@ -409,20 +490,24 @@ class TestItIsAComment:
         assert without != out and not _said(without)
         assert codec.parse(out).model_dump(mode="json") == codec.parse(without).model_dump(mode="json")
 
-    def test_both_forms_are_among_them(self, codec) -> None:
-        forms = {form for _stanza_of, _vid, _port, form in said_how(codec.render(_a_lag_and_its_members()))}
-        assert forms == {PORT_FORM, GROUP_FORM}
+    def test_each_form_is_among_them(self, codec) -> None:
+        out = codec.render(_each_form())
+        assert [(port, form) for _stanza_of, _vid, port, form in said_how(out)] == [
+            ("Trk1", GROUP_FORM), ("1/1", GROUP_FORM), ("1/4", PORT_FORM), ("1/5", TAKEN_OUT_FORM),
+        ]
+        assert out_of_vlan_1(out) == {"1/5"}
 
     def test_it_comes_back_untagged_nowhere(self, codec) -> None:
         """Read back, it is what the tree said: tagged in 20 and 30,
         untagged in none, and no native VLAN -- the words of the line
-        are no port's name and no VLAN's member."""
+        are no port's name and no VLAN's member.  (The VLAN 1 stanza
+        that takes the port out is a VLAN 1 record with no member.)"""
         back = codec.parse(codec.render(_tree(_trunk("5", 10, [20, 30]))))
         assert [iface.name for iface in back.interfaces] == ["5"]
         port = back.interfaces[0]
         assert (port.switchport_mode, port.trunk_native_vlan, port.trunk_allowed_vlans) == ("trunk", None, [20, 30])
         assert {vlan.id: (vlan.untagged_ports, vlan.tagged_ports) for vlan in back.vlans} == {
-            10: ([], []), 20: ([], ["5"]), 30: ([], ["5"]),
+            1: ([], []), 10: ([], []), 20: ([], ["5"]), 30: ([], ["5"]),
         }
 
 
@@ -436,14 +521,16 @@ class TestItIsAComment:
 #: list and has a name on AOS-S; compared for EQUALITY with what is
 #: measured.  One is a port.  The other eight are trunk groups, and
 #: the output makes none of them (the test below): the target has no
-#: name for their member ports, which the job lists.
+#: name for their member ports, which the job lists.  Each is tagged
+#: in some VLAN of the output and taken out of VLAN 1 by its ``no
+#: untagged`` line, and its line says so.
 SAID_OF: dict[str, dict[str, str]] = {
-    "real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg": {"Trk101": GROUP_FORM, "Trk102": GROUP_FORM},
-    "real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg": {"Trk101": GROUP_FORM, "Trk102": GROUP_FORM},
+    "real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg": {"Trk101": TAKEN_OUT_FORM, "Trk102": TAKEN_OUT_FORM},
+    "real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg": {"Trk101": TAKEN_OUT_FORM, "Trk102": TAKEN_OUT_FORM},
     "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": {
-        "Trk10": GROUP_FORM, "Trk12": GROUP_FORM, "Trk14": GROUP_FORM, "Trk17": GROUP_FORM,
+        "Trk10": TAKEN_OUT_FORM, "Trk12": TAKEN_OUT_FORM, "Trk14": TAKEN_OUT_FORM, "Trk17": TAKEN_OUT_FORM,
     },
-    "synthetic/arista_eos/kitchen_sink.txt": {"3": PORT_FORM},
+    "synthetic/arista_eos/kitchen_sink.txt": {"3": TAKEN_OUT_FORM},
 }
 
 #: capture -> the source trunks of that kind that AOS-S has no name
@@ -488,9 +575,11 @@ def test_the_trunks_of_the_captures() -> None:
             assert {(stanza, vid) for stanza, vid, _port, _form in said} == {("1", 1)}, (label, said)
             found[label] = {port: form for _stanza_of, _vid, port, form in said}
             assert len(found[label]) == len(said) and None not in found[label].values(), (label, said)
-            # Each is a source trunk that left its native VLAN out.
+            # Each is a source trunk that left its native VLAN out, and
+            # each is on VLAN 1's `no untagged` line.
             finals = {re.sub(r"\s+", "", job.port_renames.get(name, name)).casefold() for name in trunks}
             assert {port.casefold() for port in found[label]} <= finals, (label, found[label], finals)
+            assert set(found[label]) <= out_of_vlan_1(job.rendered), (label, found[label])
             # A trunk group that is said is one the output does not
             # make: no `trunk` line has it, the output says the LAG
             # has no members, and the job lists ports it has no name
@@ -511,7 +600,9 @@ def test_the_trunks_of_the_captures() -> None:
     assert found == SAID_OF
     assert no_name == NO_NAME_ON_AOSS
     # Nine names of four outputs: one port, and eight trunk groups
-    # that the output does not make.
+    # that the output does not make -- every one taken out of VLAN 1.
     forms = [form for names in SAID_OF.values() for form in names.values()]
-    assert (len(SAID_OF), len(forms), forms.count(PORT_FORM), forms.count(GROUP_FORM)) == (4, 9, 1, 8)
+    names = [port for names in SAID_OF.values() for port in names]
+    assert (len(SAID_OF), len(forms), forms.count(TAKEN_OUT_FORM)) == (4, 9, 9)
+    assert sum(not is_a_trunk_group(port) for port in names) == 1
     assert len(not_made) == 8

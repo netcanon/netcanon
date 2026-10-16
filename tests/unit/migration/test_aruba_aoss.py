@@ -14,6 +14,7 @@ capabilities / registry) plus AOS-S-specific quirks:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -37,7 +38,7 @@ from netcanon.migration.codecs.base import ParseError, RenderError
 from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 from netcanon.models.migration import DeviceClass, MigrationJobStatus
-from netcanon.services.migration_pipeline import run_plan
+from netcanon.services.migration_pipeline import run_plan, run_plan_with_checked_names
 
 pytestmark = pytest.mark.unit
 
@@ -489,11 +490,91 @@ class TestRender:
 
 class TestRoundTrip:
     def test_roundtrip_minimal(self):
+        """Port 25 is tagged in VLAN 10 and untagged nowhere, and this
+        text has no ``vlan 1``: the output takes the port out of VLAN 1
+        (which every AOS-S switch has) in a ``vlan 1`` stanza of its
+        own, which comes back as a VLAN 1 with no member.  Nothing else
+        moves."""
         codec = ArubaAOSSCodec()
         tree = codec.parse(_MIN)
-        tree2 = codec.parse(codec.render(tree))
+        out = codec.render(tree)
+        tree2 = codec.parse(out)
         assert tree.hostname == tree2.hostname
-        assert {v.id for v in tree.vlans} == {v.id for v in tree2.vlans}
+        assert {v.id for v in tree2.vlans} == {v.id for v in tree.vlans} | {1}
+        assert "vlan 1\n   no untagged 25\n   exit\n" in out
+        one = next(v for v in tree2.vlans if v.id == 1)
+        assert (one.untagged_ports, one.tagged_ports) == ([], [])
+        assert tree2.model_dump(mode="json")["interfaces"] == tree.model_dump(mode="json")["interfaces"]
+
+    @pytest.mark.parametrize("vlan_1", [
+        # As HPE's examples from 15.14 on print it, and as the renderer writes it.
+        ['   name "DEFAULT_VLAN"', "   no untagged 3,Trk1", "   untagged 1-2"],
+        # As HPE printed it before: the line last.
+        ['   name "DEFAULT_VLAN"', "   untagged 1-2", "   no untagged 3,Trk1"],
+    ], ids=["above the lists", "below them"])
+    def test_no_untagged_in_vlan_1_round_trips(self, vlan_1):
+        """``no untagged`` in VLAN 1 for a port and a trunk group that a
+        VLAN tags and none lists untagged, above ``untagged`` and below
+        it: on lists that share no port both read as one tree, and the
+        renderer writes it back in the first order -- the same tree."""
+        raw = "\n".join([
+            'hostname "sw1"', "trunk 5-6 trk1 lacp",
+            "vlan 1", *vlan_1, "   exit",
+            "vlan 20", '   name "twenty"', "   tagged 3,Trk1", "   exit", "",
+        ])
+        codec = ArubaAOSSCodec()
+        tree = codec.parse(raw)
+        lists = {v.id: (v.untagged_ports, v.tagged_ports) for v in tree.vlans}
+        assert lists == {1: (["1", "2"], []), 20: ([], ["3", "trk1"])}
+        out = codec.render(tree)
+        assert 'vlan 1\n   name "DEFAULT_VLAN"\n   no untagged 3,Trk1\n   untagged 1-2\n   exit\n' in out
+        back = codec.parse(out)
+        assert back.model_dump(mode="json") == tree.model_dump(mode="json")
+
+    def test_a_group_and_its_members_in_vlan_1_as_in_every_vlan(self):
+        """A Catalyst port-channel and its two members, each a trunk of
+        every VLAN (the members repeat the trunk lines), the native VLAN
+        sent tagged, and no VLAN 1 in the config.  VLAN 1's ``tagged``
+        line names what every other VLAN's ``tagged`` line names -- the
+        group and its members -- and no name is on VLAN 1's ``no
+        untagged`` line while it, or its group, is on that ``tagged``
+        line: the members' own records carry VLAN 1 as the group's does.
+        Read from the text."""
+        raw = "\n".join([
+            "hostname sw1", "vlan dot1q tag native", "!",
+            "vlan 10", " name ten", "!", "vlan 20", " name twenty", "!",
+            "interface Port-channel1", " switchport mode trunk", "!",
+            "interface GigabitEthernet1/0/3", " switchport mode trunk", " channel-group 1 mode active", "!",
+            "interface GigabitEthernet1/0/4", " switchport mode trunk", " channel-group 1 mode active", "!",
+            "end", "",
+        ])
+        job = run_plan_with_checked_names(
+            CiscoIOSXECLICodec(), ArubaAOSSCodec(), raw,
+            port_rename_map={"Port-channel1": "Trk1", "GigabitEthernet1/0/3": "3", "GigabitEthernet1/0/4": "4"},
+        )
+        text = job.rendered
+        assert "trunk 3-4 trk1 lacp" in text.splitlines()
+        lines: dict[tuple[int, str], set[str]] = {}
+        for vid, body in re.findall(r"(?m)^vlan (\d+)\n(.*?)^   exit$", text, re.S):
+            for kind, listed in re.findall(r"(?m)^   (tagged|untagged|no untagged) (\S+)$", body):
+                for part in listed.split(","):
+                    ends = re.fullmatch(r"(\d+)-(\d+)", part)
+                    names = [str(n) for n in range(int(ends[1]), int(ends[2]) + 1)] if ends else [part]
+                    lines.setdefault((int(vid), kind), set()).update(names)
+        tagged_1 = lines.get((1, "tagged"), set())
+        group_of = {"3": "Trk1", "4": "Trk1"}
+        out_of_1 = lines.get((1, "no untagged"), set())
+        assert not {name for name in out_of_1 if name in tagged_1 or group_of.get(name) in tagged_1}
+        assert tagged_1 == lines[(10, "tagged")] == lines[(20, "tagged")] == {"3", "4", "Trk1"}
+        # ... and the AOS-S parser reads the line back: every member and
+        # the group carry VLAN 1, as each VLAN of the output.
+        back = ArubaAOSSCodec().parse(text)
+        assert {v.id: (v.untagged_ports, sorted(v.tagged_ports)) for v in back.vlans} == {
+            vid: ([], ["3", "4", "trk1"]) for vid in (1, 10, 20)
+        }
+        assert {i.name: i.trunk_allowed_vlans for i in back.interfaces if i.switchport_mode == "trunk"} == {
+            name: [1, 10, 20] for name in ("3", "4", "trk1")
+        }
 
     def test_roundtrip_fixture_preserves_vlan_membership(self):
         """The architecturally important round-trip: port lists survive."""
