@@ -2134,6 +2134,46 @@ class TestDroppedTier3SectionsWireThrough:
         ]
 
 
+class TestAnIOSXRTextWithoutItsIndentation:
+    """IOS XR places a line by its indentation, so a config pasted with
+    none is refused in words: the plan job fails with ``parse failed:``
+    and the sentence, and detection still proposes IOS XR, so the
+    migrate page offers no other vendor for it."""
+
+    _FLAT = (
+        "!! IOS XR Configuration 7.5.2\nhostname xr1\n!\n"
+        "interface GigabitEthernet0/0/0/0\n"
+        "description uplink\n"
+        "ipv4 address 192.0.2.1 255.255.255.252\n"
+        "!\n"
+        "router isis CORE\n"
+        "interface GigabitEthernet0/0/0/0\n"
+        "point-to-point\n"
+        "!\n"
+    )
+
+    def test_the_plan_job_fails_with_the_sentence(self, client):
+        from netcanon.migration.codecs.cisco_iosxr.parse import FLAT_TEXT_MESSAGE
+
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={"source": "cisco_iosxr", "target": "juniper_junos", "raw_text": self._FLAT},
+        )
+        assert resp.status_code == 200
+        job = resp.json()
+        assert job["status"] == "failed"
+        assert job["error"] == "parse failed: " + FLAT_TEXT_MESSAGE.format(line=4)
+        assert "192.0.2.1" not in job["error"] and "uplink" not in job["error"]
+
+    def test_detection_keeps_iosxr_first(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": self._FLAT, "min_confidence": 40},
+        )
+        assert resp.status_code == 200
+        assert resp.json()[0]["codec"] == "cisco_iosxr"
+
+
 class TestPerPanePortNameParity:
     """(#16) Every per-pane endpoint must engage auto port-name translation
     like /plan, so a cross-vendor render never leaks an invalid source-vendor

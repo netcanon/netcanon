@@ -82,7 +82,17 @@ def test_custom_terminator() -> None:
 @pytest.mark.unit
 def test_default_terminator_rules() -> None:
     assert _default_terminator("!") is True
-    assert _default_terminator("   !  ") is True          # stripped bang
+    # An indented ``!`` closes a SUBMODE inside the stanza (IOS XR
+    # ``ptp`` under an interface), not the stanza: the stanza's own
+    # lines go on after it.
+    assert _default_terminator("   !  ") is False
+    assert _default_terminator(" !") is False
     assert _default_terminator("interface Gi0/0") is True  # column-0 dedent
     assert _default_terminator("  description x") is False  # indented body
     assert _default_terminator("") is False                # blank line falls through
+
+
+@pytest.mark.unit
+def test_a_submodes_bang_does_not_close_the_stanza() -> None:
+    text = "item a\n  attr x\n  sub\n    deep\n  !\n  attr y\n!\nitem b\n  attr z\n!\n"
+    assert _scan(text) == [("a", ("x", "y")), ("b", ("z",))]

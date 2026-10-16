@@ -162,7 +162,7 @@ per_field_expectation:
     disposition: good
     note: >
       Both matrices declare `/interfaces/interface/ipv6/address/ip` and
-      `prefix-length` supported, and every one of the 11 populated records
+      `prefix-length` supported, and every populated record
       round-trips intact across the 3 cells that carry IPv6.  One caveat worth
       carrying into a cutover: cisco_iosxe_cli declares
       `/interfaces/interface/subinterfaces/subinterface/ipv6` UNSUPPORTED

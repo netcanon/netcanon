@@ -187,8 +187,8 @@ per_field_expectation:
     disposition: good
     note: >
       Preserved on all 3 cells that carry IPv6 on an interface
-      (`iosxr_design_cst_pa3_xr752`, `xrdtools_srv6_pe1`, `kitchen_sink` — 11
-      interfaces in total), with matching address counts on both sides.  One
+      (`iosxr_design_cst_pa3_xr752`, `xrdtools_srv6_pe1`, `kitchen_sink`), with
+      matching address counts on both sides.  One
       caveat that is NOT exercised by this corpus: opnsense declares
       `/interfaces/interface/ipv6/address/secondary-ip` unsupported because
       the render emits one IPv6 address per interface.  No committed IOS-XR

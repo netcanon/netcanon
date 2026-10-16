@@ -202,10 +202,13 @@ If VLANs are missing on the target, check:
   `exit` or an `end` (see [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md)
   § "Where a stanza ends").  Release 0.7.7 and earlier read such an
   AOS-S config as VLANs with no port and no address, in a job that
-  said `completed`: translate it again.  The EOS, AOS-CX, IOS-XE CLI,
-  NX-OS, OS10 and IOS XR parsers still read a config pasted without
-  its indentation as stanzas with almost nothing in them, and the job
-  does not say so: paste the config as the device prints it.
+  said `completed`: translate it again.  An IOS XR config with no
+  indentation is refused, not read (see [The job says `parse failed:`
+  for an IOS XR config](#the-job-says-parse-failed-for-an-ios-xr-config)).
+  The EOS, AOS-CX, IOS-XE CLI, NX-OS and OS10 parsers still read a
+  config pasted without its indentation as stanzas with almost nothing
+  in them, and the job does not say so: paste the config as the device
+  prints it.
 - On AOS-S, a row `interface <port> tagged vlan <ids> (VLAN <ids>:
   declared by no vlan stanza above the line; not translated)`: a
   port's VLAN line names a VLAN that no `vlan` stanza above it
@@ -1158,6 +1161,39 @@ config onto other hardware, declare both device models (API:
 `source_profile` / `target_profile`); an entry whose target is a port
 of the declared target then moves the port there.  See
 [`CAPABILITIES.md`](CAPABILITIES.md) § G.
+
+### The job says `parse failed:` for an IOS XR config
+
+Two sentences say that the text is not in the form `show
+running-config` prints, and nothing of it was read.  Both name a line
+number and quote nothing of the text.
+
+- **`cisco_iosxr: this text has no indentation. ...`** -- no line of
+  the text is indented, and the line it names opens a stanza with the
+  line after it at the left margin.  IOS XR places each line of a
+  configuration by its indentation when it loads a file (what that
+  rests on is on the vendor page), so neither the router loading it
+  nor Netcanon can tell where such a stanza ends, and loaded onto the
+  router the text would put its lines in the wrong submode too.  The
+  indentation was lost on the way: a paste through a tool that trims
+  lines, a file joined from its lines, a config embedded in another
+  document.  Paste the output of `show running-config` as the router
+  prints it.  A whole config is still detected as IOS XR, so the
+  migrate page offers no other vendor for it; a short text with no
+  interface of an IOS XR name (a user and a VRF, say) is detected as
+  IOS-XE CLI, printed or not, and the page offers IOS-XE beside the
+  sentence -- keep IOS XR as the source and paste the text with its
+  indentation.
+- **`cisco_iosxr: line <n> states an interface's setting ...`** --
+  the line is `interface <name> <setting> ...` in column 0, the form
+  `show running-config formal` prints, or a one-line command typed
+  into a printed config.  Paste
+  `show running-config` without `formal`; if the line was typed in,
+  write the setting on a line of its own, indented under its
+  `interface` line.
+
+See [`vendors/cisco_iosxr.md`](vendors/cisco_iosxr.md) § "Common
+gotchas".
 
 ### The job says `refused:` — "my config was refused"
 

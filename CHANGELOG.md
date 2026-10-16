@@ -384,6 +384,84 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An IOS XR interface ended at the `!` that closes a submode inside
+  it.**  The interface parser ended an `interface` stanza at a `!` of
+  any depth, and an interface that holds a submode (`ptp`, `lldp`)
+  closes the submode with a `!` one level in: every line of the
+  interface after the submode was read by nothing.  On the committed
+  `iosxr_design_cst_pa3_xr752.cfg`, `TenGigE0/0/0/20` and
+  `TenGigE0/0/0/21` each lost one IPv4 and one IPv6 address, onto
+  every target, in jobs that said nothing of it.  A stanza now ends at
+  a line in column 0 (its own `!` is one); a submode's `!` does not
+  end it, and a line indented deeper than the stanza's own first body
+  line is the submode's, not the interface's -- for the interface's
+  record, for the member list of the LAG a `bundle id` line names, and
+  for a `username` block alike.  The rule is the shared stanza
+  scanner's default, which only the IOS XR interface parser used;
+  every other caller of the scanner passes a column-0 rule of its own,
+  as it already did.  Every other committed capture of every codec
+  parses as before, field for field.  If you translated an IOS XR
+  config whose interfaces hold a submode before their own lines with
+  0.7.7 or earlier, translate it again: its addresses, MTU, VRF and
+  `shutdown` after the submode were not carried.
+
+- **An IOS XR config without its indentation was read as other
+  records, and the job said `completed`.**  IOS XR places each line of
+  a configuration by its indentation when it loads a file (Cisco's CLI
+  model and a Cisco engineer's router output; no manual says it in a
+  sentence, and what the router does with such text typed at its
+  prompt is not established): a line at
+  the left margin is a line of the top level, and a file that lost its
+  indentation loads with its lines in the wrong submode.  The parser
+  read such a text by the same rule, and so made records of lines
+  nested under routing protocols, MPLS and config groups: over the 11
+  committed IOS XR captures and the synthetic config with every line's
+  leading white space removed, 61 interfaces and 29 routing instances
+  more than the texts hold, among them interfaces named `all` and
+  `'Bundle-Ether.*'` and a LAG nothing declares, with no address, no
+  description, no route, and local users with no secret and no
+  group.  Of their jobs onto IOS XR, Junos and IOS-XE CLI, 25 of 36
+  said `completed` and the rest `partial` for another reason, and none
+  said a line was not read.  The `!` lines do not give the
+  tree back: they say how many submodes close, not which line opened
+  one.  Such a text -- no line indented, and the lines of a stanza the
+  parser reads at the left margin -- is now refused before anything of
+  it is read: the job is `failed`, and its error is `parse failed:`
+  and a sentence that says the text has no indentation, why neither
+  the router loading it nor the parser can tell where a stanza of it
+  ends, the number of the first line that opens a stanza with the line
+  after it at the left margin, and asks for `show running-config` as
+  the router prints it.  The sentence quotes nothing of the text.
+  Detection still proposes IOS XR for each committed capture in that
+  form, so the migrate page offers no other vendor for it; a short
+  text with no interface of an IOS XR name (a user and a VRF, say) is
+  detected as IOS-XE CLI, printed or not, and the page offers IOS-XE
+  beside the sentence.  A text in which only some lines lost their
+  indentation is read by its indentation, as the router reads it.  A
+  translation made from such a text with 0.7.7 or earlier holds
+  interfaces and VRFs the router does not have, and none of its
+  addresses: make it again from `show running-config`.
+
+- **An IOS XR line that states an interface's setting on the
+  `interface` line was a second record of the interface, its setting
+  lost.**  `interface <name> description ...` (or `ipv4`, `ipv6`,
+  `shutdown`, `mtu`, `vrf`, `bundle`, `encapsulation`, after the name
+  and an `l2transport` if it has one) in column 0 is the form `show
+  running-config formal` prints, one line a setting with its whole
+  path (by the shape Cisco shows it printing for class and policy
+  maps), or a one-line command typed into a printed config; `show
+  running-config` prints none.  A whole formal config was read as a
+  record of an interface for each of its lines (over 500 for the 155
+  interfaces of the 11 committed IOS XR captures and the synthetic
+  config, written in that form), with no address, no route and no
+  secret.  Such a line is now refused the same way, with its line
+  number and a request for `show running-config` without `formal`.
+  The `interface preconfigure <name> ...` one-liner, whose row in
+  `dropped_tier3_sections` carried the setting's value, is refused
+  with it.  A translation made from a formal config with 0.7.7 or
+  earlier lost every interface setting: make it again from `show
+  running-config`.
+
 - **An AOS-S stanza ended at the first line that was not indented.**
   The parser ended a `vlan`, `interface` or `vrrp vrid` stanza at its
   `exit` or at any line in column 0, read that line again at the top,
@@ -2589,20 +2667,29 @@ timestamp if your timezone matters for an audit.
   it holds by most block parsers, and the job does not say so.**  Every
   committed capture with every line's leading white space removed,
   against the capture as committed: the Arista EOS, Aruba AOS-CX,
-  Cisco IOS-XE CLI, Cisco NX-OS, Dell OS10 and Cisco IOS XR parsers
-  lose nearly everything a stanza body holds -- interface addresses,
+  Cisco IOS-XE CLI, Cisco NX-OS and Dell OS10 parsers lose nearly
+  everything a stanza body holds -- interface addresses,
   descriptions, VLAN memberships, LAG members -- and AOS-CX reads its
-  interfaces as shut, its `no shutdown` lines being body lines.  Two
-  of them also make records of nested lines, read as headers: IOS XR
-  makes interfaces and routing instances of lines nested under routing
-  protocols, and EOS makes VLANs (37 where the committed captures, as
-  committed, give 31).  The Junos (set form), FortiOS,
-  RouterOS, OPNsense and IOS-XE NETCONF parsers do not depend on
-  indentation, and VyOS keeps its tree but loses a Tier-3 row for BGP
-  or OSPF.  What each of those platforms' own CLI makes of such text
-  is not established here.  The AOS-S parser reads it as the indented
-  config (Fixed, above); each other parser is a change of its own,
-  with its platform's rule from its vendor.
+  interfaces as shut, its `no shutdown` lines being body lines.  EOS
+  also makes VLANs of nested lines, read as headers (37 where the
+  committed captures, as committed, give 31).  The Junos (set form),
+  FortiOS, RouterOS, OPNsense and IOS-XE NETCONF parsers do not
+  depend on indentation, and VyOS keeps its tree but loses a Tier-3
+  row for BGP or OSPF.  What each of those platforms' own CLI makes
+  of such text is not established here.  The AOS-S parser reads it as
+  the indented config, and the IOS XR parser refuses it in words, for
+  the router's reason: IOS XR places a line by its indentation when it
+  loads a file (inferred from Cisco's CLI model and a Cisco engineer's
+  router output; Fixed, above).  Each other parser is a change of its
+  own, with its platform's rule from its vendor.
+- **A whole IOS XR `show running-config formal` config is refused,
+  not read.**  No capture of it is committed, and Cisco states its
+  printed shape for class and policy maps only.  Paste `show
+  running-config` without `formal`.  The form is recognised by its
+  `interface` lines: a formal excerpt that holds no `interface` line
+  with a setting (`show running-config formal router static`, or
+  formal output filtered by `| include`) is not recognised, and is
+  read as almost nothing, in a job that can say `completed`.
 - **The AOS-S probe needs the indentation, or the banner.**  An AOS-S
   config with its `;` banner cut off and its indentation lost is
   detected as no codec; with its banner it is detected whatever its

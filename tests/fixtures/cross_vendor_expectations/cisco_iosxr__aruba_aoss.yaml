@@ -183,7 +183,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 12 of 12 cells (54 of 54 addressed records across the 11 real
+      Preserved on 12 of 12 cells (every addressed record across the real
       captures).  Both matrices
       declare `/interfaces/interface/ipv4/address/ip` + `prefix-length`
       supported.  The anycast companion `.../virtual-gateway-address` is
