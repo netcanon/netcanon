@@ -50,6 +50,7 @@ from netcanon.migration.canonical.intent import (
 from netcanon.migration.codecs.base import ParseError
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 from netcanon.migration.codecs.dell_os10 import DellOS10Codec
+from tests.unit.migration.test_the_list_holds_the_native_vlan import read_text
 
 pytestmark = pytest.mark.unit
 
@@ -422,8 +423,10 @@ class TestSwitchport:
     ])
     def test_no_access_vlan_takes_it_back(self, codec, lines, mode, access, native, listed):
         """`no switchport access vlan` is what this codec's renderer
-        writes for a trunk that carries no untagged VLAN; a parser that
-        passed it over would keep an access VLAN stated above it."""
+        writes for a trunk that carries no untagged VLAN -- one with no
+        native VLAN in the tree, and one whose native VLAN its list
+        leaves out; a parser that passed it over would keep an access
+        VLAN stated above it."""
         raw = "\n".join(["interface ethernet1/1/1", *(f" {x}" for x in lines), "!", ""])
         port = codec.parse(raw).interfaces[0]
         assert (port.switchport_mode, port.access_vlan, port.trunk_native_vlan) == (mode, access, native)
@@ -1066,6 +1069,21 @@ def _trunk_lines(codec, native, listed, **more) -> list[str]:
     return lines[lines.index("switchport mode trunk") + 1:]
 
 
+#: The review line above ``no switchport access vlan`` for a trunk with
+#: no native VLAN, typed whole: with neither line the trunk would be an
+#: untagged member of the switch's default VLAN, and Dell's pages
+#: disagree on what the line leaves it with.  The second form is for an
+#: allowed line that holds VLAN 1, which no Dell page shows.
+_NONE_REVIEW = (
+    "! review: no untagged VLAN is stated for this trunk; an OS10 trunk with neither an access line nor the next "
+    "line is an untagged member of the switch's default VLAN, and Dell's pages disagree on whether the next line "
+    "leaves it with no untagged VLAN or with VLAN 1 -- check what this port is to carry untagged"
+)
+_NONE_REVIEW_VLAN_1 = _NONE_REVIEW.replace(
+    "with VLAN 1 -- ", "with VLAN 1; no Dell page shows VLAN 1 on an OS10 trunk's allowed line -- ",
+)
+
+
 class TestRenderForm:
     def test_native_vlan_uses_the_access_vlan_keyword(self, codec):
         out = codec.render(codec.parse(_DEVICE_DUMP))
@@ -1086,12 +1104,80 @@ class TestRenderForm:
         (30, [10, 20, 30], ["switchport access vlan 30", "switchport trunk allowed vlan 10,20"]),
         # The list is the native VLAN alone: no tagged VLAN, no line.
         (10, [10], ["switchport access vlan 10"]),
-        # No native VLAN stated: nothing is written for it.
-        (None, [20, 30], ["switchport trunk allowed vlan 20,30"]),
-        (None, [], []),
+        # No native VLAN: the trunk carries none untagged, and is
+        # written the line that takes the access VLAN away, under its
+        # review line -- with neither line it would be an untagged
+        # member of the switch's default VLAN.
+        (None, [20, 30], [_NONE_REVIEW, "no switchport access vlan", "switchport trunk allowed vlan 20,30"]),
+        (None, [], [_NONE_REVIEW, "no switchport access vlan"]),
+        (None, [1, 20], [_NONE_REVIEW_VLAN_1, "no switchport access vlan", "switchport trunk allowed vlan 1,20"]),
     ])
     def test_no_vlan_is_on_both_lines(self, codec, native, listed, written):
         assert _trunk_lines(codec, native, listed) == written
+
+    @pytest.mark.parametrize("name,more", [
+        ("ethernet1/1/1", ""),
+        ("port-channel1", "interface ethernet1/1/2\n no shutdown\n channel-group 1 mode active\n!\n"),
+    ])
+    @pytest.mark.parametrize("stanza", [
+        # Written by OS10's own renderer, and read back as it went.
+        " switchport mode trunk\n no switchport access vlan\n switchport trunk allowed vlan 20,30\n",
+        # ... and the stanza with no access line, which is the same tree.
+        " switchport mode trunk\n switchport trunk allowed vlan 20,30\n",
+    ], ids=["the line", "neither line"])
+    def test_no_access_vlan_round_trips(self, codec, name, more, stanza):
+        """A port and a port-channel, with the line and with neither:
+        each comes back as one tree, and is written the line."""
+        raw = (
+            "interface vlan20\n no shutdown\n!\ninterface vlan30\n no shutdown\n!\n"
+            f"interface {name}\n no shutdown\n{stanza}!\n{more}"
+        )
+        tree = codec.parse(raw)
+        out = codec.render(tree)
+        back = codec.parse(out)
+        assert back.model_dump(mode="json")["interfaces"] == tree.model_dump(mode="json")["interfaces"]
+        lists = {vlan.id: vlan.tagged_ports for vlan in tree.vlans}
+        assert {vlan.id: vlan.tagged_ports for vlan in back.vlans} == lists
+        trunk = next(iface for iface in back.interfaces if iface.name == name)
+        assert (trunk.switchport_mode, trunk.trunk_native_vlan, trunk.trunk_allowed_vlans) == ("trunk", None, [20, 30])
+        written = out.split(f"interface {name}\n")[1].split("\n!")[0].splitlines()
+        assert written[-3:] == [
+            f" {_NONE_REVIEW}", " no switchport access vlan", " switchport trunk allowed vlan 20,30",
+        ]
+
+    @pytest.mark.parametrize("first,second", [
+        # A trunk stanza with its native VLAN, then one with its list ...
+        (" switchport mode trunk\n switchport access vlan 10\n",
+         " switchport mode trunk\n switchport trunk allowed vlan 20\n"),
+        # ... and the other way round.
+        (" switchport mode trunk\n switchport trunk allowed vlan 20\n",
+         " switchport mode trunk\n switchport access vlan 10\n"),
+        # An access stanza, then a trunk stanza: a trunk whose access
+        # VLAN -- its untagged VLAN on OS10 -- is 10 ...
+        (" switchport access vlan 10\n",
+         " switchport mode trunk\n switchport trunk allowed vlan 20\n"),
+        # ... and the access line in the last stanza.
+        (" switchport mode trunk\n switchport trunk allowed vlan 20\n",
+         " switchport access vlan 10\n"),
+    ], ids=["native first", "native last", "access stanza first", "access stanza last"])
+    def test_two_stanzas_of_one_port_keep_its_untagged_vlan(self, codec, first, second):
+        """One interface in two stanzas, which OS10 applies in turn: the
+        port is a trunk that carries VLAN 10 untagged and VLAN 20
+        tagged.  The parser makes a record of each stanza, and the one
+        with no native VLAN must not be written ``no switchport access
+        vlan``: in its stanza the line would take back the VLAN the
+        other states.  The output, read back stanza by stanza, gives the
+        port the untagged VLAN the source TEXT gives it."""
+        raw = (
+            "interface vlan10\n no shutdown\n!\ninterface vlan20\n no shutdown\n!\n"
+            f"interface ethernet1/1/1\n no shutdown\n{first}!\ninterface ethernet1/1/1\n{second}!\n"
+        )
+        out = codec.render(codec.parse(raw))
+        source = read_text(raw, "dell_os10")["ethernet1/1/1"]
+        written = read_text(out, "dell_os10")["ethernet1/1/1"]
+        assert (source.untagged, source.tagged) == (10, frozenset({20}))
+        assert (written.untagged, written.tagged) == (source.untagged, source.tagged)
+        assert "no switchport access vlan" not in out
 
     def test_every_vlan_without_the_native_one(self, codec):
         lines = _trunk_lines(codec, 10, range(1, 4095))

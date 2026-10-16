@@ -182,8 +182,8 @@ per_field_expectation:
     references: [port_naming, vlans, ip_addressing]
 
   vlans:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       VLAN id, name, description, tagged_ports, untagged_ports, and
       ipv4_addresses (SVI absorption) round-trip cleanly.  Cisco's
       port-centric ``switchport access vlan N`` is transposed to
@@ -192,7 +192,18 @@ per_field_expectation:
       handled by the aruba_aoss codec's ``absorbs_svi_into_vlan``
       flag — Cisco's ``interface Vlan100 / ip address X`` populates
       ``CanonicalVlan.ipv4_addresses`` and the Aruba renderer emits
-      it inside the VLAN stanza.
+      it inside the VLAN stanza.  One record can be added: VLAN 1,
+      where the IOS-XE tree has none.  An AOS-S port is in the
+      default VLAN (VID 1) until a line takes it out, so a trunk the
+      output tags in some VLAN and lists untagged in none -- one that
+      carries no VLAN untagged -- is written ``no untagged <port>``
+      under ``vlan 1`` (a trunk that carries VLAN 1 tagged is written
+      ``tagged`` there instead); for a tree with no VLAN 1 record that stanza
+      is written all the same, and the AOS-S parser reads it back as
+      a VLAN 1 record with no member.  The synthetic kitchen-sink has
+      such a trunk, and comes back one VLAN longer.  The real IOS-XE
+      captures come back with no VLAN they did not have, and their
+      cells align (METHODOLOGY_ISSUE_under against this disposition).
     references: [vlans]
 
   static_routes:

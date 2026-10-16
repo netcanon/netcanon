@@ -387,7 +387,14 @@ for the reference pattern).
    line, it would carry the default untagged.  Where the form is a
    line for the whole switch, decide it over every port
    (`every_native_vlan_tagged`), and say what is not written in a
-   `! review:` line.
+   `! review:` line.  Where the default has no id the list can be
+   asked about, ask of every trunk with no native VLAN: OS10 writes
+   each one `no switchport access vlan` under a review line, unless
+   another record of the interface states its untagged VLAN (a native
+   VLAN, or an access VLAN), which the line would take back.  AOS-S,
+   told VLAN by VLAN, asks of the output's member lists: a name tagged
+   somewhere, untagged nowhere and on no line of VLAN 1 is taken out
+   of VLAN 1 with `no untagged`.
    `tests/unit/migration/test_a_trunk_says_none_nothing_or_all.py`
    fails for a public codec that is neither in the table nor named,
    with its reason, in that module's `NO_ALLOWED_LIST`; and a codec
@@ -620,7 +627,11 @@ the policy locally:
   than lex `1/1, 1/10, 1/2`).  Used by `project_switchport_to_vlan`
   and the Junos parser's port-list materialisation to guarantee
   cross-vendor list-order parity in `vlan.tagged_ports` /
-  `vlan.untagged_ports`.  Wave 7c (commit `87b2248`) added this as
+  `vlan.untagged_ports`; by the AOS-S renderer for the names of its
+  VLAN 1 lines (`_out_of_vlan_1`, `_tagged_in_vlan_1`); by the AOS-S
+  parser for the order of the interface records it makes from the
+  VLAN lists; and by the IOS-XE CLI renderer for the order of its
+  interface stanzas.  Wave 7c (commit `87b2248`) added this as
   the systemic fix for cross-vendor lexical-order drift.
 
 * **`netcanon/migration/canonical/port_names.py::rewrite_port_names`**
@@ -800,7 +811,11 @@ the policy locally:
   by codec: VLAN 1 on `arista_eos`, `aruba_aoscx`, `cisco_iosxe_cli`
   and `cisco_nxos`; `NATIVE_NONE` on `juniper_junos`;
   `NATIVE_OF_THE_SWITCH` on `dell_os10`, the default VLAN of the
-  switch, which is a setting no trunk states and is not filled in.
+  switch, which is a setting no trunk states and is not filled in
+  (as a target, an OS10 trunk with no native VLAN is written `no
+  switchport access vlan`, under a review line, unless another
+  record of the interface states its untagged VLAN -- a native VLAN,
+  or an access VLAN).
   The ONE place it is written, with the same codecs as the two tables
   above and no other; the vendors' sentences are in the same
   vendor-reference page, and so is what is not established.  In a
@@ -849,7 +864,13 @@ the policy locally:
     default id on its list.  `aruba_aoscx` writes `vlan trunk native
     1 tag`, `arista_eos` `switchport trunk native vlan tag`.  Asked
     only for a record of an interface no record of which has a
-    native VLAN (`native_vlan_stated(interfaces)`).
+    native VLAN (`native_vlan_stated(interfaces)`).  Not asked by
+    `dell_os10`, whose default is no id: it writes `no switchport
+    access vlan` for every such trunk, under a review line, and asks
+    `native_vlan_stated` the same way -- and of an access record of
+    the same name with an access VLAN, which states the trunk's
+    untagged VLAN on OS10 as well.  `aruba_aoss` is in no table
+    and asks VLAN by VLAN (`_out_of_vlan_1` in its renderer).
   * **`every_native_vlan_tagged(codec, interfaces)`** -- whether an
     IOS-XE or NX-OS output says `vlan dot1q tag native`, a line for
     every trunk: where a trunk wants the form, no trunk carries a

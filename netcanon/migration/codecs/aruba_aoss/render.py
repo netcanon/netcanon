@@ -22,17 +22,31 @@ Multi-VIP cross-vendor sources drop secondaries with ``; review:``
 comments (AOS-S supports one virtual IP per VRID).  Non-``vrrp``
 modes (HSRP / CARP) emit review comments and skip.
 
+By HPE's own sentences an AOS-S port is in the default VLAN (VID 1)
+until it is removed from it, and a new trunk group is placed in it.
+So a name the output tags in some VLAN, lists ``untagged`` in none
+and names on no line of VLAN 1 -- a port or a group that carries no
+VLAN untagged -- is taken out of VLAN 1 by a ``no untagged`` line in
+VLAN 1's stanza, after its ``name`` line and before its lists, as
+HPE's examples from 15.14 on print it (:func:`_out_of_vlan_1`).  A
+trunk that carries VLAN 1 tagged in a
+tree with no VLAN 1 record (a trunk of every VLAN) is written
+``tagged`` there; that tree is written a ``vlan 1`` stanza with no
+``name`` line, first among the VLANs, where it needs one.  A name on
+no VLAN line at all -- a trunk that carries nothing -- has no AOS-S
+form, and is left as it is.
+
 A trunk whose native VLAN its allowed list does not hold states that
 VLAN and, in the tree, does not carry it (``trunk_untagged_vlan``):
 no VLAN lists the port ``untagged``, so no ``untagged`` line is
-written for it.  Left at that the output would say nothing of it, and
-by HPE's own sentences an AOS-S port is in the default VLAN until it
-is removed from it.  So the VLAN's stanza carries one ``; review:``
-line for each such name (:data:`_NATIVE_NOT_CARRIED_REVIEW`), which
-the parser passes over like any comment.  The line has two forms:
-for a port it says what those sentences say, and for a trunk group
-or a port that is in one -- of which no sentence was found -- that
-what it is in by default is not established.
+written for it.  So the VLAN's stanza carries one ``; review:`` line
+for each such name (:data:`_NATIVE_NOT_CARRIED_REVIEW`), which the
+parser passes over like any comment.  The line says what the output
+does with the name where ``no untagged`` takes it out of VLAN 1, and
+otherwise what HPE's sentences say: for a port, that it remains in
+the default VLAN until it is removed; for a trunk group or a port
+that is in one, that a new group is placed in the default VLAN and a
+static one is configured as a port is.
 
 Internal helper re-exported from ``codec.py`` for tests that pin the
 renderer's port-range compression contract:
@@ -56,7 +70,7 @@ from ..._radius_secrets import (
 from ..._user_secrets import classify_hash, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent
-from ...canonical.transforms import trunk_untagged_vlan
+from ...canonical.transforms import _natural_port_sort_key, trunk_untagged_vlan
 from ..base import RenderError
 from .parse import _lists_read_from, _members_read_from
 from .port_names import one_spelling, trunk_number
@@ -449,47 +463,122 @@ def _format_port_list(ports: list[str]) -> str:
 #: renumbered it -- so the line does not call it the source's.  What
 #: the list leaves out is a fact of the text the trunk was read
 #: from; what the source switch does with such a VLAN is not said
-#: here, because not every vendor says it.  ``{switch}`` is what an
-#: AOS-S switch does with the name when no line makes it untagged,
-#: in one of the two forms below.
+#: here, because not every vendor says it.  ``{switch}`` is what the
+#: output does with the name, or what an AOS-S switch does with it
+#: when no line makes it untagged, in one of the three forms below.
 _NATIVE_NOT_CARRIED_REVIEW = (
     "; review: port {port} -- native VLAN {native} is stated for this "
     "trunk and its allowed list leaves it out, so no untagged line is "
-    "written for this port; {switch} -- check what this port is to "
+    "written for this port{switch} -- check what this port is to "
     "carry untagged"
 )
 
-#: For a port: what HPE's two sentences say, and no more.  "In the
-#: factory default configuration, all ports are assigned to the
-#: default VLAN (DEFAULT_VLAN; VID=1)." and "Any ports not
-#: specifically removed from the default VLAN remain in the
-#: DEFAULT_VLAN, regardless of other port assignments."  Neither
-#: says tagged or untagged, and so neither does the line.
+#: For a name the output takes out of VLAN 1 (:func:`_out_of_vlan_1`):
+#: what the output does, and no more.
+_TAKEN_OUT_OF_VLAN_1 = " and it is taken out of the default VLAN"
+
+#: For a port no line takes out of VLAN 1: what HPE's two sentences
+#: say, and no more.  "In the factory default configuration, all
+#: ports are assigned to the default VLAN (DEFAULT_VLAN; VID=1)." and
+#: "Any ports not specifically removed from the default VLAN remain
+#: in the DEFAULT_VLAN, regardless of other port assignments."
+#: Neither says tagged or untagged, and so neither does the line.
 _A_PORT_STAYS_IN_VLAN_1 = (
-    "in the factory default configuration an AOS-S port is in the "
+    "; in the factory default configuration an AOS-S port is in the "
     "default VLAN (VID 1), and it remains there until it is removed"
 )
 
-#: For a trunk group (``Trk<n>``) and for a port that is in one.
-#: HPE's sentences speak of ports; none was found that says what a
-#: trunk group, or a port once it is in one, is in by default.
-_NOT_ESTABLISHED_FOR_A_GROUP = (
-    "which VLAN an AOS-S trunk group, or a port that is in one, is in "
-    "by default is not established"
+#: For a trunk group (``Trk<n>``) and for a port that is in one, that
+#: no line takes out of VLAN 1.  HPE, in the 2530, 2930F/M and
+#: 3810/5400R management guides: "Creating a new trunk automatically
+#: places the trunk in the DEFAULT_VLAN, regardless of whether the
+#: ports in the trunk were in another VLAN.", "You can configure a
+#: static trunk in the same way that you configure a port for
+#: membership in any VLAN." and, of the ports of a trunk, "configuration
+#: for all ports in a trunk is done at the trunk level".  The groups
+#: this renderer writes are static ones (``trunk <ports> trk<n>
+#: lacp`` or ``trunk``; HPE: "TrkX (Static)"), so HPE's limit for a
+#: dynamic LACP trunk does not bear on them.
+_A_GROUP_STAYS_IN_VLAN_1 = (
+    "; a new AOS-S trunk group is placed in the default VLAN (VID 1), "
+    "a static one is configured for VLAN membership as a port is, and "
+    "the VLANs of a port that is in one are the group's"
 )
 
 
-def _native_not_carried_line(port: str, native: int, grouped: bool) -> str:
+def _native_not_carried_line(
+    port: str, native: int, grouped: bool, taken_out: bool = False,
+) -> str:
     """:data:`_NATIVE_NOT_CARRIED_REVIEW` for one name of
-    :func:`_natives_not_carried`, in the form for a trunk group or a
-    port of one (*grouped*) or in the form for a port."""
-    return _NATIVE_NOT_CARRIED_REVIEW.format(
-        port=port, native=native,
-        switch=(
-            _NOT_ESTABLISHED_FOR_A_GROUP if grouped
-            else _A_PORT_STAYS_IN_VLAN_1
-        ),
-    )
+    :func:`_natives_not_carried`: in the form for a name the output
+    takes out of VLAN 1 (*taken_out*), and otherwise in the form for a
+    trunk group or a port of one (*grouped*) or in the form for a
+    port."""
+    if taken_out:
+        switch = _TAKEN_OUT_OF_VLAN_1
+    else:
+        switch = _A_GROUP_STAYS_IN_VLAN_1 if grouped else _A_PORT_STAYS_IN_VLAN_1
+    return _NATIVE_NOT_CARRIED_REVIEW.format(port=port, native=native, switch=switch)
+
+
+def _out_of_vlan_1(tree: CanonicalIntent, on_vlan_1: set[str]) -> list[str]:
+    """The names the ``no untagged`` line of the output's ``vlan 1``
+    stanza is written for: each name the output lists ``tagged`` in
+    some VLAN, lists ``untagged`` in none, and does not name on a line
+    of VLAN 1.
+
+    By HPE's sentence "Any ports not specifically removed from the
+    default VLAN remain in the DEFAULT_VLAN, regardless of other port
+    assignments.", a name no line takes out of VLAN 1 stays in it --
+    an untagged VLAN on a port the tree gives none.  In every full
+    config HPE's 16.09-16.11 guides print, each port is on one line of
+    ``vlan 1``, its
+    ``no untagged`` line among them.  It is asked of the tree's member
+    lists, which the stanzas are written from: a fact about the
+    OUTPUT, not a reading of one interface's fields.  *on_vlan_1* are
+    the names the output's VLAN 1 lines name besides (one spelling
+    each, :func:`.port_names.one_spelling`).
+
+    A name on no VLAN line at all is not among them: AOS-S has no form
+    for a port that is a member of no VLAN.
+
+    Each name is in the spelling of the tagged line that names it
+    first, once, in port order.
+    """
+    untagged = {one_spelling(port) for vlan in tree.vlans for port in vlan.untagged_ports}
+    found: dict[str, str] = {}
+    for vlan in tree.vlans:
+        for port in vlan.tagged_ports:
+            name = one_spelling(port)
+            if name not in untagged and name not in on_vlan_1:
+                found.setdefault(name, port)
+    return [found[name] for name in sorted(found, key=_natural_port_sort_key)]
+
+
+def _tagged_in_vlan_1(tree: CanonicalIntent) -> list[str]:
+    """For a tree with no VLAN 1 record: the trunks that carry VLAN 1
+    TAGGED -- the list holds it, and the untagged VLAN
+    (``trunk_untagged_vlan``) is not it.  Each trunk record by its own
+    name, as the other VLANs' lines name it: a LAG by its group name,
+    and a member port that states the trunk lines under its own name
+    by that name as well; once, in port order.
+
+    Such a trunk has no VLAN 1 to be stamped onto (a trunk of every
+    VLAN is put on the VLANs a tree declares, and makes no record),
+    and with no line for it would stay in the DEFAULT_VLAN, by HPE's
+    sentence, as a port that is in it untagged by default.  A member
+    left off this line would be named on VLAN 1's ``no untagged`` line
+    instead (:func:`_out_of_vlan_1`), taken out of a VLAN its own
+    record carries.
+    """
+    found: dict[str, str] = {}
+    for iface in tree.interfaces:
+        if iface.switchport_mode != "trunk" or 1 not in iface.trunk_allowed_vlans:
+            continue
+        name = one_spelling(iface.name)
+        if trunk_untagged_vlan(iface.trunk_allowed_vlans, iface.trunk_native_vlan) != 1:
+            found.setdefault(name, iface.name)
+    return [found[name] for name in sorted(found, key=_natural_port_sort_key)]
 
 
 def _natives_not_carried(tree: CanonicalIntent) -> dict[int, dict[str, bool]]:
@@ -817,11 +906,55 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # Each is taken from here by the first stanza of its VLAN; what is
     # left when the stanzas are written has no stanza to stand in.
     not_carried = _natives_not_carried(tree)
+    # VLAN 1.  A name the output tags somewhere and lists untagged
+    # nowhere stays in the DEFAULT_VLAN unless a line takes it out, so
+    # VLAN 1's stanza says ``no untagged`` for it: after the ``name``
+    # line and before the lists, the order of HPE's examples from 15.14 on
+    # (the parser reads a ``no`` line above the lists as removing
+    # nothing, which on lists that share no name is the tree they were
+    # written from).  A tree with no VLAN 1 record gets the stanza,
+    # first, where it has such a name or a trunk that carries VLAN 1
+    # tagged; it has no ``name`` line (the tree holds none, and the
+    # switch keeps its own).
+    has_vlan_1 = any(vlan.id == 1 for vlan in tree.vlans)
+    tagged_in_1 = [] if has_vlan_1 else _tagged_in_vlan_1(tree)
+    on_vlan_1 = {one_spelling(port) for port in tagged_in_1} | {
+        one_spelling(port)
+        for vlan in tree.vlans if vlan.id == 1
+        for port in (*vlan.untagged_ports, *vlan.tagged_ports)
+    }
+    out_of_1 = _out_of_vlan_1(tree, on_vlan_1)
+    taken_out = {one_spelling(port) for port in out_of_1}
+
+    def _said_of(vid: int) -> list[str]:
+        """The review lines of the names :data:`not_carried` holds for
+        *vid*, taken from it."""
+        return [
+            "   " + _native_not_carried_line(
+                port, vid, grouped, one_spelling(port) in taken_out,
+            )
+            for port, grouped in not_carried.pop(vid, {}).items()
+        ]
+
+    if not has_vlan_1 and (out_of_1 or tagged_in_1):
+        opens_at = len(lines)
+        lines.append("vlan 1")
+        if out_of_1:
+            lines.append(f"   no untagged {_format_port_list(out_of_1)}")
+        if tagged_in_1:
+            lines.append(f"   tagged {_format_port_list(tagged_in_1)}")
+            _untagged, tagged = _lists_read_from("\n".join(lines[opens_at:]))
+            given_back.update(_given_back(tagged, tagged_in_1))
+        lines.extend(_said_of(1))
+        lines.append("   exit")
     for vlan in tree.vlans:
         opens_at = len(lines)
         lines.append(f"vlan {vlan.id}")
         if vlan.name:
             lines.append(f'   name "{_esc(vlan.name)}"')
+        if vlan.id == 1 and out_of_1:
+            lines.append(f"   no untagged {_format_port_list(out_of_1)}")
+            out_of_1 = []           # (a second record of VLAN 1 says it no more)
         if vlan.untagged_ports:
             lines.append(
                 f"   untagged {_format_port_list(vlan.untagged_ports)}"
@@ -836,10 +969,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             given_back.update(_given_back(tagged, vlan.tagged_ports))
         # After the lists, and after they were read back: a comment
         # is no line of theirs.
-        for port, grouped in not_carried.pop(vlan.id, {}).items():
-            lines.append(
-                "   " + _native_not_carried_line(port, vlan.id, grouped)
-            )
+        lines.extend(_said_of(vlan.id))
         # SVI absorption — codepath 2 of 3.  See
         # ._svi_absorption for the full rule.  SVI address may live
         # on:
@@ -965,7 +1095,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # the stanza would stand.
     for native, ports in not_carried.items():
         for port, grouped in ports.items():
-            lines.append(_native_not_carried_line(port, native, grouped))
+            lines.append(_native_not_carried_line(
+                port, native, grouped, one_spelling(port) in taken_out,
+            ))
 
     # OOBM (out-of-band management) — AOS-S has a top-level `oobm`
     # block that's NOT a regular interface stanza.  When the cross-

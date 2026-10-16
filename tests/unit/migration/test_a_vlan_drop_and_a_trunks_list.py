@@ -88,12 +88,16 @@ from tests.unit.migration.test_the_list_holds_the_native_vlan import (
     PORT_FORM,
     SAID_OF_A_PORT,
     SAID_ON_OS10,
+    SAID_TAKEN_OUT,
     SWITCHES,
+    TAKEN_OUT_FORM,
     _ids,
     _stanzas,
+    out_of_vlan_1,
     read_text,
     read_tree,
     said_how,
+    said_of_none_on_os10,
 )
 
 pytestmark = pytest.mark.unit
@@ -896,8 +900,27 @@ def test_a_merged_vlan_stays_tagged(
     assert _said_of_the_native(job) == [
         f"vlan_rename: interface {final!r} had native VLAN 10 {_OUTSIDE}, and {how} — {_CLEARED}",
     ], job.warnings
-    assert not said_how(job.rendered) and "no switchport access vlan" not in job.rendered
+    _written_as_cleared(target, job, final)
     assert job.status == MigrationJobStatus.completed, (target, job.status)
+
+
+def _written_as_cleared(target: str, job, final: str) -> None:
+    """The trunk is written as one with NO native VLAN, and not as one
+    whose native VLAN its list leaves out: no line of the output says
+    a native VLAN is stated.  On OS10 such a trunk is written ``no
+    switchport access vlan`` under the review line for a trunk that
+    states no untagged VLAN; on AOS-S it is taken out of VLAN 1."""
+    assert not said_how(job.rendered), job.rendered
+    if target == "dell_os10":
+        stanza = dict(_stanzas(job.rendered, "interface "))[final]
+        at = stanza.index("no switchport access vlan")
+        holds_1 = any(1 in _ids(line.rsplit(" ", 1)[1]) for line in stanza if line.startswith(f"{_ALLOWED} "))
+        assert stanza[at - 1] == said_of_none_on_os10(holds_1), stanza
+        assert not [line for line in stanza if line.startswith("! review: native VLAN")], stanza
+    else:
+        assert "no switchport access vlan" not in job.rendered
+    if target == "aruba_aoss":
+        assert final in out_of_vlan_1(job.rendered), job.rendered
 
 
 @pytest.mark.parametrize("target", SWITCHES)
@@ -932,6 +955,12 @@ RENUMBERED: dict[str, tuple[str, str, str, dict[int, int | None], int, int, tupl
 }
 
 
+#: The titles of :data:`RENUMBERED` whose list leaves VLAN 1 out: onto
+#: AOS-S such a trunk is tagged elsewhere only, and VLAN 1's stanza
+#: takes it out of VLAN 1.  (Every id but the native one holds VLAN 1.)
+_TAKEN_OUT_OF_VLAN_1 = frozenset({"EOS, a parking VLAN beside every other id"})
+
+
 @pytest.mark.parametrize("target", SWITCHES)
 @pytest.mark.parametrize("title", sorted(RENUMBERED))
 def test_a_renumbered_native_vlan_stays_off_the_trunk(title: str, target: str) -> None:
@@ -950,10 +979,16 @@ def test_a_renumbered_native_vlan_stays_off_the_trunk(title: str, target: str) -
         assert not port.carries_tagged(after), (title, target)
         assert all(port.carries_tagged(vid) for vid in tagged), (title, target)
     if target == "aruba_aoss":
-        assert said_how(job.rendered) == [(str(after), after, final, PORT_FORM)], job.rendered
+        # A list that leaves VLAN 1 out: tagged elsewhere, untagged
+        # nowhere, and taken out of VLAN 1.  One that holds it: tagged
+        # in VLAN 1, which the port stays in.
+        taken_out = title in _TAKEN_OUT_OF_VLAN_1
+        form, whole = (TAKEN_OUT_FORM, SAID_TAKEN_OUT) if taken_out else (PORT_FORM, SAID_OF_A_PORT)
+        assert said_how(job.rendered) == [(str(after), after, final, form)], job.rendered
         stanza = dict(_stanzas(job.rendered, "vlan "))[str(after)]
-        assert SAID_OF_A_PORT.format(port=final, native=after) in stanza
+        assert whole.format(port=final, native=after) in stanza
         assert not [line for line in stanza if line.startswith(("untagged", "tagged"))], stanza
+        assert (final in out_of_vlan_1(job.rendered)) == taken_out, job.rendered
     elif target == "dell_os10":
         stanza = dict(_stanzas(job.rendered, "interface "))[final]
         at = stanza.index("no switchport access vlan")
@@ -982,7 +1017,7 @@ def test_a_merge_beside_such_a_list_still_clears(target: str) -> None:
         f"vlan_rename: interface {final!r} had native VLAN 1000 {_OUTSIDE}, and the map merges it into VLAN 10, "
         f"which the trunk carries tagged — {_CLEARED}",
     ], job.warnings
-    assert not said_how(job.rendered) and "no switchport access vlan" not in job.rendered
+    _written_as_cleared(target, job, final)
 
 
 def _a_port(*lines: str) -> str:

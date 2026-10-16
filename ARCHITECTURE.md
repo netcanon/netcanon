@@ -910,8 +910,19 @@ trunk lines and no mode, and the ports in a mode no mode line is
 written for -- dynamic, private-vlan, dot1q-tunnel, fex-fabric and
 the like; a port with no mode and no trunk line is not counted);
 otherwise such a port has a `! review:` line and the target's
-default.  OS10 and AOS-S are written no such form (the CHANGELOG's
-known limitations).
+default.  OS10 and AOS-S have a default for such a port too, and are
+asked another question.  OS10's is the switch's default VLAN, which
+has no id the list can be asked about: a trunk with no native VLAN
+is written `no switchport access vlan`, under a `! review:` line
+(Dell's pages disagree on what it leaves), unless another record of
+the interface states its untagged VLAN -- a native VLAN, or an access
+VLAN -- which the line would take back.  AOS-S is asked of the
+output's member lists, VLAN by VLAN: a name some VLAN tags, none
+lists untagged and no line of VLAN 1 names is taken out of VLAN 1
+with `no untagged` in VLAN 1's stanza, written for a tree that has no
+VLAN 1 record as well.  What
+remains -- a trunk that carries nothing, which AOS-S has no form for
+-- is in the CHANGELOG's known limitations.
 [`tests/unit/migration/test_the_list_holds_the_native_vlan.py`](tests/unit/migration/test_the_list_holds_the_native_vlan.py)
 reads what a device carries untagged on each side of every job by
 its own platform's grammar, and does not read the tree by the

@@ -373,8 +373,15 @@ NATIVE_OF_THE_SWITCH = "the switch's default VLAN"
 #:   native VLAN of a port is the default VLAN of the switch.  Which
 #:   id that is is a setting of the switch, which a trunk's stanza
 #:   does not state, so it is NOT filled in: an OS10 trunk that
-#:   states no access VLAN is left with no native VLAN.  (No
-#:   committed capture has such a trunk.)
+#:   states no access VLAN is left with no native VLAN -- the reading
+#:   that carries fewer.  (No committed capture has such a trunk.)
+#:   As a TARGET the default has no id either, so no "does the list
+#:   hold it" can be asked: a trunk with no native VLAN is written
+#:   ``no switchport access vlan`` under a review line, by its
+#:   renderer, and not through :func:`wants_no_untagged_vlan` --
+#:   unless another record of the interface states its untagged VLAN
+#:   (a native VLAN, or an access VLAN), which the line would take
+#:   back.
 #:
 #: The vendors' sentences, with their sources, are in
 #: ``docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md``
@@ -387,7 +394,12 @@ NATIVE_OF_THE_SWITCH = "the switch's default VLAN"
 #: in all of them.  (AOS-S is in none, for the one reason: it is told
 #: VLAN by VLAN.  HPE's sentences say a port is in the default VLAN
 #: until it is removed from it, and not whether tagged or untagged,
-#: so nothing is filled in for it either.)
+#: so nothing is filled in for it either.  As a target it is asked
+#: VLAN by VLAN too: its renderer takes a name the output tags
+#: somewhere, lists untagged nowhere and names on no line of VLAN 1
+#: out of VLAN 1 with ``no untagged``, and writes a trunk that
+#: carries VLAN 1 tagged in a ``vlan 1`` stanza where the tree has no
+#: VLAN 1 record.)
 TRUNK_THAT_STATES_NO_NATIVE: dict[str, int | str] = {
     "arista_eos": 1,
     "aruba_aoscx": 1,
@@ -610,7 +622,12 @@ def wants_no_untagged_vlan(
     VLAN that is not carried is written.  Nor where the tree states
     a native VLAN: a line for it is written, and the default is not
     in force.  Nor on a platform whose default is no id (Junos has
-    none; OS10's is a setting of the switch).
+    none; OS10's is a setting of the switch, so its renderer writes
+    ``no switchport access vlan`` for a trunk with no native VLAN
+    whatever its list holds, unless another record of the interface
+    states its untagged VLAN -- a native VLAN, or an access VLAN).
+    AOS-S is in no table: its renderer asks VLAN by VLAN which names
+    no line takes out of VLAN 1.
 
     Asked for a port written as a trunk, of an interface that has no
     native VLAN in any record (:func:`native_vlan_stated`).
