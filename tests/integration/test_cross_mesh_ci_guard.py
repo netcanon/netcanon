@@ -430,6 +430,16 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # The loss is real (a secure-tunnel interface with no description comes back
 # with a ``review:`` comment for one) and no committed capture shows it; the
 # YAML's reason says so.  The same re-measure found no entry with slack.
+#
+# And one more, from 2 to 3: aruba_aoss__juniper_junos.  Its ``vlans[].name``
+# loss was observed on one capture only, a KB.15.15 config whose three VLANs
+# the AOS-S parser read with no name (every line of it is at column 0, and a
+# stanza used to end at the first such line); the Junos render writes a VLAN
+# with no name ``VLAN-<id>``.  The parser reads those names now.  The loss is
+# real -- a VLAN with no name, one named ``all`` and one whose name reads as
+# VLAN ids are written ``VLAN-<id>``, and a name outside the characters
+# Juniper's page gives (``DEFAULT_VLAN``) is written as it is -- and no cell's
+# round trip shows it; the YAML's reason says so.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -444,7 +454,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "aruba_aoss__cisco_iosxe": 2,
     "aruba_aoss__cisco_iosxe_cli": 3,
     "aruba_aoss__fortigate_cli": 2,
-    "aruba_aoss__juniper_junos": 2,
+    "aruba_aoss__juniper_junos": 3,
     "aruba_aoss__mikrotik_routeros": 4,
     "aruba_aoss__opnsense": 6,
     "cisco_iosxe__aruba_aoss": 1,

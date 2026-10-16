@@ -258,10 +258,10 @@ per_field_expectation:
       loopback construct; Junos's ``lo0.0`` does not arise from
       Aruba parse.
       The audit's own path translates no name, and there the names
-      are carried verbatim: preserved on 5 of the 6 cells that
-      populate interfaces.  On
+      are carried verbatim: preserved on 6 of the 7 cells, each of
+      which populates interfaces.  On
       ``aruba_central_5memberstack_rendered.cfg`` the interface list
-      itself drifts, 49 records to 28 -- the Junos render writes
+      itself drifts, 52 records to 31 -- the Junos render writes
       nothing for a port that has no description, no address and no
       VLAN under a name that is not a Junos interface name -- and
       that drift of the whole list is recorded against this key.
@@ -329,8 +329,8 @@ per_field_expectation:
       its ``switchport_mode`` from the lists (tagged anywhere ->
       trunk, untagged only -> access).  The Junos render emits
       ``family ethernet-switching interface-mode {access | trunk}``
-      from it.  Preserved on 5 of the 6 cells that populate
-      interfaces; on the sixth the whole list drifts (see
+      from it.  Preserved on 6 of the 7 cells, each of which populates
+      interfaces; on the seventh the whole list drifts (see
       ``interfaces[].name``).  It was declared lossy while the Junos
       render made the records itself, which drifted the list on
       every cell and left this field unmeasured.
@@ -389,8 +389,9 @@ per_field_expectation:
       parser sets ``dhcp_client`` on no interface of any committed
       capture (a VLAN's ``ip address dhcp-bootp`` is not read into
       it), so the flag is false on every record on both sides.
-      Preserved on 5 of the 6 cells that populate interfaces; on the
-      sixth the whole list drifts (see ``interfaces[].name``).  A
+      Preserved on 6 of the 7 cells, each of which populates
+      interfaces; on the seventh the whole list drifts (see
+      ``interfaces[].name``).  A
       source that did set it would be written
       ``set interfaces <name> unit 0 family inet dhcp``; DHCP-client
       options (lease length, hostname option) are in no canonical
@@ -418,13 +419,23 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      Junos VLAN names allow letters, digits, hyphens, periods only
-      (up to 255 chars); Aruba accepts underscores, spaces (quoted),
-      and a wider character set.  Names containing
-      ``[A-Za-z0-9.-]`` round-trip losslessly; names with
-      underscores are sanitised on Junos render
-      (typically underscore -> hyphen).  Aruba source's quoted
-      ``"DEFAULT_VLAN"`` becomes ``DEFAULT-VLAN`` on Junos.
+      Two things, neither of which this pair's round trip can see.
+      (1) The Junos render keeps a VLAN's own name, except a VLAN with
+      no name, one named ``all`` (which a member list reads as every
+      VLAN) and one whose name reads as another VLAN's id or a range
+      of ids: each of those is written ``VLAN-<id>``, and comes back
+      under that name.  No committed AOS-S cell has such a VLAN now:
+      the one that did, a capture whose three VLANs were read with no
+      name, is read with its names.  (2) Juniper's ``vlans`` page
+      gives the characters a VLAN name may have -- "The name can
+      include letters, numbers, hyphens (-), and periods (.)" -- and
+      names no underscore and no space.  The render writes a name as
+      it is, so on 5 of the 7 cells a ``set vlans <name>`` line has a
+      name outside that set (``DEFAULT_VLAN`` on 4 of them); what a
+      switch does with such a line is not established, and Netcanon's
+      own Junos parser reads it back unchanged, so the round trip
+      shows nothing.  The pair's allowance in the CI guard's
+      unevidenced-declaration table says so.
     references: [aruba-vlans, junos-vlans-statement]
 
   vlans[].description:

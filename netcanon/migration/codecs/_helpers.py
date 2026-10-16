@@ -942,8 +942,10 @@ def _parse_vlan_list(text: str) -> list[int]:
     space is clamped BEFORE the range is materialised so an out-of-bounds
     span (e.g. ``1-9999999999``) cannot OOM the process; the valid
     sub-range is preserved (lossless vs the downstream 1..4094 filter).
-    Non-numeric tokens are skipped.  The inverse is
-    :func:`_coalesce_vlan_ids`.
+    Non-numeric tokens are skipped, and so is a token ``int`` cannot
+    read (a superscript digit, more digits than it converts): a pasted
+    config is not to end a job with an unexpected error.  The inverse
+    is :func:`_coalesce_vlan_ids`.
     """
     result: list[int] = []
     for part in text.split(","):
@@ -959,8 +961,14 @@ def _parse_vlan_list(text: str) -> list[int]:
                 # Counted before it is made: a range is a few bytes.
                 charge("vlan_ids", hi_i - lo_i + 1, part)
                 result.extend(VLAN_IDS[lo_i:hi_i + 1])
-        elif part.isdigit():
-            result.append(int(part))
+        elif part.isdecimal():
+            # ``isdecimal``, not ``isdigit``: a superscript two is a
+            # digit that ``int`` refuses.  So is a run of more digits
+            # than ``int`` converts, which ``isdecimal`` lets through.
+            try:
+                result.append(int(part))
+            except ValueError:
+                continue
     return result
 
 
@@ -990,10 +998,14 @@ def sole_vlan_id(text: str) -> int | None:
             if lo_i != hi_i or found is not None:
                 return None
             found = lo_i
-        elif part.isdigit():
+        elif part.isdecimal():
+            try:
+                vid = int(part)
+            except ValueError:
+                continue
             if found is not None:
                 return None
-            found = int(part)
+            found = vid
     return found
 
 

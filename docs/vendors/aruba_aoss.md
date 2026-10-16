@@ -173,6 +173,133 @@ Spans WB / WC / KB software branches and 2920 / 2930F / 2930M /
 including 2530 / YA branch parse + render through the same
 pipeline — they just aren't pinned by a fixture yet").
 
+The kb1515 capture is committed with every line at column 0, its
+indentation lost between the switch and the repository (a forum or
+paste step, inferred).  The 5-member-stack render has five body lines at
+column 0 (`ip address` in each VLAN stanza, `no
+power-over-ethernet` in two `interface` stanzas): an earlier version
+of the in-tree render script put them there, and the file is kept
+as it is, as an input whose stanza bodies are partly flat.
+
+## Where a stanza ends, and a port's VLAN lines
+
+**A stanza ends where the switch ends a context, not where the
+indentation stops.**  HPE describes the CLI by commands: a command
+that enters a context (`vlan 10`, `interface 3`, `oobm`) moves into
+it; `exit` -- "Return to the previous context" (Basic Operation
+Guide 16.10) -- leaves it, and `end` goes to the Manager level, out of
+every context; and HPE's examples go from one context straight into
+another with a command that enters it (`vlan-10` to `int-3`, `ospf`
+to `vlan-8`).  No HPE switch guide says that indentation plays a
+part, either way.  So Netcanon ends a `vlan`, `interface` or `vrrp
+vrid` stanza at its `exit` or an `end` (in any letter case: `EXIT` is
+the same command; an `end` in a `vrrp vrid` block ends its VLAN's
+stanza too), or at a line in column 0 that enters another context or
+that the top of the config reads (`ip route ...`, `trunk ...`,
+`hostname ...`).  Any other line in column 0 is the stanza's.  A
+config pasted with its indentation lost -- a forum post, a page
+copied out of a browser -- is read as the one it was: `vlan 2` /
+`name "VLAN2"` / `untagged A1` / `exit`, every line at column 0, is
+VLAN 2 with its name and its port.  **Release 0.7.7 and earlier**
+ended the stanza at the first line in column 0 and skipped every
+indented line after it: such a config was read as VLANs with nothing
+in them -- the committed KB.15.15 capture as three empty VLANs and no
+port -- in jobs that said `completed` onto most targets (AOS-S itself
+among them), and no job said a line was not read.  If you migrated a
+config whose stanza bodies were not indented with one of those
+releases, translate it again.
+
+What is not established, and what Netcanon does there:
+
+- **A line of the top inside a stanza that lost its indentation**
+  (`ip route ...` between two of a VLAN's lines) is read as the line
+  it is, and ends the stanza: the VLAN's lines after it are read at
+  the top, where none of them is a line of its own.  For a port
+  context HPE says the global commands are run there ("plus the
+  global configuration, Manager, and Operator commands"); whether the
+  switch then stays in the context is not established, and for a
+  VLAN context whether it takes a global command at all is not.
+  HPE's examples and every committed capture a switch printed indent
+  their body lines and close each stanza with `exit`, and so do not
+  have this shape; whether any release prints otherwise is not
+  established.
+- **An indented stanza header is no header.**  A line of the top is
+  read only from column 0, so ` vlan 10` (a paste that put one space
+  in front of every line) is read as nothing.
+- **Detection needs the indentation, or the banner.**  An AOS-S
+  config whose `;` banner was cut off and whose indentation was lost
+  is detected as no codec; choose AOS-S as the source by hand.  With
+  its banner it is detected whatever its indentation.
+
+**`oobm` is a stanza, and nothing in it is read.**  Its lines
+configure the out-of-band management port, and several are lines the
+top of the config reads otherwise: HPE configures the OOBM interface's
+address "within the OOBM context" (Management and Configuration Guide
+16.09), the global forms being `oobm ip address` and `oobm ip
+default-gateway`.  The open context decides what such a line means,
+so an `ip default-gateway` in an `oobm` stanza is never the switch's
+default route -- with its indentation or without -- and `interface
+enable` there makes no interface.  The stanza ends at its `exit` (a
+stack member's `member N` block in it has its own first) or an `end`,
+or at a line in column 0 that enters another context or that the top
+of the config reads and is no word of the context (`hostname ...`,
+`ip route ...`): an `oobm` with no `exit` keeps its gateway and loses
+no line of the switch's after it.  The management port's settings are
+not carried into the output (below).
+
+**A port's VLANs can be stated from the port's side.**  In an
+`interface` stanza -- `tagged vlan 10,20`, `untagged vlan 5`, `no
+tagged vlan 10`, `no untagged vlan 1` (HPE's examples print these in
+`show running-config interface <port>`) -- and on one line at the
+top, for a list of ports (`interface 1,6,7-10 tagged vlan 1,3,5-10`,
+and its `no` form; HPE's syntax).  Netcanon reads each as the VLAN's
+own line of the same meaning, where it stands in the text:
+`interface 3` / `tagged vlan 20` is `vlan 20` / `tagged 3`.  The later
+of two lines wins, whichever context it was typed in -- an inference:
+HPE prints the one as the other, and says of the CLI, the menu and
+the web interface that "the most recently configured version of a
+parameter setting overrides any earlier settings for that parameter".
+An `untagged vlan` line moves the port out of the VLAN it was untagged
+in, as a later `vlan` stanza's `untagged` does.  HPE's own example
+shows it for VLAN 1 (it prints `no untagged 1` under VLAN 1 for a port
+made untagged in VLAN 10); for another VLAN it is an inference from
+"A port can be an untagged member of only one port-based VLAN".
+**Release 0.7.7 and earlier read none of these lines**, and a job
+that had them said nothing.
+
+- A port's line applies to a VLAN that a `vlan` stanza ABOVE it
+  declares.  One that names another VLAN makes no VLAN: it is left
+  out, and `dropped_tier3_sections` has a row for it --
+  `interface 3 tagged vlan 30 (VLAN 30: declared by no vlan stanza
+  above the line; not translated)`.  On the switch the one-line form
+  is refused for a VLAN that does not exist ("If a VLAN or SVLAN does
+  not exist, an error message displays"); what the switch does with
+  the line in an `interface` stanza is not established.  A config
+  that states memberships this way and declares its VLANs after its
+  interfaces -- the order `show running-config` prints the two kinds
+  of stanza in -- has every such line in that list: move the `vlan`
+  stanzas above the `interface` stanzas, or state the memberships
+  under `vlan N`.  The rows are bounded in number (lines that read
+  alike share one, and past a limit one last row counts the rest),
+  and a row quotes the first characters of its line and the first
+  few ids it names, then counts the rest.
+- A stanza for several ports -- `interface 1,3` or `interface 1-4`,
+  HPE's `interface <port-list>` -- gives its VLAN lines to each port
+  it names.  No interface is named after the list (release 0.7.7 and
+  earlier made one called `1-4`, and read nothing of `interface 1,3`),
+  and anything else the stanza sets (`disable`, `name ...`) is not
+  translated; a row says so.
+- A port tagged and untagged in one VLAN keeps both memberships,
+  where HPE gives a port one participation in each VLAN: see the
+  known limitations in the CHANGELOG.
+- `forbid vlan <list>` (and `forbid <ports>` under `vlan N`) is not
+  read in either context: it makes no membership ("Prevents the port
+  from joining the VLAN, even if GVRP is enabled on the switch"), and
+  GVRP is not modelled.
+- As a target, AOS-S output states every membership under `vlan N`,
+  as a full `show running-config` does: no HPE example of the full
+  configuration prints a port's VLAN line in an `interface` stanza.
+
 ## Common gotchas
 
 - **Renaming or dropping `Vlan<N>` in the rename modal changes

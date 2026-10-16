@@ -276,6 +276,25 @@ class TestAossDetector:
         Only the ``stacking`` / ``vsf`` stanza names members."""
         assert _members(detect_deployment(CAPTURE_2930M)) == [(1, "JL323A", {"A": "JL083A"})]
 
+    def test_a_stanza_pasted_without_its_indentation(self) -> None:
+        """A stanza's body is its lines up to its ``exit`` (a VSF
+        member's block has its own first), as the parser reads one: a
+        stack pasted with its indentation lost states its members all
+        the same."""
+        for text in (STANDALONE, STACKED, VSF, CAPTURE_2930M):
+            flat = "\n".join(line.lstrip() for line in text.splitlines()) + "\n"
+            assert _members(detect_deployment(flat)) == _members(detect_deployment(text))
+        # With no ``exit``, a line of the top ends the stanza.
+        text = 'stacking\nmember 1 type "JL322A"\nhostname "sw"\nmember 2 type "JL322A"\n'
+        assert _members(detect_deployment(text)) == [(1, "JL322A", {})]
+        # So does an ``end``, in any letter case, and a module line the
+        # detector reads at the top: the stanza's own begin ``member N``.
+        for after in ("END\n", "flexible-module A type JL083A\n", "module 1 type jl322a\n"):
+            text = 'stacking\n   member 1 type "JL322A"\n' + after + '   member 2 type "JL322A"\n'
+            detection = detect_deployment(text)
+            assert _members(detection) == [(1, "JL322A", {})], after
+            assert not any("could not be read" in note for note in detection.notes), after
+
 
 # ---------------------------------------------------------------------------
 # The proposal

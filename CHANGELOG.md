@@ -384,6 +384,142 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-S stanza ended at the first line that was not indented.**
+  The parser ended a `vlan`, `interface` or `vrrp vrid` stanza at its
+  `exit` or at any line in column 0, read that line again at the top,
+  and skipped every indented line after it.  HPE describes the CLI by
+  commands -- a command enters a context, `exit` returns to the one
+  before, `end` to the Manager level, a command that enters another
+  context leaves the open one -- and no HPE switch guide says
+  indentation plays a part.  So a config pasted with its indentation
+  lost was read as nothing: `hpe_community_5406rzl2_kb1515.cfg`, a
+  KB.15.15 capture committed with every line at column 0, its
+  indentation lost between the switch and the repository, was three
+  VLANs with no name, no port and no address, and no interface at
+  all, in jobs that said `completed` onto most targets (AOS-S itself
+  among them), and no job said a line was not read.  It is now its 48
+  ports, the VLANs' names, 137 tagged and 1 untagged memberships and
+  the two VLAN addresses.  In the template render
+  `aruba_central_5memberstack_rendered.cfg` the `ip address` of each
+  of its three VLANs stood at column 0 and ended the stanza: the three
+  addresses are read now.  A stanza ends at its `exit` or an `end`
+  (in any letter case: `EXIT` is the same command), at a line in
+  column 0 that enters another context, or at a line in column 0 that
+  the top of the config reads (`ip route ...`, `trunk ...`); any other
+  line in column 0 is the stanza's.  One predicate decides it for the
+  three stanza readers, the `oobm` stanza, the reader the renderer
+  asks whether a VLAN stanza gives its ports back, and deployment
+  detection's `stacking` / `vsf` body, and it is built from the
+  top-level loop's own patterns (a test holds the two together).
+  Every committed AOS-S input, its leading white space removed, now
+  parses to the tree of the text as committed, and the other AOS-S
+  inputs read as before, field for field.  Two consequences of
+  reading the lists: a VLAN name with a line break in it no longer
+  cuts its stanza short unless the rest of the name is a line of the
+  top, and kb1515's jobs onto other vendors are now `partial` where
+  most were `completed`, listing the letter-slot ports (`A1`-`B24`)
+  and `Vlan2` / `Vlan3`, which the port translator cannot read and
+  which the job used to carry none of.
+
+  **`oobm` is a stanza.**  Its lines are the management port's and
+  none is read: HPE configures the OOBM address and gateway "within
+  the OOBM context".  Indented, its body was skipped already; written
+  at column 0, its `ip default-gateway` was read as the switch's
+  default route, and its `interface enable` made an interface called
+  `enable`.  The words of the context (`ip address`, `ip
+  default-gateway`, `enable`, `disable`, `interface enable|disable|
+  speed-duplex`) do not end it, indented or not.  Its `exit` does (a
+  stack member's `member N` block in it has its own first), an `end`
+  does, and so does a line in column 0 that enters another context
+  or that the top of the config reads and is no word of the context
+  (`hostname ...`): an `oobm` with no `exit` keeps the management
+  port's gateway and loses no line of the switch's after it.
+
+  **A port's VLAN lines are read.**  `tagged vlan <list>`, `untagged
+  vlan <id>`, `no tagged vlan <list>` and `no untagged vlan <id>` in an
+  `interface` stanza, and `[no] interface <ports> tagged|untagged vlan
+  <list>` on one line at the top, were passed unread: a port named so
+  stayed untagged in VLAN 1, in a job that said nothing.  Each is now
+  the VLAN's own line of the same meaning, where it stands in the
+  text, the later line winning, and an `untagged vlan` line moves the
+  port out of the VLAN it was untagged in.  What a later line takes
+  out of a VLAN's list is what the list held when that line was read,
+  so a port moved out of VLAN 1 and back into it is in VLAN 1 (taking
+  it out of every entry would leave it in no VLAN).  A line that
+  names a VLAN no `vlan` stanza above it declares makes no VLAN; it is
+  left out and has a row in `dropped_tier3_sections`.  The order is
+  the switch's own, and it has a consequence: a config that puts its
+  `interface` stanzas above its `vlan` stanzas (the order `show
+  running-config` prints the two kinds in) has every such line left
+  out, each said in a row; move the `vlan` stanzas up.  The rows are
+  bounded in number and in length: a row quotes the first characters
+  of its line and the first few ids it names, and counts the rest.  A
+  stanza for several ports (`interface 1,3`, which entered no stanza
+  the parser read, and `interface 1-4`, which made an interface named
+  `1-4`) gives its VLAN lines to each port it names, makes no record
+  named after the list, and says in a row what else it sets: that is
+  not translated.  `forbid` is not read in either context (GVRP is
+  not modelled).  The renderer is unchanged: it writes every
+  membership under `vlan N`, as the switch's full configuration
+  prints it.  The product of a line's ports and its VLANs is counted
+  before it is made, in a stanza as on one line and for the `no`
+  lines too (each line of a stanza stamps every port of its header
+  again), and the loop that applies a stanza's lines looks at the
+  deadline.
+
+  **A VLAN id `int` cannot read ended the job.**  The VLAN-list
+  helper the AOS-S, NX-OS, AOS-CX and IOS-XE CLI parsers share took a
+  superscript digit (`1²`) for a digit, and a run of more digits
+  than Python converts for a number: the job was `failed`, "unexpected
+  error in stage parsing".  Such a token is no VLAN id now, as any
+  other word is not.
+
+  **Detection reads a stack's stanza by the same rule.**  Pasted
+  without its indentation, a `stacking` / `vsf` stanza gave no
+  member.  It ends at its `exit`, an `end`, a line in column 0 that
+  ends a stanza for the parser, or a `flexible-module` / `module`
+  line of the top (the stanza's own begin `member N`), so that a
+  `stacking` with no `exit` does not take the top's `flexible-module`
+  line for one of its own.
+
+  **The tick rule's reader knows more loops.**  Deployment
+  detection's loops over a config's lines (`for line in
+  text.split("\n")`) never looked at the deadline, and the source
+  reader in `tests/unit/migration/test_limits.py` knew only
+  `.splitlines()`.  It knows both now, and a slice of either, and the
+  four loops it then found go through `ticked`.  It also knows a list
+  a loop over lines fills -- appended to there, or handed beside the
+  lines to a call there -- and the loops over such lists it then
+  found (in the AOS-S, Junos and IOS-XE CLI parsers) go through
+  `ticked` too.
+
+  **What to check in a job made before this release.**  An AOS-S
+  source whose stanza bodies were not indented -- pasted from a
+  forum, a web page or a template -- was translated with its VLANs'
+  ports, names and addresses missing: translate it again.  An `oobm`
+  block written at column 0 gave the output the management port's
+  gateway as the switch's default route, and an interface named
+  `enable`: check the output's default route.  A config that states a
+  port's VLANs from the port's side (`tagged vlan` / `untagged vlan`
+  in an `interface` stanza, or `interface <ports> tagged vlan ...`)
+  lost those memberships: translate it again.  What remains is in
+  Known limitations: the other block parsers on flat text, the AOS-S
+  probe on flat text with no banner, an indented header, a line of
+  the top inside a flat stanza, and a port tagged and untagged in one
+  VLAN.
+
+  **The render script dedented stanza bodies.**
+  `scripts/render_aruba_central_template.py` moved to column 0 every
+  line that began `ip` or `no`, a stanza's body lines included, on
+  the strength of a comment that Aruba Central strips indentation
+  (Central's help asks the reverse: "Ensure that the command text
+  indentation matches the indentation in the running
+  configuration.").  It now dedents a top-level keyword line only
+  outside a stanza body.  The committed render is kept byte for
+  byte, as an input whose bodies are partly flat; run on the current
+  upstream template, the script now writes the same file with those
+  five lines indented, which parses to the same tree.
+
 - **A trunk that carries no VLAN untagged was left, on OS10 and AOS-S,
   to the switch's default VLAN.**  Both give a port that the output
   gives no untagged VLAN one all the same.  Dell: "By default, native
@@ -2250,13 +2386,13 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  209 of the 603 jobs that said `completed` are `partial`.  69 of
+  215 of the 600 jobs that said `completed` are `partial`.  69 of
   them list a shared name, 65 a hardware port that was dropped, 29 a
-  logical name that was dropped and 104 a name left as the source
-  has it (84 of those a hardware port); 47 list more than one kind.
+  logical name that was dropped and 111 a name left as the source
+  has it (90 of those a hardware port); 48 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
-  and none to or from `failed`; 395 jobs that were already `partial`
-  carry the sentence as well.  Each of the 209 is `completed` again,
+  and none to or from `failed`; 401 jobs that were already `partial`
+  carry the sentence as well.  Each of the 215 is `completed` again,
   with one more request, once every listed name has an entry.
 
   **To settle such a job**, decide each name with an entry of
@@ -2449,6 +2585,47 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **A config pasted without its indentation is read as far less than
+  it holds by most block parsers, and the job does not say so.**  Every
+  committed capture with every line's leading white space removed,
+  against the capture as committed: the Arista EOS, Aruba AOS-CX,
+  Cisco IOS-XE CLI, Cisco NX-OS, Dell OS10 and Cisco IOS XR parsers
+  lose nearly everything a stanza body holds -- interface addresses,
+  descriptions, VLAN memberships, LAG members -- and AOS-CX reads its
+  interfaces as shut, its `no shutdown` lines being body lines.  Two
+  of them also make records of nested lines, read as headers: IOS XR
+  makes interfaces and routing instances of lines nested under routing
+  protocols, and EOS makes VLANs (37 where the committed captures, as
+  committed, give 31).  The Junos (set form), FortiOS,
+  RouterOS, OPNsense and IOS-XE NETCONF parsers do not depend on
+  indentation, and VyOS keeps its tree but loses a Tier-3 row for BGP
+  or OSPF.  What each of those platforms' own CLI makes of such text
+  is not established here.  The AOS-S parser reads it as the indented
+  config (Fixed, above); each other parser is a change of its own,
+  with its platform's rule from its vendor.
+- **The AOS-S probe needs the indentation, or the banner.**  An AOS-S
+  config with its `;` banner cut off and its indentation lost is
+  detected as no codec; with its banner it is detected whatever its
+  indentation.  Choose the source codec by hand.
+- **An indented AOS-S stanza header is no header.**  The top of the
+  config is read from column 0 only, so a paste that put white space
+  in front of every line (` vlan 10`) is read as nothing.
+- **A line of the top inside an AOS-S stanza that lost its indentation
+  ends the stanza.**  `ip route ...` between two lines of a flat VLAN
+  stanza is read as the route, and the VLAN's lines after it are read
+  at the top, where none of them is a line of its own.  Whether the
+  switch stays in the VLAN's context after such a command is not
+  established.  HPE's examples and every committed capture a switch
+  printed indent their body lines and close each stanza with `exit`,
+  and so do not have this shape; whether any release prints otherwise
+  is not established.
+- **An AOS-S port tagged and untagged in one VLAN keeps both.**  HPE
+  gives a port one participation in each VLAN (tagged, untagged, no
+  or forbid), but the parser keeps a `tagged` and an `untagged`
+  membership side by side, from the VLAN's lines as from the port's;
+  which one the switch keeps is not read.  HPE's own one-line example, `interface 1,6,7-10
+  tagged vlan 1,3,5`, does this on a config whose VLAN 1 lists those
+  ports untagged.  Older than this release for the `vlan N` form.
 - **Dell OS10 cannot be told "every VLAN".**  It has no word for it,
   its VLAN ids end at 4093, and a VLAN must exist before a port is put
   in it.  A trunk of every VLAN is written `switchport trunk allowed
@@ -2821,7 +2998,7 @@ timestamp if your timezone matters for an audit.
   zone, a source address), and nothing says which this one is.  `ip
   route 10.50.0.0 255.255.0.0 Null0` onto RouterOS is
   `gateway=Null0`; onto EOS it is right as it stands.  Over the
-  committed captures 21 of the 392 jobs that are still `completed`
+  committed captures 25 of the 385 jobs that are still `completed`
   have such a name.  Read a finished job's warnings for that line.
 - **A LAG member the config has no interface for is no member in
   the output of seven targets.**  The members of an OPNsense lagg

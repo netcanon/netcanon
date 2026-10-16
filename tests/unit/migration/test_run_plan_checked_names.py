@@ -1718,7 +1718,15 @@ CAPTURES = _captures()
 _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     "arista_eos": (0, 0, 9, 1, 0, 0),
     "aruba_aoscx": (0, 0, 6, 0, 0, 0),
-    "aruba_aoss": (8, 0, 0, 0, 6, 0),
+    # From (8, 0, 0, 0, 6, 0): an AOS-S stanza ends at its `exit`, not
+    # at a line in column 0.  The KB.15.15 capture, every line at
+    # column 0, had been read as three empty VLANs; its 48 letter-slot
+    # ports and `Vlan2` / `Vlan3` are now in the output as the source
+    # names them, onto EOS, AOS-CX, IOS-XE CLI, NX-OS, OS10 and Junos
+    # (+6 left as the source has it).  The template render's three
+    # VLAN addresses are read: onto Junos its `Vlan<N>` names are left
+    # as well, beside its fused uplink (-1 fused, +1 several).
+    "aruba_aoss": (7, 0, 0, 0, 12, 1),
     "cisco_iosxe_cli": (10, 0, 0, 0, 3, 20),
     "cisco_iosxr": (4, 0, 13, 0, 1, 2),
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
@@ -1744,8 +1752,12 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
 #: a name that left the list: read the output line it is on before
 #: changing this table.
 _STANDS: dict[str, dict[str, int]] = {
+    # 19, from 14: an AOS-S stanza ends at its `exit`, so the VLAN
+    # addresses of the KB.15.15 capture (`Vlan2`, `Vlan3`) and of the
+    # template render (`Vlan1`, `Vlan20`, `Vlan30`) are read.  Each is
+    # `interface Vlan<N>` in the output of the four.
     "aruba_aoss": {
-        "arista_eos": 14, "cisco_iosxe": 14, "cisco_iosxe_cli": 14, "cisco_nxos": 14,
+        "arista_eos": 19, "cisco_iosxe": 19, "cisco_iosxe_cli": 19, "cisco_nxos": 19,
     },
     # 18, from 19: `ethernet` of batfish_cisco_interface.txt was one
     # of them while `interface ethernet 1/11` was read as that word.
@@ -1790,9 +1802,9 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [43, 0, 61, 1, 57, 47]
-        assert sum(by_reason) == 209
-        assert sum(sum(row.values()) for row in _STANDS.values()) == 74
+        assert by_reason == [42, 0, 61, 1, 63, 48]
+        assert sum(by_reason) == 215
+        assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))
     def test_what_moves_and_what_is_read_back(self, codec_name: str) -> None:

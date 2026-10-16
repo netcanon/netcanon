@@ -11,7 +11,7 @@
 # targeting aruba_aoscx.
 #
 # The dominant loss is NOT structural in the way the aruba_aoscx__arista_eos
-# pair is. The interface list does not shrink: 259 interface records in, 259
+# pair is. The interface list does not shrink: 312 interface records in, 312
 # out, name-for-name, on all 7 cells. Instead ONE root cause produces three
 # separate symptoms, and it is worth naming once so the entries below are not
 # read as three independent findings:
@@ -23,7 +23,7 @@
 #   `netcanon/migration/codecs/aruba_aoscx/port_names.py`.
 #
 #   From that single fact follow: (a) `interfaces[].interface_type` degrades
-#   to `ianaift:other` on all 259 records; (b) the render's L2 branch
+#   to `ianaift:other` on all 312 records; (b) the render's L2 branch
 #   (`kind in ("physical","lag")`) never fires, so NO per-port `vlan access` /
 #   `vlan trunk` line is emitted anywhere, and `vlans[].untagged_ports` /
 #   `tagged_ports` drop to empty; (c) the names themselves survive, precisely
@@ -138,10 +138,10 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      The interface inventory does NOT shrink on this pair — 49 -> 49 on
-      each of two cells, and 61 -> 61, 14 -> 14, 52 -> 52 and 34 -> 34 on
-      four more: the six that carry interfaces (the seventh carries none),
-      259 records in and 259 out.  A port the AOS-S config names only in a
+      The interface inventory does NOT shrink on this pair — 52 -> 52 on
+      each of two cells, and 49 -> 49, 61 -> 61, 14 -> 14, 50 -> 50 and
+      34 -> 34 on the other five: every cell carries interfaces, 312
+      records in and 312 out.  A port the AOS-S config names only in a
       VLAN's list or on a
       `trunk` line is among them: its parser gives each one a record.
       Names round-trip verbatim, which is a consequence of the AOS-CX codec
@@ -154,7 +154,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: good
     note: >
-      Preserved on all 5 cells that carry a description.  Both matrices declare
+      Preserved on all 6 cells that carry a description.  Both matrices declare
       `/interfaces/interface/config/description` supported and the AOS-CX
       render emits `description <text>` inside each interface stanza.
     references: [aoss-aoscx-surface]
@@ -162,7 +162,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on all 6 populated cells; the render emits an
+      Admin state preserved on all 7 populated cells; the render emits an
       explicit `no shutdown` / `shutdown` on every interface, so a port that
       was administratively down on AOS-S arrives down on AOS-CX rather than
       defaulting up.
@@ -183,7 +183,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on all 4 cells that populate routed-port addressing.  Both
+      Preserved on all 6 cells that populate routed-port addressing.  Both
       matrices declare `/interfaces/interface/ipv4/address/ip` and
       `prefix-length` supported, and the AOS-CX render emits
       `ip address <ip>/<len>` under the interface stanza.  This is the mount
@@ -203,7 +203,7 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Degrades to `ianaift:other` on all 259 interface records, on every cell
+      Degrades to `ianaift:other` on all 312 interface records, on every cell
       that carries interfaces.  Both codecs infer the IANA ifType from the
       interface-name shape and their shapes disagree: aruba_aoss maps a bare
       number to ethernetCsmacd, `Trk<N>` to ieee8023adLag and `Vlan<N>` to
@@ -264,22 +264,22 @@ per_field_expectation:
   "vlans[].name":
     disposition: good
     note: >
-      Preserved on all 6 cells that name their VLANs (the seventh carries
-      unnamed VLANs on both sides).  Both matrices declare `/vlans/vlan/name`
+      Preserved on all 7 cells, each of which names its VLANs.  Both
+      matrices declare `/vlans/vlan/name`
       supported and the render emits `name <text>` under each VLAN stanza.
     references: [aoss-aoscx-surface]
 
   "vlans[].ipv4_addresses":
     disposition: lossy
     reason: >
-      The canonical VLAN-record mount empties on all 4 cells that populate it
+      The canonical VLAN-record mount empties on all 6 cells that populate it
       — but the ADDRESS IS NOT LOST, and that distinction is the whole point
       of this entry.  The total-drop heuristic flags the `vlans` parent as a
       TOTAL vanish; the aruba_aoscx matrix declares
       `/vlans/vlan/ipv4/address/ip` merely LOSSY.  The two signals disagree,
-      so it was settled by round-trip rather than by grammar: all 18
+      so it was settled by round-trip rather than by grammar: all 23
       VLAN-record IPv4 addresses in the corpus appear verbatim in the AOS-CX
-      render text, and all 18 re-parse onto the sibling `interface Vlan<N>`
+      render text, and all 23 re-parse onto the sibling `interface Vlan<N>`
       record.  AOS-S mounts an SVI address on BOTH the VLAN record and an
       interface record; AOS-CX renders SVI L3 only from the interface stanza,
       so the duplicate mount is what drops.  `lossy` (warn, stay compatible)
@@ -293,7 +293,7 @@ per_field_expectation:
     disposition: unsupported
     reason: >
       A total drop, measured across the whole corpus rather than inferred:
-      357 VLAN member-port tokens in the source intent, 0 in the re-parsed
+      495 VLAN member-port tokens in the source intent, 0 in the re-parsed
       render, and ZERO `vlan access` / `vlan trunk` / `no routing` lines in
       any of the 7 rendered configs.  Cause is the port-name classification
       described in the file header — the AOS-CX render only takes its L2

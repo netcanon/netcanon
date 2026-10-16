@@ -21,7 +21,19 @@ Provenance chain:
 The script substitutes defensible defaults for every `%variable%`
 (hostname, IPs, VLAN IDs, etc.), takes sensible branches through
 `%if% / %else% / %endif%` directives, and post-processes to dedent
-top-level stanzas that the template's nested conditionals indented.
+top-level lines that the template's nested conditionals indented --
+only outside a stanza body: from a header to its `exit`, a line
+keeps its indentation.
+
+The committed file was written by an earlier version of the script,
+which dedented every line that began with a top-level keyword, a
+stanza's body lines included.  Five body lines stand at column 0 for
+that reason (`ip address` in each of the three VLAN stanzas, `no
+power-over-ethernet` in `interface 1/3` and `1/4`), where Aruba's
+template indents them.  The file is kept as it is, an input whose
+stanza bodies are partly flat; re-rendered with the script as it is
+now, the five lines are indented and the config parses to the same
+tree.
 
 ## Do-better note
 

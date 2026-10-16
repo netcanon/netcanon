@@ -197,6 +197,25 @@ If VLANs are missing on the target, check:
 - The migrate page's Tier-3 banner (VLAN-via-firewall-zone is
   Tier-3)
 - The dropped_tier3_sections list
+- Whether the source config was pasted without its indentation.  An
+  AOS-S config is read as the indented one: a stanza ends at its
+  `exit` or an `end` (see [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md)
+  § "Where a stanza ends").  Release 0.7.7 and earlier read such an
+  AOS-S config as VLANs with no port and no address, in a job that
+  said `completed`: translate it again.  The EOS, AOS-CX, IOS-XE CLI,
+  NX-OS, OS10 and IOS XR parsers still read a config pasted without
+  its indentation as stanzas with almost nothing in them, and the job
+  does not say so: paste the config as the device prints it.
+- On AOS-S, a row `interface <port> tagged vlan <ids> (VLAN <ids>:
+  declared by no vlan stanza above the line; not translated)`: a
+  port's VLAN line names a VLAN that no `vlan` stanza above it
+  declares, and was left out.  Move the `vlan` stanzas above the
+  `interface` stanzas, or state the membership under `vlan N`.
+- On AOS-S, a row `interface <port-list> (a context for several
+  ports: what it sets other than their VLANs is not translated)`: an
+  `interface 1,3` or `interface 1-4` stanza set something other than
+  its ports' VLANs (`disable`, `name ...`).  Its VLAN lines were read
+  for each port; for the rest, write one `interface` stanza a port.
 
 **One case is by design: a VLAN carried only by an
 "allow-everything" trunk.**  Netcanon synthesises a VLAN record for

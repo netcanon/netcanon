@@ -498,7 +498,11 @@ class ArubaAOSSCodec(CodecBase):
         intent = parse_intent(raw)
         # Aruba AOS-S uses Cisco-derived ACL grammar (`access-list extended`,
         # `policy-map`, etc.); reuse the IOS-XE CLI detector.  Notification-only.
-        intent.dropped_tier3_sections = detect_tier3_sections_iosxe_cli(raw)
+        # The parser's own rows (a port's VLAN line that names a VLAN no
+        # stanza declares) follow.
+        intent.dropped_tier3_sections = [
+            *detect_tier3_sections_iosxe_cli(raw), *intent.dropped_tier3_sections,
+        ]
         return intent
 
     def render(self, tree: Any) -> str:

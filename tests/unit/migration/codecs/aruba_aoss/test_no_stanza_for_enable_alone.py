@@ -20,9 +20,11 @@ renderer asks its reader, of the line as written.  A line counts for
 its ports only if every one of them comes back as itself: a ``trunk``
 line with a space in a member's name is no ``trunk`` line to the
 parser, a zero-padded number is written without its zeros, and a list
-under a stanza that a line break ended is read by nobody.  The port
+under a stanza that a line of the top ended -- the rest of a VLAN's
+name, after a line break, can be one -- is read by nobody.  The port
 beside such a name keeps its stanza, or it would be in no record of
-the output read back.
+the output read back.  (A line break alone ends no stanza: the rest of
+the name in column 0 is the stanza's, and the lists under it are read.)
 """
 
 from __future__ import annotations
@@ -345,20 +347,28 @@ def test_a_line_counts_whole_or_not_at_all() -> None:
     assert {"5", "7"} <= records
 
 
-def test_a_list_under_a_cut_stanza() -> None:
-    """A line break in a VLAN's name ends the stanza at the name, and
-    the lists under it are read by nobody: their ports keep their
-    stanzas.  The line alone would read back; where it stands it does
-    not, which is why the reader is asked of the stanza."""
+@pytest.mark.parametrize(
+    ("name", "kept"),
+    [("first\nsecond", set()), ("first\nhostname second", {"1", "2"})],
+    ids=["the rest is the stanza's", "the rest is a line of the top"],
+)
+def test_a_list_under_a_cut_name(name: str, kept: set[str]) -> None:
+    """A line break in a VLAN's name puts the rest of the name in
+    column 0.  That line is the stanza's -- it enters no context and
+    the top of the config does not read it -- so the lists under it are
+    read and their ports need no stanza.  Where the rest IS a line of
+    the top, the stanza ends there, and the lists under it are read by
+    nobody: their ports keep their stanzas.  The line alone would read
+    back either way, which is why the reader is asked of the stanza."""
     tree = CanonicalIntent(
         interfaces=[CanonicalInterface(name="1"), CanonicalInterface(name="2"), CanonicalInterface(name="3")],
         vlans=[
-            CanonicalVlan(id=10, name="first\nsecond", untagged_ports=["1"], tagged_ports=["2"]),
+            CanonicalVlan(id=10, name=name, untagged_ports=["1"], tagged_ports=["2"]),
             CanonicalVlan(id=20, name="whole", untagged_ports=["3"]),
         ],
     )
     stanzas, records = _read_back(tree)
-    assert set(stanzas) == {"1", "2"}
+    assert set(stanzas) == kept
     assert {"1", "2", "3"} <= records
     assert aoss_parse._lists_read_from("vlan 10\n   untagged 1\n   tagged 2") == (["1"], ["2"])
 
@@ -386,13 +396,14 @@ def test_a_trunk_line_as_the_parse_reads_it(line: str) -> None:
         "vlan 10\n   untagged 1-4,A1\n   tagged Trk1,7",
         'vlan 10\n   name "V 10"\n   untagged 1,my port\n   tagged 01',
         'vlan 10\n   name "cut\nhere"\n   untagged 1-4',
+        'vlan 10\n   name "cut\nhostname here"\n   untagged 1-4',
         "vlan 10\n   untagged 1-4\n   no untagged 2",
         "vlan 10\n   tagged 1-2000",
         " vlan 10\n   untagged 1-4",
         "vlan ten\n   untagged 1-4",
     ],
-    ids=["both lists", "a space, a zero", "a name cut in two", "a port taken out", "a span too wide",
-         "indented", "no header"],
+    ids=["both lists", "a space, a zero", "a name cut in two", "a name cut by a line of the top",
+         "a port taken out", "a span too wide", "indented", "no header"],
 )
 def test_a_vlan_stanza_as_the_parse_reads_it(stanza: str) -> None:
     """...and the same of a VLAN's lists, read where they stand.  (A
@@ -425,7 +436,7 @@ def _a_tree(rng: random.Random) -> CanonicalIntent:
     for vid in rng.sample(range(2, 60), rng.randint(0, 4)):
         untagged = rng.sample(names, rng.randint(0, min(5, len(names))))
         tagged = [name for name in rng.sample(names, rng.randint(0, min(5, len(names)))) if name not in untagged]
-        vlans.append(CanonicalVlan(id=vid, name=rng.choice(["V", "two words", "cut\nhere"]),
+        vlans.append(CanonicalVlan(id=vid, name=rng.choice(["V", "two words", "cut\nhere", "cut\nhostname here"]),
                                    untagged_ports=untagged, tagged_ports=tagged))
     ports_only = [name for name in names if not name.startswith("trk")]
     lags = []
@@ -477,7 +488,8 @@ def test_a_stanza_left_out_takes_nothing(monkeypatch: pytest.MonkeyPatch) -> Non
     assert left_out > 300, f"a stanza was left out of {left_out} outputs only: this compares little"
     # ... and the trees hold what the parser cannot read, of both kinds.
     spaced = sum(bool(re.search(r"^trunk .*(my port|lag 1)", text, flags=re.M)) for text in as_it_is)
-    cut_short = sum('name "cut' in text for text in as_it_is)
+    # A stanza a line of the top cuts short: the rest of a name.
+    cut_short = sum("\nhostname here" in text for text in as_it_is)
     assert min(spaced, cut_short) > 40, f"{spaced} trunk lines with a space, {cut_short} stanzas cut short"
     differ = [n for n, (a, b) in enumerate(zip(as_it_is, every_stanza)) if _what_reads_back(a) != _what_reads_back(b)]
     assert differ == [], f"{len(differ)} of {len(trees)} read back differently; the first: {as_it_is[differ[0]]!r}"

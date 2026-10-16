@@ -176,12 +176,17 @@ def substitute_inline(line: str) -> str:
     return _VAR_RE.sub(lambda m: lookup(m.group(1)), line)
 
 
-# AOS-S keywords that ONLY make sense at column 0 (top-level stanzas,
-# global-scope directives).  The Aruba Central template uses nested
+# AOS-S keywords that begin a top-level line (a stanza header or a
+# global-scope directive).  The Aruba Central template uses nested
 # `%if%` blocks that propagate their indentation into the rendered
-# output, which produces e.g. "   vlan 20" instead of "vlan 20".  Real
-# AOS-S config pushed by Central strips that indentation before commit.
-# We do the same as a post-pass.
+# output, which produces e.g. "   vlan 20" instead of "vlan 20", and the
+# parser reads only a line in column 0 as a line of the top.  So such a
+# line is moved to column 0 -- but only OUTSIDE a stanza body.  Inside a
+# body (from a header to its `exit`) `ip address ...` and `no
+# power-over-ethernet` are the stanza's own lines, and their indentation
+# is kept: the template indents every body line, and Aruba Central's
+# help asks that a template's indentation match the running
+# configuration's.
 _TOPLEVEL_KEYWORDS = re.compile(
     r"^\s+("
     r"hostname|vlan|interface|trunk|snmp-server|snmpv3|banner|no|"
@@ -192,18 +197,36 @@ _TOPLEVEL_KEYWORDS = re.compile(
     r")\s"
 )
 
+# A stanza header: a line that enters a context from the top.  Each is
+# left by its own `exit`.
+_STANZA_HEADER = re.compile(
+    r"^(?:vlan[ \t]+\d+|interface[ \t]+\S+|oobm|stacking|vsf|router[ \t]+\S+"
+    r"|dhcp-server[ \t]+pool[ \t]+\S+|device-profile[ \t]+\S+[ \t]+\S+)[ \t]*$",
+    re.IGNORECASE,
+)
+# A context nested in a body (`vrrp vrid N` in a VLAN, `member N` in
+# `oobm` or `vsf`), with an `exit` of its own before the stanza's.
+# (`interface enable` in `oobm` is a command of that context, not one.)
+_NESTED_CONTEXT = re.compile(r"^(?:vrrp[ \t]+vrid[ \t]+\d+|member[ \t]+\d+)[ \t]*$", re.IGNORECASE)
+
 
 def _dedent_top_level_stanzas(rendered: str) -> str:
-    """Strip leading whitespace from any line that starts with a
-    recognised AOS-S top-level keyword.  Preserves indentation inside
-    multi-line stanza bodies (those lines don't start with a top-level
-    keyword)."""
+    """Strip the leading white space from a line that starts with a
+    recognised AOS-S top-level keyword, where the line stands outside
+    every stanza body.  A body runs from its header to its ``exit``
+    (a context nested in it has an ``exit`` of its own); every line in
+    it keeps its indentation, whatever word it starts with."""
     out: list[str] = []
+    depth = 0
     for line in rendered.splitlines():
-        if _TOPLEVEL_KEYWORDS.match(line):
-            out.append(line.lstrip())
-        else:
-            out.append(line)
+        stripped = line.strip()
+        if depth == 0 and _TOPLEVEL_KEYWORDS.match(line):
+            line = line.lstrip()
+        if stripped == "exit":
+            depth = max(depth - 1, 0)
+        elif _STANZA_HEADER.match(stripped) if depth == 0 else _NESTED_CONTEXT.match(stripped):
+            depth += 1
+        out.append(line)
     return "\n".join(out) + "\n"
 
 

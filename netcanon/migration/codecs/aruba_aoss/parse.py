@@ -8,10 +8,27 @@ Extracted from ``codec.py`` during the parse/render split per the
 * :func:`parse_intent` — one-shot parse entry: raw text in, fully-
   populated :class:`CanonicalIntent` out.
 
-The parser walks the input line-by-line at column-0 to dispatch to
-per-stanza inner parsers (``_parse_vlan_stanza`` /
-``_parse_interface_stanza``) for indented bodies that terminate at
-``exit`` or the next un-indented line.
+The parser walks the input line by line, from column 0, and hands the
+body of a ``vlan``, ``interface`` or ``vrrp vrid`` stanza to its own
+reader (``_parse_vlan_stanza`` / ``_parse_interface_stanza`` /
+``_parse_vrrp_group_stanza``).  A stanza ends where the switch ends a
+context: at its ``exit`` or an ``end`` (:func:`_leaves`), or at a line
+in column 0 that enters another context or that the top of the config
+reads (``ip route ...``, ``trunk ...``) -- :func:`_ends_the_stanza`.
+Indentation alone ends nothing: HPE describes a context by the
+commands that enter and leave it, and a config pasted with its
+indentation lost (``name "VLAN2"`` and ``untagged A1`` at column 0
+under ``vlan 2``) is read as the one it was.  An ``oobm`` stanza is
+the management port's, and nothing in it is read
+(:func:`_past_the_oobm_stanza`).
+
+A port's VLANs can be stated from the port's side as well:
+``interface 4`` / ``untagged vlan 20``, or ``interface 4 untagged vlan
+20`` on one line.  Such a line is the VLAN's own line of the same
+meaning, read where it stands, and the later of two lines wins
+(:class:`_Memberships`).  A stanza for several ports (``interface
+1,3``, ``interface 1-4``) gives its VLAN lines to each port, makes no
+record named after the list, and says what else it sets.
 
 Wire-format surfaces handled (mirrors the codec's CapabilityMatrix
 ``supported`` list): hostname, DNS, NTP, syslog, SNMP (community /
@@ -59,8 +76,8 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
-from ...limits import census, charge, distinct, tick
-from .._helpers import GrowingIndex, _mask_to_prefix
+from ...limits import census, charge, distinct, tick, ticked
+from .._helpers import GrowingIndex, _coalesce_vlan_ids, _mask_to_prefix, _parse_vlan_list
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 from .port_names import one_spelling
@@ -337,6 +354,157 @@ _VRRP_AUTH_PLAINTEXT_RE = re.compile(
     r'^authentication\s+mode\s+plaintext-password\s+(\S.*)$',
     re.IGNORECASE,
 )
+
+# A port's VLANs, stated from the port's side.  In an ``interface``
+# stanza (HPE's examples print it in ``show running-config interface
+# <port>``; the full config states the same under ``vlan N``):
+#
+#   interface 3
+#      tagged vlan 10,20
+#      no untagged vlan 1
+#      exit
+#
+# and on one line at the top, for a list of ports (vendor syntax:
+# ``[no] interface <port-list> <tagged | untagged | forbid> vlan
+# <vlan-id-list>``):
+#
+#   interface 1,6,7-10 tagged vlan 1,3,5-10
+#
+# ``forbid`` is not read in either context, as it is not under ``vlan
+# N``: it makes no membership, and GVRP is not modelled.
+_PORT_VLAN_LINE_RE = re.compile(
+    r"^(no[ \t]+)?(tagged|untagged)[ \t]+vlan[ \t]+(\S+)[ \t]*$", re.IGNORECASE,
+)
+_GLOBAL_PORT_VLAN_RE = re.compile(
+    r"^(no[ \t]+)?interface[ \t]+(\S+)[ \t]+(tagged|untagged)[ \t]+vlan[ \t]+(\S+)[ \t]*$",
+    re.IGNORECASE,
+)
+
+# ---------------------------------------------------------------------------
+# Where a stanza ends
+# ---------------------------------------------------------------------------
+#
+# The switch reads a configuration as CLI commands.  A command that
+# enters a context (``vlan 10``, ``interface 3``, ``oobm``) moves into
+# it, ``exit`` returns to the context before, ``end`` to the Manager
+# level, and a command that enters another context leaves the open
+# one.  No HPE switch guide says indentation plays a part.  HPE's
+# examples, and every committed capture a switch printed, indent their
+# body lines and close each stanza with ``exit``; whether any release
+# prints otherwise is not established.  A config that reached this
+# parser through a forum, a web page or a template can have lost the
+# indentation and kept the ``exit`` lines.
+
+#: ``oobm``: the context of the out-of-band management port.
+_OOBM_HEADER_RE = re.compile(r"^oobm[ \t]*$", re.IGNORECASE)
+
+#: ``interface 1,3``: a context for several ports, which
+#: :data:`_IFACE_HEADER_RE` does not take (a range, ``interface 1-4``,
+#: it does).  Either is read as a context for the ports it names
+#: (:func:`_parse_port_list`), and no record is named after the list.
+_PORT_LIST_HEADER_RE = re.compile(
+    r"^interface[ \t]+([A-Za-z0-9][A-Za-z0-9./\-]*(?:,[A-Za-z0-9][A-Za-z0-9./\-]*)+)[ \t]*$",
+    re.IGNORECASE,
+)
+
+#: A line that enters a context the top of the config reads nothing
+#: of.  It still ends the context that was open.  (``vlan N``,
+#: ``interface X`` and ``oobm`` end it as lines of the top,
+#: :data:`_TOP_LEVEL_LINES`; ``interface`` is here for a name the
+#: header patterns do not take.)
+_OPENS_A_CONTEXT_RE = re.compile(
+    r"^(?:interface[ \t]+\S+|router[ \t]+\S+|stacking|vsf"
+    r"|dhcp-server[ \t]+pool[ \t]+\S+|device-profile[ \t]+\S+[ \t]+\S+)[ \t]*$",
+    re.IGNORECASE,
+)
+
+
+def _leaves(stripped: str) -> str:
+    """``"exit"`` or ``"end"`` if *stripped* is that command, in any
+    letter case, and ``""`` if it is not.  HPE: ``exit`` returns to the
+    context before; ``end`` to the Manager level, out of every context
+    that is open."""
+    word = stripped.lower()
+    return word if word in ("exit", "end") else ""
+
+
+#: The commands of the ``oobm`` context whose words mean something else
+#: outside it (HPE: the OOBM interface's address and gateway are
+#: configured "within the OOBM context"; their global forms are ``oobm
+#: ip address`` and ``oobm ip default-gateway``).  None of them ends the
+#: stanza, whatever it looks like: ``interface enable`` enters no
+#: context there.
+_OOBM_WORDS_RE = re.compile(
+    r"^(?:ip[ \t]+(?:address|default-gateway)|enable|disable"
+    r"|interface[ \t]+(?:enable|disable|speed-duplex))\b",
+    re.IGNORECASE,
+)
+
+#: ``member N`` alone on its line: a stack member's own context, nested
+#: in ``oobm``, with an ``exit`` of its own.
+_MEMBER_BLOCK_RE = re.compile(r"^member[ \t]+\S+[ \t]*$", re.IGNORECASE)
+
+#: Every pattern the top-level loop of :func:`parse_intent` reads a line
+#: with.  A line one of them matches is the top's, and a stanza ends at
+#: it.  It is this one tuple that :func:`_ends_the_stanza` asks, and a
+#: test holds it to the patterns the loop calls.
+_TOP_LEVEL_LINES: tuple[re.Pattern[str], ...] = (
+    _HOSTNAME_RE,
+    _SNMP_COMMUNITY_LINE_RE,
+    _SNMP_LOCATION_RE,
+    _SNMP_CONTACT_RE,
+    _SNMP_HOST_RE,
+    _SNMPV3_USER_RE,
+    _SNMPV3_GROUP_BIND_RE,
+    _DNS_SERVER_RE,
+    _SNTP_SERVER_RE,
+    _DEFAULT_GW_RE,
+    _IPV6_ROUTE_RE,
+    _IP_ROUTE_RE,
+    _RADIUS_HOST_RE,
+    _RADIUS_KEY_GLOBAL_RE,
+    _PASSWORD_LINE_RE,
+    _PASSWORD_HEAD_RE,
+    _TRUNK_LINE_RE,
+    _GLOBAL_PORT_VLAN_RE,
+    _OOBM_HEADER_RE,
+    _VLAN_HEADER_RE,
+    _PORT_LIST_HEADER_RE,
+    _IFACE_HEADER_RE,
+)
+
+
+def _ends_the_stanza(line: str, stripped: str) -> bool:
+    """Whether *line*, met in the body of a ``vlan``, ``interface`` or
+    ``vrrp vrid`` stanza, ends it.  The line is then read again at the
+    top of the config.  (``exit`` and ``end`` are not asked about here:
+    each ends the stanza, and is used up -- :func:`_leaves`.)  The
+    ``oobm`` stanza asks it too, of a line that is no word of its own
+    (:func:`_past_the_oobm_stanza`).
+
+    A line that begins with white space is the stanza's.  A line in
+    column 0 ends the stanza if it enters a context
+    (:data:`_OPENS_A_CONTEXT_RE`) or if the top of the config has a
+    handler for it (:data:`_TOP_LEVEL_LINES`).  Any other line in column
+    0 is the stanza's: read if it is one of the stanza's own lines,
+    passed if not.  So ``vlan 2`` / ``name "VLAN2"`` / ``untagged A1`` /
+    ``exit``, every line at column 0, is the stanza it is indented.
+
+    A line of the top's inside a stanza that has lost its indentation
+    (``ip route ...`` between two of a VLAN's lines) is read as the
+    line it is, and the stanza ends there: the lines after it are read
+    at the top.  Whether the switch stays in the VLAN's context after
+    such a command is not established.
+
+    Args:
+        line: The line as the config has it.
+        stripped: The same line without its white space at either end.
+    """
+    if line[0].isspace():
+        return False
+    return bool(_OPENS_A_CONTEXT_RE.match(stripped)) or any(
+        pattern.match(stripped) for pattern in _TOP_LEVEL_LINES
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -719,11 +887,13 @@ def _parse_vlan_stanza(
         if not stripped or stripped.startswith(";"):
             i += 1
             continue
-        # Stanza terminates at `exit` or the next un-indented line.
-        if stripped == "exit":
+        # The stanza ends at its `exit` or an `end`, or at a line of
+        # another context or of the top (`_ends_the_stanza`) -- not at
+        # a line that has merely lost its indentation.
+        if _leaves(stripped):
             i += 1
             break
-        if not line[0].isspace():
+        if _ends_the_stanza(line, stripped):
             break
 
         nm = _VLAN_NAME_RE.match(stripped)
@@ -852,12 +1022,18 @@ def _parse_vrrp_group_stanza(
         if not stripped or stripped.startswith(";"):
             i += 1
             continue
-        # Inner ``exit`` closes the vrrp vrid sub-block.
-        if stripped == "exit":
+        # Inner ``exit`` closes the vrrp vrid sub-block.  ``end``
+        # closes it and the VLAN's stanza too: it is left for the
+        # VLAN's reader, which ends there.
+        left = _leaves(stripped)
+        if left == "exit":
             return group, i + 1
-        # Un-indented line ends the sub-block defensively (paste
-        # without explicit `exit`).
-        if not line[0].isspace():
+        if left:
+            return group, i
+        # A line of another context or of the top ends it as well (a
+        # paste without its `exit`); the VLAN's stanza then meets the
+        # same line and ends there too.
+        if _ends_the_stanza(line, stripped):
             return group, i
 
         vip = _VRRP_VIRTUAL_IP_RE.match(stripped)
@@ -929,8 +1105,17 @@ def _parse_vrrp_group_stanza(
     return group, i
 
 
+def _fresh_record(name: str) -> CanonicalInterface:
+    """The record an ``interface`` stanza with no lines makes."""
+    return CanonicalInterface(name=name, enabled=True, interface_type=_infer_iface_type(name))
+
+
 def _parse_interface_stanza(
-    lines: list[str], start: int, iface_name: str, into: CanonicalInterface | None = None,
+    lines: list[str],
+    start: int,
+    iface_name: str,
+    into: CanonicalInterface | None = None,
+    vlan_lines: list[re.Match[str]] | None = None,
 ) -> tuple[CanonicalInterface, int]:
     """Parse an ``interface X`` stanza starting at *start*.
 
@@ -943,15 +1128,17 @@ def _parse_interface_stanza(
             line replaces what an earlier one set, an address is
             added -- which is what the device does with two stanzas
             for one interface.
+        vlan_lines: Where the stanza's ``[no] tagged vlan <list>`` and
+            ``[no] untagged vlan <id>`` lines go, in the order they
+            are met (:data:`_PORT_VLAN_LINE_RE`).  They change VLAN
+            records, which the caller holds; the caller applies them
+            once the stanza is read (:class:`_Memberships`).  ``None``
+            reads them and keeps nothing.
 
     Returns the parsed :class:`CanonicalInterface` and the index of
     the first line AFTER the stanza's ``exit``.
     """
-    iface = into if into is not None else CanonicalInterface(
-        name=iface_name,
-        enabled=True,
-        interface_type=_infer_iface_type(iface_name),
-    )
+    iface = into if into is not None else _fresh_record(iface_name)
     i = start
     while i < len(lines):
         tick()
@@ -961,15 +1148,22 @@ def _parse_interface_stanza(
         if not stripped or stripped.startswith(";"):
             i += 1
             continue
-        if stripped == "exit":
+        if _leaves(stripped):
             i += 1
             break
-        if not line[0].isspace():
+        if _ends_the_stanza(line, stripped):
             break
 
         nm = _IFACE_NAME_RE.match(stripped)
         if nm:
             iface.description = _unquote(nm.group(1))
+            i += 1
+            continue
+
+        vlan_line = _PORT_VLAN_LINE_RE.match(stripped)
+        if vlan_line:
+            if vlan_lines is not None:
+                vlan_lines.append(vlan_line)
             i += 1
             continue
 
@@ -1026,6 +1220,231 @@ def _parse_interface_stanza(
     return iface, i
 
 
+def _past_the_oobm_stanza(lines: list[str], start: int) -> int:
+    """The index of the first line after the ``oobm`` stanza whose body
+    starts at *start*.
+
+    Nothing in the stanza is read: its lines configure the out-of-band
+    management port, and several are lines the top of the config reads
+    otherwise.  ``ip default-gateway`` there is the management port's
+    gateway and not the switch's default route; ``ip address`` is the
+    port's own address; ``interface enable`` turns the port on and
+    enters no context.  The open context decides what such a line
+    means, so none of them ends the stanza (:data:`_OOBM_WORDS_RE`),
+    with its indentation or without.
+
+    The stanza ends at its own ``exit`` -- a stack member's nested
+    ``member N`` context has an ``exit`` of its own first -- or at an
+    ``end``; or at a line in column 0 that is no word of the context
+    and that enters another context or that the top of the config
+    reads (:func:`_ends_the_stanza`).  So an ``oobm`` with no ``exit``
+    keeps the management port's gateway, and loses no ``hostname``
+    or ``vlan`` stanza after it.
+    """
+    depth = 0
+    i = start
+    while i < len(lines):
+        tick()
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped or stripped.startswith(";"):
+            i += 1
+            continue
+        left = _leaves(stripped)
+        if left:
+            i += 1
+            if left == "end" or not depth:
+                break
+            depth -= 1
+            continue
+        if not _OOBM_WORDS_RE.match(stripped) and _ends_the_stanza(line, stripped):
+            break
+        if _MEMBER_BLOCK_RE.match(stripped):
+            depth += 1
+        i += 1
+    return i
+
+
+#: The most rows :class:`_Memberships` gives for the lines it left out.
+#: Every row is in every answer, and a config is whatever was pasted.
+_ROWS_SHOWN = 50
+#: The most VLAN ids, and the most characters of a line, one row spells
+#: out: a line names thousands of ids in a few bytes, and as many ports
+#: as it likes.
+_IDS_SHOWN = 8
+_LINE_SHOWN = 120
+
+
+def _shown(line: str) -> str:
+    """*line*, or its first :data:`_LINE_SHOWN` characters and a mark
+    that it was cut."""
+    return line if len(line) <= _LINE_SHOWN else line[: _LINE_SHOWN - 1] + "\u2026"
+
+
+def _few_ids(ids: list[int]) -> str:
+    """*ids*, sorted and distinct, as an id list: its first
+    :data:`_IDS_SHOWN` runs, and how many ids are not shown."""
+    runs = _coalesce_vlan_ids(ids).split(",")
+    if len(runs) <= _IDS_SHOWN:
+        return ",".join(runs)
+    in_shown = 0
+    for run in runs[:_IDS_SHOWN]:
+        low, _, high = run.partition("-")
+        in_shown += int(high) - int(low) + 1 if high else 1
+    return f"{','.join(runs[:_IDS_SHOWN])} and {len(ids) - in_shown} more"
+
+
+def _cut(cuts: dict[int, tuple[CanonicalVlan, dict[str, int]]], vlan: CanonicalVlan, port: str, at: int) -> None:
+    """Note that *port* leaves *vlan*'s list once the config has been
+    read: every entry of it above *at*, the length the list had when
+    the line that took it out was read.  An entry a later line puts
+    there is kept."""
+    cuts.setdefault(id(vlan), (vlan, {}))[1][port] = at
+
+
+class _Memberships:
+    """Which VLAN a port is untagged in, and what later lines take out
+    of a VLAN's lists, while a config is read.
+
+    Two kinds of line state a port's part in a VLAN: the VLAN's own
+    (``vlan 20`` / ``untagged 4``) and the port's (``interface 4`` /
+    ``untagged vlan 20``, or ``interface 4 untagged vlan 20`` on one
+    line).  Both set the same thing, and the later line wins whichever
+    kind it is.  A port is untagged in one VLAN at a time, so a line
+    that makes it untagged in another takes it out of the one it was in
+    (HPE's own example: a port made untagged in VLAN 10 is printed
+    ``no untagged`` under VLAN 1).
+
+    What a line takes out of a VLAN's list leaves the list after the
+    last line (:meth:`finish`): until then nothing reads an earlier
+    VLAN's list, and a list written again for every such line cost the
+    square of the lines.  What leaves is what the list held when the
+    line was read, so a later line that puts the port back is kept --
+    a port moved out of VLAN 1 and then back into it is in VLAN 1, not
+    in no VLAN at all.
+
+    A port's line applies to the VLAN as the config has declared it
+    by then (the record of the last ``vlan N`` stanza above it).  A
+    line that names a VLAN no stanza above it declares makes no VLAN:
+    it is left out, and said in a row of ``dropped_tier3_sections``
+    (:meth:`rows`).  On the switch the one-line form is refused for a
+    VLAN that does not exist; what it does with the form inside an
+    ``interface`` stanza is not established.  The same rows say what
+    else a line was left out for (:meth:`say`).
+    """
+
+    def __init__(self, intent: CanonicalIntent) -> None:
+        self._vlan = GrowingIndex(lambda: intent.vlans, lambda vlan: vlan.id, last=True)
+        self._untagged_in: dict[str, CanonicalVlan] = {}
+        self._untagged_out: dict[int, tuple[CanonicalVlan, dict[str, int]]] = {}
+        self._tagged_out: dict[int, tuple[CanonicalVlan, dict[str, int]]] = {}
+        self._left_out: dict[str, int] = {}
+        self._not_listed = 0
+
+    def _untagged(self, port: str, vlan: CanonicalVlan) -> None:
+        holder = self._untagged_in.get(port)
+        if holder is not None and holder is not vlan:
+            _cut(self._untagged_out, holder, port, len(holder.untagged_ports))
+        self._untagged_in[port] = vlan
+
+    def vlan_read(self, vlan: CanonicalVlan) -> None:
+        """A ``vlan`` stanza has been read into *vlan*: each port it
+        lists untagged leaves the VLAN it was untagged in before."""
+        for port in dict.fromkeys(vlan.untagged_ports):
+            self._untagged(port, vlan)
+
+    def port_line(
+        self, ports: list[str], no: str | None, kind: str, ids: str, line: str, *, counted: bool,
+    ) -> None:
+        """Apply one of a port's lines: ``[no] tagged vlan <ids>`` or
+        ``[no] untagged vlan <ids>`` for each of *ports*.
+
+        What the line makes (or, with ``no``, notes for removal) is one
+        entry a port a VLAN, and it is counted before the first is
+        made.
+
+        Args:
+            ports: The ports, as the tree names them.
+            no: The line's ``no``, if it has one.
+            kind: ``tagged`` or ``untagged``.
+            ids: The VLAN id list as the line writes it.
+            line: The line in the vendor's one-line form (``[no]
+                interface 4 untagged vlan 20``), for a row.
+            counted: Whether *ports* were made from this very line --
+                the one-line form, whose port ranges were counted as
+                they were made, for one VLAN.  In a stanza they were
+                made once, for its header, and every line of it
+                stamps all of them again.
+        """
+        found: list[CanonicalVlan] = []
+        absent: list[int] = []
+        for vid in dict.fromkeys(_parse_vlan_list(ids)):
+            vlan = self._vlan.get(vid)
+            if vlan is None:
+                absent.append(vid)
+            else:
+                found.append(vlan)
+        if absent:
+            self._say(line, absent)
+        stamps = len(ports) * (len(found) - 1 if counted else len(found))
+        if stamps > 0:
+            charge("memberships", stamps, line)
+        tagged = kind.lower() == "tagged"
+        for vlan in found:
+            for port in ports:
+                if no and tagged:
+                    _cut(self._tagged_out, vlan, port, len(vlan.tagged_ports))
+                elif no:
+                    _cut(self._untagged_out, vlan, port, len(vlan.untagged_ports))
+                    if self._untagged_in.get(port) is vlan:
+                        del self._untagged_in[port]
+                elif tagged:
+                    vlan.tagged_ports.append(port)
+                else:
+                    vlan.untagged_ports.append(port)
+                    self._untagged(port, vlan)
+
+    def _say(self, line: str, absent: list[int]) -> None:
+        self.say(
+            f"{_shown(line)} ({'VLAN' if len(absent) == 1 else 'VLANs'} {_few_ids(sorted(absent))}: "
+            f"declared by no vlan stanza above the line; not translated)"
+        )
+
+    def say(self, row: str) -> None:
+        """Keep *row*, which ends in a closing bracket, for a line that
+        was left out: one row for the lines that read alike, and no
+        more than :data:`_ROWS_SHOWN` rows."""
+        if row in self._left_out:
+            self._left_out[row] += 1
+        elif len(self._left_out) < _ROWS_SHOWN:
+            self._left_out[row] = 1
+        else:
+            self._not_listed += 1
+
+    def finish(self) -> None:
+        """Take out of each VLAN's lists what later lines took out."""
+        for vlan, gone in self._untagged_out.values():
+            vlan.untagged_ports = _stated_since(vlan.untagged_ports, gone)
+        for vlan, gone in self._tagged_out.values():
+            vlan.tagged_ports = _stated_since(vlan.tagged_ports, gone)
+
+    def rows(self) -> list[str]:
+        """The rows for the lines that were left out (a line that named
+        a VLAN no stanza declared, what a context for several ports
+        set): lines that read alike share one, and past
+        :data:`_ROWS_SHOWN` one last row counts the rest."""
+        rows = [
+            row if count == 1 else f"{row[:-1]}; {count} lines)"
+            for row, count in self._left_out.items()
+        ]
+        if self._not_listed:
+            rows.append(
+                f"{self._not_listed} more lines left out as the rows above say "
+                f"(not translated; not listed)"
+            )
+        return rows
+
+
 # ---------------------------------------------------------------------------
 # What a written line gives back
 # ---------------------------------------------------------------------------
@@ -1060,9 +1479,11 @@ def _lists_read_from(stanza: str) -> tuple[list[str], list[str]]:
     empty lists where the text does not open with a header.
 
     The stanza and not the one line, because a list is read only
-    while its stanza lasts: a line above it that a line break cuts in
-    two (one in a VLAN's name) ends the stanza, and nobody reads the
-    lists below.
+    while its stanza lasts, and the stanza ends where
+    :func:`_ends_the_stanza` says.  A line break in a VLAN's name puts
+    the rest of the name in column 0; that line is the stanza's unless
+    it is a line of another context or of the top, and only then does
+    nobody read the lists below it.
     """
     lines = stanza.splitlines()
     if not lines or lines[0][:1].isspace():
@@ -1140,12 +1561,11 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # to give its key to, and how many servers have been looked at.
     keyless: list[CanonicalRADIUSServer] = []
     servers_seen = 0
-    # Which VLAN record a port is untagged in, and the ports each
-    # record has since lost to a later stanza (taken out after the
-    # loop: until then the record still lists them, and nothing in the
-    # loop reads an earlier VLAN's list).
-    untagged_in: dict[str, CanonicalVlan] = {}
-    lost: dict[int, tuple[CanonicalVlan, set[str]]] = {}
+    # Which VLAN record a port is untagged in, and what each record has
+    # since lost to a later line (taken out after the loop: until then
+    # the record still lists it, and nothing in the loop reads an
+    # earlier VLAN's list).
+    memberships = _Memberships(intent)
     i = 0
     while i < len(lines):
         tick()
@@ -1387,7 +1807,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                     servers_seen += 1
                     if not server.key:
                         keyless.append(server)
-                for server in keyless:
+                for server in ticked(keyless):
                     if not server.key:
                         server.key = global_key
                 keyless = []
@@ -1511,11 +1931,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             # that loses it is found by the port -- not by reading
             # every earlier VLAN for every stanza, which made a config
             # of N stanzas cost N squared.
-            for port in dict.fromkeys(vlan.untagged_ports):
-                holder = untagged_in.get(port)
-                if holder is not None:
-                    lost.setdefault(id(holder), (holder, set()))[1].add(port)
-                untagged_in[port] = vlan
+            memberships.vlan_read(vlan)
             intent.vlans.append(vlan)
             # SVI absorption — codepath 1 of 3.  See
             # ._svi_absorption for the full rule.  AOS-S packs
@@ -1546,27 +1962,70 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             i = next_i
             continue
 
-        im = _IFACE_HEADER_RE.match(stripped_line)
+        # ``interface <ports> tagged vlan <ids>`` on one line: a port's
+        # VLANs, stated at the top.  It enters no context and names no
+        # interface of its own.
+        port_vlans = _GLOBAL_PORT_VLAN_RE.match(stripped_line)
+        if port_vlans:
+            memberships.port_line(
+                _parse_port_list(port_vlans.group(2)), port_vlans.group(1),
+                port_vlans.group(3), port_vlans.group(4), " ".join(stripped_line.split()),
+                counted=True,
+            )
+            i += 1
+            continue
+
+        if _OOBM_HEADER_RE.match(stripped_line):
+            i = _past_the_oobm_stanza(lines, i + 1)
+            continue
+
+        im = _IFACE_HEADER_RE.match(stripped_line) or _PORT_LIST_HEADER_RE.match(stripped_line)
         if im:
             iface_name = one_spelling(im.group(1).strip('"'))
+            # ``interface 1-4`` or ``interface 1,3``: a context for the
+            # ports the header names, and no record named after the
+            # list.  Its VLAN lines are each port's; anything else it
+            # sets is said, not translated.
+            ports = _parse_port_list(iface_name)
+            several = len(ports) > 1
             # A second stanza for an interface goes on with the first,
             # as the device reads them: one interface, one record.
-            earlier = stanza_of.get(iface_name)
-            iface, next_i = _parse_interface_stanza(lines, i + 1, iface_name, into=earlier)
-            if earlier is None:
+            earlier = None if several else stanza_of.get(iface_name)
+            vlan_lines: list[re.Match[str]] = []
+            iface, next_i = _parse_interface_stanza(
+                lines, i + 1, iface_name, into=earlier, vlan_lines=vlan_lines,
+            )
+            if several:
+                if iface != _fresh_record(iface_name):
+                    memberships.say(
+                        f"{_shown(f'interface {iface_name}')} (a context for several ports: what it "
+                        f"sets other than their VLANs is not translated)"
+                    )
+            elif earlier is None:
                 stanza_of[iface_name] = iface
                 intent.interfaces.append(iface)
             else:
                 met_twice[iface_name] = iface
+            # The stanza's VLAN lines, where they stand in the text:
+            # no ``vlan`` stanza can come between them and its header.
+            # Each stamps every port of the header again, and is
+            # counted for all of them (``counted=False``).
+            for found in ticked(vlan_lines):
+                memberships.port_line(
+                    ports, found.group(1), found.group(2), found.group(3),
+                    f"{'no ' if found.group(1) else ''}interface {iface_name} "
+                    f"{found.group(2)} vlan {found.group(3)}",
+                    counted=False,
+                )
             i = next_i
             continue
 
         # Unrecognised top-level line — skip.
         i += 1
 
-    # The ports each VLAN lost to a later stanza leave it now.
-    for holder, ports in lost.values():
-        holder.untagged_ports = [p for p in holder.untagged_ports if p not in ports]
+    # What each VLAN lost to a later line leaves it now.
+    memberships.finish()
+    intent.dropped_tier3_sections = memberships.rows()
 
     # LAG-member linkage post-pass.  The inline linking at the
     # ``trunk`` line above only catches members whose

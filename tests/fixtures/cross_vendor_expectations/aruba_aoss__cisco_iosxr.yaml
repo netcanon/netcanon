@@ -16,8 +16,8 @@
 # 5->0; zero `vlan` stanzas in the render).  Note the direction is the
 # OPPOSITE of aruba_aoscx__arista_eos — there the interface inventory shrank
 # and the VLANs survived.  Here the interface inventory is preserved
-# completely (49->49, 49->49, 61->61, 14->14, 52->52, 34->34 on the populated
-# cells) and it is the VLANs that vanish.
+# completely (52->52, 49->49, 61->61, 14->14, 50->50, 34->34, 52->52 on the
+# seven cells) and it is the VLANs that vanish.
 #
 # Because the VLAN drift is a wholesale list-length signal, every `vlans[].*`
 # sub-field measures as drifted.  The reconciler collapses that to ONE
@@ -128,8 +128,9 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on all 6 cells that carry interfaces, and the inventory does
-      not shrink: 49->49, 49->49, 61->61, 14->14, 52->52, 34->34 records.  This is the
+      Preserved on all 7 cells, each of which carries interfaces, and the
+      inventory does not shrink: 52->52, 49->49, 61->61, 14->14, 50->50,
+      34->34, 52->52 records.  This is the
       structural opposite of `aruba_aoscx__arista_eos`, where the interface
       list was the thing that collapsed — do not carry that pair's intuition
       across.  Note the names arrive in AOS-S form (`1/25`, `23`, `A1`),
@@ -139,7 +140,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: good
     note: >
-      Preserved on all 5 populated cells.  Both matrices declare
+      Preserved on all 6 populated cells.  Both matrices declare
       `/interfaces/interface/config/description` supported and, because the
       record itself survives on this pair, the attribute survives with it.
     references: [aoss-iosxr-surface]
@@ -147,7 +148,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on all 6 populated cells; declared supported on
+      Admin state preserved on all 7 populated cells; declared supported on
       both sides.  A port administratively down on AOS-S arrives shut on XR
       rather than silently absent.
     references: [aoss-iosxr-surface]
@@ -173,7 +174,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on all 4 cells that populate routed addressing.  This is the
+      Preserved on all 6 cells that populate routed addressing.  This is the
       field that carries the surviving inter-VLAN L3: the AOS-S parser
       materialises a sibling `Vlan<N>` interface record per SVI and the XR
       render emits it as a plain `interface Vlan<N>` stanza with its address.
@@ -184,10 +185,11 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      Drifts on all 6 cells that carry interfaces, and on every record of
-      those cells: `ianaift:ethernetCsmacd` -> `ianaift:other` throughout,
-      plus `ianaift:l3ipvlan` -> `ianaift:other` and `ianaift:ieee8023adLag`
-      -> `ianaift:other` on `kitchen_sink.cfg`.  The mechanism is declared:
+      Drifts on all 7 cells, each of which carries interfaces, and on every
+      record of them: `ianaift:ethernetCsmacd` -> `ianaift:other`
+      throughout, `ianaift:l3ipvlan` -> `ianaift:other` on every `Vlan<N>`
+      record, and `ianaift:ieee8023adLag` -> `ianaift:other` on
+      `kitchen_sink.cfg`.  The mechanism is declared:
       cisco_iosxr marks `/interfaces/interface/config/type` lossy because its
       CLI parser infers type from the name prefix (GigabitEthernet ->
       ethernetCsmacd, Bundle-Ether -> ieee8023adLag, and so on).  AOS-S port

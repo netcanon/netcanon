@@ -61,6 +61,7 @@ from netcanon.migration.codecs._helpers import (
     joined_ids_length,
     unstated_trunk_list,
 )
+from netcanon.migration.codecs.aruba_aoss import parse as aoss_parse
 from netcanon.migration.codecs.juniper_junos import parse as junos_parse
 from netcanon.migration.codecs.registry import get_codec, list_public_codecs
 from netcanon.migration.fixture_dirs import DIR_TO_CODEC_NAME
@@ -557,6 +558,56 @@ class TestEveryExpanderCountsFirst:
         assert (exc.kind, exc.exact) == ("memberships", False)
         with L.limits_scope(replace(TINY, memberships=3_000)):
             assert len(get_codec("aruba_aoss").parse(text).vlans) == 60
+
+    def test_a_ports_vlan_line_is_counted_before_it_stamps(self) -> None:
+        """``interface 1-48 tagged vlan 2-61`` is the same 2,880
+        memberships as the sixty stanzas above, in one line of 31
+        bytes; and ``no`` in front of it notes as many removals.  Each
+        is refused before the first is made."""
+        vlans = 'hostname "T"\n' + "".join(f"vlan {vid}\n   exit\n" for vid in range(2, 62))
+        for line in ("interface 1-48 tagged vlan 2-61\n", "no interface 1-48 tagged vlan 2-61\n"):
+            exc = _refused("aruba_aoss", vlans + line, TINY)
+            assert (exc.kind, exc.exact, exc.asked) == ("memberships", False, 2_880), line
+        with L.limits_scope(replace(TINY, memberships=3_000)):
+            tree = get_codec("aruba_aoss").parse(vlans + "interface 1-48 tagged vlan 2-61\n")
+        assert [len(v.tagged_ports) for v in tree.vlans] == [48] * 60
+
+    #: Sixty VLAN lines under ``interface 1-48``, in each form.
+    _STANZA_BODIES = (
+        "".join(f"   tagged vlan {vid}\n" for vid in range(2, 62)),
+        "   tagged vlan 2\n" * 60,
+        "   untagged vlan 2\n" * 60,
+        "   no tagged vlan 2\n" * 60,
+    )
+
+    def test_a_ports_vlan_lines_in_a_stanza_are_counted_before_they_stamp(self) -> None:
+        """In a stanza the header's ports are made once, and every VLAN
+        line of it stamps all of them again: sixty lines under
+        ``interface 1-48`` are 2,880 memberships, whichever VLANs they
+        name, the ``no`` lines among them.  Each body is refused before
+        the entries are made, and not by the count of the finished
+        parse (which only a list nobody counted reaches)."""
+        vlans = 'hostname "T"\n' + "".join(f"vlan {vid}\n   exit\n" for vid in range(2, 62))
+        for body in self._STANZA_BODIES:
+            exc = _refused("aruba_aoss", vlans + "interface 1-48\n" + body + "   exit\n", TINY)
+            assert (exc.kind, exc.exact) == ("memberships", False), body[:30]
+        with L.limits_scope(replace(TINY, memberships=3_000)):
+            tree = get_codec("aruba_aoss").parse(vlans + "interface 1-48\n" + self._STANZA_BODIES[0] + "   exit\n")
+        assert [len(v.tagged_ports) for v in tree.vlans] == [48] * 60
+
+    def test_the_stanza_check_fails_when_its_lines_are_charged_as_one_line(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The defect: a stanza's line charged as the one-line form is,
+        for every VLAN but the first, so that the first VLAN of every
+        line is stamped uncounted."""
+        real = aoss_parse._Memberships.port_line
+        monkeypatch.setattr(
+            aoss_parse._Memberships, "port_line",
+            lambda self, *args, counted: real(self, *args, counted=True),
+        )
+        with pytest.raises((AssertionError, pytest.fail.Exception)):
+            self.test_a_ports_vlan_lines_in_a_stanza_are_counted_before_they_stamp()
 
     def test_a_product_is_counted_before_one_stamp(self) -> None:
         """Forty trunks that allow every VLAN and sixty VLANs: no
@@ -1559,6 +1610,51 @@ class TestTheDeadline:
             f"the request passed the 10 seconds it may take while reading the config as {codec}, and was stopped."
         )
 
+    @staticmethod
+    def _vlan_lines_applied(monkeypatch: pytest.MonkeyPatch) -> int:
+        """How many of an ``interface`` stanza's two thousand ``no
+        tagged vlan 10`` lines are applied, each to a thousand ports,
+        when the deadline passes as the first of them is."""
+        text = (
+            'hostname "T"\nvlan 10\n   tagged 1-1000\n   exit\ninterface 1-1000\n'
+            + "   no tagged vlan 10\n" * 2_000 + "   exit\n"
+        )
+        _only_loops_look(monkeypatch)
+        clock = _Clock(free=10**9)
+        monkeypatch.setattr(L, "time", clock)
+        real = aoss_parse._Memberships.port_line
+        applied: list[int] = []
+
+        def counting(self, *args, **kwargs) -> None:
+            if not applied:
+                clock.free = 0
+            applied.append(1)
+            real(self, *args, **kwargs)
+
+        monkeypatch.setattr(aoss_parse._Memberships, "port_line", counting)
+        with L.limits_scope(replace(L.UNLIMITED, name="brief", seconds=10.0)), \
+                pytest.raises(L.LimitExceeded) as caught:
+            get_codec("aruba_aoss").parse(text)
+        assert caught.value.kind == "seconds"
+        return len(applied)
+
+    def test_a_stanzas_vlan_lines_are_applied_by_a_loop_that_looks(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The AOS-S parser applies an ``interface`` stanza's VLAN lines
+        once the stanza is read, in a loop of its own.  ``no tagged
+        vlan`` makes no entry, and with no limit on what is made only
+        the deadline stops two thousand such lines: the loop looks
+        before it has applied them all."""
+        assert self._vlan_lines_applied(monkeypatch) <= 256
+
+    def test_the_loop_check_fails_when_the_loop_does_not_look(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(aoss_parse, "ticked", lambda items: items)
+        with pytest.raises((AssertionError, pytest.fail.Exception)):
+            self.test_a_stanzas_vlan_lines_are_applied_by_a_loop_that_looks(monkeypatch)
+
     def test_a_spent_request_starts_no_other_stage(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
@@ -1771,26 +1867,95 @@ def _rel(path: Path) -> str:
 
 
 def _unwrap(node: ast.AST) -> tuple[ast.AST, bool]:
-    """(the iterable inside enumerate / iter / ticked, whether ticked wraps it)"""
+    """(the iterable inside enumerate / iter / ticked and any slice of
+    it, whether ticked wraps it).  A slice of the lines is lines:
+    ``text.split("\\n")[1:]``."""
     ticked = False
-    while (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-           and node.func.id in _WRAPPERS and node.args):
-        ticked = ticked or node.func.id == "ticked"
-        node = node.args[0]
-    return node, ticked
+    while True:
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id in _WRAPPERS and node.args):
+            ticked = ticked or node.func.id == "ticked"
+            node = node.args[0]
+        elif isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Slice):
+            node = node.value
+        else:
+            return node, ticked
 
 
 def _is_splitlines(node: ast.AST) -> bool:
-    return isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "splitlines"
+    """``<text>.splitlines()``, or ``<text>.split("\\n")``: the cut
+    into lines the AOS-S detector made, which this rule did not know."""
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+        return False
+    if node.func.attr == "splitlines":
+        return True
+    return (
+        node.func.attr == "split" and len(node.args) == 1 and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value in ("\n", "\r\n")
+    )
+
+
+def _while_over(node: ast.While, names: set[str], lengths: set[str]) -> bool:
+    """Whether the test of *node* compares something with the length of
+    a list of lines."""
+    return any(
+        (isinstance(side, ast.Name) and side.id in lengths)
+        or (isinstance(side, ast.Call) and isinstance(side.func, ast.Name) and side.func.id == "len"
+            and side.args and isinstance(side.args[0], ast.Name) and side.args[0].id in names)
+        for compare in ast.walk(node.test) if isinstance(compare, ast.Compare)
+        for side in [compare.left, *compare.comparators]
+    )
+
+
+def _filled_from_lines(fn: ast.AST, names: set[str], lengths: set[str]) -> set[str]:
+    """The lists *fn* makes empty and then fills in a loop over lines:
+    appended to there (``held.append(...)``), or handed, beside the
+    lines, to a call there that may fill it (``read(lines, i,
+    into=held)``).  Such a list is as long as the lines are, and a
+    loop over it is a loop over them: the AOS-S parser's loop over the
+    VLAN lines its stanza reader had kept was one, and the rule did not
+    see it."""
+    empties: set[str] = set()
+    for node in ast.walk(fn):
+        value, targets = None, []
+        if isinstance(node, ast.Assign):
+            value, targets = node.value, node.targets
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            value, targets = node.value, [node.target]
+        if (isinstance(value, ast.List) and not value.elts) or (
+            isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == "list"
+            and not value.args
+        ):
+            empties.update(target.id for target in targets if isinstance(target, ast.Name))
+    filled: set[str] = set()
+    for loop in ast.walk(fn):
+        if isinstance(loop, ast.For):
+            inner, _ticked = _unwrap(loop.iter)
+            if not (_is_splitlines(inner) or (isinstance(inner, ast.Name) and inner.id in names)):
+                continue
+        elif not (isinstance(loop, ast.While) and _while_over(loop, names, lengths)):
+            continue
+        for call in ast.walk(loop):
+            if not isinstance(call, ast.Call):
+                continue
+            if (isinstance(call.func, ast.Attribute) and call.func.attr in ("append", "extend", "insert")
+                    and isinstance(call.func.value, ast.Name) and call.func.value.id in empties):
+                filled.add(call.func.value.id)
+            given = [*call.args, *(keyword.value for keyword in call.keywords)]
+            if any(isinstance(arg, ast.Name) and arg.id in names for arg in given):
+                filled.update(arg.id for arg in given if isinstance(arg, ast.Name) and arg.id in empties)
+    return filled
 
 
 def _loops_that_do_not_look(source: str, rel: str = "") -> list[str]:
     """The loops over the lines of a config in *source* that never
     look at the deadline, as ``file:line``.
 
-    A loop is over the lines when it iterates ``<text>.splitlines()``,
-    a name the same function got from one, or a parameter called
-    ``lines`` or ``raw_lines``; or, for a ``while``, when its test
+    A loop is over the lines when it iterates ``<text>.splitlines()``
+    or ``<text>.split("\\n")`` (or a slice of either), a name the same
+    function got from one, a parameter called ``lines`` or
+    ``raw_lines``, or a list the function fills in such a loop
+    (:func:`_filled_from_lines`); or, for a ``while``, when its test
     compares something with the length of such a list.  A ``for`` has
     to wrap its iterable in ``ticked(...)``, a ``while`` to call
     ``tick()``, and a comprehension to do the first or be listed in
@@ -1812,8 +1977,9 @@ def _loops_that_do_not_look(source: str, rel: str = "") -> list[str]:
             and isinstance(node.value.args[0], ast.Name) and node.value.args[0].id in names
             for target in node.targets if isinstance(target, ast.Name)
         }
+        filled = _filled_from_lines(fn, names, lengths)
 
-        def over_lines(node: ast.AST, names: set[str] = names) -> bool:
+        def over_lines(node: ast.AST, names: set[str] = names | filled) -> bool:
             return _is_splitlines(node) or (isinstance(node, ast.Name) and node.id in names)
 
         for node in ast.walk(fn):
@@ -1826,13 +1992,7 @@ def _loops_that_do_not_look(source: str, rel: str = "") -> list[str]:
                 if over_lines(inner) and not ticked and (rel, fn.name) not in QUICK_FILTERS:
                     missing.append(f"{rel}:{node.iter.lineno}")
             elif isinstance(node, ast.While):
-                over = any(
-                    (isinstance(side, ast.Name) and side.id in lengths)
-                    or (isinstance(side, ast.Call) and isinstance(side.func, ast.Name) and side.func.id == "len"
-                        and side.args and isinstance(side.args[0], ast.Name) and side.args[0].id in names)
-                    for compare in ast.walk(node.test) if isinstance(compare, ast.Compare)
-                    for side in [compare.left, *compare.comparators]
-                )
+                over = _while_over(node, names, lengths)
                 looks = any(
                     isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id == "tick"
                     for statement in node.body for call in ast.walk(statement)
@@ -1987,6 +2147,23 @@ class TestReadingTheCode:
                 "n = len(lines)\n    i = 0\n    while i < n:\n        tick()\n        i += 1",
             "return [use(line) for line in raw.splitlines()]":
                 "return [use(line) for line in ticked(raw.splitlines())]",
+            'for line in raw.split("\\n"):\n        use(line)':
+                'for line in ticked(raw.split("\\n")):\n        use(line)',
+            'for line in raw[3:].split("\\n")[1:]:\n        use(line)':
+                'for line in ticked(raw[3:].split("\\n")[1:]):\n        use(line)',
+            'rows = raw.split("\\r\\n")\n    for line in rows:\n        use(line)':
+                'rows = raw.split("\\r\\n")\n    for line in ticked(rows):\n        use(line)',
+            'return any(use(line) for line in raw.split("\\n"))':
+                'return any(use(line) for line in ticked(raw.split("\\n")))',
+            # A list a loop over lines fills is as long as the lines.
+            "held = []\n    for line in ticked(lines):\n        held.append(line)\n"
+            "    for line in held:\n        use(line)":
+                "held = []\n    for line in ticked(lines):\n        held.append(line)\n"
+                "    for line in ticked(held):\n        use(line)",
+            "i = 0\n    while i < len(lines):\n        tick()\n        held: list = []\n"
+            "        i = read(lines, i, into=held)\n        for match in held:\n            use(match)":
+                "i = 0\n    while i < len(lines):\n        tick()\n        held: list = []\n"
+                "        i = read(lines, i, into=held)\n        for match in ticked(held):\n            use(match)",
         }
         for unticked, ticked in looping.items():
             assert _loops_that_do_not_look(f"def parse(raw, lines):\n    {unticked}\n", "x.py"), unticked

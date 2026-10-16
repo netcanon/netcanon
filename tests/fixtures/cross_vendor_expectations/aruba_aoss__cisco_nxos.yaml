@@ -20,7 +20,7 @@
 # clearest case is `vlans[].ipv4_addresses`: the NX-OS matrix declares
 # `/vlans/vlan/ipv4/address/ip` lossy, but the AOS-S SVI-absorption parser
 # always emits the sibling interface stanza the NX-OS renderer needs, so the
-# address is preserved on all 4 cells that carry one.  It is declared `good`.
+# address is preserved on all 6 cells that carry one.  It is declared `good`.
 #
 # The mesh path is a bare parse -> render -> parse: no port-name translation
 # and no overrides.  It scores PRESERVATION of canonical content, not
@@ -133,7 +133,7 @@ per_field_expectation:
       Names are carried verbatim by design — the mesh scores name STABILITY,
       and native translation (`1/25` -> `Ethernet1/25`) belongs to the
       orchestrator's port-rename layer, which this bare path does not engage.
-      Preserved on all 6 cells that populate interfaces.
+      Preserved on all 7 cells, each of which populates interfaces.
     references: [aoss-nxos-surface]
 
   "interfaces[].description":
@@ -149,14 +149,14 @@ per_field_expectation:
     disposition: lossy
     reason: >
       `ianaift:ethernetCsmacd` degrades to `ianaift:other` on every physical
-      port, and `ianaift:ieee8023adLag` on every trunk — all 6 cells that
-      populate interfaces, 241 of their 259 records.  NX-OS infers the IANA ifType
+      port, and `ianaift:ieee8023adLag` on every trunk — all 7 cells, each
+      of which populates interfaces, 289 of their 312 records.  NX-OS infers the IANA ifType
       from the name prefix (`Ethernet` -> ethernetCsmacd, `Vlan` -> l3ipvlan,
       `port-channel` -> ieee8023adLag), and AOS-S port names are bare numerics
       or module-lettered (`1`, `1/1`, `A1`), so the inference falls through.
       Cosmetic in isolation — the port, its addressing and its switchport
       state all survive — and it self-heals once the port-rename mesh gives
-      the ports NX-OS-shaped names.  The 18 records that keep their type are
+      the ports NX-OS-shaped names.  The 23 records that keep their type are
       SVIs, whose `Vlan<N>` names NX-OS does recognise.
     references: [aoss-nxos-surface]
 
@@ -172,7 +172,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Interface IPv4 addressing round-trips on all 4 cells that carry it,
+      Interface IPv4 addressing round-trips on all 6 cells that carry it,
       including the SVIs synthesised by the AOS-S SVI-absorption path.
     references: [aoss-nxos-surface]
 
@@ -289,7 +289,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: good
     note: >
-      Preserved on all 5 cells that populate tagged ports — 161 of 161 member
+      Preserved on all 6 cells that populate tagged ports — 298 of 298 member
       tokens.  AOS-S states trunk membership on the VLAN (`vlan 2 / tagged
       45-48`) and NX-OS only per interface (`switchport trunk allowed vlan
       <list>`), so the membership travels on the port's interface record.
@@ -305,7 +305,7 @@ per_field_expectation:
   "vlans[].untagged_ports":
     disposition: good
     note: >
-      Preserved on all 6 cells that populate untagged ports — 196 of 196
+      Preserved on all 7 cells that populate untagged ports — 197 of 197
       member tokens — by the same route as `vlans[].tagged_ports`: the access
       VLAN rides the port's interface record and NX-OS writes it as
       `switchport access vlan N`.  This was the largest loss on the pair
@@ -319,7 +319,7 @@ per_field_expectation:
   "vlans[].ipv4_addresses":
     disposition: good
     note: >
-      The SVI address carried on the VLAN record survives on all 4 cells that
+      The SVI address carried on the VLAN record survives on all 6 cells that
       have one, and this is the case where the measurement overrides the
       matrices: cisco_nxos declares `/vlans/vlan/ipv4/address/ip` lossy
       because it renders SVI L3 only from a sibling `interface Vlan<N>`

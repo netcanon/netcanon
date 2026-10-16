@@ -25,6 +25,12 @@
 # names: `vlans[].tagged_ports` and `vlans[].untagged_ports` moved to
 # `good`, `interfaces[].interface_type` to `lossy`.  No other key's
 # counts moved.
+# Re-measured 2026-10-16, when the AOS-S parser began to end a stanza at
+# its `exit` and not at the first line in column 0: the KB.15.15 capture
+# (every line at column 0) is read with its ports, names and addresses,
+# and the template render with its three VLAN addresses.  No `vlans[]`
+# key drifts on any cell now; the counts of the `interfaces[]` keys moved.
+# No disposition changed.
 
 meta:
   source_vendor: aruba_aoss
@@ -135,14 +141,13 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 5, preserved on 1, both
-      sides empty on 1.
+      trip. Measured over 7 cells: drifted on 5, preserved on 2.
     references: [aoss-os10-surface]
 
   interfaces[].enabled:
     disposition: good
     note: >
-      Preserved on 1 of 7 cells. On 5 further cells the whole
+      Preserved on 2 of 7 cells. On the other 5 the whole
       `interfaces` list drifted at once (records added or dropped),
       and the reconciler attributes that single structural event to
       one owner sub-field rather than counting it against every
@@ -160,29 +165,29 @@ per_field_expectation:
       its AOS-S name (`1`, `1/25`, `A3`, `Trk1`), which is no OS10
       interface name; the OS10 parser types an interface from its
       name and gives one it does not know `ianaift:other`. Every port
-      and trunk record is typed so -- 241 of the 259 records, the
-      other 18 being SVIs, whose `vlan<N>` names it does know.
-      Measured over 7 cells: drifted on 6, preserved on 0, both sides
-      empty on 1. On 5 of the 6 the whole `interfaces` list also
-      drifts at once (the render writes an `interface vlan<N>` for a
-      VLAN that has a name and no address, where the source has no
-      SVI record), which the reconciler records against one owner
-      sub-field; on
-      `hpe_community_2930f_wc1610_dhcp_server.cfg` the list keeps its
-      length and this field's own drift shows, on 10 of 10 port
-      records. Until the AOS-S parser gave a port named only in a
+      and trunk record is typed so -- 289 of the 312 records, the
+      other 23 being SVIs, whose `vlan<N>` names it does know.
+      Measured over 7 cells: drifted on 7, preserved on 0. On 5 of
+      the 7 the whole `interfaces` list also drifts at once (the
+      render writes an `interface vlan<N>` for a VLAN that has a name
+      and no address, where the source has no SVI record), which the
+      reconciler records against one owner sub-field; on
+      `hpe_community_2930f_wc1610_dhcp_server.cfg` and
+      `aruba_central_5memberstack_rendered.cfg` the list keeps its
+      length and this field's own drift shows, on 10 of 10 and 49 of
+      49 port records. Until the AOS-S parser gave a port named only in a
       VLAN's list a record, that capture's tree held its four SVIs
       and no port, and the field read as preserved. Through the
       port-name translation the ports become `ethernet1/1/<n>` and
-      keep their type (4 of 259 records do not: the kitchen sink's
-      letter-slot ports, which the translator leaves under their
-      source names).
+      keep their type (52 of 312 records do not: the letter-slot
+      ports of the kitchen sink and of the KB.15.15 capture, which the
+      translator leaves under their source names).
     references: [aoss-os10-surface]
 
   interfaces[].ipv4_addresses:
     disposition: good
     note: >
-      Preserved on 1 of 7 cells. On 5 further cells the whole
+      Preserved on 2 of 7 cells. On the other 5 the whole
       `interfaces` list drifted at once (records added or dropped),
       and the reconciler attributes that single structural event to
       one owner sub-field rather than counting it against every
@@ -204,8 +209,8 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 5, preserved on 0, both
-      sides empty on 2.
+      trip. Measured over 7 cells: drifted on 6, preserved on 0, both
+      sides empty on 1.
     references: [aoss-os10-surface]
 
   interfaces[].mtu:
@@ -220,8 +225,7 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 7 cells: drifted on 6, preserved on 0, both
-      sides empty on 1.
+      trip. Measured over 7 cells: drifted on 7, preserved on 0.
     references: [aoss-os10-surface]
 
   interfaces[].vrrp_groups:
@@ -399,57 +403,35 @@ per_field_expectation:
       SVI's `description` — and the render spends it on
       CanonicalVlan.name. A separate canonical VLAN description has no
       second place to go and is dropped. Measured over 7 cells:
-      drifted on 1, preserved on 0, both sides empty on 6.
+      drifted on 0, preserved on 0, both sides empty on 7.
     references: [aoss-os10-surface]
 
   vlans[].id:
     disposition: good
     note: >
-      Preserved on 6 of 7 cells. On 1 further cell the whole `vlans`
-      list drifted at once (records added or dropped), and the
-      reconciler attributes that single structural event to one owner
-      sub-field rather than counting it against every sibling. So this
-      field shows no loss of its own on this pair: the parent-level
-      drift is recorded against that owner key, and declaring it lossy
-      here would over-claim a second, independent loss that the corpus
-      does not exhibit.
+      Preserved on 7 of 7 cells; no cell drifts. Both codecs model
+      this surface.
     references: [aoss-os10-surface]
 
   vlans[].ipv4_addresses:
     disposition: good
     note: >
-      Preserved on 4 of 7 cells. On 1 further cell the whole `vlans`
-      list drifted at once (records added or dropped), and the
-      reconciler attributes that single structural event to one owner
-      sub-field rather than counting it against every sibling. So this
-      field shows no loss of its own on this pair: the parent-level
-      drift is recorded against that owner key, and declaring it lossy
-      here would over-claim a second, independent loss that the corpus
-      does not exhibit.
+      Preserved on 6 of 7 cells; no cell drifts. Both codecs model
+      this surface.
     references: [aoss-os10-surface]
 
   vlans[].name:
     disposition: good
     note: >
-      Preserved on 6 of 7 cells. On 1 further cell the whole `vlans`
-      list drifted at once (records added or dropped), and the
-      reconciler attributes that single structural event to one owner
-      sub-field rather than counting it against every sibling. So this
-      field shows no loss of its own on this pair: the parent-level
-      drift is recorded against that owner key, and declaring it lossy
-      here would over-claim a second, independent loss that the corpus
-      does not exhibit.
+      Preserved on 7 of 7 cells; no cell drifts. Both codecs model
+      this surface.
     references: [aoss-os10-surface]
 
   vlans[].tagged_ports:
     disposition: good
     note: >
-      Preserved on 5 of 7 cells (161 of 161 member tokens); both
-      sides empty on 1. On 1 further cell the whole `vlans` list
-      drifted at once (records added or dropped), and the reconciler
-      attributes that single structural event to one owner sub-field
-      rather than counting it against every sibling. So this field
-      shows no loss of its own on this pair. OS10 states membership
+      Preserved on 6 of 7 cells (298 of 298 member tokens); both
+      sides empty on 1; no cell drifts. OS10 states membership
       per interface, so it travels on the port's interface record;
       the AOS-S parser makes that record for every port a VLAN's list
       names, whether or not the config has an `interface` stanza for
@@ -460,12 +442,8 @@ per_field_expectation:
   vlans[].untagged_ports:
     disposition: good
     note: >
-      Preserved on 6 of 7 cells (196 of 196 member tokens). On 1
-      further cell the whole `vlans` list drifted at once (records
-      added or dropped), and the reconciler attributes that single
-      structural event to one owner sub-field rather than counting it
-      against every sibling. So this field shows no loss of its own
-      on this pair. The membership travels on the port's interface
+      Preserved on 7 of 7 cells (197 of 197 member tokens); no cell
+      drifts. The membership travels on the port's interface
       record, as for `vlans[].tagged_ports`; until the AOS-S parser
       gave every listed port a record, this list came back short on 6
       cells.
