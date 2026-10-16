@@ -10,17 +10,17 @@ Intra-vendor self-pairs skipped (no Phase 3 YAML — by design, Phase 3 is cross
 
 | Variance class | Count | Severity |
 |---|---:|---|
-| ALIGNED | 9345 | ok |
-| CODEC_BUG | 5 | **high** |
-| EXPECTED_LOSSY | 4196 | ok |
+| ALIGNED | 9320 | ok |
+| CODEC_BUG | 4 | **high** |
+| EXPECTED_LOSSY | 4203 | ok |
 | EXPECTED_UNSUPPORTED | 2683 | ok |
-| METHODOLOGY_ISSUE_under | 1943 | low/medium |
+| METHODOLOGY_ISSUE_under | 1948 | low/medium |
 | METHODOLOGY_ISSUE_over | 21 | low |
-| STRUCTURAL_ONLY | 4511 | low |
-| TRIVIAL_EMPTY | 35290 | ok |
+| STRUCTURAL_ONLY | 4541 | low |
+| TRIVIAL_EMPTY | 35274 | ok |
 | **Total field-cells classified** | **57994** | |
 
-Severity roll-up: 5 high, 287 medium, 6188 low, 51514 ok.
+Severity roll-up: 4 high, 287 medium, 6223 low, 51480 ok.
 
 ## Per-cell matrix — CODEC_BUG counts
 
@@ -37,7 +37,7 @@ Each cell shows the number of CODEC_BUG (drifted-where-docs-say-good) findings s
 | cisco_nxos |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | dell_os10 |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | fortigate_cli |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| juniper_junos |  |  | 1 |  | 1 |  |  |  |  |  |  |  |  |
+| juniper_junos |  |  |  |  | 1 |  |  |  |  |  |  |  |  |
 | mikrotik_routeros |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | opnsense |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | vyos |  |  |  |  |  |  |  |  |  |  |  |  |  |
@@ -50,8 +50,7 @@ Ordered by total CODEC_BUG findings across every fixture in the (source → targ
 |---:|---|---|---:|
 | 1 | arista_eos | cisco_iosxe_cli | 2 |
 | 2 | cisco_iosxe | cisco_iosxe_cli | 1 |
-| 3 | juniper_junos | aruba_aoss | 1 |
-| 4 | juniper_junos | cisco_iosxe_cli | 1 |
+| 3 | juniper_junos | cisco_iosxe_cli | 1 |
 
 (Top 20 shown.  Full list in the per-run JSON's ``pair_codec_bug_counts`` array.)
 
