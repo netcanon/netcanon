@@ -34,7 +34,7 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 |
 | aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 |
 | aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 |
-| aruba_aoss/hpe_community_5406rzl2_kb1515.cfg | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 20/21 |
+| aruba_aoss/hpe_community_5406rzl2_kb1515.cfg | WARN 20/21 | WARN 19/21 | OK 21/21 | WARN 20/21 | WARN 20/21 | WARN 18/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 |
 | aruba_aoss/user_contrib_2930m_wc1611.cfg | WARN 19/21 | WARN 18/21 | OK 21/21 | WARN 20/21 | WARN 19/21 | WARN 17/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 |
 | cisco_iosxe/batfish_cisco_aaa.txt | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 | OK 21/21 |
 | cisco_iosxe/batfish_cisco_interface.txt | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | OK 21/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 |
@@ -175,7 +175,7 @@ Same roll-up but restricted to the synthetic kitchen-sink cells.  These pairs se
 
 ## Per-cell drill-downs — real captures
 
-One section per non-OK real-capture cell (1124 total).  Sections are ordered by source fixture then target codec.
+One section per non-OK real-capture cell (1130 total).  Sections are ordered by source fixture then target codec.
 
 ### arista_eos/batfish_duplicateprivate_eos4211.txt → aruba_aoscx  (WARN 19/21)
 
@@ -1446,7 +1446,7 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "access_vl... | count drift: 49 → 29 (interfaces) |
+| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "access_vl... | count drift: 52 → 32 (interfaces) |
 | lags | DRIFT | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [{"name": "Port-Channel1", "members": ["1/25", "1/26"], "mode": "static"}] | {"lags[0] {'name': 'trk1'}": {"name": {"source": "trk1", "target": "Port-Channel1"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
 
@@ -1456,7 +1456,7 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 |---|---|---|---|---|
 | dns_servers | DRIFT | ["192.168.10.4"] | [] | all 1 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "... | {"interfaces[0] {'name': '1/1'}": {"access_vlan": {"source": 20, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "a... |
-| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": ["1/25", "1/26"... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": [], "untagged_p... | {"vlans[1] {'id': 20, 'name': 'USERS'}": {"tagged_ports": {"source": ["1/25", "1/26"], "target": []}, "untagged_ports": {"source": ["1/1", "1/2", "1/3", "... and 9 more"], "target": []}}, "vlans[2]... |
+| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gatewa... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": [], "untagged_p... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"ipv4_addresses": {"source": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gateway_address": "", "virtual_gateway_mac"... |
 | lags | DRIFT | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [{"name": "lag 1", "members": ["1/25", "1/26"], "mode": "static"}] | {"lags[0] {'name': 'trk1'}": {"name": {"source": "trk1", "target": "lag 1"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
 
@@ -1467,7 +1467,7 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 | hostname | UNSUPPORTED (by design) | sw-demo-01 |  | hostname: 'sw-demo-01' → '' |
 | dns_servers | UNSUPPORTED (by design) | ["192.168.10.4"] | [] | all 1 dns_servers dropped |
 | interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | {"interfaces[0] {'name': '1/1'}": {"access_vlan": {"source": 20, "target": null}, "switchport_mode": {"source": "access", "target": null}}, "interfaces[1] {'name': '1/10'}": {"access_vlan": {"sourc... |
-| vlans | UNSUPPORTED (by design) | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": ["1/25", "1/26"... | [] | all 3 vlans dropped |
+| vlans | UNSUPPORTED (by design) | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gatewa... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gatewa... | {"vlans[1] {'id': 20, 'name': 'USERS'}": {"tagged_ports": {"source": ["1/25", "1/26"], "target": []}, "untagged_ports": {"source": ["1/1", "1/2", "1/3", "... and 9 more"], "target": []}}, "vlans[2]... |
 | static_routes | UNSUPPORTED (by design) | [{"destination": "0.0.0.0/0", "gateway": "192.168.10.1", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "10.0.0.0/8", "gateway": "192.168.10.1", "interface": "", "metr... | [] | all 3 static_routes dropped |
 | lags | UNSUPPORTED (by design) | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [] | all 1 lags dropped |
 | local_users | UNSUPPORTED (by design) | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
@@ -1476,7 +1476,7 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access... | count drift: 49 → 28 (interfaces) |
+| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access... | count drift: 52 → 31 (interfaces) |
 | lags | DRIFT | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [{"name": "Port-channel1", "members": ["1/25", "1/26"], "mode": "static"}] | {"lags[0] {'name': 'trk1'}": {"name": {"source": "trk1", "target": "Port-channel1"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
 
@@ -1485,7 +1485,7 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "... | {"interfaces[0] {'name': '1/1'}": {"access_vlan": {"source": 20, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "a... |
-| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": ["1/25", "1/26"... | [] | all 3 vlans dropped |
+| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gatewa... | [] | all 3 vlans dropped |
 | lags | DRIFT | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [{"name": "Bundle-Ether1", "members": ["1/25", "1/26"], "mode": "static"}] | {"lags[0] {'name': 'trk1'}": {"name": {"source": "trk1", "target": "Bundle-Ether1"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
 
@@ -1502,7 +1502,7 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | dns_servers | DRIFT | ["192.168.10.4"] | [] | all 1 dns_servers dropped |
-| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access... | count drift: 49 → 52 (interfaces) |
+| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access... | {"interfaces[0] {'name': '1/1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': '1/10'}": {"interface_type": {"source": "ianaift:ether... |
 | lags | DRIFT | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
 
@@ -1510,15 +1510,15 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | count drift: 49 → 53 (interfaces) |
-| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": ["1/25", "1/26"... | [{"id": 1, "name": "vlan1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "vlan20", "description": "", "tagged_ports": [], "untagged_ports":... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"name": {"source": "DEFAULT_VLAN", "target": "vlan1"}}, "vlans[1] {'id': 20, 'name': 'USERS'}": {"name": {"source": "USERS", "target": "vlan20"}, "ta... |
+| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | count drift: 52 → 53 (interfaces) |
+| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gatewa... | [{"id": 1, "name": "Vlan1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "Vlan20", "description": "", "tagged_ports": [], "untagged_ports":... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"ipv4_addresses": {"source": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gateway_address": "", "virtual_gateway_mac"... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [{"name": "admin", "privilege_level": 15, "hashed_password": "", "role": "super_admin"}] | {"local_users[0] {'name': 'admin'}": {"hashed_password": {"source": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "target": ""}, "role": {"source": "manager", "target": "super_admin"}}} |
 
 ### aruba_aoss/aruba_central_5memberstack_rendered.cfg → juniper_junos  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "access_vl... | count drift: 49 → 28 (interfaces) |
+| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "access_vl... | count drift: 52 → 31 (interfaces) |
 | lags | DRIFT | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [{"name": "ae1", "members": ["1/25", "1/26"], "mode": "static"}] | {"lags[0] {'name': 'trk1'}": {"name": {"source": "trk1", "target": "ae1"}}} |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
 
@@ -1526,8 +1526,8 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan":... | count drift: 49 → 54 (interfaces) |
-| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": ["1/25", "1/26"... | [{"id": 1, "name": "vlan1", "description": "DEFAULT_VLAN", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "vlan20", "description": "USERS", "tagged_ports": [], ... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"description": {"source": "", "target": "DEFAULT_VLAN"}, "name": {"source": "DEFAULT_VLAN", "target": "vlan1"}}, "vlans[1] {'id': 20, 'name': 'USERS'... |
+| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan":... | count drift: 52 → 54 (interfaces) |
+| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gatewa... | [{"id": 1, "name": "Vlan1", "description": "DEFAULT_VLAN", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "Vlan20", "description": "USERS", "tagged_ports": [], ... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"description": {"source": "", "target": "DEFAULT_VLAN"}, "ipv4_addresses": {"source": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": fa... |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [{"name": "admin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | {"local_users[0] {'name': 'admin'}": {"hashed_password": {"source": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "target": ""}, "role": {"source": "manager", "target": "admin"}}} |
 
 ### aruba_aoss/aruba_central_5memberstack_rendered.cfg → opnsense  (WARN 17/21)
@@ -1535,7 +1535,7 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan":... | {"interfaces[0] {'name': '1/1'}": {"access_vlan": {"source": 20, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "access", "targ... |
-| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": ["1/25", "1/26"... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": [], "untagged_p... | {"vlans[1] {'id': 20, 'name': 'USERS'}": {"tagged_ports": {"source": ["1/25", "1/26"], "target": []}, "untagged_ports": {"source": ["1/1", "1/2", "1/3", "... and 9 more"], "target": []}}, "vlans[2]... |
+| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gatewa... | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": [], "untagged_p... | {"vlans[0] {'id': 1, 'name': 'DEFAULT_VLAN'}": {"ipv4_addresses": {"source": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gateway_address": "", "virtual_gateway_mac"... |
 | static_routes | DRIFT | [{"destination": "0.0.0.0/0", "gateway": "192.168.10.1", "interface": "", "metric": 0, "description": "", "vrf": ""}, {"destination": "10.0.0.0/8", "gateway": "192.168.10.1", "interface": "", "metr... | [] | all 3 static_routes dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [{"name": "admin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | {"local_users[0] {'name': 'admin'}": {"hashed_password": {"source": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "target": ""}, "role": {"source": "manager", "target": "admin"}}} |
 
@@ -1543,8 +1543,8 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan":... | count drift: 49 → 50 (interfaces) |
-| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 20, "name": "USERS", "description": "", "tagged_ports": ["1/25", "1/26"... | [] | all 3 vlans dropped |
+| interfaces | DRIFT | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode"... | [{"name": "1/1", "default_name": "", "description": "Desk-A", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan":... | count drift: 52 → 53 (interfaces) |
+| vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "192.168.10.2", "prefix_length": 24, "is_secondary": false, "virtual_gatewa... | [] | all 3 vlans dropped |
 | lags | DRIFT | [{"name": "trk1", "members": ["1/25", "1/26"], "mode": "static"}] | [] | all 1 lags dropped |
 | local_users | DRIFT | [{"name": "admin", "privilege_level": 15, "hashed_password": "sha1:8db6741fec5628d6415719b59a9b0ddfd668c8a4", "role": "manager"}] | [] | all 1 local_users dropped |
 
@@ -1807,44 +1807,87 @@ One section per non-OK real-capture cell (1124 total).  Sections are ordered by 
 | interfaces | DRIFT | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acces... | [{"name": "1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan": null, "... | {"interfaces[0] {'name': '1'}": {"access_vlan": {"source": 200, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "access", "targe... |
 | vlans | DRIFT | [{"id": 1, "name": "DEFAULT_VLAN", "description": "", "tagged_ports": [], "untagged_ports": ["2", "4", "5", "6", "9", "10"], "ipv4_addresses": [{"ip": "192.168.1.29", "prefix_length": 24, "is_secon... | [] | all 4 vlans dropped |
 
-### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → cisco_iosxr  (WARN 19/21)
+### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → arista_eos  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_a... | [] | all 3 vlans dropped |
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "access_vlan": 2,... | {"interfaces[0] {'name': 'A1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}}, "interfaces[1] {'name': 'A10'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "ta... |
+
+### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → aruba_aoscx  (WARN 19/21)
+
+| Field | Disposition | Source | Target | Drift |
+|---|---|---|---|---|
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_... | {"interfaces[0] {'name': 'A1'}": {"access_vlan": {"source": 2, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "acc... |
+| vlans | DRIFT | [{"id": 1, "name": "VLAN1", "description": "", "tagged_ports": ["A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12", "A13", "A14", "A15", "A16", "A17", "A18", "A19", "A20", "A21", "... | [{"id": 1, "name": "VLAN1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "VLAN2", "description": "", "tagged_ports": [], "untagged_ports": [... | {"vlans[0] {'id': 1, 'name': 'VLAN1'}": {"tagged_ports": {"source": ["A2", "A3", "A4", "... and 44 more"], "target": []}}, "vlans[1] {'id': 2, 'name': 'VLAN2'}": {"ipv4_addresses": {"source": [{"ip... |
+
+### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → cisco_iosxe  (WARN 20/21)
+
+| Field | Disposition | Source | Target | Drift |
+|---|---|---|---|---|
+| hostname | UNSUPPORTED (by design) | HP-5406Rzl2 |  | hostname: 'HP-5406Rzl2' → '' |
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | {"interfaces[0] {'name': 'A1'}": {"access_vlan": {"source": 2, "target": null}, "switchport_mode": {"source": "access", "target": null}}, "interfaces[1] {'name': 'A10'}": {"switchport_mode": {"sour... |
+| vlans | UNSUPPORTED (by design) | [{"id": 1, "name": "VLAN1", "description": "", "tagged_ports": ["A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12", "A13", "A14", "A15", "A16", "A17", "A18", "A19", "A20", "A21", "... | [{"id": 2, "name": "VLAN2", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": [{"ip": "10.30.60.1", "prefix_length": 24, "is_secondary": false, "virtual_gateway_address... | count drift: 3 → 2 (vlans) |
+| snmp | UNSUPPORTED (by design) | {"community": "public", "location": "", "contact": "", "trap_hosts": [], "v3_users": []} |  | snmp: {'community': 'public', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': []} → None |
+
+### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → cisco_iosxe_cli  (WARN 20/21)
+
+| Field | Disposition | Source | Target | Drift |
+|---|---|---|---|---|
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "acc... | {"interfaces[0] {'name': 'A1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'A10'}": {"interface_type": {"source": "ianaift:etherne... |
+
+### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → cisco_iosxr  (WARN 18/21)
+
+| Field | Disposition | Source | Target | Drift |
+|---|---|---|---|---|
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_... | {"interfaces[0] {'name': 'A1'}": {"access_vlan": {"source": 2, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}, "switchport_mode": {"source": "acc... |
+| vlans | DRIFT | [{"id": 1, "name": "VLAN1", "description": "", "tagged_ports": ["A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12", "A13", "A14", "A15", "A16", "A17", "A18", "A19", "A20", "A21", "... | [] | all 3 vlans dropped |
 | snmp | DRIFT | {"community": "public", "location": "", "contact": "", "trap_hosts": [], "v3_users": []} |  | snmp: {'community': 'public', 'location': '', 'contact': '', 'trap_hosts': [], 'v3_users': []} → None |
+
+### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → cisco_nxos  (WARN 20/21)
+
+| Field | Disposition | Source | Target | Drift |
+|---|---|---|---|---|
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "acc... | {"interfaces[0] {'name': 'A1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": "ianaift:other"}}, "interfaces[1] {'name': 'A10'}": {"interface_type": {"source": "ianaift:etherne... |
 
 ### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → dell_os10  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_a... | [] | all 3 vlans dropped |
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "acc... | count drift: 50 → 51 (interfaces) |
 
 ### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → fortigate_cli  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [] | [{"name": "vlan1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:l3ipvlan", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "a... | 3 interfaces appeared in target (parser bug?) |
-| vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_a... | [{"id": 1, "name": "vlan1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "vlan2", "description": "", "tagged_ports": [], "untagged_ports": [... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "vlan1"}}, "vlans[1] {'id': 2, 'name': ''}": {"name": {"source": "", "target": "vlan2"}}, "vlans[2] {'id': 3, 'name': ''}": {"na... |
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | count drift: 50 → 51 (interfaces) |
+| vlans | DRIFT | [{"id": 1, "name": "VLAN1", "description": "", "tagged_ports": ["A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12", "A13", "A14", "A15", "A16", "A17", "A18", "A19", "A20", "A21", "... | [{"id": 1, "name": "vlan1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "Vlan2", "description": "", "tagged_ports": [], "untagged_ports": [... | {"vlans[0] {'id': 1, 'name': 'VLAN1'}": {"name": {"source": "VLAN1", "target": "vlan1"}, "tagged_ports": {"source": ["A2", "A3", "A4", "... and 44 more"], "target": []}}, "vlans[1] {'id': 2, 'name'... |
 
 ### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → juniper_junos  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_a... | [{"id": 1, "name": "VLAN-1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "VLAN-2", "description": "", "tagged_ports": [], "untagged_ports":... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "VLAN-1"}}, "vlans[1] {'id': 2, 'name': ''}": {"name": {"source": "", "target": "VLAN-2"}}, "vlans[2] {'id': 3, 'name': ''}": {"... |
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "access", "access_vlan": 2,... | {"interfaces[0] {'name': 'A1'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}}, "interfaces[1] {'name': 'A10'}": {"interface_type": {"source": "ianaift:ethernetCsmacd", "ta... |
 
 ### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → mikrotik_routeros  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [] | [{"name": "bridge1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:bridge", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "a... | 4 interfaces appeared in target (parser bug?) |
-| vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_a... | [{"id": 1, "name": "vlan1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "vlan2", "description": "", "tagged_ports": [], "untagged_ports": [... | {"vlans[0] {'id': 1, 'name': ''}": {"name": {"source": "", "target": "vlan1"}}, "vlans[1] {'id': 2, 'name': ''}": {"name": {"source": "", "target": "vlan2"}}, "vlans[2] {'id': 3, 'name': ''}": {"na... |
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan": null, ... | count drift: 50 → 52 (interfaces) |
+| vlans | DRIFT | [{"id": 1, "name": "VLAN1", "description": "", "tagged_ports": ["A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12", "A13", "A14", "A15", "A16", "A17", "A18", "A19", "A20", "A21", "... | [{"id": 1, "name": "vlan1", "description": "VLAN1", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "Vlan2", "description": "VLAN2", "tagged_ports": [], "untagged... | {"vlans[0] {'id': 1, 'name': 'VLAN1'}": {"description": {"source": "", "target": "VLAN1"}, "name": {"source": "VLAN1", "target": "vlan1"}, "tagged_ports": {"source": ["A2", "A3", "A4", "... and 44 ... |
 
-### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → vyos  (WARN 20/21)
+### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → opnsense  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| vlans | DRIFT | [{"id": 1, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_a... | [] | all 3 vlans dropped |
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan": null, ... | {"interfaces[0] {'name': 'A1'}": {"access_vlan": {"source": 2, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "access", "target... |
+| vlans | DRIFT | [{"id": 1, "name": "VLAN1", "description": "", "tagged_ports": ["A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12", "A13", "A14", "A15", "A16", "A17", "A18", "A19", "A20", "A21", "... | [{"id": 1, "name": "VLAN1", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 2, "name": "VLAN2", "description": "", "tagged_ports": [], "untagged_ports": [... | {"vlans[0] {'id': 1, 'name': 'VLAN1'}": {"tagged_ports": {"source": ["A2", "A3", "A4", "... and 44 more"], "target": []}}, "vlans[1] {'id': 2, 'name': 'VLAN2'}": {"ipv4_addresses": {"source": [{"ip... |
+
+### aruba_aoss/hpe_community_5406rzl2_kb1515.cfg → vyos  (WARN 19/21)
+
+| Field | Disposition | Source | Target | Drift |
+|---|---|---|---|---|
+| interfaces | DRIFT | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": "acce... | [{"name": "A1", "default_name": "", "description": "", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan": null, ... | {"interfaces[0] {'name': 'A1'}": {"access_vlan": {"source": 2, "target": null}, "interface_type": {"source": "ianaift:ethernetCsmacd", "target": ""}, "switchport_mode": {"source": "access", "target... |
+| vlans | DRIFT | [{"id": 1, "name": "VLAN1", "description": "", "tagged_ports": ["A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12", "A13", "A14", "A15", "A16", "A17", "A18", "A19", "A20", "A21", "... | [] | all 3 vlans dropped |
 
 ### aruba_aoss/user_contrib_2930m_wc1611.cfg → arista_eos  (WARN 19/21)
 

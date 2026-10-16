@@ -438,7 +438,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # Kept in the list, ``set apply-groups G`` was written to a Junos
     # target that was given no group ``G``.
     applied_groups = [
-        gname for gname in applied_groups
+        gname for gname in ticked(applied_groups)
         if gname in group_lines or gname not in cut_groups
     ]
 
@@ -451,7 +451,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # List-shaped fields (static_routes, users) accumulate from
     # all groups regardless of order.  Any group that wasn't
     # apply-grouped silently drops.
-    for gname in reversed(applied_groups):
+    for gname in ticked(reversed(applied_groups)):
         for tokens in ticked(group_lines.get(gname, [])):
             _dispatch_set(
                 tokens, intent, iface_state, range_state,
@@ -483,7 +483,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # into the candidate config on a real Junos either).
     intent.group_content = {
         gname: [list(t) for t in group_lines[gname]]
-        for gname in applied_groups
+        for gname in ticked(applied_groups)
         if gname in group_lines
     }
 
@@ -1137,7 +1137,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     intent.dns_servers = list(dict.fromkeys(intent.dns_servers))
     intent.ntp_servers = list(dict.fromkeys(intent.ntp_servers))
     intent.syslog_servers = list(dict.fromkeys(intent.syslog_servers))
-    for number, gname, path in met_in_groups:
+    for number, gname, path in ticked(met_in_groups):
         if gname in applied:
             inactive_met[path] = min(number, inactive_met.get(path, number))
     intent.dropped_tier3_sections = left_out_rows(

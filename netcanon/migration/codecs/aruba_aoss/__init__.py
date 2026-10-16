@@ -23,8 +23,20 @@ users + groups, NTP, local users, RADIUS, LAG trunks.
 
 Structural quirks handled:
     * ``;`` is the comment character (not ``!``)
-    * Stanza delimiter is ``exit`` at the outdented position, or the
-      next unindented line
+    * A stanza ends where the switch ends a context: at its ``exit``
+      or an ``end`` (in any letter case), or at a line in column 0
+      that enters another context or that the top of the config
+      reads.  A line that has only lost its indentation is still the
+      stanza's, so a config pasted without it is read as the one it
+      was.  ``oobm`` is a stanza whose lines are the management
+      port's, and none of them is read; its own words never end it
+    * A port's VLANs stated from the port's side (``tagged vlan
+      <list>`` / ``untagged vlan <id>`` in an ``interface`` stanza, or
+      ``interface <ports> tagged vlan <list>`` on one line) are read
+      as the VLAN's own lines of the same meaning, the later line
+      winning; the renderer writes them under ``vlan N``.  A stanza
+      for several ports (``interface 1,3``, ``interface 1-4``) gives
+      its VLAN lines to each, and says what else it sets
     * Port names are bare: ``1``, ``1/1``, ``A1``, ``Trk1``
     * ``routing`` on an interface enables L3 (replaces ``no switchport``)
     * IP addresses support BOTH ``A.B.C.D M.M.M.M`` and ``A.B.C.D/N``
@@ -48,7 +60,9 @@ convention):
                                delegation, probe, port-name bridges)
     * ``parse.py``           — line-walker + per-stanza parsers
                                (``_parse_vlan_stanza`` /
-                               ``_parse_interface_stanza``)
+                               ``_parse_interface_stanza``), and the one
+                               rule for where a stanza ends
+                               (``_ends_the_stanza``)
     * ``render.py``          — canonical tree → AOS-S CLI text
     * ``port_names.py``      — cross-vendor port-name identity bridge
     * ``_svi_absorption.py`` — SVI-into-VLAN absorption flag (single

@@ -6,7 +6,7 @@
 # Asymmetric by device class.  aruba_aoss in the committed corpus is a campus
 # access switch (HPE/Aruba 2920 / 2930F / 2930M / 5406R plus an Aruba
 # Central-rendered 5-member stack) whose centre of gravity is the VLAN
-# database — 32 VLAN records carrying 357 port-membership entries and 18 SVI
+# database — 32 VLAN records carrying 495 port-membership entries and 23 SVI
 # addresses.  vyos is a Linux software router with NO VLAN database at all:
 # 802.1Q is a `vif <vid>` sub-interface on a device, and interface names are
 # kernel device names (`eth0`, `bond0`, `lo`, `dum0`).  The realistic
@@ -18,7 +18,7 @@
 # READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: there the
 # interface inventory was fully preserved and every interface loss stood on
 # its own measurement.  Here the inventory does not shrink either — it GROWS,
-# 259 source records to 260, with ZERO source names missing.  The extra record
+# 312 source records to 313, with ZERO source names missing.  The extra record
 # is a phantom LAG stanza.  Because the count moves on 1 of 7 cells, the
 # audit routes that cell's `interfaces` compare to STRUCTURAL_ONLY and lets
 # `interfaces[].name` carry the signal, which is why several interface
@@ -26,7 +26,7 @@
 # into `lossy` by their parent.
 #
 # The real losses on this pair are the VLAN database (a total record drop),
-# the interface type hint (259 of 259 records), the local-user role (which
+# the interface type hint (312 of 312 records), the local-user role (which
 # fails OPEN), SNMP trap destinations, RADIUS, and — path-dependently — the
 # LAG surface.
 #
@@ -138,7 +138,7 @@ per_field_expectation:
   # -- Interfaces -- inventory intact, two attributes lost --------------------
   #
   # The measured record count is the headline, and it moves the OPPOSITE way
-  # from most pairs: 259 source interface records across the 7 cells, 260 after
+  # from most pairs: 312 source interface records across the 7 cells, 313 after
   # the round-trip, with ZERO source names missing.  Every AOS-S port —
   # `1/25`, `A1`, `23`, `Vlan10`, `trk1` — survives the VyOS render verbatim.
   # The extra record is a phantom LAG stanza (see `lags`).
@@ -148,7 +148,7 @@ per_field_expectation:
     reason: >
       The interface record SET drifts on 1 of 7 cells, and the direction is
       unusual enough to state plainly: nothing is lost, something is added.
-      `aruba_central_5memberstack_rendered.cfg` goes 49 -> 50 records; all 259
+      `aruba_central_5memberstack_rendered.cfg` goes 52 -> 53 records; all 312
       source names are present in the target on every cell.  The extra record
       is that config's AOS-S trunk (`trk1`) materialising as a bare
       `ethernet trk1 { }` stanza, because the vyos renderer only treats a
@@ -181,7 +181,7 @@ per_field_expectation:
   "interfaces[].description":
     disposition: good
     note: >
-      Preserved on 39 of 39 populated records — zero drift across all 259
+      Preserved on 44 of 44 populated records — zero drift across all 312
       matched records.  Both matrices declare
       `/interfaces/interface/config/description` supported.
       Worth stating because the opposite is easy to assume on a vyos target:
@@ -195,7 +195,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 259 of 259 records — zero differing.  The 3
+      Admin state preserved on 312 of 312 records — zero differing.  The 3
       administratively-down ports on this corpus (`1/47`, `1/48`, `21`) all
       render as `disable` and come back down.  Both matrices declare
       `/interfaces/interface/config/enabled` supported.
@@ -204,7 +204,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Zero drift on 259 of 259 records — but the honest reading is that this
+      Zero drift on 312 of 312 records — but the honest reading is that this
       field is untested here, not proven.  NO source record on any of the 7
       cells carries an MTU, so both sides are empty everywhere and the
       measurement is trivially clean.  The disposition therefore rests on
@@ -216,7 +216,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 259 of 259 records; IPv6 is populated on 2 of them
+      Preserved on 312 of 312 records; IPv6 is populated on 2 of them
       (`kitchen_sink.cfg` uplinks A1 and A2) carrying 3 addresses, and every
       address, prefix-length AND scope survives — including the `fe80::/64`
       link-local, which matters because vyos declares
@@ -227,23 +227,23 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 259 of 259 records — 20 populated records, 20 addresses, all
+      Preserved on 312 of 312 records — 25 populated records, 25 addresses, all
       round-tripping through `address "<ip>/<plen>"`.  Both matrices declare
       `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
       supported.
       This is where the AOS-S SVI addressing lands, and it is the reason the
-      VLAN drop below is survivable: 18 of those 20 addresses are SVI
+      VLAN drop below is survivable: 23 of those 25 addresses are SVI
       addresses absorbed onto a sibling `Vlan<N>` interface record by the
-      AOS-S parser, and all 18 were verified present after the round-trip.
+      AOS-S parser, and all 23 were verified present after the round-trip.
       The VLAN records die; the L3 does not.
     references: [aoss-vyos-surface]
 
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      A clean sweep: all 259 of 259 records lose the IANA type hint entirely,
+      A clean sweep: all 312 of 312 records lose the IANA type hint entirely,
       going to the empty string.  Zero records keep it.  The breakdown is
-      uniform by type — 239 `ianaift:ethernetCsmacd`, 18 `ianaift:l3ipvlan`
+      uniform by type — 287 `ianaift:ethernetCsmacd`, 23 `ianaift:l3ipvlan`
       and 2 `ianaift:ieee8023adLag` all drop.
       Both matrices declare `/interfaces/interface/config/type` LOSSY in
       their own right, and vyos states exactly why: it declares no IANA
@@ -287,7 +287,7 @@ per_field_expectation:
   "interfaces[].vrrp_groups":
     disposition: good
     note: >
-      No committed cell exercises this — 0 of 259 source records carry a VRRP
+      No committed cell exercises this — 0 of 312 source records carry a VRRP
       group, so zero drift is measured and there is no round-trip to point
       at.  Recorded `good` because the key's only drift signal on this pair
       is its parent list's count moving, which `interfaces[].name` already
@@ -305,8 +305,8 @@ per_field_expectation:
   # -- VLANs -- the campus surface the target has no shape for ----------------
   #
   # All 7 cells populate `vlans`, and all 7 lose the whole list: 32 records
-  # in, 0 out.  Those records carried 29 names, 18 SVI addresses, 196
-  # untagged-port entries and 161 tagged-port entries.  The record itself
+  # in, 0 out.  Those records carried 32 names, 23 SVI addresses, 197
+  # untagged-port entries and 298 tagged-port entries.  The record itself
   # vanishes, so the disappearance is recorded ONCE below and the five
   # sibling keys are `good` — see each note for why that is not a whitewash.
 
@@ -326,7 +326,7 @@ per_field_expectation:
       which would badly understate losing the entire VLAN database of a
       campus access switch.
       This key carries the structural loss for the whole `vlans` list.  The
-      operational half worth knowing: the SVI L3 does NOT go with it.  All 18
+      operational half worth knowing: the SVI L3 does NOT go with it.  All 23
       SVI addresses were verified intact on their sibling `Vlan<N>` interface
       records after the round-trip, so what must be re-authored on VyOS is
       VLAN identity and port membership, not addressing.
@@ -335,7 +335,7 @@ per_field_expectation:
   "vlans[].name":
     disposition: good
     note: >
-      29 of the 32 source VLAN records carry a name, and none of them
+      32 of the 32 source VLAN records carry a name, and none of them
       survives — but that is not a loss belonging to this key.  The VLAN
       RECORD vanishes wholesale, and a record that no longer exists takes
       every sub-field with it.  That single event is recorded once, on
@@ -349,9 +349,9 @@ per_field_expectation:
   "vlans[].ipv4_addresses":
     disposition: good
     note: >
-      18 of the 32 VLAN records carry an SVI address and none of the VLAN
+      23 of the 32 VLAN records carry an SVI address and none of the VLAN
       records survives — but the addresses do.  The AOS-S parser absorbs each
-      SVI onto a sibling `Vlan<N>` interface record, and all 18 addresses
+      SVI onto a sibling `Vlan<N>` interface record, and all 23 addresses
       were verified present, with matching prefix-length, on a surviving
       interface after the round-trip.  The correct place to read that result
       is `interfaces[].ipv4_addresses`, which is `good` on its own
@@ -366,7 +366,7 @@ per_field_expectation:
   "vlans[].untagged_ports":
     disposition: good
     note: >
-      This is the one that stings, so state it precisely.  196 untagged-port
+      This is the one that stings, so state it precisely.  197 untagged-port
       entries across the 32 source VLAN records are gone after the
       round-trip, and they are NOT recoverable from anything else in the
       target tree — vyos declares `/interfaces/interface/switchport-mode` and
@@ -384,7 +384,7 @@ per_field_expectation:
   "vlans[].tagged_ports":
     disposition: good
     note: >
-      Same mechanism and same accounting as `vlans[].untagged_ports`: 161
+      Same mechanism and same accounting as `vlans[].untagged_ports`: 298
       tagged-port entries ride on VLAN records that vanish, so the loss is
       recorded once on `vlans[].id` rather than a second time here.  VyOS
       expresses trunk tagging as `vif <vid>` sub-interfaces on the port,

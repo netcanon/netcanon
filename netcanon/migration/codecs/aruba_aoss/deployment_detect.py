@@ -71,6 +71,8 @@ from __future__ import annotations
 import re
 
 from ....models.port_inventory import DetectedDeployment, DetectedMember
+from ...limits import ticked
+from .parse import _ends_the_stanza, _leaves
 
 __all__ = ["detect_deployment"]
 
@@ -86,18 +88,21 @@ _STACK_BANNER_RE = re.compile(r"(?:hp)?Stack_\w+", re.IGNORECASE)
 _PART_RE = re.compile(r"[A-Z][A-Z0-9]{4,7}")
 
 _FABRIC_RE = re.compile(r"^(?P<kind>stacking|vsf)[ \t]*$", re.MULTILINE)
+# The four below are matched against the lines of the stanza's body,
+# one at a time: a line is the stanza's by where it stands
+# (:func:`_stanza_body`), indented or not.
 _MEMBER_TYPE_RE = re.compile(
-    r'^[ \t]+member[ \t]+(?P<id>[0-9]{1,6})[ \t]+type[ \t]+"?(?P<part>[A-Za-z0-9]{1,32})"?(?=[ \t]|$)',
+    r'^[ \t]*member[ \t]+(?P<id>[0-9]{1,6})[ \t]+type[ \t]+"?(?P<part>[A-Za-z0-9]{1,32})"?(?=[ \t]|$)',
     re.MULTILINE,
 )
 _MEMBER_MODULE_RE = re.compile(
-    r'^[ \t]+member[ \t]+(?P<id>[0-9]{1,6})[ \t]+flexible-module[ \t]+(?P<bay>[A-Za-z])'
+    r'^[ \t]*member[ \t]+(?P<id>[0-9]{1,6})[ \t]+flexible-module[ \t]+(?P<bay>[A-Za-z])'
     r'[ \t]+type[ \t]+"?(?P<part>[A-Za-z0-9]{1,32})"?(?=[ \t]|$)',
     re.MULTILINE,
 )
-_NESTED_MEMBER_RE = re.compile(r"^[ \t]+member[ \t]+(?P<id>[0-9]{1,6})[ \t]*$", re.MULTILINE)
+_NESTED_MEMBER_RE = re.compile(r"^[ \t]*member[ \t]+(?P<id>[0-9]{1,6})[ \t]*$", re.MULTILINE)
 _NESTED_TYPE_RE = re.compile(
-    r'^[ \t]+type[ \t]+"?(?P<part>[A-Za-z0-9]{1,32})"?(?=[ \t]|$)', re.MULTILINE,
+    r'^[ \t]*type[ \t]+"?(?P<part>[A-Za-z0-9]{1,32})"?(?=[ \t]|$)', re.MULTILINE,
 )
 _CHASSIS_RE = re.compile(
     r"^module[ \t]+1[ \t]+type[ \t]+(?P<part>[A-Za-z0-9]{1,32})[ \t]*$", re.MULTILINE,
@@ -160,6 +165,12 @@ def _heads_a_member_block(line: str) -> bool:
     return len(words) == 2 and words[0] == "member"
 
 
+def _read_at_the_top(line: str) -> bool:
+    """*line* is one this detector reads at the top of the config: a
+    ``flexible-module`` or ``module`` line in column 0."""
+    return line.split(None, 1)[:1] in (["flexible-module"], ["module"]) and not line[0].isspace()
+
+
 def _listed(numbers: set[int]) -> str:
     """The first few of *numbers*, and how many more there are."""
     ordered = sorted(numbers)
@@ -174,11 +185,31 @@ def _evidence(line: str) -> str:
 
 
 def _stanza_body(text: str, start: int) -> list[str]:
-    """The indented lines of the stanza whose header starts at *start*."""
+    """The lines of the stanza whose header starts at *start*.
+
+    The body ends where the AOS-S parser ends a stanza
+    (:func:`~.parse._ends_the_stanza`): at its own ``exit`` -- a VSF
+    member's nested ``member N`` block has an ``exit`` of its own first
+    -- or at an ``end``; or at a line in column 0 that enters another
+    context, that the top of the config reads, or that this detector
+    reads at the top (a ``flexible-module`` or ``module`` line: the
+    stanza's own module lines begin ``member N``).  Not at a line that
+    has merely lost its indentation: a stack pasted without it states
+    its members all the same.
+    """
     body: list[str] = []
-    for line in text[start:].split("\n")[1:]:
-        if line.strip() and not line[0].isspace():
+    depth = 0
+    for line in ticked(text[start:].split("\n")[1:]):
+        stripped = line.strip()
+        left = _leaves(stripped)
+        if left:
+            if left == "end" or not depth:
+                break
+            depth -= 1
+        elif stripped and (_ends_the_stanza(line, stripped) or _read_at_the_top(line)):
             break
+        elif _heads_a_member_block(stripped):
+            depth += 1
         body.append(line)
     return body
 
@@ -358,7 +389,7 @@ def _top_modules(text: str) -> tuple[dict[str, str], dict[str, str], bool, int]:
     module_line: dict[str, str] = {}
     rebayed = False
     unread = 0
-    for line in text.split("\n"):
+    for line in ticked(text.split("\n")):
         if not line.startswith("flexible-module") or not _says_module(line):
             continue
         match = _TOP_MODULE_RE.match(line)
@@ -415,7 +446,7 @@ def detect_deployment(raw_text: str) -> DetectedDeployment | None:
                 f"The banner names one switch ({banner_id.upper()}) and the "
                 f"config has a `{kind}` stanza; the stanza was read."
             )
-        if any(_says_chassis(line) for line in text.split("\n")):
+        if any(_says_chassis(line) for line in ticked(text.split("\n"))):
             detection.notes.append(
                 f"The config has a `module 1` line, which a switch that is "
                 f"not stacked prints, and a `{kind}` stanza; the stanza was "
@@ -446,7 +477,7 @@ def detect_deployment(raw_text: str) -> DetectedDeployment | None:
 
     chassis = list(dict.fromkeys(match.group("part").upper() for match in _CHASSIS_RE.finditer(text)))
     unread_chassis = sum(
-        1 for line in text.split("\n") if _says_chassis(line) and _CHASSIS_RE.match(line) is None
+        1 for line in ticked(text.split("\n")) if _says_chassis(line) and _CHASSIS_RE.match(line) is None
     )
     part = ""
     notes: list[str] = []

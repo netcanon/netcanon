@@ -56,8 +56,10 @@ set interfaces irb unit 100 family inet address 192.168.10.1/24
 set interfaces irb unit 100 family inet6 address 2001:db8::1/64
 ```
 
-VLAN names allow letters, digits, hyphens, periods only (no
-underscores, no spaces, up to 255 chars).
+VLAN names: "The name can include letters, numbers, hyphens (-), and
+periods (.)", up to 255 characters (Juniper, "vlans").  The page
+names no underscore and no space; whether a device refuses either is
+not established here.
 
 ## Cross-vendor mapping
 
@@ -74,9 +76,12 @@ Specifics:
   default name (typically `vlan<N>`) when the source had no explicit
   name.
 * `name`: Aruba names allow underscores, spaces (quoted), and a wider
-  character set than Junos.  Junos rejects underscores; sanitisation
-  (underscore -> hyphen) on render.  AOS-S `"DEFAULT_VLAN"` becomes
-  `DEFAULT-VLAN` on Junos.
+  character set than the one Juniper's page gives.  The Junos render
+  does not sanitise a name: it writes it as it is (AOS-S
+  `"DEFAULT_VLAN"` is `set vlans DEFAULT_VLAN ...` on Junos), except
+  a VLAN with no name, one named `all`, and one whose name reads as
+  VLAN ids, each of which is written `VLAN-<id>`.  What a switch does
+  with a name outside Juniper's set is not established.
 * `description`: Aruba does not model a VLAN-level description (only
   interface descriptions); the canonical field is empty on parse, so
   Junos render emits no `set vlans <name> description` line.
@@ -89,6 +94,7 @@ Specifics:
   block plus `set vlans <name> l3-interface irb.100`.
 
 Disposition: **good** on id, member ports, SVI v4 address; **lossy**
-on name (sanitisation when underscores present); **lossy** on
+on name (`VLAN-<id>` for a name that is none, `all` or VLAN ids; a
+name outside Juniper's character set written as it is); **lossy** on
 description (Aruba has no VLAN-level description to populate, so
 Junos source -> Aruba render drops the description with a comment).

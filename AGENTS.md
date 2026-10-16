@@ -981,13 +981,12 @@ tests use these exclusively — never CSS classes or element structure.  See
   target's parser reads one (the declared VLANs are a handful of
   ids, and a renderer that lost thousands of the others passed the
   first reading alone); and the text for the word itself, since a
-  parser may read its own word for "all" as an empty list.  **The
-  same class is still open one step on:** the tree has ONE value, an
-  empty list, for "none", for "nothing stated" and for AOS-CX's own
-  `all`, so a trunk that allows no VLAN is written as every VLAN on
-  AOS-CX, IOS-XE, EOS and NX-OS.  That module pins which targets
-  (`WRITES_NOTHING_AS_EVERYTHING`); the change that mends it empties
-  the pin.
+  parser can read its own word for "all" as something a check of ids
+  does not see (AOS-CX read it as an empty list).  The same class was
+  open one step on — an EMPTY list written as every VLAN on four
+  targets — and that module pinned which.  It is mended, the pin is
+  gone, and the assertion that no target does it stays there; what
+  made it is the rule on "not stated" below.
 - **Never** translate a statement the source device holds and does not
   run, and never read a form of a platform's config you do not parse as
   an empty config.  Junos prints `inactive:` ahead of a deactivated
@@ -1012,12 +1011,31 @@ tests use these exclusively — never CSS classes or element structure.  See
   hand, so that neither is the oracle for itself:
   `tests/unit/migration/codecs/juniper_junos/test_two_forms_one_tree.py`
   and `test_statements_left_out.py`.
-  parser can read its own word for "all" as something a check of ids
-  does not see (AOS-CX read it as an empty list).  The same class was
-  open one step on — an EMPTY list written as every VLAN on four
-  targets — and that module pinned which.  It is mended, the pin is
-  gone, and the assertion that no target does it stays there; what
-  made it is the next rule.
+  **And a stanza ends where the DEVICE ends it, not where the printer
+  happens to indent.**  The AOS-S parser ended a `vlan`, `interface`
+  or `vrrp vrid` stanza at its `exit` or at any line in column 0, and
+  skipped every indented line after that: a KB.15.15 capture committed
+  with every line at column 0, its indentation lost between the switch
+  and the repository, was three empty VLANs and no interface, in jobs
+  that said `completed` onto most targets (AOS-S itself among them),
+  no job said a line was not read, and its RESULTS row gave another
+  cause for the empty tree.  HPE describes a context by commands --
+  `exit` returns to the previous one, `end` to the Manager level, a
+  command that enters another context leaves the open one -- and no
+  HPE switch guide says anything of indentation.  So the stanza ends
+  at its `exit` or an `end`, or at a line in column 0 that enters a
+  context or that the top reads (`_ends_the_stanza`: ONE predicate,
+  built from the top's own patterns, which a test holds to the loop),
+  and a context whose words the top reads otherwise (`oobm`'s `ip
+  default-gateway`) is a stanza none of whose words a handler of the
+  top sees.  **The blind spot:** every check read the captures as
+  printed, and the one test that pinned the old rule pinned a shape
+  the renderer writes.  A form the device takes is a form to read: the
+  parse of every AOS-S input with its indentation removed is held to
+  the parse of the input
+  (`tests/unit/migration/codecs/aruba_aoss/test_where_a_stanza_ends.py`).
+  The other block parsers fail that still; the CHANGELOG's known
+  limitations say which.
 - **Never** let one value stand for "not stated".  The canonical tree
   had ONE value, an empty list, for three statements: a trunk that
   allows no VLAN (`switchport trunk allowed vlan none`, a list a

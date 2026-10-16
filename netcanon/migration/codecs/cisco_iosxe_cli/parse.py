@@ -931,7 +931,7 @@ def _parse_vxlan(raw: str) -> tuple[list[CanonicalVxlan], dict[str, int]]:
             source_interface=source_iface,
             mcast_group=mcast_by_vni.get(vni, ""),
         )
-        for vni in l2_vnis
+        for vni in ticked(l2_vnis)
         if vni in vlan_by_vni
     ]
     return records, l3vni_by_vrf
