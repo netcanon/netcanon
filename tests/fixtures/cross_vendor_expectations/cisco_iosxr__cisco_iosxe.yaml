@@ -206,8 +206,8 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on the 3 cells that populate it — 11 IPv6 addresses across the
-      corpus, 11 survivors with prefix length intact.  The render emits an
+      Preserved on the 3 cells that populate it — every IPv6 address across the
+      corpus survives with its prefix length intact.  The render emits an
       `oc-ip:ipv6` sibling under the same subinterface as IPv4 (GAP-EVPN-3).
       Narrow caveat, stated rather than implied: cisco_iosxe declares
       `/interfaces/interface/ipv6/address/scope` lossy, so a link-local address
@@ -219,8 +219,8 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on all 12 cells — 60 IPv4 addresses across the corpus, 60
-      survivors, address and prefix length intact.  The routed-interface
+      Preserved on all 12 cells — every IPv4 address across the corpus
+      survives, address and prefix length intact.  The routed-interface
       addressing plane is the part of an IOS-XR config this pair migrates most
       reliably.
     references: [iosxr-iosxe-surface]

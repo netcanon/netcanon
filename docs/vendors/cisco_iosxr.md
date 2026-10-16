@@ -145,6 +145,64 @@ bridge-groups, ACL, QoS) is welcomed via
 
 ## Common gotchas
 
+- **Paste the config as the router prints it, with its
+  indentation.**  IOS XR places each line of a configuration by its
+  indentation when it loads a file: a line at the left margin is a
+  line of the top level.  No Cisco manual says this in a sentence:
+  Cisco's CLI model has an "indentation tracking" feature (`service
+  cli indentation`, on unless disabled), and a Cisco engineer's router
+  output (IOS XR 7.1.1) shows a file with no indentation loading with
+  its VRFs' address-families moved to the top level and only the lines
+  that then failed reported.  What the router does with such text
+  typed or pasted at its prompt is not established.  A text with no
+  indentation at all, the lines of a stanza this parser reads at the
+  left margin, is refused: the job is `failed`,
+  its error `parse failed: cisco_iosxr: this text has no
+  indentation. ...`, naming the first line that opens a stanza with
+  the line after it at the margin.  Neither the router nor Netcanon
+  can tell where such a stanza ends -- the `!` lines say how many
+  submodes close, not which line opened one -- so nothing is read
+  rather than records made of the wrong lines.  A text in which only
+  some lines lost their indentation is read by its indentation, as
+  the router reads it: a line at the margin is a line of the top
+  level.  ⚠️ Up to 0.7.7 a text with no indentation was read: it gave
+  interfaces and VRFs made of lines nested under routing protocols,
+  MPLS and config groups (interfaces called `all` or
+  `'Bundle-Ether.*'` among them), with no address and no route, and
+  local users with no secret, in jobs that said `completed`.  A
+  translation made from such a text then holds interfaces and VRFs
+  the router does not have, and none of its addresses: make it again
+  from `show running-config`.
+- **A whole `show running-config formal` config is refused, not
+  read.**  A formal text is recognised by its `interface` lines: a
+  line in column 0 that states an interface's setting on the
+  `interface` line (`interface <name> description ...`, `... ipv4
+  address ...`, `interface <name> l2transport encapsulation ...`) is
+  the form `show running-config formal` prints, by the shape Cisco
+  shows it printing for class and policy maps.  It is refused with its
+  line number (the error begins `parse failed: cisco_iosxr: line <n>
+  states an interface's setting`): paste `show running-config`
+  without `formal`.  A one-line command typed
+  into a printed config is refused the same way; write the setting on
+  a line of its own under the interface.  A formal excerpt that holds
+  no such `interface` line (`show running-config formal router
+  static`, or formal output filtered by `| include`) is not
+  recognised: it is read as almost nothing, in a job that can say
+  `completed`.  ⚠️ Up to 0.7.7 each such line was a second record of
+  the interface, with its setting lost; translate a config made of
+  such lines again from `show running-config`.
+- **A submode inside an interface does not end it.**  `ptp`, `lldp`
+  and the like are closed by a `!` one level in; the interface's own
+  lines after it are read, and a line indented under the submode is
+  the submode's, not the interface's.  A line indented deeper than the
+  interface's first line is read as nested, as the router reads it,
+  and is not the interface's own: an `ipv4 address` indented one
+  space too far is not translated.  ⚠️ Up to 0.7.7 the interface
+  ended at the submode's `!`, and every line after it was lost: an
+  address after a `ptp` block was not translated.  If you translated
+  an IOS XR config whose interfaces hold a submode before their own
+  lines with 0.7.7 or earlier, translate it again: its addresses, MTU,
+  VRF and `shutdown` after the submode were not carried.
 - **4-segment port names.**  `GigabitEthernet0/0/0/3` is
   rack/slot/instance/port.  Same-vendor round-trip preserves all four;
   renaming to a 3-segment vendor (IOS-XE / Arista) drops the 4th

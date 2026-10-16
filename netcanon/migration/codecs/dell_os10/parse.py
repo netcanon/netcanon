@@ -39,10 +39,11 @@ they carry real password hashes), not inferred from another vendor:
         priority 150
       !
 
-  The shared :func:`..._scanner._default_terminator` fires on
-  ``line.strip() == "!"``, which would close the stanza at the INDENTED
-  separator and silently drop everything after it.  This module passes a
-  column-0-only terminator instead (same rule ``cisco_nxos`` uses).
+  A rule that closed the stanza on ``line.strip() == "!"`` would close
+  it at the INDENTED separator and silently drop everything after it
+  (the shared :func:`..._scanner._default_terminator` once did).  This
+  module passes a column-0-only terminator of its own (same rule
+  ``cisco_nxos`` uses).
 
 * **Interface keyword case and spacing are not stable.**  The SVI header
   appears as ``interface vlan700`` ×161 (device output), ``interface Vlan
@@ -375,11 +376,14 @@ def _infer_type(iface_name: str) -> str:
 def _column_zero_terminator(line: str) -> bool:
     """Close a stanza only on a non-indented (column-0) line.
 
-    Deliberately NOT the shared :func:`_default_terminator`, which also
-    closes on a bare ``!``.  OS10 device dumps use a ONE-SPACE ``!`` to
-    separate an SVI's L3 block from its nested VRRP block, so the shared
-    rule would close the stanza at that separator and drop the rest of
-    the interface.  Same rule ``cisco_nxos`` applies, for the same reason.
+    OS10 device dumps use a ONE-SPACE ``!`` to separate an SVI's L3
+    block from its nested VRRP block, so a rule that also closed on a
+    bare ``!`` at any depth would close the stanza at that separator and
+    drop the rest of the interface.  The shared
+    :func:`_default_terminator` once did; it now closes on column 0 only
+    as well, and this module keeps its own so that its rule does not
+    rest on the shared one.  Same rule ``cisco_nxos`` applies, for the
+    same reason.
     """
     return bool(line) and not line[0].isspace()
 

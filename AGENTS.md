@@ -1035,7 +1035,27 @@ tests use these exclusively — never CSS classes or element structure.  See
   the parse of the input
   (`tests/unit/migration/codecs/aruba_aoss/test_where_a_stanza_ends.py`).
   The other block parsers fail that still; the CHANGELOG's known
-  limitations say which.
+  limitations say which.  **And where the device places a line BY its
+  indentation, a text without it is a form the device takes but does
+  not apply as written: it is refused in words, never read.**  IOS XR
+  loads a file by its indentation (its vendor page says what that
+  rests on), so a flat IOS XR text was interfaces and VRFs made of
+  lines nested under routing protocols, users with no secret, and not
+  one address, in jobs that said `completed` -- and the router would
+  have misplaced the same lines.  A form of the platform's own that
+  the parser was not written for is refused the same way (the `show
+  running-config formal` form of a whole config: a setting on its
+  `interface` lines).  The sentence names a line and quotes nothing of
+  the text, for a parse failure is logged.  And a submode's `!` does
+  not end the stanza it is in: the IOS XR interface parser ended an
+  interface at the `!` of its `ptp` block and lost every address after
+  it, on a committed capture of a certified codec.  **The blind
+  spot:** every check read that capture through the parser that lost
+  the lines -- the mesh compares the source's tree with the target's,
+  and an address neither holds is no drift -- and the scanner's own
+  test pinned "an indented `!` closes a stanza" as its rule; the guard
+  counts each interface's address lines by its indentation, by hand
+  (`tests/unit/migration/test_cisco_iosxr_indentation.py`).
 - **Never** let one value stand for "not stated".  The canonical tree
   had ONE value, an empty list, for three statements: a trunk that
   allows no VLAN (`switchport trunk allowed vlan none`, a list a

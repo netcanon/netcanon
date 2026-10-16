@@ -55,8 +55,19 @@ Phase 2 surface (this commit):
 Where IOS-XR diverges from ``cisco_iosxe_cli`` (see
 ``02-codec-architecture.md`` § "Parse strategy"):
 
-* Stanzas are terminated by a ``!`` line (and close defensively on a
-  shallower-indent line); indentation nests 3-4 deep, not 1-2.
+* Indentation nests 3-4 deep, not 1-2, and it is what places a line:
+  when the router loads a file, a line goes to the submode its
+  indentation puts it in, and a line in column 0 is a line of the top
+  level (inferred, strongly: Cisco's CLI model has "indentation
+  tracking", and a Cisco engineer's router output shows a file with no
+  indentation loaded with its lines in the wrong mode; no manual says
+  it in a sentence, and what the router does with such text typed at
+  its prompt is not established).  A stanza ends at a line in column
+  0 (its own closing ``!`` is one).  A submode inside it (``ptp`` /
+  ``lldp`` under an ``interface``) is closed by a ``!`` at the
+  submode's own depth, which does not end the stanza, and a line
+  indented deeper than the stanza's own first body line is the
+  submode's, not the stanza's.
 * IPv4 addresses use ``ipv4 address X Y`` (note the ``ipv4`` keyword,
   not IOS-XE's ``ip address``); the mask is dotted-decimal.
 * Static routes live in a ``router static`` block with CIDR-form
@@ -65,6 +76,28 @@ Where IOS-XR diverges from ``cisco_iosxe_cli`` (see
   the RT values on their own further-indented lines (the opposite word
   order from NX-OS / IOS-XE's single-line ``route-target import <rt>``).
 * The route-distinguisher lives under ``router bgp``, not the VRF stanza.
+
+Two forms of text are refused with a :class:`ParseError` that says why
+and names a line number (and quotes nothing of the text), before any
+reader runs (:func:`_refuse_a_form_the_router_misplaces`):
+
+* a text with NO indentation, where the body of a stanza this parser
+  reads stands at the left margin.  The router itself would load such a
+  text (as above) as lines of the top
+  level -- a VRF's address-family moved to the global one, the VRF left
+  empty -- and no reading of its ``!`` lines gives the tree back;
+  read here it was interfaces and VRFs made of lines nested under
+  routing protocols, users with no secret, and no address at all.  A
+  text with SOME lines dedented is read by its indentation, as the
+  router reads it.
+* a line in column 0 that states an interface's setting on the
+  ``interface`` line itself (``interface <name> description ...``):
+  the form ``show running-config formal`` prints, by the shape Cisco
+  shows it printing for class and policy maps, or a one-line command
+  typed into a printed text.  Read as a header, it was a second record
+  of the interface with the setting lost.  The formal form is not read,
+  and a formal excerpt with no such ``interface`` line (``show
+  running-config formal router static``) is not recognised.
 
 Deliberately NOT parsed (declared ``unsupported`` in the capability
 matrix — Tier-3): the SP-routing protocol blocks (``router bgp`` beyond
@@ -231,8 +264,8 @@ _BGP_RD_RE = re.compile(r"^\s+rd\s+(\S+)\s*$", re.IGNORECASE)
 
 # ── local users (Phase 2) ──
 #: ``username <name>`` alone on a line opens a user block; ``group`` /
-#: ``secret`` / ``password`` sub-lines follow, terminated by ``!`` or a
-#: column-0 line.
+#: ``secret`` / ``password`` sub-lines follow, ended by a column-0 line
+#: (the block's own ``!`` is one).
 _USERNAME_HDR_RE = re.compile(r"^username\s+(\S+)\s*$", re.IGNORECASE)
 #: single-line variant ``username <name> {secret|password} <type> <hash>``.
 _USERNAME_INLINE_RE = re.compile(
@@ -242,6 +275,34 @@ _USER_GROUP_RE = re.compile(r"^\s+group\s+(\S+)", re.IGNORECASE)
 _USER_SECRET_RE = re.compile(
     r"^\s+(?:secret|password)\s+(\d+)\s+(\S+)", re.IGNORECASE,
 )
+#: ``ntp`` alone on a line opens the NTP block (:data:`_NTP_BLOCK_RE`).
+_NTP_HDR_RE = re.compile(r"^ntp[ \t]*$", re.IGNORECASE)
+
+# ── A text the router would place otherwise than it reads ──
+#: The headers of the stanzas this parser reads.  In a text with no
+#: indentation, one of them followed by a line that is none of them,
+#: no ``!``, no comment and no ``end`` has its body at the left margin.
+_STANZA_HEADERS = (
+    _IFACE_RE, _VRF_TOP_RE, _ROUTER_STATIC_RE, _ROUTER_BGP_RE,
+    _USERNAME_HDR_RE, _NTP_HDR_RE,
+)
+#: ``interface [preconfigure ]<name>[ <number>][ l2transport] <setting>
+#: ...`` in column 0: a setting of the interface on the interface's own
+#: line, as ``show running-config formal`` prints it (by the shape Cisco
+#: shows it printing for class and policy maps; no source shows a formal
+#: ``interface`` line).  ``show running-config`` never prints one: its
+#: ``interface`` line is the name alone, or with ``l2transport``, or
+#: after ``preconfigure``, and each setting is a line of its own under
+#: it.  The settings are the words a body line this parser reads begins
+#: with.
+_SETTING_ON_THE_HEADER_RE = re.compile(
+    r"^interface[ \t]+(?:preconfigure[ \t]+)?\S+(?:[ \t]+\d\S*)?"
+    r"(?:[ \t]+l2transport)?[ \t]+"
+    r"(?:description|ipv4|ipv6|shutdown|mtu|vrf|bundle|encapsulation)"
+    r"(?![^ \t])",
+    re.IGNORECASE,
+)
+
 #: IOS-XR task-groups that map to the cross-vendor admin privilege (15).
 #: Other groups round-trip their name verbatim but map to privilege 1.
 _IOSXR_ADMIN_GROUPS = {"root-lr", "root-system"}
@@ -286,13 +347,108 @@ def _fmt_secret(hash_type: str | None, payload: str) -> str:
     return payload
 
 
+#: Said of a text with no indentation.  It quotes nothing of the text:
+#: a parse failure is logged, and what a message quotes from a config
+#: never goes to a log.
+FLAT_TEXT_MESSAGE = (
+    "cisco_iosxr: this text has no indentation.  IOS XR places each line "
+    "of a configuration by its indentation: `show running-config` prints "
+    "a stanza's lines indented under it, and when it loads a "
+    "configuration file the router reads a line at the left margin as a "
+    "line of the top level.  So neither the router nor this parser can "
+    "tell where a stanza of this text ends: line {line} opens one, and "
+    "the line after it is at the left margin.  "
+    "Paste the output of `show running-config` as the router prints it, "
+    "with its indentation."
+)
+#: Said of a setting written on an ``interface`` line.  It quotes
+#: nothing of the text either.
+FORMAL_LINE_MESSAGE = (
+    "cisco_iosxr: line {line} states an interface's setting on the "
+    "`interface` line itself.  That is the form `show running-config "
+    "formal` prints (or a one-line command typed into the text), and this "
+    "parser reads the form `show running-config` prints, where each "
+    "setting is a line of its own, indented under the `interface` line: "
+    "read as it is, the line would be a second record of the interface "
+    "with its setting lost.  Paste the output of `show running-config` "
+    "without `formal`; if the line was typed into the text, write the "
+    "setting on a line of its own under the interface."
+)
+
+
+def _refuse_a_form_the_router_misplaces(raw: str) -> None:
+    """Raise :class:`ParseError` for a text this parser would misread.
+
+    Two shapes, found in one pass over the lines:
+
+    * a line in column 0 that states an interface's setting on the
+      ``interface`` line (:data:`_SETTING_ON_THE_HEADER_RE`), anywhere in
+      the text: the ``show running-config formal`` form, or a one-line
+      command typed into a printed text;
+    * a text in which NO line is indented, and a stanza this parser
+      reads (:data:`_STANZA_HEADERS`) is followed by a line that is no
+      header of one, no ``!`` and no ``end``: its body is at the left
+      margin, where the router loading the file would read it as lines
+      of the top level.
+      Blank lines and comments (``!`` and more) are passed over: a
+      comment belongs to the line after it.  A text with SOME lines
+      dedented is not this shape: the router reads it by its
+      indentation, and so does this parser.
+
+    The first formal line is named before a flat stanza.  Each message
+    gives a line number (counted as ``str.splitlines`` counts) and
+    quotes nothing of the text.
+
+    Raises:
+        ParseError: For either shape.
+    """
+    formal_at: int | None = None
+    flat_at: int | None = None
+    waiting: int | None = None
+    indented = False
+    for number, line in enumerate(ticked(raw.splitlines()), 1):
+        if not line.strip():
+            continue
+        if line[0].isspace():
+            indented = True
+            waiting = None
+            continue
+        if line.startswith("!") and line.strip() != "!":
+            # A comment belongs to the line after it; a bare ``!`` is
+            # the end of a stanza as the router prints it.
+            continue
+        if formal_at is None and _SETTING_ON_THE_HEADER_RE.match(line):
+            formal_at = number
+        opens = any(header.match(line) for header in _STANZA_HEADERS)
+        if (
+            waiting is not None and flat_at is None and not opens
+            and line.strip() != "!" and line.strip().lower() != "end"
+        ):
+            flat_at = waiting
+        waiting = number if opens else None
+    if formal_at is not None:
+        raise ParseError(
+            FORMAL_LINE_MESSAGE.format(line=formal_at),
+            path=f"line {formal_at}", snippet="",
+        )
+    if flat_at is not None and not indented:
+        raise ParseError(
+            FLAT_TEXT_MESSAGE.format(line=flat_at),
+            path=f"line {flat_at}", snippet="",
+        )
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse IOS-XR ``show running-config`` output into a
     :class:`CanonicalIntent`.
 
     Raises:
         ParseError: If the input is empty or looks like XML / JSON
-            rather than IOS-XR CLI text.
+            rather than IOS-XR CLI text; if it has no indentation and a
+            stanza's body stands at the left margin; or if a line in
+            column 0 states an interface's setting on the ``interface``
+            line (the ``show running-config formal`` form).  See
+            :func:`_refuse_a_form_the_router_misplaces`.
     """
     if not raw.strip():
         raise ParseError("cisco_iosxr: empty input", snippet="")
@@ -304,6 +460,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
             f"CLI.  Paste the output of `show running-config`.",
             snippet=raw.lstrip()[:120],
         )
+
+    # A text the router would place otherwise than this parser reads it:
+    # refused in words, before any reader makes a record of it.
+    _refuse_a_form_the_router_misplaces(raw)
 
     intent = CanonicalIntent(
         source_vendor="cisco_iosxr",
@@ -445,7 +605,25 @@ def _new_iface_scratch(name: str) -> dict:
         "vrf": "",
         "lag_member_of": None,
         "dot1q_vlan": None,
+        # The indent of the stanza's first body line: a line indented
+        # deeper is a submode's (:func:`_in_a_submode`).
+        "body_indent": None,
     }
+
+
+def _in_a_submode(line: str, current: dict) -> bool:
+    """Whether *line* of an open stanza belongs to a submode of it.
+
+    The stanza's own lines are at the indent of its first body line; a
+    line indented deeper is under a submode (``ptp``, ``lldp``) and is
+    the submode's, whatever its words.  A blank line is no body line.
+    """
+    if not line.strip():
+        return True
+    width = _indent(line)
+    if current["body_indent"] is None:
+        current["body_indent"] = width
+    return width > current["body_indent"]
 
 
 def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
@@ -454,12 +632,16 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     Per interface: description, enabled (``shutdown``), mtu, IPv4 (dotted
     mask → prefix), IPv6 (CIDR + scope), VRF membership (bare ``vrf
     <name>``), and Bundle-Ether membership (``bundle id <N> mode <m>`` →
-    ``lag_member_of``).  Stanzas close on a ``!`` line or a
-    shallower-indent (non-indented) line.  ``encapsulation dot1q`` is
-    handled by :func:`_parse_dot1q_vlans` (a separate scan) — it falls
-    through this loop harmlessly.
+    ``lag_member_of``).  A stanza ends at a line in column 0 (its closing
+    ``!`` is one, the shared scanner's default); the indented ``!`` that
+    closes a submode (``ptp``, ``lldp``) does not end it, and the
+    submode's own lines are not the interface's (:func:`_in_a_submode`).
+    ``encapsulation dot1q`` is handled by :func:`_parse_dot1q_vlans` (a
+    separate scan) — it falls through this loop harmlessly.
     """
     def _on_line(line: str, current: dict) -> None:
+        if _in_a_submode(line, current):
+            return
         dm = _DESC_RE.match(line)
         if dm:
             current["description"] = dm.group(1).strip()
@@ -524,9 +706,9 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 pass
             return
 
-    # Loop skeleton (open on `interface`, close on `!`/dedent, flush at EOF)
-    # is the shared codecs/_scanner helper; the vendor regex cascade above
-    # stays here.  Behaviour-identical to the former hand-rolled loop.
+    # Loop skeleton (open on `interface`, close on a column-0 line, flush
+    # at EOF) is the shared codecs/_scanner helper; the vendor regex
+    # cascade above, and which lines are a submode's, stay here.
     return scan_stanzas(
         raw.splitlines(),
         is_header=_IFACE_RE.match,
@@ -892,6 +1074,9 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
     mode_by_lag: dict[str, str] = {}
     declared: set[str] = set()
     current_iface: str | None = None
+    # The open stanza's depth, as :func:`_parse_interfaces` keeps it: a
+    # ``bundle id`` under a submode is not the port's.
+    depth: dict = {"body_indent": None}
 
     def _note_header(name: str) -> None:
         if name.lower().startswith("bundle-ether"):
@@ -902,6 +1087,7 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
         if m:
             current_iface = _header_name(m)
             _note_header(current_iface)
+            depth["body_indent"] = None
             continue
         if current_iface is None:
             continue
@@ -911,6 +1097,9 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
             if m:
                 current_iface = _header_name(m)
                 _note_header(current_iface)
+                depth["body_indent"] = None
+            continue
+        if _in_a_submode(line, depth):
             continue
         bm = _BUNDLE_ID_RE.match(line)
         if bm:
@@ -998,15 +1187,22 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
         hm = _USERNAME_HDR_RE.match(line)
         if hm:
             _flush()
-            current = {"name": hm.group(1), "group": "", "secret": ""}
+            current = {
+                "name": hm.group(1), "group": "", "secret": "",
+                "body_indent": None,
+            }
             continue
 
         if current is None:
             continue
 
-        # `!` terminator or any non-indented line closes the block.
-        if line.strip() == "!" or (line and not line[0].isspace()):
+        # A line in column 0 closes the block (its own `!` is one).  An
+        # indented `!` closes a submode inside it, whose lines are not
+        # the user's, as for an interface.
+        if line and not line[0].isspace():
             _flush()
+            continue
+        if _in_a_submode(line, current):
             continue
 
         gm = _USER_GROUP_RE.match(line)

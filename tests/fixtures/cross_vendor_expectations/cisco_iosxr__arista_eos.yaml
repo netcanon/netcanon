@@ -169,7 +169,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 155 of 155 records; IPv6 is populated on 11 of them and
+      Preserved on 155 of 155 records; IPv6 is populated on some of them and
       every address + prefix-length survives.  Both matrices declare
       `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
       supported.

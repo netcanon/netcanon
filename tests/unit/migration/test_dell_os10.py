@@ -296,11 +296,11 @@ class TestInterfaceStanzaTraps:
         """THE scanner trap.
 
         Device dumps separate an SVI's L3 block from its nested VRRP
-        block with a ONE-SPACE `!`.  The shared
-        `_scanner._default_terminator` fires on `line.strip() == "!"`,
-        which would close the stanza at that separator and silently drop
-        everything after it.  `mtu` is placed after the VRRP block purely
-        so a Phase-1 field proves the stanza stayed open.
+        block with a ONE-SPACE `!`.  A terminator that fires on
+        `line.strip() == "!"` (the shared `_scanner._default_terminator`
+        once did) would close the stanza at that separator and silently
+        drop everything after it.  `mtu` is placed after the VRRP block
+        purely so a Phase-1 field proves the stanza stayed open.
         """
         raw = (
             "interface vlan101\n"

@@ -2,10 +2,11 @@
 
 Several codecs hand-roll the same control-flow skeleton: a *header* line
 opens a scratch accumulator, subsequent indented lines feed a per-attribute
-handler cascade, and a ``!`` or column-0 (dedented) line closes the stanza
-and materialises a canonical record.  :func:`scan_stanzas` factors out ONLY
-that loop; the vendor grammar — header regex, attribute cascade, scratch
-shape, and build step — stays in the codec via callables.  The scanner
+handler cascade, and a column-0 line (a ``!`` in column 0 among them)
+closes the stanza and materialises a canonical record.
+:func:`scan_stanzas` factors out ONLY that loop; the vendor grammar —
+header regex, attribute cascade, scratch shape, and build step — stays
+in the codec via callables.  The scanner
 carries zero canonical-model knowledge, so the records it produces are
 identical to the hand-rolled loop it replaces.
 
@@ -30,12 +31,18 @@ _Result = TypeVar("_Result")
 
 
 def _default_terminator(line: str) -> bool:
-    """Close a stanza on a bare ``!`` or any non-indented (column-0) line.
+    """Close a stanza on a line in column 0 (its closing ``!`` is one).
 
-    Replicates the de-facto rule the CLI codecs hand-roll verbatim:
-    ``line.strip() == "!" or (line and not line[0].isspace())``.
+    An INDENTED ``!`` does not close it.  Inside a stanza, a submode
+    (IOS XR ``ptp`` / ``lldp`` under an ``interface``, an OS10 VRRP
+    group under an SVI) is closed by a ``!`` at the submode's own depth,
+    one level in, and the stanza's own lines go on after it: a rule that
+    closed the stanza at that ``!`` dropped every line after the
+    submode.  The stanza's own ``!`` is printed in column 0, so the one
+    rule covers both.  What a submode's own lines are is the codec's to
+    say (the scanner hands every line in the stanza to ``on_line``).
     """
-    return line.strip() == "!" or bool(line and not line[0].isspace())
+    return bool(line) and not line[0].isspace()
 
 
 def scan_stanzas(

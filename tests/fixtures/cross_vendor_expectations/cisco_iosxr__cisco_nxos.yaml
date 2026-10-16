@@ -175,7 +175,7 @@ per_field_expectation:
     note: >
       `/interfaces/interface/ipv6/address/ip` + `prefix-length` are supported
       on both sides and preserved on every record of the 3 cells that carry
-      IPv6 (11 records).  Note what is NOT covered by this `good`: cisco_nxos
+      IPv6 (every such record).  Note what is NOT covered by this `good`: cisco_nxos
       declares `/interfaces/interface/ipv6/address/virtual-gateway-address`
       unsupported, and cisco_iosxr declares it unsupported too — so IPv6
       anycast-gateway addressing is a symmetric gap the source never emits
@@ -186,7 +186,7 @@ per_field_expectation:
     disposition: good
     note: >
       Routed-port addressing is supported on both sides and preserved on
-      every record of all 12 cells (60 addressed records).  This is where the
+      every addressed record of all 12 cells.  This is where the
       L3 for a dot1q sub-interface lives on this pair — an IOS-XR
       `GigabitEthernet0/0/0/1.35` carries the address that a campus source
       would have mounted on the VLAN record (see `vlans[].ipv4_addresses`).

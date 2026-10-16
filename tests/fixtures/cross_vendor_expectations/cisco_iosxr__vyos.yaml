@@ -206,7 +206,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 155 of 155 records; IPv6 is populated on 11 of them and
+      Preserved on 155 of 155 records; IPv6 is populated on some of them and
       every address + prefix-length survives.  Both matrices declare
       `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
       supported.
@@ -215,8 +215,8 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 155 of 155 records — populated on 60 of them, the
-      widest-populated field on the pair, and all 60 round-trip with
+      Preserved on 155 of 155 records — populated on dozens of them,
+      and every one round-trips with
       address and prefix-length intact.  Both matrices declare
       `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
       supported.  This is the field the migration most depends on and it
@@ -339,8 +339,8 @@ per_field_expectation:
       BVI or a dot1q sub-interface), never on the VLAN record, so all 4
       populated VLAN records carry an empty address list — measured, not
       assumed.  The corresponding addressing lives in
-      `interfaces[].ipv4_addresses`, which is `good` on 60 of 60 populated
-      records.
+      `interfaces[].ipv4_addresses`, which is `good` on every populated
+      record.
       The record-level VLAN loss is claimed once, by `vlans[].id`.
     references: [iosxr-vyos-surface]
 

@@ -420,8 +420,16 @@ Anycast Gateway).  The lossy / unsupported exceptions:
 #### `cisco_iosxr` (Cisco IOS-XR, bidirectional, certified)
 
 Broad supported surface (Tier-1 + VRF + RT + per-interface VRF + LAG +
-local users + per-VRF static + dot1q sub-interfaces).  The lossy /
-unsupported exceptions:
+local users + per-VRF static + dot1q sub-interfaces).  A text with no
+indentation, and the `show running-config formal` form of a whole
+config (a setting on its `interface` lines), are REFUSED in words
+rather than mis-parsed: a text with no indentation because IOS XR
+places a line by its indentation when it loads a file, the formal
+form because the parser reads only the form `show running-config`
+prints.  A formal excerpt with no `interface` line is not recognised,
+and is read as almost nothing (see
+[`vendors/cisco_iosxr.md`](vendors/cisco_iosxr.md) § "Common
+gotchas").  The lossy / unsupported exceptions:
 
 | Path | Class | Reason |
 |---|---|---|
