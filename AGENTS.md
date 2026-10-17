@@ -1056,6 +1056,43 @@ tests use these exclusively — never CSS classes or element structure.  See
   test pinned "an indented `!` closes a stanza" as its rule; the guard
   counts each interface's address lines by its indentation, by hand
   (`tests/unit/migration/test_cisco_iosxr_indentation.py`).
+  **And where the device reads a text without its indentation by the
+  mode each command leaves open, reading it needs every mode's
+  words, which the vendor does not list: it is a form the device
+  takes, and still not one to read -- unlike AOS-S, whose printed
+  `exit` closes each context, the text says nowhere where a mode
+  ends -- so it is refused in words, with the parser's reason, not
+  the device's.**  EOS runs a typed or pasted line in the deepest open
+  mode that accepts it (Arista's transcripts show it), and Arista's
+  own generator deploys a config through eAPI as a flat stream, so a
+  flat EOS text has a meaning to the switch (inferred) -- but no
+  Arista page lists the words each mode takes, and the parser had
+  read such a text as a second VLAN for each `vlan` block under
+  `router bgp` and not one address, in jobs that said `completed` or
+  were `partial` for another reason, none saying a line was not read.
+  The sentence says what the parser cannot do, never what the switch
+  would do.  Nor is a depth rule a reading where the device places a
+  line by its mode: inside an EOS interface no depth tells a
+  submode's line from the interface's own, so every indented line is
+  the interface's (a known limitation), and only `router bgp`, whose
+  blocks are real, is read by depth.  **And a body that runs to its
+  own end (`EOF`) is text, never lines of the config: unread, a
+  banner became an administrator account.**  A printed `banner motd`
+  body is as it was typed and ends at `EOF` in column 0 (Arista's
+  pyeapi reads it so), so every reader took its lines for the top
+  level, and a line `username <name> privilege 15 nopassword` in it
+  was a privilege-15 account with no secret on the target.  Every
+  such body is emptied, its lines keeping their numbers, before any
+  reader of the parse -- the Tier-3 rows included -- and a body with
+  no `EOF` is refused.  A body that only a generator is seen to print
+  (a certificate and its key) is opened only where its own first
+  line proves it (PEM): taken on the generator's word, a printout
+  with one body lost every line after it (caught before release).
+  **The blind spot:** no
+  committed capture has a banner, and every check read the captures
+  as printed; the guard writes the banner and reads every target's
+  output for its words
+  (`tests/unit/migration/test_arista_eos_indentation.py`).
 - **Never** let one value stand for "not stated".  The canonical tree
   had ONE value, an empty list, for three statements: a trunk that
   allows no VLAN (`switchport trunk allowed vlan none`, a list a

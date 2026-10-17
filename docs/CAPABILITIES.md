@@ -281,6 +281,18 @@ output.
 
 #### `arista_eos` (bidirectional)
 
+A text with no indentation is REFUSED in words rather than
+mis-parsed: the parser reads a stanza by its indentation, and reading
+such a text as the switch is inferred to (by the mode each command
+leaves open) would need every mode's words, which no Arista page
+lists.  A banner, and every other body that Arista's tools end at an
+`EOF` line (a `comment`, RCF code, a multi-line `action bash`, a
+certificate and its key), is text and is never read as
+configuration; a body with no `EOF` is refused.  `router bgp` is read
+by relative depth, so tabs and other widths read as EOS's own (see
+[`vendors/arista_eos.md`](vendors/arista_eos.md) § "Common
+gotchas").
+
 | Path | Class | Reason |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Classic VRRP parses `vrrp <N> ipv4 <VIP>` + multi-line modern `vrrp <N> { ip address, priority, preempt, advertisement-interval }` and renders the multi-line modern form. |
@@ -1554,8 +1566,9 @@ What you get back, on the job's `port_mapping_plan`:
   `partial` until your `port_rename_map` names it.  A unit gets
   here from a source platform whose parser reads no tag for a
   sub-interface (AOS-CX, OS10), from a stanza whose tag line the
-  parser did not read (an IOS config pasted without its
-  indentation), and from a config that states none.
+  parser did not read (an IOS-XE CLI, NX-OS, AOS-CX or OS10 config
+  pasted without its indentation; an IOS XR or EOS one is refused),
+  and from a config that states none.
 * **`unvouched_units`** — sub-interface names that went where their
   port went, tag and all, and that the plan does not count as having
   followed, each with the name it has in the output.  The plan takes
