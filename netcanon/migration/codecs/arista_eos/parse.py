@@ -1,8 +1,13 @@
 """
 Parse path for Arista EOS CLI (``show running-config`` form).
 
-Public function: :func:`parse_intent` — raw text in,
-:class:`CanonicalIntent` out.
+Public functions: :func:`parse_intent` — raw text in,
+:class:`CanonicalIntent` out; and :func:`without_bodies` — the text with
+every body that runs to an ``EOF`` line (a banner, a comment, RCF code,
+a script, a certificate and its key) emptied, which every reader of the
+parse is given (the codec's Tier-3 rows among them; the probe reads the
+text as it came).  A text with no indentation is refused before any
+reader runs (:func:`_refuse_a_flat_text`).
 
 Handles standard interfaces, VLANs, VRFs (``vrf instance`` form),
 EVPN MAC-VRFs (``router bgp / vlan N`` form), VXLAN (interface
@@ -37,6 +42,8 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+import sys
+from collections.abc import Callable
 from typing import Any
 
 from ...canonical.intent import (
@@ -68,7 +75,7 @@ from .._helpers import (
     tags_its_native_vlan,
 )
 from .._input_shape import detect_input_shape
-from .._scanner import scan_stanzas
+from .._scanner import first_flat_stanza, scan_stanzas
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -476,6 +483,200 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
 
 
 # ---------------------------------------------------------------------------
+# Text that is no line of the config, and a text with no indentation
+# ---------------------------------------------------------------------------
+
+#: ``router bgp <asn>`` in column 0 opens the BGP section
+#: (:func:`_parse_router_bgp`).
+_ROUTER_BGP_RE = re.compile(r"router bgp ")
+
+#: The headers of the stanzas this parser reads by their indentation.
+#: In a text with no indentation, one of them followed by a line that
+#: is none of them, no ``!``, no comment, no ``exit`` and no ``end`` has
+#: its body at the left margin (:func:`.._scanner.first_flat_stanza`).
+_STANZA_HEADERS = (
+    _INTERFACE_HEADER_RE, _VLAN_HEADER_RE, _VRF_INSTANCE_RE,
+    _DHCP_POOL_HEADER_RE, _ROUTER_BGP_RE,
+)
+
+#: A line that opens a body of text that runs to a line that is ``EOF``
+#: and nothing else.  ``banner login`` / ``banner motd`` (group
+#: ``banner``) is in column 0, its body as it was typed, and the body
+#: ends at a line ``EOF`` in column 0: so Arista's pyeapi reads a
+#: printed banner, and a line `` EOF`` with white space in front of it
+#: is the banner's text.  A banner line may begin with ``!``.
+#: ``comment`` is typed in a mode and ended by ``EOF`` ("case
+#: sensitive", Arista's manual).  An RCF ``code unit <name>`` body keeps
+#: the white space it was typed with, and its ``EOF`` is indented (at a
+#: depth Arista's own tools do not agree on).  A multi-line ``action
+#: bash`` is a body as Arista's config generator prints it.  The
+#: indented openers' ``EOF`` may be indented.  One pattern, not five: it
+#: is asked of every line of a config.
+_OPENS_A_BODY_RE = re.compile(
+    r"^(?:(?P<banner>banner[ \t]+(?:login|motd))"
+    r"|[ \t]*(?:comment|code[ \t]+unit[ \t]+\S+|action[ \t]+bash"
+    r"|protocol[ \t]+https[ \t]+(?P<certificate>certificate)))[ \t]*$",
+    re.IGNORECASE,
+)
+#: ``protocol https certificate`` (group ``certificate``) is followed,
+#: as Arista's config generator prints it, by a certificate and then its
+#: key, each a body ended by ``EOF``.  No switch printout of it is to
+#: hand, so each body opens only where the next line that is not empty
+#: begins as PEM text does: a printout with one body, or none, is read
+#: as it was before any body was known.
+_PEM_BEGINS = "-----BEGIN"
+
+#: Said of a body that no ``EOF`` line ends.  It quotes nothing of the
+#: text: a parse failure is logged, and what a message quotes from a
+#: config never goes to a log.
+UNENDED_BODY_MESSAGE = (
+    "arista_eos: line {line} opens a block of text -- a banner, a "
+    "comment, a certificate and its key, or a script -- that runs to "
+    "the end of this text: a line that is `EOF` ends each such block, "
+    "and the last one opened has none.  Read as it stands, every line "
+    "after line {line} is text, and no line of it is configuration.  "
+    "Paste the output of `show running-config` whole, with each "
+    "block's `EOF` line."
+)
+
+#: Said of a text with no indentation.  It quotes nothing of the text
+#: either.  It gives this parser's reason, not the switch's: what EOS
+#: itself makes of such a text is not stated by Arista (the vendor page
+#: says what it is inferred to do).
+FLAT_TEXT_MESSAGE = (
+    "arista_eos: this text has no indentation.  No line but a comment "
+    "begins with a space or a tab.  `show running-config` "
+    "prints the lines of a stanza indented under it, and this parser "
+    "tells which lines belong to a stanza by their indentation, so it "
+    "cannot tell where a stanza of this text ends: line {line} opens "
+    "one, and the line after it is at the left margin.  "
+    "Paste the output of `show running-config` as the switch prints "
+    "it, with its indentation."
+)
+
+
+def _line_end(line: str) -> str:
+    """What ends *line*, one of ``str.splitlines(keepends=True)``'s."""
+    kept = line.splitlines()
+    return line[len(kept[0]):] if kept else line
+
+
+def _eof_stripped(line: str) -> bool:
+    """Whether *line* is ``EOF``, white space around it allowed."""
+    return line.strip() == "EOF"
+
+
+def _eof_in_column_0(line: str) -> bool:
+    """Whether *line* is ``EOF`` in column 0, white space after it
+    allowed: the end of a banner."""
+    return line.rstrip() == "EOF"
+
+
+def without_bodies(raw: str) -> str:
+    """*raw* with every line of each body that runs to ``EOF`` made empty.
+
+    A body is the lines after a line that opens one
+    (:data:`_OPENS_A_BODY_RE`), up to and including the first line that is
+    ``EOF`` (case-sensitive): for a banner, ``EOF`` in column 0, white
+    space after it allowed; for the other openers, ``EOF`` once its white
+    space is stripped.  After ``protocol https certificate`` a body opens
+    only at a line that begins as PEM text does (:data:`_PEM_BEGINS`), the
+    first line after it that is not empty, and then once more for the
+    key after the certificate's ``EOF``.  A banner is text the switch
+    shows, not configuration: read as lines of the config, a banner's
+    words were accounts, VLANs, routes and interfaces.  The line that
+    opens a body stays (no reader takes it); each line of the body is
+    left as its line end only, so every line keeps its number.  A text
+    with no body is returned as it is.
+
+    Raises:
+        ParseError: A body has no ``EOF`` line before the end of the
+            text.  The message names the line that opens it and quotes
+            nothing of the text.
+    """
+    lines = raw.splitlines(keepends=True)
+    # Inside a body: how its ``EOF`` line is told (None: in no body).
+    ends: Callable[[str], bool] | None = None
+    # After ``protocol https certificate``: how many PEM bodies may
+    # still open (the certificate, then its key).
+    pem_owed = 0
+    opened_at = 0
+    blanked = False
+    for index, line in enumerate(ticked(lines)):
+        if ends is None and pem_owed:
+            if not line.strip():
+                continue
+            if line.strip().startswith(_PEM_BEGINS):
+                pem_owed -= 1
+                ends = _eof_stripped
+            else:
+                # No body, or no more of them: the line is the config's.
+                pem_owed = 0
+        if ends is not None:
+            if ends(line):
+                ends = None
+            # The line being walked, never one ahead of it.
+            lines[index] = _line_end(line)
+            blanked = True
+            continue
+        opener = _OPENS_A_BODY_RE.match(line.rstrip())
+        if opener:
+            opened_at = index + 1
+            if opener.group("certificate"):
+                pem_owed = 2
+            elif opener.group("banner"):
+                ends = _eof_in_column_0
+            else:
+                ends = _eof_stripped
+    if ends is not None:
+        raise ParseError(
+            UNENDED_BODY_MESSAGE.format(line=opened_at),
+            path=f"line {opened_at}", snippet="",
+        )
+    return "".join(lines) if blanked else raw
+
+
+def _refuse_a_flat_text(raw: str) -> None:
+    """Raise :class:`ParseError` for a text with no indentation whose
+    stanzas have their bodies at the left margin.
+
+    This parser reads a stanza's lines by their indentation.  Without
+    it, it read a dedented line as a line of the top level: a nested
+    ``vlan <id>`` under ``router bgp`` became a second VLAN, and every
+    address, description, membership, LAG, VNI and route target was
+    lost, in jobs that said ``completed`` or were ``partial`` for
+    another reason, none saying a line was not read.  Reading such a
+    text as the switch is inferred to (by the mode each command leaves
+    open; Arista does not say) would need every mode's words, which no
+    Arista page lists.  So it is refused, in this parser's words.  The
+    shape is :func:`.._scanner.first_flat_stanza`'s, with this parser's
+    headers (:data:`_STANZA_HEADERS`): a text with SOME lines dedented
+    is read by its indentation.  White space in front of a line that is
+    no space or tab (a no-break space) is no indentation: the interface,
+    VLAN and ``router bgp`` readers take such a line for one at the
+    margin.
+
+    Raises:
+        ParseError: For a text of that shape.  The message gives the
+            number of the line that opens the first such stanza and
+            quotes nothing of the text.
+    """
+    # The module's tuple, read at the call: a test that changes it
+    # changes what is asked.
+    flat_at = first_flat_stanza(raw, _STANZA_HEADERS)
+    if flat_at is not None:
+        raise ParseError(
+            FLAT_TEXT_MESSAGE.format(line=flat_at),
+            path=f"line {flat_at}", snippet="",
+        )
+
+
+def _indent(line: str) -> int:
+    """The width of *line*'s indentation, a tab counted as one."""
+    return len(line) - len(line.lstrip())
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -486,14 +687,24 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
     Raises:
         ParseError: On empty input or input that clearly isn't EOS CLI
-            (XML or JSON).
+            (XML or JSON); if a banner, comment, certificate or script
+            body has no ``EOF`` line before the end of the text
+            (:func:`without_bodies`); or if the text has no indentation
+            and a stanza's body stands at the left margin
+            (:func:`_refuse_a_flat_text`).
     """
     if not raw.strip():
         raise ParseError(
             "arista_eos: empty input", snippet="",
         )
-    # Shape sanity — Round-4.2 shared helper tolerates leading
-    # shell-echo / banner framing on real captures.
+    # A body that runs to its own ``EOF`` (a banner, a comment, a
+    # certificate, a script) is text, never lines of the config: every
+    # reader below -- the shape check and the flat check among them --
+    # is given the text with each body's lines empty (a banner whose
+    # body begins ``{`` is no JSON).  Then shape sanity — Round-4.2
+    # shared helper tolerates leading shell-echo / banner framing on
+    # real captures.
+    raw = without_bodies(raw)
     shape = detect_input_shape(raw)
     if shape == "xml":
         raise ParseError(
@@ -505,6 +716,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             "arista_eos: input looks like JSON, not EOS CLI.",
             snippet=raw.lstrip()[:120],
         )
+    # A text this parser cannot read by its indentation is refused in
+    # words, before any reader makes a record of it.
+    _refuse_a_flat_text(raw)
 
     intent = CanonicalIntent(
         source_vendor="arista_eos",
@@ -833,10 +1047,16 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     """Line-scanner for interface + vlan stanzas.
 
-    Both stanza types are delimited by ``!`` or by the next top-
-    level keyword (``interface ``, ``vlan ``, ``router ``, etc.).
-    EOS indents sub-commands with 3 spaces (not Cisco's 1 or
-    tab); matching is whitespace-tolerant.
+    Both stanza types are delimited by ``!`` in column 0 or by the
+    next top-level keyword (``interface ``, ``vlan ``, ``router ``,
+    etc.).  EOS indents sub-commands with 3 spaces (not Cisco's 1 or
+    tab); matching is whitespace-tolerant, and every indented line of
+    an open stanza is the stanza's, at any depth.  EOS places a line by
+    the mode it is typed in, not by its indentation, so no depth here
+    would tell a submode's line from the stanza's own: a line this
+    reader takes, typed inside a submode of an interface (``tx-queue``,
+    ``evpn ethernet-segment``), is read as the interface's (no Arista
+    printout shows one there).  An empty line closes nothing.
     """
     iface_by_name: dict[str, CanonicalInterface] = {}
     # Track pending LAG member ↔ channel-group bindings so we
@@ -885,7 +1105,10 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     for raw_line in ticked(lines):
         line = raw_line.rstrip()
         stripped = line.strip()
-        if not stripped or stripped.startswith("!"):
+        if not stripped:
+            # An empty line is no command: it closes nothing.
+            continue
+        if stripped.startswith("!"):
             # An INDENTED comment (``   ! review: ...``) is a comment WITHIN
             # the open stanza, NOT an end-of-stanza delimiter.  The render
             # emits these for un-translatable attributes (e.g. an HSRP group
@@ -1025,6 +1248,34 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
                 m_iface.lag_member_of = lag_name
 
 
+def _section_depths(lines: list[str]) -> list[int]:
+    """The depth of each ``router bgp`` section's own lines, in the order
+    of the sections: the shallowest indentation of any line of the
+    section that is not empty, a ``!`` or a comment.  A section ends
+    where :func:`_parse_router_bgp` ends it, at a line in column 0 that
+    is not a ``!`` or a comment.  A section with no indented line has
+    no depth that is asked (``sys.maxsize``).
+    """
+    depths: list[int] = []
+    in_bgp = False
+    for raw_line in ticked(lines):
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        if _ROUTER_BGP_RE.match(raw_line):
+            in_bgp = True
+            depths.append(sys.maxsize)
+            continue
+        if stripped.startswith("!"):
+            continue
+        if not raw_line.startswith((" ", "\t")):
+            in_bgp = False
+            continue
+        if in_bgp:
+            depths[-1] = min(depths[-1], _indent(raw_line))
+    return depths
+
+
 def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:
     """Parse ``router bgp <asn> / vrf <name> / rd <rd> /
     route-target import|export|both <rt>`` — VRF metadata — AND
@@ -1032,9 +1283,23 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:
     — the per-VLAN EVPN MAC-VRF binding form (GAP-EVPN-1).
     BGP neighbor/address-family details stay parse-and-ignore.
 
-    Lines in EOS `router bgp` are indented; `vrf <name>` and
-    `vlan <N>` nest 3-spaces deeper than the router-bgp stanza.
-    We track stanza depth via leading-whitespace count.
+    The section is read by RELATIVE depth, so that any indentation --
+    EOS's own 3 spaces a level, tabs, 2 or 4 spaces -- reads alike.
+    The section's own lines are at the SHALLOWEST indentation of any of
+    its lines (:func:`_section_depths`, one pass before this one), so a
+    first line indented deeper than the rest is not the section's
+    depth.  There, ``vrf <name>``, ``vlan <N>``, ``vlan-aware-bundle
+    <name>`` and ``address-family ...`` each open a block; only the
+    first two are read.  A ``vrf`` or ``vlan`` line deeper than that is
+    no block of the section (a VLAN of a bundle is not a MAC-VRF): a
+    block's header stands at the section's own depth.  A block's body
+    is every line deeper than its header, up to the next line at the
+    section's own depth.  A ``!`` closes nothing: as EOS prints the
+    section, a ``!`` comes before a sibling block at its own depth, and
+    a block's own lines may follow a ``!`` that ends a submode of it
+    (``address-family`` in a ``vrf``).  An empty line is no command,
+    and closes nothing either.  The section ends at a line in column 0
+    that is not a ``!`` or a comment.
 
     For ``vlan <N>``: the routing-instance is keyed by the
     matching CanonicalVlan.name (the ``vlan <N> name <NAME>``
@@ -1046,111 +1311,107 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:
     in_bgp = False
     once = Uniques()
     # Renamed from current_vrf — now tracks both VRF and MAC-VRF
-    # contexts with the same RD/RT machinery.
+    # contexts with the same RD/RT machinery.  None in a block this
+    # parser does not read, and between blocks.
     current_ri: CanonicalRoutingInstance | None = None
+    lines = raw.splitlines()
+    # The indentation of each section's own lines, in order, and the
+    # open section's.
+    depths = _section_depths(lines)
+    sections = 0
+    section_indent = 0
     # A ``vrf`` or ``vlan`` line finds its record by key.  Scanned for,
     # one line per VRF or VLAN cost the square of them.
     instances = GrowingIndex(lambda: intent.routing_instances, lambda ri: ri.name)
     vlans_by_id = GrowingIndex(lambda: intent.vlans, lambda vlan: vlan.id)
-    for raw_line in ticked(raw.splitlines()):
+    for raw_line in ticked(lines):
         stripped = raw_line.strip()
-        # Blank line: end of file / section.
         if not stripped:
-            in_bgp = False
-            current_ri = None
+            # An empty line is no command: it closes nothing.
             continue
         # Top-level ``router bgp <asn>`` opens the section.
-        if raw_line.startswith("router bgp "):
+        if _ROUTER_BGP_RE.match(raw_line):
             in_bgp = True
             current_ri = None
+            section_indent = depths[sections]
+            sections += 1
             continue
-        # ``!`` alone (possibly indented) is a sub-stanza separator
-        # inside router-bgp; close the per-vrf / per-vlan context
-        # but KEEP in_bgp active so the next sub-stanza parses.
-        if stripped == "!":
-            current_ri = None
+        if stripped.startswith("!"):
+            # A ``!`` (or a comment) closes nothing, at any depth.
             continue
-        # Another top-level stanza (non-indented, non-comment)
-        # closes router-bgp.
+        # Another top-level stanza closes router-bgp.
         if not raw_line.startswith((" ", "\t")):
             in_bgp = False
             current_ri = None
             continue
         if not in_bgp:
             continue
-        # Inside router-bgp: 3-space indent for top-level router
-        # subs, 6-space indent for per-vrf / per-vlan subs.  Count
-        # leading spaces to distinguish.
-        leading_spaces = len(raw_line) - len(raw_line.lstrip(" "))
-        if stripped.startswith("vrf "):
-            vrf_name = stripped.split(None, 1)[1].strip()
-            current_ri = instances.get(vrf_name)
-            if current_ri is None:
-                # ``router bgp X / vrf Y`` declares a VRF context
-                # even if no standalone ``vrf instance Y`` was
-                # seen upstream — create one so RD/RTs don't get
-                # dropped.
-                current_ri = CanonicalRoutingInstance(name=vrf_name)
-                intent.routing_instances.append(current_ri)
-            # Defensive: a freshly-seen VRF context is L3, not
-            # MAC-VRF.  If a previous parse had marked it
-            # ``mac-vrf``, that's a re-declaration error and we
-            # leave the existing tag (don't silently flip).
-            continue
-        # GAP-EVPN-1: ``vlan <N>`` opens a per-VLAN EVPN MAC-VRF
-        # binding block.  Look up the matching CanonicalVlan to
-        # derive the routing-instance name (vlan.name when set;
-        # ``VLAN<N>`` synthetic fallback otherwise).  The same
-        # synthetic-name convention lets render look up the
-        # source vlan_id back from the routing-instance name.
-        #
-        # CRITICAL: only fire at the 3-space top-level indent
-        # within router-bgp.  At deeper indents, ``vlan <N>``
-        # appears as a sub-line of vlan-aware-bundle blocks
-        # (``vlan-aware-bundle <NAME> / vlan 110``) and would
-        # otherwise spawn a spurious MAC-VRF context.
-        m_vlan = (
-            re.match(r"^vlan\s+(\d+)\s*$", stripped)
-            if leading_spaces == 3 else None
-        )
-        if m_vlan:
-            try:
-                vid = int(m_vlan.group(1))
-            except ValueError:
-                current_ri = None
-                continue
-            vlan = vlans_by_id.get(vid)
-            ri_name = (vlan.name if vlan and vlan.name else f"VLAN{vid}")
-            existing = instances.get(ri_name)
-            if existing is None:
-                current_ri = CanonicalRoutingInstance(
-                    name=ri_name, instance_type="mac-vrf",
-                )
-                intent.routing_instances.append(current_ri)
-            else:
-                # Existing entry: tag it as mac-vrf if no other
-                # parse path already populated as L3.  ``vrf``
-                # context wins by precedence; if both are seen
-                # (extremely unusual — same name as both an L3
-                # VRF and a MAC-VRF binding), keep the first
-                # type and merge RD/RTs.
-                current_ri = existing
-                if (
-                    existing.instance_type == "vrf"
-                    and not existing.route_distinguisher
-                    and not existing.rt_imports
-                    and not existing.rt_exports
-                ):
-                    # Empty placeholder — safe to upgrade.
-                    existing.instance_type = "mac-vrf"
-            continue
-        if current_ri is None:
-            continue
-        # Deeper indent = sub-command of ``vrf <name>`` or
-        # ``vlan <N>``.
-        if leading_spaces < 6:
-            # Back up to router-bgp top-level — close context.
+        width = _indent(raw_line)
+        if width <= section_indent:
+            # A line of the section's own (no line of it is shallower):
+            # whatever block was open has ended.  It opens another, or
+            # it is a setting of the section's.
             current_ri = None
+            if stripped.startswith("vrf "):
+                vrf_name = stripped.split(None, 1)[1].strip()
+                current_ri = instances.get(vrf_name)
+                if current_ri is None:
+                    # ``router bgp X / vrf Y`` declares a VRF context
+                    # even if no standalone ``vrf instance Y`` was
+                    # seen upstream — create one so RD/RTs don't get
+                    # dropped.
+                    current_ri = CanonicalRoutingInstance(name=vrf_name)
+                    intent.routing_instances.append(current_ri)
+                # Defensive: a freshly-seen VRF context is L3, not
+                # MAC-VRF.  If a previous parse had marked it
+                # ``mac-vrf``, that's a re-declaration error and we
+                # leave the existing tag (don't silently flip).
+                continue
+            # GAP-EVPN-1: ``vlan <N>`` opens a per-VLAN EVPN MAC-VRF
+            # binding block.  Look up the matching CanonicalVlan to
+            # derive the routing-instance name (vlan.name when set;
+            # ``VLAN<N>`` synthetic fallback otherwise).  The same
+            # synthetic-name convention lets render look up the
+            # source vlan_id back from the routing-instance name.
+            # Only at the section's own depth: deeper, ``vlan <N>`` is
+            # a line of a ``vlan-aware-bundle`` block, not a MAC-VRF.
+            m_vlan = _VLAN_HEADER_RE.match(stripped)
+            if m_vlan:
+                try:
+                    vid = int(m_vlan.group(1))
+                except ValueError:
+                    continue
+                vlan = vlans_by_id.get(vid)
+                ri_name = (vlan.name if vlan and vlan.name else f"VLAN{vid}")
+                existing = instances.get(ri_name)
+                if existing is None:
+                    current_ri = CanonicalRoutingInstance(
+                        name=ri_name, instance_type="mac-vrf",
+                    )
+                    intent.routing_instances.append(current_ri)
+                else:
+                    # Existing entry: tag it as mac-vrf if no other
+                    # parse path already populated as L3.  ``vrf``
+                    # context wins by precedence; if both are seen
+                    # (extremely unusual — same name as both an L3
+                    # VRF and a MAC-VRF binding), keep the first
+                    # type and merge RD/RTs.
+                    current_ri = existing
+                    if (
+                        existing.instance_type == "vrf"
+                        and not existing.route_distinguisher
+                        and not existing.rt_imports
+                        and not existing.rt_exports
+                    ):
+                        # Empty placeholder — safe to upgrade.
+                        existing.instance_type = "mac-vrf"
+            # ``vlan-aware-bundle <name>`` and ``address-family ...``
+            # open blocks this parser does not read; any other line is
+            # a setting of the section's.
+            continue
+        # Deeper = a line of the open ``vrf <name>`` or ``vlan <N>``
+        # block, or of a block this parser does not read.
+        if current_ri is None:
             continue
         if stripped.startswith("rd "):
             parts = stripped.split(None, 1)

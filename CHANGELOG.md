@@ -28,6 +28,18 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **An EOS banner's lines were read as configuration, and a banner line
+  became an administrator account with no secret on the target.**  A
+  printed EOS config whose `banner motd` or `banner login` held a line
+  `username <name> privilege 15 nopassword` came out with that account
+  onto 12 of the 13 public codecs -- `username <name> privilege 15
+  nopassword` on EOS and IOS-XE, a `super-user` with no authentication
+  on Junos -- and the jobs onto seven of them said `completed`.  The
+  EOS parser now reads every body that runs to an `EOF` line as text
+  (Fixed, below).  If you translated an EOS config with a banner with
+  0.7.7 or earlier, look in the old output for accounts the switch
+  does not have before it reaches a device.
+
 - **Reading a pasted config could take time that grew with the square of
   it.**  Five shapes, each in shipped code.  Patterns that began
   `^\s` and were applied to the whole text walked, from every line start,
@@ -383,6 +395,126 @@ timestamp if your timezone matters for an audit.
   --limits standard"), where it spoke of a server.
 
 ### Fixed
+
+- **An EOS banner was read as lines of the config, and an account
+  came out of it** (Security, above).  `banner login` and `banner
+  motd` are printed with their body as it was typed and a line `EOF`
+  in column 0 after it (so Arista's pyeapi reads a printed banner),
+  and the parser knew no banner: every reader took the body's lines
+  for lines of the top level.  A printed config whose banner held a
+  line `username <name> privilege 15 nopassword`, and lines that
+  began `vlan`, `interface`, `ip route` and `ip access-list`, came out
+  onto 12 of the 13 public codecs with that account -- `username
+  <name> privilege 15 nopassword` on EOS and IOS-XE, a `super-user`
+  with no authentication on Junos -- onto every one of them with the
+  banner's interface, and onto most with its VLAN and route; the
+  parse also held a Tier-3 row of its words, and the jobs onto seven
+  of the codecs said `completed`.  The same holds for every other
+  body that Arista's tools end at an `EOF` line: a `comment` typed in
+  a mode, RCF `code unit <name>`, a multi-line `action bash`, and
+  after `protocol https certificate` a certificate and then its key.
+  Each line of such a body is now emptied before any reader of the
+  parse runs -- the Tier-3 rows included, and the check for a JSON or
+  XML paste, which took a config whose banner text began `{` for
+  JSON -- and every line keeps its number; the line that opens the
+  body is read as before (by nothing), and no banner is translated.
+  A banner ends at `EOF` in column 0 (a line ` EOF` with white space
+  in front of it is the banner's text, as pyeapi reads it); the other
+  bodies end at a line `EOF`, indented or not.  The certificate and
+  its key are a shape Arista's config generator prints, and no switch
+  printout of it is to hand: each is taken for a body only where its
+  first line begins as PEM text does (`-----BEGIN`), so a printout
+  with one body, or none, reads as before.  A body with no `EOF` line
+  before the end of the text is refused in words, naming the line
+  that opens it and quoting nothing: read, the rest of the config
+  would be the body's text.  Detection still reads the text as it
+  came.  No committed capture has a banner, and no capture's tree
+  moves.  If you translated an EOS config with a banner, or any other
+  body ended by `EOF`, with 0.7.7 or earlier, translate it again, and
+  look in the old output for accounts, interfaces, VLANs and routes
+  the switch does not have.
+
+- **An EOS config without its indentation was read as far less than
+  it holds, and the job said nothing of it.**  The parser reads a
+  stanza by its indentation.  Read without it, a `vlan <id>` block
+  under `router bgp` was a second VLAN of that id, and every body line
+  was read by nothing: over the 5 committed EOS captures and the
+  synthetic config with every line's leading white space removed, 37
+  VLAN records of 28 ids where the configs as committed give 31 (9
+  duplicates, 3 VLANs lost), and no IPv4 address (of 58), description
+  (of 73), LAG (of 10), VXLAN VNI (of 19) or route distinguisher (of
+  16); of their jobs onto EOS, Junos, IOS-XE CLI and AOS-S, 10 of 24
+  said `completed`, the rest `partial` for another reason, and none
+  said a line was not read.  What the switch itself makes of such a
+  text Arista does not say: typed or pasted, a line runs in the
+  deepest open mode that accepts it (Arista's transcripts show it),
+  and Arista's own config generator deploys a config through eAPI as
+  a flat stream of commands, so the switch most likely reads it by
+  the mode each command leaves open (inferred) -- and reading it so
+  would need the words each mode takes, which no Arista page lists.
+  Such a text -- no line indented but a comment, and the lines of a
+  stanza the parser reads (`interface`, `vlan <id>`, `vrf
+  instance|definition`, `ip dhcp pool`, `router bgp`) at the left
+  margin -- is now refused before anything of it is read: the job is
+  `failed`, and its error is `parse failed:` and a sentence that says
+  the text has no indentation, that the parser tells a stanza's lines
+  by their indentation and so cannot tell where a stanza of it ends,
+  the number of the first line that opens a stanza with the line
+  after it at the margin, and asks for `show running-config` as the
+  switch prints it.  It quotes nothing of the text, and says nothing
+  of what the switch would do.  Detection still proposes EOS for each
+  capture in that form.  A text in which only some lines lost their
+  indentation is read by its indentation.  Indentation is a space or
+  a tab: a text indented with no-break spaces (a paste out of a web
+  page), which the stanza readers took for lines at the margin and
+  read as far less, is refused the same way.  The check is the one
+  IOS XR's refusal uses, now shared (`first_flat_stanza` in
+  `netcanon/migration/codecs/_scanner.py`), with each parser's own
+  headers and sentence; under it a comment line, indented or not, is
+  passed over and is never indentation, `exit` (like `!` and `end`) is
+  no line of a stanza's body, and indentation is a space or a tab.
+  IOS XR now reads a text so too: one whose only indented lines were
+  comments was read, and is now refused; one indented with no-break
+  spaces was read, its `ntp` servers lost (that reader takes only a
+  space or a tab: of the committed IOS XR configs so indented, the
+  one with an `ntp` block read otherwise than as committed, the rest
+  alike), and is now refused; a flat one whose stanzas
+  have no body, each closed by `exit`, was refused, and is now read.
+  No committed capture of any codec, as committed, dedented or
+  without its `!` lines, moves under IOS XR.  Make a translation made
+  from such a text with 0.7.7 or earlier again from `show
+  running-config`.
+
+- **EOS `router bgp` was read by EOS's own widths, and an empty line
+  ended a stanza.**  The `router bgp` reader counted spaces only, and
+  took a `vlan <id>` block at exactly three of them and a block's
+  lines at six or more: re-indented with tabs, or with two spaces a
+  level, 4 of the 6 committed EOS configs (the 5 captures and the
+  synthetic one) lost MAC-VRFs, route distinguishers or route targets
+  (with four spaces, 3 of them).  A `!` of any depth closed the `vrf`
+  or `vlan` block it was in, so a VRF's own line after one of its
+  address-families was lost; a comment in column 0 ended the section;
+  and a `vrf` line at any depth opened a routing instance.  An empty
+  line ended the open interface, VLAN or `router bgp`: with its line
+  ends doubled, every committed EOS config parsed otherwise, its
+  addresses and descriptions lost.  `router bgp` is now read by
+  relative depth: the section's own lines are at the shallowest
+  indentation of any of its lines, a `vrf <name>`, `vlan <id>`,
+  `vlan-aware-bundle` or `address-family` block opens only there and
+  holds every line deeper than it, and a `!` closes no block.  An
+  empty line closes nothing, in `router bgp` or in an interface or
+  VLAN stanza, which reads every indented line as its own as before.
+  Each committed EOS config re-indented with tabs, two or four spaces
+  a level, and with its line ends doubled (`\n\n` and `\r\r\n`), now
+  parses to the tree it gives as committed, whole; no committed
+  capture of any codec, as committed, moves.  One hand-edited shape
+  reads as less than before: a block header indented deeper than
+  another line of the section's own opens no block (Known
+  limitations).  If you translated an EOS config indented with tabs
+  or another width, or with empty lines in it, with 0.7.7 or earlier,
+  translate it again: the old output may lack its MAC-VRFs, route
+  distinguishers and route targets, or its addresses and
+  descriptions.
 
 - **An IOS XR interface ended at the `!` that closes a submode inside
   it.**  The interface parser ended an `interface` stanza at a `!` of
@@ -2666,22 +2798,48 @@ timestamp if your timezone matters for an audit.
 - **A config pasted without its indentation is read as far less than
   it holds by most block parsers, and the job does not say so.**  Every
   committed capture with every line's leading white space removed,
-  against the capture as committed: the Arista EOS, Aruba AOS-CX,
-  Cisco IOS-XE CLI, Cisco NX-OS and Dell OS10 parsers lose nearly
-  everything a stanza body holds -- interface addresses,
-  descriptions, VLAN memberships, LAG members -- and AOS-CX reads its
-  interfaces as shut, its `no shutdown` lines being body lines.  EOS
-  also makes VLANs of nested lines, read as headers (37 where the
-  committed captures, as committed, give 31).  The Junos (set form),
-  FortiOS, RouterOS, OPNsense and IOS-XE NETCONF parsers do not
+  against the capture as committed: the Aruba AOS-CX, Cisco IOS-XE
+  CLI, Cisco NX-OS and Dell OS10 parsers lose nearly everything a
+  stanza body holds -- interface addresses, descriptions, VLAN
+  memberships, LAG members -- and AOS-CX reads its interfaces as
+  shut, its `no shutdown` lines being body lines.  The Junos (set
+  form), FortiOS, RouterOS, OPNsense and IOS-XE NETCONF parsers do not
   depend on indentation, and VyOS keeps its tree but loses a Tier-3
   row for BGP or OSPF.  What each of those platforms' own CLI makes
   of such text is not established here.  The AOS-S parser reads it as
-  the indented config, and the IOS XR parser refuses it in words, for
+  the indented config.  The IOS XR parser refuses it in words, for
   the router's reason: IOS XR places a line by its indentation when it
   loads a file (inferred from Cisco's CLI model and a Cisco engineer's
-  router output; Fixed, above).  Each other parser is a change of its
-  own, with its platform's rule from its vendor.
+  router output; Fixed, above).  The EOS parser refuses it in words,
+  for its own reason, not the switch's: it reads a stanza by its
+  indentation, and reading such a text as the switch is inferred to
+  (by the mode each command leaves open) would need every mode's
+  words, which no Arista page lists (Fixed, above).  Each other parser
+  is a change of its own, with its platform's rule from its vendor.
+- **A line typed inside an EOS interface's submode is read as the
+  interface's, and an EOS `router bgp` block's header has to stand at
+  the section's own depth.**  EOS places a line by the mode it is
+  typed in, not by its indentation, and no depth inside an interface
+  tells a submode's line (`tx-queue`, `evpn ethernet-segment`) from
+  the interface's own: a line the parser reads (`shutdown`,
+  `description`, ...) typed inside such a submode is read as the
+  interface's.  No Arista printout shows one there.  In `router bgp`
+  the section's own lines are at the shallowest indentation of any of
+  them: a `vrf` or `vlan` header indented deeper than another line of
+  the section's own (a hand edit) opens no block, and its route
+  distinguisher and route targets are not read, in a job that does
+  not say so.  As printed, every header stands at the section's own
+  depth.
+- **Whether a banner is read as configuration by the AOS-CX, AOS-S,
+  IOS-XE CLI, NX-OS and OS10 parsers is not measured.**  Their
+  banners are written between delimiters (`^C`, `#`, `!`, a quote),
+  not ended by a line `EOF`, and committed captures of each hold one.
+  The EOS parser passes over every body that runs to `EOF` (Security,
+  above); each of the others is a change of its own.
+- **An EOS account with `nopassword` is written to Junos as a login
+  user with no authentication statement**, in a job that says
+  `completed`; what Junos then allows such a user is not established
+  here.
 - **A whole IOS XR `show running-config formal` config is refused,
   not read.**  No capture of it is committed, and Cisco states its
   printed shape for class and policy maps only.  Paste `show

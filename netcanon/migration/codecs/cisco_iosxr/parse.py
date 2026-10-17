@@ -133,7 +133,7 @@ from .._helpers import (
     without_keyword_stanzas,
 )
 from .._input_shape import detect_input_shape
-from .._scanner import scan_stanzas
+from .._scanner import first_flat_stanza, scan_stanzas
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -281,7 +281,8 @@ _NTP_HDR_RE = re.compile(r"^ntp[ \t]*$", re.IGNORECASE)
 # ── A text the router would place otherwise than it reads ──
 #: The headers of the stanzas this parser reads.  In a text with no
 #: indentation, one of them followed by a line that is none of them,
-#: no ``!``, no comment and no ``end`` has its body at the left margin.
+#: no ``!``, no comment, no ``exit`` and no ``end`` has its body at the
+#: left margin.
 _STANZA_HEADERS = (
     _IFACE_RE, _VRF_TOP_RE, _ROUTER_STATIC_RE, _ROUTER_BGP_RE,
     _USERNAME_HDR_RE, _NTP_HDR_RE,
@@ -351,7 +352,8 @@ def _fmt_secret(hash_type: str | None, payload: str) -> str:
 #: a parse failure is logged, and what a message quotes from a config
 #: never goes to a log.
 FLAT_TEXT_MESSAGE = (
-    "cisco_iosxr: this text has no indentation.  IOS XR places each line "
+    "cisco_iosxr: this text has no indentation.  No line but a comment "
+    "begins with a space or a tab.  IOS XR places each line "
     "of a configuration by its indentation: `show running-config` prints "
     "a stanza's lines indented under it, and when it loads a "
     "configuration file the router reads a line at the left margin as a "
@@ -379,21 +381,24 @@ FORMAL_LINE_MESSAGE = (
 def _refuse_a_form_the_router_misplaces(raw: str) -> None:
     """Raise :class:`ParseError` for a text this parser would misread.
 
-    Two shapes, found in one pass over the lines:
+    Two shapes:
 
     * a line in column 0 that states an interface's setting on the
       ``interface`` line (:data:`_SETTING_ON_THE_HEADER_RE`), anywhere in
       the text: the ``show running-config formal`` form, or a one-line
       command typed into a printed text;
-    * a text in which NO line is indented, and a stanza this parser
-      reads (:data:`_STANZA_HEADERS`) is followed by a line that is no
-      header of one, no ``!`` and no ``end``: its body is at the left
-      margin, where the router loading the file would read it as lines
-      of the top level.
-      Blank lines and comments (``!`` and more) are passed over: a
-      comment belongs to the line after it.  A text with SOME lines
-      dedented is not this shape: the router reads it by its
-      indentation, and so does this parser.
+    * a text in which no line but a comment is indented, and a stanza
+      this parser reads (:data:`_STANZA_HEADERS`) is followed by a line
+      that is no header of one, no ``!``, no ``exit`` and no ``end``:
+      its body is at the left margin, where the router loading the file
+      would read it as lines of the top level.  The shared
+      :func:`.._scanner.first_flat_stanza` finds it, with this parser's
+      headers: blank lines and comments (``!`` and more) are passed
+      over, at any depth -- a comment belongs to the line after it, and
+      is never indentation -- and indentation is a space or a tab (the
+      ``ntp`` block reader, :data:`_NTP_BLOCK_RE`, takes no other).  A
+      text with SOME lines dedented is not this shape: the router reads
+      it by its indentation, and so does this parser.
 
     The first formal line is named before a flat stanza.  Each message
     gives a line number (counted as ``str.splitlines`` counts) and
@@ -402,36 +407,16 @@ def _refuse_a_form_the_router_misplaces(raw: str) -> None:
     Raises:
         ParseError: For either shape.
     """
-    formal_at: int | None = None
-    flat_at: int | None = None
-    waiting: int | None = None
-    indented = False
     for number, line in enumerate(ticked(raw.splitlines()), 1):
-        if not line.strip():
-            continue
-        if line[0].isspace():
-            indented = True
-            waiting = None
-            continue
-        if line.startswith("!") and line.strip() != "!":
-            # A comment belongs to the line after it; a bare ``!`` is
-            # the end of a stanza as the router prints it.
-            continue
-        if formal_at is None and _SETTING_ON_THE_HEADER_RE.match(line):
-            formal_at = number
-        opens = any(header.match(line) for header in _STANZA_HEADERS)
-        if (
-            waiting is not None and flat_at is None and not opens
-            and line.strip() != "!" and line.strip().lower() != "end"
-        ):
-            flat_at = waiting
-        waiting = number if opens else None
-    if formal_at is not None:
-        raise ParseError(
-            FORMAL_LINE_MESSAGE.format(line=formal_at),
-            path=f"line {formal_at}", snippet="",
-        )
-    if flat_at is not None and not indented:
+        if _SETTING_ON_THE_HEADER_RE.match(line):
+            raise ParseError(
+                FORMAL_LINE_MESSAGE.format(line=number),
+                path=f"line {number}", snippet="",
+            )
+    # The module's tuple, read at the call: a test that changes it
+    # changes what is asked.
+    flat_at = first_flat_stanza(raw, _STANZA_HEADERS)
+    if flat_at is not None:
         raise ParseError(
             FLAT_TEXT_MESSAGE.format(line=flat_at),
             path=f"line {flat_at}", snippet="",

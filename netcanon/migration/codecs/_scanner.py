@@ -15,13 +15,17 @@ fit the flat open/accumulate/close shape (brace-stack ``vyos``, XML
 ``opnsense`` / ``cisco_iosxe``-NETCONF, set-form ``juniper_junos``, or the
 nested sub-blocks like NX-OS HSRP) keep their bespoke loop.
 
+:func:`first_flat_stanza` is the other half of a parser that reads its
+stanzas by their indentation: it finds a text that has none, which such
+a parser cannot read (each parser says why, and refuses it in words).
+
 Import as ``from .._scanner import scan_stanzas`` from inside a codec package.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from typing import TypeVar
 
 from ..limits import ticked
@@ -94,3 +98,56 @@ def scan_stanzas(
 
     _flush()
     return results
+
+
+def first_flat_stanza(raw: str, headers: Sequence[re.Pattern[str]]) -> int | None:
+    """The line that opens the first stanza whose body stands at the
+    left margin of a text with no indentation, or ``None``.
+
+    *headers* are the patterns of the stanzas the caller reads, each
+    matched against a whole line; the caller passes its own at the call,
+    so that a test that changes the caller's tuple changes what is
+    asked.  A text is this shape when no line of it but a comment is
+    indented and a line that opens a stanza is followed by a line that
+    opens none and is no ``!``, no ``exit`` and no ``end``: that line
+    is the stanza's body, at the margin.
+
+    * Indentation is a space or a tab.  Any other white space in front
+      of a line (a no-break space, as a paste out of a web page can
+      carry) is none: readers of the parsers that call this take such
+      a line for one at the margin (the EOS stanza readers, the IOS XR
+      ``ntp`` reader), so a text indented with it is not read whole.
+    * Blank lines are passed over.
+    * A comment (a line that begins with ``!`` and is more than ``!``,
+      such as ``!!`` or ``! text``) is passed over at any depth: it
+      belongs to the line after it, and it is never indentation -- an
+      indented comment does not make a text whose stanza bodies are at
+      the margin a text with indentation.
+    * A bare ``!`` is the end of a stanza as a device prints it,
+      ``exit`` the end of a mode, and ``end`` the end of the config;
+      none of them is a body line.
+    * A text with SOME lines indented is not this shape (``None``): it
+      is read by its indentation.  The answer is ``None`` as soon as an
+      indented line is met.
+
+    Line numbers are counted as ``str.splitlines`` counts them, from 1.
+    """
+    flat_at: int | None = None
+    waiting: int | None = None
+    for number, line in enumerate(ticked(raw.splitlines()), 1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("!") and stripped != "!":
+            # A comment belongs to the line after it, at any depth.
+            continue
+        if line[0] in " \t":
+            return None
+        opens = any(header.match(line) for header in headers)
+        if (
+            waiting is not None and flat_at is None and not opens
+            and stripped != "!" and stripped.lower() not in ("exit", "end")
+        ):
+            flat_at = waiting
+        waiting = number if opens else None
+    return flat_at

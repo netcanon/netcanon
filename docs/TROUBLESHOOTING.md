@@ -202,10 +202,11 @@ If VLANs are missing on the target, check:
   `exit` or an `end` (see [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md)
   § "Where a stanza ends").  Release 0.7.7 and earlier read such an
   AOS-S config as VLANs with no port and no address, in a job that
-  said `completed`: translate it again.  An IOS XR config with no
-  indentation is refused, not read (see [The job says `parse failed:`
-  for an IOS XR config](#the-job-says-parse-failed-for-an-ios-xr-config)).
-  The EOS, AOS-CX, IOS-XE CLI, NX-OS and OS10 parsers still read a
+  said `completed`: translate it again.  An IOS XR or EOS config
+  with no indentation is refused, not read (see [The job says `parse
+  failed:` for an IOS XR config](#the-job-says-parse-failed-for-an-ios-xr-config)
+  and [for an EOS config](#the-job-says-parse-failed-for-an-eos-config)).
+  The AOS-CX, IOS-XE CLI, NX-OS and OS10 parsers still read a
   config pasted without its indentation as stanzas with almost nothing
   in them, and the job does not say so: paste the config as the device
   prints it.
@@ -746,9 +747,10 @@ and FortiOS, with the unit's NUMBER as its VLAN id.  The causes:
 * the source platform's parser reads no tag for a sub-interface.
   That is every sub-interface of an AOS-CX or Dell OS10 config,
   whatever its `encapsulation dot1q` line says;
-* the parser did not read the line that states it.  An IOS config
-  pasted without its indentation is read as stanzas with nothing
-  in them: the unit's address is not in the output either;
+* the parser did not read the line that states it.  An IOS-XE
+  CLI, NX-OS, AOS-CX or OS10 config pasted without its indentation
+  is read as stanzas with nothing in them (an IOS XR or EOS one is
+  refused): the unit's address is not in the output either;
 * the stanza states none.
 
 Look the tag up in the source and set it on the target by hand.
@@ -1169,16 +1171,18 @@ running-config` prints, and nothing of it was read.  Both name a line
 number and quote nothing of the text.
 
 - **`cisco_iosxr: this text has no indentation. ...`** -- no line of
-  the text is indented, and the line it names opens a stanza with the
-  line after it at the left margin.  IOS XR places each line of a
-  configuration by its indentation when it loads a file (what that
-  rests on is on the vendor page), so neither the router loading it
-  nor Netcanon can tell where such a stanza ends, and loaded onto the
-  router the text would put its lines in the wrong submode too.  The
-  indentation was lost on the way: a paste through a tool that trims
-  lines, a file joined from its lines, a config embedded in another
-  document.  Paste the output of `show running-config` as the router
-  prints it.  A whole config is still detected as IOS XR, so the
+  the text but a comment is indented, and the line it names opens a
+  stanza with the line after it at the left margin.  IOS XR places
+  each line of a configuration by its indentation when it loads a file
+  (what that rests on is on the vendor page), so neither the router
+  loading it nor Netcanon can tell where such a stanza ends, and
+  loaded onto the router the text would put its lines in the wrong
+  submode too.  The indentation was lost on the way: a paste through
+  a tool that trims lines, a file joined from its lines, a config
+  embedded in another document.  Indentation is a space or a tab: a
+  text copied out of a web page can be indented with no-break spaces,
+  which are none -- replace them with spaces.  Paste the output of
+  `show running-config` as the router prints it.  A whole config is still detected as IOS XR, so the
   migrate page offers no other vendor for it; a short text with no
   interface of an IOS XR name (a user and a VRF, say) is detected as
   IOS-XE CLI, printed or not, and the page offers IOS-XE beside the
@@ -1193,6 +1197,39 @@ number and quote nothing of the text.
   `interface` line.
 
 See [`vendors/cisco_iosxr.md`](vendors/cisco_iosxr.md) § "Common
+gotchas".
+
+### The job says `parse failed:` for an EOS config
+
+Two sentences say that the text is not in the form `show
+running-config` prints, and nothing of it was read.  Both name a line
+number and quote nothing of the text.
+
+- **`arista_eos: this text has no indentation. ...`** -- no line of
+  the text but a comment is indented, and the line it names opens a
+  stanza with the line after it at the left margin.  The parser tells
+  which lines belong to a stanza by their indentation, and without it
+  cannot tell where a stanza ends.  (What the switch makes of such a
+  text Arista does not say; the vendor page says what it is inferred
+  to do.)  The indentation was lost on the way: a paste through a
+  tool that trims lines, a file joined from its lines, a config
+  embedded in another document or a forum post.  Indentation is a
+  space or a tab: a text copied out of a web page can be indented
+  with no-break spaces, which are none -- replace them with spaces.
+  Paste the output of `show running-config` as the switch prints it.
+  A whole config is still detected as EOS, so the migrate page offers
+  no other vendor for it; a short text may be detected as no codec --
+  keep EOS as the source.
+- **`arista_eos: line <n> opens a block of text ...`** -- the line
+  opens a banner (`banner login`, `banner motd`), a `comment`, RCF
+  `code unit`, a multi-line `action bash` or `protocol https
+  certificate` (which opens two, a certificate and then its key, each
+  ended by its own `EOF`): bodies that Arista's tools end at a line
+  that is `EOF` -- for a banner, `EOF` in column 0 -- and the last one
+  opened has none.  The text was cut short, or its `EOF` line was
+  lost: paste the whole of `show running-config`.
+
+See [`vendors/arista_eos.md`](vendors/arista_eos.md) § "Common
 gotchas".
 
 ### The job says `refused:` — "my config was refused"

@@ -156,7 +156,10 @@ bridge-groups, ACL, QoS) is welcomed via
   that then failed reported.  What the router does with such text
   typed or pasted at its prompt is not established.  A text with no
   indentation at all, the lines of a stanza this parser reads at the
-  left margin, is refused: the job is `failed`,
+  left margin, is refused (an indented comment is no indentation, nor
+  is a no-break space in front of a line, which the `ntp` reader
+  takes for the margin; `exit`, like `!` and `end`, is no line of a
+  stanza's body): the job is `failed`,
   its error `parse failed: cisco_iosxr: this text has no
   indentation. ...`, naming the first line that opens a stanza with
   the line after it at the margin.  Neither the router nor Netcanon

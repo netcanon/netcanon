@@ -53,7 +53,7 @@ from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
-from .parse import parse_intent
+from .parse import parse_intent, without_bodies
 from .render import render_intent
 
 
@@ -430,7 +430,11 @@ class AristaEOSCodec(CodecBase):
         # Surface Tier-3 stanza headers (ACLs, route-maps, crypto, QoS)
         # the parser deliberately drops — see
         # netcanon/migration/_tier3_detection.py.  Notification-only.
-        intent.dropped_tier3_sections = detect_tier3_sections_iosxe_cli(raw)
+        # Read from the text the parser read: a banner's (or any other
+        # body's) lines up to its ``EOF`` are text, not stanzas.
+        intent.dropped_tier3_sections = detect_tier3_sections_iosxe_cli(
+            without_bodies(raw),
+        )
         return intent
 
     def render(self, tree: Any) -> str:

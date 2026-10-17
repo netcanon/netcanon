@@ -366,6 +366,49 @@ def test_a_capture_without_its_indentation_or_its_bangs_is_refused(path: Path) -
     _check_flat_without_bangs(path)
 
 
+def _with_no_break_spaces(text: str) -> str:
+    """*text* with every space in front of a line a no-break space."""
+    return "\n".join(
+        "\u00a0" * (len(line) - len(line.lstrip(" "))) + line.lstrip(" ") for line in text.splitlines()
+    ) + "\n"
+
+
+def _is_comment(line: str) -> bool:
+    return line.strip().startswith("!") and line.strip() != "!"
+
+
+def _first_top_stanza_with_a_body(printed: str) -> int:
+    """In a printed text: the number of the first line in column 0 that
+    opens a stanza of a kind the parser reads and has after it (comments
+    passed over) an indented line that is no ``!``.  A no-break space in
+    front of a line is no indentation, so a nested header is no header
+    there."""
+    lines = printed.splitlines()
+    for number, line in enumerate(lines, 1):
+        if not line[:1] or line[0].isspace() or not _is_header(line):
+            continue
+        after = next((nxt for nxt in lines[number:] if nxt.strip() and not _is_comment(nxt)), "")
+        if after[:1] in (" ", "\t") and after.strip() != "!":
+            return number
+    raise AssertionError("no stanza with a body")
+
+
+def _check_no_break_spaces(path: Path) -> None:
+    raw = _read(path)
+    error = _refusal(_with_no_break_spaces(raw))
+    assert str(error) == xr_parse.FLAT_TEXT_MESSAGE.format(line=_first_top_stanza_with_a_body(raw)), path.name
+
+
+@pytest.mark.parametrize("path", CAPTURES, ids=IDS)
+def test_a_capture_indented_with_no_break_spaces_is_refused(path: Path) -> None:
+    """A no-break space is no indentation to the flat check: the
+    ``ntp`` block reader takes only a space or a tab, so a capture
+    indented with no-break spaces (a paste out of a web page) lost its
+    NTP servers in a job that said nothing of it.  It is refused in
+    words."""
+    _check_no_break_spaces(path)
+
+
 _WORD = re.compile(r"[^\s`'\"()]+")
 
 
@@ -580,10 +623,23 @@ def test_each_kind_of_stanza_with_its_body_at_the_margin_is_refused(kind: str) -
 
 #: Flat texts, typed by hand, and the line the refusal names (None: the
 #: text is read).  A comment (``!`` and more) belongs to the line after
-#: it, and is passed over; a bare ``!`` and ``end`` are no body line.
+#: it, and is passed over -- indented or not, it is never indentation; a
+#: bare ``!``, ``exit`` and ``end`` are no body line.  Indentation is a
+#: space or a tab, never a no-break space.
 FLAT_SHAPES = {
+    "a header, then exit": (
+        "hostname r1\ninterface GigabitEthernet0/0/0/0\nexit\nrouter static\nexit\n", None,
+    ),
+    "a body indented with no-break spaces": (
+        "hostname r1\nntp\n\u00a0server 192.0.2.50\n!\ninterface GigabitEthernet0/0/0/0\n"
+        "\u00a0description uplink\n!\n",
+        2,
+    ),
     "a comment between a header and its body": (
         "interface GigabitEthernet0/0/0/0\n!! the uplink\ndescription uplink\n", 1,
+    ),
+    "an indented comment between a header and its body": (
+        "interface GigabitEthernet0/0/0/0\n !! the uplink\ndescription uplink\n", 1,
     ),
     "a comment, then the stanza's own !": ("interface GigabitEthernet0/0/0/0\n!! the uplink\n!\n", None),
     "a comment, then another header": (
@@ -842,37 +898,67 @@ def test_the_detection_check_fails_when_iosxr_is_not_proposed(monkeypatch: pytes
         _check_detection(KITCHEN_SINK)
 
 
-def _refusal_with(old: str, new: str) -> Callable[[str], None]:
-    """The refusal with *old*, one fragment of its source, written as
-    *new*: a defect put back, in this process only.  A fragment that is
-    no longer in the source fails here, not in silence."""
-    source = textwrap.dedent(inspect.getsource(xr_parse._refuse_a_form_the_router_misplaces))
+def _flat_check_with(old: str, new: str) -> Callable[..., int | None]:
+    """The shared flat check (:func:`_scanner.first_flat_stanza`, which
+    the refusal calls for its flat half) with *old*, one fragment of its
+    source, written as *new*: a defect put back, in this process only.
+    A fragment that is no longer in the source fails here, not in
+    silence."""
+    source = textwrap.dedent(inspect.getsource(_scanner.first_flat_stanza))
     assert source.count(old) == 1, old
-    space = dict(vars(xr_parse))
+    space = dict(vars(_scanner))
     exec(compile(source.replace(old, new), "<a defect put back>", "exec"), space)
-    return space["_refuse_a_form_the_router_misplaces"]
+    return space["first_flat_stanza"]
 
 
 def test_the_comment_checks_fail_when_a_comment_is_a_body_line(monkeypatch: pytest.MonkeyPatch) -> None:
-    defect = _refusal_with('if line.startswith("!") and line.strip() != "!":', "if False:")
-    monkeypatch.setattr(xr_parse, "_refuse_a_form_the_router_misplaces", defect)
+    defect = _flat_check_with('if stripped.startswith("!") and stripped != "!":', "if False:")
+    monkeypatch.setattr(xr_parse, "first_flat_stanza", defect)
     for name in ("a comment, then the stanza's own !", "a comment, then another header"):
         with pytest.raises(ParseError):
             _check_flat_shape(name)
 
 
+def test_the_indented_comment_check_fails_when_a_comment_is_indentation(monkeypatch: pytest.MonkeyPatch) -> None:
+    defect = _flat_check_with(
+        'if stripped.startswith("!") and stripped != "!":',
+        'if line[0] not in " \\t" and stripped.startswith("!") and stripped != "!":',
+    )
+    monkeypatch.setattr(xr_parse, "first_flat_stanza", defect)
+    with pytest.raises((AssertionError, pytest.fail.Exception)):
+        _check_flat_shape("an indented comment between a header and its body")
+
+
 def test_the_end_check_fails_when_end_is_a_body_line(monkeypatch: pytest.MonkeyPatch) -> None:
-    defect = _refusal_with(' and line.strip().lower() != "end"', "")
-    monkeypatch.setattr(xr_parse, "_refuse_a_form_the_router_misplaces", defect)
+    defect = _flat_check_with('not in ("exit", "end")', 'not in ("exit",)')
+    monkeypatch.setattr(xr_parse, "first_flat_stanza", defect)
     with pytest.raises(ParseError):
         _check_flat_shape("a header, then end")
 
 
+def test_the_exit_check_fails_when_exit_is_a_body_line(monkeypatch: pytest.MonkeyPatch) -> None:
+    defect = _flat_check_with('not in ("exit", "end")', 'not in ("end",)')
+    monkeypatch.setattr(xr_parse, "first_flat_stanza", defect)
+    with pytest.raises(ParseError):
+        _check_flat_shape("a header, then exit")
+
+
 def test_the_tab_check_fails_when_only_a_space_is_indentation(monkeypatch: pytest.MonkeyPatch) -> None:
-    defect = _refusal_with("if line[0].isspace():", 'if line[0] == " ":')
-    monkeypatch.setattr(xr_parse, "_refuse_a_form_the_router_misplaces", defect)
+    defect = _flat_check_with('if line[0] in " \\t":', 'if line[0] == " ":')
+    monkeypatch.setattr(xr_parse, "first_flat_stanza", defect)
     with pytest.raises(ParseError):
         _check_tabs(KITCHEN_SINK)
+
+
+def test_the_no_break_space_checks_fail_when_any_white_space_is_indentation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    defect = _flat_check_with('if line[0] in " \\t":', "if line[0].isspace():")
+    monkeypatch.setattr(xr_parse, "first_flat_stanza", defect)
+    with pytest.raises((AssertionError, pytest.fail.Exception)):
+        _check_flat_shape("a body indented with no-break spaces")
+    with pytest.raises((AssertionError, pytest.fail.Exception)):
+        _check_no_break_spaces(KITCHEN_SINK)
 
 
 @pytest.mark.parametrize("kind", list(FLAT_PAIRS))
