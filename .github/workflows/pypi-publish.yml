@@ -208,7 +208,7 @@ jobs:
         run: python -m twine check dist/*
 
       - name: Upload distribution artefacts
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: dist
           path: dist/
