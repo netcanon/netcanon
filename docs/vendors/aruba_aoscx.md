@@ -155,6 +155,66 @@ source, plus configs exercising symmetric-IRB **L3VNI**, **VSX**, and
 **VRRP**, are welcomed via
 [`WANTED.md`](../../tests/fixtures/real/WANTED.md).
 
+## A banner is text
+
+The parser reads a banner as text the switch shows, not as lines of
+the config: each line of it is passed over by every reader of the
+parse (the Tier-3 rows and the check for a JSON or XML paste
+included), and nothing of it is translated.  Detection still reads
+the text as it came.
+
+- **`banner motd` and `banner exec`** in column 0, then ONE character
+  and nothing else (HPE: `banner {motd | exec} <DELIMITER>`, "the
+  character used to terminate the input string").  `show
+  running-config` prints the banner's text on the lines below it.  The
+  character is usually `!` (a published sample prints `$`), so it is
+  taken from the line, never assumed; it is compared by its case.
+  `banner motd` with nothing after it opens nothing, nor does `no
+  banner ...`.  (No HPE page prints a banner in a running config; the
+  printed form is from published captures.)
+- **Where the banner ends**: at the first later line that ENDS with the
+  character, white space after it allowed -- alone on a line, or at the
+  end of the text's last line when the text was typed with no line end
+  after it (HPE: the input "will be terminated when the delimiter
+  character is encountered").  The whole of that line is the banner's.
+  The switch prints the stored text and then the character and a line
+  end, so the character with text after it on its line is the text's
+  own: a banner line `WARNING! Authorised access only` is text, and the
+  banner runs on past it.
+- **Refused in words**, naming the line and quoting nothing (`parse
+  failed: aruba_aoscx: line <n> ...`): a banner with no end before the
+  end of the text; more than one character after the type (`banner
+  motd !Welcome!` -- no printout has it, so where the text ends cannot
+  be told; inferred); and a line of a banner that ends in another
+  character than a line feed -- a form feed, a vertical tab, a carriage
+  return on its own (the switch ends a line at a line feed, so where it
+  ends the banner is not where those lines say).  Paste the whole of
+  `show running-config`.  A text typed in a script with more after the
+  character that ends it (which the switch discards) runs on to a later
+  line that ends with the character, or to that first refusal: the safe
+  side.
+- **The known limit**: a banner whose text holds its delimiter at the
+  END of a line (`WARNING!` alone, under the usual `!`) ends there.
+  Nothing in the printout tells that line from the end -- and, since
+  `!` is also the comment mark, nor does the line the switch printed
+  after the text -- and the switch itself, loading the printout again,
+  would end the banner there too (inferred from HPE's input rule; HPE
+  says nothing of a banner in a loaded CLI file).  The lines after it
+  are then read as configuration (measured: an account line there is
+  an account on the target).
+- **Not handled**: a `ta-certificate` paste, up to its
+  `END_OF_CERTIFICATE` line (its lines are base64, which no reader
+  takes).
+
+⚠️ Up to 0.7.7 a banner's lines were read as lines of the config: a
+banner line `user <name> group administrators ...` became an account
+with privilege 15 on the target, and its `vlan`, `interface`, `ip
+route` and `access-list` lines became VLANs, interfaces, routes and a
+Tier-3 row, in jobs that said `completed`.  If you translated an
+AOS-CX config with a banner with 0.7.7 or earlier, translate it again,
+and look in the old output for accounts, interfaces, VLANs and routes
+the switch does not have.
+
 ## Common gotchas
 
 - **A trunk's allowed list means what it says, and AOS-CX cannot say

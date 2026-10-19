@@ -1,9 +1,12 @@
 """
 Parse path for Cisco NX-OS (``show running-config`` form).
 
-Public function: :func:`parse_intent` — raw text in,
-:class:`CanonicalIntent` out.  Targets the Nexus 3000 / 5000 / 7000 /
-9000 series on NX-OS 9.x / 10.x.
+Public functions: :func:`parse_intent` — raw text in,
+:class:`CanonicalIntent` out, for the Nexus 3000 / 5000 / 7000 / 9000
+series on NX-OS 9.x / 10.x; and :func:`without_banner_bodies` — the
+text with every line of each banner and each scheduler job emptied,
+which every reader of the parse is given (the codec's Tier-3 rows among
+them; the probe reads the text as it came).
 
 Note: probe is in :mod:`.codec`; this module assumes input has already
 been classified as Cisco NX-OS CLI.
@@ -80,7 +83,7 @@ from .._helpers import (
     untags_its_native_vlan,
 )
 from .._input_shape import detect_input_shape
-from .._scanner import scan_stanzas
+from .._scanner import Body, ends_anywhere, scan_stanzas, without_text_bodies
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -423,17 +426,105 @@ def _is_mgmt_vrf(vrf_name: str) -> bool:
     return bool(_MGMT_VRF_RE.match(vrf_name or ""))
 
 
+# ---------------------------------------------------------------------------
+# Text that is no line of the config
+# ---------------------------------------------------------------------------
+
+#: ``banner motd`` / ``banner exec`` in column 0 and a delimiter (Cisco:
+#: "Very first char is delimiter char"; printed with one space before
+#: it, and Batfish passes over any white space, so the first character
+#: that is not white space).  NX-OS prints the delimiter as it was
+#: typed, and a config carried over an upgrade keeps one that 10.1(x)
+#: no longer takes for a new banner, so any character is one.  The
+#: match ends where the delimiter begins.  ``banner motd`` with nothing
+#: after it opens nothing, nor does ``no banner ...``.
+_OPENS_A_BANNER_RE = re.compile(r"^banner[ \t]+(?:motd|exec)[ \t]+(?=[^ \t])", re.IGNORECASE)
+#: ``scheduler job name <name>`` in column 0 opens a job, whose commands
+#: are printed as they were entered -- in column 0 on 9.2(2) -- up to a
+#: line that is ``end-job``, in column 0.  They run when the job runs;
+#: they are not configuration in force.  (The end line is printed so in
+#: published ``show running-config`` files; no Cisco page prints a job.)
+_OPENS_A_JOB_RE = re.compile(r"^scheduler[ \t]+job[ \t]+name[ \t]+[^ \t]", re.IGNORECASE)
+
+#: Said of a body that is still open at the end of the text.  It quotes
+#: nothing of the text, and names no delimiter: the delimiter is the
+#: operator's.
+UNENDED_BODY_MESSAGE = (
+    "cisco_nxos: line {line} opens a block of text -- a banner, or the "
+    "commands of a scheduler job -- that runs to the end of this text: "
+    "a banner ends at the next occurrence of the delimiter written "
+    "after `banner motd` or `banner exec`, a job at a line that is "
+    "`end-job`, and the last one opened has none.  Read as it stands, "
+    "every line after line {line} is text, and no line of it is "
+    "configuration.  Paste the output of `show running-config` whole."
+)
+
+
+def _is_the_jobs_end(text: str, number: int) -> bool:
+    """Whether *text* is ``end-job`` in column 0, white space after it
+    allowed."""
+    return text.rstrip() == "end-job"
+
+
+def _opens_a_body(text: str, number: int) -> Body | None:
+    """The body of text *text* opens, or ``None``
+    (:func:`without_banner_bodies`)."""
+    match = _OPENS_A_BANNER_RE.match(text)
+    if match is not None:
+        rest = text[match.end():]
+        delimiter = rest[0]
+        # Anywhere on a later line, or on this one (``banner motd
+        # #Welcome#``); what follows it on its line is discarded.
+        return Body(ends_anywhere(delimiter), ended=delimiter in rest[1:])
+    if _OPENS_A_JOB_RE.match(text):
+        return Body(_is_the_jobs_end)
+    return None
+
+
+def without_banner_bodies(raw: str) -> str:
+    """*raw* with every line of each banner and scheduler job made
+    empty, keeping its number (:func:`.._scanner.without_text_bodies`).
+
+    A banner (:data:`_OPENS_A_BANNER_RE`) ends at the first occurrence
+    of its delimiter after the one that opens it, anywhere
+    (:func:`.._scanner.ends_anywhere`): on the line that opens it, in
+    the middle of a later line, or at its start.  The delimiter is
+    compared by case.  What follows it on its line is discarded (Cisco's
+    NX-API page pairs the line ``banner exec 123:12`` with the message
+    ``23:``), so the whole line is the banner's.  A scheduler job
+    (:data:`_OPENS_A_JOB_RE`) ends at a line that is ``end-job``.  NX-OS
+    prints the delimiter as it was typed, and a typed text ends at the
+    delimiter's first occurrence, so no stored text holds its own end.
+
+    Raises:
+        ParseError: A body has no end before the end of the text, or a
+            line of one ends in another character than a line feed.
+            Each message names the line and quotes nothing of the text.
+    """
+    return without_text_bodies(raw, _opens_a_body, UNENDED_BODY_MESSAGE, codec="cisco_nxos")
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse NX-OS ``show running-config`` output into a
     :class:`CanonicalIntent`.
 
     Raises:
         ParseError: If the input is empty or looks like XML / JSON
-            rather than NX-OS CLI text.
+            rather than NX-OS CLI text; or if a banner or a scheduler
+            job cannot be told from the configuration
+            (:func:`without_banner_bodies`).
     """
     if not raw.strip():
         raise ParseError("cisco_nxos: empty input", snippet="")
 
+    # A banner, or a scheduler job's commands, is text, never lines of
+    # the config: every reader below -- the shape check among them -- is
+    # given the text with each body's lines empty, each keeping its
+    # number.
+    # ``given``: the length of the text as it came, for the debug line
+    # at the end.
+    given = len(raw)
+    raw = without_banner_bodies(raw)
     # Shape sanity: reject XML / JSON early so the operator gets a clean
     # error instead of a near-empty render.  Mirrors cisco_iosxe_cli.
     shape = detect_input_shape(raw)
@@ -534,7 +625,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
         len(intent.vlans),
         len(intent.static_routes),
         len(intent.routing_instances),
-        len(raw),
+        given,
     )
     return intent
 

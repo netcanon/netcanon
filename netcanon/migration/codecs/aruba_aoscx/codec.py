@@ -67,7 +67,7 @@ from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
-from .parse import parse_intent
+from .parse import parse_intent, without_banner_bodies
 from .render import render_intent
 
 
@@ -689,8 +689,9 @@ class ArubaAOSCXCodec(CodecBase):
         intent = parse_intent(raw)
         # Surface Tier-3 stanza headers the parser deliberately drops
         # (BGP / OSPF / ACLs / class / policy).  Notification-only —
-        # never read by any render-side code.
-        intent.dropped_tier3_sections = detect_tier3_sections_aoscx(raw)
+        # never read by any render-side code.  Read from the text the
+        # parser read: a banner's lines are text, not stanzas.
+        intent.dropped_tier3_sections = detect_tier3_sections_aoscx(without_banner_bodies(raw))
         return intent
 
     def render(self, tree: Any) -> str:

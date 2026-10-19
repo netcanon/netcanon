@@ -1,10 +1,13 @@
 """
 Parse path for Aruba AOS-CX (``show running-config`` form).
 
-Public function: :func:`parse_intent` — raw text in,
-:class:`CanonicalIntent` out.  Targets the AOS-CX switch portfolio
-(6000 / 6100 / 6200 / 6300 / 6400 / 8100 / 8320 / 8325 / 8360 / 8400 /
-9300 / CX-10000) on AOS-CX 10.x.
+Public functions: :func:`parse_intent` — raw text in,
+:class:`CanonicalIntent` out, for the AOS-CX switch portfolio (6000 /
+6100 / 6200 / 6300 / 6400 / 8100 / 8320 / 8325 / 8360 / 8400 / 9300 /
+CX-10000) on AOS-CX 10.x; and :func:`without_banner_bodies` — the text
+with every line of each banner emptied, which every reader of the parse
+is given (the codec's Tier-3 rows among them; the probe reads the text
+as it came).
 
 Note: probe is in :mod:`.codec`; this module assumes input has already
 been classified as Aruba AOS-CX CLI text.
@@ -68,6 +71,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+from collections.abc import Callable
 
 from ...canonical.intent import (
     CanonicalIntent,
@@ -94,7 +98,7 @@ from .._helpers import (
     vlan_id_run,
 )
 from .._input_shape import detect_input_shape
-from .._scanner import scan_stanzas
+from .._scanner import Body, scan_stanzas, without_text_bodies
 from ..base import ParseError
 from . import port_names as _port_names
 
@@ -331,17 +335,113 @@ def _lag_sort_key(name: str) -> tuple[int, int]:
     return (0, int(m.group(1))) if m else (1, 0)
 
 
+# ---------------------------------------------------------------------------
+# Text that is no line of the config
+# ---------------------------------------------------------------------------
+
+#: ``banner motd`` / ``banner exec`` in column 0, and the delimiter
+#: (HPE: ``banner {motd | exec} <DELIMITER>``, "the character used to
+#: terminate the input string").  ``show running-config`` prints the
+#: line with ONE character after the type and nothing after it, and the
+#: body as it was typed on the lines below; the character is usually
+#: ``!`` (a published sample prints ``$``), so it is taken from the
+#: line.  The match ends where the delimiter begins.  ``banner motd``
+#: with nothing after it opens nothing, nor does ``no banner ...``.
+_OPENS_A_BANNER_RE = re.compile(r"^banner[ \t]+(?:motd|exec)[ \t]+(?=[^ \t])", re.IGNORECASE)
+
+#: Said of a banner that is still open at the end of the text.  Each
+#: sentence quotes nothing of the text, and names no delimiter: the
+#: delimiter is the operator's.
+UNENDED_BODY_MESSAGE = (
+    "aruba_aoscx: line {line} opens a banner that runs to the end of "
+    "this text: a banner ends at the first later line that ends with "
+    "the character written after `banner motd` or `banner exec`, and "
+    "this one has none.  Read as it stands, every line after line "
+    "{line} is the banner's text, and no line of it is configuration.  "
+    "Paste the output of `show running-config` whole."
+)
+#: Said of a banner line with more than one character after its type.
+MORE_ON_THE_OPENER_MESSAGE = (
+    "aruba_aoscx: line {line} opens a banner with more than one "
+    "character after `banner motd` or `banner exec`.  `show "
+    "running-config` prints that line with the one character that ends "
+    "the banner after it and nothing else, and the banner's text on the "
+    "lines below; so where this banner ends, and where the "
+    "configuration goes on, cannot be told.  Paste the output of `show "
+    "running-config` whole."
+)
+
+
+def _ends_at_the_end_of_a_line(delimiter: str) -> Callable[[str, int], bool]:
+    """A banner that ends at the first line that ENDS with *delimiter*,
+    white space after it allowed, compared by case.  The switch prints
+    a banner's stored text and then the delimiter and a line end: alone
+    on a line, or at the end of the text's last line.  So a delimiter
+    with text after it on its line is the text's own, never the end;
+    the whole line that ends the banner is the banner's."""
+
+    def ends(text: str, number: int) -> bool:
+        return text.rstrip().endswith(delimiter)
+
+    return ends
+
+
+def _opens_a_body(text: str, number: int) -> Body | None:
+    """The banner *text* opens, or ``None`` (:func:`without_banner_bodies`)."""
+    match = _OPENS_A_BANNER_RE.match(text)
+    if match is None:
+        return None
+    delimiter = text[match.end():].rstrip()
+    if len(delimiter) > 1:
+        raise ParseError(
+            MORE_ON_THE_OPENER_MESSAGE.format(line=number),
+            path=f"line {number}", snippet="",
+        )
+    return Body(_ends_at_the_end_of_a_line(delimiter))
+
+
+def without_banner_bodies(raw: str) -> str:
+    """*raw* with every line of each banner made empty, keeping its
+    number (:func:`.._scanner.without_text_bodies`).
+
+    A banner (:data:`_OPENS_A_BANNER_RE`) ends at the first later line
+    that ends with its delimiter, white space after it allowed; the
+    delimiter is compared by case, and one with text after it on its
+    line is the text's.  A banner whose text holds the delimiter at the
+    end of a line (``WARNING!``) ends there: nothing in the printout
+    tells that from the end, and since the delimiter is also the
+    comment mark, nor does the line the switch printed after the text
+    (a known limitation).  Not handled: a ``ta-certificate`` paste (its
+    lines are base64, which no reader takes).
+
+    Raises:
+        ParseError: A banner has no end before the end of the text; its
+            line has more than one character after its type; or a line
+            of one ends in another character than a line feed.  Each
+            message names the line and quotes nothing of the text.
+    """
+    return without_text_bodies(raw, _opens_a_body, UNENDED_BODY_MESSAGE, codec="aruba_aoscx")
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse AOS-CX ``show running-config`` output into a
     :class:`CanonicalIntent`.
 
     Raises:
         ParseError: If the input is empty or looks like XML / JSON
-            rather than AOS-CX CLI text.
+            rather than AOS-CX CLI text; or if a banner cannot be told
+            from the configuration (:func:`without_banner_bodies`).
     """
     if not raw.strip():
         raise ParseError("aruba_aoscx: empty input", snippet="")
 
+    # A banner is text, never lines of the config: every reader below --
+    # the shape check among them -- is given the text with each banner's
+    # lines empty, each keeping its number.
+    # ``given``: the length of the text as it came, for the debug line
+    # at the end.
+    given = len(raw)
+    raw = without_banner_bodies(raw)
     shape = detect_input_shape(raw)
     if shape is not None:
         raise ParseError(
@@ -430,7 +530,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
         len(intent.routing_instances),
         len(intent.lags),
         len(intent.local_users),
-        len(raw),
+        given,
     )
     return intent
 

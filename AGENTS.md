@@ -1093,6 +1093,21 @@ tests use these exclusively — never CSS classes or element structure.  See
   as printed; the guard writes the banner and reads every target's
   output for its words
   (`tests/unit/migration/test_arista_eos_indentation.py`).
+  **And the rule is every parser's, each ending a body its own way,
+  from its vendor**: IOS-XE and NX-OS at the delimiter anywhere (an
+  IOSv printout puts the closing `^C` after the text, so "alone on a
+  line" never ends its banners), AOS-CX at a line that ends with its
+  delimiter, OS10 at a line of the delimiter alone, AOS-S at a quote no
+  backslash escapes.  A body's lines are a device's lines: one that
+  ends in a form feed or the like is refused (EOS's pass too).  Where
+  a printout cannot say where a banner ends, the code refuses what it
+  can see -- AOS-S text after its quote, and the end a device printed
+  left outside every body because the banner's own text held it
+  (IOS-XE, AOS-S, OS10) -- and the rest is a stated limitation, not a
+  guarantee: a text that holds its end at the end of a line on AOS-CX,
+  or holds it and then opens another banner, ends there unseen
+  (`_scanner.without_text_bodies`;
+  `tests/unit/migration/test_a_banner_is_text.py`).
 - **Never** let one value stand for "not stated".  The canonical tree
   had ONE value, an empty list, for three statements: a trunk that
   allows no VLAN (`switchport trunk allowed vlan none`, a list a

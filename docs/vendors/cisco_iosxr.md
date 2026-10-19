@@ -145,6 +145,14 @@ bridge-groups, ACL, QoS) is welcomed via
 
 ## Common gotchas
 
+- **A banner's lines are read as configuration (measured).**  The IOS
+  XR parser does not pass over a `banner` body: a body line `username
+  <name>` with ` group root-lr` under it is an account with privilege
+  15 on the target, and a `vrf` line a VRF, in jobs that say
+  `completed`.  The EOS, IOS-XE CLI, NX-OS, AOS-CX, OS10 and AOS-S
+  parsers read a banner as text; doing so here is a change of its own,
+  from Cisco's IOS XR pages.  Until then, remove a banner's lines from
+  the text you paste.
 - **Paste the config as the router prints it, with its
   indentation.**  IOS XR places each line of a configuration by its
   indentation when it loads a file: a line at the left margin is a

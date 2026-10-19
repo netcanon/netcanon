@@ -1,9 +1,14 @@
 """
 Parse path for Cisco IOS-XE CLI (``show running-config`` form).
 
-Public function: :func:`parse_intent` — raw text in,
-:class:`CanonicalIntent` out.  Stable across IOS 15.x / IOS-XE 16.x /
-17.x.
+Public functions: :func:`parse_intent` — raw text in,
+:class:`CanonicalIntent` out, stable across IOS 15.x / IOS-XE 16.x /
+17.x; and :func:`without_banner_bodies` — the text with every line of
+each banner, and of each other body of text a config prints (a menu's
+title or prompt, a line's message, a busy message, a web
+authentication banner, a macro), emptied, which every reader of the
+parse is given (the codec's Tier-3 rows among them; the probe reads the
+text as it came).
 
 Note: probe is in :mod:`.codec`; this module assumes input has already
 been classified as Cisco IOS-XE CLI.
@@ -80,7 +85,7 @@ from .._helpers import (
     without_keyword_stanzas,
 )
 from .._input_shape import detect_input_shape
-from .._scanner import scan_stanzas
+from .._scanner import Body, ends_anywhere, scan_stanzas, without_text_bodies
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -543,19 +548,188 @@ def _is_mgmt_vrf(vrf_name: str) -> bool:
     return bool(_MGMT_VRF_RE.match(vrf_name or ""))
 
 
+# ---------------------------------------------------------------------------
+# Text that is no line of the config
+# ---------------------------------------------------------------------------
+
+#: A line that opens a body of text written between two delimiters, up
+#: to the delimiter (Cisco: "one or more blank spaces and a delimiting
+#: character", "terminating the message with the second occurrence of
+#: the delimiting character").  In column 0: ``banner`` and a type
+#: (``exec``, ``incoming``, ``login``, ``motd``, ``prompt-timeout``,
+#: ``slip-ppp``, ``config-save``), or ``banner`` and the delimiter
+#: itself (a MOTD banner: the word after ``banner`` is no type, nor
+#: ``text`` / ``title``); ``aaa authentication banner`` /
+#: ``fail-message``; ``menu <name> title`` / ``prompt``; and
+#: ``busy-message <host>`` (O'Reilly's *Cisco IOS in a Nutshell*: "The
+#: delimiter marks the beginning and end of the message" -- a
+#: third-party book; that IOS-XE takes the command is not established).
+#: At any indentation, since neither is a command of the top level: a
+#: line's ``vacant-message`` / ``refuse-message``, and a web
+#: authentication parameter map's ``banner text`` / ``banner title``.
+#: The device prints those indented; a text whose indentation was lost
+#: has them in column 0, where ``text`` and ``title`` after ``banner``
+#: are still those words, never a delimiter.  The match ends where the
+#: delimiter begins.  A keyword with nothing after it (``banner motd``,
+#: a bare ``vacant-message``) opens nothing, nor does a ``no`` form, nor
+#: ``exec-banner`` / ``motd-banner``.
+_OPENS_A_DELIMITED_BODY_RE = re.compile(
+    r"^(?:banner[ \t]+"
+    r"(?:(?:exec|incoming|login|motd|prompt-timeout|slip-ppp|config-save)[ \t]+"
+    r"|(?!(?:exec|incoming|login|motd|prompt-timeout|slip-ppp|config-save|text|title)(?![^ \t])))"
+    r"|aaa[ \t]+authentication[ \t]+(?:banner|fail-message)[ \t]+"
+    r"|menu[ \t]+[^ \t]+[ \t]+(?:title|prompt)[ \t]+"
+    r"|busy-message[ \t]+[^ \t]+[ \t]+"
+    r"|[ \t]*(?:vacant-message|refuse-message|banner[ \t]+(?:text|title))[ \t]+)"
+    r"(?=[^ \t])",
+    re.IGNORECASE,
+)
+#: ``macro name <name>`` in column 0 opens a macro, whose commands are
+#: printed as they were typed, in column 0 or not, up to a line that is
+#: ``@`` (Cisco: "Use the @ character to end the macro").  The commands
+#: run when the macro is applied; they are not configuration in force.
+#: (Cisco documents ``macro name`` for the Catalyst switches of IOS;
+#: that IOS-XE prints it the same way is inferred.)
+_OPENS_A_MACRO_RE = re.compile(r"^macro[ \t]+name[ \t]+[^ \t]", re.IGNORECASE)
+
+#: The delimiter IOS prints for every ``banner`` and ``aaa
+#: authentication`` text, whatever was typed: the two characters ``^``
+#: and ``C``.  No Cisco page says so; every committed and published
+#: printout shows it, and Ansible's ``ios_banner`` reads it so (no
+#: committed capture holds the byte 0x03).  It is ONE delimiter: a body
+#: ends at the next ``^C``, and a ``^`` alone in it is text.  That is
+#: what the device holds (the printer writes ``^C`` round the stored
+#: text); Batfish and ciscoconfparse2 end the body at a ``^`` alone,
+#: which is how the device would read the printed text if it were
+#: loaded again (Cisco does not say; inferred).  The two differ only for
+#: a body that holds a ``^`` with no ``C`` after it.  A web
+#: authentication ``banner text`` / ``title`` is printed with a caret
+#: before the TYPED character (Cisco: "The caret symbol (^) displays in
+#: the configuration output before the delimiting character that you
+#: entered"), so ``^c`` there is a caret, and ends at the next one.
+_PRINTED_DELIMITER = "^C"
+#: What a device writes round a stored text.  A text that holds one
+#: ends there, early, and the one the device wrote after it is left on
+#: a line outside every body (:data:`ORPHAN_MESSAGE`).
+_DEVICE_DELIMITERS = (_PRINTED_DELIMITER, "\x03")
+
+#: Said of a body that is still open at the end of the text.  It quotes
+#: nothing of the text, and names no delimiter: the delimiter is the
+#: operator's.
+UNENDED_BODY_MESSAGE = (
+    "cisco_iosxe_cli: line {line} opens a block of text -- a banner, "
+    "a menu title or prompt, a line's vacant or refuse message, a busy "
+    "message, a web authentication banner, or a macro -- that runs to "
+    "the end of this text: a banner and the others end at the next "
+    "occurrence of the delimiter written after their keyword (the "
+    "device prints a banner's as a caret and a capital C), and a macro "
+    "at a line that is `@`, and the last one opened has none.  Read as "
+    "it stands, every line after line {line} is text, and no line of it "
+    "is configuration.  Paste the output of `show running-config` whole."
+)
+#: Said of a line outside every body that holds what a device writes
+#: round a stored text, after a body that delimiter opened.
+ORPHAN_MESSAGE = (
+    "cisco_iosxe_cli: line {line} is outside every banner, and holds "
+    "what ends one (a caret and a capital C, as the device prints it, "
+    "or the byte 3): the text of the banner that line {opened} opens "
+    "holds it too, and so ended before its end, and where it really "
+    "ends, and where the configuration goes on, cannot be told.  Change "
+    "the banner on the device so that its text does not hold those "
+    "characters, or remove the banner's lines from the text you paste."
+)
+
+
+def _is_the_macros_end(text: str, number: int) -> bool:
+    """Whether *text* is ``@``, white space after it allowed."""
+    return text.rstrip() == "@"
+
+
+def _openers() -> Callable[[str, int], Body | None]:
+    """The ``opens`` of one pass (:func:`without_banner_bodies`).
+
+    It remembers the line of the last body each of
+    :data:`_DEVICE_DELIMITERS` opened, and refuses a later line outside
+    every body that holds that delimiter (:data:`ORPHAN_MESSAGE`).  Not
+    seen so: a stored text whose part after its own ``^C`` opens another
+    body, which then takes the ``^C`` the device wrote for its end.
+    """
+    opened: dict[str, int] = {}
+
+    def opens(text: str, number: int) -> Body | None:
+        match = _OPENS_A_DELIMITED_BODY_RE.match(text)
+        if match is not None:
+            rest = text[match.end():]
+            delimiter = _PRINTED_DELIMITER if rest.startswith(_PRINTED_DELIMITER) else rest[0]
+            if delimiter in _DEVICE_DELIMITERS:
+                opened[delimiter] = number
+            # ``banner motd ^Ctext^C``: the body ends on its own line.
+            return Body(ends_anywhere(delimiter), ended=delimiter in rest[len(delimiter):])
+        if _OPENS_A_MACRO_RE.match(text):
+            return Body(_is_the_macros_end)
+        for delimiter, at in opened.items():
+            if delimiter in text:
+                raise ParseError(
+                    ORPHAN_MESSAGE.format(line=number, opened=at),
+                    path=f"line {number}", snippet="",
+                )
+        return None
+
+    return opens
+
+
+def without_banner_bodies(raw: str) -> str:
+    """*raw* with every line of each banner and other body of text made
+    empty, keeping its number (:func:`.._scanner.without_text_bodies`).
+
+    A body written between two delimiters (:data:`_OPENS_A_DELIMITED_BODY_RE`)
+    ends at the first occurrence of the delimiter after the one that
+    opens it, anywhere (:func:`.._scanner.ends_anywhere`): on the line
+    that opens it, in the middle of a later line, or at its start.  The
+    delimiter is the first character after the keyword that is not
+    white space, compared by case; the two characters ``^C`` are one
+    (:data:`_PRINTED_DELIMITER`).  A macro (:data:`_OPENS_A_MACRO_RE`)
+    ends at a line that is ``@``.  Not handled: ``crypto pki
+    certificate chain`` (its body is hexadecimal words and ``quit``,
+    indented, which no reader takes), ``macro auto execute`` (no printed
+    form of it was found), and an Easy VPN group's ``banner`` under
+    ``crypto isakmp client configuration group`` (no Cisco page that
+    shows it was found).
+
+    Raises:
+        ParseError: A body has no end before the end of the text; a
+            line of one ends in another character than a line feed; or
+            a line outside every body holds what a device writes round
+            a banner's text, after a banner it opened
+            (:data:`ORPHAN_MESSAGE`).  Each message names the line and
+            quotes nothing of the text.
+    """
+    return without_text_bodies(raw, _openers(), UNENDED_BODY_MESSAGE, codec="cisco_iosxe_cli")
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse IOS-XE ``show running-config`` output into a
     :class:`CanonicalIntent`.
 
     Raises:
         ParseError: If the input doesn't look like IOS config at all
-            (e.g. XML or JSON).
+            (e.g. XML or JSON); or if a banner, or another body of text,
+            cannot be told from the configuration
+            (:func:`without_banner_bodies`).
     """
     if not raw.strip():
         raise ParseError(
             "cisco_iosxe_cli: empty input",
             snippet="",
         )
+    # A banner (or a menu's text, a line's message, a macro) is text,
+    # never lines of the config: every reader below -- the shape check
+    # and the keyword stanzas among them -- is given the text with each
+    # body's lines empty, each keeping its number.
+    # ``given``: the length of the text as it came, for the debug line
+    # at the end.
+    given = len(raw)
+    raw = without_banner_bodies(raw)
     # Shape sanity: reject XML / JSON early so the operator gets a
     # clean error instead of a "completed with zero supported paths"
     # near-empty render.  Uses the shared shape helper so leading
@@ -715,7 +889,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
         len(intent.lags),
         len(intent.local_users),
         "yes" if intent.snmp else "no",
-        len(raw),
+        given,
     )
     return intent
 

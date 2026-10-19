@@ -226,6 +226,18 @@ in `netcanon/migration/codecs/<vendor>/codec.py`.
 
 #### `cisco_iosxe_cli` (Cisco IOS-XE CLI, bidirectional)
 
+A banner, and every other text written between two delimiters (`aaa
+authentication banner`, a `menu` title, a `busy-message`, a line's
+`vacant-message` and a web authentication banner at any indentation),
+and a `macro name`, is text and is not read as configuration: a banner
+ends at the next occurrence of its delimiter anywhere, a macro at a
+line that is `@`.  One with no end, a line of one that ends in a form
+feed or the like, and a `^C` left outside every banner because a
+banner's own text held it are refused; a text that holds `^C` and then
+opens another banner is not seen (see
+[`vendors/cisco_iosxe.md`](vendors/cisco_iosxe.md) § "A banner is
+text").
+
 | Path | Class | Reason summary |
 |---|---|---|
 | `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses the `vrrp <vrid> ip|ipv6|priority|preempt|description|authentication|track|timers` family inside `interface` stanzas; renders the classic single-line per-attribute form (broadest IOS-XE compatibility, 15.x onward). |
@@ -288,7 +300,8 @@ leaves open) would need every mode's words, which no Arista page
 lists.  A banner, and every other body that Arista's tools end at an
 `EOF` line (a `comment`, RCF code, a multi-line `action bash`, a
 certificate and its key), is text and is never read as
-configuration; a body with no `EOF` is refused.  `router bgp` is read
+configuration; a body with no `EOF`, or with a line that ends in a
+form feed or the like, is refused.  `router bgp` is read
 by relative depth, so tabs and other widths read as EOS's own (see
 [`vendors/arista_eos.md`](vendors/arista_eos.md) § "Common
 gotchas").
@@ -311,6 +324,16 @@ gotchas").
 | `/access-list/{extended,standard,ipv6}` | Unsupported | Tier 3 — auto-translating ACL semantics across vendors risks shipping subtly-permissive rules. |
 
 #### `aruba_aoss` (bidirectional)
+
+A banner -- printed as a double-quoted string across lines, ended by
+the first quote no backslash escapes -- is text and is not read as
+configuration, by the parser or the deployment detector.  One with no
+end, with text after its closing quote, or with a line that ends in a
+form feed or the like is refused, and so is a later line with an odd
+number of quotes (the quote a banner's own text held ended it early);
+a text whose quotes leave no such line is not seen (see
+[`vendors/aruba_aoss.md`](vendors/aruba_aoss.md) § "A banner is
+text").
 
 | Path | Class | Reason |
 |---|---|---|
@@ -404,7 +427,12 @@ gotchas").
 
 Broad supported surface (L1/L3 + L2 switchport/LAG + SNMP/local-users +
 HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed
-Anycast Gateway).  The lossy / unsupported exceptions:
+Anycast Gateway).  A banner, ended at the next occurrence of its
+delimiter anywhere, and a `scheduler job`'s commands, ended by a line
+`end-job`, are text and are not read as configuration; one with no
+end, or with a line that ends in a form feed or the like, is refused
+(see [`vendors/cisco_nxos.md`](vendors/cisco_nxos.md) § "A banner is
+text").  The lossy / unsupported exceptions:
 
 | Path | Class | Reason |
 |---|---|---|
@@ -464,8 +492,14 @@ gotchas").  The lossy / unsupported exceptions:
 
 Broad supported surface (Tier-1 + L2 switchport/LAG + local users + SNMP
 v2c/v3 + IPv4 active-gateway anycast + VXLAN L2VNI VLAN↔VNI binding).
-Distinct from the campus `aruba_aoss` (AOS-S) codec.  The lossy /
-unsupported exceptions:
+Distinct from the campus `aruba_aoss` (AOS-S) codec.  A banner, ended
+at the first later line that ENDS with its one delimiter (one with
+text after it is the banner's text), is text and is not read as
+configuration; one with no end, more than one character after its
+type, or a line that ends in a form feed or the like is refused.  A
+banner whose text holds the delimiter at the end of a line ends there,
+undetected (see [`vendors/aruba_aoscx.md`](vendors/aruba_aoscx.md) §
+"A banner is text").  The lossy / unsupported exceptions:
 
 | Path | Class | Reason |
 |---|---|---|
@@ -520,8 +554,14 @@ curly-brace form.  The lossy / unsupported exceptions:
 Broad supported surface (Tier-1 + L2 switchport/LAG + SVI-derived VLANs
 + local users + SNMP v2c/v3 + real VRRP + VRF + per-VRF static).
 Distinct from Dell's older Force10 **OS9 / FTOS** grammar, which this
-codec REFUSES rather than mis-parse.  The lossy / unsupported
-exceptions:
+codec REFUSES rather than mis-parse.  A banner, ended by a line that
+is its delimiter alone, is text and is not read as configuration; one
+with no end, with more than its delimiter after its type, or with a
+line that ends in a form feed or the like is refused, and so is a
+line of its delimiter alone left outside every banner because a
+banner's own text held one (see
+[`vendors/dell_os10.md`](vendors/dell_os10.md) § "A banner is
+text").  The lossy / unsupported exceptions:
 
 | Path | Class | Reason |
 |---|---|---|

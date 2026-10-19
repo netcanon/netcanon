@@ -220,6 +220,117 @@ Provenance + per-fixture detail in
   subinterfaces, QoS, ACL groups, uRPF.  Validates parse-tolerance
   for grammar outside the Cat9k campus surface
 
+## A banner is text
+
+The CLI codec reads a banner, and every other body of text a config
+prints, as text the device shows or runs later, not as lines of the
+config: each line of it is passed over by every reader of the parse
+(the Tier-3 rows and the check for a JSON or XML paste included), and
+nothing of it is translated.  Detection still reads the text as it
+came.
+
+- **Bodies written between two delimiters.**  In column 0: `banner`
+  with a type (`exec`, `incoming`, `login`, `motd`, `prompt-timeout`,
+  `slip-ppp`, `config-save`) or with none (a MOTD banner: the word
+  after `banner` is no type), `aaa authentication banner` and `aaa
+  authentication fail-message`, `menu <name> title` and `menu <name>
+  prompt`, and `busy-message <host>`.  At any indentation, since
+  neither is a command of the top level: a line's `vacant-message` and
+  `refuse-message`, and a web authentication parameter map's `banner
+  text` and `banner title` -- the device prints them indented, and in a
+  text whose indentation was lost `text` and `title` after `banner` are
+  still those words, never a delimiter.  A keyword with nothing after
+  it (`banner motd`, a bare `vacant-message`) opens nothing, nor does a
+  `no` form, nor `exec-banner` / `motd-banner`.  (Cisco's configuration
+  guides for the syntax, the end and most types: "one or more blank
+  spaces and a delimiting character", "terminating the message with the
+  second occurrence of the delimiting character"; `prompt-timeout` from
+  Cisco's IOS-XE YANG model, a bare `banner` from an IOS 11.0
+  reference; `config-save` from a search excerpt of a Cisco Community
+  answer and from Batfish; `busy-message` from O'Reilly's *Cisco IOS in
+  a Nutshell*, a third-party book -- that IOS-XE takes the command is
+  not established.)
+- **The delimiter** is the first character after the keyword that is
+  not white space, compared by its case (Cisco does not say; Batfish
+  and ciscoconfparse2 compare it so).  `show running-config` prints
+  every `banner` and `aaa authentication` text with the two characters
+  `^C` as its delimiter, whatever was typed (no Cisco page says so:
+  every committed and published printout shows it, and Ansible's
+  `ios_banner` reads it so), and they are read as ONE delimiter: the
+  body ends at the next `^C`, and a `^` alone in it is text.  That is
+  what the device holds -- the printer writes `^C` round the stored
+  text -- and it departs from Batfish and ciscoconfparse2, which end
+  the body at a `^` alone: that is how the device would read the
+  printout if it were loaded again (a Cisco community thread: a
+  restored `^C` banner gains a `C` each time).  The choice is
+  inferred, and the two readings differ only for a body that holds a
+  `^` with no `C` after it.  A web authentication `banner text` /
+  `banner title` is printed with a caret before the TYPED character
+  (Cisco: "The caret symbol (^) displays in the configuration output
+  before the delimiting character that you entered"), and ends at the
+  next caret.  The byte 0x03 is a delimiter too.
+- **Where the body ends**: at the next occurrence of the delimiter,
+  ANYWHERE -- on the line that opens it (`banner motd ^CWelcome^C`,
+  `aaa authentication banner *Unauthorized*`), in the middle of a later
+  line, or at its start.  An IOSv printout puts the closing `^C` after
+  the text of the body's last line, and the next banner straight after
+  it, so a rule of "the delimiter alone on a line" would never end
+  those banners.  What follows the delimiter on its line is discarded,
+  neither text nor configuration (Cisco: "Characters after the ending
+  delimiter are discarded").
+- **`macro name <name>`** runs to a line that is `@` (Cisco: "Use the
+  @ character to end the macro"; a published IOS printout shows the
+  commands in column 0); an `@` inside a line of it is the macro's
+  text.  Its commands run when the macro is applied, and are not
+  configuration in force.  That IOS-XE prints a macro the same way is
+  inferred.
+- **Refused in words**, naming the line and quoting nothing (`parse
+  failed: cisco_iosxe_cli: line <n> ...`):
+  - a body with no end before the end of the text (`opens a block of
+    text ...`).  A device's own printout always has the closer, and the
+    device, loading a text whose banner never ends, takes every later
+    line for the banner's text (a Cisco community report); read as it
+    stands, nothing after it is configuration.  The text was cut
+    short, or a delimiter was lost: paste the whole of `show
+    running-config`;
+  - a line of a body that ends in another character than a line feed
+    -- a form feed, a vertical tab, a carriage return on its own, or
+    another character Python ends a line at (`is a line of a banner,
+    or of another block of text, and ends in a character ...`).  The
+    device ends a line at a line feed, so where it ends the body, and
+    so where the configuration goes on, is not where those lines say;
+  - a line outside every body that holds `^C` (or the byte 0x03),
+    after a body opened with it (`is outside every banner, and holds
+    what ends one ...`).  A banner typed with another delimiter may
+    hold the two characters `^C` (`Press ^C to abort`); printed between
+    two `^C`, it ends at its own, and the `^C` the device printed after
+    the text is left on a later line.  Read as it stands, the lines
+    between were configuration: an account line in such a text was an
+    account on the target.  Change the banner on the device so its text
+    does not hold `^C`, or remove the banner's lines from the paste.
+- **Not seen (a known limitation)**: a banner whose text holds `^C`
+  and, after it, a line that opens another body (`banner exec ^C`,
+  say).  That body takes the `^C` the device printed for its own end,
+  nothing is left outside every body, and the lines between are read
+  as configuration (measured: an account line there is an account on
+  the target).
+- **Not handled**: `crypto pki certificate chain` (its body is
+  hexadecimal words and `quit`, indented, which no reader takes);
+  `macro auto execute` (no printed form of it was found; Cisco shows
+  it typed, ended by `}`); and an Easy VPN server group's `banner`,
+  indented under `crypto isakmp client configuration group` (not
+  established: no Cisco page that shows its form was found).  The
+  bodies of the last two are read as configuration.
+
+⚠️ Up to 0.7.7 a banner's lines were read as lines of the config: a
+banner line `username <name> privilege 15 ...` became an account with
+privilege 15 on the target, and its `vlan`, `interface`, `ip route`
+and `ip access-list` lines became VLANs, interfaces, routes and a
+Tier-3 row, in jobs that said `completed`.  If you translated an
+IOS-XE config with a banner with 0.7.7 or earlier, translate it again,
+and look in the old output for accounts, interfaces, VLANs and routes
+the device does not have.
+
 ## Common gotchas
 
 - **Renaming or dropping `Vlan<N>` in the rename modal is not

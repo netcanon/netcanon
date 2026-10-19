@@ -238,6 +238,12 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
   text as it came).  A body with no `EOF` line before the end of the
   text is refused (`parse failed: arista_eos: line <n> opens a block
   of text ...`): read, every line after it would be the body's text.
+  So is a line that opens a body, or is in one, and ends in another
+  character than a line feed -- a form feed, a vertical tab, a carriage
+  return on its own (`... is a line of a banner, or of another block of
+  text, and ends in a character ...`): the switch ends a line at a line
+  feed, so its `EOF` line is not where those lines say, and a banner
+  cut short there had its next lines read as configuration.
   ⚠️ Up to 0.7.7 a banner's lines were read as lines of the config: a
   line `username <name> privilege 15 nopassword` in a banner became
   an administrator account with no secret on the target, and a

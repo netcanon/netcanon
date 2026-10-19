@@ -1,9 +1,12 @@
 """
 Parse path for Dell SmartFabric OS10 (``show running-configuration`` form).
 
-Public function: :func:`parse_intent` — raw text in,
-:class:`CanonicalIntent` out.  Targets OS10 10.5.x on the S-series
-(S3048-ON / S4100 / S5200 / S5232F) and Z-series.
+Public functions: :func:`parse_intent` — raw text in,
+:class:`CanonicalIntent` out, for OS10 10.5.x on the S-series
+(S3048-ON / S4100 / S5200 / S5232F) and Z-series; and
+:func:`without_banner_bodies` — the text with every line of each banner
+emptied, which every reader of the parse is given (the codec's Tier-3
+rows among them; the probe reads the text as it came).
 
 Note: probe lives in :mod:`.codec`; this module assumes the input has
 already been classified as Dell OS10 CLI.
@@ -100,6 +103,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+from collections.abc import Callable
 
 from ...canonical.intent import (
     CanonicalIntent,
@@ -125,7 +129,7 @@ from .._helpers import (
     trunk_list_read,
 )
 from .._input_shape import detect_input_shape
-from .._scanner import scan_stanzas
+from .._scanner import Body, scan_stanzas, without_text_bodies
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -408,17 +412,154 @@ def _iface_name(m: re.Match[str]) -> str:
     return head
 
 
+# ---------------------------------------------------------------------------
+# Text that is no line of the config
+# ---------------------------------------------------------------------------
+
+#: ``banner motd`` / ``banner login`` in column 0, and the delimiter.
+#: Dell prints the two characters ``^C`` there, whatever was typed;
+#: a generated config has one other character (CANU's ``^``).  The
+#: match ends where the delimiter begins.  ``banner motd disable`` /
+#: ``banner login disable`` is a command of one line, and opens
+#: nothing; nor does ``banner motd`` with nothing after it, nor ``no
+#: banner ...``.
+_OPENS_A_BANNER_RE = re.compile(r"^banner[ \t]+(?:motd|login)[ \t]+(?=[^ \t])", re.IGNORECASE)
+#: The delimiter Dell prints: two characters, one delimiter.
+_PRINTED_DELIMITER = "^C"
+#: OS10's comment mark: a line that is ``!`` alone, after a banner
+#: delimited by ``!``, is a comment as likely as it is that banner's
+#: real end, so it is not refused (a known limitation).
+_COMMENT_MARK = "!"
+
+#: Said of a banner that is still open at the end of the text.  Each
+#: sentence quotes nothing of the text, and names no delimiter: the
+#: delimiter is the operator's.
+UNENDED_BODY_MESSAGE = (
+    "dell_os10: line {line} opens a banner that runs to the end of "
+    "this text: a banner ends at a line that holds nothing but the "
+    "delimiter written after `banner motd` or `banner login`, in "
+    "column 0, and this one has none.  Read as it stands, every line "
+    "after line {line} is the banner's text, and no line of it is "
+    "configuration.  Paste the output of `show running-configuration` "
+    "whole."
+)
+#: Said of a banner line with more than its delimiter after its type.
+MORE_ON_THE_OPENER_MESSAGE = (
+    "dell_os10: line {line} opens a banner with more than its delimiter "
+    "after `banner motd` or `banner login`.  `show running-configuration` "
+    "prints that line with the delimiter after it and nothing else, and "
+    "the banner's text on the lines below; so where this banner ends, "
+    "and where the configuration goes on, cannot be told.  Paste the "
+    "output of `show running-configuration` whole."
+)
+#: Said of a line outside every banner that is the delimiter of a
+#: banner opened before it.
+ORPHAN_MESSAGE = (
+    "dell_os10: line {line} is outside every banner, and holds nothing "
+    "but the delimiter of the banner that line {opened} opens: that "
+    "banner's text holds a line of its delimiter alone too, and so "
+    "ended before its end, and where it really ends, and where the "
+    "configuration goes on, cannot be told.  Change the banner on the "
+    "switch so that no line of its text is the delimiter alone, or "
+    "remove the banner's lines from the text you paste."
+)
+
+
+def _ends_at_a_line_of(delimiter: str) -> Callable[[str, int], bool]:
+    """A banner that ends at a line that is *delimiter* and nothing else,
+    in column 0, white space after it allowed (Dell: "a line that
+    contains only the delimiter character"; the white space is
+    inferred).  A line with white space in front of it is the banner's
+    text: the safe side, since the banner then runs on to a later line,
+    or is refused."""
+
+    def ends(text: str, number: int) -> bool:
+        return text.rstrip() == delimiter
+
+    return ends
+
+
+def _openers() -> Callable[[str, int], Body | None]:
+    """The ``opens`` of one pass (:func:`without_banner_bodies`).
+
+    It remembers the line of the last banner each delimiter opened, and
+    refuses a later line outside every banner that is that delimiter
+    alone (:data:`ORPHAN_MESSAGE`; the comment mark excepted): a stored
+    text with a line of the delimiter alone ends there, early, and the
+    line the switch printed after the text is left behind.  Not seen
+    so: a stored text whose part after that line opens another banner,
+    which then takes the line the switch printed for its end.
+    """
+    opened: dict[str, int] = {}
+
+    def opens(text: str, number: int) -> Body | None:
+        match = _OPENS_A_BANNER_RE.match(text)
+        if match is None:
+            if opened:
+                alone = text.rstrip()
+                if alone in opened and alone != _COMMENT_MARK:
+                    raise ParseError(
+                        ORPHAN_MESSAGE.format(line=number, opened=opened[alone]),
+                        path=f"line {number}", snippet="",
+                    )
+            return None
+        delimiter = text[match.end():].rstrip()
+        if delimiter.lower() == "disable":
+            return None
+        if len(delimiter) > 1 and delimiter != _PRINTED_DELIMITER:
+            raise ParseError(
+                MORE_ON_THE_OPENER_MESSAGE.format(line=number),
+                path=f"line {number}", snippet="",
+            )
+        opened[delimiter] = number
+        return Body(_ends_at_a_line_of(delimiter))
+
+    return opens
+
+
+def without_banner_bodies(raw: str) -> str:
+    """*raw* with every line of each banner made empty, keeping its
+    number (:func:`.._scanner.without_text_bodies`).
+
+    A banner (:data:`_OPENS_A_BANNER_RE`) ends at a line that is its
+    delimiter and nothing else, in column 0, white space after it
+    allowed.  The delimiter in the middle of a line does not end it
+    (inferred from Dell's wording).  The last line of the text may have
+    no line end.
+
+    Raises:
+        ParseError: A banner has no end before the end of the text; its
+            line has more than its delimiter after its type; a line of
+            one ends in another character than a line feed; or a line
+            outside every banner is the delimiter of one opened before
+            it (:data:`ORPHAN_MESSAGE`).  Each message names the line
+            and quotes nothing of the text.
+    """
+    return without_text_bodies(
+        raw, _openers(), UNENDED_BODY_MESSAGE,
+        codec="dell_os10", command="show running-configuration",
+    )
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse Dell OS10 ``show running-configuration`` output into a
     :class:`CanonicalIntent`.
 
     Raises:
         ParseError: If the input is empty or looks like XML / JSON rather
-            than OS10 CLI text.
+            than OS10 CLI text; or if a banner cannot be told from the
+            configuration (:func:`without_banner_bodies`).
     """
     if not raw.strip():
         raise ParseError("dell_os10: empty input", snippet="")
 
+    # A banner is text, never lines of the config: every reader below --
+    # the shape check among them -- is given the text with each banner's
+    # lines empty, each keeping its number.
+    # ``given``: the length of the text as it came, for the debug line
+    # at the end.
+    given = len(raw)
+    raw = without_banner_bodies(raw)
     shape = detect_input_shape(raw)
     if shape is not None:
         raise ParseError(
@@ -475,7 +616,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
         len(intent.static_routes),
         len(intent.lags),
         len(intent.routing_instances),
-        len(raw),
+        given,
     )
     return intent
 

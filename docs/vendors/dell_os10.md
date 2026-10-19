@@ -259,6 +259,64 @@ with its version banner intact remains the single highest-value
 contribution to this codec** — see
 [`WANTED.md`](../../tests/fixtures/real/WANTED.md).
 
+## A banner is text
+
+The parser reads a banner as text the switch shows, not as lines of
+the config: each line of it is passed over by every reader of the
+parse (the Tier-3 rows and the check for a JSON or XML paste
+included), and nothing of it is translated.  Detection still reads
+the text as it came.
+
+- **`banner motd` and `banner login`** in column 0, then the
+  delimiter and nothing else: the two characters `^C` as Dell prints
+  them whatever was typed (a Dell knowledge-base listing, 10.5.1.0),
+  or one other character (a generated config, the committed CANU one,
+  has `^`).  `banner motd disable` and `banner login disable` are
+  commands of one line and open nothing, nor does `banner motd` with
+  nothing after it, nor `no banner ...`.
+- **Where it ends**: at a line that is the delimiter and nothing else,
+  in column 0 (Dell: "a line that contains only the delimiter
+  character").  White space after it is allowed (inferred).  The
+  delimiter in the middle of a line, or after white space, does not
+  end it -- inferred from Dell's wording, and the safe side: the
+  banner runs on to a later line, or is refused.  The last line of the
+  text may have no line end.  A `!` in the text is the text's.
+- **Refused in words**, naming the line and quoting nothing (`parse
+  failed: dell_os10: line <n> ...`):
+  - a banner with no end before the end of the text;
+  - a banner line with more than its delimiter after the type (`banner
+    motd ^CWelcome^C` -- no Dell page shows it; inferred);
+  - a line outside every banner that is the delimiter alone of a banner
+    opened before it (`is outside every banner, and holds nothing but
+    the delimiter ...`): a banner typed with another delimiter may hold
+    a line `^C`; printed with `^C`, it ends there, and the `^C` line
+    Dell printed after the text is left behind.  Read as it stands, the
+    lines between were configuration.  A `!` line is not refused so:
+    `!` is OS10's comment mark, and a line of it after a banner
+    delimited by `!` is as likely a comment;
+  - a line of a banner that ends in another character than a line feed
+    -- a form feed, a vertical tab, a carriage return on its own (the
+    switch ends a line at a line feed, so where it ends the banner is
+    not where those lines say).
+
+  Paste the whole of `show running-configuration`; if a line of the
+  banner's text is its delimiter alone, change the banner on the
+  switch, or remove its lines from the paste.
+- **Not seen (a known limitation)**: a text with a line that is the
+  delimiter alone and, after it, a line that opens another banner
+  (which takes the line Dell printed for its own end), or one whose
+  delimiter is `!`.  The lines between are read as configuration
+  (measured: an account line there is an account on the target).
+
+⚠️ Up to 0.7.7 a banner's lines were read as lines of the config: a
+banner line `username <name> password ... role sysadmin` became an
+account with privilege 15 on the target, and its `interface vlan`,
+`ip route` and `ip access-list` lines became VLANs, interfaces, routes
+and a Tier-3 row, in jobs that said `completed`.  If you translated an
+OS10 config with a banner with 0.7.7 or earlier, translate it again,
+and look in the old output for accounts, interfaces, VLANs and routes
+the switch does not have.
+
 ## Common gotchas
 
 ⚠️ **Auto-detection finds about three OS10 configs in four.**
