@@ -182,6 +182,57 @@ Operator captures from a **newer NX-OS major** (10.x) and a second
 source are the highest-value contributions — see
 [`WANTED.md`](../../tests/fixtures/real/WANTED.md).
 
+## A banner is text
+
+The parser reads a banner, and a scheduler job's commands, as text,
+not as lines of the config: each line of it is passed over by every
+reader of the parse (the Tier-3 rows and the check for a JSON or XML
+paste included), and nothing of it is translated.  Detection still
+reads the text as it came.
+
+- **`banner motd` and `banner exec`** in column 0, then the delimiter:
+  the first character after the type that is not white space (Cisco:
+  "Very first char is delimiter char"; every printout has one space
+  there, and Batfish passes over any).  NX-OS prints the delimiter as
+  it was typed, and a config carried over an upgrade keeps one that
+  10.1(x) no longer takes for a new banner, so any character is one,
+  compared by its case.  `banner motd` with nothing after it opens
+  nothing, nor does `no banner ...`.
+- **Where the body ends**: at the next occurrence of the delimiter,
+  anywhere -- on the line that opens it (`banner motd #Welcome to the
+  Switch#`, Cisco's own example), in the middle of a later line, or at
+  its start; every published printout has it alone on a line.  What
+  follows it on its line is discarded: Cisco's NX-API page pairs the
+  line `banner exec 123:12` with the message `23:` (the rule that
+  pairing needs is inferred from it).  A typed text ends at the
+  delimiter's first occurrence, and the printer writes the delimiter
+  that was typed, so no stored text holds its own end.
+- **`scheduler job name <name>`** runs to a line that is `end-job`, in
+  column 0 (an indented `end-job`, or `end-jobs`, is the job's text).
+  The job's commands are printed as they were entered -- in column 0
+  on 9.2(2), indented on 10.3(3) -- and run when the job runs; they
+  are not configuration in force.  (The end line is from published
+  `show running-config` files; no Cisco page prints a job.)
+- **Refused in words**, naming the line and quoting nothing (`parse
+  failed: cisco_nxos: line <n> ...`): a body with no end before the end
+  of the text (`opens a block of text ...`; every printout has the
+  closer, so the text was cut short; read as it stands, nothing after
+  it is configuration), and a line of a body that ends in another
+  character than a line feed -- a form feed, a vertical tab, a carriage
+  return on its own (`is a line of a banner, or of another block of
+  text, and ends in a character ...`): the switch ends a line at a line
+  feed, so where it ends the body is not where those lines say.  Paste
+  the whole of `show running-config`.
+
+⚠️ Up to 0.7.7 a banner's lines were read as lines of the config: a
+banner line `username <name> password ... role network-admin` became
+an account with privilege 15 on the target, and its `vlan`,
+`interface`, `ip route` and `ip access-list` lines became VLANs,
+interfaces, routes and a Tier-3 row, in jobs that said `completed`.
+If you translated an NX-OS config with a banner with 0.7.7 or earlier,
+translate it again, and look in the old output for accounts,
+interfaces, VLANs and routes the switch does not have.
+
 ## Common gotchas
 
 - **A trunk's allowed list means what it says.**  A trunk with no

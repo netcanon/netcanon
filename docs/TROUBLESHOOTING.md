@@ -928,8 +928,13 @@ config with its `stacking` or `vsf` stanza cut off states none); no
 model family describes a part number in `unknown_parts`; the members
 belong to different families; what the config states does not compile
 (a module the bay does not take, a member number outside the mode's
-range, more members than the mode allows); or the vendor has no
-detector yet.  A stack that comes back short of a member, or with a
+range, more members than the mode allows); the lines that state the
+hardware could not be read -- on AOS-S, a banner the parser cannot
+tell from the configuration (a `banner motd` with no end, with text
+after its closing quote, or whose text holds a quote; see [The job
+says `parse failed:` for a
+banner](#the-job-says-parse-failed-for-a-banner)); or the vendor has
+no detector yet.  A stack that comes back short of a member, or with a
 bay empty that the config provisions, has a note that counts the
 member lines, member blocks or module lines that could not be read;
 so has a `module 1` line that could not be read, where the banner was
@@ -1231,6 +1236,78 @@ number and quote nothing of the text.
 
 See [`vendors/arista_eos.md`](vendors/arista_eos.md) § "Common
 gotchas".
+
+### The job says `parse failed:` for a banner
+
+The IOS-XE CLI, NX-OS, AOS-CX, OS10 and AOS-S parsers read a banner
+as text, ended where the vendor ends it, and refuse a text in which
+the banner cannot be told from the configuration: read as it stands,
+the lines after it would be the banner's text, or where it ends is
+not in the text.  Each sentence names a line and quotes nothing of
+the text, nor the delimiter (which is yours).
+
+- **`<codec>: line <n> opens a banner ...` / `opens a block of text
+  ...`, "that runs to the end of this text"** -- the banner (or, on
+  IOS-XE, a `menu` title or prompt, a `busy-message`, a line's
+  `vacant-message` or `refuse-message`, a web authentication banner or
+  a `macro name`; on NX-OS, a `scheduler job name`) never ends.
+  IOS-XE and NX-OS end a banner at the next occurrence of the
+  delimiter after its keyword, anywhere (IOS prints it as `^C`); a
+  macro ends at a line that is `@`, a scheduler job at a line that is
+  `end-job`.  AOS-CX ends it at the next line that ENDS with the one
+  character after `banner motd` / `banner exec` (the character with
+  text after it is the banner's text).  OS10 ends it at a line that
+  holds the delimiter and nothing else, in column 0 -- the delimiter
+  inside a line, or after a space, does not end it.  AOS-S ends a
+  printed banner at the next double quote that no backslash escapes.
+  The text was cut short, or the line that ends the banner was lost:
+  paste the whole of `show running-config` (on OS10, `show
+  running-configuration`).
+- **`aruba_aoscx: line <n> opens a banner with more than one
+  character ...`** and **`dell_os10: line <n> opens a banner with more
+  than its delimiter ...`** -- the banner's line has text after its
+  delimiter, which no printout of `show running-config` (on OS10,
+  `show running-configuration`) has there, so where the banner's text
+  ends cannot be told.  The text was typed or edited by hand: paste
+  the device's own printout.
+- **`aruba_aoss: line <n> ends a banner, and has text after the
+  double quote that ends it`** -- a double quote inside the banner's
+  text ended it early, or the listing lost a line and the next quote is
+  another command's.  Check the banner's lines in the paste; remove
+  them if the device's printout cannot be had.  `detect-deployment`
+  then answers "The lines that state the hardware could not be read;
+  declare the device yourself."
+- **`<codec>: line <n> is outside every banner, and holds ...`**
+  (IOS-XE, AOS-S, OS10) -- the line holds what the device prints to
+  end a banner: on IOS-XE `^C` (or the byte 0x03), on AOS-S an odd
+  number of double quotes, on OS10 the delimiter alone.  The banner
+  the sentence names held the same in its own text, and so ended
+  early: the device printed its real end later, on this line, and the
+  lines between, read as they stand, would be configuration.  A
+  device's printout cannot say where such a banner ends.  Change the
+  banner on the device so that its text does not hold its end, or
+  remove the banner's lines from the text you paste.
+- **`<codec>: line <n> is a line of a banner, or of another block of
+  text, and ends in a character ...`** (the five above, and
+  `arista_eos`) -- a line of the banner ends in a form feed, a
+  vertical tab, a carriage return on its own, or another character
+  that ends a line for the parser and not for the device, which ends
+  a line at a line feed: where the device ends the banner, and so
+  where the configuration goes on, is not where those lines say.  The
+  character came with the banner's text (a banner set through an API
+  or a file can hold one), or the text was changed on the way.  Paste
+  the device's own printout; if it holds the character, change the
+  banner on the device, or remove its lines from the paste.
+
+See the vendor pages, § "A banner is text":
+[`cisco_iosxe.md`](vendors/cisco_iosxe.md#a-banner-is-text),
+[`cisco_nxos.md`](vendors/cisco_nxos.md#a-banner-is-text),
+[`aruba_aoscx.md`](vendors/aruba_aoscx.md#a-banner-is-text),
+[`dell_os10.md`](vendors/dell_os10.md#a-banner-is-text),
+[`aruba_aoss.md`](vendors/aruba_aoss.md#a-banner-is-text).  On AOS-S,
+a banner the parser refuses is not read by `detect-deployment` either
+(see [Detection proposes a device, and says ports are
+missing](#detection-proposes-a-device-and-says-ports-are-missing)).
 
 ### The job says `refused:` — "my config was refused"
 

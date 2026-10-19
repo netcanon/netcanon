@@ -75,7 +75,7 @@ from .._helpers import (
     tags_its_native_vlan,
 )
 from .._input_shape import detect_input_shape
-from .._scanner import first_flat_stanza, scan_stanzas
+from .._scanner import LINE_END_MESSAGE, first_flat_stanza, scan_stanzas
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -561,6 +561,24 @@ def _line_end(line: str) -> str:
     return line[len(kept[0]):] if kept else line
 
 
+#: What a line of a body may end with (:data:`.._scanner.LINE_END_MESSAGE`):
+#: a line feed, printed ``\r\n`` too, or nothing at the end of the text.
+_DEVICE_LINE_ENDS = ("\n", "\r\n", "")
+
+
+def _ends_as_the_switch_ends(line: str, number: int) -> None:
+    """Refuse *line*, numbered *number*, of a body or that opens one,
+    when it ends in another of the characters ``str.splitlines`` ends a
+    line at (a form feed, a vertical tab, a carriage return alone ...):
+    the switch ends a line at a line feed, so its ``EOF`` line, and so
+    where the configuration goes on, is not where these lines say."""
+    if _line_end(line) not in _DEVICE_LINE_ENDS:
+        raise ParseError(
+            LINE_END_MESSAGE.format(codec="arista_eos", line=number, command="show running-config"),
+            path=f"line {number}", snippet="",
+        )
+
+
 def _eof_stripped(line: str) -> bool:
     """Whether *line* is ``EOF``, white space around it allowed."""
     return line.strip() == "EOF"
@@ -587,12 +605,15 @@ def without_bodies(raw: str) -> str:
     words were accounts, VLANs, routes and interfaces.  The line that
     opens a body stays (no reader takes it); each line of the body is
     left as its line end only, so every line keeps its number.  A text
-    with no body is returned as it is.
+    with no body is returned as it is.  A line that opens a body, or is
+    in one, and ends in another character than a line feed is refused
+    (:func:`_ends_as_the_switch_ends`).
 
     Raises:
         ParseError: A body has no ``EOF`` line before the end of the
-            text.  The message names the line that opens it and quotes
-            nothing of the text.
+            text, or a line that opens one or is in one ends in another
+            character than a line feed.  The message names the line and
+            quotes nothing of the text.
     """
     lines = raw.splitlines(keepends=True)
     # Inside a body: how its ``EOF`` line is told (None: in no body).
@@ -613,6 +634,7 @@ def without_bodies(raw: str) -> str:
                 # No body, or no more of them: the line is the config's.
                 pem_owed = 0
         if ends is not None:
+            _ends_as_the_switch_ends(line, index + 1)
             if ends(line):
                 ends = None
             # The line being walked, never one ahead of it.
@@ -622,6 +644,7 @@ def without_bodies(raw: str) -> str:
         opener = _OPENS_A_BODY_RE.match(line.rstrip())
         if opener:
             opened_at = index + 1
+            _ends_as_the_switch_ends(line, opened_at)
             if opener.group("certificate"):
                 pem_owed = 2
             elif opener.group("banner"):

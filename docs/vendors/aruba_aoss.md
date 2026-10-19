@@ -300,6 +300,84 @@ that had them said nothing.
   as a full `show running-config` does: no HPE example of the full
   configuration prints a port's VLAN line in an `interface` stanza.
 
+## A banner is text
+
+The parser reads a `banner motd` (not the `;` Configuration Editor
+lines at the top, which detection reads) as text the switch shows,
+not as lines of the config: each line of it is passed over by every
+reader of the parse -- the Tier-3 rows, the check for a JSON or XML
+paste, the release on the config-editor line and the deployment
+detector (which had taken a banner line `module 1 type <part>` for the
+chassis) included -- and nothing of it is translated.  Detection still
+reads the text as it came.
+
+- **The printed form.**  `show running-config` prints `banner motd`
+  in column 0 and the banner's text as a double-quoted string that
+  starts on that line, right after the quote, and runs across lines,
+  the text's own line breaks printed as line breaks; the delimiter the
+  operator typed is not printed (HPE's K.11.00 figure; a published
+  R.11.121 printout).  A one-line banner is one line (`banner motd
+  "Authorized use only."`).  `\'`, `\n` and `\t` are printed as typed
+  in HPE's 16.06 and 16.10 listing; `\"` and `\\` are in its table of
+  escapes, and are read the same way (inferred).  `banner exec` is read
+  the same way, though no HPE page shows that type (inferred).  `banner
+  motd` with nothing after it opens nothing, nor does `no banner motd`.
+- **Where it ends**: at the first double quote that no backslash
+  escapes -- on the line that opens it, at the end of a line of its
+  text, or alone on a line.  A backslash takes the next character with
+  it, and a backslash at the end of a line takes the line end, nothing
+  of the next line.  The lines between are text, whatever they hold
+  (`!`, `exit`, words of commands).  A printed line of the text may be
+  a longer line wrapped at column 80; inside the quotes that is
+  harmless.
+- **Refused in words**, naming the line and quoting nothing (`parse
+  failed: aruba_aoss: line <n> ...`):
+  - a banner with no end before the end of the text;
+  - text after the quote that ends a printed banner.  The printer
+    writes nothing there, so such text means a quote in the banner's
+    text ended it early (how a switch prints a typed `"` is not
+    established), or that the listing lost a line -- as one of HPE's own
+    guides prints a `banner motd "good morning` whose next quote is in
+    the line after it (inferred);
+  - a line outside every banner, after a printed one, with an odd
+    number of double quotes, counting none a backslash escapes (`is
+    outside every banner, and holds an odd number of double quotes
+    ...`): a text with a line that ends in a quote, or is one, ends
+    there, and the quote the switch printed after the text is left on
+    a later line.  Read as it stands, the lines between were
+    configuration;
+  - a line of a banner that ends in another character than a line feed
+    -- a form feed, a vertical tab, a carriage return on its own (the
+    switch ends a line at a line feed, so where it ends the banner is
+    not where those lines say).
+
+  A detection of the hardware then says the lines that state it could
+  not be read.  Paste the whole of `show running-config`; if the
+  banner's text holds a double quote, change the banner on the switch,
+  or remove its lines from the paste.
+- **Not seen (a known limitation)**: a text that holds a quote at the
+  end of a line, and after it either a line that opens another banner
+  (which takes the switch's quote for its own end) or a last line with
+  an odd number of quotes (which the switch's quote makes even).
+  Nothing is left with an odd number of quotes, and the lines between
+  are read as configuration (measured: an account line there is an
+  account on the target).
+- **The typed form**, in a pasted script: `banner motd %`, the text,
+  and `%` again -- any character but a quote.  It ends at the next
+  occurrence of that character, anywhere (the line that opens it
+  included), and what follows it on its line is discarded (HPE's
+  typed example ends at `penalties!%`).
+
+⚠️ Up to 0.7.7 a banner's lines were read as lines of the config: a
+banner line `password manager user-name ...` became an account with
+privilege 15 on the target, its `vlan` and `ip route` lines became a
+VLAN with an address and a route, and a line `module 1 type <part>`
+the chassis the deployment detector proposed, in jobs that said
+`completed`.  If you translated an AOS-S config with a banner of
+several lines with 0.7.7 or earlier, translate it again, and look in
+the old output for accounts, VLANs and routes the switch does not
+have.
+
 ## Common gotchas
 
 - **Renaming or dropping `Vlan<N>` in the rename modal changes

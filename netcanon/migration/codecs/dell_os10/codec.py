@@ -59,7 +59,7 @@ from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
-from .parse import parse_intent
+from .parse import parse_intent, without_banner_bodies
 from .render import render_intent
 
 
@@ -665,7 +665,9 @@ class DellOS10Codec(CodecBase):
         # Notification-only — never read by any render-side code.  VLT
         # alone appears in 10 of 12 OS10 captures, so this banner fires on
         # most real configs; that is correct behaviour, not a defect.
-        intent.dropped_tier3_sections = detect_tier3_sections_dellos10(raw)
+        # Read from the text the parser read: a banner's lines are text,
+        # not stanzas.
+        intent.dropped_tier3_sections = detect_tier3_sections_dellos10(without_banner_bodies(raw))
         return intent
 
     def render(self, tree: Any) -> str:

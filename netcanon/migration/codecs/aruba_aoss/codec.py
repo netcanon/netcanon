@@ -42,7 +42,7 @@ from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
 from ._svi_absorption import ABSORBS_SVI_INTO_VLAN
-from .parse import _parse_port_list, parse_intent
+from .parse import _parse_port_list, parse_intent, without_banner_bodies
 from .render import _format_port_list, render_intent
 
 # Re-export the internal helpers that tests pin against the codec's
@@ -499,9 +499,11 @@ class ArubaAOSSCodec(CodecBase):
         # Aruba AOS-S uses Cisco-derived ACL grammar (`access-list extended`,
         # `policy-map`, etc.); reuse the IOS-XE CLI detector.  Notification-only.
         # The parser's own rows (a port's VLAN line that names a VLAN no
-        # stanza declares) follow.
+        # stanza declares) follow.  Read from the text the parser read:
+        # a banner's lines are text, not stanzas.
         intent.dropped_tier3_sections = [
-            *detect_tier3_sections_iosxe_cli(raw), *intent.dropped_tier3_sections,
+            *detect_tier3_sections_iosxe_cli(without_banner_bodies(raw)),
+            *intent.dropped_tier3_sections,
         ]
         return intent
 

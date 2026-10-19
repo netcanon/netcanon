@@ -2,11 +2,15 @@
 Aruba AOS-S parser — ``show running-config`` text to ``CanonicalIntent``.
 
 Extracted from ``codec.py`` during the parse/render split per the
-``codecs/README.md`` split-codec convention.  Public function
-(consumed by ``codec.py::ArubaAOSSCodec.parse()``):
+``codecs/README.md`` split-codec convention.  Public functions
+(consumed by ``codec.py`` and ``deployment_detect.py``):
 
 * :func:`parse_intent` — one-shot parse entry: raw text in, fully-
   populated :class:`CanonicalIntent` out.
+* :func:`without_banner_bodies` — the text with every line of each
+  banner emptied, which every reader of the parse is given (the
+  codec's Tier-3 rows and the deployment detector among them; the
+  probe reads the text as it came).
 
 The parser walks the input line by line, from column 0, and hands the
 body of a ``vlan``, ``interface`` or ``vrrp vrid`` stanza to its own
@@ -61,6 +65,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 
 from ...canonical.intent import (
     CanonicalIntent,
@@ -79,6 +84,7 @@ from ...canonical.intent import (
 from ...limits import census, charge, distinct, tick, ticked
 from .._helpers import GrowingIndex, _coalesce_vlan_ids, _mask_to_prefix, _parse_vlan_list
 from .._input_shape import detect_input_shape
+from .._scanner import Body, ends_anywhere, without_text_bodies
 from ..base import ParseError
 from .port_names import one_spelling
 
@@ -1496,6 +1502,163 @@ def _lists_read_from(stanza: str) -> tuple[list[str], list[str]]:
 
 
 # ---------------------------------------------------------------------------
+# Text that is no line of the config
+# ---------------------------------------------------------------------------
+
+#: ``banner motd`` in column 0, and what opens its text.  ``show
+#: running-config`` prints a banner as a quoted string that starts on
+#: this line, right after the quote, and runs across lines, the text's
+#: own line breaks printed as line breaks (HPE's K.11.00 figure; HPE's
+#: 16.06 and 16.10 listing prints the escapes ``\'``, ``\n`` and ``\t``
+#: as they were typed); the delimiter the operator typed is not
+#: printed.  ``banner exec`` is read the same way, though no HPE page
+#: shows it (inferred).  The match ends where the quote, or the typed
+#: delimiter, begins.  ``banner motd`` with nothing after it opens
+#: nothing, nor does ``no banner motd``.
+_OPENS_A_BANNER_RE = re.compile(r"^banner[ \t]+(?:motd|exec)[ \t]+(?=[^ \t])", re.IGNORECASE)
+#: A backslash and the character after it: an escape, which holds no
+#: quote that ends a string.
+_ESCAPE_RE = re.compile(r"\\.")
+
+#: Said of a banner that is still open at the end of the text.  Each
+#: sentence quotes nothing of the text, and names no delimiter: the
+#: delimiter is the operator's.
+UNENDED_BODY_MESSAGE = (
+    "aruba_aoss: line {line} opens a banner that runs to the end of "
+    "this text: `show running-config` prints a banner's text between "
+    "two double quotes (one with a backslash in front of it is the "
+    "text's own), and a banner typed with another delimiter ends at "
+    "the next occurrence of it; this one has no end.  Read as it "
+    "stands, every line after line {line} is the banner's text, and no "
+    "line of it is configuration.  Paste the output of `show "
+    "running-config` whole."
+)
+#: Said of a printed banner whose closing quote has text after it.
+TEXT_AFTER_THE_END_MESSAGE = (
+    "aruba_aoss: line {line} ends a banner, and has text after the "
+    "double quote that ends it.  `show running-config` prints nothing "
+    "there: a double quote in the banner's text ended it early, or the "
+    "listing lost a line, so where the banner really ends cannot be "
+    "told.  Paste the output of `show running-config` whole."
+)
+#: Said of a line outside every banner with an odd number of quotes,
+#: after a printed banner.
+ORPHAN_MESSAGE = (
+    "aruba_aoss: line {line} is outside every banner, and holds an odd "
+    "number of double quotes, counting none that a backslash escapes: "
+    "the text of the banner that line {opened} opens holds a double "
+    "quote too, and so ended before its end, and where it really ends, "
+    "and where the configuration goes on, cannot be told.  Change the "
+    "banner on the switch so that its text holds no double quote, or "
+    "remove the banner's lines from the text you paste."
+)
+
+
+def _closing_quote(text: str, start: int) -> int:
+    """Where the first double quote in *text* at or after *start* is that
+    no backslash escapes, or -1.  A backslash takes the next character
+    with it (HPE's escapes: ``\\"``, ``\\\\``, ``\\n``, ...), the line
+    end included when it is the last character."""
+    at = start
+    quote = text.find('"', at)
+    while quote >= 0:
+        backslash = text.find("\\", at, quote)
+        if backslash < 0:
+            return quote
+        at = backslash + 2
+        if at > quote:
+            # That quote was the backslash's: look past it.
+            quote = text.find('"', at)
+    return -1
+
+
+def _ends_at_a_quote(text: str, number: int, start: int = 0) -> bool:
+    """Whether the quoted banner text ends on *text* (from *start*): at
+    a double quote no backslash escapes.  A line with text after that
+    quote is refused (:data:`TEXT_AFTER_THE_END_MESSAGE`)."""
+    at = _closing_quote(text, start)
+    if at < 0:
+        return False
+    if text[at + 1:].strip():
+        raise ParseError(
+            TEXT_AFTER_THE_END_MESSAGE.format(line=number),
+            path=f"line {number}", snippet="",
+        )
+    return True
+
+
+def _quotes_in(text: str) -> int:
+    """How many double quotes *text* holds once each backslash and the
+    character after it are taken out."""
+    if "\\" in text:
+        text = _ESCAPE_RE.sub("", text)
+    return text.count('"')
+
+
+def _openers() -> Callable[[str, int], Body | None]:
+    """The ``opens`` of one pass (:func:`without_banner_bodies`).
+
+    It remembers the line of the last printed (quoted) banner, and
+    refuses a later line outside every banner that holds an odd number
+    of double quotes (:data:`ORPHAN_MESSAGE`): a stored text that holds
+    a quote at the end of a line ends there, early, and the quote the
+    switch printed after the text is left behind.  Not seen so: a
+    stored text whose part after that quote holds an odd number of
+    quotes on its last line (the printed quote makes it even), or opens
+    another banner, which then takes that quote for its end.
+    """
+    quoted_at = 0
+
+    def opens(text: str, number: int) -> Body | None:
+        nonlocal quoted_at
+        match = _OPENS_A_BANNER_RE.match(text)
+        if match is None:
+            if quoted_at and '"' in text and _quotes_in(text) % 2:
+                raise ParseError(
+                    ORPHAN_MESSAGE.format(line=number, opened=quoted_at),
+                    path=f"line {number}", snippet="",
+                )
+            return None
+        start = match.end()
+        if text[start] == '"':
+            # The printed form: the text starts after the quote, on this
+            # line, and may end on it (``banner motd "Authorized use
+            # only."``).
+            quoted_at = number
+            return Body(_ends_at_a_quote, ended=_ends_at_a_quote(text, number, start + 1))
+        # The typed form, in a pasted script (``banner motd %``): the
+        # text ends at the next occurrence of the delimiter, on this
+        # line or a later one, and what follows it on its line is
+        # discarded.
+        delimiter = text[start]
+        return Body(ends_anywhere(delimiter), ended=delimiter in text[start + 1:])
+
+    return opens
+
+
+def without_banner_bodies(raw: str) -> str:
+    """*raw* with every line of each banner made empty, keeping its
+    number (:func:`.._scanner.without_text_bodies`).
+
+    A printed banner (:data:`_OPENS_A_BANNER_RE` and a double quote)
+    ends at the first double quote that no backslash escapes: on the
+    line that opens it, at the end of a line of its text, or alone on a
+    line.  The lines between are text, whatever they hold.  A banner
+    typed with another delimiter ends at the next occurrence of it,
+    anywhere (:func:`.._scanner.ends_anywhere`).
+
+    Raises:
+        ParseError: A banner has no end before the end of the text; a
+            printed one has text after its closing quote; a line of one
+            ends in another character than a line feed; or a line
+            outside every banner, after a printed one, holds an odd
+            number of double quotes (:data:`ORPHAN_MESSAGE`).  Each
+            message names the line and quotes nothing of the text.
+    """
+    return without_text_bodies(raw, _openers(), UNENDED_BODY_MESSAGE, codec="aruba_aoss")
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -1506,13 +1669,22 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
     Raises:
         ParseError: On empty input or input that clearly isn't AOS-S
-            CLI (XML or JSON).
+            CLI (XML or JSON); or if a banner cannot be told from the
+            configuration (:func:`without_banner_bodies`).
     """
     if not raw.strip():
         raise ParseError(
             "aruba_aoss: empty input",
             snippet="",
         )
+    # A banner is text, never lines of the config: every reader below --
+    # the shape check, the release and the deployment's lines among
+    # them -- is given the text with each banner's lines empty, each
+    # keeping its number.
+    # ``given``: the length of the text as it came, for the debug line
+    # at the end.
+    given = len(raw)
+    raw = without_banner_bodies(raw)
     # Shape sanity — Round-4.2 shared helper tolerates leading
     # shell-echo / banner framing on real captures.
     shape = detect_input_shape(raw)
@@ -2110,6 +2282,6 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         len(intent.lags),
         len(intent.local_users),
         "yes" if intent.snmp else "no",
-        len(raw),
+        given,
     )
     return intent

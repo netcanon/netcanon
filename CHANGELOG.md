@@ -40,6 +40,26 @@ timestamp if your timezone matters for an audit.
   0.7.7 or earlier, look in the old output for accounts the switch
   does not have before it reaches a device.
 
+- **A banner's lines were read as configuration by the IOS-XE CLI,
+  NX-OS, AOS-CX, OS10 and AOS-S parsers, and a banner line became an
+  account with privilege 15 on the target.**  A config of any of the
+  five whose banner held a line, in the platform's own grammar, for an
+  account with privilege 15 (`username <name> privilege 15 ...` on
+  IOS-XE, `role network-admin` on NX-OS, `group administrators` on
+  AOS-CX, `role sysadmin` on OS10, `password manager user-name ...` on
+  AOS-S) came out with that account onto all but one of the public
+  codecs, and with the banner's VLAN, interface address and route,
+  many of the jobs saying `completed`.  No committed banner holds such
+  a line.  Each of the five now reads a banner as text, ended where
+  its vendor ends it (Fixed, below), and refuses a banner it cannot
+  tell from the configuration: one whose line ends in a form feed or
+  another character a device does not end a line at (EOS's own pass
+  too), and, on IOS-XE, AOS-S and OS10, one whose text held the end
+  the device printed after it -- either of which, read, made a banner
+  an account again.  If you translated a config of any of them that
+  has a banner with 0.7.7 or earlier, look in the old output for
+  accounts the device does not have before it reaches a device.
+
 - **Reading a pasted config could take time that grew with the square of
   it.**  Five shapes, each in shipped code.  Patterns that began
   `^\s` and were applied to the whole text walked, from every line start,
@@ -433,6 +453,118 @@ timestamp if your timezone matters for an audit.
   body ended by `EOF`, with 0.7.7 or earlier, translate it again, and
   look in the old output for accounts, interfaces, VLANs and routes
   the switch does not have.
+
+- **An IOS-XE CLI banner, and every other text written between two
+  delimiters, was read as lines of the config** (Security, above).
+  Each line of such a body is now emptied, keeping its number, before
+  any reader of the parse runs -- the Tier-3 rows, the check for a
+  JSON or XML paste and the stanzas a keyword opens (`interface range
+  ...`) included -- and the lines that open and end it are emptied
+  too; nothing of a banner is translated.  The bodies are `banner`
+  with a type (`exec`, `incoming`, `login`, `motd`, `prompt-timeout`,
+  `slip-ppp`, `config-save`) or with none (a MOTD banner), `aaa
+  authentication banner` and `fail-message`, `menu <name> title` and
+  `prompt`, `busy-message <host>` (from a third-party book; that
+  IOS-XE takes it is not established), and -- at any indentation, so
+  that a text whose indentation was lost reads them too -- a line's
+  `vacant-message` and `refuse-message` and a web authentication
+  parameter map's `banner text` and `banner title`.
+  The delimiter is the first character after the keyword that is not
+  white space, compared by its case; the body ends at its next
+  occurrence anywhere -- on the line that opens it (`banner motd
+  ^CWelcome^C`), in the middle of a later line, or at its start (an
+  IOSv capture prints the closing `^C` after the text of the body's
+  last line) -- and what follows it on that line is discarded, as
+  Cisco says the device does.  The two characters `^C`, which IOS
+  prints as the delimiter of every `banner` (the printouts show it;
+  Cisco does not say), are one delimiter: a `^` alone in the body is
+  text (Batfish and ciscoconfparse2 end the body there, which is how
+  the device would read the printout if it were loaded again; what it
+  holds ends at `^C` -- inferred).  A `macro name <name>` runs to a
+  line that is `@`: its commands run when the macro is applied, and
+  are not configuration in force (that IOS-XE prints a macro so is
+  inferred).  Refused in words, naming a line and quoting nothing
+  (`parse failed: cisco_iosxe_cli: line <n> ...`): a body with no end
+  before the end of the text; a line of a body that ends in another
+  character than a line feed; and a line outside every body that holds
+  `^C` after a banner opened with it -- a banner typed with another
+  delimiter whose text held `^C` ended there, and the `^C` the device
+  printed after the text was left behind.  Detection still reads the
+  text as it came.  Every committed IOS-XE input parses to the tree it
+  gave before.
+- **An NX-OS banner and a scheduler job were read as lines of the
+  config** (Security, above).  `banner motd` and `banner exec` take
+  the first character after the type that is not white space as the
+  delimiter, as typed (NX-OS prints it as it was typed, any
+  character), and the body ends at its next occurrence anywhere, the
+  line that opens it included (`banner motd #Welcome#`); what follows
+  it on its line is discarded.  A `scheduler job name <name>` runs to a
+  line that is `end-job`, in column 0: 9.2(2) prints the job's
+  commands in column 0, and they run when the job runs.  Each such
+  body is emptied before any reader runs, the Tier-3 rows included;
+  one with no end, or with a line that ends in another character than
+  a line feed, is refused in words.  Every committed NX-OS input parses
+  to the tree it gave before.
+- **An AOS-CX banner was read as lines of the config** (Security,
+  above).  `banner motd` and `banner exec` are printed with one
+  character after the type -- usually `!` -- and the body on the lines
+  below; the switch prints the stored text and then the character, so
+  the body ends at the first later line that ENDS with it, alone or at
+  the end of the text's last line, and the character with text after
+  it on its line is the text's own (`WARNING! Authorised access only`).
+  The body is emptied before any reader runs, the Tier-3 rows
+  included.  Refused in words, naming the line and quoting nothing: a
+  banner with no end; more than one character after the type (no
+  printout has it); and a line of a banner that ends in another
+  character than a line feed.  Every committed AOS-CX input parses to
+  the tree it gave before.
+- **An AOS-S banner was read as lines of the config** (Security,
+  above).  `show running-config` prints a banner as a double-quoted
+  string that starts on the `banner motd "` line and runs across
+  lines, with the text's own line breaks; it now ends at the first
+  quote that no backslash escapes (HPE's escapes, `\"` and `\\` among
+  them; its listing prints them as typed), on the line that opens it,
+  at the end of a line of its text, or alone on a line, and every
+  line of it is emptied before any reader runs -- the Tier-3 rows,
+  the release on the config-editor line and the deployment detector
+  included (a line `module 1 type <part>` in a banner had replaced the
+  chassis the config named).  `banner exec` is read the same way.  A
+  banner typed with another delimiter in a pasted script (`banner motd
+  %`) ends at its next occurrence anywhere, what follows it on its line
+  discarded.
+  A banner with no end, a printed one with text after its closing
+  quote (a quote in the text ended it early, or the listing lost a
+  line, as one of HPE's own does), a line of one that ends in another
+  character than a line feed, and a line after a printed banner with
+  an odd number of quotes (a banner whose text held a quote at the end
+  of a line ended there, and the quote the switch printed after the
+  text was left behind) are refused in words; a detection of the
+  hardware then says the lines that state it could not be read.  Every
+  committed AOS-S input parses to the tree it gave before.
+- **An OS10 banner was read as lines of the config** (Security,
+  above).  `banner motd` and `banner login` are printed with the two
+  characters `^C` after the type (a generated config has one other
+  character), and the body ends at a line that is the delimiter and
+  nothing else, in column 0 (Dell: "a line that contains only the
+  delimiter character"); it is emptied before any reader runs, the
+  Tier-3 rows included.  `banner motd disable` and `banner login
+  disable` open nothing.  A banner with no end, one with more than its
+  delimiter after the type, one with a line that ends in another
+  character than a line feed, and a line outside every banner that is
+  the delimiter alone of a banner opened before it (a text with such a
+  line ended there, and the line the switch printed after the text was
+  left behind; `!`, the comment mark, excepted) are refused in words.
+  Every committed OS10 input parses to the tree it gave before.
+- **A banner line that ended in a form feed, a vertical tab, a lone
+  carriage return or another character Python ends a line at, and a
+  device does not, ended the banner early** -- on the five parsers
+  above and in EOS's own pass (Security, above): the parsers cut lines
+  where Python does, so the lines after such a character were read as
+  configuration, an account among them.  A line that opens a body, is
+  in one or ends one with such a line end is now refused in words,
+  naming the line (`parse failed: <codec>: line <n> is a line of a
+  banner, or of another block of text, and ends in a character ...`).
+  No committed input has one.
 
 - **An EOS config without its indentation was read as far less than
   it holds, and the job said nothing of it.**  The parser reads a
@@ -2830,12 +2962,46 @@ timestamp if your timezone matters for an audit.
   distinguisher and route targets are not read, in a job that does
   not say so.  As printed, every header stands at the section's own
   depth.
-- **Whether a banner is read as configuration by the AOS-CX, AOS-S,
-  IOS-XE CLI, NX-OS and OS10 parsers is not measured.**  Their
-  banners are written between delimiters (`^C`, `#`, `!`, a quote),
-  not ended by a line `EOF`, and committed captures of each hold one.
-  The EOS parser passes over every body that runs to `EOF` (Security,
-  above); each of the others is a change of its own.
+- **An AOS-CX banner whose text holds its delimiter at the end of a
+  line ends there.**  The switch prints a banner's text with the
+  delimiter after it, alone on a line or at the end of the last line,
+  and nothing in the printout tells a text line that ends with that
+  character (`WARNING!` alone, under the usual `!`) from the end -- nor,
+  since `!` is also the comment mark, the line the switch printed after
+  the text; the switch itself, loading the printout again, would end
+  the banner there too (inferred from HPE's input rule; HPE says
+  nothing of a banner in a loaded CLI file).  The lines after it are
+  then read as configuration (measured: an account line there is an
+  account on the target).
+- **A banner whose text holds the end the device prints after it is
+  refused only where that end is left outside every banner.**  On
+  IOS-XE (`^C`), OS10 (a line of the delimiter alone) and AOS-S (a
+  quote), the banner ends early, and the device's own end is left on a
+  later line, which is refused.  Not seen: such a text whose part after
+  its own end opens another banner, which takes the device's end for
+  its own, or, on AOS-S, whose quotes are paired so that no later line
+  has an odd number; nor, on OS10, a banner delimited by `!`, OS10's
+  comment mark.  The lines between are read as configuration
+  (measured: an account line there is an account on the target).
+- **An IOS `macro auto execute` body is read as configuration.**  No
+  printed form of it was found (Cisco shows it typed, ended by `}`);
+  `macro name`, which ends at `@`, is read as text.  Nor is an Easy VPN
+  server group's indented `banner` (under `crypto isakmp client
+  configuration group`) passed over: no Cisco page that shows its form
+  was found.
+- **An IOS XR banner's lines are read as configuration (measured).**
+  The IOS XR parser does not pass over a `banner` body: a body line
+  `username <name>` with ` group root-lr` under it is an account with
+  privilege 15 on the target, in jobs that say `completed`.  It is a
+  change of its own.  Whether the parsers of the other grammars
+  (Junos, VyOS, FortiOS, RouterOS) read a multi-line free-text value
+  as configuration is not measured.
+- **AOS-S `banner exec` is read as `banner motd` is**, though no HPE
+  page shows the type; and whether an OS10 banner ends at its
+  delimiter in the middle of a line is not established (Dell names "a
+  line that contains only the delimiter character"; the parser reads
+  the rest as text, the safe side, and a banner that never ends so is
+  refused).
 - **An EOS account with `nopassword` is written to Junos as a login
   user with no authentication statement**, in a job that says
   `completed`; what Junos then allows such a user is not established

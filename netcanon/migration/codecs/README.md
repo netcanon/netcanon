@@ -903,6 +903,34 @@ the policy locally:
   address there is the gateway.  (`cisco_nxos`, `aruba_aoscx` and
   `dell_os10` read their headers themselves.)
 
+* **`netcanon/migration/codecs/_scanner.py::without_text_bodies`** --
+  `without_text_bodies(raw, opens, unended, *, codec, command=...)`:
+  the text with every line of each body of text in it (a banner, a
+  macro, a scheduler job) made empty, each keeping its number, so that
+  no reader of the parse takes a banner's words for configuration (a
+  banner line `username <name> privilege 15 ...` was an account on the
+  target).  The loop is shared: it walks the text a line at a time,
+  cut where `str.splitlines` cuts it (so a line's number is the
+  parser's), and copies it only when a line is emptied.  Where a body
+  opens and ends is the parser's own, from its vendor, handed in as
+  `opens(text, number)`, which returns a `Body(ends, ended)` or
+  `None`; `ends_anywhere(delimiter)` is the rule "at the next
+  occurrence of the delimiter, anywhere in a line".  Refused, each in
+  a sentence that names the line and quotes nothing: a body still open
+  at the end of the text (the parser's `unended`), a line that opens,
+  is in or ends a body and ends in another character than a line feed
+  (`LINE_END_MESSAGE`, with `codec` and `command` filled in: a device
+  ends a line at a line feed, Python at a form feed too), and whatever
+  the parser's callables refuse.  The IOS-XE CLI, NX-OS, AOS-CX, OS10
+  and AOS-S parsers each wrap it as `without_banner_bodies(raw)` and
+  call it first in `parse_intent` (before the JSON/XML check) and
+  again where `codec.parse` reads the Tier-3 rows; the AOS-S
+  deployment detector calls it too.  A new parser of a platform with
+  banners does the same, from its vendor's rule.  The EOS parser keeps
+  its own loop (`without_bodies`), which refuses the same line ends: a
+  certificate there opens its body on a later line than the one that
+  names it.
+
 * **LAG-name helpers (location note)** — two LAG-name helpers exist
   but are NOT shared cross-codec utilities and do NOT live in
   `netcanon/migration/canonical/transforms.py`: `_canonical_lag_name`

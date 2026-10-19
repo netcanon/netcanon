@@ -62,7 +62,7 @@ from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
-from .parse import parse_intent
+from .parse import parse_intent, without_banner_bodies
 from .render import render_intent
 
 
@@ -478,9 +478,10 @@ class CiscoIOSXECLICodec(CodecBase):
         # (ACLs, NAT, QoS, route-maps, crypto).  Notification-only —
         # never read by any render-side code.  After them, the rows
         # the parser itself made: the header of a stanza a keyword
-        # opens (``interface range ...``).
+        # opens (``interface range ...``).  Read from the text the
+        # parser read: a banner's lines are text, not stanzas.
         intent.dropped_tier3_sections = list(dict.fromkeys([
-            *detect_tier3_sections_iosxe_cli(raw),
+            *detect_tier3_sections_iosxe_cli(without_banner_bodies(raw)),
             *intent.dropped_tier3_sections,
         ]))
         return intent

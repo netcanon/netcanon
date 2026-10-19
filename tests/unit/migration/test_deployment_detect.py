@@ -27,6 +27,7 @@ import pytest
 
 from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration import deployment_detect
+from netcanon.migration.codecs.aruba_aoss import deployment_detect as aoss_deployment_detect
 from netcanon.migration.codecs.aruba_aoss.deployment_detect import detect_deployment
 from netcanon.migration.codecs.base import ParseError
 from netcanon.migration.codecs.registry import get_codec
@@ -858,6 +859,55 @@ class TestWhereALineEnds:
         """A ``member`` line under another stanza is not a stack member."""
         text = _stanza('member 1 type "JL322A"') + 'vlan 1\n   member 2 type "JL320A"\n   exit\n'
         assert [m.id for m in detect_deployment(text).members] == [1]
+
+
+class TestAMotdStatesNoHardware:
+    """A ``banner motd`` text is the switch's to show, and the detector
+    reads the text as the parser does, its lines empty: a line of it
+    shaped like a hardware line states nothing.  Read, the line below
+    replaced the chassis the config-editor line and the ``module 1``
+    line name, with a note that it was used."""
+
+    TEXT = (
+        '; JL322A Configuration Editor; Created on release #WC.16.07.0003\nhostname "sw"\n'
+        'banner motd "Welcome\nmodule 1 type jl324a\nflexible-module A type JL083A\n"\n'
+        'module 1 type jl322a\nvlan 1\n   name "DEFAULT_VLAN"\n   untagged 1-48\n   exit\n'
+    )
+
+    @staticmethod
+    def _check(text: str) -> None:
+        detected = detect_deployment(text)
+        assert _members(detected) == [(None, "JL322A", {})]
+        assert detected.evidence == ["; JL322A Configuration Editor", "module 1 type jl322a"]
+        assert detected.notes == []
+
+    def test_a_line_of_the_motd_is_not_read(self) -> None:
+        self._check(self.TEXT)
+
+    def test_the_check_fails_when_the_detector_reads_the_motd(self, monkeypatch) -> None:
+        monkeypatch.setattr(aoss_deployment_detect, "without_banner_bodies", lambda raw: raw)
+        with pytest.raises(AssertionError):
+            self._check(self.TEXT)
+
+    def test_a_motd_with_no_end_is_answered_in_words(self, caplog) -> None:
+        """The parser refuses it, naming its line; the proposal says the
+        hardware lines could not be read, and the log names the kind of
+        error only."""
+        text = (
+            '; JL322A Configuration Editor; Created on release #WC.16.07.0003\n'
+            'banner motd "Welcome\nmodule 1 type jl324a\n'
+        )
+        with pytest.raises(ParseError):
+            detect_deployment(text)
+        with caplog.at_level(logging.WARNING, logger="netcanon.migration.deployment_detect"):
+            proposal = propose_deployment(AOSS, text, REGISTRY)
+        assert proposal.deployment is None and not proposal.stated
+        assert proposal.notes == [
+            "The lines that state the hardware could not be read; declare the device yourself.",
+        ]
+        (record,) = caplog.records
+        assert record.getMessage() == "deployment detector for aruba_aoss raised ParseError"
+        assert "jl324a" not in caplog.text
 
 
 class TestThePartAsPrinted:

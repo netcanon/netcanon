@@ -72,7 +72,7 @@ import re
 
 from ....models.port_inventory import DetectedDeployment, DetectedMember
 from ...limits import ticked
-from .parse import _ends_the_stanza, _leaves
+from .parse import _ends_the_stanza, _leaves, without_banner_bodies
 
 __all__ = ["detect_deployment"]
 
@@ -420,10 +420,19 @@ def detect_deployment(raw_text: str) -> DetectedDeployment | None:
         ``fabric`` is the config's own word for the stanza it was read
         from, ``"stacking"`` or ``"vsf"``, and ``""`` when there is no
         such stanza.
+
+    Raises:
+        ParseError: A ``banner motd`` cannot be told from the
+            configuration (:func:`.parse.without_banner_bodies`): its
+            lines are not read, and nor is anything after them.
     """
     # Lines as the AOS-S parser cuts them (``str.splitlines``), so the
-    # two cannot disagree about where a line ends.
-    text = "\n".join(raw_text.splitlines())
+    # two cannot disagree about where a line ends; and a ``banner
+    # motd``'s lines empty, as the parser reads them: a ``banner
+    # motd``'s text states no hardware.  (One the parser cannot tell
+    # from the configuration raises; a proposal answers that the
+    # hardware lines could not be read.)
+    text = "\n".join(without_banner_bodies(raw_text).splitlines())
     evidence: list[str] = []
     said: list[str] = []
     banners = list(dict.fromkeys(match.group("id") for match in _BANNER_RE.finditer(text)))
