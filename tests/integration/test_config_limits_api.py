@@ -47,6 +47,11 @@ class below:
 The texts are small on purpose: a few hundred bytes to a few tens of
 kilobytes.  What each expands to is the point.
 
+The test client is put in front of a server that takes an answer as
+it is sent (``_Served``), as uvicorn does and as the test client no
+longer does; the refusals made after a deadline are also read from
+uvicorn itself, on a socket.
+
 The mechanism itself is tested in ``tests/unit/migration/test_limits.py``.
 """
 
@@ -70,6 +75,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
@@ -115,8 +121,66 @@ def trunk_all(ports: int, vlans: int) -> str:
     return "\n".join(out) + "\n"
 
 
+def _taken_as_sent(app: Any) -> Any:
+    """*app*, behind a server that takes each message of an answer as
+    it is sent and hands it to the client as the client reads: a
+    buffer with no bound."""
+
+    async def served(scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await app(scope, receive, send)
+            return
+        taken: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        async def hand_on() -> None:
+            while (message := await taken.get()) is not None:
+                await send(message)
+
+        async def take(message: dict[str, Any]) -> None:
+            taken.put_nowait(message)
+
+        handing = asyncio.ensure_future(hand_on())
+        try:
+            await app(scope, receive, take)
+        except BaseException:
+            handing.cancel()
+            raise
+        taken.put_nowait(None)
+        await handing
+
+    return served
+
+
+class _Served(TestClient):
+    """The test client, in front of a server that takes what it is
+    handed.
+
+    An answer made after its request's deadline -- the refusal of a
+    request that waited for its turn all that time, or ran out of it
+    in a parser -- is sent without waiting for the client: a few
+    hundred bytes, which a server takes into its buffer at once
+    (``_InItsTime``).  Since Starlette 1.9 the test client takes no
+    piece of a body until its client reads it, and the client reads
+    only once the head has come, so such a refusal was abandoned
+    unsent and these tests read an empty body.  uvicorn takes a write
+    into its buffer while that is below its high-water mark
+    (``TestOneAtATimeUnderSmall.test_and_on_a_socket`` holds that on
+    a real socket); this gives the test client a buffer, as it had
+    before.  The tests that use it are of what an answer SAYS.  What
+    a server does with an answer nobody reads is tested on a socket
+    (``TestAnAnswerNobodyReads``) and against a server the test plays
+    (``TestTheMiddlewareAlone``).
+    """
+
+    def __init__(self, app: FastAPI) -> None:
+        super().__init__(_taken_as_sent(app))
+        # The application itself, which the tests read routes from and
+        # call directly; its lifespan needs no buffer.
+        self.app = app
+
+
 def _client(settings: Settings, limits: str) -> TestClient:
-    return TestClient(create_app(settings.model_copy(update={"config_limits": limits})))
+    return _Served(create_app(settings.model_copy(update={"config_limits": limits})))
 
 
 @pytest.fixture()
@@ -795,6 +859,36 @@ class TestOneAtATimeUnderSmall:
             "refused cisco_iosxe_cli -> juniper_junos before any stage: at_once limit of the small limits "
             "(asked 2, limit 1)"
         )
+
+    def test_and_on_a_socket(
+        self, test_settings: Settings, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Each refusal above is made at its request's deadline and
+        sent after it, without waiting for the client.  The test client
+        is given a buffer to take it (``_Served``); this is the server
+        Netcanon runs, on a socket, where every surface's refusal
+        reaches a client that reads it and none is abandoned."""
+        monkeypatch.setitem(L.PROFILES, "small", replace(L.SMALL, seconds=0.2))
+        sentence = _busy("0.2")
+        with (
+            _on_a_socket(test_settings) as port,
+            _a_request_at_work(),
+            caplog.at_level(logging.WARNING),
+            httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30) as web,
+        ):
+            for path in sorted(TAKES_CONFIG_TEXT):
+                resp = web.post(path, **TAKES_CONFIG_TEXT[path])
+                assert resp.content, f"{path}: an empty answer"
+                if path == "/api/v1/migration/detect-deployment":
+                    assert resp.status_code == 200
+                    assert resp.json()["notes"] == ["Nothing was proposed: " + sentence]
+                elif path in ("/api/v1/sanitize", "/api/v1/migration/detect"):
+                    assert resp.status_code == 503 and resp.headers["Retry-After"] == "5", path
+                    assert resp.json() == {"detail": "Refused: " + sentence}, path
+                else:
+                    assert resp.status_code == 200 and resp.headers["X-Netcanon-Job-Status"] == "failed", path
+                    assert resp.json()["error"] == "refused: " + sentence, path
+        assert not [record for record in caplog.records if "was abandoned" in record.getMessage()]
 
     def test_the_sentence_under_the_shipped_limits(self) -> None:
         """The test above shortens the wait; this is the sentence a
