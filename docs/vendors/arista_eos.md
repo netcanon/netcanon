@@ -186,6 +186,92 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
 
 ## Common gotchas
 
+- **Paste the config as the switch prints it, with its
+  indentation.**  This parser tells which lines belong to a stanza by
+  their indentation.  A text with no line indented but a comment, the
+  lines of a stanza it reads (`interface`, `vlan <id>`, `vrf instance`
+  / `vrf definition`, `ip dhcp pool`, `router bgp`) at the left
+  margin, is refused: the job is `failed`, its error `parse failed:
+  arista_eos: this text has no indentation. ...`, naming the first
+  line that opens a stanza with the line after it at the margin.  It
+  quotes nothing of the text.  Indentation is a space or a tab: a
+  no-break space in front of a line (a paste out of a web page) is
+  none, and the stanza readers take such a line for one at the
+  margin, so a text indented that way is refused too.  What the
+  switch itself makes of such a text
+  Arista does not say.  Typed or pasted, a line runs in the deepest
+  open mode that accepts it, and otherwise in a parent mode (Arista's
+  manual, with its transcripts), and Arista's own config generator
+  deploys a config through eAPI as a flat stream of commands, its
+  indentation and `!` lines removed: so the switch most likely reads a
+  flat text by the mode each command leaves open (inferred -- strongly
+  for a configuration session and eAPI, less so for a file loaded with
+  `copy` or `configure replace`; whether a file's indentation is
+  consulted when it is there is not established).  Reading it that
+  way would need the words each mode takes -- `router bgp` takes
+  `vlan` and `vrf`, `group interface` takes `interface` -- and no
+  Arista page lists them, so Netcanon refuses the text rather than
+  guess where its lines belong.  A text in which only some lines lost
+  their indentation is read by its indentation.  ⚠️ Up to 0.7.7 a
+  text with no indentation was read: a `vlan <id>` block under
+  `router bgp` became a second VLAN of that id, and every interface
+  address, description, VLAN membership, LAG, VXLAN VNI, route
+  distinguisher and route target was lost, in jobs that said
+  `completed` or were `partial` for another reason; none said a line
+  was not read.  Make such a translation again from `show
+  running-config`.
+- **A banner is text, never configuration.**  `banner login` and
+  `banner motd` are printed with their body as it was typed and a line
+  `EOF` in column 0 after it (so Arista's own pyeapi reads a printed
+  banner): the body ends there, and a line ` EOF` with white space in
+  front of it is the banner's text.  The body is the switch's to show,
+  and Netcanon translates no banner.  The same holds for every other
+  body that Arista's tools end at an `EOF` line, indented or not: a
+  `comment` typed in a mode, RCF `code unit <name>`, a multi-line
+  `action bash`, and after `protocol https certificate` a certificate
+  and then its key -- a shape Arista's config generator prints, so
+  each of those two bodies is taken for one only where its first line
+  begins as PEM text does (`-----BEGIN`), and a printout with one
+  body, or none, is read as before.  Each line of such a body is
+  passed over by every reader of the parse, the Tier-3 rows and the
+  check for a JSON or XML paste included (detection still reads the
+  text as it came).  A body with no `EOF` line before the end of the
+  text is refused (`parse failed: arista_eos: line <n> opens a block
+  of text ...`): read, every line after it would be the body's text.
+  ⚠️ Up to 0.7.7 a banner's lines were read as lines of the config: a
+  line `username <name> privilege 15 nopassword` in a banner became
+  an administrator account with no secret on the target, and a
+  banner's `vlan`, `interface`, `ip route` and `ip access-list` lines
+  became VLANs, interfaces, routes and a Tier-3 row, in jobs that
+  said `completed`.  If you translated an EOS config with a banner (or
+  any other body ended by `EOF`) with 0.7.7 or earlier, translate it
+  again, and look in the old output for accounts, interfaces, VLANs
+  and routes the switch does not have.
+- **`router bgp` is read by relative depth, not by its width.**  The
+  section's own lines are at the shallowest indentation of any of its
+  lines; a `vrf <name>` or `vlan <id>` block's header has to stand
+  there, and its lines deeper -- its body is every line deeper than
+  it, up to the next line at the section's own depth.  So tabs, or two
+  or four spaces a level, read as EOS's own three do, and a `!` inside
+  `router bgp` closes no block.  A header deeper than another line of
+  the section's own (a hand edit) opens no block, and its lines land
+  on nothing.  An interface or a VLAN stanza takes every indented line
+  as its own, at any depth: EOS places a line by the mode it is typed
+  in, not by its indentation, so no depth tells a submode's line from
+  the interface's -- a line this parser reads (`shutdown`,
+  `description`, ...) typed inside an interface's submode (`tx-queue`,
+  `evpn ethernet-segment`) is read as the interface's (no Arista
+  printout shows one there).  An empty line closes nothing anywhere (a
+  paste that doubled every line end reads as the config).  ⚠️ Up to
+  0.7.7 the `router bgp` reader counted EOS's own widths exactly, so a
+  config indented otherwise lost its MAC-VRFs, route distinguishers
+  and route targets, and an empty line ended the interface, VLAN or
+  `router bgp` it was in, its addresses and descriptions lost after
+  it.  If you translated an EOS config indented with tabs or another
+  width, or with empty lines in it, with 0.7.7 or earlier, translate
+  it again: the old output may lack its MAC-VRFs, route
+  distinguishers and route targets, or its addresses and
+  descriptions.
 - **A trunk's allowed list means what it says.**  A trunk with no
   `switchport trunk allowed vlan` line is read as a trunk of EVERY
   VLAN — the EOS default, which EOS states by the absence of the
