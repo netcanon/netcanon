@@ -467,46 +467,47 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 6 cells that populate local users — 7 account
-      records, none dropped, none renamed.  The account arrives; see the two
-      keys below for what it arrives WITHOUT.
+    disposition: lossy
+    reason: >
+      1 of 7 accounts arrive across the 6 cells that populate local users; the
+      list shrinks on 5 of them. The 6 accounts that vanish carry 6 AOS-CX `AQB`
+      device-keyed ciphertext. RouterOS can consume a genuine plaintext password
+      only (it hashes the password itself); anything else is refused with a
+      review comment naming the account, in place of the account. Up to 0.7.7
+      such an account was written as `/user add` with no `password=`, which
+      RouterOS gives a blank password; a refused secret now drops the whole
+      account, as on every other target. The survivors are 1 carrying 1
+      plaintext password. Recorded `lossy` rather than `unsupported`: which
+      account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [aoscx-routeros-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on all 7 account records.  The AOS-CX role string is routed
-      through RouterOS group names on render and read back under RouterOS's
-      vocabulary, so `administrators` returns as `admin` and `operators` as
-      `operator`.  The privilege TIER is carried — the render puts the
-      administrator in `group=full` and the operator in `group=read` — but the
-      literal role does not survive, and `read` is a strictly read-only group.
-      Recorded `lossy` rather than `unsupported` because the account and its
-      tier both arrive.  Re-check which group each migrated account lands in
-      before handing the box to an operations team; neither matrix declares
-      anything for local users, so nothing but this measurement is warning you.
+      On the 1 account that survives, the role changes: `administrators` ->
+      `admin` on 1. Mechanism: RouterOS carries a built-in group (`full` /
+      `write` / `read`) chosen from the privilege level, and the parser reads
+      the group back. Accounts refused for their secret vanish with their role
+      and are counted once, under `local_users[].name`; this key is about the
+      value on accounts that survive.
     references: [aoscx-routeros-surface]
 
   "local_users[].hashed_password":
     disposition: lossy
     reason: >
-      Drifts on all 7 account records, and the round-trip shows something the
-      drift count alone hides.  AOS-CX stores the user secret in its own
-      encrypted form — an `AQB…`-prefixed ciphertext blob of roughly 180
-      characters, neither a crypt(3) hash nor anything RouterOS can consume.
-      The renderer does not drop it: on 7 of 7 cells it echoes the blob
-      VERBATIM into a RouterOS `password=` field, which is a plaintext
-      credential slot, and the re-parse then recovers no password at all.  Two
-      consequences, both worth acting on.  First, every migrated account
-      arrives without a working credential — set passwords on the target
-      before cutover or the accounts are unusable.  Second, the rendered
-      artifact carries operator-traceable key material in a plaintext field,
-      so treat a rendered RouterOS config from an AOS-CX source as a secret
-      and store it accordingly.  The ciphertext is deliberately NOT quoted
-      here or in the reference note; a document that reproduces the value it
-      describes defeats its own redaction.
+      1 typed password is written as `password=`, which the RouterOS parser does
+      not read back (an export never prints a user's password), so the
+      comparison sees none; the output carries it. 6 accounts are refused for
+      their secret (6 AOS-CX `AQB` device-keyed ciphertext) and vanish with it;
+      that loss is recorded once, under `local_users[].name`. Recorded `lossy`
+      because the value changes on surviving accounts. Up to 0.7.7 such an
+      account was written as `/user add` with no `password=`, which RouterOS
+      gives a blank password; a refused secret now drops the whole account, as
+      on every other target. No secret value is quoted here or in the reference
+      doc; only shapes and counts.
     references: [aoscx-routeros-surface]
 
   # -- Fabric ---------------------------------------------------------------

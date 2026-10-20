@@ -211,6 +211,11 @@ and 100E physical hardware.
 - **`ENC <base64>` encrypted secrets** — round-trip through the
   canonical `hashed_password` field with format-preservation; never
   decoded to plaintext.
+- **An admin whose password cannot be carried is left out** as a
+  target, with a `# ... review:` line in its place.  ⚠️ Up to 0.7.7
+  the admin was written without its password (`edit`, `set accprofile
+  "super_admin"`) — an admin with no password; read old outputs for
+  an `edit` after a `review:` line.
 - **Declaring a FortiGate as the source device** — with both devices
   declared (in the Interface rename modal or on the API), a correctly
   declared FortiGate is still

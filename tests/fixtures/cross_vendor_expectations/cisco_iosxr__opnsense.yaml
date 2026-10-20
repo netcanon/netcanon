@@ -446,48 +446,50 @@ per_field_expectation:
   # is left for a codec change rather than fixed here.
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 9 cells that populate local users — 14 of 14
-      records survive with the name intact.  The account is created on the
-      target; what it arrives without is covered by the two keys below.
+    disposition: unsupported
+    reason: >
+      No account arrives: 0 of 14 across all 9 cells that populate local users.
+      The stored secrets on this corpus: 6 MD5 crypt (Cisco type 5), 5 Cisco
+      type-7 reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt. OPNsense
+      can consume bcrypt (`$2y$` / `$2b$`) or SHA-512 crypt (`$6$`) in
+      `<password>`, or a genuine plaintext password; anything else is refused
+      with a review comment naming the account, in place of the account. Up to
+      0.7.7 such an account was written as a `<user>` element with no
+      `<password>`; a refused secret now drops the whole account, as on every
+      other target. Recorded `unsupported` rather than `lossy` because the
+      record vanishes entirely (#436) and a `lossy` warning would understate a
+      target with no local accounts. It is a property of the source's secret
+      form, not a gap in the OPNsense user model: an account whose secret
+      OPNsense can consume would still migrate. Create a console admin on the
+      target out of band before cutover, then re-create every account with a
+      native credential.
     references: [iosxr-opnsense-surface]
 
   "local_users[].role":
-    disposition: lossy
-    reason: >
-      Drifts on 14 of 14 user records across all 9 populated cells, and the
-      value is REWRITTEN rather than dropped, which is what makes this lossy
-      rather than unsupported: the IOS-XR task-group collapses into
-      OPNsense's two-tier model, `root-lr` -> `admin` on 13 records and
-      `operator` -> `user` on 1.  The account keeps a role and stays usable,
-      so `lossy` (warn, stay compatible) is the truthful signal — but any
-      finer IOS-XR task-group grant is gone, and a `root-lr` operator lands
-      with full firewall admin.  Review the privilege of every migrated
-      account.
+    disposition: good
+    note: >
+      No account arrives on this pair (see `local_users[].name`), so there is no
+      role on the target to compare. Recorded `good` rather than `lossy`: the
+      only drift on this key is the parent record-count collapse, which the
+      audit attributes to `local_users[].name` and reclassifies STRUCTURAL_ONLY
+      here. Accounts refused for their secret vanish with their role and are
+      counted once, under `local_users[].name`.
     references: [iosxr-opnsense-surface]
 
   "local_users[].hashed_password":
-    disposition: lossy
-    reason: >
-      Drifts on 14 of 14 user records, and the split is the operationally
-      important part.  11 records LOSE the secret entirely: they carry IOS-XR
-      type-5 (`5 $1$...` md5crypt) or short non-crypt forms, and the OPNsense
-      renderer refuses them by design — `_TARGET_ACCEPTS["opnsense"]` in
-      `netcanon/migration/_user_secrets.py` admits only plaintext and bcrypt,
-      and a non-migratable hash is replaced by an XML review comment inside
-      `<user>` naming the source algorithm, with `<password>` omitted.  Those
-      accounts arrive without a working credential and must have a password
-      set on the target before cutover.  The remaining 3 records carry IOS-XR
-      type-10 (`secret 10 $6$...`) and keep the secret, but re-labelled: the
-      round-tripped value is the source value plus a 7-character `bcrypt:`
-      prefix, with the digest body unchanged.  Recorded `lossy` rather than
-      `unsupported` because the user record itself never vanishes (#436) —
-      the account migrates, the credential does not.
-      No hash value, salt or digest is quoted here or in the reference note:
-      per `AGENTS.md`, `$1$` / `$6$`-form secrets are operator-traceable even
-      though they are one-way, so only lengths, algorithm identifiers and
-      structural prefixes are recorded.
+    disposition: good
+    note: >
+      No secret is written in a form OPNsense cannot consume. 14 accounts are
+      refused for their secret (6 MD5 crypt (Cisco type 5), 5 Cisco type-7
+      reversible obfuscation, 3 IOS-XR type-10 SHA-512 crypt) and vanish with
+      it; that loss is recorded once, under `local_users[].name`. No account
+      with a stored secret arrives, so there is no value to compare. Recorded
+      `good` rather than `lossy`: the only drift on this key is the parent
+      record-count collapse, which the audit attributes to `local_users[].name`
+      and reclassifies STRUCTURAL_ONLY here. Up to 0.7.7 such an account was
+      written as a `<user>` element with no `<password>`; a refused secret now
+      drops the whole account, as on every other target. No secret value is
+      quoted here or in the reference doc; only shapes and counts.
     references: [iosxr-opnsense-surface]
 
   radius_servers:

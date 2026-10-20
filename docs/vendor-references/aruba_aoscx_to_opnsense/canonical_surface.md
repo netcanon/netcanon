@@ -281,6 +281,9 @@ ifType at all — 157 of 157 records come back empty. The YAML records `lossy`
 
 ## Identity: roles and credentials
 
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the OPNsense render wrote such an account as a `<user>` element with no `<password>`.  Measured after the change: **1 of 7** local accounts arrive across the 6 cells that populate users; 6 are refused for a secret OPNsense cannot consume (6 AOS-CX `AQB` device-keyed ciphertext), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__opnsense.yaml`.
+
 **Roles are remapped, not lost.** The AOS-CX `administrators` role renders to
 the OPNsense `admins` group and re-parses as `admin`; `operators` maps to
 `user` (measured on `kitchen_sink`, which carries both). The privilege intent

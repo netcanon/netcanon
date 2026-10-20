@@ -144,6 +144,9 @@ they are recorded `not_applicable` on that measurement, not on a declaration.
 
 ### 1. Credential material lands in RouterOS's *cleartext* password field
 
+<!-- account-goes-with-its-secret -->
+> **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the RouterOS render wrote such an account as `/user add` with no `password=`, which RouterOS gives a blank password.  Measured after the change: **1 of 17** local accounts arrive across the 13 cells that populate users; 16 are refused for a secret RouterOS cannot consume (16 SHA-512 crypt (`$6$`)), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/vyos__mikrotik_routeros.yaml`.
+
 <!-- snmpv3-key-gate-468 -->
 > **Update 2026-09-17 (#468) — the SNMPv3 USM behaviour described in this document has changed.**  `authentication-password=` takes the operator's PASSPHRASE and RouterOS derives the localised USM key from it, so a value that is ALREADY a key cannot be re-derived.  This source supplies a VyOS `encrypted-password` blob, localised against the source agent's engine ID.  Such a key is now refused: no v3 user line, and a `review:` comment names the user.  Measured after the change: **0 of 2** USM users arrive across the 2 cells that carry one, 2 refused (2 localised).  Any statement below that the key is carried verbatim, round-trips, or merely needs re-keying on the target describes the render before this change.
 

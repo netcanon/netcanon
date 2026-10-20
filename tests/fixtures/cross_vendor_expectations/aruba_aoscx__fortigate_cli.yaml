@@ -509,47 +509,49 @@ per_field_expectation:
   # -- Identity -------------------------------------------------------------
 
   "local_users[].name":
-    disposition: good
-    note: >
-      Usernames preserved on all 6 cells that populate local users, rendering
-      as `config system admin / edit "<name>"`.  The account arrives; see
-      `local_users[].role` and `local_users[].hashed_password` for what it
-      arrives with.
+    disposition: lossy
+    reason: >
+      1 of 7 accounts arrive across the 6 cells that populate local users; the
+      list shrinks on 5 of them. The 6 accounts that vanish carry 6 AOS-CX `AQB`
+      device-keyed ciphertext. FortiOS can consume its own `ENC` ciphertext or a
+      genuine plaintext password; anything else is refused with a review comment
+      naming the account, in place of the account. Up to 0.7.7 such an account
+      was written as an `edit` with its access profile and no `set password` --
+      an admin with no password; a refused secret now drops the whole account,
+      as on every other target. The survivors are 1 carrying 1 plaintext
+      password. Recorded `lossy` rather than `unsupported`: which account
+      survives is decided by its secret form, and accounts with a consumable
+      secret do arrive. Before cutover, list the source accounts, search the
+      render for `review:` comments, and re-create each refused account on the
+      target with a fresh password.
     references: [aoscx-fortigate-surface]
 
   "local_users[].role":
     disposition: lossy
     reason: >
-      Drifts on all 6 populated cells, and the mechanism is a deliberate
-      remap rather than a loss: the AOS-CX `administrators` role renders to the
-      FortiOS `super_admin` accessprofile.  It is scoped, not blanket —
-      `operators` passes through unchanged, measured on the kitchen sink, which
-      carries both roles.  aruba_aoscx also declares
-      `/local-users/user/privilege-level` lossy in its own right.
-      The privilege intent is preserved and arguably correct, but two things
-      follow: any downstream tooling keyed on the literal role string will stop
-      matching, and `super_admin` on a FortiGate is unrestricted access.
-      Review the mapping before the account becomes production.
+      On the 1 account that survives, the role changes: `administrators` ->
+      `super_admin` on 1. Mechanism: FortiOS carries an access profile:
+      privilege 15 renders `super_admin`, anything else the canonical role (or
+      `prof_admin`), and the parser reads the profile back as the role. Accounts
+      refused for their secret vanish with their role and are counted once,
+      under `local_users[].name`; this key is about the value on accounts that
+      survive.
     references: [aoscx-fortigate-surface]
 
   "local_users[].hashed_password":
     disposition: lossy
     reason: >
-      Drifts on all 6 cells that populate local users.  AOS-CX stores the user
-      secret in its own encrypted form — an `AQB...`-prefixed ciphertext blob —
-      and the FortiOS render re-emits that same blob behind a `set password
-      ENC` marker; measured, the canonical string grows by exactly the 12
-      characters of the `fortios:ENC ` prefix on every cell and is otherwise
-      unchanged.
-      So nothing is deleted, which is why this is `lossy` and not
-      `unsupported` — but the bytes surviving is not the credential surviving.
-      A FortiGate decrypts `ENC` material with FortiOS-internal key material,
-      so an ArubaOS-CX ciphertext presented as a FortiOS `ENC` blob is not a
-      password any FortiGate can authenticate.  Every migrated account arrives
-      without a working credential: set passwords on the target before cutover,
-      or you will be locked out of the box you just migrated.
-      The ciphertext is deliberately NOT quoted here — it is operator-traceable
-      key material even though it is encrypted (AGENTS.md).
+      1 typed password is written `set password ENC <password>` and read back
+      tagged `fortios:ENC`: that claims FortiOS ciphertext the value is not, so
+      the account does not hold the password it was given (the defect #533
+      mends). 6 accounts are refused for their secret (6 AOS-CX `AQB`
+      device-keyed ciphertext) and vanish with it; that loss is recorded once,
+      under `local_users[].name`. Recorded `lossy` because the value changes on
+      surviving accounts. Up to 0.7.7 such an account was written as an `edit`
+      with its access profile and no `set password` -- an admin with no
+      password; a refused secret now drops the whole account, as on every other
+      target. No secret value is quoted here or in the reference doc; only
+      shapes and counts.
     references: [aoscx-fortigate-surface]
 
   # -- Fabric ---------------------------------------------------------------

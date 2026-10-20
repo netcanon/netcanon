@@ -473,16 +473,20 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Cisco type-9 (``$9$`` scrypt) and type-8 (``$4$`` PBKDF2-
-      SHA256) hashes are NOT bcrypt and OPNsense will reject them
-      on apply.  Type-5 (``$1$`` MD5-crypt) might work via PAM
-      legacy but is not the default.  Operators must reset
-      passwords on the OPNsense target.  Privilege number (1-15)
-      collapses to OPNsense's binary admin / non-admin via group
-      membership: privilege >= 15 → ``<groupname>admins</groupname>``,
-      otherwise ``<groupname>users</groupname>`` (or similar).  Both
-      codecs pass hashes through verbatim; loss surfaces in the
-      validation report.
+      1 of 11 accounts arrive across the 7 cells that populate local users; the
+      list shrinks on 6 of them. The 10 accounts that vanish carry 5 Cisco
+      type-9 scrypt, 3 MD5 crypt (Cisco type 5), 1 Cisco type-7 reversible
+      obfuscation, 1 Cisco type-8 PBKDF2. OPNsense can consume bcrypt (`$2y$` /
+      `$2b$`) or SHA-512 crypt (`$6$`) in `<password>`, or a genuine plaintext
+      password; anything else is refused with a review comment naming the
+      account, in place of the account. Up to 0.7.7 such an account was written
+      as a `<user>` element with no `<password>`; a refused secret now drops the
+      whole account, as on every other target. The survivors are 1 carrying 1
+      plaintext password. Recorded `lossy` rather than `unsupported`: which
+      account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [opnsense-users, cisco-user-security]
 
   radius_servers:

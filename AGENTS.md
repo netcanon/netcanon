@@ -358,6 +358,17 @@ tests use these exclusively — never CSS classes or element structure.  See
   well the secret was classified.  A new user-rendering codec goes in
   `_USER_RENDERING_TARGETS` in that test file, which fails for any render
   path that skips the gate.
+  And the gate is only half of a refusal: **the account goes with its
+  secret.**  FortiOS, RouterOS and OPNsense called the gate, wrote the
+  review line, and then wrote the account without its password --
+  `edit` and an access profile, `add group=full`, a `<user>` element --
+  and a RouterOS user added with no password has a blank one: on the
+  committed captures, 93 accounts onto FortiOS and 99 onto RouterOS
+  were written with no password, in jobs that reported the review
+  line and nothing else.  Every check asked whether the SECRET reached
+  the output; none asked whether the ACCOUNT did.
+  `test_a_refused_secret_takes_its_account_with_it` reads every
+  target's output for the account's name outside a comment.
   And never let a TAG decide the algorithm when the tag cannot be trusted:
   a vendor envelope (`junos:`) or a parser that tags everything one way
   (OPNsense `bcrypt:` over a `$6$` body) must defer to the payload's own

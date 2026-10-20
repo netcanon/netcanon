@@ -372,21 +372,19 @@ per_field_expectation:
   local_users:
     disposition: lossy
     reason: >
-      Arista's numeric ``privilege 0..15`` plus ``role
-      <network-admin|network-operator|...>`` two-axis model versus
-      RouterOS's named groups (``full`` / ``write`` / ``read`` /
-      custom) requires operator-curated mapping.  Default mapping:
-      privilege 15 + role network-admin -> full, privilege 1 + role
-      network-operator -> read, privilege 7 -> write.  Password
-      hash formats are NOT cross-compatible: Arista's modern
-      ``secret sha512 $6$...`` (Linux-crypt SHA-512), legacy
-      ``secret 5 $1$...`` (MD5), and ``secret 7 ...`` (Cisco
-      type-7 reversible obfuscation) are all Arista-only on the
-      wire; RouterOS stores passwords in a vendor-private format
-      that is not surfaced in /export at all.  The codec passes the
-      Arista-side hash through verbatim into a RouterOS ``comment=``
-      so operator has it during re-key, but operator MUST set
-      passwords on the RouterOS target after migration.
+      3 of 12 accounts arrive across the 6 cells that populate local users; the
+      list shrinks on 6 of them. The 9 accounts that vanish carry 7 SHA-512
+      crypt (`$6$`), 2 MD5 crypt (Cisco type 5). RouterOS can consume a genuine
+      plaintext password only (it hashes the password itself); anything else is
+      refused with a review comment naming the account, in place of the account.
+      Up to 0.7.7 such an account was written as `/user add` with no
+      `password=`, which RouterOS gives a blank password; a refused secret now
+      drops the whole account, as on every other target. The survivors are 3
+      with no stored secret. Recorded `lossy` rather than `unsupported`: which
+      account survives is decided by its secret form, and accounts with a
+      consumable secret do arrive. Before cutover, list the source accounts,
+      search the render for `review:` comments, and re-create each refused
+      account on the target with a fresh password.
     references: [arista_user_security, mikrotik_user]
 
   radius_servers:

@@ -987,6 +987,19 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.local_users:
         out.append("config system admin")
         for user in tree.local_users:
+            # A secret FortiOS cannot take drops the WHOLE account: an
+            # admin written without its password is an admin with none
+            # (the review line used to sit inside the ``edit``, with the
+            # access profile after it).
+            if user.hashed_password and not is_migratable(
+                user.hashed_password, "fortigate_cli",
+            ):
+                algorithm, _payload = classify_hash(user.hashed_password)
+                out.append("    " + format_review_comment(
+                    user.name, algorithm, comment_syntax="hash",
+                    target_label="FortiOS",
+                ))
+                continue
             out.append(f'    edit "{user.name}"')
             # Hash-portability gate (Issue #1a from
             # tests/fixtures/real/user_smoke_findings.md).  Foreign
@@ -999,30 +1012,22 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # FortiOS would either reject at commit time or, worse,
             # parse as garbage.  Now we consult the shared
             # :mod:`netcanon.migration._user_secrets` policy and
-            # emit a comment-form ``review:`` line instead, naming
-            # the source algorithm so the operator knows exactly
-            # which user to reset.  Native fortigate hashes tagged
-            # ``fortios:<blob>`` still pass through unchanged.
+            # emit a comment-form ``review:`` line instead (above,
+            # in place of the account), naming the source algorithm so
+            # the operator knows exactly which user to reset.  Native
+            # fortigate hashes tagged ``fortios:<blob>`` still pass
+            # through unchanged.
             if user.hashed_password:
-                if is_migratable(user.hashed_password, "fortigate_cli"):
-                    alg, _, raw = user.hashed_password.partition(":")
-                    if alg == "fortios":
-                        out.append(f"        set password {raw}")
-                    elif raw:
-                        out.append(f"        set password ENC {raw}")
-                    else:
-                        out.append(
-                            f"        set password ENC "
-                            f"{user.hashed_password}"
-                        )
+                alg, _, raw = user.hashed_password.partition(":")
+                if alg == "fortios":
+                    out.append(f"        set password {raw}")
+                elif raw:
+                    out.append(f"        set password ENC {raw}")
                 else:
-                    algorithm, _payload = classify_hash(
-                        user.hashed_password,
+                    out.append(
+                        f"        set password ENC "
+                        f"{user.hashed_password}"
                     )
-                    review_comment = format_review_comment(
-                        user.name, algorithm, comment_syntax="hash", target_label="FortiOS"
-                    )
-                    out.append(f"        {review_comment}")
             # Map canonical privilege back to accprofile.
             accprofile = (
                 "super_admin" if user.privilege_level == 15

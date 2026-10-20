@@ -831,15 +831,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # auth bypass for anyone who has read access to the
             # original config.  When the canonical carries a
             # plaintext password, emit it; when foreign-hashed,
-            # skip the field AND emit a ``# password manager …
-            # -- review:`` comment immediately above the ``add``
-            # line so the operator has a deterministic signal that
-            # a hash existed and must be reset manually.  Without
-            # the review comment the user appears to have been
-            # created with no password, with no hint that one was
-            # ever set.  Surfaced by OPNsense supergate smoke test
-            # (issues #13 + #18 in
+            # emit a ``# password manager … -- review:`` comment IN
+            # PLACE of the ``add`` line, so the operator has a
+            # deterministic signal that a hash existed and the user
+            # must be re-created.  Surfaced by OPNsense supergate
+            # smoke test (issues #13 + #18 in
             # ``tests/fixtures/real/user_smoke_findings.md``).
+            # ⚠️ The ``add`` line used to stay, without its password:
+            # "If not specified, it is left blank" (RouterOS ``/user``
+            # reference), so a ``group=full`` user with an EMPTY
+            # password.  Refusing a secret drops the whole account.
             parts = ["add", f"group={group}", f"name={user.name}"]
             if user.hashed_password and is_migratable(
                 user.hashed_password, "mikrotik_routeros",
@@ -866,6 +867,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         target_label="RouterOS",
                     )
                 )
+                continue
             lines.append(" ".join(parts))
         lines.append("")
 
