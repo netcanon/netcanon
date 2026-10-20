@@ -50,6 +50,7 @@ import re
 import shlex
 from typing import ClassVar
 
+from ..._radius_secrets import FORTIOS_ENVELOPE
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
@@ -890,7 +891,13 @@ def _apply_user_radius(
         next
 
     The ``ENC`` prefix is preserved on the canonical key so a lossless
-    round-trip back to FortiGate reconstructs the original command.
+    round-trip back to FortiGate reconstructs the original command, and
+    the whole ``ENC <blob>`` is carried behind ``FORTIOS_ENVELOPE``: it
+    is encrypted under this FortiGate's own key.  ``set secret <secret>``
+    without ``ENC`` is the secret as typed (FortiOS takes it so, and
+    prints it encrypted), and carries no envelope.  Until 2026-10 every
+    secret was put behind the envelope, and the RADIUS policy refused a
+    typed secret on every other target.
     """
     for edit in ticked(block.edits):
         server_tokens = edit.settings.get("server")
@@ -899,8 +906,10 @@ def _apply_user_radius(
         host = server_tokens[0]
         secret_tokens = edit.settings.get("secret")
         key = ""
-        if secret_tokens:
-            key = f"fortios:{' '.join(secret_tokens)}"
+        if secret_tokens and secret_tokens[0] == "ENC":
+            key = f"{FORTIOS_ENVELOPE}{' '.join(secret_tokens)}"
+        elif secret_tokens:
+            key = " ".join(secret_tokens)
         auth_port = 1812
         acct_port = 1813
         port_tokens = edit.settings.get("radius-port")

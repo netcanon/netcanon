@@ -1069,6 +1069,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                             server.host,
                             comment_syntax="hash",
                             target_label="FortiGate",
+                            secret=server.key,
                         )
                     )
             if server.auth_port and server.auth_port != 1812:

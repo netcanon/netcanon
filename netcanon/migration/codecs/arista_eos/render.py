@@ -34,11 +34,12 @@ from typing import Any
 
 from ..._naming import sanitise_hostname
 from ..._radius_secrets import (
-    format_review_comment as format_radius_review_comment,
-)
-from ..._radius_secrets import (
+    EOS_ENVELOPE,
     radius_secret_is_migratable,
     unwrap_native_secret,
+)
+from ..._radius_secrets import (
+    format_review_comment as format_radius_review_comment,
 )
 from ..._user_secrets import (
     classify_hash,
@@ -129,6 +130,21 @@ def _cidr_to_dotted_mask(cidr: str) -> tuple[str, str]:
     except (ipaddress.AddressValueError, ValueError):
         return "", ""
     return str(net.network_address), str(net.netmask)
+
+
+def _radius_key_text(key: str) -> str:
+    """What follows ``key`` for a secret the RADIUS policy let through.
+
+    A value behind ``EOS_ENVELOPE`` goes back as the device wrote it
+    (``7 <blob>``).  A secret as typed is written as it is, unless it
+    begins with a type token and white space, which the parser reads as
+    a type: then ``0`` says that what follows is the secret.
+    """
+    if key.startswith(EOS_ENVELOPE):
+        return key[len(EOS_ENVELOPE):]
+    if re.match(r"^\d+[a-z]?\s", key):
+        return f"0 {key}"
+    return unwrap_native_secret(key)
 
 
 def _normalise_lag_name_to_arista(name: str) -> str | None:
@@ -418,9 +434,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 if radius_secret_is_migratable(
                     server.key, tree.source_vendor, "arista_eos",
                 ):
-                    parts.append(
-                        f'key {unwrap_native_secret(server.key)}'
-                    )
+                    parts.append(f"key {_radius_key_text(server.key)}")
                 else:
                     refused = True
             out.append(" ".join(parts))
@@ -430,6 +444,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         server.host,
                         comment_syntax="exclamation",
                         target_label="Arista EOS",
+                        secret=server.key,
                     )
                 )
         out.append("!")

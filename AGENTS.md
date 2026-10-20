@@ -412,7 +412,28 @@ tests use these exclusively — never CSS classes or element structure.  See
   default must not become a false-positive blast: classify by envelope
   and PROVENANCE, so a plaintext secret that merely CONTAINS a colon
   (`my:secret`) stays migratable while an unregistered envelope from an
-  unvouched source is refused.
+  unvouched source is refused.  (3) A gate reads what the parsers hand
+  it, and is no better than their reading.  The IOS-XE CLI parser kept
+  a `key 7` type IN the value (`7 <blob>`) and dropped it on the
+  one-line form, the EOS parser read `key 7 <blob>` as the secret `7`,
+  and the AOS-S parser read `encrypted-key "<blob>"` as the plaintext
+  `<blob>`: none carried an envelope, so the gate called each a typed
+  secret and every target wrote the stored form into its
+  literal-secret slot, in jobs that said `completed`.  And the
+  FortiGate parser put EVERY `set secret` behind `fortios:`, so a
+  secret typed without `ENC` was refused everywhere.  What a value is
+  is said by the grammar it was read from, which only its parser has:
+  each parser envelopes its platform's stored form (`iosxe:`, `eos:`,
+  `aoss:`, `fortios:`) and only that platform's renderer writes it
+  back.  **The blind spot:** the gate's tests built their trees with
+  the envelope already on, or parsed the FortiOS `ENC` form alone, so
+  every value they handed it was already right -- and a parser test
+  pinned the IOS-XE value `7 <blob>` as the key.  Guarded by
+  `tests/unit/migration/test_a_radius_key_says_its_form.py`, which
+  sends each stored form of each grammar through its parser onto
+  every target and reads the output as text and with the target's
+  parser; and the envelope-registry test now fails for a snippet its
+  parser reads no keyed server from.
 - **Never** hand text nobody vouches for to code whose cost you have not
   measured.  A config is whatever was pasted, a request carries megabytes
   of it, and a pattern at work does not let the server's other threads
