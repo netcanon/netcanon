@@ -85,7 +85,13 @@ from .._helpers import (
     without_keyword_stanzas,
 )
 from .._input_shape import detect_input_shape
-from .._scanner import Body, ends_anywhere, scan_stanzas, without_text_bodies
+from .._scanner import (
+    Body,
+    ends_anywhere,
+    first_flat_stanza,
+    scan_stanzas,
+    without_text_bodies,
+)
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -639,6 +645,22 @@ ORPHAN_MESSAGE = (
     "characters, or remove the banner's lines from the text you paste."
 )
 
+#: Said of a text with no indentation whose stanzas have their bodies
+#: at the left margin (:func:`_refuse_a_flat_text`).  It quotes
+#: nothing of the text, and gives this parser's reason, not the
+#: device's: what the device makes of such a text is not established
+#: here.
+FLAT_TEXT_MESSAGE = (
+    "cisco_iosxe_cli: this text has no indentation.  No line but a comment "
+    "begins with white space.  `show running-config` prints the lines of a "
+    "stanza indented under it, and this parser tells which lines "
+    "belong to a stanza by their indentation, so it cannot tell where "
+    "a stanza of this text ends: line {line} opens one, and the line "
+    "after it is at the left margin.  "
+    "Paste the output of `show running-config` as the device prints "
+    "it, with its indentation."
+)
+
 
 def _is_the_macros_end(text: str, number: int) -> bool:
     """Whether *text* is ``@``, white space after it allowed."""
@@ -707,6 +729,39 @@ def without_banner_bodies(raw: str) -> str:
     return without_text_bodies(raw, _openers(), UNENDED_BODY_MESSAGE, codec="cisco_iosxe_cli")
 
 
+def _refuse_a_flat_text(raw: str) -> None:
+    """Raise :class:`ParseError` for a text with no indentation whose
+    stanzas have their bodies at the left margin.
+
+    This parser reads a stanza's lines by their indentation.  Without it, it
+    read a body line as a line of the top level: every interface address,
+    description and VLAN membership was lost, and every VLAN name, and no
+    job said a line was not read.  Reading such a text by the mode each
+    command leaves open, as the CLI is typed into, would need every mode's
+    words, which no vendor page lists; what the device itself makes of such
+    a text is not established here.  So it is refused, in this parser's
+    words.  The shape is :func:`.._scanner.first_flat_stanza`'s, with this
+    parser's headers (:data:`_STANZA_HEADERS`): a text with SOME lines
+    dedented is read by its indentation.  Any white space in front of a line
+    is indentation, a no-break space among them: the readers ask
+    ``str.isspace`` and ``\\s``, and read a text so indented as it was
+    printed.
+
+    Raises:
+        ParseError: For a text of that shape.  The message gives the
+            number of the line that opens the first such stanza and
+            quotes nothing of the text.
+    """
+    # The module's tuple, read at the call: a test that changes it
+    # changes what is asked.
+    flat_at = first_flat_stanza(raw, _STANZA_HEADERS, any_white_space=True)
+    if flat_at is not None:
+        raise ParseError(
+            FLAT_TEXT_MESSAGE.format(line=flat_at),
+            path=f"line {flat_at}", snippet="",
+        )
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse IOS-XE ``show running-config`` output into a
     :class:`CanonicalIntent`.
@@ -715,7 +770,8 @@ def parse_intent(raw: str) -> CanonicalIntent:
         ParseError: If the input doesn't look like IOS config at all
             (e.g. XML or JSON); or if a banner, or another body of text,
             cannot be told from the configuration
-            (:func:`without_banner_bodies`).
+            (:func:`without_banner_bodies`); or if the text has no
+            indentation (:func:`_refuse_a_flat_text`).
     """
     if not raw.strip():
         raise ParseError(
@@ -744,6 +800,9 @@ def parse_intent(raw: str) -> CanonicalIntent:
             f"XML input.",
             snippet=raw.lstrip()[:120],
         )
+    # A text with no indentation is refused in words, before any
+    # reader takes a stanza's body for lines of the top level.
+    _refuse_a_flat_text(raw)
 
     intent = CanonicalIntent(
         source_vendor="cisco_iosxe",
@@ -2082,6 +2141,18 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
 #    key [7] <secret>
 _RADIUS_SERVER_HEADER_RE = re.compile(
     r"^radius\s+server\s+(\S+)", re.IGNORECASE,
+)
+
+#: The headers of the stanzas this parser reads by their indentation
+#: (``interface``, ``vlan``, ``vlan configuration``, ``vrf definition`` /
+#: ``ip vrf``, ``ip dhcp pool``, ``radius server``).
+#: In a text with no indentation, one of them followed by a line that
+#: is none of them, no ``!``, no comment, no ``exit`` and no ``end``
+#: has its body at the left margin
+#: (:func:`.._scanner.first_flat_stanza`).
+_STANZA_HEADERS = (
+    _IFACE_RE, _VLAN_RE, _VLAN_CONFIG_RE, _VRF_DEFINITION_RE,
+    _DHCP_POOL_HEADER_RE, _RADIUS_SERVER_HEADER_RE,
 )
 _RADIUS_ADDRESS_RE = re.compile(
     r"^\s+address\s+ipv4\s+(\d+\.\d+\.\d+\.\d+)"

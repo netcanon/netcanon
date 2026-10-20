@@ -210,7 +210,10 @@ Provenance + per-fixture detail in
 - **`cml_saumur_iosxe1712_pvrstp.txt`** — CML lab on IOS-XE 17.12
   exercising `spanning-tree pathcost method long` etc.
 - **`cml_basic_forwarding_iosv_r1_ospf.txt`** — IOSv 15.x with OSPF
-  + dot1Q sub-interfaces
+  + dot1Q sub-interfaces, published with every line at column 0: the
+  parser refuses it (§ "A config without its indentation"), and it is
+  kept under `tests/fixtures/refused/cisco_iosxe/`, in no coverage
+  figure
 - **`batfish_iosxe_basic_vrrp.txt`** — Batfish public corpus VRRP
   basic grammar (Apache-2.0).  Two-router HA pair with VRRP
   groups on GigabitEthernet — exercises the classic single-line
@@ -330,6 +333,35 @@ Tier-3 row, in jobs that said `completed`.  If you translated an
 IOS-XE config with a banner with 0.7.7 or earlier, translate it again,
 and look in the old output for accounts, interfaces, VLANs and routes
 the device does not have.
+
+## A config without its indentation
+
+The parser reads a stanza's lines by their indentation: `show running-config`
+prints an interface's lines, a VLAN's, a VRF's, a DHCP pool's and a RADIUS
+server's indented under it.  A text with NO indentation -- no
+line but a comment begins with white space, and a stanza is followed
+by a line at the left margin that is no other stanza, no `!` and no
+`exit` or `end` -- is refused in words (`parse failed: cisco_iosxe_cli: this
+text has no indentation. ...`), naming the line of the first such
+stanza and quoting nothing of the text.  The parser cannot tell where
+a stanza of such a text ends, and a guess would put a line where the
+device does not; what the device itself makes of such a text is not
+established here.  Any white space in front of a line is indentation,
+a no-break space included, as the parser's readers take it: a config
+copied out of a web page is read.  A text in which only SOME lines
+lost their indentation is read by its indentation, each dedented line
+as a line of the top level.
+
+One committed capture is such a text: an IOSv config published in a
+lab topology file with every line at column 0.  It is refused, and
+kept under `tests/fixtures/refused/cisco_iosxe/` as the evidence for
+the refusal, outside the corpus every other check reads; it had been
+read as interfaces with no address, no `shutdown` and no dot1Q tag.
+
+⚠️ Up to 0.7.7 such a text was read: every interface address, description and VLAN membership was lost,
+and the VLAN names, in a job that did not say
+so.  If you translated an IOS-XE config that had lost its indentation,
+translate it again from `show running-config` as the device prints it.
 
 ## Common gotchas
 

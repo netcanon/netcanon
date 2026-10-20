@@ -202,13 +202,16 @@ If VLANs are missing on the target, check:
   `exit` or an `end` (see [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md)
   § "Where a stanza ends").  Release 0.7.7 and earlier read such an
   AOS-S config as VLANs with no port and no address, in a job that
-  said `completed`: translate it again.  An IOS XR or EOS config
-  with no indentation is refused, not read (see [The job says `parse
-  failed:` for an IOS XR config](#the-job-says-parse-failed-for-an-ios-xr-config)
-  and [for an EOS config](#the-job-says-parse-failed-for-an-eos-config)).
-  The AOS-CX, IOS-XE CLI, NX-OS and OS10 parsers still read a
-  config pasted without its indentation as stanzas with almost nothing
-  in them, and the job does not say so: paste the config as the device
+  said `completed`: translate it again.  An IOS XR, EOS, AOS-CX,
+  IOS-XE CLI, NX-OS or OS10 config with no indentation is refused, not
+  read (see [The job says `parse failed:` for an IOS XR
+  config](#the-job-says-parse-failed-for-an-ios-xr-config), [for an
+  EOS config](#the-job-says-parse-failed-for-an-eos-config) and [for
+  an AOS-CX, IOS-XE CLI, NX-OS or OS10
+  config](#the-job-says-parse-failed-for-an-aos-cx-ios-xe-cli-nx-os-or-os10-config)).
+  Release 0.7.7 and earlier read such an AOS-CX, IOS-XE CLI, NX-OS or
+  OS10 config as stanzas with almost nothing in them, in a job that
+  did not say so: translate it again, from the config as the device
   prints it.
 - On AOS-S, a row `interface <port> tagged vlan <ids> (VLAN <ids>:
   declared by no vlan stanza above the line; not translated)`: a
@@ -747,10 +750,6 @@ and FortiOS, with the unit's NUMBER as its VLAN id.  The causes:
 * the source platform's parser reads no tag for a sub-interface.
   That is every sub-interface of an AOS-CX or Dell OS10 config,
   whatever its `encapsulation dot1q` line says;
-* the parser did not read the line that states it.  An IOS-XE
-  CLI, NX-OS, AOS-CX or OS10 config pasted without its indentation
-  is read as stanzas with nothing in them (an IOS XR or EOS one is
-  refused): the unit's address is not in the output either;
 * the stanza states none.
 
 Look the tag up in the source and set it on the target by hand.
@@ -1236,6 +1235,31 @@ number and quote nothing of the text.
 
 See [`vendors/arista_eos.md`](vendors/arista_eos.md) § "Common
 gotchas".
+
+### The job says `parse failed:` for an AOS-CX, IOS-XE CLI, NX-OS or OS10 config
+
+- **`<codec>: this text has no indentation. ...`** (`aruba_aoscx`,
+  `cisco_iosxe_cli`, `cisco_nxos`, `dell_os10`) -- no line of the text
+  but a comment begins with white space, and the line it names opens a
+  stanza with a line after it at the left margin.  The parser tells
+  which lines belong to a stanza by their indentation, and without it
+  cannot tell where a stanza ends: an `ip route` after an empty NX-OS
+  `vrf context` may be the VRF's.  (What the device itself makes of
+  such a text is not established here.)  The indentation was lost on
+  the way: a paste through a tool that trims lines, a file joined from
+  its lines, a config embedded in another document -- a lab topology
+  file is one.  Any white space in front of a line is indentation, a
+  no-break space included, so a text copied out of a web page is read.
+  Paste the output of `show running-config` (OS10: `show
+  running-configuration`) as the device prints it.  A whole config is
+  still detected as its own vendor's, so the migrate page offers no
+  other vendor for it.  Release 0.7.7 and earlier read such a text as
+  stanzas with almost nothing in them -- no interface address, no
+  VLAN membership -- in a job that did not say so: translate it again.
+
+See the vendor pages ([AOS-CX](vendors/aruba_aoscx.md),
+[IOS-XE](vendors/cisco_iosxe.md), [NX-OS](vendors/cisco_nxos.md),
+[OS10](vendors/dell_os10.md)) § "A config without its indentation".
 
 ### The job says `parse failed:` for a banner
 

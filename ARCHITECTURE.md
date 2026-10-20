@@ -196,8 +196,11 @@ and each in `AGENTS.md`'s Hard Rules:
   submode's `!` does not end the stanza it is in; EOS reads `router
   bgp`, whose blocks are real, by depth.
 * **A text the device would place otherwise than the parser reads it
-  is refused.**  An IOS XR or EOS text with no indentation
-  (`_scanner.first_flat_stanza`), and IOS XR's `show running-config
+  is refused.**  A text with no indentation, by the IOS XR, EOS,
+  AOS-CX, IOS-XE CLI, NX-OS and OS10 parsers
+  (`_scanner.first_flat_stanza`, which counts as indentation what each
+  parser's readers count: a space or a tab for IOS XR and EOS, any
+  white space for the other four), and IOS XR's `show running-config
   formal` form: the sentence names a line and quotes nothing of the
   text.
 * **A block of text is text, never lines of the config.**  A banner, a
@@ -218,6 +221,7 @@ by hand and read each target's OUTPUT
 (`tests/unit/migration/codecs/aruba_aoss/test_where_a_stanza_ends.py`,
 `tests/unit/migration/test_cisco_iosxr_indentation.py`,
 `tests/unit/migration/test_arista_eos_indentation.py`,
+`tests/unit/migration/test_a_flat_text_is_refused.py`,
 `tests/unit/migration/test_a_banner_is_text.py`).  Which parsers still
 read a flat text, or a free-text value of another grammar, is in the
 CHANGELOG's known limitations.

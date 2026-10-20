@@ -933,6 +933,18 @@ the policy locally:
   certificate there opens its body on a later line than the one that
   names it.
 
+* **`netcanon/migration/codecs/_scanner.py::first_flat_stanza`** --
+  `first_flat_stanza(raw, headers, *, any_white_space=False)`: the
+  line of the first stanza whose body stands at the left margin of a
+  text with no indentation, or `None`.  A parser that reads its
+  stanzas by their indentation cannot read such a text, and refuses it
+  in words before any reader runs (after `without_banner_bodies`, so
+  that a banner's lines are no indentation): IOS XR, EOS, AOS-CX,
+  IOS-XE CLI, NX-OS and OS10, each with its own `_STANZA_HEADERS` and
+  `FLAT_TEXT_MESSAGE`.  Indentation is what the parser's readers take
+  for it: a space or a tab by default, any white space with
+  `any_white_space` (the readers of the last four ask `str.isspace`).
+
 * **LAG-name helpers (location note)** — two LAG-name helpers exist
   but are NOT shared cross-codec utilities and do NOT live in
   `netcanon/migration/canonical/transforms.py`: `_canonical_lag_name`

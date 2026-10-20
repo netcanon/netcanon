@@ -600,6 +600,44 @@ timestamp if your timezone matters for an audit.
   banner that ends in a form feed or the like.  Every committed IOS XR
   input parses to the tree it gave before.
 
+- **An AOS-CX, IOS-XE CLI, NX-OS or OS10 config without its
+  indentation was read as far less than it holds, and the job said
+  nothing of it.**  Each of the four parsers reads a stanza by its
+  indentation.  Over their committed captures with every line's
+  leading white space removed, every interface address was lost, and
+  with them the descriptions, VLAN names and memberships, LAG members
+  and VNIs; AOS-CX read every interface as shut.  An IOSv capture,
+  published in a lab topology file with every line at column 0, was
+  read so as it stood: interfaces with no address, no `shutdown` and
+  no dot1Q tag.  What each platform's own CLI makes of such a text is
+  not established here; reading it by the mode each command leaves
+  open would need every mode's words, which no vendor page lists, and
+  a guess puts a line where the device does not (an `ip route` after
+  an empty NX-OS `vrf context` may be the VRF's).  Such a text -- no
+  line but a comment begins with white space, and a stanza the parser
+  reads (AOS-CX: `interface`, `vlan <id>`, `vrf`; IOS-XE: `interface`,
+  `vlan`, `vlan configuration`, `vrf definition` / `ip vrf`, `ip dhcp
+  pool`, `radius server`; NX-OS: `interface`, `vlan`, `vrf context`;
+  OS10: `interface`) followed by a line at the left margin that is no
+  stanza, no `!`, no comment, no `exit` and no `end` -- is now refused
+  before anything of it is read, with the EOS parser's sentence in
+  each parser's name (`show running-configuration` for OS10): the job
+  is `failed`, `parse failed:`, the line of the first such stanza,
+  nothing quoted, and nothing said of what the device would do.
+  Detection still proposes each parser's codec for each of its
+  captures in that form.  A banner's lines are emptied first, so they
+  are no indentation.  The check is the shared `first_flat_stanza`,
+  which now counts as indentation what the parser's readers count:
+  these four take any white space for it (`any_white_space=True`), so
+  a config indented with no-break spaces (a paste out of a web page)
+  is still read as printed, where the EOS and IOS XR parsers refuse
+  one.  The IOSv capture moves to `tests/fixtures/refused/cisco_iosxe/`,
+  kept as the evidence for the refusal and out of the corpus every
+  other check reads to a tree (and out of the cross-mesh audit); the
+  count of jobs the port-name check makes `partial` (below) is now 213
+  of 588.  If you translated a config of these four that had lost its
+  indentation with 0.7.7 or earlier, translate it again from the
+  config as the device prints it.
 - **An EOS config without its indentation was read as far less than
   it holds, and the job said nothing of it.**  The parser reads a
   stanza by its indentation.  Read without it, a `vlan <id>` block
@@ -1980,8 +2018,7 @@ timestamp if your timezone matters for an audit.
 
   A unit's 802.1Q tag is not in its name: it travels in the parsed
   tree.  A unit that went with its port and has none there — the
-  AOS-CX and OS10 parsers read no tag for a sub-interface, an IOS
-  stanza pasted without its indentation is read as empty, and a
+  AOS-CX and OS10 parsers read no tag for a sub-interface, and a
   config may state none — is written as an interface with no VLAN,
   on a target that would have carried the tag, and there is no tag
   for the validation report to list.  The job says it: one warning
@@ -2762,13 +2799,13 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  215 of the 600 jobs that said `completed` are `partial`.  69 of
+  213 of the 588 jobs that said `completed` are `partial`.  67 of
   them list a shared name, 65 a hardware port that was dropped, 29 a
   logical name that was dropped and 111 a name left as the source
   has it (90 of those a hardware port); 48 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
   and none to or from `failed`; 401 jobs that were already `partial`
-  carry the sentence as well.  Each of the 215 is `completed` again,
+  carry the sentence as well.  Each of the 213 is `completed` again,
   with one more request, once every listed name has an entry.
 
   **To settle such a job**, decide each name with an entry of
@@ -2961,27 +2998,21 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
-- **A config pasted without its indentation is read as far less than
-  it holds by most block parsers, and the job does not say so.**  Every
-  committed capture with every line's leading white space removed,
-  against the capture as committed: the Aruba AOS-CX, Cisco IOS-XE
-  CLI, Cisco NX-OS and Dell OS10 parsers lose nearly everything a
-  stanza body holds -- interface addresses, descriptions, VLAN
-  memberships, LAG members -- and AOS-CX reads its interfaces as
-  shut, its `no shutdown` lines being body lines.  The Junos (set
-  form), FortiOS, RouterOS, OPNsense and IOS-XE NETCONF parsers do not
-  depend on indentation, and VyOS keeps its tree but loses a Tier-3
-  row for BGP or OSPF.  What each of those platforms' own CLI makes
-  of such text is not established here.  The AOS-S parser reads it as
-  the indented config.  The IOS XR parser refuses it in words, for
-  the router's reason: IOS XR places a line by its indentation when it
-  loads a file (inferred from Cisco's CLI model and a Cisco engineer's
-  router output; Fixed, above).  The EOS parser refuses it in words,
-  for its own reason, not the switch's: it reads a stanza by its
-  indentation, and reading such a text as the switch is inferred to
-  (by the mode each command leaves open) would need every mode's
-  words, which no Arista page lists (Fixed, above).  Each other parser
-  is a change of its own, with its platform's rule from its vendor.
+- **A config pasted without its indentation is not translated by most
+  block parsers: they refuse it in words.**  The IOS XR parser
+  refuses it for the router's reason: IOS XR places a line by its
+  indentation when it loads a file (inferred from Cisco's CLI model
+  and a Cisco engineer's router output; Fixed, above).  The EOS,
+  AOS-CX, IOS-XE CLI, NX-OS and OS10 parsers refuse it for their own
+  reason, not the device's: each reads a stanza by its indentation,
+  and reading such a text by the mode each command leaves open (as
+  EOS is inferred to; what the other four platforms do with it is not
+  established here) would need every mode's words, which no vendor
+  page lists (Fixed, above).  The AOS-S parser reads it as the
+  indented config.  The Junos (set form), FortiOS, RouterOS, OPNsense
+  and IOS-XE NETCONF parsers do not depend on indentation.  VyOS keeps
+  its tree but loses a Tier-3 row for BGP or OSPF, and the job does
+  not say so.
 - **A line typed inside an EOS interface's submode is read as the
   interface's, and an EOS `router bgp` block's header has to stand at
   the section's own depth.**  EOS places a line by the mode it is

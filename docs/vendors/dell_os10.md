@@ -317,6 +317,28 @@ OS10 config with a banner with 0.7.7 or earlier, translate it again,
 and look in the old output for accounts, interfaces, VLANs and routes
 the switch does not have.
 
+## A config without its indentation
+
+The parser reads a stanza's lines by their indentation: `show running-configuration`
+prints an interface's lines (a VLAN's and a port channel's among them) indented under it.  A text with NO indentation -- no
+line but a comment begins with white space, and a stanza is followed
+by a line at the left margin that is no other stanza, no `!` and no
+`exit` or `end` -- is refused in words (`parse failed: dell_os10: this
+text has no indentation. ...`), naming the line of the first such
+stanza and quoting nothing of the text.  The parser cannot tell where
+a stanza of such a text ends, and a guess would put a line where the
+switch does not; what the switch itself makes of such a text is not
+established here.  Any white space in front of a line is indentation,
+a no-break space included, as the parser's readers take it: a config
+copied out of a web page is read.  A text in which only SOME lines
+lost their indentation is read by its indentation, each dedented line
+as a line of the top level.
+
+⚠️ Up to 0.7.7 such a text was read: every interface address, description, VLAN membership and LAG
+member was lost, in a job that did not say
+so.  If you translated an OS10 config that had lost its indentation,
+translate it again from `show running-configuration` as the switch prints it.
+
 ## Common gotchas
 
 ⚠️ **Auto-detection finds about three OS10 configs in four.**

@@ -1137,18 +1137,23 @@ class TestAUnitWithNoTag:
             f"none was read for it from the source config"
         )
 
-    def test_a_tag_the_parser_did_not_read(self) -> None:
-        """A committed IOS capture lost its indentation, and the
-        IOS parser reads a stanza's lines by it.  Its two units
-        state ``encapsulation dot1Q`` and the tree holds no tag for
-        either.  "The parser reads none" is not true of them and
-        neither is "the config states none", so the line gives no
-        cause: it says what is known, and what to do."""
+    def test_a_unit_whose_config_states_no_tag(self) -> None:
+        """Two IOS units that state no ``encapsulation dot1Q``: the
+        tree holds no tag for either.  The IOS parser reads a tag
+        where one is stated, so "the parser reads none" is not true
+        of them; the line gives no cause at all, the same line for
+        every one: it says what is known, and what to do.  (The one
+        committed IOS capture whose units' tags were not read had
+        lost its indentation, and is refused now.)"""
         ios, eos = get_codec("cisco_iosxe_cli"), get_codec("arista_eos")
         text = (
-            FIXTURES / "real/cisco_iosxe/cml_basic_forwarding_iosv_r1_ospf.txt"
-        ).read_text(encoding="utf-8")
-        assert "\nencapsulation dot1Q 100\n" in text
+            "hostname r1\n!\ninterface GigabitEthernet0/1\n no ip address\n!\n"
+            "interface GigabitEthernet0/1.100\n ip address 192.0.2.1 255.255.255.0\n!\n"
+            "interface GigabitEthernet0/1.200\n ip address 198.51.100.1 255.255.255.0\n!\nend\n"
+        )
+        assert {i.name: i.dot1q_vlan for i in ios.parse(text).interfaces}[
+            "GigabitEthernet0/1.100"
+        ] is None
         job = run_plan_with_overrides(ios, eos, text, port_rename_map={})
         lines = [w for w in job.warnings if _NO_TAG in w]
         assert [line.split("'")[1] for line in lines] == [

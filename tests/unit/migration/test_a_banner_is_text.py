@@ -1021,7 +1021,9 @@ BEFORE: dict[str, str] = {
     "real/cisco_iosxe/batfish_cisco_snmp.txt": "ec27664e753c",
     "real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt": "516d7c944062",
     "real/cisco_iosxe/ciscolive_brkops1104_evpn_leaf_iosxe1715.txt": "9aab4d223d04",
-    "real/cisco_iosxe/cml_basic_forwarding_iosv_r1_ospf.txt": "df3e88c05d0b",
+    # The IOSv capture whose every line is at column 0 was here: the
+    # IOS-XE CLI parser refuses it, and it is kept under ``refused/``
+    # (``test_a_flat_text_is_refused.py``).
     "real/cisco_iosxe/cml_saumur_iosxe1712_pvrstp.txt": "2425f79888f2",
     "real/cisco_iosxe/ntc_carrier_interfaces.txt": "3c1760c9d5cd",
     "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "0bd80061c03b",
@@ -1082,7 +1084,6 @@ HOLD_A_BANNER = {
     "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg",
     "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg",
     "real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt",
-    "real/cisco_iosxe/cml_basic_forwarding_iosv_r1_ospf.txt",
     "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt",
     "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt",
     "real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
