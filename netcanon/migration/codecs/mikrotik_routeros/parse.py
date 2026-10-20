@@ -766,6 +766,12 @@ def _parse_interface_tunnel(
             iface.description = kv["comment"]
         if "disabled" in kv:
             iface.enabled = kv["disabled"].lower() == "no"
+        if "mtu" in kv:
+            # ``mtu=auto`` (the default) states no number.
+            try:
+                iface.mtu = int(kv["mtu"])
+            except ValueError:
+                pass
 
 
 def _parse_interface_vrrp(

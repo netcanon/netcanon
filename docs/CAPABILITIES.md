@@ -1907,9 +1907,6 @@ nothing, as before.
   gateways or a routing-table suffix, and — across vendors — a Junos
   unit next hop.  The plan lists the route (`stale_next_hops`) and the
   job is `partial`.
-* **A non-zero unit of a Junos management port** (`me0 unit 5`)
-  follows its port under a name Junos does not accept
-  (`set interfaces me0.5 unit 0 ...`).  Map it by hand.
 * A FortiGate VLAN interface the codec reads as a physical port
   (`DMZ` beside a port `dmz`) or as a management port (`MGMT`), and
   its stock `fortilink` aggregate,
