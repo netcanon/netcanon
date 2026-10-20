@@ -595,9 +595,10 @@ per_field_expectation:
       internal-key-encrypted; OPNsense expects cleartext in
       ``<radius_secret>``.  Cross-vendor migration requires
       re-keying — operators must paste the cleartext shared secret
-      into OPNsense after migration.  The codec passes the FortiOS-
-      encoded form through verbatim with a vendor tag so the loss
-      surfaces in the validation report.  ``auth_port`` / ``host``
+      into OPNsense after migration.  The OPNsense render writes the
+      server with no secret, beside a review element.  A ``set secret
+      <secret>`` written without ``ENC`` is the secret as typed, and
+      lands in ``<radius_secret>``.  ``auth_port`` / ``host``
       / ``name`` preserve cleanly.  ``acct_port``: FortiGate has no
       separate field (canonical defaults to 1813, which is
       OPNsense's default too).  FortiOS ``set auth-type`` /

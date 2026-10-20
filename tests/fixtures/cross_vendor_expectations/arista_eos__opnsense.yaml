@@ -559,17 +559,23 @@ per_field_expectation:
     references: [opnsense-users, arista-user-security]
 
   radius_servers:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Arista ``radius-server host <ip> key <secret>`` (with
       separate ``radius-server key <secret>`` global default and
       optional ``auth-port`` / ``acct-port`` overrides) ↔
       OPNsense ``<authserver>`` with ``<type>radius</type>``,
       ``<host>``, ``<radius_secret>``, ``<radius_auth_port>``,
       ``<radius_acct_port>``.  Round-trips host / port pair /
-      shared key cleanly with default ports 1812 / 1813.
+      a key written as typed, with default ports 1812 / 1813.
       Arista's optional ``timeout`` / ``retransmit`` per-server
       directives have no canonical model and drop on render.
+      EOS prints a key in its own form, ``key 7 <blob>``: it is
+      held behind ``eos:``, not decoded, and the server is written
+      with no key, beside a review line that names the form.  No
+      committed EOS capture has a RADIUS server; until 2026-10 a ``key
+      7`` was read as the secret ``7``, and this entry called the
+      field good.
     references: [opnsense-radius, arista-snmp-cg]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──

@@ -26,7 +26,7 @@ RouterOS.
 | `dhcp_server.md` | Cisco's bundled `ip dhcp pool` versus RouterOS's three-section split (`/ip pool` + `/ip dhcp-server network` + `/ip dhcp-server`).  Static reservations / option codes lossy. |
 | `snmp.md` | `snmp-server community` versus `/snmp community add` (RouterOS overloads section for v1/v2c + v3).  v3 SHA-2 / AES-256 / 3DES not available on RouterOS — downgrade required.  USM passphrases re-key required regardless. |
 | `local_users.md` | Cisco `username X privilege Y secret 9 $9$...` versus RouterOS `/user add name=X group=full password=...`.  Hash formats are NOT cross-compatible.  Privilege-number to named-group mapping is operator-curated. |
-| `radius_aaa.md` | Cisco `radius server <name> / address ipv4 X` versus RouterOS `/radius add address=X service=login,...`.  Shared-secret pass-through opaque; service-binding versus method-list models diverge. |
+| `radius_aaa.md` | Cisco `radius server <name> / address ipv4 X` versus RouterOS `/radius add address=X service=login,...`.  A key written as typed migrates, a `key 7` / `key 6` is refused; service-binding versus method-list models diverge. |
 | `lags.md` | Cisco `Port-channel<N>` + per-interface `channel-group <N> mode active` versus RouterOS `/interface bonding add slaves=etherN,etherM mode=802.3ad`.  Mode mapping documented. |
 | `routing_instances_vrf.md` | Cisco `vrf definition <name>` versus RouterOS `/ip vrf add interfaces=...`.  Both codecs parse-and-ignore VRF declarations in v1; whole surface unsupported pending wire-up. |
 

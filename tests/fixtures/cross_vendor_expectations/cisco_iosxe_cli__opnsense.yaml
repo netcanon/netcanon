@@ -486,17 +486,22 @@ per_field_expectation:
     references: [opnsense-users, cisco-user-security]
 
   radius_servers:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Cisco modern ``radius server NAME / address ipv4 X
       auth-port 1812 acct-port 1813 / key <secret>`` ↔ OPNsense
       ``<authserver>`` with ``<type>radius</type>``,
       ``<host>``, ``<radius_secret>``, ``<radius_auth_port>``,
-      ``<radius_acct_port>``.  Round-trips host / port pair
-      cleanly.  Cisco type-7 obfuscated keys (``key 7 <hex>``)
-      land verbatim in OPNsense ``<radius_secret>`` and
-      authentication fails until the operator resets the secret —
-      a caveat in the validation report.
+      ``<radius_acct_port>``.  Host and the port pair round-trip,
+      and a key written as typed (``key <secret>``, ``key 0
+      <secret>``) lands in ``<radius_secret>``.  A ``key 7`` or
+      ``key 6`` is a form only IOS-XE reads: it is held behind
+      ``iosxe:``, not decoded, and the OPNsense render writes the
+      server with no secret, beside a review element that names the
+      form; the secret has to be re-entered.  The kitchen sink's
+      ``key 7`` shows it.  Until 2026-10 the type-7 text was written
+      into ``<radius_secret>`` as the secret, and this entry called
+      the field good.
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
 
