@@ -107,7 +107,9 @@ def scan_stanzas(
     return results
 
 
-def first_flat_stanza(raw: str, headers: Sequence[re.Pattern[str]]) -> int | None:
+def first_flat_stanza(
+    raw: str, headers: Sequence[re.Pattern[str]], *, any_white_space: bool = False,
+) -> int | None:
     """The line that opens the first stanza whose body stands at the
     left margin of a text with no indentation, or ``None``.
 
@@ -119,11 +121,16 @@ def first_flat_stanza(raw: str, headers: Sequence[re.Pattern[str]]) -> int | Non
     opens none and is no ``!``, no ``exit`` and no ``end``: that line
     is the stanza's body, at the margin.
 
-    * Indentation is a space or a tab.  Any other white space in front
-      of a line (a no-break space, as a paste out of a web page can
-      carry) is none: readers of the parsers that call this take such
-      a line for one at the margin (the EOS stanza readers, the IOS XR
-      ``ntp`` reader), so a text indented with it is not read whole.
+    * Indentation is what the caller's readers take for it.  By
+      default it is a space or a tab, and any other white space in
+      front of a line (a no-break space, as a paste out of a web page
+      can carry) is none: readers of the EOS and IOS XR parsers take
+      such a line for one at the margin (the EOS stanza readers, the
+      IOS XR ``ntp`` reader), so a text indented with it is not read
+      whole.  With *any_white_space*, every white space a ``str`` knows
+      is indentation, a no-break space among them: the AOS-CX, IOS-XE
+      CLI, NX-OS and OS10 readers ask ``str.isspace`` and ``\\s``, and
+      read a capture indented with no-break spaces as it was printed.
     * Blank lines are passed over.
     * A comment (a line that begins with ``!`` and is more than ``!``,
       such as ``!!`` or ``! text``) is passed over at any depth: it
@@ -149,6 +156,8 @@ def first_flat_stanza(raw: str, headers: Sequence[re.Pattern[str]]) -> int | Non
             # A comment belongs to the line after it, at any depth.
             continue
         if line[0] in " \t":
+            return None
+        if any_white_space and line[0].isspace():
             return None
         opens = any(header.match(line) for header in headers)
         if (

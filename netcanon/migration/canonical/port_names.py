@@ -865,9 +865,8 @@ def translate_port_names(  # noqa: C901
            went with its port and has no tag there is written
            without one, and a warning says so.  The tree has none
            where the platform's parser reads none for a
-           sub-interface (AOS-CX, OS10), where it did not read the
-           line that states it (an IOS stanza pasted without its
-           indentation), and where the config states none.
+           sub-interface (AOS-CX, OS10) and where the config states
+           none.
 
            What the target makes of ``<its port>.<unit>`` is the
            target's renderer's business; where it has no tagged

@@ -83,7 +83,13 @@ from .._helpers import (
     untags_its_native_vlan,
 )
 from .._input_shape import detect_input_shape
-from .._scanner import Body, ends_anywhere, scan_stanzas, without_text_bodies
+from .._scanner import (
+    Body,
+    ends_anywhere,
+    first_flat_stanza,
+    scan_stanzas,
+    without_text_bodies,
+)
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -459,6 +465,30 @@ UNENDED_BODY_MESSAGE = (
     "configuration.  Paste the output of `show running-config` whole."
 )
 
+#: Said of a text with no indentation whose stanzas have their bodies
+#: at the left margin (:func:`_refuse_a_flat_text`).  It quotes
+#: nothing of the text, and gives this parser's reason, not the
+#: switch's: what the switch makes of such a text is not established
+#: here.
+FLAT_TEXT_MESSAGE = (
+    "cisco_nxos: this text has no indentation.  No line but a comment "
+    "begins with white space.  `show running-config` prints the lines of a "
+    "stanza indented under it, and this parser tells which lines "
+    "belong to a stanza by their indentation, so it cannot tell where "
+    "a stanza of this text ends: line {line} opens one, and the line "
+    "after it is at the left margin.  "
+    "Paste the output of `show running-config` as the switch prints "
+    "it, with its indentation."
+)
+
+#: The headers of the stanzas this parser reads by their indentation
+#: (``interface``, ``vlan``, ``vrf context``).
+#: In a text with no indentation, one of them followed by a line that
+#: is none of them, no ``!``, no comment, no ``exit`` and no ``end``
+#: has its body at the left margin
+#: (:func:`.._scanner.first_flat_stanza`).
+_STANZA_HEADERS = (_IFACE_RE, _VLAN_TOP_RE, _VRF_CONTEXT_RE)
+
 
 def _is_the_jobs_end(text: str, number: int) -> bool:
     """Whether *text* is ``end-job`` in column 0, white space after it
@@ -504,6 +534,39 @@ def without_banner_bodies(raw: str) -> str:
     return without_text_bodies(raw, _opens_a_body, UNENDED_BODY_MESSAGE, codec="cisco_nxos")
 
 
+def _refuse_a_flat_text(raw: str) -> None:
+    """Raise :class:`ParseError` for a text with no indentation whose
+    stanzas have their bodies at the left margin.
+
+    This parser reads a stanza's lines by their indentation.  Without it, it
+    read a body line as a line of the top level: every interface address,
+    description and VLAN membership was lost, and the VLAN names and VNIs,
+    and no job said a line was not read.  Reading such a text by the mode
+    each command leaves open, as the CLI is typed into, would need every
+    mode's words, which no vendor page lists; what the device itself makes
+    of such a text is not established here.  So it is refused, in this
+    parser's words.  The shape is :func:`.._scanner.first_flat_stanza`'s,
+    with this parser's headers (:data:`_STANZA_HEADERS`): a text with SOME
+    lines dedented is read by its indentation.  Any white space in front of
+    a line is indentation, a no-break space among them: the readers ask
+    ``str.isspace`` and ``\\s``, and read a text so indented as it was
+    printed.
+
+    Raises:
+        ParseError: For a text of that shape.  The message gives the
+            number of the line that opens the first such stanza and
+            quotes nothing of the text.
+    """
+    # The module's tuple, read at the call: a test that changes it
+    # changes what is asked.
+    flat_at = first_flat_stanza(raw, _STANZA_HEADERS, any_white_space=True)
+    if flat_at is not None:
+        raise ParseError(
+            FLAT_TEXT_MESSAGE.format(line=flat_at),
+            path=f"line {flat_at}", snippet="",
+        )
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse NX-OS ``show running-config`` output into a
     :class:`CanonicalIntent`.
@@ -512,7 +575,8 @@ def parse_intent(raw: str) -> CanonicalIntent:
         ParseError: If the input is empty or looks like XML / JSON
             rather than NX-OS CLI text; or if a banner or a scheduler
             job cannot be told from the configuration
-            (:func:`without_banner_bodies`).
+            (:func:`without_banner_bodies`); or if the text has no
+            indentation (:func:`_refuse_a_flat_text`).
     """
     if not raw.strip():
         raise ParseError("cisco_nxos: empty input", snippet="")
@@ -534,6 +598,9 @@ def parse_intent(raw: str) -> CanonicalIntent:
             f"CLI.  Paste the output of `show running-config`.",
             snippet=raw.lstrip()[:120],
         )
+    # A text with no indentation is refused in words, before any
+    # reader takes a stanza's body for lines of the top level.
+    _refuse_a_flat_text(raw)
 
     intent = CanonicalIntent(
         source_vendor="cisco_nxos",

@@ -226,6 +226,13 @@ in `netcanon/migration/codecs/<vendor>/codec.py`.
 
 #### `cisco_iosxe_cli` (Cisco IOS-XE CLI, bidirectional)
 
+A text with no indentation is REFUSED in words rather than
+mis-parsed: the parser reads a stanza by its indentation, and cannot
+tell where a stanza of such a text ends (any white space in front of
+a line is indentation, a no-break space included).  See
+[`vendors/cisco_iosxe.md`](vendors/cisco_iosxe.md) § "A config
+without its indentation".
+
 A banner, and every other text written between two delimiters (`aaa
 authentication banner`, a `menu` title, a `busy-message`, a line's
 `vacant-message` and a web authentication banner at any indentation),
@@ -425,6 +432,11 @@ text").
 
 #### `cisco_nxos` (Cisco NX-OS, bidirectional, certified)
 
+A text with no indentation is REFUSED in words rather than
+mis-parsed, as on IOS-XE CLI (see
+[`vendors/cisco_nxos.md`](vendors/cisco_nxos.md) § "A config without
+its indentation").
+
 Broad supported surface (L1/L3 + L2 switchport/LAG + SNMP/local-users +
 HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed
 Anycast Gateway).  A banner, ended at the next occurrence of its
@@ -499,6 +511,11 @@ banner is text").  The lossy / unsupported exceptions:
 
 #### `aruba_aoscx` (Aruba AOS-CX, bidirectional, certified)
 
+A text with no indentation is REFUSED in words rather than
+mis-parsed, as on IOS-XE CLI (see
+[`vendors/aruba_aoscx.md`](vendors/aruba_aoscx.md) § "A config
+without its indentation").
+
 Broad supported surface (Tier-1 + L2 switchport/LAG + local users + SNMP
 v2c/v3 + IPv4 active-gateway anycast + VXLAN L2VNI VLAN↔VNI binding).
 Distinct from the campus `aruba_aoss` (AOS-S) codec.  A banner, ended
@@ -559,6 +576,11 @@ curly-brace form.  The lossy / unsupported exceptions:
 | `/access-list/extended` | Unsupported | VyOS `policy` route-maps / prefix-lists are Tier-3. |
 
 #### `dell_os10` (Dell SmartFabric OS10, bidirectional, best_effort)
+
+A text with no indentation is REFUSED in words rather than
+mis-parsed, as on IOS-XE CLI (see
+[`vendors/dell_os10.md`](vendors/dell_os10.md) § "A config without
+its indentation").
 
 Broad supported surface (Tier-1 + L2 switchport/LAG + SVI-derived VLANs
 + local users + SNMP v2c/v3 + real VRRP + VRF + per-VRF static).
@@ -1614,10 +1636,8 @@ What you get back, on the job's `port_mapping_plan`:
   in `off_inventory` and in `unresolved_ports`, so the job is
   `partial` until your `port_rename_map` names it.  A unit gets
   here from a source platform whose parser reads no tag for a
-  sub-interface (AOS-CX, OS10), from a stanza whose tag line the
-  parser did not read (an IOS-XE CLI, NX-OS, AOS-CX or OS10 config
-  pasted without its indentation; an IOS XR or EOS one is refused),
-  and from a config that states none.
+  sub-interface (AOS-CX, OS10), and from a config that states none
+  (a config pasted without its indentation is refused, not read).
 * **`unvouched_units`** — sub-interface names that went where their
   port went, tag and all, and that the plan does not count as having
   followed, each with the name it has in the output.  The plan takes

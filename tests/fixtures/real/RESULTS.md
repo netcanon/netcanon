@@ -45,7 +45,7 @@ equal trees).
 | `racc_cat8000v_iosxe179_netconf.txt` | 343 | 1 | 7 | 0 | 1 | 0 | 0 | 1 | Real `show run` from Cat8000V on **IOS-XE 17.9 LTS**.  `ip nat inside source list ... overload`, `telemetry ietf subscription` (YANG-push over grpc-tcp), app-hosting guestshell, RESTCONF + NETCONF-YANG, `username X secret 9 $9$...` type-9 hash. |
 | `user_contrib_cat9300_iosxe1712.txt` | 491 | 1 | 47 | 6 | 1 | 3 | 0 | 2 | **Real physical Cat 9300-24UX on IOS-XE 17.12** (user-contributed, sanitised).  `switch 1 provision c9300-24ux`, Gi/TenG/FortyG/TwentyFiveG/AppG + Port-channel1-3 + Vlan SVIs + Mgmt-vrf, 3 LACP EtherChannels (`channel-group N mode active`), `switchport mode trunk/access` + `switchport trunk allowed vlan <list>` + `switchport trunk native vlan`, full Cat9k `class-map system-cpp-police-*` + `policy-map system-cpp-policy` CPP grammar, 28 × `privilege exec level 5 show X` delegation, multiple `line vty` ranges. |
 | `cml_saumur_iosxe1712_pvrstp.txt` | 147 | 1 | 4 | 0 | 0 | 0 | 0 | 0 | Real `show run` from a CML virtual `ioll2-xe` on **IOS-XE 17.12**.  Uses `Ethernet0/N` IOL port notation (not physical `Gi1/0/N`) but the spanning-tree grammar is authentic: `spanning-tree mode rapid-pvst`, `spanning-tree pathcost method long`, `spanning-tree vlan 1-4094 priority 4096`, `spanning-tree link-type point-to-point`, `spanning-tree cost 2000000`.  Closes PVRST+ cost-tuning grammar coverage the Cat9300 fixture doesn't exercise. |
-| `cml_basic_forwarding_iosv_r1_ospf.txt` | 85 | 1 | 7 | 0 | 0 | 0 | 0 | 0 | Real `show run` from a CML virtual **Cisco IOSv** router node — first fixture exercising **OSPFv2 single-area multi-feature grammar** across the whole corpus: `router ospf 1` + `router-id 1.1.1.1` + `passive-interface <iface>` + 5 `network <addr> <wildcard> area 0` statements, per-interface `ip ospf cost 100` / `ip ospf cost 110` metric tuning, plus `encapsulation dot1Q <vlan>` on two subinterfaces (`GigabitEthernet0/1.100` + `.200`).  IOSv grammar is a subset of IOS-XE (no LACP, no switchport on physical routers); parse-and-ignore of the banner blocks + OSPF-protocol-network statements validates the codec's "unknown top-level stanza" tolerance.  **Every line stands at column 0**, its indentation lost between the router and the repository (inferred: the lab topology file embeds the config), so the IOS-XE CLI parser reads its stanza bodies as nothing: its interfaces carry no address, no `shutdown` and no dot1Q tag (CHANGELOG Known limitations). |
+| ~~`cml_basic_forwarding_iosv_r1_ospf.txt`~~ (refused; under `tests/fixtures/refused/cisco_iosxe/`) | 85 | 1 | 7 | 0 | 0 | 0 | 0 | 0 | Real `show run` from a CML virtual **Cisco IOSv** router node — first fixture exercising **OSPFv2 single-area multi-feature grammar** across the whole corpus: `router ospf 1` + `router-id 1.1.1.1` + `passive-interface <iface>` + 5 `network <addr> <wildcard> area 0` statements, per-interface `ip ospf cost 100` / `ip ospf cost 110` metric tuning, plus `encapsulation dot1Q <vlan>` on two subinterfaces (`GigabitEthernet0/1.100` + `.200`).  IOSv grammar is a subset of IOS-XE (no LACP, no switchport on physical routers); parse-and-ignore of the banner blocks + OSPF-protocol-network statements validates the codec's "unknown top-level stanza" tolerance.  **Every line stands at column 0**, its indentation lost between the router and the repository (inferred: the lab topology file embeds the config), so the IOS-XE CLI parser refuses it in words (it had read its interfaces with no address, no `shutdown` and no dot1Q tag); the figures in this row are what that reading gave, and the capture is in no other figure here. |
 
 ### Findings
 
@@ -864,7 +864,7 @@ committed and all nine round-trip canonical-stable.
 
 The tier is held deliberately on the one thing the corpus cannot show: **no
 committed capture states its OS10 release.**  Every other certified codec names
-the versions behind its claim (`cisco_iosxe_cli`: 4 LTS + IOSv 15.x, and so
+the versions behind its claim (`cisco_iosxe_cli`: 4 LTS + 17.15, and so
 on), and "certified against an unspecified release" is a weaker claim wearing
 the same word.  Promote when a licence-clean capture **with its `! Version`
 banner intact** lands.
@@ -883,7 +883,7 @@ re-parsing with **zero errors**.
 
 | Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |
 |---|---:|---:|---:|---|---|
-| **cisco_iosxe_cli** | **13** (6 grammar-test + 7 real) | **4 LTS + IOSv 15.x** (16.9 + 17.3 + 17.9 + 17.12 + IOSv) | 1 (LAG member dedup) | **certified** ✅ | — |
+| **cisco_iosxe_cli** | **13** in `real/` (the IOSv capture is refused: no indentation) | **4 LTS + 17.15** (16.9 + 17.3 + 17.9 + 17.12 + 17.15) | 1 (LAG member dedup) | **certified** ✅ | — |
 | **opnsense** | **7** (3 upstream + 1 real user-deployed + 1 paramiko-shell regression fixture + 2 upstream CARP HA pair) | 2 sources | 2 (render dropped VLANs; paramiko-shell command-echo broke parse) | **certified** ✅ | — |
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |

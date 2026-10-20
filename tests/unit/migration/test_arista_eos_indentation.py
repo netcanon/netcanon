@@ -301,11 +301,12 @@ def test_detection_keeps_eos_first(path: Path) -> None:
 #: parser, refusing it would be right: an AOS-S capture and an IOSv
 #: capture in which every line stands at column 0, their indentation lost
 #: between the device and the repository (the CHANGELOG's AOS-S entry and
-#: the AOS-S guard say so of the first; ``RESULTS.md``, ``NOTICE.md`` and
-#: the IOS XR guard of the second).
+#: the AOS-S guard say so of the first; ``NOTICE.md`` and the IOS XR guard
+#: of the second, which its own parser refuses and which is kept under
+#: ``refused/``).
 FLAT_AS_COMMITTED = {
     "real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg",
-    "real/cisco_iosxe/cml_basic_forwarding_iosv_r1_ospf.txt",
+    "refused/cisco_iosxe/cml_basic_forwarding_iosv_r1_ospf.txt",
 }
 _NOT_A_CAPTURE = {".md", ".json", ".yaml", ".yml", ".py", ".pyc"}
 #: The directories under ``tests/fixtures/`` that hold no capture.

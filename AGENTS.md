@@ -1034,8 +1034,9 @@ tests use these exclusively — never CSS classes or element structure.  See
   parse of every AOS-S input with its indentation removed is held to
   the parse of the input
   (`tests/unit/migration/codecs/aruba_aoss/test_where_a_stanza_ends.py`).
-  The other block parsers fail that still; the CHANGELOG's known
-  limitations say which.  **And where the device places a line BY its
+  The other block parsers refuse such a text in words (below), and
+  VyOS keeps its tree and loses a Tier-3 row; the CHANGELOG's known
+  limitations say so.  **And where the device places a line BY its
   indentation, a text without it is a form the device takes but does
   not apply as written: it is refused in words, never read.**  IOS XR
   loads a file by its indentation (its vendor page says what that
@@ -1071,7 +1072,13 @@ tests use these exclusively — never CSS classes or element structure.  See
   `router bgp` and not one address, in jobs that said `completed` or
   were `partial` for another reason, none saying a line was not read.
   The sentence says what the parser cannot do, never what the switch
-  would do.  Nor is a depth rule a reading where the device places a
+  would do.  The AOS-CX, IOS-XE CLI, NX-OS and OS10 parsers refuse
+  such a text the same way, and the check counts as indentation what
+  their READERS count: they take any white space for it, and a check
+  that knew a space or a tab alone would have refused a text indented
+  with no-break spaces that they read whole
+  (`first_flat_stanza(..., any_white_space=True)`,
+  `tests/unit/migration/test_a_flat_text_is_refused.py`).  Nor is a depth rule a reading where the device places a
   line by its mode: inside an EOS interface no depth tells a
   submode's line from the interface's own, so every indented line is
   the interface's (a known limitation), and only `router bgp`, whose

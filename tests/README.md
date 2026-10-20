@@ -14,6 +14,7 @@ tests/
 │   ├── target_profiles/     Synthetic target profiles (never shipped) for grades no shipped profile carries
 │   ├── synthetic/<vendor>/  Hand-crafted minimal configs per vendor (parser-feature focus)
 │   ├── real/<vendor>/       Real-capture corpus + RESULTS.md + NOTICE.md + CROSS_MESH_RESULTS.md
+│   ├── refused/<vendor>/    Real captures their own codec refuses, kept as the evidence (in no corpus walk)
 │   └── cross_vendor_expectations/  Phase 3 mechanical-drift expectation tables
 ├── unit/                    Pure-function tests, no I/O
 │   ├── test_schema.py       Pydantic schema validation (incl. type_key filename-safety)

@@ -515,9 +515,10 @@ def test_the_short_texts_not_detected_as_iosxr_are_pinned() -> None:
 #: topology file it comes from embeds it), as IOSv prints its interface
 #: bodies indented.  It is not an IOS XR text; were it given to the IOS
 #: XR parser, the refusal would be right.  Its own codec, IOS-XE CLI,
-#: reads it as interfaces with no address, no ``shutdown`` and no dot1Q
-#: tag (the CHANGELOG's known limitations).
-FLAT_AS_COMMITTED = {"real/cisco_iosxe/cml_basic_forwarding_iosv_r1_ospf.txt"}
+#: refuses it too (it had read it as interfaces with no address, no
+#: ``shutdown`` and no dot1Q tag), and it is kept under ``refused/``
+#: (``test_a_flat_text_is_refused.py``).
+FLAT_AS_COMMITTED = {"refused/cisco_iosxe/cml_basic_forwarding_iosv_r1_ospf.txt"}
 _NOT_A_CAPTURE = {".md", ".json", ".yaml", ".yml", ".py", ".pyc"}
 #: The directories under ``tests/fixtures/`` that hold no capture: what
 #: a translation is expected to give, model families, target profiles.
