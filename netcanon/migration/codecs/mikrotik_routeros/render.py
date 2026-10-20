@@ -23,8 +23,9 @@ same VIP-row pattern for ``v3-protocol=ipv6`` groups), ``/ip route``,
 ``/system dns``, ``/system ntp client``.  Non-``vrrp`` modes (HSRP /
 CARP / anycast) surface as ``# review:`` comments and skip.
 
-Shared name/type helpers (``_is_ethernet_name``, ``_is_vlan_name``)
-live in :mod:`.parse` and are imported here — the README's split-codec
+Shared name/type helpers (``_is_vlan_name`` and the like) live in
+:mod:`.parse`, and which names are factory port names in
+:mod:`.port_names`; both are imported here — the README's split-codec
 guidance keeps those edges directional (parse → render is invalid;
 render → parse for shared utilities is fine).
 """
@@ -49,12 +50,12 @@ from ...canonical.transforms import is_every_vlan
 from .._helpers import same_vendor_version
 from ..base import RenderError
 from .parse import (
-    _is_ethernet_name,
     _is_vlan_name,
     _looks_like_bridge_iface,
     _looks_like_lag_iface,
     _looks_like_vlan_iface,
 )
+from .port_names import is_factory_port_name
 
 # ---------------------------------------------------------------------------
 # Render-only constants
@@ -257,8 +258,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # Find clause: prefer the MikroTik factory ``default-name=``
             # form when we know the original factory port name - either
             # because parse captured it on a ``set [ find default-name=X ]``
-            # line, or because the canonical name itself follows the
-            # MikroTik ``etherN`` shape (in which case ``default-name``
+            # line, or because the canonical name itself is one a
+            # MikroTik device gives a port (``is_factory_port_name``:
+            # ``ether1_ADMIN`` is not; in which case ``default-name``
             # is the right thing for the device to look up).  When
             # ``default_name`` is empty AND the name doesn't match the
             # factory shape - the common case for cross-vendor sources
@@ -267,7 +269,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # instead.  Using ``default-name`` in that branch would
             # cause a round-trip to synthesise a spurious
             # ``default_name`` field on the second parse pass.
-            use_default_name_form = bool(iface.default_name) or _is_ethernet_name(iface.name)
+            use_default_name_form = bool(iface.default_name) or is_factory_port_name(
+                iface.name
+            )
             if use_default_name_form:
                 find_key = iface.default_name or iface.name
                 parts = [f"set [ find default-name={find_key} ]"]

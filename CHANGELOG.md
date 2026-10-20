@@ -429,6 +429,32 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A RouterOS port was looked up by a name the device did not give
+  it.**  `set [ find default-name=<name> ]` finds a port by the name
+  the device gave it, and the parser recorded that name only for a
+  `set [ find default-name= ]` line or a name that BEGAN `ether` and
+  a digit, in any letter case.  An SFP, SFP+, SFP28 or combo port the
+  config names only in `/ip address`, a bonding's `slaves=` or a
+  VRRP's `interface=` had none, so an entry that gave it a name of
+  its own was written `set [ find name=<new> ]`, a lookup no device
+  matches; and a name an operator chose (`ether1_ADMIN`,
+  `ether2-master`, `Ether1`) was written `find
+  default-name=ether1_ADMIN`, which matches nothing either -- each in
+  a job that said `completed`.  A factory name is now one MikroTik's
+  manual or an export of a real device shows (`etherN`, `sfpN`,
+  `comboN`, `sfp-sfpplusN`, `sfp28-N`, and the QSFP lanes
+  `qsfpplusN-L`, `qsfp28-N-L`, `qsfp56-N-L`, `qsfp56-dd-N-L`), whole
+  and in lower case (`port_names.is_factory_port_name`), given to a
+  record of a port once the whole config has been read
+  (`parse._name_the_hardware`); the renderer asks the same question.
+  The classifier reads `sfp28-N`, `comboN` and `qsfp28-N-L` as ports,
+  which it read as nothing, and no longer reads a port name in
+  another letter case (`SFP-SFPPLUS1`, `Ether1`) -- RouterOS keeps an
+  operator's names as free text -- so onto another vendor such a name
+  is listed as one the translator could not read.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_a_factory_name_is_the_devices.py`,
+  which reads the lookup lines of the output as text, and is handed
+  the old parse and render.  The cross-mesh audit is unchanged.
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
   motd` are printed with their body as it was typed and a line `EOF`
@@ -3573,10 +3599,11 @@ timestamp if your timezone matters for an audit.
   `set interfaces me0.5 unit 0 ...`.  Map it by hand.
 - **On RouterOS only a declared target device can move a port onto
   other hardware.**  Without one, an entry of `port_rename_map` names
-  the port.  The output then finds it by the factory name it had
-  where the config states one — a `set [ find default-name= ]` line,
-  or a name of the form `etherN`.  A port the export mentions only
-  elsewhere (an SFP port with nothing but an address) has no factory
+  the port.  The output then finds it by the factory name it had: a
+  `set [ find default-name= ]` line's, or the port's own name where
+  that is one a MikroTik device gives a port (`etherN`, `sfpN`,
+  `comboN`, `sfp-sfpplusN`, `sfp28-N`, the QSFP lanes).  A port
+  known only by a name of yours, with no such line, has no factory
   name recorded, and naming it renders a lookup by the NEW name
   (`set [ find name=WAN ]`), which matches no port: declare both
   devices, or add the port's `/interface ethernet` line.

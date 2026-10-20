@@ -56,6 +56,7 @@ from ...limits import ticked
 from .._helpers import Uniques
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .port_names import is_factory_port_name
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +202,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # appeared in the source ``/interface vrrp`` section, keeping
     # render output deterministic.
     _materialise_vrrp_groups(vrrp_scratch, iface_by_name)
+    _name_the_hardware(iface_by_name.values())
 
     # Order interfaces deterministically: ethernet ports first
     # (by natural-sort name), then bridges, then VLANs, then rest.
@@ -934,9 +936,6 @@ def _materialise_vrrp_groups(
             parent_iface = CanonicalInterface(
                 name=parent_name,
                 interface_type=_infer_iface_type_from_name(parent_name),
-                default_name=(
-                    parent_name if _is_ethernet_name(parent_name) else ""
-                ),
             )
             iface_by_name[parent_name] = parent_iface
         group = CanonicalVRRPGroup(
@@ -1015,12 +1014,6 @@ def _parse_ip_address(
             CanonicalInterface(
                 name=iface_name,
                 interface_type=_infer_iface_type_from_name(iface_name),
-                # If the name already matches a factory default pattern,
-                # use it as the default_name too.  Keeps round-trip
-                # consistent for ifaces that only appear in /ip address
-                # (no /interface ethernet set line carries the default-
-                # name lookup).
-                default_name=iface_name if _is_ethernet_name(iface_name) else "",
             ),
         )
         iface.ipv4_addresses.append(CanonicalIPv4Address(
@@ -1089,7 +1082,6 @@ def _parse_ipv6_address(
             CanonicalInterface(
                 name=iface_name,
                 interface_type=_infer_iface_type_from_name(iface_name),
-                default_name=iface_name if _is_ethernet_name(iface_name) else "",
             ),
         )
         iface.ipv6_addresses.append(CanonicalIPv6Address(
@@ -1404,8 +1396,48 @@ def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
 
 
 def _is_ethernet_name(name: str) -> bool:
-    """Does this name look like a MikroTik default ethernet port?"""
+    """Does this name look like a MikroTik ethernet port?
+
+    A guess at the KIND of interface, for its type and its place in
+    the output: ``ether1_ADMIN`` is most likely a port.  It is not a
+    factory name -- :func:`.port_names.is_factory_port_name` says
+    which names are.
+    """
     return bool(re.match(r"^ether\d", name, re.IGNORECASE))
+
+
+#: The types a record of a port has: an interface the config only
+#: refers to is typed by nothing.
+_PORT_TYPES = frozenset({"", "ianaift:ethernetCsmacd"})
+
+
+def _name_the_hardware(ifaces: Iterable[CanonicalInterface]) -> None:
+    """Give a port the config names by its factory name that name as
+    its ``default_name``.
+
+    A port no line renames keeps the name the device gave it, and an
+    export writes no ``/interface ethernet`` line for a port with
+    nothing set on it: an SFP port known only from ``/ip address`` or a
+    bonding's ``slaves=`` is still the hardware of that name.  Without
+    it an entry that gives the port a name of its own was written ``set
+    [ find name=<new> ]``, a lookup no device matches.
+
+    Only a factory name (:func:`.port_names.is_factory_port_name`), and
+    only on a record of a port, not a VLAN, bridge, bond or tunnel some
+    line named so.  A line that still uses a port's factory name after
+    ``set [ find default-name=ether5 ] name=lan5`` -- what a
+    hand-merged file has -- is given it too, as ``ether<N>`` always
+    was: two records then look one port up, and the mapping onto a
+    declared device refuses to pair them, since which of the two the
+    port is cannot be told.
+    """
+    for iface in ifaces:
+        if (
+            not iface.default_name
+            and iface.interface_type in _PORT_TYPES
+            and is_factory_port_name(iface.name)
+        ):
+            iface.default_name = iface.name
 
 
 def _is_vlan_name(name: str) -> bool:

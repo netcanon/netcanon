@@ -17,7 +17,8 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
 [Tier 1](../CAPABILITIES.md#tier-1--auto-translatable-cross-vendor-stable):
 
 - `hostname` (`/system identity`)
-- Interfaces — physical (`ether<N>`, `sfp-sfpplus<N>`), bridge
+- Interfaces — physical (`ether<N>`, `sfp<N>`, `combo<N>`,
+  `sfp-sfpplus<N>`, `sfp28-<N>`, `qsfp28-<N>-<lane>`), bridge
   (`/interface bridge`), VLAN (`/interface vlan` named e.g.
   `gn-mgmt`); IPv4 (`/ip address`), IPv6 (`/ipv6 address`)
 - VLANs — `/interface bridge port` with vlan-id mappings + tagged
@@ -185,12 +186,20 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   device replacements.  An entry of `port_rename_map` gives a port a
   NAME: `{"ether1": "WAN"}` renders
   `set [ find default-name=ether1 ] name=WAN`, and the port is still
-  found by the factory name it had — where the config states one (a
-  `set [ find default-name= ]` line, or a name of the form `etherN`).
-  A port the export mentions only elsewhere, such as an SFP port with
-  nothing but an address, has no factory name recorded: naming it
-  renders `set [ find name=WAN ]`, a lookup by the new name that
-  matches no port, unless both device models are declared (below).
+  found by the factory name it had: a `set [ find default-name= ]`
+  line's, or the port's own name where that is one a MikroTik device
+  gives a port — `etherN`, `sfpN`, `comboN`, `sfp-sfpplusN`, `sfp28-N`, and the
+  QSFP lanes `qsfpplusN-L`, `qsfp28-N-L`, `qsfp56-N-L` and
+  `qsfp56-dd-N-L`, whole and in lower case, as MikroTik's
+  manual and exports show them.  So an SFP port the export mentions
+  only in `/ip address` is found too.  A name of yours
+  (`ether1_ADMIN`, `Ether1`) is not one, and a port known only by
+  such a name, with no `set [ find default-name= ]` line for it, has
+  none recorded: naming it renders `set [ find name=WAN ]`, a lookup
+  by the new name that matches no port, unless both device models
+  are declared (below).  RouterOS names are free text in their own
+  letter case, so `SFP-SFPPLUS1` is not read as a port: onto another
+  vendor the job lists it as a name the translator could not read.
   The key of an entry is the name the config uses for the port —
   yours, where you gave one; without devices declared an entry keyed
   by the factory name of a port you named matches nothing and is

@@ -724,6 +724,12 @@ tests use these exclusively — never CSS classes or element structure.  See
   declared and nothing reported — and "the ordinary path did not move"
   had been measured with an empty port map only.  A port's factory
   name says which hardware it IS; it is not a reference to the port.
+  And it is a name the DEVICE gives, whole: the parser took any name
+  that began `ether` and a digit for one, in any letter case, and
+  looked `ether1_ADMIN` up as hardware no device has, while an SFP
+  port the config named only in `/ip address` had none and was
+  looked up by its new name.  The shapes come from the vendor's
+  manual and exports (`is_factory_port_name`), never from a prefix.
   The translator leaves it alone, and `run_plan_with_models` — the one
   caller that knows the target device — sets it, and reads back from
   the tree that is rendered where each port's hardware ended.  Nothing
