@@ -143,16 +143,78 @@ conventions.  Further grammar diversity (flex-algo, L2VPN
 bridge-groups, ACL, QoS) is welcomed via
 [`WANTED.md`](../../tests/fixtures/real/WANTED.md).
 
+## A banner is text
+
+The parser reads a banner as text, not as lines of the config: each
+line of it is passed over by every reader of the parse (the Tier-3
+rows, the check for a JSON or XML paste and the check for a text with
+no indentation included), and nothing of it is translated.  Up to
+0.7.7 every line of a banner was read as configuration: a body line
+`username <name>` with ` group root-lr` under it was an account on 12
+of the 13 public targets (with privilege 15 on nine), and a `vrf` line
+a VRF, in jobs that said `completed`.  Detection still reads the text as it came.
+
+- **What opens one**: a line in column 0, `banner` and its type --
+  `exec`, `incoming`, `login`, `motd`, `prompt-timeout` or `slip-ppp`,
+  the six of Cisco's `Cisco-IOS-XR-um-banner-cfg` model; Cisco's IOS XR
+  command reference lists each in global configuration only -- or
+  `aaa banner login`, whose value Cisco's AAA model describes in the
+  same words.  Then white space and the delimiter.
+- **The delimiter is the one character after the type.**  Unlike IOS,
+  which prints every banner between two `^C`, IOS XR prints `banner
+  <type>` and the text as it is stored, beginning with the delimiter
+  that was typed: printed configs show `;`, `#`, `/`, `^`, `"`, `c` and
+  `^C`.  Cisco calls it "a delimiting character" ("End with the
+  character 'c'"), so `^C` is the delimiter `^` and a text that begins
+  with `C`, as Batfish and scrapli_cfg read it.  Whether the router
+  takes `^C` as one delimiter is not established.  The two readings end
+  a banner on the same line unless a line holds a `^` without the `C`
+  (or `c`) after it: read as one character the banner would end there
+  and the lines after it be configuration, read as two it would run on.
+  Such a line is refused (below); no printed config seen has one.  The
+  delimiter is compared by its case.
+- **Where the banner ends**: at the next occurrence of the delimiter,
+  anywhere (Cisco: "terminating the message with the second occurrence
+  of the delimiting character") -- on the line that opens it (`banner
+  motd cc`, a banner with no text, is printed so), in the middle of a
+  later line, or at its start or end (`<text>^C`, `<text>"`).  The
+  whole of the line that ends it is the banner's: IOS XR prints what
+  follows the delimiter there (spaces, or more text) as part of the
+  stored text.  A line `!` or `end` inside it is its text.
+- **A row for each kind of banner**: `banner motd (9 lines, from line
+  4)` in the sections not translated.  It quotes nothing of the text
+  and says how many lines the banners of that kind took -- see the
+  limitation below.
+- **Refused in words**, naming the line and quoting nothing (`parse
+  failed: cisco_iosxr: line <n> ...`): a banner with no end before the
+  end of the text (`opens a banner that runs to the end of this text`;
+  read as it stands, nothing after it is configuration); a line in
+  column 0 that names a banner IOS XR does not print (`banner` and a
+  delimiter with no type, or `banner config-save`, as IOS has them; a
+  type with no text after it; another `aaa banner`); a line of a
+  banner printed with `^C` that holds a `^` and not the two (`holds a
+  caret with no C after it`); and a line of a
+  banner that ends in another character than a line feed -- a form
+  feed, a vertical tab, a carriage return on its own (`is a line of a
+  banner, or of another block of text, and ends in a character ...`).
+- **Not handled**: the value of `crypto key generate rsa ... pubkey`,
+  which Cisco's model calls "Generated keys in pem format" and whose
+  printed form no source shows.  No other body of free text was found
+  in Cisco's IOS XR configuration models or in printed configs.
+- **A limitation: a banner set through NETCONF can be printed with no
+  end.**  Cisco's xrdocs.io shows a banner set through the YANG model
+  printed as `banner login ! <text>`, with no second `!`.  Its text then
+  runs on to the next `!` in the config, and the lines between are
+  taken for the banner's text: none of them is read (the safe side --
+  no line of a banner becomes an account), but configuration among
+  them is not translated, in a job that says nothing else of it.  The
+  banner's row counts its lines: a banner that took many more lines
+  than you wrote ended later than you meant.  Give the banner an end on
+  the router (set it again from the CLI), or remove its line from the
+  text you paste.
+
 ## Common gotchas
 
-- **A banner's lines are read as configuration (measured).**  The IOS
-  XR parser does not pass over a `banner` body: a body line `username
-  <name>` with ` group root-lr` under it is an account with privilege
-  15 on the target, and a `vrf` line a VRF, in jobs that say
-  `completed`.  The EOS, IOS-XE CLI, NX-OS, AOS-CX, OS10 and AOS-S
-  parsers read a banner as text; doing so here is a change of its own,
-  from Cisco's IOS XR pages.  Until then, remove a banner's lines from
-  the text you paste.
 - **Paste the config as the router prints it, with its
   indentation.**  IOS XR places each line of a configuration by its
   indentation when it loads a file: a line at the left margin is a

@@ -181,6 +181,47 @@ certainty:        enum     # certified | best_effort | experimental
 For authoring instructions see
 [`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md).
 
+#### Where a stanza, and a block of text, ends (parse side)
+
+A parser reads a config as its DEVICE places the lines, not as the
+printer happens to lay them out, and what it cannot place it refuses in
+words rather than guesses.  Three rules of one idea, each grounded in
+what the vendor documents (or said to be inferred where it does not),
+and each in `AGENTS.md`'s Hard Rules:
+
+* **A stanza ends where the device ends it.**  AOS-S ends a context at
+  its `exit`, an `end`, or a line in column 0 that enters another
+  context or that the top level reads (`_ends_the_stanza`), never at
+  indentation.  IOS XR places a line by its indentation, and a
+  submode's `!` does not end the stanza it is in; EOS reads `router
+  bgp`, whose blocks are real, by depth.
+* **A text the device would place otherwise than the parser reads it
+  is refused.**  An IOS XR or EOS text with no indentation
+  (`_scanner.first_flat_stanza`), and IOS XR's `show running-config
+  formal` form: the sentence names a line and quotes nothing of the
+  text.
+* **A block of text is text, never lines of the config.**  A banner, a
+  macro, a scheduler job or an EOS `EOF` body is emptied before any
+  reader of the parse runs -- the Tier-3 rows included -- each line
+  keeping its number, so every later refusal names the right line
+  (`_scanner.without_text_bodies`, with each parser's `opens` /
+  `Body` from its vendor's rule; EOS keeps its own loop).  A body with
+  no end, a line of one that ends where the device does not end a
+  line, and a line where two readings of the grammar end the body
+  differently are refused.
+
+The blind spot all three shared: every check read the captures as
+printed, and pinned the shapes the printers write; the shapes that
+broke each parser (a text without its indentation, a banner whose text
+holds an account line) were in no test.  The guards build those shapes
+by hand and read each target's OUTPUT
+(`tests/unit/migration/codecs/aruba_aoss/test_where_a_stanza_ends.py`,
+`tests/unit/migration/test_cisco_iosxr_indentation.py`,
+`tests/unit/migration/test_arista_eos_indentation.py`,
+`tests/unit/migration/test_a_banner_is_text.py`).  Which parsers still
+read a flat text, or a free-text value of another grammar, is in the
+CHANGELOG's known limitations.
+
 ### Layer 3 — Canonical Intent Model (CIM)
 
 **Where:** `netcanon/migration/canonical/intent.py`

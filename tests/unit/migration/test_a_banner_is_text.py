@@ -1,5 +1,5 @@
-"""A banner is text, not config: IOS-XE CLI, NX-OS, AOS-CX, OS10 and
-AOS-S (and, for the line ends of a body, EOS).
+"""A banner is text, not config: IOS-XE CLI, NX-OS, AOS-CX, OS10, AOS-S
+and IOS XR (and, for the line ends of a body, EOS).
 
 Each of these parsers read a banner's body as lines of the config.  A
 banner whose body held a line ``username <name> privilege 15 ...`` in
@@ -29,13 +29,22 @@ Each platform ends a body its own way, from its vendor:
   refused.  A banner typed with another delimiter ends at its next
   occurrence.
 * OS10 -- a line that is the delimiter and nothing else, in column 0.
+* IOS XR -- the ONE character after the type (``^C`` is ``^``),
+  wherever it next occurs, the line that opens the banner included; XR
+  prints the delimiter that was typed, and what follows the closer on
+  its line is the banner's.  ``aaa banner login`` the same.  Each kind
+  of banner is a row of ``dropped_tier3_sections`` with its count of
+  lines.
 
 A body with no end is refused in words, naming the line that opens it
 and quoting nothing.  So is a line of a body that ends in another of
 the characters ``str.splitlines`` ends a line at (a form feed, a
-vertical tab ...), on all six parsers; and, on IOS-XE, AOS-S and OS10,
+vertical tab ...), on all seven parsers; on IOS-XE, AOS-S and OS10,
 a line outside every body that holds what the device printed to end a
-banner whose own text held it too.  Tested here:
+banner whose own text held it too; and on IOS XR, a line that names a
+banner XR does not print, and a ``^`` alone in a banner printed with
+``^C`` (one delimiter or two: the readings end it on different
+lines).  Tested here:
 
 (a) for each parser, a banner whose body holds an account, a VLAN, an
     interface with an address, a route and an ACL: the parse holds none
@@ -43,10 +52,10 @@ banner whose own text held it too.  Tested here:
 (b) each form, the opener and the closer as the vendor prints them, with
     what the parser makes of the text typed by hand beside it;
 (c) each refusal, with its sentence;
-(d) every committed input of the six parses to the tree it gave before
+(d) every committed input of the seven parses to the tree it gave before
     the change, and none is refused;
 (e) a line end the device does not count, in every place of a body, on
-    the six;
+    the seven;
 (f) each check, handed the defect it is for, fails (the last section).
 """
 
@@ -73,6 +82,8 @@ from netcanon.migration.codecs.aruba_aoss import parse as aoss_parse
 from netcanon.migration.codecs.base import ParseError
 from netcanon.migration.codecs.cisco_iosxe_cli import codec as ios_codec
 from netcanon.migration.codecs.cisco_iosxe_cli import parse as ios_parse
+from netcanon.migration.codecs.cisco_iosxr import codec as xr_codec
+from netcanon.migration.codecs.cisco_iosxr import parse as xr_parse
 from netcanon.migration.codecs.cisco_nxos import codec as nxos_codec
 from netcanon.migration.codecs.cisco_nxos import parse as nxos_parse
 from netcanon.migration.codecs.dell_os10 import codec as os10_codec
@@ -94,6 +105,7 @@ MODULES: dict[str, tuple[ModuleType, ModuleType]] = {
     "aruba_aoscx": (aoscx_parse, aoscx_codec),
     "dell_os10": (os10_parse, os10_codec),
     "aruba_aoss": (aoss_parse, aoss_codec),
+    "cisco_iosxr": (xr_parse, xr_codec),
 }
 CODECS = list(MODULES)
 
@@ -119,12 +131,15 @@ HEAD = {
     "aruba_aoscx": "!Version ArubaOS-CX GL.10.09.0010\n!\n",
     "dell_os10": "! Version 10.5.1.0\n!\n",
     "aruba_aoss": "; J9729A Configuration Editor; Created on release #WC.16.10.0001\n",
+    "cisco_iosxr": "!! IOS XR Configuration 7.3.2\n!\n",
 }
 #: What comes after it, in each grammar: a VLAN, an interface with an
 #: address and a route.  None of them holds a delimiter a test below
 #: uses (no ``!`` and no ``^C`` line, no odd number of quotes), so a
 #: banner opened before them and never ended is refused.  (AOS-S's
-#: names are quoted.)
+#: names are quoted.  IOS XR's has no ``!``, ``^``, ``;``, ``#`` and no
+#: ``"``; it has ``/`` and ``c``, which no IOS XR banner below leaves
+#: open.  Its VLAN is a sub-interface's tag.)
 AFTER = {
     "cisco_iosxe_cli": (
         "hostname r1\n!\nvlan 10\n name users\n!\ninterface GigabitEthernet1\n"
@@ -146,6 +161,11 @@ AFTER = {
         'hostname "s1"\nvlan 10\n   name "users"\n   untagged 1\n   ip address 192.0.2.1 255.255.255.0\n'
         "   exit\nip route 0.0.0.0 0.0.0.0 192.0.2.254\n"
     ),
+    "cisco_iosxr": (
+        "hostname x1\ninterface GigabitEthernet0/0/0/0.10\n encapsulation dot1q 10\n"
+        " ipv4 address 192.0.2.1 255.255.255.0\nrouter static\n address-family ipv4 unicast\n"
+        "  0.0.0.0/0 192.0.2.254\nend\n"
+    ),
 }
 #: What the parser makes of ``AFTER``, read by hand: the accounts, the
 #: VLAN ids, the interface addresses and the routes' destinations.
@@ -161,6 +181,7 @@ VLAN_3999 = {
     "aruba_aoscx": "vlan 3999\n",
     "dell_os10": "interface vlan3999\n",
     "aruba_aoss": "vlan 3999\n   exit\n",
+    "cisco_iosxr": "interface Bundle-Ether1.3999\n encapsulation dot1q 3999\n",
 }
 #: A privilege-15 account line in each grammar.
 ACCOUNT = {
@@ -169,6 +190,7 @@ ACCOUNT = {
     "aruba_aoscx": "user intruder group administrators password plaintext x",
     "dell_os10": "username intruder password x role sysadmin",
     "aruba_aoss": 'password manager user-name "intruder" plaintext "x"',
+    "cisco_iosxr": "username intruder\n group root-lr\n secret 0 x",
 }
 
 #: A banner in each grammar whose body holds an account with privilege
@@ -205,7 +227,16 @@ BANNER = {
         "ip route 203.0.113.0 255.255.255.0 198.51.100.1\n"
         'ip access-list extended "FROM_BANNER"\n%\n'
     ),
+    "cisco_iosxr": (
+        "banner motd ;\nhostname from-the-banner\nusername intruder\n group root-lr\n"
+        " secret 0 from-the-banner\nvrf FROM_BANNER\ninterface GigabitEthernet0/0/0/9.3999\n"
+        " encapsulation dot1q 3999\n ipv4 address 198.51.100.66 255.255.255.0\nrouter static\n"
+        " address-family ipv4 unicast\n  203.0.113.0/24 198.51.100.1\nipv4 access-list FROM_BANNER\n;\n"
+    ),
 }
+#: The rows each parser gives the banner above: IOS XR's says it is not
+#: translated, and how many lines it took; the others give none.
+BANNER_ROWS = {"cisco_iosxr": ["banner motd (14 lines, from line 3)"]}
 BANNER_WORDS = ("intruder", "3999", "198.51.100.66", "203.0.113", "FROM_BANNER", "from-the-banner")
 
 
@@ -239,13 +270,18 @@ def test_each_config_without_its_banner_holds_what_is_typed_beside_it() -> None:
 
 def _check_banner_tree(codec: str) -> None:
     tree = _parse(codec, _with_banner(codec))
+    bare = _parse(codec, _without_banner(codec))
     assert _holds(codec, _with_banner(codec)) == AFTER_HOLDS, codec
-    assert tree.dropped_tier3_sections == [], codec
+    assert tree.dropped_tier3_sections == BANNER_ROWS.get(codec, []), codec
+    assert bare.dropped_tier3_sections == [], codec
     assert tree.hostname == {
         "cisco_iosxe_cli": "r1", "cisco_nxos": "n1", "aruba_aoscx": "c1", "dell_os10": "d1", "aruba_aoss": "s1",
+        "cisco_iosxr": "x1",
     }[codec]
     # Every line after the banner is read as it is without it.
-    assert tree.model_dump() == _parse(codec, _without_banner(codec)).model_dump(), codec
+    assert tree.model_dump(exclude={"dropped_tier3_sections"}) == bare.model_dump(
+        exclude={"dropped_tier3_sections"},
+    ), codec
 
 
 @pytest.mark.parametrize("codec", CODECS)
@@ -262,6 +298,7 @@ def _check_banner_outputs(codec: str) -> None:
         assert [w for w in BANNER_WORDS if w.lower() in job.rendered.lower()] == [], (codec, target)
         # The banner is not translated, and changes nothing that is.
         assert (job.status, job.rendered, job.warnings) == (bare.status, bare.rendered, bare.warnings), target
+        assert job.dropped_tier3_sections == BANNER_ROWS.get(codec, []), target
         # And the target's own parser finds no account, VLAN or route of
         # the banner's in what was written.
         read_back = get_codec(target).parse(job.rendered)
@@ -527,6 +564,80 @@ FORMS: dict[str, dict[str, tuple[str, tuple]]] = {
             'banner motd "\n{ authorised access only }\n"\nvlan 3999\n   exit\n', WITH_3999,
         ),
     },
+    "cisco_iosxr": {
+        # Printed so by 6.4.1 (`;`), 7.11.2 (`#`) and 7.10.1 (`/`): the
+        # opener alone, the text, the delimiter alone.
+        "a semicolon alone on the lines that open and end it": (
+            "banner motd ;\n" + ACCOUNT["cisco_iosxr"] + "\n" + "vrf X\n;\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        "a hash alone on the lines that open and end it": (
+            "banner login #\n" + ACCOUNT["cisco_iosxr"] + "\n#\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        "a slash alone on the lines that open and end it": (
+            "banner exec /\n" + ACCOUNT["cisco_iosxr"] + "\n/\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # 5.2.1 (Batfish's capture): a caret, and the text's first line empty.
+        "a caret, the first line of the text empty": (
+            "banner login ^\n\n" + ACCOUNT["cisco_iosxr"] + "\n^\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # 6.1.3 (XRv): `^C` on the opener, the closing `^C` after the text
+        # of the last line.
+        "^C, the end after the text of the last line": (
+            "banner motd ^C\n" + ACCOUNT["cisco_iosxr"] + "\nthe end^C\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # 7.3.2 (DevNet): `^c`, the closing line `^c` and eight spaces.
+        "^c, the closing line with spaces after it": (
+            "banner motd ^c\n" + ACCOUNT["cisco_iosxr"] + "\n^c        \n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # A caret alone and the two on one line: read as one character or
+        # as two, the delimiter ends the banner on that line.
+        "^C, a caret alone and the end on one line": (
+            "banner motd ^C\n" + ACCOUNT["cisco_iosxr"] + "\na ^ b^C\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        "^C on one line, a caret alone before its end": (
+            "banner motd ^Ca ^ b^C\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # 7.3.2 (DevNet): the text begins on the opener line, and the
+        # closing quote ends the last line of it.
+        "text on the line that opens it, the end after the text of the last line": (
+            'banner motd "Welcome\n' + ACCOUNT["cisco_iosxr"] + '\nbye"\n' + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # Two printed corpus lines: the closer at the start of a line,
+        # more text after it.
+        "the end at the start of a line, with more after it": (
+            "banner motd ;\n" + ACCOUNT["cisco_iosxr"] + "\n;and the rest\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # A line `!` or `end` in the text is text: only the delimiter ends it.
+        "lines that are ! and end in the text": (
+            "banner motd #\n!\nend\n" + ACCOUNT["cisco_iosxr"] + "\n#\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        "aaa banner login": (
+            "aaa banner login ;\n" + ACCOUNT["cisco_iosxr"] + "\n;\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # 6.5.1: two banners with an empty text, each on one line.
+        "two banners on one line each, their texts empty": (
+            "banner motd cc\nbanner login cc\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # 7.8.1: one line, two spaces after its end.
+        "a banner on one line, spaces after its end": (
+            'banner motd "Authorised access only"  \n' + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # 7.8.1: one line, text after its end.
+        "a banner on one line, text after its end": (
+            "banner exec DHello. Dthe rest of it\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        # The keyword and the type in another letter case; the delimiter
+        # is compared by its own, so a line `C` is text.
+        "a delimiter compared by its case": (
+            "BANNER MOTD c\nC\nusername intruder\n group root-lr\nc\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        "lines that open nothing": (
+            "service sysadmin-login-banner disable\nhostname banner\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+        "a banner whose text begins as JSON does": (
+            "banner motd ;\n{ authorised access only }\n;\n" + VLAN_3999["cisco_iosxr"], WITH_3999,
+        ),
+    },
 }
 #: The forms whose lines are configuration either way: read as lines,
 #: they make the same records.
@@ -534,7 +645,9 @@ _HIDES_NOTHING = {
     "lines that open nothing", "a banner on one line", "a banner on one line, and what follows its end",
     "the one-line form", "the typed form on one line", "escapes for line ends on one line", "an empty banner",
     "a backslash at the end of a line", "an escaped quote in a line after a banner",
-    "an odd number of quotes before any banner",
+    "an odd number of quotes before any banner", "two banners on one line each, their texts empty",
+    "a banner on one line, spaces after its end", "a banner on one line, text after its end",
+    "^C on one line, a caret alone before its end",
 }
 FORM_IDS = [(codec, name) for codec in CODECS for name in FORMS[codec]]
 
@@ -550,6 +663,46 @@ def _check_form(codec: str, name: str) -> None:
 @pytest.mark.parametrize(("codec", "name"), FORM_IDS, ids=[f"{c}: {n}" for c, n in FORM_IDS])
 def test_each_form_holds_what_is_typed_beside_it(codec: str, name: str) -> None:
     _check_form(codec, name)
+
+
+#: IOS XR: banners of three kinds, one of them twice, and what the rows
+#: say -- each kind once, its lines counted, from where its first begins.
+_XR_KINDS = (
+    "banner motd ;\nhello\n;\nbanner login cc\naaa banner login #\none\ntwo\n#\n"
+    "banner motd /\nbye/\n"
+)
+_XR_KINDS_ROWS = [
+    "banner motd (5 lines, from line 3)", "banner login (1 line, from line 6)",
+    "aaa banner login (4 lines, from line 7)",
+]
+
+
+def _check_xr_rows() -> None:
+    text = HEAD["cisco_iosxr"] + _XR_KINDS + AFTER["cisco_iosxr"]
+    assert _holds("cisco_iosxr", text) == AFTER_HOLDS
+    assert _parse("cisco_iosxr", text).dropped_tier3_sections == _XR_KINDS_ROWS
+
+
+def test_ios_xr_says_each_kind_of_banner_and_its_lines() -> None:
+    """A banner is not translated: each kind is a row, which quotes
+    nothing of the text and counts its lines."""
+    _check_xr_rows()
+
+
+def test_ios_xr_a_banner_printed_with_no_end_of_its_own() -> None:
+    """Cisco's xrdocs.io shows a banner set through NETCONF printed as
+    ``banner login ! <text>``, with no second ``!``.  Its text runs on
+    to the next ``!``, and the lines before it are taken for its text:
+    the safe side (the account under it is not read, and no line of a
+    banner is), and the row says how many lines it took.  A known
+    limitation, written here as it stands."""
+    text = (
+        HEAD["cisco_iosxr"] + "banner login ! Unauthorised access to this device is restricted.\n"
+        + "username admin\n group root-lr\n!\n" + AFTER["cisco_iosxr"]
+    )
+    tree = _parse("cisco_iosxr", text)
+    assert _holds("cisco_iosxr", text) == AFTER_HOLDS
+    assert tree.dropped_tier3_sections == ["banner login (4 lines, from line 3)"]
 
 
 def test_a_banner_at_the_end_with_no_line_end_after_it() -> None:
@@ -689,6 +842,45 @@ REFUSED: dict[str, tuple[str, str, str, dict[str, int], str]] = {
         + '\nbye"\n' + AFTER["aruba_aoss"],
         aoss_parse.ORPHAN_MESSAGE, {"line": 4, "opened": 2}, '"',
     ),
+    "cisco_iosxr: a banner with no end": (
+        "cisco_iosxr", HEAD["cisco_iosxr"] + "banner motd ;\n" + ACCOUNT["cisco_iosxr"] + "\n" + AFTER["cisco_iosxr"],
+        xr_parse.UNENDED_BODY_MESSAGE, {"line": 3}, ";",
+    ),
+    # Its text on the line that opens it, and no other `#`.
+    "cisco_iosxr: a banner with no end, its text on the line that opens it": (
+        "cisco_iosxr", HEAD["cisco_iosxr"] + "banner login # Welcome\nvrf X\n" + AFTER["cisco_iosxr"],
+        xr_parse.UNENDED_BODY_MESSAGE, {"line": 3}, "#",
+    ),
+    # IOS's form: `banner` and a delimiter, with no type.
+    "cisco_iosxr: a banner with no type": (
+        "cisco_iosxr", HEAD["cisco_iosxr"] + "banner ^C\n" + ACCOUNT["cisco_iosxr"] + "\n^C\n" + AFTER["cisco_iosxr"],
+        xr_parse.UNKNOWN_BANNER_MESSAGE, {"line": 3}, "^",
+    ),
+    "cisco_iosxr: a type IOS XR does not list": (
+        "cisco_iosxr", HEAD["cisco_iosxr"] + "banner config-save ;\nvrf X\n;\n" + AFTER["cisco_iosxr"],
+        xr_parse.UNKNOWN_BANNER_MESSAGE, {"line": 3}, ";",
+    ),
+    "cisco_iosxr: a banner with no text after its type": (
+        "cisco_iosxr", HEAD["cisco_iosxr"] + "banner motd\nvrf X\n" + AFTER["cisco_iosxr"],
+        xr_parse.UNKNOWN_BANNER_MESSAGE, {"line": 3}, ";",
+    ),
+    "cisco_iosxr: an aaa banner IOS XR does not list": (
+        "cisco_iosxr", HEAD["cisco_iosxr"] + "aaa banner fail-message ;\nvrf X\n;\n" + AFTER["cisco_iosxr"],
+        xr_parse.UNKNOWN_BANNER_MESSAGE, {"line": 3}, ";",
+    ),
+    # Printed with `^C`, a caret alone: read as one character the banner
+    # ends there and the account after it is configuration; read as two
+    # it runs on.
+    "cisco_iosxr: a caret alone in a banner printed with ^C": (
+        "cisco_iosxr", HEAD["cisco_iosxr"] + "banner motd ^C\nbye^\n" + ACCOUNT["cisco_iosxr"] + "\n^C\n"
+        + AFTER["cisco_iosxr"],
+        xr_parse.CARET_MESSAGE, {"line": 4}, "^",
+    ),
+    "cisco_iosxr: a caret alone on the line that opens a banner printed with ^c": (
+        "cisco_iosxr", HEAD["cisco_iosxr"] + "banner motd ^cWelcome^\n" + ACCOUNT["cisco_iosxr"] + "\n^c\n"
+        + AFTER["cisco_iosxr"],
+        xr_parse.CARET_MESSAGE, {"line": 3}, "^",
+    ),
 }
 #: The refusals of a body with no end, and of a text that holds its end.
 UNENDED = [name for name, (codec, _, sentence, _, _) in REFUSED.items()
@@ -742,6 +934,7 @@ def test_the_sentences_name_no_delimiter_and_say_what_to_paste() -> None:
         aoscx_parse.UNENDED_BODY_MESSAGE, aoscx_parse.MORE_ON_THE_OPENER_MESSAGE,
         os10_parse.UNENDED_BODY_MESSAGE, os10_parse.MORE_ON_THE_OPENER_MESSAGE, os10_parse.ORPHAN_MESSAGE,
         aoss_parse.UNENDED_BODY_MESSAGE, aoss_parse.TEXT_AFTER_THE_END_MESSAGE, aoss_parse.ORPHAN_MESSAGE,
+        xr_parse.UNENDED_BODY_MESSAGE, xr_parse.UNKNOWN_BANNER_MESSAGE, xr_parse.CARET_MESSAGE,
         *(_line_end_sentence(codec) for codec in (*CODECS, "arista_eos")),
     ]
     for sentence in sentences:
@@ -749,13 +942,17 @@ def test_the_sentences_name_no_delimiter_and_say_what_to_paste() -> None:
         assert "show running-config" in sentence or "remove the banner's lines" in sentence, sentence
         for mark in ("^", '"', "!", "#", "%", "$"):
             assert mark not in sentence, (mark, sentence)
+    # IOS XR prints the delimiter that was typed: `;` and `/` among the
+    # commonest.
+    for sentence in (xr_parse.UNENDED_BODY_MESSAGE, xr_parse.UNKNOWN_BANNER_MESSAGE, xr_parse.CARET_MESSAGE):
+        assert ";" not in sentence and "/" not in sentence, sentence
     # Each sentence for a text that holds its end names the banner's line.
     for sentence in (ios_parse.ORPHAN_MESSAGE, os10_parse.ORPHAN_MESSAGE, aoss_parse.ORPHAN_MESSAGE):
         assert "{opened}" in sentence, sentence
 
 
 # ---------------------------------------------------------------------------
-# (d) Every committed input of the six, as it was
+# (d) Every committed input of the seven, as it was
 # ---------------------------------------------------------------------------
 
 #: The committed inputs of each parser.
@@ -766,6 +963,7 @@ _DIRS = {
     "cisco_nxos": ("real/cisco_nxos", "synthetic/cisco_nxos"),
     "dell_os10": ("real/dell_os10", "synthetic/dell_os10"),
     "arista_eos": ("real/arista_eos", "synthetic/arista_eos"),
+    "cisco_iosxr": ("real/cisco_iosxr", "synthetic/cisco_iosxr"),
 }
 _NOT_A_CAPTURE = {".md", ".py", ".pyc", ".xml", ".json", ".yaml", ".yml"}
 
@@ -796,7 +994,8 @@ def _digest(codec: str, path: str) -> str:
 
 
 #: What :func:`_digest` gave for each committed input on the code as it
-#: was before a banner was read as text (``8210c697``).  A value changes
+#: was before a banner was read as text (``8210c697``; IOS XR's on
+#: ``efda1659``, before its parser read one).  A value changes
 #: only when a parser's reading of that input is changed on purpose; the
 #: failing assertion prints the new one.
 BEFORE: dict[str, str] = {
@@ -860,6 +1059,18 @@ BEFORE: dict[str, str] = {
     "real/arista_eos/karneliuk_a_eos1_eos4260.txt": "0b4c4b217747",
     "real/arista_eos/ksator_dcs_7150s64_eos4224.txt": "1b74762ebc5b",
     "synthetic/arista_eos/kitchen_sink.txt": "5f8ca989330b",
+    "real/cisco_iosxr/batfish_ebgp_border01.txt": "d17cfb52335f",
+    "real/cisco_iosxr/batfish_ebgp_border02.txt": "eb970a141bb2",
+    "real/cisco_iosxr/batfish_ibgp_border01.txt": "04fb1591aafb",
+    "real/cisco_iosxr/batfish_ibgp_rr.txt": "26dee33685ac",
+    "real/cisco_iosxr/batfish_vpnv4_pe1.txt": "d3c44fa0bb3b",
+    "real/cisco_iosxr/batfish_vpnv4_pe2.txt": "fa0c9f8fddb3",
+    "real/cisco_iosxr/batfish_vpnv4_pe3.txt": "63fcc6d7a988",
+    "real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg": "22396ca5c243",
+    "real/cisco_iosxr/xrdtools_isis_r1.cfg": "178d0314da43",
+    "real/cisco_iosxr/xrdtools_sr_xrd1.cfg": "74c70c975078",
+    "real/cisco_iosxr/xrdtools_srv6_pe1.cfg": "0e4e6ddc0250",
+    "synthetic/cisco_iosxr/kitchen_sink.cfg": "87347d0d4a5c",
 }
 
 #: The committed inputs that hold a banner: the body pass changes their
@@ -898,7 +1109,7 @@ def _check_committed() -> None:
 
 
 def test_every_committed_input_parses_to_the_tree_it_gave() -> None:
-    """No committed input of the six is refused, and each pinned one
+    """No committed input of the seven is refused, and each pinned one
     parses to the tree it gave before a banner was read as text: no
     committed banner's body holds a line a reader takes, and none ends
     a line where a device would not."""
@@ -964,6 +1175,11 @@ LINE_END_PLACES: dict[str, tuple[str, dict[str, tuple[str, int]]]] = {
         "the line that opens it": ("banner motd{LE}hi\nEOF\n" + "username intruder privilege 15 nopassword\n", 4),
         "a line in it": ("banner motd\nHello{LE}EOF\nusername intruder privilege 15 nopassword\nEOF\n", 5),
         "the line that ends it": ("banner motd\nhi\nEOF{LE}username intruder privilege 15 nopassword\n", 6),
+    }),
+    "cisco_iosxr": (HEAD["cisco_iosxr"], {
+        "the line that opens it": ("banner motd ;{LE}" + ACCOUNT["cisco_iosxr"] + "\n;\n", 3),
+        "a line in it": ("banner motd ;\nhi{LE};\n" + ACCOUNT["cisco_iosxr"] + "\n;\n", 4),
+        "the line that ends it": ("banner motd ;\nhi\nx;{LE}" + ACCOUNT["cisco_iosxr"] + "\n", 5),
     }),
 }
 LINE_END_IDS = [
@@ -1034,7 +1250,7 @@ def _bodies_by(monkeypatch: pytest.MonkeyPatch, defect: Callable[[str], str]) ->
 
 
 def _scanner_by(monkeypatch: pytest.MonkeyPatch, old: str, new: str) -> None:
-    """The shared loop with a defect, in each of the five parsers."""
+    """The shared loop with a defect, in each of the parsers that call it."""
     defect = _with_a_defect(_scanner, "without_text_bodies", old, new)
     for parse_module, _ in MODULES.values():
         monkeypatch.setattr(parse_module, "without_text_bodies", defect)
@@ -1256,6 +1472,82 @@ def test_the_escape_check_fails_when_an_escaped_quote_is_counted(monkeypatch: py
     monkeypatch.setattr(aoss_parse, "_quotes_in", lambda text: text.count('"'))
     with pytest.raises(ParseError):
         _check_form("aruba_aoss", "an escaped quote in a line after a banner")
+
+
+@pytest.mark.parametrize("new", [
+    "caret = None", 'caret = rest[:2] if rest[:2] == "^C" else None',
+], ids=["a caret alone ends it", "only a capital C is the printed form"])
+def test_the_ios_xr_caret_checks_fail_when_a_caret_alone_ends_a_caret_c_banner(
+    new: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Read as one character, ``^C`` ends at a caret alone and the
+    account after it is configuration; whether the router reads it so is
+    not established, and the line is refused."""
+    old = 'caret = rest[:2] if rest[:2] in ("^C", "^c") else None'
+    monkeypatch.setattr(xr_parse, "_openers", _with_a_defect(xr_parse, "_openers", old, new))
+    names = [name for name, (_, _, sentence, _, _) in REFUSED.items() if sentence is xr_parse.CARET_MESSAGE]
+    assert len(names) == 2
+    with pytest.raises(pytest.fail.Exception):
+        for name in names:
+            _check_refused(name)
+
+
+def test_the_ios_xr_caret_check_fails_when_both_readings_ending_on_one_line_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Where the two readings end the banner on the same line, nothing is
+    in doubt, and nothing is refused."""
+    monkeypatch.setattr(xr_parse, "_openers", _with_a_defect(
+        xr_parse, "_openers", "if caret and caret not in line:", "if caret and line.count('^') != line.count(caret):",
+    ))
+    for name in ("^C, a caret alone and the end on one line", "^C on one line, a caret alone before its end"):
+        with pytest.raises(ParseError):
+            _check_form("cisco_iosxr", name)
+
+
+def test_the_ios_xr_one_line_check_fails_when_the_opening_line_ends_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(xr_parse, "_openers", _with_a_defect(
+        xr_parse, "_openers", "ended=_end_in(after, number)", "ended=False",
+    ))
+    # (Two banners ``cc`` hide it: the first, left open, ends at the second.)
+    for name in ("a banner on one line, spaces after its end", "a banner on one line, text after its end"):
+        with pytest.raises((AssertionError, ParseError)):
+            _check_form("cisco_iosxr", name)
+
+
+def test_the_ios_xr_checks_fail_when_a_banner_xr_does_not_print_opens_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(xr_parse, "_NAMES_A_BANNER_RE", re.compile(r"(?!)"))
+    names = [name for name, (_, _, sentence, _, _) in REFUSED.items() if sentence is xr_parse.UNKNOWN_BANNER_MESSAGE]
+    assert len(names) == 4
+    for name in names:
+        with pytest.raises(pytest.fail.Exception):
+            _check_refused(name)
+
+
+def test_the_ios_xr_case_check_fails_when_a_delimiter_is_compared_without_its_case(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(xr_parse, "_openers", _with_a_defect(
+        xr_parse, "_openers", "if delimiter not in line:", "if delimiter.lower() not in line.lower():",
+    ))
+    with pytest.raises(AssertionError):
+        _check_form("cisco_iosxr", "a delimiter compared by its case")
+
+
+@pytest.mark.parametrize(("old", "new"), [
+    ("span[2] = at", "pass"),
+    ("lines[what] = lines.get(what, 0) + end - start + 1", "lines[what] = end - start + 1"),
+    ("first.setdefault(what, start)", "first[what] = start"),
+], ids=["no line counted", "the last banner of a kind only", "the last first line"])
+def test_the_ios_xr_row_checks_fail_when_lines_are_miscounted(
+    old: str, new: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    function = "_openers" if old == "span[2] = at" else "banner_rows"
+    monkeypatch.setattr(xr_parse, function, _with_a_defect(xr_parse, function, old, new))
+    with pytest.raises(AssertionError):
+        _check_xr_rows()
 
 
 def test_the_line_end_checks_fail_when_any_line_end_is_taken(monkeypatch: pytest.MonkeyPatch) -> None:
