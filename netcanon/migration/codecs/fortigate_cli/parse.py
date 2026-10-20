@@ -485,6 +485,12 @@ def _apply_system_interface(  # noqa: C901
         )
         if looks_like_vlan and vlanid:
             iface.interface_type = "ianaift:l3ipvlan"
+            # The interface the VLAN rides on, as the config states it:
+            # without it the renderer chose one, and every VLAN of the
+            # committed captures came back on another port -- a loopback
+            # among them.
+            if parent_iface and parent_iface[0]:
+                iface.vlan_parent = parent_iface[0]
             try:
                 vid = int(vlanid[0])
                 # Use the iface name as the canonical VLAN name so the

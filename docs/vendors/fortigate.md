@@ -48,7 +48,13 @@ firewall translation is your primary need, see
   advisory fires.  The bare aggregate (`internal` / `lan` with no
   number) has no cross-vendor equivalent at all and warns separately.
 - VLANs — VLAN sub-interface form (`config system interface` →
-  `set type vlan` + `set vlanid <N>`)
+  `set type vlan` + `set vlanid <N>`), on the interface its
+  `set interface` names.  The parent is kept onto FortiOS and
+  RouterOS; onto any other vendor it is not carried, and nothing
+  reports it.  Where the output has no interface of that name, a
+  parent is chosen and a `# review:` line in the VLAN's block names
+  the one the source stated.  A VLAN that states no parent, or one
+  from another vendor, is on the parent the renderer chooses
 - Static routes (`config router static`)
 - LAGs (`config system interface` with `set type aggregate` +
   member lists)

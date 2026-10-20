@@ -457,8 +457,24 @@ timestamp if your timezone matters for an audit.
   renames it with the interface it names and clears it where that
   interface is dropped -- said in the job's warnings, since the
   renderer then chooses -- and the renderer chooses a parent only for
-  a VLAN that has none of its own.  A tree from another vendor holds
-  no parent, and renders as before.
+  a VLAN that has none of its own.  A tree that holds no parent
+  renders as before.
+- **A FortiGate VLAN interface was written on a parent the renderer
+  chose, not on the one its config states.**  `set interface
+  "LAG_INTERNAL"` under a VLAN's `edit` names the interface it rides
+  on, and the parser did not keep it: the renderer gave every VLAN
+  the port its scorer liked best, which does not look at the VLAN.
+  FortiGate to FortiGate, both VLANs of the 70G capture came back on
+  its loopback `LO_BGP` and the five of the 100E capture on `dmz`
+  instead of the aggregate `lacp trunk`; onto RouterOS they were on
+  `LO_BGP` and on a made-up `bridge1`; and from RouterOS every VLAN of
+  the CRS310 capture was on the port `Access Point` -- in jobs that
+  said `completed`.  The parser keeps the parent
+  (`CanonicalInterface.vlan_parent`), and the renderer writes it where
+  the output has that interface; where it does not, a parent is
+  chosen as before and a `# review:` line in the VLAN's block names
+  the one the source stated.  Between FortiOS and RouterOS the parent
+  now goes both ways.
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
@@ -3621,11 +3637,12 @@ timestamp if your timezone matters for an audit.
   the port, and its address on a `bridge1` nothing defines; with
   `"vlan5"`, the port becomes VLAN 5 of the other port.  Give the
   port another name.
-- **The interface a RouterOS VLAN rides on is not carried onto
-  another vendor**, and nothing reports it: no other codec writes a
-  VLAN interface on a parent the config names.  From another vendor,
-  every VLAN interface of a RouterOS output is on one parent the
-  renderer chooses.
+- **The interface a VLAN rides on is carried between RouterOS and
+  FortiOS only**, and its loss onto another vendor is not reported:
+  no other codec writes a VLAN interface on a parent the config
+  names.  From another vendor, a VLAN interface of a RouterOS or
+  FortiOS output is on a parent the renderer chooses.  OPNsense's
+  `<vlan><if>` is not kept either; no committed capture has one.
 - **A RouterOS port an operator named is not placed by its factory
   name onto another vendor.**  With no devices declared it is
   translated only by an entry of `port_rename_map`; the job lists it
