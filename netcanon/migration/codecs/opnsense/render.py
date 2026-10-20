@@ -167,14 +167,16 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
         # tests/fixtures/real/user_smoke_findings.md issue #1).
         #
         # Policy lives in :mod:`netcanon.migration._user_secrets`
-        # (``_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt, sha512}``;
-        # PHP's password_verify() also consumes a ``$6$`` crypt string).
+        # (``_TARGET_ACCEPTS["opnsense"] = {bcrypt, sha512}``; PHP's
+        # password_verify() also consumes a ``$6$`` crypt string).
         # When the hash is unmigratable, emit a comment-form review
         # line IN PLACE of the ``<user>`` element, naming the source
         # algorithm so the operator knows what to reset from: a
         # refused secret drops the whole account, never the password
         # alone (the element used to stay, with no ``<password>``).
-        # Plaintext is accepted verbatim (operator-supplied).
+        # A TYPED password is refused the same way: ``<password>`` is
+        # what password_verify() checks a password against, and the
+        # typed string written there opened nothing.
         for user in intent.local_users:
             if user.hashed_password and not is_migratable(
                 user.hashed_password, "opnsense",
@@ -194,14 +196,9 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
             ET.SubElement(user_el, "name").text = user.name
             if user.hashed_password:
                 # Strip the ``alg:`` tag so OPNsense's <password>
-                # element carries the raw value (e.g. ``$2y$10$...`` for
-                # bcrypt; the literal password for plaintext).
-                algorithm, payload = classify_hash(user.hashed_password)
-                if algorithm == "plaintext":
-                    hash_out = payload or user.hashed_password
-                else:
-                    hash_out = payload
-                ET.SubElement(user_el, "password").text = hash_out
+                # element carries the raw hash (e.g. ``$2y$10$...``).
+                _algorithm, payload = classify_hash(user.hashed_password)
+                ET.SubElement(user_el, "password").text = payload
             # Sub-finding 19 round-trip: emit ``<scope>system</scope>``
             # only for admin-tier users so the parser's new symmetric
             # rule (scope=system OR priv=page-all OR groupname=admins

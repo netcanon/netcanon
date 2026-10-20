@@ -500,7 +500,10 @@ the policy locally:
   `xml` / `exclamation`) and skip the password command.  NEVER fall
   back to plaintext (would leak the hash literal as the password).
   Per-target accepted-algorithm sets live in
-  `_TARGET_ACCEPTS[<vendor>]`.
+  `_TARGET_ACCEPTS[<vendor>]`, and a typed password (`plaintext`) is
+  in a target's set only where the target has a line that takes one:
+  a new user-rendering codec goes in `_TYPED_FORM` in
+  `tests/unit/migration/test_a_typed_password_is_not_a_hash.py`.
 
 * **`netcanon/migration/_radius_secrets.py`** — cross-vendor RADIUS
   shared-secret portability.  Public API:

@@ -1037,7 +1037,7 @@ on the canonical model:
 | Domain | `example-N.test` |
 | Public IPv4 | RFC 5737 docs ranges |
 | Public / global IPv6 | RFC 3849 docs range (`2001:db8::`) — ULA / link-local / loopback / multicast / docs preserved |
-| Hashed passwords | Format-preserving fakes (Junos `$9$`, FortiGate `ENC`, crypt `$5$`/`$6$`, bcrypt `$2y$`, Cisco type-7 hex, Aruba SHA-1) |
+| Hashed passwords | Format-preserving fakes of the same kind (Junos `$9$`, FortiGate `ENC`, every crypt(3) `$id$`, bcrypt `$2y$`, AOS-CX `AQB` ciphertext, Cisco type-7 hex, Aruba SHA-1).  A parser's tag (`arista:sha512:`, `junos:`, `5 `) is kept and only the payload is faked, so a stored hash is never faked as a password as typed; text before a colon that no parser writes is faked with the rest |
 | SNMP communities | `public_redacted_N` |
 | SNMP contact / location (operator PII) | `<contact redacted>` / `<location redacted>` |
 | SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |

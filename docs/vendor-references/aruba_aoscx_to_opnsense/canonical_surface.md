@@ -281,6 +281,9 @@ ifType at all — 157 of 157 records come back empty. The YAML records `lossy`
 
 ## Identity: roles and credentials
 
+<!-- a-typed-password-is-not-a-hash -->
+> **Update 2026-10-20 — no AOS-CX account reaches OPNsense.**  Two changes.  OPNsense takes a password into its config only as a hash, so a password as typed is now refused there, where up to 0.7.7 it was written into `<password>` as it stood, which opened nothing; and the AOS-CX parser now reads `password ciphertext <value>` by its keyword, so the GL CX 10.09 capture's `admin`, whose publisher put a placeholder word where its ciphertext was is ciphertext, not a password as typed.  Measured after the change: **0 of 7** local accounts arrive across the 6 cells that populate users, and the render writes a `review:` comment naming each account IN PLACE of the account.  Any statement below that an AOS-CX account arrives describes the code before these changes.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__opnsense.yaml`.
+
 <!-- account-goes-with-its-secret -->
 > **Update 2026-10-20 — a refused secret now drops the whole account.**  Up to 0.7.7 the OPNsense render wrote such an account as a `<user>` element with no `<password>`.  Measured after the change: **1 of 7** local accounts arrive across the 6 cells that populate users; 6 are refused for a secret OPNsense cannot consume (6 AOS-CX `AQB` device-keyed ciphertext), and the render writes a `review:` comment naming the account IN PLACE of the account.  Any statement below that such an account arrives without its password, or that the review comment sits inside it, describes the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/aruba_aoscx__opnsense.yaml`.
 

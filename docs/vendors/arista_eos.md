@@ -186,6 +186,11 @@ Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
 
 ## Common gotchas
 
+- **`secret 0 <password>` is read as a password as typed**, and is
+  written so onto every target that takes one.  Up to 0.7.7 it was
+  read as an algorithm `0` that no target takes, and the account was
+  left out everywhere, EOS included.  A printed EOS config holds no
+  `secret 0`: the switch hashes the password when it is entered.
 - **Paste the config as the switch prints it, with its
   indentation.**  This parser tells which lines belong to a stanza by
   their indentation.  A text with no line indented but a comment, the

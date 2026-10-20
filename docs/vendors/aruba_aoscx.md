@@ -87,7 +87,12 @@ in v1 (parity with the NX-OS / IOS-XE IPv6-anycast deferral).
   targets; the named group round-trips losslessly same-vendor.  The
   `password ciphertext` blob is AES-encrypted with the device key
   (portable same-device only) — cross-vendor migration requires
-  re-keying.
+  re-keying: such an account is left out on every other target, with
+  a review line that names it.  The keyword decides, not the value's
+  shape: `ciphertext` is ciphertext whatever it looks like (a
+  published capture holds a placeholder word there), and `plaintext`
+  is a password as typed, which arrives on every target that takes
+  one (not Junos or OPNsense).
 - **`/snmp/v3-user/auth-passphrase`** — SNMPv3 auth/priv keys are
   device-key `ciphertext` blobs; emitted verbatim cross-vendor but the
   operator must re-key on the target.

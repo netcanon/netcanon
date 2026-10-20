@@ -819,7 +819,9 @@ target's CLI accepts that hash form.  Cross-vendor mismatches (e.g.
 Cisco type-9 scrypt → Junos, OPNsense bcrypt → Arista) emit a
 `format_review_comment(...)` line in the appropriate per-codec
 syntax instead of leaking the hash literal as plaintext.  Per-target
-accepted-algorithm sets live in `_TARGET_ACCEPTS[<vendor>]`.
+accepted-algorithm sets live in `_TARGET_ACCEPTS[<vendor>]`; a typed
+password (`plaintext`) is in a set only where the target has a line
+that takes one (not Junos, not OPNsense).
 
 **RADIUS shared-secret portability policy**
 (`netcanon/migration/_radius_secrets.py`).  The third credential

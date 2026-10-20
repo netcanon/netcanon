@@ -448,6 +448,65 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A password typed in the source was written onto Junos and OPNsense
+  as if it were a hash.**  IOS-XE `password 0`, AOS-CX `password
+  plaintext`, VyOS `plaintext-password` and the like hold a password
+  as it was typed, and every target but two has a line that takes one
+  and hashes it itself.  Junos and OPNsense have none: Juniper
+  documents `encrypted-password`, which takes a hash, and
+  `plain-text-password`, which takes no value and asks at a prompt;
+  OPNsense's `<password>` is the hash PHP's `password_verify()` checks
+  a password against.  The Junos renderer wrote `authentication
+  encrypted-password "<typed>"` and the OPNsense renderer the typed
+  string into `<password>`: an account no password opens, in a job
+  that reported nothing, because the shared policy took a typed
+  password to be accepted by every target.  Such an account is now
+  left out on both, with a review line that says why and quotes
+  nothing of the password.  And the EOS parser read its own `secret 0
+  <typed>` as an algorithm `0` that no target takes, so an EOS account
+  with a typed password was refused on every target, EOS included; it
+  is read as typed.  Guarded by
+  `tests/unit/migration/test_a_typed_password_is_not_a_hash.py`, which
+  reads every user-rendering target's output as text against each
+  vendor's form for a typed password, typed by hand, and the target's
+  parser for the password read back.  FortiOS's `set password ENC
+  <typed>` is mended by the change that quotes every secret as one
+  value, and pinned there until it merges.
+
+- **An AOS-CX password is read by its keyword, not by its shape.**
+  The parser read `password ciphertext <value>` as ciphertext only
+  where the value began `AQB`, so a ciphertext of any other shape was
+  taken for a password as typed and written onto every other target
+  behind its cleartext form -- on a committed capture, the GL CX 10.09
+  `admin`, whose publisher put a placeholder word where its ciphertext
+  was -- and `password plaintext <value>` that began `AQB` was taken
+  for ciphertext.  `ciphertext` is now ciphertext and `plaintext` is
+  typed, whatever the value looks like (a value whose shape disagrees
+  with its keyword is tagged `aoscx:<kind>:`).  The ciphertext is
+  device-keyed and refused on every target but AOS-CX, so no committed
+  AOS-CX account reaches another vendor; the expectations of the pairs
+  from AOS-CX are re-authored from a round trip of the corpus, and
+  their summaries, which still said every username survives, are
+  corrected (stale since #461).
+
+- **The sanitiser faked a stored hash as a password as typed.**  It
+  recognised a few bare shapes (`$6$...`, `ENC ...`) and faked every
+  other secret as `fake-hash-NNNN`.  But a parser writes a tag in
+  front of most stored secrets (EOS `arista:sha512:`, NX-OS and IOS-XE
+  `5 `, AOS-S `sha1:`, Junos `junos:`), and an AOS-CX ciphertext
+  begins `AQB`, which no rule knew: each came out of the sanitiser as
+  a typed password, written behind the device's cleartext marker
+  (`secret 0 fake-hash-0001`) -- a sanitised config that was not the
+  config, and, with the change above, one whose Junos and OPNsense
+  translation lost the account.  A fake is now the same kind of secret
+  as what it replaces: a parser's tag is kept and its payload faked,
+  every crypt(3) id and the AOS-CX ciphertext keep their shape, and
+  text before a colon that no parser writes is faked with the rest.
+  Guarded by `tests/unit/tools/test_sanitize_keeps_a_secrets_kind.py`,
+  which sanitises every committed input that holds a stored secret and
+  holds each secret's kind, as the shared policy reads it, to the
+  original's.
+
 - **A refused password takes its account with it on FortiOS, RouterOS
   and OPNsense** (Security, above).  The review line is written in
   place of the account (`edit`, `/user add`, `<user>`), never inside
@@ -458,7 +517,9 @@ timestamp if your timezone matters for an audit.
   pairs onto them are re-authored from a round trip of the corpus:
   from IOS XR and NX-OS no account arrives on any of the three (every
   stored secret is a form none of them takes), so `local_users[].name`
-  is `unsupported` there; from VyOS and AOS-CX it is `lossy`.
+  is `unsupported` there; from VyOS and AOS-CX it is `lossy` (from
+  AOS-CX onto OPNsense `unsupported`, since an AOS-CX password is read
+  by its keyword, above).
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner

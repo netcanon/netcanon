@@ -533,6 +533,20 @@ written without the password it had would be an account with none.
 password with the target's native CLI (`username ... secret`, `set
 system login user ... authentication plain-text-password`, etc.).
 
+### "A user with a typed password came out as a review comment on Junos or OPNsense"
+
+By design.  The source held the password as it was typed (IOS-XE
+`password 0`, AOS-CX `password plaintext`, and the like), and the
+config of Junos and OPNsense holds a password only as a hash:
+Junos's `encrypted-password` and OPNsense's `<password>`.  Written
+there, the typed string would be the hash itself, and no password
+would open the account.  The review line names the account and says
+why; it never quotes the password.
+
+**Action:** add the user on the device and set its password there
+(Junos `set system login user <name> authentication
+plain-text-password`, which asks for it; the OPNsense user manager).
+
 ### "My LAG/Port-Channel name changed"
 
 By design.  Cross-vendor LAG names get reconciled via the LAG
