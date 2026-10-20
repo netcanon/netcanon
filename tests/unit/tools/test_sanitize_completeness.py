@@ -128,6 +128,7 @@ _NON_SENSITIVE: dict[tuple[str, str], tuple[str, str]] = {
     ("CanonicalInterface", "name"): ("IDENTIFIER", "interface name"),
     ("CanonicalInterface", "switchport_mode"): ("ENUM", "access | trunk"),
     ("CanonicalInterface", "tunnel_type"): ("ENUM", "tunnel encapsulation token"),
+    ("CanonicalInterface", "vlan_parent"): ("IFACE_REF", "interface a VLAN interface rides on"),
     ("CanonicalLAG", "members"): ("IFACE_REF", "member interface names"),
     ("CanonicalLAG", "mode"): ("ENUM", "active | passive | on"),
     ("CanonicalLAG", "name"): ("IDENTIFIER", "LAG name"),

@@ -358,16 +358,34 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # RouterOS docs:
     # https://help.mikrotik.com/docs/spaces/ROS/pages/328068/VLAN
     # — ``interface=`` must reference an existing parent.
-    has_vlan_to_render = bool(tree.vlans) or any(
-        i.interface_type == "ianaift:l3ipvlan"
+    #
+    # A VLAN interface whose config states its parent
+    # (``vlan_parent``, RouterOS ``interface=``) is written on that
+    # parent, and nothing is chosen for it.  A parent is chosen only
+    # where some VLAN is rendered without one of its own: a VLAN
+    # interface from a config whose names say the parent, or a VLAN
+    # with no interface.  Chosen for a VLAN whose parent was stated,
+    # the single-anchor rule put every VLAN of a RouterOS bridge on
+    # the one port that had an address or a trunk.
+    vlan_ifaces = [
+        i for i in tree.interfaces
+        if i.interface_type == "ianaift:l3ipvlan"
         or _is_vlan_name(i.name)
-        for i in tree.interfaces
+    ]
+    has_vlan_to_render = bool(tree.vlans) or bool(vlan_ifaces)
+    on_a_stated_parent = {
+        _vlan_id_for(i.name, tree.vlans)
+        for i in vlan_ifaces if i.vlan_parent
+    }
+    has_vlan_without_a_parent = has_vlan_to_render and not (
+        all(i.vlan_parent for i in vlan_ifaces)
+        and all(vlan.id in on_a_stated_parent for vlan in tree.vlans)
     )
     vlan_parent_iface = (
-        _identify_vlan_parent(tree) if has_vlan_to_render else None
+        _identify_vlan_parent(tree) if has_vlan_without_a_parent else None
     )
     needs_synthetic_bridge1 = (
-        has_vlan_to_render
+        has_vlan_without_a_parent
         and not bridge_ifaces
         and vlan_parent_iface is None
     )
@@ -524,12 +542,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # silently dropped any non-conforming name on render.
     # Surfaced by routeros-diff's verbose_export.rsc (the
     # "gn-mgmt" VLAN interface named after its purpose, not its
-    # ID).
-    vlan_ifaces = [
-        i for i in tree.interfaces
-        if i.interface_type == "ianaift:l3ipvlan"
-        or _is_vlan_name(i.name)
-    ]
+    # ID).  ``vlan_ifaces`` is gathered above, where the parent is
+    # chosen.
     if vlan_ifaces or tree.vlans:
         lines.append("/interface vlan")
         rendered_vlan_ids: set[int] = set()
@@ -541,11 +555,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts = ["add"]
             if iface.description:
                 parts.append(f'comment="{_escape(iface.description)}"')
-            # Bind to the parent we resolved above — either an
-            # identified source-side parent's renamed target name
+            # Bind to the parent the config states, and otherwise
+            # to the one chosen above -- either an identified
+            # source-side parent's renamed target name
             # (router-on-stick: OPNsense ixl0 → sfp-sfpplus0) or
             # the synthesised ``bridge1`` (switching topology).
-            parts.append(f"interface={_quote_if_needed(vlan_parent_name)}")
+            parent = iface.vlan_parent or vlan_parent_name
+            parts.append(f"interface={_quote_if_needed(parent)}")
             parts.append(f"name={_quote_if_needed(iface.name)}")
             parts.append(f"vlan-id={vid}")
             # Admin-state: a shut VLAN SVI must carry disabled=yes, else
