@@ -429,6 +429,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A loopback onto Junos was written as an interface Junos does not
+  have, and the loopbacks of a Junos config's routing instances were
+  written as one loopback onto every other platform.**  Junos has one
+  loopback interface, `lo0`: its unit 0 is the loopback of the global
+  routing table, and each routing instance takes a unit of its own
+  ("you must place each additional unit in a separate routing
+  instance", Juniper, *Loopback Interfaces*).  The port translator
+  named one name at a time, and so wrote `Loopback2` as `lo2` --
+  among the committed captures, the VTEP source of the Cisco Live
+  EVPN leaf, an IOS XR route reflector's second loopback and the AOS-CX
+  leaves' `loopback 1` -- in jobs that said `completed`; and it read
+  each unit of `lo0` as `lo0` itself, so that every routing
+  instance's loopback came out on `Loopback0`, beside the global
+  one.  The translator now gives Junos every loopback of the config
+  at once (`CodecBase.place_loopbacks`): the one loopback of the
+  global table is `lo0`, and of several there the one numbered 0 is;
+  a routing instance's one loopback numbered N is `lo0.N`, in that
+  routing instance.  A loopback that has no place -- a second one in
+  the global table, one of several in a routing instance, one with
+  no number or numbered 0 in a routing instance, a number two routing
+  instances share, a unit an entry of the rename map has taken -- is
+  dropped, listed in `unresolved_ports`, and its warning says why;
+  which of two loopbacks is `lo0` is not chosen for you.  The other
+  way, `lo0.N` is loopback N (`Loopback2` on IOS-XE), and a unit
+  written with more digits than Junos numbers a unit with is a name
+  the translator does not read.  The count of
+  jobs the port-name check makes `partial` is now 217 of 588: the
+  four jobs onto Junos above.  If you translated a config with a
+  loopback other than 0 onto Junos, or a Junos config whose routing
+  instances have loopbacks onto another vendor, with 0.7.7 or
+  earlier, translate it again.
 - **A unit of a Junos loopback, tunnel, aggregate or management port
   was written under a name Junos refuses.**  The parser reads `set
   interfaces lo0 unit 10 ...` as an interface `lo0.10`, and the
@@ -3037,6 +3068,16 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
+- **What goes with a name the translator drops is not said.**  A
+  static route out of the name, a DHCP pool on it, a VRRP group's
+  track of it and a VXLAN source interface (VTEP) that is the name
+  are removed with it, and the job lists the name
+  (`unresolved_ports`, so it is `partial`) but not those lines.  A
+  loopback that has no place on Junos is such a name: the Cisco Live
+  EVPN leaf's `Loopback2` is its VTEP source, and the Junos output
+  has no `vtep-source-interface` line.  Read the source config for
+  what referred to each name in `unresolved_ports` before you settle
+  it.
 - **An IOS-XE Q-in-Q sub-interface is read as its outer tag alone.**
   `encapsulation dot1Q 2234 second-dot1q 15` is read as `dot1q 2234`,
   and a target that writes a sub-interface's tag (EOS, NX-OS and

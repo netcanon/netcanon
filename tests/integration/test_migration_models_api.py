@@ -1228,14 +1228,17 @@ class TestAUnitThePlanDoesNotVouchFor:
 # Port names that are not settled, with no devices declared
 # ---------------------------------------------------------------------------
 
-#: A Junos router: a port, the loopback and the loopback of a routing
-#: instance, and the management port.  Onto IOS-XE both loopbacks are
-#: written ``Loopback0``, and the management port has no name there.
+#: A Junos router: a port, the loopback, an ``irb`` and a ``vlan``
+#: unit of one VLAN (the two Junos grammars' names for a VLAN
+#: interface), and the management port.  Onto IOS-XE both VLAN
+#: interfaces are written ``Vlan100``, and the management port has no
+#: name there.
 _JUNOS_NOT_SETTLED = "\n".join([
     "set system host-name r1",
     "set interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24",
     "set interfaces lo0 unit 0 family inet address 192.0.2.1/32",
-    "set interfaces lo0 unit 2 family inet address 192.0.2.2/32",
+    "set interfaces irb unit 100 family inet address 192.0.2.65/26",
+    "set interfaces vlan unit 100 family inet address 192.0.2.2/32",
     "set interfaces fxp0 unit 0 family inet address 198.51.100.9/24",
     "",
 ])
@@ -1292,7 +1295,7 @@ class TestPortNamesWithNoDevices:
         assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
         job = resp.json()
         assert job["status"] == "partial", path
-        assert job["fused_ports"] == {"Loopback0": ["lo0", "lo0.2"]}, path
+        assert job["fused_ports"] == {"Vlan100": ["irb.100", "vlan.100"]}, path
         assert job["unresolved_ports"] == ["fxp0"], path
         assert job["untranslated_ports"] == [], path
         assert job["error"] == (
@@ -1308,18 +1311,18 @@ class TestPortNamesWithNoDevices:
         ), path
         assert job["port_mapping_plan"] is None, path
         # The output is as it was: nothing is renamed or dropped for it.
-        assert job["rendered"].count("interface Loopback0\n") == 2, path
+        assert job["rendered"].count("interface Vlan100\n") == 2, path
         assert "198.51.100.9" not in job["rendered"], path
 
     @pytest.mark.parametrize("path", _PLAN_PATHS)
     def test_entries_settle_it_on_every_endpoint(
         self, client: TestClient, path: str,
     ) -> None:
-        """A name of its own for one of the two loopbacks, and
+        """A name of its own for one of the two VLAN interfaces, and
         ``null`` for the port that went: the operator has decided
         each, and must not be asked again because of the URL."""
         resp = client.post(f"/api/v1/migration{path}", json=_not_settled_body(
-            port_rename_map={"lo0.2": "Loopback2", "fxp0": None},
+            port_rename_map={"vlan.100": "Loopback2", "fxp0": None},
         ))
         assert resp.headers["X-Netcanon-Job-Status"] == "completed", path
         job = resp.json()
@@ -1335,16 +1338,16 @@ class TestPortNamesWithNoDevices:
         ))
         job = resp.json()
         assert job["unresolved_ports"] == [], path
-        assert job["fused_ports"] == {"Loopback0": ["lo0", "lo0.2"]}, path
+        assert job["fused_ports"] == {"Vlan100": ["irb.100", "vlan.100"]}, path
         assert resp.headers["X-Netcanon-Job-Status"] == "partial", path
         assert "198.51.100.9" in job["rendered"], path
 
     def test_two_entries_on_one_name_are_said(self, client: TestClient) -> None:
         """Whoever decided it, two interfaces are one."""
         job = client.post("/api/v1/migration/plan", json=_not_settled_body(
-            port_rename_map={"lo0.2": "Loopback7", "fxp0": "Loopback7"},
+            port_rename_map={"vlan.100": "Loopback7", "fxp0": "Loopback7"},
         )).json()
-        assert job["fused_ports"] == {"Loopback7": ["fxp0", "lo0.2"]}
+        assert job["fused_ports"] == {"Loopback7": ["fxp0", "vlan.100"]}
         assert job["status"] == "partial"
 
     @pytest.mark.parametrize("path", _PLAN_PATHS)
@@ -1420,13 +1423,13 @@ class TestPortNamesWithNoDevices:
         job = resp.json()
         assert job["port_mapping_plan"] is None
         assert job["status"] == "partial"
-        assert job["fused_ports"] == {"Loopback0": ["lo0", "lo0.2"]}
+        assert job["fused_ports"] == {"Vlan100": ["irb.100", "vlan.100"]}
         assert job["unresolved_ports"] == ["fxp0"]
 
     def test_devices_are_not_offered_for_these(
         self, client: TestClient,
     ) -> None:
-        """Two loopbacks on one loopback.  With both devices declared
+        """Two VLAN interfaces on one.  With both devices declared
         the same output is ``completed`` -- the pairing is of
         hardware ports and asks nothing of these -- so the sentence
         of the job with none declared does not offer it."""
@@ -1438,7 +1441,7 @@ class TestPortNamesWithNoDevices:
         }
         job = client.post("/api/v1/migration/plan", json=body).json()
         assert job["status"] == "partial"
-        assert job["fused_ports"] == {"Loopback0": ["lo0", "lo0.2"]}
+        assert job["fused_ports"] == {"Vlan100": ["irb.100", "vlan.100"]}
         assert job["error"] == (
             "Port names are not settled: 1 name(s) in the output received "
             "more than one source name, so the config of two interfaces is "
@@ -1452,7 +1455,7 @@ class TestPortNamesWithNoDevices:
         }).json()
         # What the sentence must not send an operator to: the same
         # two stanzas, and a status that says nothing of them.
-        assert paired["rendered"].count("interface Loopback0\n") == 2
+        assert paired["rendered"].count("interface Vlan100\n") == 2
         assert (paired["status"], paired["port_mapping_plan"]["fused"]) == ("completed", {})
 
     def test_with_devices_the_plan_says_it(self, client: TestClient) -> None:

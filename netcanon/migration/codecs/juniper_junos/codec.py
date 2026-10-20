@@ -465,6 +465,9 @@ class JunosCodec(CodecBase):
     def format_port_identity(self, identity) -> str | None:
         return _port_names.format_port_identity(identity)
 
+    def place_loopbacks(self, loopbacks, taken):
+        return _port_names.place_loopbacks(loopbacks, taken)
+
     # -----------------------------------------------------------------
     # Auto-detection probe (R5)
     # -----------------------------------------------------------------

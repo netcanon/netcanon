@@ -561,8 +561,8 @@ such name with the source names on it, for example
 happens where the target's names cannot tell the two apart: an
 AOS-S uplink-module port beside the access port of the same number,
 ports numbered from 0 onto a platform that numbers from 1, two
-aggregates numbered from 0, a Junos per-instance loopback (`lo0.2`)
-onto a platform with one `Loopback0`.
+aggregates numbered from 0, `Loopback0` and `Loopback1` onto AOS-S,
+which writes both `loopback1`.
 
 *To settle it:* give all but one of the names a target of its own,
 or drop it.  In the rename modal the rows carry the collision mark
@@ -577,8 +577,15 @@ with no form for one (NX-OS `mgmt0` onto IOS-XE), a breakout lane, a
 port whose name shape the target cannot take — and a logical name
 just the same: a loopback or a tunnel the target has no form for, a
 FortiGate hardware switch (`internal`) with the LAN address on it.
-What was configured on the name is not in the output.  A
-sub-interface that went with its port is listed with it.
+Onto Junos, a loopback that has no place: Junos has one loopback
+interface, `lo0`, whose unit 0 is the global table's loopback and of
+which each routing instance takes a unit of its own, so a second
+loopback of the global table, or one of two in a routing instance,
+is dropped, and its warning says which loopback took the place.
+What was configured on the name is not in the output — and neither
+is what referred to it: a route out of it, a DHCP pool on it, a
+VXLAN that used it as its source.  A sub-interface that went with
+its port is listed with it.
 
 *To settle it:* say what is to happen to the name.  In the rename
 modal the row is marked with a `?`: **keep verbatim** opens its
@@ -586,7 +593,11 @@ field for a target name, **drop** records that it is to go, and
 **Accept the drops** above the table records that for every such
 row at once.  Through the API: `{"mgmt0": "GigabitEthernet0/0"}`,
 or `{"mgmt0": null}`.  Dropping a port settles its sub-interfaces
-too.
+too.  For a loopback onto Junos, which loopback is to be `lo0`:
+`{"Loopback1": "lo0", "Loopback0": null}` keeps `Loopback1` as the
+global table's loopback.  A unit of `lo0` other than 0
+(`{"Loopback1": "lo0.1"}`) is a routing instance's: Junos takes it
+in no other place, so put the unit in a routing instance yourself.
 
 **3. A name was left as the source config has it.**
 `untranslated_ports` lists them, and each has a `could not classify
@@ -675,10 +686,9 @@ under that name, and a device reads one port.  The job is `partial`
 for it, and lists the names in `fused_ports` (with both devices
 declared, in `port_mapping_plan.fused`).  (One exception: a Junos
 interface named with and without its unit, `sources: lo0, lo0.0`, is
-one interface, and is not in `fused_ports`.  A unit other than 0 is
-not: `sources: lo0, lo0.2` says a Junos per-instance loopback was put
-on the target's one loopback — give it a loopback of its own in
-`port_rename_map`.)
+one interface, and is not in `fused_ports`.  Another unit of `lo0` is
+the loopback of a routing instance, and is a loopback of its own on
+the target: `lo0.2` is `Loopback2`.)
 Where the line reads `map to 'Trk1' (also written
 'trk1': one port on <platform>)`, the two were sent to names that
 differ only in letter case, which on that platform is one port.

@@ -329,14 +329,25 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   Between two Junos configs it keeps its name, and follows a
   `port_rename_map` entry for its port (`ge-0/0/7.54`).  Onto another
   vendor it goes where its port goes, with its unit and its tag
-  (`Ethernet1.54`, `encapsulation dot1q vlan 54`).  A unit of `lo0`
-  (`lo0.2`, a per-instance loopback) has no counterpart on another
-  platform: it is put on the target's loopback beside `lo0` and the
-  job warns that two names share it — map it by hand.  With no
-  devices declared such a job is `partial` until the unit has a
-  loopback of its own, and lists the pair in `fused_ports`; a mere
-  reference to unit 0 (`lo0.0`) is the loopback itself and is not
-  counted.  Names the port translator does not read — `vme`, the
+  (`Ethernet1.54`, `encapsulation dot1q vlan 54`).
+- **Loopbacks.**  Junos has one loopback interface, `lo0`: unit 0 is
+  the loopback of the global routing table, and each routing
+  instance takes a unit of its own.  A unit of `lo0` is the loopback
+  of that number on another platform (`lo0.2` is `Loopback2` on
+  IOS-XE, `loopback2` on NX-OS), and a reference to unit 0 (`lo0.0`)
+  is the loopback itself.  Onto Junos the translator places the
+  config's loopbacks together: the one loopback of the global table
+  is `lo0` (of several, the one numbered 0), and a routing
+  instance's one loopback numbered N is `lo0.N`, in that routing
+  instance.  A loopback with no place — a second one in the global
+  table, one of several in a routing instance, one numbered 0 in a
+  routing instance, a number two routing instances share — is
+  dropped and listed in `unresolved_ports`, with a warning that says
+  why.  An entry decides it: `lo0` for the loopback of the global
+  table (and `null` for the one that had the place), or another unit
+  (`{"Loopback1": "lo0.1"}`), which Junos takes only in a routing
+  instance — put the unit in one yourself.  Names the port
+  translator does not read — `vme`, the
   units of `st0`, a channelized `xe-0/0/6:2`, and a bare `irb` or
   `st0` that a line configures — are left as they are on the
   target, and such a job lists them in `untranslated_ports` until

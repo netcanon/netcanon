@@ -897,8 +897,8 @@ capability matrix has no path for:
   of two interfaces is written as one.  Aruba AOS-S `1/1` and the
   uplink-module port `1/A1` are both `Ethernet1` on EOS; VyOS `eth0`
   and `eth1` are both `port1` on FortiOS, which numbers from 1; Junos
-  `ae0` and `ae1` are both `Port-channel1` on IOS-XE; a Junos
-  per-instance loopback `lo0.2` is put on `Loopback0` beside `lo0`.
+  `ae0` and `ae1` are both `Port-channel1` on IOS-XE; IOS-XE
+  `Loopback0` and `Loopback1` are both `loopback1` on AOS-S.
   Any two names count — a LAG or a loopback as much as a port —
   and they are compared as each platform tells interfaces apart
   (`Trk1` and `trk1` are one port on AOS-S; `DMZ` and `dmz` are two
@@ -1944,9 +1944,9 @@ nothing, as before.
   job.  Check the VLAN id of every sub-interface on those two.
 
   Not followed across vendors: a unit of a **loopback** or of a
-  **management port** (a Junos `lo0.5` is put on the target's
-  loopback beside `lo0`, and the job warns that two names share
-  it) — a management port by its name (EOS `Management1.5`) or by
+  **management port** (a Junos `lo0.5` is the loopback of a routing
+  instance, and is the target's loopback 5, `Loopback5`) — a
+  management port by its name (EOS `Management1.5`) or by
   what its config says of it (the Catalyst port in `Mgmt-vrf`,
   whose name reads as any other port's); a unit of a port the
   source codec's classifier does not know
