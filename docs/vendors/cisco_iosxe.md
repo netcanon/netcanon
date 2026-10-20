@@ -60,7 +60,9 @@ vendors (or vice versa), use `cisco_iosxe_cli`.
   VLAN-centric projection from the `switchport` per-interface form)
 - Static routes
 - LAGs (`Port-channel<N>` reconciled with cross-vendor names like
-  `ae<N>` / `trk<N>`)
+  `ae<N>` / `trk<N>`); `Port-channel<N>.<M>` is a sub-interface of
+  the LAG, read as an interface with its tag and not as a LAG of its
+  own
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats) —
 translatable with caveats:

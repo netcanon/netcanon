@@ -1778,7 +1778,9 @@ def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
       * ``interface Port-channelN`` stanza declares the LAG exists
         (and carries the LAG's description / switchport / IP state
         via the existing interface parse path — that's already on
-        ``intent.interfaces``).
+        ``intent.interfaces``).  ``interface Port-channelN.M`` is a
+        sub-interface OF that LAG, an interface and no LAG of its own:
+        read as one, it was an empty LAG that Junos wrote as ``aeM``.
       * ``channel-group N mode M`` under a physical interface declares
         that physical port a member of Port-channelN.
 
@@ -1809,9 +1811,8 @@ def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
                 pcm = re.match(
                     r"^port-channel(\d+)$", current_iface, re.IGNORECASE
                 )
-                declared_lag_names.add(
-                    f"Port-channel{int(pcm.group(1))}" if pcm else current_iface
-                )
+                if pcm:
+                    declared_lag_names.add(f"Port-channel{int(pcm.group(1))}")
             continue
         if current_iface is None:
             continue
