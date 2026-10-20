@@ -921,11 +921,13 @@ the policy locally:
   is in or ends a body and ends in another character than a line feed
   (`LINE_END_MESSAGE`, with `codec` and `command` filled in: a device
   ends a line at a line feed, Python at a form feed too), and whatever
-  the parser's callables refuse.  The IOS-XE CLI, NX-OS, AOS-CX, OS10
-  and AOS-S parsers each wrap it as `without_banner_bodies(raw)` and
-  call it first in `parse_intent` (before the JSON/XML check) and
+  the parser's callables refuse.  The IOS-XE CLI, NX-OS, AOS-CX, OS10,
+  AOS-S and IOS XR parsers each wrap it as `without_banner_bodies(raw)`
+  and call it first in `parse_intent` (before the JSON/XML check) and
   again where `codec.parse` reads the Tier-3 rows; the AOS-S
-  deployment detector calls it too.  A new parser of a platform with
+  deployment detector calls it too.  IOS XR also runs it once more, on
+  a text that held a banner, to count each banner's lines for its
+  Tier-3 row (`banner_rows`).  A new parser of a platform with
   banners does the same, from its vendor's rule.  The EOS parser keeps
   its own loop (`without_bodies`), which refuses the same line ends: a
   certificate there opens its body on a later line than the one that

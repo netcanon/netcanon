@@ -469,7 +469,16 @@ form because the parser reads only the form `show running-config`
 prints.  A formal excerpt with no `interface` line is not recognised,
 and is read as almost nothing (see
 [`vendors/cisco_iosxr.md`](vendors/cisco_iosxr.md) § "Common
-gotchas").  The lossy / unsupported exceptions:
+gotchas").  A banner (`banner <type>`, `aaa banner login`) is text and
+is not read as configuration: it ends at the next occurrence of the one
+character after its type, anywhere, and each kind is a row of the
+sections not translated with its count of lines.  One with no end, a
+`banner` line IOS XR does not print, a `^` alone in a banner printed
+with `^C`, and a line of one that ends in a form feed or the like are
+refused; a banner set through NETCONF that is printed with no end runs
+on to its first character's next occurrence, and the lines between are
+not read (see [`vendors/cisco_iosxr.md`](vendors/cisco_iosxr.md) § "A
+banner is text").  The lossy / unsupported exceptions:
 
 | Path | Class | Reason |
 |---|---|---|

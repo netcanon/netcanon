@@ -60,6 +60,19 @@ timestamp if your timezone matters for an audit.
   has a banner with 0.7.7 or earlier, look in the old output for
   accounts the device does not have before it reaches a device.
 
+- **An IOS XR banner's lines were read as configuration, and a banner
+  line became an account on the target.**  A printed IOS XR config
+  whose banner held a line `username <name>` with ` group root-lr`
+  under it came out with that account onto 12 of the 13 public codecs
+  -- with privilege 15 on nine of them, and on Junos, NX-OS and AOS-CX
+  under the role `root-lr`, which they do not have -- and with the
+  banner's interface address onto all 13; the jobs onto five of the
+  twelve said `completed`.  No committed IOS XR capture has a banner.
+  The parser now reads a banner as text, ended where Cisco ends it
+  (Fixed, below).  If you translated an IOS XR config with a banner
+  with 0.7.7 or earlier, look in the old output for accounts the
+  router does not have before it reaches a device.
+
 - **Reading a pasted config could take time that grew with the square of
   it.**  Five shapes, each in shipped code.  Patterns that began
   `^\s` and were applied to the whole text walked, from every line start,
@@ -565,6 +578,27 @@ timestamp if your timezone matters for an audit.
   naming the line (`parse failed: <codec>: line <n> is a line of a
   banner, or of another block of text, and ends in a character ...`).
   No committed input has one.
+- **An IOS XR banner was read as lines of the config** (Security,
+  above).  A banner opens at a line in column 0: `banner` and its type
+  (`exec`, `incoming`, `login`, `motd`, `prompt-timeout`, `slip-ppp`),
+  or `aaa banner login`.  IOS XR prints the text as it is stored,
+  beginning with the delimiter that was typed (`;`, `#`, `/`, `^`, `"`,
+  `c` ... in printed configs), never a fixed `^C`.  The delimiter is
+  the one character after the type (Cisco: "a delimiting character"),
+  and the banner ends at its next occurrence, anywhere -- on the line
+  that opens it too -- the whole of that line being the banner's.  It
+  is emptied before any reader runs, the Tier-3 rows and the check for
+  a text with no indentation included, and each kind of banner is a
+  row of the sections not translated, with its count of lines
+  (`banner motd (9 lines, from line 4)`).  Refused in words: a banner
+  with no end; a line in column 0 that names a banner IOS XR does not
+  print (`banner` and a delimiter with no type, `banner config-save`,
+  a type with no text, another `aaa banner`); a line of a banner
+  printed with `^C` that holds a `^` and not the two (whether the
+  router takes `^C` for one delimiter is not established, and the two
+  readings end such a banner on different lines); and a line of a
+  banner that ends in a form feed or the like.  Every committed IOS XR
+  input parses to the tree it gave before.
 
 - **An EOS config without its indentation was read as far less than
   it holds, and the job said nothing of it.**  The parser reads a
@@ -2989,13 +3023,16 @@ timestamp if your timezone matters for an audit.
   server group's indented `banner` (under `crypto isakmp client
   configuration group`) passed over: no Cisco page that shows its form
   was found.
-- **An IOS XR banner's lines are read as configuration (measured).**
-  The IOS XR parser does not pass over a `banner` body: a body line
-  `username <name>` with ` group root-lr` under it is an account with
-  privilege 15 on the target, in jobs that say `completed`.  It is a
-  change of its own.  Whether the parsers of the other grammars
-  (Junos, VyOS, FortiOS, RouterOS) read a multi-line free-text value
-  as configuration is not measured.
+- **An IOS XR banner set through NETCONF can be printed with no end of
+  its own**: Cisco's xrdocs.io shows `banner login ! <text>` with no
+  second `!`.  Its text then runs on to the next occurrence of its
+  first character, and the lines of the configuration between are
+  taken for its text: none of them is read, and none is translated, in
+  a job that says nothing else of it.  The banner's row counts its
+  lines.  Nor is the value of `crypto key generate rsa ... pubkey`
+  passed over: no source shows how it is printed.  Whether the parsers
+  of the other grammars (Junos, VyOS, FortiOS, RouterOS) read a
+  multi-line free-text value as configuration is not measured.
 - **AOS-S `banner exec` is read as `banner motd` is**, though no HPE
   page shows the type; and whether an OS10 banner ends at its
   delimiter in the middle of a line is not established (Dell names "a

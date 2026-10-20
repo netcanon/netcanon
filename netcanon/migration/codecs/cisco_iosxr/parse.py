@@ -77,6 +77,19 @@ Where IOS-XR diverges from ``cisco_iosxe_cli`` (see
   order from NX-OS / IOS-XE's single-line ``route-target import <rt>``).
 * The route-distinguisher lives under ``router bgp``, not the VRF stanza.
 
+A banner is text, not configuration (:func:`without_banner_bodies`):
+read as lines, a banner line ``username <name>`` with `` group
+root-lr`` under it was an account on 12 of the 13 public targets.
+Each banner's lines are emptied, keeping their numbers, before any
+reader -- the Tier-3 rows included.  A banner opens at a line in
+column 0, ``banner <type>`` or ``aaa banner login``, ends at the next
+occurrence of the one character after its type (anywhere, on the line
+that opens it too), and is a row of ``dropped_tier3_sections`` with its
+count of lines (:func:`banner_rows`).  A banner with no end, a line
+that names a banner IOS XR does not print, and a ``^`` alone in a
+banner printed with ``^C`` (where it ends cannot be told) are refused
+in words.
+
 Two forms of text are refused with a :class:`ParseError` that says why
 and names a line number (and quotes nothing of the text), before any
 reader runs (:func:`_refuse_a_form_the_router_misplaces`):
@@ -111,6 +124,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
+from collections.abc import Callable
 
 from ...canonical.intent import (
     CanonicalIntent,
@@ -133,7 +147,7 @@ from .._helpers import (
     without_keyword_stanzas,
 )
 from .._input_shape import detect_input_shape
-from .._scanner import first_flat_stanza, scan_stanzas
+from .._scanner import Body, first_flat_stanza, scan_stanzas, without_text_bodies
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -304,6 +318,31 @@ _SETTING_ON_THE_HEADER_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── A banner is text ──
+#: A line in column 0 that opens a banner: ``banner`` and one of the six
+#: types of ``Cisco-IOS-XR-um-banner-cfg.yang`` (Cisco's IOS XR 3.7
+#: command reference lists five of them, each in global configuration
+#: only), or ``aaa banner login``, whose value Cisco's AAA model
+#: describes in the same words ("c banner-text c, where 'c' is a
+#: delimiting character"); then white space and the delimiter.
+#: ``show running-config`` prints ``banner <type> `` and the text as it
+#: is stored, which begins with the delimiter that was TYPED -- printed
+#: configs show ``;``, ``#``, ``/``, ``^``, ``"``, ``c`` and ``^C`` --
+#: where IOS prints every banner between two ``^C``.  The delimiter is
+#: ONE character ("a delimiting character"; "End with the character
+#: 'c'"): ``^C`` is ``^`` and a text that begins with ``C``, as
+#: Batfish and scrapli_cfg read it.
+_OPENS_A_BANNER_RE = re.compile(
+    r"(?:banner[ \t]+(?:exec|incoming|login|motd|prompt-timeout|slip-ppp)"
+    r"|aaa[ \t]+banner[ \t]+login)[ \t]+(?=\S)",
+    re.IGNORECASE,
+)
+#: Any other line in column 0 that names a banner: a type IOS XR does
+#: not list (``banner config-save``, or ``banner`` and a delimiter, as
+#: IOS has them), or a banner with no text after its type.  Where its
+#: text would end cannot be told.
+_NAMES_A_BANNER_RE = re.compile(r"(?:aaa[ \t]+)?banner(?![^ \t])", re.IGNORECASE)
+
 #: IOS-XR task-groups that map to the cross-vendor admin privilege (15).
 #: Other groups round-trip their name verbatim but map to privilege 1.
 _IOSXR_ADMIN_GROUPS = {"root-lr", "root-system"}
@@ -376,6 +415,42 @@ FORMAL_LINE_MESSAGE = (
     "without `formal`; if the line was typed into the text, write the "
     "setting on a line of its own under the interface."
 )
+#: Said of a banner that is still open at the end of the text.  It
+#: quotes nothing of the text, and names no delimiter: the delimiter is
+#: the operator's.
+UNENDED_BODY_MESSAGE = (
+    "cisco_iosxr: line {line} opens a banner that runs to the end of this "
+    "text: a banner's text ends at the next occurrence of the character "
+    "written after its type, and this one has none.  Read as it stands, "
+    "every line after line {line} is text, and no line of it is "
+    "configuration.  A banner set through NETCONF or another programmatic "
+    "interface can be printed with no end of its own: give it one on the "
+    "router, or remove the banner's lines from the text you paste.  "
+    "Otherwise paste the output of `show running-config` whole."
+)
+#: Said of a line of a banner opened with ``^C`` that holds a ``^`` and
+#: not the two.  It quotes nothing of the text and names no delimiter.
+CARET_MESSAGE = (
+    "cisco_iosxr: line {line} is a line of a banner whose delimiter is "
+    "printed as a caret and a letter C, and holds a caret with no C after "
+    "it.  IOS XR takes a banner's delimiter to be one character, which "
+    "would end the banner there, and whether it takes those two for one "
+    "is not established, which would not: where the banner ends, and "
+    "where the configuration goes on, cannot be told.  Change the banner "
+    "on the router so that its text holds no caret, or remove the "
+    "banner's lines from the text you paste."
+)
+#: Said of a line in column 0 that names a banner IOS XR does not print.
+UNKNOWN_BANNER_MESSAGE = (
+    "cisco_iosxr: line {line} names a banner that IOS XR does not print.  "
+    "`show running-config` prints a banner as `banner`, its type (exec, "
+    "incoming, login, motd, prompt-timeout or slip-ppp) and its text "
+    "between two of the same character, and `aaa banner login` the same "
+    "way.  Where the text of this one ends, and where the configuration "
+    "goes on, cannot be told.  Paste the output of `show running-config` "
+    "whole, as the router prints it.  If the line was typed into the "
+    "text, remove it."
+)
 
 
 def _refuse_a_form_the_router_misplaces(raw: str) -> None:
@@ -423,6 +498,115 @@ def _refuse_a_form_the_router_misplaces(raw: str) -> None:
         )
 
 
+def _openers(spans: list[list] | None = None) -> Callable[[str, int], Body | None]:
+    """The ``opens`` of one pass (:func:`without_banner_bodies`).
+
+    A banner (:data:`_OPENS_A_BANNER_RE`) ends at the next occurrence of
+    its delimiter, anywhere: on the line that opens it (``banner motd
+    cc``, ``banner motd "Welcome"``), or in a later line, at its start,
+    in its middle or at its end (Cisco: "terminating the message with
+    the second occurrence of the delimiting character").  The whole of
+    the line that ends it is the banner's: XR prints what follows the
+    delimiter there (spaces, or more text) as part of the stored text.
+    Every other line in column 0 that names a banner
+    (:data:`_NAMES_A_BANNER_RE`) is refused.  So is a line of a banner
+    opened with ``^C`` (or ``^c``) that holds a ``^`` and not the two
+    (:data:`CARET_MESSAGE`): read as one character, the delimiter ends
+    the banner there, and read as two it does not.
+
+    Args:
+        spans: Given, each banner is appended to it as ``[what, the
+            number of its first line, the number of its last]``, where
+            *what* is ``banner <type>`` or ``aaa banner login``.
+    """
+
+    def opens(text: str, number: int) -> Body | None:
+        match = _OPENS_A_BANNER_RE.match(text)
+        if match is None:
+            if _NAMES_A_BANNER_RE.match(text):
+                raise ParseError(
+                    UNKNOWN_BANNER_MESSAGE.format(line=number),
+                    path=f"line {number}", snippet="",
+                )
+            return None
+        rest = text[match.end():]
+        delimiter = rest[0]
+        # ``^C`` / ``^c``, IOS's printed form: the delimiter is ``^``,
+        # unless the router takes the two characters for one (not
+        # established).  The two readings end the banner on the same
+        # line unless a line holds a ``^`` and not the two: refused.
+        caret = rest[:2] if rest[:2] in ("^C", "^c") else None
+        after = rest[2:] if caret else rest[1:]
+        span = [" ".join(match.group(0).lower().split()), number, number]
+        if spans is not None:
+            spans.append(span)
+
+        def _end_in(line: str, at: int) -> bool:
+            if delimiter not in line:
+                return False
+            if caret and caret not in line:
+                raise ParseError(
+                    CARET_MESSAGE.format(line=at), path=f"line {at}", snippet="",
+                )
+            return True
+
+        def ends(line: str, at: int) -> bool:
+            span[2] = at
+            return _end_in(line, at)
+
+        return Body(ends, ended=_end_in(after, number))
+
+    return opens
+
+
+def without_banner_bodies(raw: str) -> str:
+    """*raw* with every line of each banner made empty, keeping its
+    number (:func:`.._scanner.without_text_bodies`, with the openers of
+    :func:`_openers`).
+
+    Not handled: the value of ``crypto key generate rsa ... pubkey``,
+    which Cisco's model calls "Generated keys in pem format" and whose
+    printed form no source shows.  No other body of free text was found
+    in Cisco's IOS XR configuration models or in printed configs.
+
+    Raises:
+        ParseError: A banner has no end before the end of the text
+            (:data:`UNENDED_BODY_MESSAGE`); a line in column 0 names a
+            banner IOS XR does not print (:data:`UNKNOWN_BANNER_MESSAGE`);
+            a line of a banner printed with ``^C`` holds a ``^`` and not
+            the two (:data:`CARET_MESSAGE`); or a line of a banner ends
+            in another character than a line feed.  Each message names
+            the line and quotes nothing of the text.
+    """
+    return without_text_bodies(raw, _openers(), UNENDED_BODY_MESSAGE, codec="cisco_iosxr")
+
+
+def banner_rows(raw: str) -> list[str]:
+    """A row of ``dropped_tier3_sections`` for each kind of banner in
+    *raw*: what it is, how many lines its banners take and where the
+    first begins (``banner motd (9 lines, from line 4)``).  It quotes
+    nothing of the text, and there are at most seven.
+
+    A banner is in force on the router and is not translated.  The count
+    is there for a banner set through a programmatic interface, which XR
+    can print with no end of its own (Cisco's xrdocs.io shows one): its
+    text then runs on to the next occurrence of its first character, and
+    lines of the configuration are taken for its text -- the safe side,
+    since none of them is read, but a banner of many lines says so.
+    """
+    spans: list[list] = []
+    without_text_bodies(raw, _openers(spans), UNENDED_BODY_MESSAGE, codec="cisco_iosxr")
+    lines: dict[str, int] = {}
+    first: dict[str, int] = {}
+    for what, start, end in spans:
+        first.setdefault(what, start)
+        lines[what] = lines.get(what, 0) + end - start + 1
+    return [
+        f"{what} ({count} line{'' if count == 1 else 's'}, from line {first[what]})"
+        for what, count in lines.items()
+    ]
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse IOS-XR ``show running-config`` output into a
     :class:`CanonicalIntent`.
@@ -433,10 +617,26 @@ def parse_intent(raw: str) -> CanonicalIntent:
             stanza's body stands at the left margin; or if a line in
             column 0 states an interface's setting on the ``interface``
             line (the ``show running-config formal`` form).  See
-            :func:`_refuse_a_form_the_router_misplaces`.
+            :func:`_refuse_a_form_the_router_misplaces`.  Or if a banner
+            cannot be told from the configuration
+            (:func:`without_banner_bodies`).
     """
     if not raw.strip():
         raise ParseError("cisco_iosxr: empty input", snippet="")
+
+    # A banner is text, never lines of the config: read as lines, a
+    # banner line ``username <name>`` with `` group root-lr`` under it
+    # was an account on the target.  Every reader
+    # below -- the shape check and the two refusals among them -- is
+    # given the text with each banner's lines empty, each keeping its
+    # number.  ``given``: the text as it came, for the banners' rows and
+    # the debug line.
+    given = raw
+    raw = without_banner_bodies(raw)
+    # A banner is not translated: a row for each kind says so, and how
+    # many lines it took (:func:`banner_rows`).  The text is read again
+    # only where it held one.
+    rows = banner_rows(given) if raw is not given else []
 
     shape = detect_input_shape(raw)
     if shape is not None:
@@ -469,7 +669,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # ``range`` or ``breakout``, is taken out the same way; its row
     # is the header line, a section.)
     raw, headers = without_keyword_stanzas(raw)
-    intent.dropped_tier3_sections = keyword_stanza_rows(headers)
+    intent.dropped_tier3_sections = [*keyword_stanza_rows(headers), *rows]
 
     intent.hostname = _extract_hostname(raw)
     intent.domain = _extract_domain(raw)
@@ -506,7 +706,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
         len(intent.static_routes),
         len(intent.lags),
         len(intent.local_users),
-        len(raw),
+        len(given),
     )
     return intent
 

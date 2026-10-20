@@ -1239,9 +1239,9 @@ gotchas".
 
 ### The job says `parse failed:` for a banner
 
-The IOS-XE CLI, NX-OS, AOS-CX, OS10 and AOS-S parsers read a banner
-as text, ended where the vendor ends it, and refuse a text in which
-the banner cannot be told from the configuration: read as it stands,
+The IOS-XE CLI, NX-OS, AOS-CX, OS10, AOS-S and IOS XR parsers read a
+banner as text, ended where the vendor ends it, and refuse a text in
+which the banner cannot be told from the configuration: read as it stands,
 the lines after it would be the banner's text, or where it ends is
 not in the text.  Each sentence names a line and quotes nothing of
 the text, nor the delimiter (which is yours).
@@ -1260,9 +1260,11 @@ the text, nor the delimiter (which is yours).
   holds the delimiter and nothing else, in column 0 -- the delimiter
   inside a line, or after a space, does not end it.  AOS-S ends a
   printed banner at the next double quote that no backslash escapes.
-  The text was cut short, or the line that ends the banner was lost:
-  paste the whole of `show running-config` (on OS10, `show
-  running-configuration`).
+  IOS XR ends it at the next occurrence of the one character after
+  its type, anywhere; a banner set through NETCONF can be printed with
+  none (see the IOS XR vendor page).  The text was cut short, or the
+  line that ends the banner was lost: paste the whole of `show
+  running-config` (on OS10, `show running-configuration`).
 - **`aruba_aoscx: line <n> opens a banner with more than one
   character ...`** and **`dell_os10: line <n> opens a banner with more
   than its delimiter ...`** -- the banner's line has text after its
@@ -1287,8 +1289,24 @@ the text, nor the delimiter (which is yours).
   device's printout cannot say where such a banner ends.  Change the
   banner on the device so that its text does not hold its end, or
   remove the banner's lines from the text you paste.
+- **`cisco_iosxr: line <n> names a banner that IOS XR does not
+  print`** -- a line in column 0 begins `banner` (or `aaa banner`) and
+  is not `banner` with one of its six types and a delimiter, or `aaa
+  banner login` and a delimiter: `banner` and a delimiter with no type
+  and `banner config-save` are IOS's, and a type with nothing after it
+  has no text.  Where its text would end cannot be told.  The line came
+  from another platform's config or was typed by hand: paste the
+  router's own printout, or remove the line.
+- **`cisco_iosxr: line <n> is a line of a banner whose delimiter is
+  printed as a caret and a letter C, and holds a caret with no C after
+  it`** -- the banner was opened with `^C`.  IOS XR takes a delimiter
+  to be one character, which would end the banner at that caret, and
+  whether it takes `^C` for one is not established, which would not:
+  the lines after it would be configuration under one reading and
+  banner under the other.  Change the banner on the router so that its
+  text holds no caret, or remove the banner's lines from the paste.
 - **`<codec>: line <n> is a line of a banner, or of another block of
-  text, and ends in a character ...`** (the five above, and
+  text, and ends in a character ...`** (the six above, and
   `arista_eos`) -- a line of the banner ends in a form feed, a
   vertical tab, a carriage return on its own, or another character
   that ends a line for the parser and not for the device, which ends
@@ -1304,7 +1322,8 @@ See the vendor pages, § "A banner is text":
 [`cisco_nxos.md`](vendors/cisco_nxos.md#a-banner-is-text),
 [`aruba_aoscx.md`](vendors/aruba_aoscx.md#a-banner-is-text),
 [`dell_os10.md`](vendors/dell_os10.md#a-banner-is-text),
-[`aruba_aoss.md`](vendors/aruba_aoss.md#a-banner-is-text).  On AOS-S,
+[`aruba_aoss.md`](vendors/aruba_aoss.md#a-banner-is-text),
+[`cisco_iosxr.md`](vendors/cisco_iosxr.md#a-banner-is-text).  On AOS-S,
 a banner the parser refuses is not read by `detect-deployment` either
 (see [Detection proposes a device, and says ports are
 missing](#detection-proposes-a-device-and-says-ports-are-missing)).

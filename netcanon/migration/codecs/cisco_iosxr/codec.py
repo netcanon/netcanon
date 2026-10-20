@@ -67,7 +67,7 @@ from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
-from .parse import parse_intent
+from .parse import parse_intent, without_banner_bodies
 from .render import render_intent
 
 
@@ -580,9 +580,11 @@ class CiscoIOSXRCodec(CodecBase):
         # (BGP / OSPF / IS-IS / MPLS / route-policy / prefix-set / ACLs /
         # l2vpn / evpn).  Notification-only — never read by render.
         # After them, what the parser itself read and left out: a
-        # row for each ``interface preconfigure`` stanza.
+        # row for each ``interface preconfigure`` stanza, and for each
+        # kind of banner.  Read from the text the parser read: a
+        # banner's lines are text, not stanzas.
         intent.dropped_tier3_sections = list(dict.fromkeys([
-            *detect_tier3_sections_iosxr(raw),
+            *detect_tier3_sections_iosxr(without_banner_bodies(raw)),
             *intent.dropped_tier3_sections,
         ]))
         return intent
