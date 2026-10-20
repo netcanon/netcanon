@@ -63,6 +63,8 @@ from __future__ import annotations
 
 import re
 
+from ._comments import comment
+
 # The envelope the FortiGate parser stamps on a `set secret ENC <blob>`
 # value.  Kept as a constant because both the classifier and the
 # FortiGate renderer's round-trip branch key off it.
@@ -220,16 +222,7 @@ def format_review_comment(
         f"cannot be re-used on {target_label}; re-enter the secret "
         f"manually"
     )
-    delimiters = {
-        "hash": ("# ", ""),
-        "semicolon": ("; ", ""),
-        "slash": ("/* ", " */"),
-        "xml": ("<!-- ", " -->"),
-        "exclamation": ("! ", ""),
-        # Undelimited — for callers that supply their own wrapper, e.g.
-        # an ``ET.Comment`` node, which adds ``<!-- -->`` itself.  Using
-        # ``xml`` there would nest the markers and corrupt the document.
-        "plain": ("", ""),
-    }
-    prefix, suffix = delimiters.get(comment_syntax, ("# ", ""))
-    return f"{prefix}{body}{suffix}"
+    # Built by :mod:`netcanon.migration._comments`, so a host that holds
+    # what ends the comment cannot end it.  ``plain`` is the text alone,
+    # for the text of an element (OPNsense), which ElementTree escapes.
+    return comment(body, comment_syntax)

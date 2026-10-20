@@ -505,6 +505,18 @@ the policy locally:
   a new user-rendering codec goes in `_TYPED_FORM` in
   `tests/unit/migration/test_a_typed_password_is_not_a_hash.py`.
 
+* **`netcanon/migration/_comments.py`** — a value written into a
+  comment stays in it.  Public API: `comment(text, syntax)` (the
+  comment with its delimiters) and `comment_text(text, syntax)` (the
+  text alone, e.g. for an `ET.Comment`).  A comment that ends at a
+  terminator (`slash` `/* */`, `xml` `<!-- -->`) is ended by a value
+  that holds it, and what follows is configuration; the helper breaks
+  the terminator where it stands.  Build every comment that carries a
+  value of the tree through it (both `format_review_comment` helpers
+  do); a new codec goes in `_COMMENT_FORMS` in
+  `tests/unit/migration/test_a_value_stays_in_its_comment.py`, which
+  also reads the source for a block comment built anywhere else.
+
 * **`netcanon/migration/_radius_secrets.py`** — cross-vendor RADIUS
   shared-secret portability.  Public API:
   `classify_radius_secret(value, source_vendor)`,

@@ -64,11 +64,14 @@ Configuration surface:
   reader is not misled into treating it as policy.
 * ``_TARGET_ACCEPTS`` — per-target accepted-algorithm sets; the
   positive list backing :func:`is_migratable`.
-* ``_COMMENT_PREFIXES`` — per-target ``(open, close)`` comment-syntax
-  tuples used by :func:`format_review_comment`.
+* :func:`format_review_comment` builds its comment through
+  :func:`netcanon.migration._comments.comment`, so a user name cannot
+  end the comment it is named in.
 """
 
 from __future__ import annotations
+
+from ._comments import comment
 
 # ---------------------------------------------------------------------------
 # Algorithm vocabulary
@@ -362,15 +365,6 @@ def is_migratable(hashed: str, target_vendor: str) -> bool:
     return algorithm in accepted
 
 
-_COMMENT_PREFIXES: dict[str, tuple[str, str]] = {
-    "hash":        ("# ", ""),
-    "semicolon":   ("; ", ""),
-    "slash":       ("/* ", " */"),
-    "xml":         ("<!-- ", " -->"),
-    "exclamation": ("! ", ""),
-}
-
-
 def format_review_comment(
     user_name: str,
     algorithm: str,
@@ -412,8 +406,11 @@ def format_review_comment(
     ``-`` so the output is embeddable directly into XML without
     post-processing.  All other comment syntaxes keep the ``--``
     separator byte-for-byte (Aruba / FortiGate / Junos rely on it).
+
+    The comment is built by :func:`netcanon.migration._comments.comment`:
+    a user name that holds what ends the comment (``*/``, ``--``) is
+    broken where it stands, so that what follows it is not configuration.
     """
-    prefix, suffix = _COMMENT_PREFIXES.get(comment_syntax, ("# ", ""))
     # XML 1.0 disallows ``--`` inside comment bodies — collapse to a
     # single hyphen for the xml variant only.  Other syntaxes keep the
     # original ``-- review:`` separator byte-identical (existing Aruba
@@ -428,10 +425,10 @@ def format_review_comment(
             f"takes a password into its config only as a hash; the account "
             f"is left out: add it on the device and set its password there"
         )
-        return f"{prefix}{body}{suffix}"
+        return comment(body, comment_syntax)
     body = (
         f'password manager user-name "{user_name}" {separator} review: '
         f"{algorithm} hash from source vendor cannot be re-used on "
         f"{target_label}; reset this user password manually"
     )
-    return f"{prefix}{body}{suffix}"
+    return comment(body, comment_syntax)

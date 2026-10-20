@@ -156,6 +156,11 @@ real set-form) capture are welcomed via
 
 ## Common gotchas
 
+- **A review comment shows `*/` in a name as `* /`.**  VyOS ends a
+  `/* */` comment at its first `*/`, so a name that held one (a source
+  account left out for its password) would have ended the comment, and
+  what followed was configuration.  The name in the comment is the
+  source's name with that one change.
 - **VLANs are `vif` sub-interfaces.**  There is no VLAN database — a
   tagged VLAN is `interfaces ethernet ethN vif <vid>`, modelled as an
   `ethN.<vid>` interface.  A switch-source's per-port VLAN membership

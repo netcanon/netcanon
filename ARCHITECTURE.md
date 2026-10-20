@@ -847,6 +847,16 @@ envelope-shaped prefix from an *unvouched* source classifies as
 `unknown` and is refused.  Refusing every value containing a colon
 would be a false-positive blast rather than a fix.
 
+**A value stays in its comment** (`netcanon/migration/_comments.py`).
+A review comment names what was left out as the tree holds it, and a
+comment that ends at a terminator -- VyOS `/* */`, OPNsense
+`<!-- -->` -- is ended by a name that holds the terminator, with what
+follows it read as configuration (an OPNsense account the source
+never had).  `comment(text, syntax)` builds every such comment and
+breaks the terminator where it stands; a comment that ends with its
+line is left as it is.  Both `format_review_comment` helpers build
+their line through it.
+
 **Naming-value sanitisation** (`netcanon/migration/_naming.py`).
 Some target CLI parsers (Arista EOS, Cisco IOS-XE) reject whitespace
 in hostname / domain / VRF-name tokens; renderers call

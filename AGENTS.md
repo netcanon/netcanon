@@ -439,6 +439,25 @@ tests use these exclusively — never CSS classes or element structure.  See
   and PROVENANCE, so a plaintext secret that merely CONTAINS a colon
   (`my:secret`) stays migratable while an unregistered envelope from an
   unvouched source is refused.
+- **Never** put a value of the tree into a comment that a terminator
+  ends without breaking the terminator in it.  A review comment names
+  what was left out, as the source holds the name, and a block comment
+  ends at its terminator, not at its line: on OPNsense a source account
+  named `x--><user>...</user><!--`, refused for its password, came out
+  as an account the source never had, holding whatever elements the
+  name spelled out; `svc--backup` (XML allows no `--` in a comment) failed
+  the render; on VyOS `a*/system{...}/*` left `system{...}` on the line
+  as nodes.  The account was refused, so every check of accounts looked
+  past it, and every check of a review line read that it was there.
+  Build such a comment with `netcanon/migration/_comments.py`
+  (`comment` / `comment_text`); a line comment is left as it is, since
+  a value with a line break is another rule's.  Guarded by
+  `tests/unit/migration/test_a_value_stays_in_its_comment.py`, which
+  reads each block-comment target's output with a reader of its own
+  (an XML parser; the `/* */` grammar) and reads the source for a block
+  comment built around a value anywhere but there -- a table that is
+  compared for equality, so a new one fails until it is mended or
+  listed with why it may.
 - **Never** hand text nobody vouches for to code whose cost you have not
   measured.  A config is whatever was pasted, a request carries megabytes
   of it, and a pattern at work does not let the server's other threads
