@@ -43,7 +43,11 @@ translatable with caveats:
 - Local users — `system login user` (name + role +
   `encrypted-password` hash)
 - LAGs — `interfaces bonding bondN` (members + `lag-member-of`
-  back-link)
+  back-link).  Members are read as VyOS prints them — one bare
+  `interface ethN` line each under `member`, or `member interface
+  'ethN'` in the set form — and written the first way; a `vif <vid>`
+  under a bond is a unit of the LAG, `bondN.<vid>`, as it is under an
+  ethernet port
 - SNMP — `service snmp` v1/v2c community + v3 USM (community,
   location, contact, v3 users)
 - VRFs — `vrf name <X>` instances + the per-interface binding
@@ -163,7 +167,9 @@ real set-form) capture are welcomed via
   where its port goes, with its number (`Ethernet1.54`).  ⚠️ Up to
   0.7.7 a `vif` was written onto its parent port — and a translation
   from VyOS to VyOS lost it with its addresses; translate such a
-  config again.
+  config again.  ⚠️ Up to 0.7.7 a `vif` under a **bond** was not
+  read at all, and a bond printed in the block form had no members:
+  translate a config with a bond again too.
 - **`protocols bgp` / `protocols ospf` are SHARED with Junos.**  Both
   VyOS and Junos use `set protocols …` — the probe disambiguates by
   config shape, not by that keyword alone.  Pick the right vendor in

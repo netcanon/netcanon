@@ -28,10 +28,13 @@ Grammar notes that shape the output (see
   commit order (``address`` → ``description`` → ``disable`` → ``mtu`` →
   ``vrf``), followed by any nested ``vif`` sub-interface blocks, so a
   same-vendor diff against a real ``show configuration`` is reviewable.
-* A ``vif`` sub-interface (canonical name ``ethN.<vid>``) is nested
-  inside its parent ``ethernet ethN`` block; an orphan vif (parent not
-  separately declared) synthesises an empty parent block so the output
-  is valid VyOS.
+* A ``vif`` sub-interface (canonical name ``ethN.<vid>`` or
+  ``bondN.<vid>``) is nested inside its parent ``ethernet ethN`` or
+  ``bonding bondN`` block; an orphan vif (parent not separately
+  declared) synthesises an empty parent block so the output is valid
+  VyOS.
+* A bond's members are ``member { interface ethN }``, one line each:
+  ``member interface`` is a leaf of many values, not a node.
 """
 
 from __future__ import annotations
@@ -212,10 +215,10 @@ def _render_interfaces(interfaces: list, lags: list | None = None) -> list[str]:
     """Render the body of the ``interfaces { }`` block.
 
     Splits canonical interfaces into parents and ``vif`` sub-interfaces
-    (``ethN.<vid>``), nests each vif inside its parent ethernet block,
-    and synthesises an empty parent block for any orphan vif.  A
+    (``ethN.<vid>``, ``bondN.<vid>``), nests each vif inside its parent
+    block, and synthesises an empty parent block for any orphan vif.  A
     ``bonding bondN`` interface additionally emits its LACP ``mode`` and
-    1.4-style ``member { interface ethN { } }`` list from the matching
+    its ``member { interface ethN }`` list from the matching
     :class:`CanonicalLAG`.
     """
     lag_by_name = {lag.name: lag for lag in (lags or [])}
@@ -224,7 +227,7 @@ def _render_interfaces(interfaces: list, lags: list | None = None) -> list[str]:
     order: list[str] = []
 
     for iface in interfaces:
-        m = re.match(r"^(eth\d+)\.(\d+)$", iface.name)
+        m = re.match(r"^((?:eth|bond)\d+)\.(\d+)$", iface.name)
         if m:
             vifs.setdefault(m.group(1), []).append((int(m.group(2)), iface))
         elif iface.name not in parents:
@@ -262,10 +265,11 @@ def _render_interfaces(interfaces: list, lags: list | None = None) -> list[str]:
 
 def _bond_extra(lag, indent: str) -> list[str]:
     """Render a bonding interface's ``mode`` + ``member`` lines from the
-    matching :class:`CanonicalLAG` (1.4-style member-interface form;
-    members sorted).  ``mode 802.3ad`` is emitted for an ``active``
-    (LACP) LAG; a ``static`` LAG omits the line (VyOS applies its
-    default)."""
+    matching :class:`CanonicalLAG` (members sorted, one ``interface``
+    line each: VyOS defines ``member interface`` as a leaf of many
+    values, and prints it so).  ``mode 802.3ad`` is emitted for an
+    ``active`` (LACP) LAG; a ``static`` LAG omits the line (VyOS
+    applies its default)."""
     if lag is None:
         return []
     out: list[str] = []
@@ -274,8 +278,7 @@ def _bond_extra(lag, indent: str) -> list[str]:
     if lag.members:
         out.append(f"{indent}member {{")
         for member in sorted(lag.members):
-            out.append(f"{indent}    interface {member} {{")
-            out.append(f"{indent}    }}")
+            out.append(f"{indent}    interface {member}")
         out.append(f"{indent}}}")
     return out
 
