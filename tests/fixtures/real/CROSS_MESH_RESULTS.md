@@ -105,7 +105,7 @@ Real configs from carriers, Batfish parser tests, and vendor-published examples.
 | opnsense/opnsense_paramiko_shell_capture.xml | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 18/21 | OK 21/21 | WARN 19/21 |
 | opnsense/opnsense_service_test_config.xml | WARN 20/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | WARN 20/21 | OK 21/21 | WARN 19/21 |
 | opnsense/user_contrib_supergate_opn25.xml | WARN 18/21 | WARN 17/21 | WARN 17/21 | WARN 20/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 17/21 | WARN 18/21 | WARN 19/21 | WARN 17/21 | OK 21/21 | WARN 18/21 |
-| vyos/houdev_vyos_dhcpv6_pd_client.conf | WARN 19/21 | WARN 18/21 | WARN 18/21 | WARN 20/21 | WARN 18/21 | WARN 18/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | OK 21/21 |
+| vyos/houdev_vyos_dhcpv6_pd_client.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
 | vyos/metasploit-vyos-config.conf | WARN 19/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 18/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | OK 21/21 |
 | vyos/pc5-round1-border.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
 | vyos/pc5-round1-core.conf | WARN 20/21 | WARN 18/21 | WARN 19/21 | OK 21/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 19/21 | WARN 20/21 | WARN 20/21 | WARN 19/21 | OK 21/21 |
@@ -8887,27 +8887,25 @@ One section per non-OK real-capture cell (1121 total).  Sections are ordered by 
 | vlans | DRIFT | [{"id": 10, "name": "USER VLAN", "description": "", "tagged_ports": [], "untagged_ports": [], "ipv4_addresses": []}, {"id": 100, "name": "CLUSTER VLAN", "description": "", "tagged_ports": [], "unta... | [] | all 5 vlans dropped |
 | local_users | DRIFT | [{"name": "api", "privilege_level": 15, "hashed_password": "bcrypt:$2y$11$fakeBcryptHashForApiUserExampleValueNotRealXXXXXXXX", "role": "admin"}, {"name": "root", "privilege_level": 15, "hashed_pas... | [] | all 2 local_users dropped |
 
-### vyos/houdev_vyos_dhcpv6_pd_client.conf → arista_eos  (WARN 19/21)
+### vyos/houdev_vyos_dhcpv6_pd_client.conf → arista_eos  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | list contents differ |
-| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}}} |
+| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | count drift: 3 → 2 (interfaces) |
 
 ### vyos/houdev_vyos_dhcpv6_pd_client.conf → aruba_aoscx  (WARN 18/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | [] | all 3 ntp_servers dropped |
+| ntp_servers | DRIFT | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other... |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | [] | all 1 local_users dropped |
 
-### vyos/houdev_vyos_dhcpv6_pd_client.conf → aruba_aoss  (WARN 18/21)
+### vyos/houdev_vyos_dhcpv6_pd_client.conf → aruba_aoss  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | list contents differ |
-| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mod... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:ether... |
+| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mod... | count drift: 3 → 2 (interfaces) |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | [] | all 1 local_users dropped |
 
 ### vyos/houdev_vyos_dhcpv6_pd_client.conf → cisco_iosxe  (WARN 20/21)
@@ -8915,31 +8913,28 @@ One section per non-OK real-capture cell (1121 total).  Sections are ordered by 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
 | hostname | UNSUPPORTED (by design) | vyos |  | hostname: 'vyos' → '' |
-| ntp_servers | UNSUPPORTED (by design) | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | [] | all 3 ntp_servers dropped |
+| ntp_servers | UNSUPPORTED (by design) | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}}} |
 | local_users | UNSUPPORTED (by design) | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | [] | all 1 local_users dropped |
 
-### vyos/houdev_vyos_dhcpv6_pd_client.conf → cisco_iosxe_cli  (WARN 18/21)
+### vyos/houdev_vyos_dhcpv6_pd_client.conf → cisco_iosxe_cli  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | list contents differ |
-| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other... |
+| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | count drift: 3 → 2 (interfaces) |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | [] | all 1 local_users dropped |
 
-### vyos/houdev_vyos_dhcpv6_pd_client.conf → cisco_iosxr  (WARN 18/21)
+### vyos/houdev_vyos_dhcpv6_pd_client.conf → cisco_iosxr  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | list contents differ |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other... |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | [{"name": "netadmin", "privilege_level": 1, "hashed_password": "", "role": "admin"}] | {"local_users[0] {'name': 'netadmin'}": {"privilege_level": {"source": 15, "target": 1}}} |
 
-### vyos/houdev_vyos_dhcpv6_pd_client.conf → cisco_nxos  (WARN 18/21)
+### vyos/houdev_vyos_dhcpv6_pd_client.conf → cisco_nxos  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | list contents differ |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other... |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | [] | all 1 local_users dropped |
 
@@ -8947,36 +8942,34 @@ One section per non-OK real-capture cell (1121 total).  Sections are ordered by 
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | [] | all 3 ntp_servers dropped |
+| ntp_servers | DRIFT | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:other", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null,... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:other... |
 
 ### vyos/houdev_vyos_dhcpv6_pd_client.conf → fortigate_cli  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mod... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}, "interface_type": {"source": "", "target": "ianaift:ether... |
+| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mod... | count drift: 3 → 2 (interfaces) |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": "super_admin"}] | {"local_users[0] {'name': 'netadmin'}": {"role": {"source": "admin", "target": "super_admin"}}} |
 
-### vyos/houdev_vyos_dhcpv6_pd_client.conf → juniper_junos  (WARN 18/21)
+### vyos/houdev_vyos_dhcpv6_pd_client.conf → juniper_junos  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | list contents differ |
-| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client_v6": {"source": "dhcpv6", "target": ""}}} |
+| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | count drift: 3 → 2 (interfaces) |
 | local_users | DRIFT | [{"name": "netadmin", "privilege_level": 15, "hashed_password": "", "role": "admin"}] | [{"name": "netadmin", "privilege_level": 1, "hashed_password": "", "role": "admin"}] | {"local_users[0] {'name': 'netadmin'}": {"privilege_level": {"source": 15, "target": 1}}} |
 
-### vyos/houdev_vyos_dhcpv6_pd_client.conf → mikrotik_routeros  (WARN 19/21)
+### vyos/houdev_vyos_dhcpv6_pd_client.conf → mikrotik_routeros  (WARN 20/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | ["time1.vyos.net"] | count drift: 3 → 1 (ntp_servers) |
-| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}}} |
+| interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client": {"source": true, "target": false}, "dhcp_client_v6": {"source": "dhcpv6", "target": ""}}, "interfaces[2] {'name': 'lo'}": {"interface_type": {"sou... |
 
 ### vyos/houdev_vyos_dhcpv6_pd_client.conf → opnsense  (WARN 19/21)
 
 | Field | Disposition | Source | Target | Drift |
 |---|---|---|---|---|
-| ntp_servers | DRIFT | ["time1.vyos.net { }", "time2.vyos.net { }", "time3.vyos.net { }"] | [] | all 3 ntp_servers dropped |
+| ntp_servers | DRIFT | ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] | [] | all 3 ntp_servers dropped |
 | interfaces | DRIFT | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | [{"name": "eth0", "default_name": "", "description": "OUTSIDE", "enabled": true, "interface_type": "", "mtu": null, "ipv4_addresses": [], "ipv6_addresses": [], "switchport_mode": null, "access_vlan... | {"interfaces[0] {'name': 'eth0'}": {"dhcp_client_v6": {"source": "dhcpv6", "target": ""}}} |
 
 ### vyos/metasploit-vyos-config.conf → arista_eos  (WARN 19/21)
