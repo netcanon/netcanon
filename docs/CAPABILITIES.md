@@ -850,6 +850,24 @@ in rendered output find every such site.
   syntax but unverified IPv6 syntax; the renderer emits the IPv6
   address as a comment-form review line rather than guessing.
 
+* **A credential that would not be one value**
+  ([`_one_value.py`](../netcanon/migration/_one_value.py)).  A local
+  user's name, password or role, an SNMP community, an SNMPv3 user's
+  name, group or keys, and a VRRP/HSRP key that holds white space or a
+  `"` is not written where the target reads one word (IOS-XE CLI,
+  NX-OS, EOS, AOS-CX, OS10, IOS XR, and a VyOS user or community name)
+  or where it quotes with no escape (AOS-S, for a `"`), and is never
+  altered to fit.  The record is left out with a line of the form:
+
+      username <name> -- review: a value of it holds white space or a
+      quote, which <target> does not read as one value; it is left out,
+      re-create it on the device
+
+  A local user and an SNMPv3 user go whole; a community goes with every
+  trap host that would carry it; a VRRP/HSRP key goes alone and the
+  group stays.  The line never holds the secret.  RADIUS keys are not
+  yet under this rule.
+
 * **MikroTik IPsec tunnel placeholders**.  When the canonical
   carries an IPsec peer with an empty/placeholder address, the
   renderer emits the line plus `comment="review: tunnel endpoint

@@ -516,6 +516,21 @@ the policy locally:
   `_RENDERING_TARGETS` in
   `tests/unit/migration/test_radius_secret_portability.py`.
 
+* **`netcanon/migration/_one_value.py`** — a credential or an
+  account's name is written as ONE value of the place it goes, or not
+  at all.  Public API: `splits(value)` (not one word of a
+  word-at-a-time CLI: white space or a `"`), `breaks_its_quotes(value)`
+  (cannot stand between quotes on a grammar with no escape, AOS-S),
+  `left_out(what, target_label)` (the review line's text; `what` must
+  not hold a secret).  A renderer writing a password, community,
+  SNMPv3 user or FHRP key asks before it writes, and leaves the record
+  out (never alters it) where the value would not be one value; where
+  its target quotes, it escapes as the platform documents.  A new
+  line-grammar codec is judged by
+  `tests/unit/migration/test_a_secret_is_one_value.py` with no entry
+  of its own (it walks `list_public_codecs()`); a target that quotes
+  goes in that module's `_QUOTES` with the escape it documents.
+
 * **`netcanon/migration/_tier3_detection.py`** — Tier-3 stanza-header
   detection.  One `detect_tier3_sections_<vendor>(raw)` per source codec
   (`iosxe_cli`, `iosxe_xml` [no-op], `fortios`, `junos`, `routeros`,

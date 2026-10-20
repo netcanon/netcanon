@@ -1455,6 +1455,34 @@ tests use these exclusively — never CSS classes or element structure.  See
   strength of `trunk 1,my port trk1 lacp`, a line the parser does
   not read, and port 1 came back in no record.  Guarded by
   `tests/unit/migration/codecs/aruba_aoss/test_no_stanza_for_enable_alone.py`.
+- **Never** write a credential where one value goes unless it IS one
+  value there.  A renderer puts a value into its line as it stands,
+  and a word-at-a-time CLI reads a value that holds white space as two
+  words, the second as whatever that place takes next: NX-OS
+  `snmp-server community public rw` is a READ-WRITE community
+  `public`, an EOS community's second word is an ACL name, a password
+  `secret scrypt` sets `secret`.  Every line-grammar renderer did this
+  for every password, community, SNMPv3 user and VRRP/HSRP key, and
+  AOS-S, which quotes and documents no escape, ended a value at its
+  `"`.  Which places quote, and with what escape, is the VENDOR's to
+  say: no word-at-a-time CLI documents a quoted credential, so such a
+  value is not written there, and a secret is never altered to fit (a
+  secret with a space replaced is another secret).  It is left out
+  with the granularity the credential rules above set, and said in a
+  line that names the place and never the value -- three review lines
+  quoted the very key they could not write.  Where the target quotes,
+  escape as it documents (`_one_value.py`; FortiOS and Junos `\"`,
+  VyOS none at all).  **The blind spot that hid it:** no committed
+  input holds such a value, every check read the captures, and a
+  codec's round trip to itself writes the two words and reads the
+  same two back.  And a check of "the secret is in no comment" has to
+  run whether or not the target writes the field: the first version of
+  the guard looked only where the one-word value was written, and the
+  AOS-S line that quoted an MD5 key it could not write passed it.
+  Guarded by `tests/unit/migration/test_a_secret_is_one_value.py`,
+  which reads every target's output as text, and is handed each
+  defect it is for.  Not yet under the rule: RADIUS keys, names that
+  label (host name, VLAN, VRF) and addresses.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

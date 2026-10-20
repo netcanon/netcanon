@@ -45,6 +45,7 @@ import ipaddress
 import re
 from typing import Any
 
+from ..._one_value import left_out, splits
 from ..._radius_secrets import (
     FORTIOS_ENVELOPE,
     radius_secret_is_migratable,
@@ -835,7 +836,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     if group.authentication.startswith("plain:"):
                         out.append(
                             f'                set authentication '
-                            f'"{group.authentication[6:]}"'
+                            f'"{_esc(group.authentication[6:])}"'
                         )
                     if group.track_interfaces:
                         # FortiOS ``set vrdst`` is single-valued; emit
@@ -895,7 +896,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append("config system snmp community")
             out.append("    edit 1")
             community_name = tree.snmp.community or "public"
-            out.append(f'        set name "{community_name}"')
+            out.append(f'        set name "{_esc(community_name)}"')
             if tree.snmp.trap_hosts:
                 out.append("        config hosts")
                 for idx, host in enumerate(tree.snmp.trap_hosts, start=1):
@@ -945,7 +946,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         f"target"
                     )
                     continue
-                out.append(f'    edit "{u.name}"')
+                out.append(f'    edit "{_esc(u.name)}"')
                 if u.auth_protocol and u.priv_protocol:
                     out.append("        set security-level auth-priv")
                 elif u.auth_protocol:
@@ -966,9 +967,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         if val.startswith("ENC ") or classify_usm_key(
                             val, tree.source_vendor, u.auth_kind,
                         ) == PLAINTEXT:
-                            out.append(f'        set auth-pwd "{val}"')
+                            out.append(
+                                f'        set auth-pwd "{_esc(val)}"'
+                            )
                         else:
-                            out.append(f'        set auth-pwd "ENC {val}"')
+                            out.append(
+                                f'        set auth-pwd "ENC {_esc(val)}"'
+                            )
                 if u.priv_protocol:
                     fg_priv = _CAN_TO_FG_PRIV.get(u.priv_protocol, "aes")
                     out.append(f"        set priv-proto {fg_priv}")
@@ -977,9 +982,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         if val.startswith("ENC ") or classify_usm_key(
                             val, tree.source_vendor, u.priv_kind,
                         ) == PLAINTEXT:
-                            out.append(f'        set priv-pwd "{val}"')
+                            out.append(
+                                f'        set priv-pwd "{_esc(val)}"'
+                            )
                         else:
-                            out.append(f'        set priv-pwd "ENC {val}"')
+                            out.append(
+                                f'        set priv-pwd "ENC {_esc(val)}"'
+                            )
                 out.append("    next")
             out.append("end")
 
@@ -987,7 +996,22 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.local_users:
         out.append("config system admin")
         for user in tree.local_users:
-            out.append(f'    edit "{user.name}"')
+            # This device's own blob is written bare, so one that holds
+            # white space is not one value; the account is left out whole
+            # rather than written with no password.
+            if user.hashed_password and is_migratable(
+                user.hashed_password, "fortigate_cli",
+            ):
+                algorithm, payload = classify_hash(user.hashed_password)
+                if (
+                    algorithm == "fortios" and payload.startswith("ENC ")
+                    and splits(payload[4:])
+                ):
+                    out.append(
+                        "    # " + left_out(f"admin {user.name}", "FortiOS")
+                    )
+                    continue
+            out.append(f'    edit "{_esc(user.name)}"')
             # Hash-portability gate (Issue #1a from
             # tests/fixtures/real/user_smoke_findings.md).  Foreign
             # hashes (Cisco type-5/7/8/9, Arista sha512, OPNsense
@@ -1005,15 +1029,18 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # ``fortios:<blob>`` still pass through unchanged.
             if user.hashed_password:
                 if is_migratable(user.hashed_password, "fortigate_cli"):
-                    alg, _, raw = user.hashed_password.partition(":")
-                    if alg == "fortios":
-                        out.append(f"        set password {raw}")
-                    elif raw:
-                        out.append(f"        set password ENC {raw}")
+                    # This FortiGate's own ``ENC <blob>`` goes back as the
+                    # device printed it.  Anything else that passed the
+                    # gate is a password as it was TYPED, and is written
+                    # as one quoted value for FortiOS to encrypt on save:
+                    # under ``ENC`` it would be read as a blob it is not
+                    # (and a typed password with a space was two words).
+                    algorithm, payload = classify_hash(user.hashed_password)
+                    if algorithm == "fortios" and payload.startswith("ENC "):
+                        out.append(f"        set password {payload}")
                     else:
                         out.append(
-                            f"        set password ENC "
-                            f"{user.hashed_password}"
+                            f'        set password "{_esc(payload)}"'
                         )
                 else:
                     algorithm, _payload = classify_hash(
@@ -1028,7 +1055,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 "super_admin" if user.privilege_level == 15
                 else (user.role or "prof_admin")
             )
-            out.append(f'        set accprofile "{accprofile}"')
+            out.append(f'        set accprofile "{_esc(accprofile)}"')
             out.append("    next")
         out.append("end")
 

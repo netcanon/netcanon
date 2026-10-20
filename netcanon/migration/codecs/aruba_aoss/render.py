@@ -60,6 +60,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..._one_value import breaks_its_quotes, left_out
 from ..._radius_secrets import (
     format_review_comment as format_radius_review_comment,
 )
@@ -676,7 +677,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         or tree.snmp.contact or tree.snmp.trap_hosts
         or tree.snmp.v3_users
     ):
-        if tree.snmp.community:
+        # AOS-S quotes a credential and documents no escape (only
+        # `banner motd` takes escape characters), so a `"` in it ends the
+        # value and the rest is CLI words.  A community that cannot stand
+        # in its quotes is left out, with every trap host that would
+        # carry it.  Policy: :mod:`netcanon.migration._one_value`.
+        community_breaks = breaks_its_quotes(tree.snmp.community)
+        if community_breaks:
+            lines.append("; " + left_out("an SNMP community", "AOS-S"))
+        elif tree.snmp.community:
             lines.append(
                 f'snmp-server community "{tree.snmp.community}" Operator'
             )
@@ -685,6 +694,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if tree.snmp.contact:
             lines.append(f'snmp-server contact "{tree.snmp.contact}"')
         for host in tree.snmp.trap_hosts:
+            if community_breaks:
+                lines.append(
+                    "; " + left_out(f"snmp-server host {host}", "AOS-S")
+                )
+                continue
             comm = tree.snmp.community or "public"
             lines.append(
                 f'snmp-server host {host} community "{comm}"'
@@ -712,6 +726,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f'; snmpv3 user "{u.name}" -- review: a {kind} USM key '
                     f'belongs to the source agent, so AOS-S cannot re-derive '
                     f'it; re-create this user and re-key it on the target'
+                )
+                continue
+            if any(
+                breaks_its_quotes(v) for v in (
+                    u.name, u.group, u.auth_passphrase, u.priv_passphrase,
+                )
+            ):
+                lines.append(
+                    "; " + left_out(f"snmpv3 user {u.name}", "AOS-S")
                 )
                 continue
             parts = [f'snmpv3 user "{u.name}"']
@@ -817,6 +840,12 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 f'; password {aos_role} user-name "{user.name}" '
                 f'-- review: {hash_val} hash from source vendor cannot '
                 f'be re-used on AOS-S; reset this user password manually'
+            )
+            continue
+        if breaks_its_quotes(user.name) or breaks_its_quotes(hash_val):
+            lines.append(
+                "; " + left_out(f"password {aos_role} user-name {user.name}",
+                                "AOS-S")
             )
             continue
         lines.append(
@@ -1070,17 +1099,27 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     lines.append(f"      priority {group.priority}")
                 if group.preempt:
                     lines.append("      preempt")
-                if group.authentication.startswith("plain:"):
+                if group.authentication.startswith(
+                    "plain:"
+                ) and breaks_its_quotes(group.authentication[6:]):
+                    lines.append(
+                        "      ; " + left_out(
+                            "authentication mode plaintext-password", "AOS-S",
+                        )
+                    )
+                elif group.authentication.startswith("plain:"):
                     lines.append(
                         f'      authentication mode plaintext-password '
                         f'"{group.authentication[6:]}"'
                     )
                 elif group.authentication:
                     # md5 / carp-key / unknown scheme — AOS-S doesn't
-                    # consume this format.  Surface as review.
+                    # consume this format.  Surface as review, naming the
+                    # scheme and never the key.
+                    scheme = group.authentication.partition(":")[0]
                     lines.append(
                         f"      ; review: vrrp authentication "
-                        f"{group.authentication!r} cannot be cleanly "
+                        f"({scheme or 'no scheme'}) cannot be cleanly "
                         f"emitted on AOS-S"
                     )
                 # ``enable`` is the platform-mandatory activation
