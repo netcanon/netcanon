@@ -46,10 +46,10 @@ block has to be read against it.
 
 | measurement | value |
 |---|---|
-| source interface records, all 13 cells | **55** |
+| source interface records, all 13 cells | **56** |
 | records after parse → render → re-parse | **46** |
-| records lost | **9** |
-| cells where the interface name set differs | **5 of 13** |
+| records lost | **10** |
+| cells where the interface name set differs | **6 of 13** |
 
 The rule is exact and it is in the renderer, not in a heuristic:
 `_iface_is_empty_stub()` (`netcanon/migration/codecs/fortigate_cli/render.py`,
@@ -61,29 +61,35 @@ then drops such an interface unless its name matches a FortiOS-native port
 shape (`_IS_FORTIGATE_PHYSICAL_PORT_RE` — `portN`, `mgmt`, `wan`, `lan`,
 `dmz`, `ha`, `vlanN`, `loopbackN`, …) or it is a LAG bundle name.
 
-VyOS's parser **never populates `interface_type`** — 0 of 55 source records
+VyOS's parser **never populates `interface_type`** — 0 of 56 source records
 carry one — so every content-free VyOS port trips the predicate. And `lo` is
 not a FortiOS-native shape (the regex accepts `loopbackN`, not `lo`), so a bare
 VyOS loopback is elided too.
 
 | cell | records lost |
 |---|---|
+| `houdev_vyos_dhcpv6_pd_client.conf` | `lo` |
 | `metasploit-vyos-config.conf` | `eth1`, `lo` |
 | `scottlaird-vyos-parser.conf` | `eth2`, `eth3`, `eth4`, `lo` |
 | `vyos_forum_snmpv3_user_eq13.conf` | `lo` |
 | `wcni-kind-gw0.conf` | `lo` |
 | `wcni-kind-gw1.conf` | `lo` |
 
-Every one of those nine records is address-less, description-less and
-administratively up. The counter-examples in `kitchen_sink.conf` confirm the
+Every one of those ten records is address-less, description-less and
+administratively up. The `lo` of `houdev_vyos_dhcpv6_pd_client.conf` has
+nothing set at all: the capture prints it on one line (`loopback lo { }`),
+which the VyOS parser reads as the empty interface it is (until 2026-10 it
+made no record of it). Its elision is structural drift on that cell; no
+attribute is lost. The counter-examples in `kitchen_sink.conf` confirm the
 predicate rather than contradict it: `eth3` survives because it is explicitly
 shut (`enabled=False` is meaningful), and `eth4` / `eth5` survive because they
 are `bond0` members.
 
-**Consequence for reading the rest of this file:** on the 5 affected cells the
+**Consequence for reading the rest of this file:** on the 6 affected cells the
 reconciler collapses every `interfaces[].*` sub-key after the first into
 `STRUCTURAL_ONLY`, because one record-count change must not be counted nine
-times. `interfaces[].name` carries that signal and is recorded `lossy`. The
+times, once for each `interfaces[]` key the audit compares.
+`interfaces[].name` carries that signal and is recorded `lossy`. The
 surviving sub-fields are recorded `good` — and each of them was separately
 measured on the **46 surviving records**, not waved through.
 
@@ -141,7 +147,7 @@ Every other pair in this mesh loses the IANA type hint. This one **gains**
 one, and that is why the field is still recorded `lossy`: the canonical value
 does not round-trip.
 
-- source: `""` on all 55 records (VyOS asserts no ifType)
+- source: `""` on all 56 records (VyOS asserts no ifType)
 - target after re-parse, on the 46 survivors: **43** `ianaift:ethernetCsmacd`,
   **2** `ianaift:l3ipvlan`, **1** `ianaift:ieee8023adLag`
 
@@ -167,7 +173,7 @@ descriptions of 48 characters come back at 25, with the target string an exact
 prefix of the source — semicolon-delimited patch-panel metadata, so the
 truncation removes the far-end port and the circuit speed.
 
-That cell is **also** one of the five whose interface list shrank. The
+That cell is **also** one of the six whose interface list shrank. The
 reconciler therefore classifies `interfaces[].description` as
 `STRUCTURAL_ONLY` there and never emits an evidenced-loss class for it
 anywhere on the pair — which means a `lossy` declaration would score as an

@@ -16,10 +16,10 @@
 # SNMP, VRF identity, the VXLAN VNI-to-VLAN binding and user identity.
 #
 # READ THIS BEFORE COMPARING WITH `vyos__arista_eos.yaml`: there the interface
-# inventory SHRINKS (55 records in, 46 out, on 6 of 13 cells) because the EOS
+# inventory SHRINKS (56 records in, 46 out, on 7 of 13 cells) because the EOS
 # render elides content-free VyOS stubs, so `interfaces[].name` carries a
 # structural loss and the sub-fields inherit that one signal.  Here NOTHING is
-# elided: 55 interface records in, 55 out, identical name sets on all 13
+# elided: 56 interface records in, 56 out, identical name sets on all 13
 # cells.  Every interface loss below is therefore a genuine per-attribute loss
 # that stands on its own measurement, and the sub-fields that survive are
 # declared `good` rather than dragged down by a vanishing parent.
@@ -30,8 +30,8 @@
 #
 # The real losses on this pair are: a uniform interface type-hint fabrication
 # (large but harmless), the LAG identity rename that strands the bundle's
-# addressing, one passwordless local account that disappears at re-parse, the
-# SNMPv3 privacy-cipher token, and a one-cell NTP parser artefact.
+# addressing, one passwordless local account that disappears at re-parse, and
+# the SNMPv3 privacy-cipher token.
 #
 # Dispositions are grounded in the codecs' `CapabilityMatrix` declarations and
 # a 13-cell round-trip over the committed corpus (0 render errors, 0 re-parse
@@ -56,7 +56,7 @@ meta:
     inventory with its addressing, MTU, description and admin state, static
     routes, SNMP v1/v2c, the VNI-to-VLAN binding, VRF names and 16 of 17
     local-user records all survive.  What does not: the interface type hint
-    (fabricated on the target for all 55 records), the LAG identity — renamed
+    (fabricated on the target for all 56 records), the LAG identity — renamed
     `bond0` -> `port-channel0` while the bundle's L3 stays behind on a stanza
     called `bond0` that the render never turns into a port-channel — a single
     passwordless account that the NX-OS parser cannot read back, the SNMPv3
@@ -103,24 +103,17 @@ per_field_expectation:
     references: [vyos-nxos-surface]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Drifts on exactly 1 of 13 cells, and the drift is punctuation the SOURCE
-      parser attached — not a server that went missing.
-      `houdev_vyos_dhcpv6_pd_client.conf` writes its servers as one-line
-      empty-body blocks (`server         time1.vyos.net { }`).  The VyOS
-      brace parser captures the whole token run, so the canonical value is
-      `time1.vyos.net { }`.  The NX-OS render emits that verbatim as
-      `ntp server time1.vyos.net { }`, and the NX-OS parser reads only the
-      first token after `ntp server`, so the round trip returns the clean
-      `time1.vyos.net`.
-      All three hostnames are present on both sides, in order — the text
-      survives, the stray brace pair does not.  Recorded as a loss because the
-      audit compares canonical strings and this one is not preserved, but an
-      operator reading a migration report should know the target value is the
-      more correct of the two.  On the other 11 populated cells the lists
-      round-trip identically.  Both matrices declare `/system/ntp-server`
-      supported; neither codec is at fault for the shape of the loss.
+    disposition: good
+    note: >
+      Preserved on all 12 cells that populate it, list order included.
+      `houdev_vyos_dhcpv6_pd_client.conf` prints each server as a node with
+      nothing under it, on one line (`server time1.vyos.net { }`).  Until
+      2026-10 the VyOS parser kept the ` { }` in the name, the NX-OS render
+      wrote it out (`ntp server time1.vyos.net { }`), and that cell drifted.
+      The parser now reads such a line as the node it is, the reading the set
+      form gives the same path
+      (`tests/unit/migration/test_a_vyos_node_with_nothing_under_it.py`).
+      Both matrices declare `/system/ntp-server` supported.
     references: [vyos-nxos-surface]
 
   timezone:
@@ -155,8 +148,8 @@ per_field_expectation:
 
   # -- Interfaces -- inventory fully intact, two attributes drift ------------
   #
-  # The measured record count is the headline: 55 interface records across the
-  # 13 cells, 55 after the round-trip, with identical name sets on EVERY cell.
+  # The measured record count is the headline: 56 interface records across the
+  # 13 cells, 56 after the round-trip, with identical name sets on EVERY cell.
   # The NX-OS render emits `interface eth0`, `interface lo`, `interface dum0`,
   # `interface bond0` and `interface eth1.100` under their VyOS names verbatim
   # and the NX-OS parser reads every one back — bare content-free stubs
@@ -166,7 +159,7 @@ per_field_expectation:
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 13 of 13 cells: 55 source interface records, 55 after
+      Preserved on 13 of 13 cells: 56 source interface records, 56 after
       parse -> render -> re-parse, same names on every cell.  The NX-OS render
       does not rewrite kernel-style names into `Ethernet<N>`, does not collapse
       `eth1.100` / `eth1.200` dot1q sub-interfaces (they render with
@@ -193,7 +186,7 @@ per_field_expectation:
   "interfaces[].enabled":
     disposition: good
     note: >
-      Admin state preserved on 55 of 55 records — zero differing.  The two
+      Admin state preserved on 56 of 56 records — zero differing.  The two
       records that are admin-down on the VyOS side render as `shutdown` and
       arrive shut; every other record renders `no shutdown`.  Both matrices
       declare `/interfaces/interface/config/enabled` supported.
@@ -202,7 +195,7 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 55 of 55 records.  MTU is actually populated on exactly 1
+      Preserved on 56 of 56 records.  MTU is actually populated on exactly 1
       of them (`kitchen_sink.conf`, an `mtu 1500` that round-trips unchanged),
       so the coverage is thin — but both matrices declare
       `/interfaces/interface/config/mtu` supported and the one measurement is
@@ -212,7 +205,7 @@ per_field_expectation:
   "interfaces[].ipv6_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records; IPv6 is populated on 20 records across 5
+      Preserved on 56 of 56 records; IPv6 is populated on 20 records across 5
       cells and every address + prefix-length survives.  Both matrices declare
       `/interfaces/interface/ipv6/address/ip` and `.../prefix-length`
       supported.
@@ -221,7 +214,7 @@ per_field_expectation:
   "interfaces[].ipv4_addresses":
     disposition: good
     note: >
-      Preserved on 55 of 55 records; IPv4 is populated on 21 records across 9
+      Preserved on 56 of 56 records; IPv4 is populated on 21 records across 9
       cells — the widest-populated interface attribute on the pair — and every
       address + prefix-length survives.  Both matrices declare
       `/interfaces/interface/ipv4/address/ip` and `.../prefix-length`
@@ -232,7 +225,7 @@ per_field_expectation:
   "interfaces[].interface_type":
     disposition: lossy
     reason: >
-      The single largest drift signal on the pair: all 55 records on all 13
+      The single largest drift signal on the pair: all 56 records on all 13
       cells.  The direction is the surprise, and it changes how this should be
       read — the source value is the EMPTY STRING on every record measured,
       and the target comes back `ianaift:other`.  Nothing is lost; a hint the
@@ -281,7 +274,7 @@ per_field_expectation:
       anchor plus mode, priority, preempt, advertisement-interval,
       authentication, virtual-IPv6 and description — with the blunt reason
       "VyOS VRRP / VRRPv3 is not modelled by the codec", so nothing reaches
-      the target.  Measured: 0 differing of 55 records, because both sides are
+      the target.  Measured: 0 differing of 56 records, because both sides are
       empty on all of them.
       cisco_nxos declares `/interfaces/interface/vrrp-groups/group` LOSSY
       rather than unsupported — it renders every canonical FHRP group as an
