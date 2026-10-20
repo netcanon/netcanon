@@ -9,6 +9,13 @@ Cached measurement backing
 - Render errors: **0** · re-parse errors: **0**
 - Retrieved: 2026-09-21
 
+> **2026-10-20:** a member of a LAG is now written onto OPNsense in its
+> lagg's `<members>` alone, since OPNsense adds only an unassigned
+> interface to a LAGG.  A member's own description and MTU are no longer
+> written (a comment in the `<lagg>` names what is left out), so the
+> zero-drift figures below for `description` and `mtu` predate that change; the
+> paired expectation YAML has the current measure.
+
 > **No device-vendor documentation was consulted for this file.** Everything below is derived from in-repo artefacts: the two codecs' `CapabilityMatrix` declarations and the measured mesh run. Where a disposition rests on a declaration rather than an observed round-trip, the YAML says so explicitly.
 
 ## Why the dispositions could not be written in advance

@@ -265,12 +265,19 @@ per_field_expectation:
     references: [opnsense-interfaces, arista-iface-cg]
 
   interfaces[].description:
-    disposition: good
-    note: >
-      Arista ``description "<text>"`` (240-char CLI limit) ↔
-      OPNsense ``<descr>`` (no length limit).  Round-trip
-      preserves text content.
-    references: [opnsense-interfaces, arista-iface-cg]
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 15 of the 73 records that carry a
+      description are LAG members and lose it.  Every other record
+      keeps its text: Arista ``description "<text>"`` (240-char CLI
+      limit) ↔ OPNsense ``<descr>`` (no length limit).
+    references: [opnsense-interfaces, opnsense-laggs, arista-iface-cg]
 
   interfaces[].enabled:
     disposition: good
