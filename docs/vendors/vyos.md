@@ -164,6 +164,12 @@ real set-form) capture are welcomed via
   VyOS refuses an embedded quote even escaped (vyos.dev/T1246) and a
   secret with its quote replaced is another secret.  See
   [`../CAPABILITIES.md`](../CAPABILITIES.md) § C.
+- **A host name or VRF name that holds white space or a `"` is
+  written with `_` and `'` as a target**, the VRF at every place it is
+  named, with a `review:` line.  A `"` in a description or the SNMP
+  location or contact is written `'` (VyOS refuses one even escaped).
+  An NTP or DNS server, the domain or a route's gateway that holds
+  either is left out and said, the route whole.
 - **VLANs are `vif` sub-interfaces.**  There is no VLAN database — a
   tagged VLAN is `interfaces ethernet ethN vif <vid>`, modelled as an
   `ethN.<vid>` interface.  A switch-source's per-port VLAN membership

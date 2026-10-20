@@ -45,7 +45,7 @@ import ipaddress
 import re
 from typing import Any
 
-from ..._one_value import left_out, splits
+from ..._one_value import ADDRESSES, left_out, one_value_tree, splits
 from ..._radius_secrets import (
     FORTIOS_ENVELOPE,
     radius_secret_is_migratable,
@@ -512,13 +512,21 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             yang_path="/",
         )
 
+    # An address is never altered: one that is not one word is left out
+    # and said (a static route whose gateway it is, whole).  Policy:
+    # :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "FortiOS", addresses=ADDRESSES,
+    )
+
     out: list[str] = []
     out.append("#config-version=netcanon-translator")
+    out += [f"# {said}" for said in one_value_said]
 
     # --- system global ---
     if tree.hostname:
         out.append("config system global")
-        out.append(f'    set hostname "{tree.hostname}"')
+        out.append(f'    set hostname "{_esc(tree.hostname)}"')
         out.append("end")
 
     # --- system dns ---

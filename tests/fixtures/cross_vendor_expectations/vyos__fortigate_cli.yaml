@@ -108,13 +108,15 @@ per_field_expectation:
     references: [vyos-fortigate-surface]
 
   ntp_servers:
-    disposition: good
-    note: >
-      Preserved on all 12 cells that populate it, list order included —
-      the rendered `config system ntp / config ntpserver` blocks re-parse to
-      the same servers.  Both matrices declare `/system/ntp-server`
-      supported.  The one unpopulated cell is
-      `vyos_forum_snmpv3_user_eq13.conf`.
+    disposition: lossy
+    reason: >
+      The VyOS parser reads `server time1.vyos.net { }` (an empty
+      node, as the houdev DHCPv6-PD capture prints it) as the
+      server `time1.vyos.net { }`, an address with white space in
+      it, which the render leaves out with a review line.  #532
+      reads the empty node: whichever of #532 and the change that
+      left such an address out merges second sets this entry back
+      to good.  Every other cell is preserved.
     references: [vyos-fortigate-surface]
 
   timezone:

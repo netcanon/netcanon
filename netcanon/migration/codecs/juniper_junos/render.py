@@ -73,6 +73,7 @@ from ..._derived_values import (
 from ..._derived_values import (
     review_comment as derived_review_comment,
 )
+from ..._one_value import ADDRESSES, one_value_tree
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -141,7 +142,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     from ...canonical.transforms import project_vlan_to_switchport
     project_vlan_to_switchport(tree)
 
-    out: list[str] = []
+    # A name or a text is written between quotes where it needs them;
+    # an address is never altered, so one that is not one word is left
+    # out and said (a static route whose next hop it is, whole).
+    # Policy: :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "Junos", addresses=ADDRESSES,
+    )
+
+    out: list[str] = [f"# {said}" for said in one_value_said]
 
     # --- system ---
     if tree.hostname:

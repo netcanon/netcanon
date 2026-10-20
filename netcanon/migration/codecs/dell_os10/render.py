@@ -83,7 +83,7 @@ exists in the ``cisco_nxos`` render for the same reason.
 
 from __future__ import annotations
 
-from ..._one_value import left_out, splits
+from ..._one_value import left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import PLAINTEXT, user_usm_is_migratable, user_usm_kind
 from ...canonical.intent import CanonicalIntent, CanonicalInterface
@@ -156,6 +156,21 @@ def _version_token(tree: CanonicalIntent) -> str:
 
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Dell OS10 config text."""
+    # A name that is not one word where OS10 reads one is written as
+    # one, at every place it goes; a gateway is left out with its route.
+    # A description (a VLAN's name is written as its interface's) and
+    # the SNMP location and contact are written between quotes, which
+    # Dell documents no escape for, so a ``"`` in one is written ``'``.
+    # Each is said.  Policy: :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "OS10",
+        names=("hostname", "routing_instances[].name"),
+        addresses=("static_routes[].gateway",),
+        no_escape=(
+            "interfaces[].description", "vlans[].name", "snmp.location",
+            "snmp.contact",
+        ),
+    )
     lines: list[str] = []
 
     # ── Banner ──
@@ -165,6 +180,7 @@ def render_intent(tree: CanonicalIntent) -> str:
     # the exact string that made `cisco_iosxe_cli` claim every Dell
     # config at confidence 95 before PR #475.
     lines.append(f"! Version {_version_token(tree)}")
+    lines += [f"! {said}" for said in one_value_said]
     lines.append("!")
 
     # ── VRFs ──
@@ -562,7 +578,14 @@ def _render_interface(
     """
     block = [f"interface {iface.name}"]
     if iface.description:
-        block.append(f" description {iface.description}")
+        # "Spaces between characters are not preserved ... unless you
+        # enclose the entire description in quotation marks" (Dell OS10
+        # User Guide, ``description (Interface)``); the parser strips
+        # them again.
+        described = iface.description
+        if any(ch.isspace() for ch in described):
+            described = f'"{described}"'
+        block.append(f" description {described}")
     block.append(" no shutdown" if iface.enabled else " shutdown")
 
     if iface.lag_member_of:

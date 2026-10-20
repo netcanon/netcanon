@@ -1481,8 +1481,33 @@ tests use these exclusively — never CSS classes or element structure.  See
   AOS-S line that quoted an MD5 key it could not write passed it.
   Guarded by `tests/unit/migration/test_a_secret_is_one_value.py`,
   which reads every target's output as text, and is handed each
-  defect it is for.  Not yet under the rule: RADIUS keys, names that
-  label (host name, VLAN, VRF) and addresses.
+  defect it is for.  Not yet under the rule: RADIUS keys.
+  **What is not a secret is under the same rule, by what it is**
+  (`one_value_tree`, which each line renderer runs on the tree before
+  its first line).  A NAME that labels (host name, VLAN, VRF, route
+  name) may be written as one word (`_` for each run of white space,
+  `'` for a `"`) and said; an ADDRESS (a server, a domain, a gateway)
+  is never altered, so it is left out and said, and a static route
+  whose gateway it is goes WHOLE (a route that keeps its destination
+  without its next hop is another route); a TEXT is written to the end
+  of the line where the vendor documents that place so, written and
+  said where no page does, and quoted where the target quotes (OS10's
+  description: Dell does not keep the spaces of an unquoted one).  A
+  name is changed ON THE TREE, once, never at the line that writes it:
+  a VRF is named on its own stanza, on every interface in it and on
+  every route of it, and a name relabelled at one of those lines and
+  not at another is two VRFs; and a relabel that would give a VRF
+  another VRF's name is told apart.  **The blind spot:** two
+  renderers already wrote the host name with `_`, from a helper whose
+  own docstring said to extend it only after auditing each codec's
+  grammar; nobody did, the other six wrote `hostname a b`, and the
+  IOS-XE route name holding a space was left out with nothing said.
+  Guarded by `tests/unit/migration/test_a_name_is_one_word.py`, which
+  reads every target's output as text with a table of the places
+  that read to the end of the line typed from the vendor references
+  (or a committed capture that prints such a line),
+  counts the places a name goes before and after, and is handed each
+  defect it is for.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

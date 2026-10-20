@@ -530,6 +530,18 @@ the policy locally:
   `tests/unit/migration/test_a_secret_is_one_value.py` with no entry
   of its own (it walks `list_public_codecs()`); a target that quotes
   goes in that module's `_QUOTES` with the escape it documents.
+  For what is not a secret: `one_value_tree(tree, target_label, names=,
+  addresses=, unread_text=, no_escape=, test=)`, called once at the top
+  of `render_intent`, before the first line, with the fields the
+  renderer writes as one word; it returns the tree to write and the
+  review lines, which the renderer puts at the top of its output in
+  its own comment form.  `one_word(name)` is the one word a name is
+  written as.  A new line-grammar codec is judged by
+  `tests/unit/migration/test_a_name_is_one_word.py` with no entry of its
+  own; a place of its grammar that reads to the end of the line goes in
+  that module's `_REST_OF_LINE`, from a vendor page or a committed
+  capture that prints such a line, and a target that
+  quotes in some places only, in `_QUOTED_PLACES`.
 
 * **`netcanon/migration/_tier3_detection.py`** — Tier-3 stanza-header
   detection.  One `detect_tier3_sections_<vendor>(raw)` per source codec

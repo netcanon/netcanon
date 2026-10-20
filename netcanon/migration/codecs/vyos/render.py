@@ -39,7 +39,7 @@ from __future__ import annotations
 import logging
 import re
 
-from ..._one_value import breaks_its_quotes, left_out, splits
+from ..._one_value import breaks_its_quotes, left_out, one_value_tree, splits
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent
 from .._helpers import same_vendor_version
@@ -82,7 +82,21 @@ _TYPE_RANK = {"ethernet": 0, "loopback": 1, "dummy": 2, "bonding": 3}
 
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as VyOS ``config.boot`` text."""
-    lines: list[str] = []
+    # A name VyOS writes bare is written as one word where it is not
+    # one, at every place it goes; an address is left out; a text it
+    # writes between quotes has each ``"`` written ``'`` (:func:`_q`
+    # says why).  Each is said.  Policy: :mod:`netcanon.migration._one_value`.
+    tree, one_value_said = one_value_tree(
+        tree, "VyOS",
+        names=("hostname", "routing_instances[].name"),
+        addresses=(
+            "domain", "ntp_servers", "dns_servers", "static_routes[].gateway",
+        ),
+        no_escape=(
+            "interfaces[].description", "snmp.location", "snmp.contact",
+        ),
+    )
+    lines: list[str] = [_review(said) for said in one_value_said]
 
     iface_lines = _render_interfaces(tree.interfaces, tree.lags)
     vxlan_lines = _render_vxlan(tree.vxlan_vnis)
@@ -150,6 +164,9 @@ def _q(value: str) -> str:
     common no-quote case included — so the honest, value-specific signal is a
     log line emitted only when a substitution actually happens.  Structured
     values (IP / prefix) never contain a quote, so this is a no-op for them.
+    The fields :func:`~netcanon.migration._one_value.one_value_tree` knows
+    (a description, the SNMP location and contact) reach this function
+    with the substitution already made and said in a review line.
     """
     if '"' in value:
         logger.warning(
