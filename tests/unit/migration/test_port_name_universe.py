@@ -787,11 +787,9 @@ class TestAnEntryNamesAPort:
         assert f'set [ find default-name=ether1 ] name={shown} comment="wan"' in job.rendered
         assert f"default-name={name}" not in job.rendered
         assert f"add address=192.0.2.2/30 interface={shown}" in job.rendered
-        # The route's next hop follows the name.  (The RouterOS
-        # renderer writes a next hop unquoted, as it does a route's
-        # interface, so a name with a space in it is written bare
-        # there: the renderer's own, older, limit.)
-        assert f"add dst-address=0.0.0.0/0 gateway={name}" in job.rendered
+        # The route's next hop follows the name, a string where the
+        # name has a space in it.
+        assert f"add dst-address=0.0.0.0/0 gateway={shown}" in job.rendered
         assert job.port_renames == {"ether1": name}
 
     def test_on_a_committed_capture(self) -> None:

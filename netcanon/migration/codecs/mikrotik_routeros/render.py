@@ -173,12 +173,12 @@ def _render_ntp_client(tree: Any) -> list[str]:
         and 1 <= len(servers) <= 2
         and _all_ip_literals(servers)
     ):
-        parts = ["set enabled=yes", f"primary-ntp={servers[0]}"]
+        parts = ["set enabled=yes", f"primary-ntp={_quote_if_needed(servers[0])}"]
         if len(servers) == 2:
-            parts.append(f"secondary-ntp={servers[1]}")
+            parts.append(f"secondary-ntp={_quote_if_needed(servers[1])}")
         lines.append(" ".join(parts))
     else:
-        lines.append(f"set enabled=yes servers={','.join(servers)}")
+        lines.append(f"set enabled=yes servers={_quote_if_needed(','.join(servers))}")
     lines.append("")
     return lines
 
@@ -270,7 +270,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             use_default_name_form = bool(iface.default_name) or _is_ethernet_name(iface.name)
             if use_default_name_form:
                 find_key = iface.default_name or iface.name
-                parts = [f"set [ find default-name={find_key} ]"]
+                parts = [f"set [ find default-name={_quote_if_needed(find_key)} ]"]
                 # Emit the renamed name only when it differs from
                 # the factory default-name - avoids a noisy no-op
                 # `name=ether1` on otherwise-default ports.
@@ -433,7 +433,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for lag in tree.lags:
             parts = ["add"]
             if lag.members:
-                parts.append(f"slaves={','.join(lag.members)}")
+                parts.append(f"slaves={_quote_if_needed(','.join(lag.members))}")
             parts.append(
                 f"mode={_CANONICAL_MODE_TO_ROUTEROS_BONDING.get(lag.mode, '802.3ad')}"
             )
@@ -598,7 +598,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         lines.append("/ip address")
         for ip, prefix, iface_name in ip_rows:
             lines.append(
-                f"add address={ip}/{prefix} interface={_quote_if_needed(iface_name)}"
+                f"add address={_quote_if_needed(f'{ip}/{prefix}')} "
+                f"interface={_quote_if_needed(iface_name)}"
             )
         lines.append("")
 
@@ -612,7 +613,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         lines.append("/ipv6 address")
         for ip, prefix, iface_name in ip6_rows:
             lines.append(
-                f"add address={ip}/{prefix} interface={_quote_if_needed(iface_name)}"
+                f"add address={_quote_if_needed(f'{ip}/{prefix}')} "
+                f"interface={_quote_if_needed(iface_name)}"
             )
         lines.append("")
 
@@ -639,15 +641,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts = ["add"]
             if route.description:
                 parts.append(f'comment="{_escape(route.description)}"')
-            parts.append(f"dst-address={route.destination}")
+            parts.append(f"dst-address={_quote_if_needed(route.destination)}")
+            # The whole ``gateway=`` value is one string, quoted as
+            # one: an interface named with a space is part of it.
             if route.gateway and route.interface:
                 # Both populated -- RouterOS combined form pins the
                 # next-hop IP to a specific egress interface.
-                parts.append(f"gateway={route.gateway}%{route.interface}")
-            elif route.gateway:
-                parts.append(f"gateway={route.gateway}")
-            elif route.interface:
-                parts.append(f"gateway={route.interface}")
+                gateway = f"{route.gateway}%{route.interface}"
+            else:
+                gateway = route.gateway or route.interface
+            if gateway:
+                parts.append(f"gateway={_quote_if_needed(gateway)}")
             if route.metric:
                 # RouterOS admin distance (default 1); emit only when the
                 # canonical metric is set so ordinary routes stay clean.
@@ -669,7 +673,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts.append(f'location="{_escape(tree.snmp.location)}"')
         if tree.snmp.trap_hosts:
             parts.append(
-                f'trap-target={",".join(tree.snmp.trap_hosts)}'
+                f'trap-target={_quote_if_needed(",".join(tree.snmp.trap_hosts))}'
             )
         lines.append(" ".join(parts))
         lines.append("")
@@ -677,7 +681,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             lines.append("/snmp community")
             if tree.snmp.community:
                 lines.append(
-                    f"set [ find default=yes ] name={tree.snmp.community}"
+                    f"set [ find default=yes ] "
+                    f"name={_quote_if_needed(tree.snmp.community)}"
                 )
             # Canonical auth/priv → RouterOS names.  RouterOS
             # only accepts ``MD5`` / ``SHA1`` / ``SHA256`` /
@@ -717,7 +722,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                         f"the target"
                     )
                     continue
-                add_parts = ["add", f"name={u.name}"]
+                add_parts = ["add", f"name={_quote_if_needed(u.name)}"]
                 if u.auth_protocol:
                     mt_auth = _CAN_TO_MT_AUTH.get(
                         u.auth_protocol, "SHA1",
@@ -749,7 +754,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if tree.radius_servers:
         lines.append("/radius")
         for server in tree.radius_servers:
-            parts = ["add", f"address={server.host}"]
+            parts = ["add", f"address={_quote_if_needed(server.host)}"]
             # (#482) See netcanon/migration/_radius_secrets.py — RouterOS
             # reads `secret=` as the literal shared secret.
             refused_secret = False
@@ -758,7 +763,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     server.key, tree.source_vendor, "mikrotik_routeros",
                 ):
                     parts.append(
-                        f"secret={unwrap_native_secret(server.key)}"
+                        f"secret={_quote_if_needed(unwrap_native_secret(server.key))}"
                     )
                 else:
                     refused_secret = True
@@ -795,21 +800,24 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if not (pool.start_ip and pool.end_ip):
                 continue
             name = f"dhcp_pool{idx}"
+            ranges = f"{pool.start_ip}-{pool.end_ip}"
             lines.append(
-                f"add name={name} ranges={pool.start_ip}-{pool.end_ip}"
+                f"add name={name} ranges={_quote_if_needed(ranges)}"
             )
         lines.append("")
         lines.append("/ip dhcp-server network")
         for pool in tree.dhcp_servers:
             if not pool.network:
                 continue
-            parts = ["add", f"address={pool.network}"]
+            parts = ["add", f"address={_quote_if_needed(pool.network)}"]
             if pool.gateway:
-                parts.append(f"gateway={pool.gateway}")
+                parts.append(f"gateway={_quote_if_needed(pool.gateway)}")
             if pool.dns_servers:
-                parts.append(f"dns-server={','.join(pool.dns_servers)}")
+                parts.append(
+                    f"dns-server={_quote_if_needed(','.join(pool.dns_servers))}"
+                )
             if pool.domain_name:
-                parts.append(f"domain={pool.domain_name}")
+                parts.append(f"domain={_quote_if_needed(pool.domain_name)}")
             lines.append(" ".join(parts))
         lines.append("")
 
@@ -840,7 +848,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # ever set.  Surfaced by OPNsense supergate smoke test
             # (issues #13 + #18 in
             # ``tests/fixtures/real/user_smoke_findings.md``).
-            parts = ["add", f"group={group}", f"name={user.name}"]
+            parts = ["add", f"group={group}", f"name={_quote_if_needed(user.name)}"]
             if user.hashed_password and is_migratable(
                 user.hashed_password, "mikrotik_routeros",
             ):
@@ -872,7 +880,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # ----- /system dns -----
     if tree.dns_servers:
         lines.append("/system dns")
-        lines.append(f"set servers={','.join(tree.dns_servers)}")
+        lines.append(f"set servers={_quote_if_needed(','.join(tree.dns_servers))}")
         lines.append("")
 
     # ----- /system ntp client (dialect-aware: v6 vs v7) -----
@@ -1024,17 +1032,30 @@ def _is_tunnel_type(iface: Any) -> bool:
     return iface.interface_type in _TUNNEL_TYPES
 
 
+#: What a value may hold and be written as it stands: the characters
+#: a RouterOS export itself leaves unquoted in a value -- letters,
+#: digits and ``- . _ / : , %`` (names, addresses, prefixes, lists,
+#: ``<gateway>%<interface>``).  Anything else is written as a string,
+#: since outside one RouterOS reads it as script: white space parts two
+#: words, ``;`` ends the command, ``$`` substitutes a variable, ``[ ]``,
+#: ``( )`` and ``{ }`` open a command, an expression and a scope, ``#``
+#: a comment, and a backslash is refused.  (MikroTik, "Scripting":
+#: https://help.mikrotik.com/docs/spaces/ROS/pages/47579229/Scripting.)
+_BARE_VALUE = re.compile(r"[A-Za-z0-9._/:,%-]+")
+
+
 def _quote_if_needed(value: str) -> str:
-    """Quote a RouterOS key=value value if it contains whitespace
-    or characters that would otherwise break parsing.  No-op for
-    simple identifiers (the common case, so we keep render output
-    tidy by default)."""
-    if not value:
-        return '""'
-    if any(c in value for c in ' \t\n"\\'):
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    return value
+    """Write a value of the tree into a RouterOS ``key=value``.
+
+    Every value the renderer takes from the tree goes through here (or
+    into a ``"..."`` through :func:`_escape`): a value is the config's
+    text, and a character RouterOS reads as script, left bare, is a
+    command on the device that imports the output.  A value of the
+    bare characters is written as it stands, the common case; any
+    other is written as a string, escaped."""
+    if _BARE_VALUE.fullmatch(value):
+        return value
+    return f'"{_escape(value)}"'
 
 
 def _yes_no(flag: bool) -> str:
@@ -1048,11 +1069,20 @@ def _escape(value: str) -> str:
     string, so a literal backslash must itself be doubled *before*
     double-quotes are escaped — otherwise ``a\\b`` renders as ``a\\b``
     where ``\\b`` is read back as a backspace escape, and a value
-    containing ``"`` closes the literal early.  Mirrors the sibling
-    :func:`_quote_if_needed` (which already escapes both) and the
-    parse-side :func:`~netcanon.migration.codecs.mikrotik_routeros.parse._parse_kv`
-    which reverses this.  Backslash first, then quote (order matters)."""
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    containing ``"`` closes the literal early.  And ``$`` is escaped
+    (``\\$``): inside a string RouterOS substitutes ``$name`` with a
+    variable and ``$[...]`` / ``$(...)`` with what a command or an
+    expression returns, so a description holding ``$[/system reset-configuration]``
+    was that command on the device that imported the output.  A
+    RouterOS export escapes it the same way (``value="\\$(HOSTNAME)"``).
+    Used by :func:`_quote_if_needed`; the parse-side
+    :func:`~netcanon.migration.codecs.mikrotik_routeros.parse._unescape`
+    reverses it.  Backslash first (order matters)."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("$", "\\$")
+    )
 
 
 def _render_vrrp(

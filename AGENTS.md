@@ -1455,6 +1455,40 @@ tests use these exclusively — never CSS classes or element structure.  See
   strength of `trunk 1,my port trk1 lacp`, a line the parser does
   not read, and port 1 came back in no record.  Guarded by
   `tests/unit/migration/codecs/aruba_aoss/test_no_stanza_for_enable_alone.py`.
+- **Never** write a value of the tree where the target reads it as
+  more than a value.  RouterOS imports an `.rsc` as a script: outside
+  a string white space parts two words, `;` ends the command, and
+  `$`, `[ ]`, `( )` and `{ }` substitute a variable, run a command or
+  an expression, or open a scope -- and inside a string `$[...]` and
+  `$(...)` run as well.  The renderer escaped `\` and `"` in a string
+  and wrote most values bare, so a description `$[/system
+  reset-configuration]` from any source vendor came out as that
+  command on the router that imported the output, a value holding `;`
+  ended its command there, and a RADIUS secret `7 <blob>` was a secret
+  `7` and a stray word -- in jobs that said `completed`.  A value is
+  written as it stands only when it is made of characters the
+  vendor's own printout leaves bare (letters, digits and
+  `- . _ / : , %` for RouterOS), and as a string otherwise, escaped
+  by the vendor's rules -- `$` included, as an export escapes it
+  (`_quote_if_needed` and `_escape` in the RouterOS renderer) -- and
+  the parser reads back every form the renderer writes (a quoted
+  `[ find name="..." ]`), in the same change.  An allow-list, never a
+  list of the characters known to be dangerous: what a grammar gives a
+  meaning to is the vendor's to say, and a value nobody vouches for
+  finds the one left off.  **The blind spot that hid it:** every check
+  read the output with the codec's own parser, which reads `$[...]`
+  inside a string as text and a bare value up to its first space as
+  the whole of it -- so a description that runs a command
+  round-tripped, and a secret cut to `7` was a loss the mesh had
+  measured and put down to the secret's encoding.  The guard reads the
+  output with a reader of its own, typed from MikroTik's "Scripting"
+  page, over a tree built from the schema with such text in every
+  place it has and over every committed input, and each of its checks
+  is handed the old rule and fails
+  (`tests/unit/migration/codecs/mikrotik_routeros/test_a_value_is_not_code.py`).
+  Still open: the renderers whose lines a device reads a word at a
+  time have not been read for a value with white space in it written
+  bare (SECURITY.md, "Known Limitations").
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

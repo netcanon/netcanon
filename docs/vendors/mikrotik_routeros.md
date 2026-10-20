@@ -155,6 +155,21 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
 
 ## Common gotchas
 
+- **A value is written as one string where it holds anything but
+  letters, digits and `- . _ / : , %`** — white space, `;`, `$`, a
+  bracket, a quote.  RouterOS reads an imported `.rsc` as a script:
+  outside a string white space parts two words, `;` ends the command
+  and `$` and the brackets substitute a variable or run a command, and
+  inside a string `$` still substitutes, so it is escaped there (`\$`),
+  as an export escapes it.  ⚠️ Up to 0.7.7 the renderer escaped only
+  `\` and `"` and wrote most values bare: a description
+  `$[/system reset-configuration]` from any source was that command on
+  the router that imported the output, and a value with a space or a
+  `;` in it was cut there or ran on as another command.  Read an older
+  output for `$`, `;`, `[` and `(` before it reaches a router.  The
+  parser reads a string back whole; it reads `\` and the character
+  after it as that character, so a hex escape (`\C3\A9`), `\n` or `\_`
+  in an export reaches the target as the letters.
 - **VLAN interfaces, bridges and names of your own, onto another
   vendor** — the port translator reads the names RouterOS gives a
   port or a bond (`ether2`, `sfp-sfpplus1`, `bonding1`).  A VLAN
@@ -226,8 +241,8 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   and the job is `partial`.  Give such a port a port of the target,
   not a name.  A port with no place that you keep under a name is
   written the same way, and is said in a line of the plan, not in
-  `unbound_ports`.  (Both lists are written unquoted: a name with
-  white space or a comma in it breaks the line.)
+  `unbound_ports`.  (A comma parts two names in either list, so a
+  name with a comma in it is two names there.)
 - **`gateway=<interface>` routes** follow the interface when it is
   renamed, and are removed with it when it is dropped.  A list of
   gateways (`gateway=ether1,ether2`) and a routing-table suffix

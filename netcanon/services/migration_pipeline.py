@@ -2162,17 +2162,17 @@ def _unbound_hardware(
     write.  Under the name of the target port it was paired with it
     needs none.  Under any other name it is looked up by nothing, and
     that matters where the output USES the name.  An allowance
-    applies there too: a list is written unquoted (``slaves=``,
-    ``gateway=``), so a name with white space, a comma, ``@`` or
-    ``%`` in it is not given back whole, and is judged by the part of
-    it before the first such character.  That is what a member list
-    reads where the character is white space or a comma, and a next
-    hop where it is any of the four; a name that begins with one of
-    them, holds ``@`` or ``%`` ahead of the white space or comma as a
-    LAG member, is wrapped in double quotes, or has a line break in
-    it is NOT caught (its entry is then listed off-target only).
-    Quoting the two lists in the renderer is what would retire the
-    whole case.
+    applies there too: the RouterOS parser cuts a member list
+    (``slaves=``) at each comma, and a next hop (``gateway=``) at a
+    comma, an ``@`` (a routing table) and a ``%`` (an interface after
+    an address), so a name holding one of them is not given back
+    whole, and is judged by the part of it before the first.  A name
+    that begins with one of them, holds ``@`` or ``%`` ahead of a
+    comma as a LAG member, or has a line break in it is NOT caught
+    (its entry is then listed off-target only).  White space and a
+    double quote are no longer among them: the renderer writes each
+    list as one string where it holds any character outside a bare
+    value, and the parser reads the string back whole.
 
     Args:
         target: The target codec.
@@ -2252,14 +2252,11 @@ def _unbound_hardware(
     def refers_to(name: str) -> bool:
         if name in used:
             return True
-        # A list is written unquoted (``slaves=``, ``gateway=``), so the
-        # parser gives a name back only up to its first white space or
-        # comma -- or, in a next hop, ``@`` or ``%``.  A name that holds
-        # one is judged by the part before the first of them (see the
-        # docstring for what that does not catch).
-        cut = next(
-            (at for at, ch in enumerate(name) if ch.isspace() or ch in ",@%"), len(name),
-        )
+        # The parser cuts a list at a comma -- and a next hop at ``@``
+        # or ``%`` as well -- so it gives a name back only up to the
+        # first of them.  A name that holds one is judged by the part
+        # before it (see the docstring for what that does not catch).
+        cut = next((at for at, ch in enumerate(name) if ch in ",@%"), len(name))
         return 0 < cut < len(name) and name[:cut] in used
 
     unbound = [name for name, where in hardware.items() if not bound(name, where)]
