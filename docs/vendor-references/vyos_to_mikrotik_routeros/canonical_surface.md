@@ -68,7 +68,7 @@ expects.
 | hostname | 13 | 0 | 0 |
 | domain | 0 | 1 | 12 |
 | dns_servers | 1 | 0 | 12 |
-| ntp_servers | 11 | 1 | 1 |
+| ntp_servers | 12 | 0 | 1 |
 | interfaces[].name | 13 | 0 | 0 |
 | interfaces[].enabled | 12 | 1 | 0 |
 | interfaces[].description | 6 | 1 | 6 |
@@ -276,27 +276,28 @@ IANA ifType; the codec infers it from the interface-name prefix"). Recorded
 `lossy`: the interface record, its addressing and its admin state are
 untouched, so this is a wrong hint, not lost forwarding state.
 
-### 4. NTP loses two of three servers on one cell — from a source-parse residue
+### 4. NTP names carry a source-parse residue that no round trip sees
 
-`ntp_servers` round-trips cleanly on 11 of the 12 cells that populate it,
-including a five-server cell. On `houdev_vyos_dhcpv6_pd_client.conf` it drops
-**3 → 1**, and the mechanism spans both codecs:
+`ntp_servers` round-trips on all 12 cells that populate it, including a
+five-server cell, and is wrong on one, `houdev_vyos_dhcpv6_pd_client.conf`:
 
 - That fixture writes the empty block **inline**: `server  time1.vyos.net { }`
   on one line, where every other fixture uses the multi-line
   `server 0.pool.ntp.org {` / `}` form. The VyOS brace-stack parser handles
   the multi-line form and leaves a literal ` { }` glued to the server name on
   the inline form, so the canonical value is `time1.vyos.net { }`.
-- The RouterOS renderer writes that verbatim into a comma-joined
-  `servers=` value. An unquoted RouterOS value terminates at whitespace, so
-  the re-parse recovers only `time1.vyos.net` and the second and third servers
-  are gone.
+- The RouterOS renderer writes the comma-joined `servers=` value as one
+  string, since it holds white space, and the re-parse reads it back whole:
+  both trees hold `time1.vyos.net { }`, and the router is given three names
+  that resolve to nothing. Until 2026-10 the value was written bare, ended at
+  its first white space, and the re-parse recovered only `time1.vyos.net`
+  (**3 → 1**).
 
 Both matrices declare `/system/ntp-server` supported, and the concept plainly
-crosses on 11 of 12 cells — so `ntp_servers` is recorded `lossy` (partial
-record loss inside a concept the target models), not `unsupported`. The
-residue is a source-side artifact; the record loss is measured on the target
-round-trip. Worth stating both halves rather than blaming one side.
+crosses — so `ntp_servers` stays recorded `lossy` (partial record loss inside
+a concept the target models), not `unsupported`, though no cell's round trip
+shows it now. The residue is a source-side artifact, and every target carries
+it.
 
 ## Credential material
 
