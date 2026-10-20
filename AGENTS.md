@@ -1455,6 +1455,49 @@ tests use these exclusively — never CSS classes or element structure.  See
   strength of `trunk 1,my port trk1 lacp`, a line the parser does
   not read, and port 1 came back in no record.  Guarded by
   `tests/unit/migration/codecs/aruba_aoss/test_no_stanza_for_enable_alone.py`.
+- **Never** write a value of the tree on more than one line.  Every
+  renderer writes a config a line at a time and puts a value into its
+  line as it stands, so a value that held a line break was written as
+  lines of its own, and the text after the break was a command: an
+  interface description holding a break and then `username <name>
+  privilege 15 nopassword` came out with that line on its own onto 12
+  of the 13 public codecs.  The OPNsense and IOS-XE NETCONF parsers
+  keep such a value from an element's text, and the FortiOS parser
+  made one of the device's own printout as well -- FortiOS prints a
+  certificate, a key or a replacement message's HTML between its
+  quotes, over several lines, and the parser read each line of it as a
+  statement: a line `end` in the HTML closed the block it was in, and
+  a line `config system admin` after it was an account with no
+  password on IOS-XE and EOS, in jobs that said `completed`.  The rule
+  is ONE for every field of every target, never a list of the fields a
+  target may hold a break in, since a value in the wrong place on such
+  a list is an account: the pipeline (and the sanitiser, before it
+  renders) writes each run of breaks as a space after the transforms
+  -- an operator's map puts values into the tree too -- and says each
+  place in the job's warnings (`one_line_each`), and `CodecBase.render`
+  refuses a tree that still holds one, naming the field and nothing of
+  the value (`netcanon/migration/_one_line.py`).  A break is every
+  character `str.splitlines` ends a line at, not the line feed alone.
+  The walk reads every field a record HOLDS, not the fields the schema
+  declares, and a dict's keys with its values: a value in a place the
+  schema does not name is written all the same.  The parsers' half is
+  the rule on a body that runs to its own end, above: a FortiOS quoted
+  value is read whole, up to the line whose quote no backslash escapes,
+  and the Tier-3 rows and the release are read from the text with its
+  lines emptied (`without_quoted_values`).  **The blind spot that hid
+  it:** every check read a capture, no committed capture's tree holds a
+  value of several lines, and a codec's round trip to itself writes
+  the break and reads the same value back.  `raw_sections`, the one
+  field built for text of several lines, is under the rule too; no
+  parser fills it.  Guarded by
+  `tests/unit/migration/test_a_value_is_one_line.py`, which puts a
+  break into every place of a tree built from the schema and sends the
+  sources that keep one onto every public codec; with the mend taken
+  out the render refuses, and with both gates out the line comes back
+  on every codec it is pinned for; and by
+  `tests/unit/migration/codecs/fortigate_cli/test_a_quoted_value_is_text.py`,
+  which holds where each quoted value of every committed input ends to
+  a reader of its own, a character at a time.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

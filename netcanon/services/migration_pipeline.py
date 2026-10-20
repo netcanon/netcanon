@@ -144,6 +144,7 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from typing import Any
 
+from ..migration._one_line import one_line_each, said
 from ..migration._tier3_detection import is_left_out_row
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
 from ..migration.limits import LimitExceeded
@@ -349,6 +350,11 @@ def run_plan(
         )
         for fn in transforms or []:
             tree = fn(tree)
+        # Every value on one line, said where: a renderer puts a value
+        # into its line as it stands, so the text after a line break
+        # is a command of its own.  After the transforms, which put an
+        # operator's values into the tree (`netcanon.migration._one_line`).
+        job.warnings.extend(said(where) for where in one_line_each(tree))
 
         # Stage 4 — validate
         job.status = MigrationJobStatus.validating

@@ -28,6 +28,24 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+- **A value of several lines was written as lines of the config, and
+  the text after a line break was a command on the target.**  Every
+  renderer puts a value into its line as it stands.  An interface
+  description that held a line break and then `username intruder
+  privilege 15 nopassword` -- which the OPNsense and IOS-XE NETCONF
+  parsers keep from an element's text (`&#10;`), and the FortiOS parser
+  from a value printed between quotes over several lines -- came out
+  with that line on its own onto 12 of the 13 public codecs, many of
+  the jobs saying `completed`.  And the FortiOS parser read each line
+  of such a value as a statement: a replacement message whose HTML
+  held a line `end` and then `config system admin` made an account
+  with no password on the IOS-XE and EOS targets, in jobs that said
+  `completed`.  No value is now written on more than one line, and
+  FortiOS reads a quoted value whole (Fixed, below).  If you translated
+  an OPNsense, IOS-XE NETCONF or FortiGate config with 0.7.7 or
+  earlier, look in the old output for lines the source config did not
+  have before it reaches a device.
+
 - **An EOS banner's lines were read as configuration, and a banner line
   became an administrator account with no secret on the target.**  A
   printed EOS config whose `banner motd` or `banner login` held a line
@@ -428,6 +446,49 @@ timestamp if your timezone matters for an audit.
   --limits standard"), where it spoke of a server.
 
 ### Fixed
+
+- **A value is written on one line, on every target, and the job says
+  where** (Security, above).  The pipeline writes each run of line
+  breaks in a value -- any character `str.splitlines` ends a line at,
+  not only a line feed -- as one space, after the transforms (an
+  operator's map puts values into the tree too), and says each place
+  in the job's warnings: `interfaces[em0].description held a line
+  break: it is written on one line, ...`.  The sanitiser does the same
+  before it renders.  And `CodecBase.render` refuses a tree that still
+  holds one, naming the field and nothing of the value, so a caller
+  that renders without the pipeline cannot write one either
+  (`netcanon/migration/_one_line.py`).  It is one rule for every field
+  of every target, not a list of which field of which target may hold
+  a break, because a value in the wrong place on such a list is an
+  account; an XML target, or FortiOS between its quotes, loses the
+  layout of such a value.  The walk reads every field a record holds,
+  whatever the schema says it is, and was measured on the largest tree
+  the `standard` limits admit: a small part of what the parse of the
+  same text takes.  No committed capture's tree, nor any of the
+  development corpus's, holds a line break, and every job of every
+  committed input onto every public codec is as it was.
+
+- **FortiOS: a quoted value of several lines is read as one value, not
+  as lines of the config** (Security, above).  FortiOS prints a
+  certificate, a private key or a replacement message's HTML as it is,
+  between its quotes, a quote or a backslash in it escaped with a
+  backslash, and the parser read the text a line at a time.  Besides
+  the account: a line `end` in a value closed the block it was in, and
+  the configuration after it was read
+  as nothing (the job `partial`, with "no source constructs were
+  recognized"); a line of HTML that read `config firewall policy` was
+  a Tier-3 row the config did not have; and a `#config-version` line
+  in a buffer was the config's release.  A statement whose quoted value
+  runs on is now read whole, up to the line whose quote ends it, and
+  the Tier-3 rows and the release are read from the text with that
+  value's lines emptied (`without_quoted_values`).  A value that no
+  later line ends is refused in words, naming the line that opens it
+  and quoting nothing: read, the rest of the config would be the
+  value's text.  So is a line of a value that ends in a character a
+  device does not end a line at (a form feed, a carriage return on its
+  own ...).  The committed captures hold certificates, keys and
+  replacement messages; where each value ends is held to a reader of
+  the test's own, a character at a time, and no capture's tree moves.
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
@@ -3061,9 +3122,20 @@ timestamp if your timezone matters for an audit.
   taken for its text: none of them is read, and none is translated, in
   a job that says nothing else of it.  The banner's row counts its
   lines.  Nor is the value of `crypto key generate rsa ... pubkey`
-  passed over: no source shows how it is printed.  Whether the parsers
-  of the other grammars (Junos, VyOS, FortiOS, RouterOS) read a
-  multi-line free-text value as configuration is not measured.
+  passed over: no source shows how it is printed.  (FortiOS reads a
+  quoted value of several lines whole; Junos, VyOS and RouterOS are
+  the next bullet.)
+- **The Junos and VyOS parsers read a set-form text a line at a
+  time**: a line after a quote that no later quote on its line ends is
+  read as a statement of its own.  Whether either device prints a
+  value of several lines so is not established.  RouterOS prints a
+  line break in a quoted value as `\n`, and its parser reads that as
+  the letter `n`: the value is written with an `n` where the break
+  was.
+- **A value of several lines loses its layout on every target**, the
+  ones that could hold it included (OPNsense and IOS-XE over NETCONF,
+  in an element's text, and FortiOS between its quotes): it is written
+  on one line, each run of breaks as a space, and the job says where.
 - **AOS-S `banner exec` is read as `banner motd` is**, though no HPE
   page shows the type; and whether an OS10 banner ends at its
   delimiter in the middle of a line is not established (Dell names "a
