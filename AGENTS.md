@@ -766,7 +766,10 @@ tests use these exclusively — never CSS classes or element structure.  See
   was read back, allow for the reader's losses in every branch and
   for every list (a member list and a next hop are not cut at the
   same characters), and give its oracle another way to look (the
-  text).
+  text).  And a port its own line finds is no less lost to a list
+  that cuts its name: when an OPNsense lagg's members were given
+  records, `my port` had a line of its own and was `my` in
+  `slaves=`, in a job that said `completed`.
   **And a job from a codec to itself changes no name unless an entry
   says so.**  The translator asks the source codec to classify a
   name and the target codec to write it, and that round trip is not
@@ -1448,6 +1451,13 @@ tests use these exclusively — never CSS classes or element structure.  See
   by a reader of its own, the port's name in a line), holds every
   parser to the record on the captures, and pins by name what it
   knows is still open — the change that mends one empties its pin.
+  A LAG's list is such a list: OPNsense adds only an UNASSIGNED
+  interface to a LAGG, so its members are in no zone, the parser
+  made no record for them, and seven targets wrote the LAG with no
+  member, in jobs that said `completed`.  And a record a parser adds
+  is a record every renderer writes: the OPNsense renderer wrote a
+  zone for each, which assigns a member, and a member is now written
+  in `<members>` alone (`tests/unit/migration/test_a_lag_member_has_a_record.py`).
   The same holds the other way: a renderer that leaves a port's
   stanza out because another line of its output names the port asks
   the target's own reader whether that line gives the port back.

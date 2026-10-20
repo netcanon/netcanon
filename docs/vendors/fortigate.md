@@ -51,7 +51,8 @@ firewall translation is your primary need, see
   `set type vlan` + `set vlanid <N>`)
 - Static routes (`config router static`)
 - LAGs (`config system interface` with `set type aggregate` +
-  member lists)
+  member lists; a member with no `edit` of its own, as in a pasted
+  fragment, is given a port record)
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats):
 

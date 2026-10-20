@@ -429,6 +429,37 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An OPNsense LAGG's members were no members on seven targets, and
+  the OPNsense output assigned every member.**  OPNsense adds only an
+  unassigned interface to a LAGG ("Only unassigned interfaces can be
+  added to LAGG", docs.opnsense.org, Other Types), so a member is
+  named in `<laggs>` alone, and the parser made an interface record
+  only for a zone of `<interfaces>`.  Seven renderers write a LAG on
+  each member's own stanza: onto EOS the LAG was not written at all,
+  and onto IOS-XE CLI, IOS-XR, NX-OS, Junos, AOS-CX and OS10 it was a
+  LAG with no member, in jobs that could say `completed`.  Each
+  member now has a record of its own that names its LAG, and a
+  FortiGate aggregate that names a member no `edit` configures (a
+  pasted fragment: FortiOS prints every port) gives it one the same
+  way.  The OPNsense renderer wrote a zone for every interface, a
+  member included: a config OPNsense refuses.  A member of a LAGG is
+  now written in its `<members>` alone, and where its record held
+  something a zone would have carried (a description, an MTU, an
+  address, a disabled state), a comment in the `<lagg>` names the
+  member and the elements not written, and no value.  The OPNsense
+  synthetic fixture assigned its two members as zones; it no longer
+  does.  No committed capture has a LAGG.  If you translated an
+  OPNsense config with a LAGG with 0.7.7 or earlier, translate it
+  again, or add the members on the target by hand.
+  Given a record, a member onto RouterOS with both devices declared
+  has a line of its own that finds its hardware, and a name an entry
+  gave it with white space or a comma in it (`my port`, `a,b`) was no
+  longer reported, though `slaves=` is written unquoted and read
+  back as a member `my`: the job said `completed`.  A port a list
+  cuts the name of is now listed in `unbound_ports` whether or not a
+  line of its own finds it -- an AOS-S trunk member under such a name
+  was not listed either.
+
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
   motd` are printed with their body as it was typed and a line `EOF`
@@ -3479,17 +3510,12 @@ timestamp if your timezone matters for an audit.
   `gateway=Null0`; onto EOS it is right as it stands.  Over the
   committed captures 25 of the 385 jobs that are still `completed`
   have such a name.  Read a finished job's warnings for that line.
-- **A LAG member the config has no interface for is no member in
-  the output of seven targets.**  The members of an OPNsense lagg
-  are as a rule NICs assigned to nothing, and a FortiGate aggregate
-  can name a member that has no `edit` stanza; those two parsers
-  make no record for such a member.  Onto EOS, AOS-CX, IOS-XE CLI,
-  IOS-XR, NX-OS, OS10 and Junos, which write a LAG on each member's
-  own stanza, the LAG comes out with no member, in a job that can be
-  `completed`.  Shown on configs typed for the purpose; no committed
-  capture has such a member.  (For an AOS-S port named only in a
-  VLAN's list or on a `trunk` line this was so on more targets, VLAN
-  membership included: the first entry under Fixed.)
+- **A FortiGate aggregate under a name the translator cannot read
+  is no LAG on EOS, OS10 and VyOS.**  `agg1` keeps its name, and
+  those three write an interface `agg1` that is no LAG, beside its
+  members as plain ports, in a `partial` job that lists the name
+  (`untranslated_ports`).  Give the aggregate a name in the port
+  map.
 - **AOS-CX writes no VLAN line for a port under a name it cannot
   read as a port.**  A port left under its source name, or given a
   name of the operator's own (`{"1": "uplink-x"}`), has its stanza

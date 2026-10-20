@@ -767,7 +767,7 @@ class MappingPlan(BaseModel):
     output looks up by their hardware: source name to that hardware.
     Read back from the rendered output with the target's own parser,
     on a target that finds a port by a factory name (RouterOS).
-    Three ways.  The port's name reads to the target as another kind
+    Four ways.  The port's name reads to the target as another kind
     of interface — the RouterOS renderer writes no Ethernet line for
     a name shaped like a VLAN, a bridge, a LAG or a loopback
     (``bond1``, ``bridge-uplink``, ``vlan-trunk``, ``uplink.10``,
@@ -778,7 +778,10 @@ class MappingPlan(BaseModel):
     in a route — and an entry gave it a name that is no port of the
     target, which the output then uses and nothing defines.  Or two
     ports of another vendor were given one name: the output finds
-    the first by it, and the second is listed.  Such a port is in
+    the first by it, and the second is listed.  Or the port has a line
+    of its own, and a list that names it -- ``slaves=``, ``gateway=``,
+    written unquoted -- cuts the name an entry gave it at white space
+    or a comma.  Such a port is in
     neither :attr:`target_hardware` nor :attr:`source_hardware`, nor
     is its entry listed in :attr:`off_target`, and the job is
     ``partial`` while this is not empty: name the port with a port of

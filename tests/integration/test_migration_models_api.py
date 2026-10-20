@@ -904,9 +904,10 @@ vlan 1
    exit
 """
 
-#: An OPNsense lagg.  Its members are NICs assigned to nothing: the
-#: config has an interface for ``lagg0`` and none for ``igb0`` or
-#: ``igb1``, and the parser makes no record for them.
+#: An OPNsense lagg.  Its members are NICs assigned to nothing (OPNsense
+#: adds no other to a lagg): the config has an interface for ``lagg0``
+#: and none for ``igb0`` or ``igb1``, and the parser gives each a
+#: record of its own.
 _OPNSENSE_LAGG = """<?xml version="1.0"?>
 <opnsense>
   <system>
@@ -975,13 +976,14 @@ class TestEveryPlacedPortIsFoundByItsHardware:
         assert "10.0.0.1" not in job["rendered"]
         assert job["port_mapping_plan"]["overridden"] == ["core-a"]
 
-    def test_a_named_port_the_config_has_no_interface_for_is_reported(
+    def test_a_lagg_member_is_looked_up_by_its_hardware(
         self, client: TestClient,
     ) -> None:
         """The members of an OPNsense lagg are NICs assigned to
-        nothing: the config has no interface for them.  Named by an
-        entry, one is written into ``slaves=`` under a name no line
-        defines; that used to be ``completed``."""
+        nothing: the config has no interface for them, and the parser
+        gives each a record.  Named by an entry, one is looked up by
+        the hardware it was paired with.  (With no record it was
+        written into ``slaves=`` under a name no line defines.)"""
         request = {
             "source": "opnsense", "target": "mikrotik_routeros",
             "raw_text": _OPNSENSE_LAGG,
@@ -995,11 +997,14 @@ class TestEveryPlacedPortIsFoundByItsHardware:
             **request, "port_rename_map": {"igb0": "up-a"},
         }).json()
         plan = job["port_mapping_plan"]
+        assert _find_lines(job) == [
+            "set [ find default-name=sfp-sfpplus1 ] name=up-a disabled=no",
+            "set [ find default-name=sfp-sfpplus2 ] disabled=no",
+        ]
         assert "slaves=up-a,sfp-sfpplus2" in job["rendered"]
-        assert plan["unbound_ports"] == {"igb0": "sfp-sfpplus1"}
-        assert plan["off_target"] == []
-        assert job["status"] == "partial"
-        assert "1 port(s) are not looked up by their hardware in the output" in job["error"]
+        assert (plan["unbound_ports"], plan["off_target"]) == ({}, [])
+        assert plan["target_hardware"] == {"igb0": "sfp-sfpplus1"}
+        assert job["status"] == "completed"
 
     def test_an_aoss_port_only_a_list_names(
         self, client: TestClient,
@@ -1033,7 +1038,8 @@ class TestEveryPlacedPortIsFoundByItsHardware:
     ) -> None:
         """The member list is written unquoted, so a name with white
         space or a comma in it is not read back whole.  The port is
-        reported all the same; this used to be ``completed``."""
+        reported all the same, though a line of its own finds its
+        hardware; this used to be ``completed``."""
         resp = client.post("/api/v1/migration/plan", json={
             "source": "opnsense", "target": "mikrotik_routeros",
             "raw_text": _OPNSENSE_LAGG,

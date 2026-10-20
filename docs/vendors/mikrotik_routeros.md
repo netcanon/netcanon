@@ -227,7 +227,9 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   not a name.  A port with no place that you keep under a name is
   written the same way, and is said in a line of the plan, not in
   `unbound_ports`.  (Both lists are written unquoted: a name with
-  white space or a comma in it breaks the line.)
+  white space or a comma in it breaks the line, and with both devices
+  declared a placed port under such a name is listed in
+  `unbound_ports`, whether or not it has a line of its own.)
 - **`gateway=<interface>` routes** follow the interface when it is
   renamed, and are removed with it when it is dropped.  A list of
   gateways (`gateway=ether1,ether2`) and a routing-table suffix

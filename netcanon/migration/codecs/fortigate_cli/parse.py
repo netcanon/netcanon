@@ -632,9 +632,20 @@ def _link_lag_members(intent: CanonicalIntent) -> None:
     for lag in intent.lags:
         for m in lag.members:
             lag_members.setdefault(m, lag.name)
+    have: set[str] = set()
     for iface in intent.interfaces:
+        have.add(iface.name)
         if iface.lag_member_of is None and iface.name in lag_members:
             iface.lag_member_of = lag_members[iface.name]
+    # A member that ``set member`` names and no ``edit`` of its own
+    # configures -- a pasted fragment; FortiOS prints every port -- is
+    # given the record an edit with nothing in it would make, so that
+    # a target that writes a member from its record writes it.
+    for m, lag_name in lag_members.items():
+        if m not in have:
+            intent.interfaces.append(
+                CanonicalInterface(name=m, lag_member_of=lag_name),
+            )
 
 
 def _apply_snmp_sysinfo(

@@ -2146,7 +2146,9 @@ def _unbound_hardware(
     renderer's rules is re-derived here.
 
     A port is confirmed by ITS OWN line: an interface of the output
-    under the port's name that is looked up by the port's hardware.
+    under the port's name that is looked up by the port's hardware --
+    and by every list that names it giving the name back whole (below:
+    a LAG member with a line of its own is still named in ``slaves=``).
     That another interface is looked up by the same hardware says
     nothing for this port.  Two allowances, both for what a parser
     cannot give back: where several names ended on one name the
@@ -2249,9 +2251,7 @@ def _unbound_hardware(
             return True
         return any(not ends[shown] for shown in holders.get(where, ()))
 
-    def refers_to(name: str) -> bool:
-        if name in used:
-            return True
+    def cut_in_a_list(name: str) -> bool:
         # A list is written unquoted (``slaves=``, ``gateway=``), so the
         # parser gives a name back only up to its first white space or
         # comma -- or, in a next hop, ``@`` or ``%``.  A name that holds
@@ -2262,7 +2262,16 @@ def _unbound_hardware(
         )
         return 0 < cut < len(name) and name[:cut] in used
 
-    unbound = [name for name, where in hardware.items() if not bound(name, where)]
+    def refers_to(name: str) -> bool:
+        return name in used or cut_in_a_list(name)
+
+    # A port its own line finds is no less lost to a list that cuts its
+    # name: ``set [ find default-name=sfp-sfpplus1 ] name="my port"``
+    # beside ``slaves=my port,sfp-sfpplus2``, a LAG of a member ``my``.
+    unbound = [
+        name for name, where in hardware.items()
+        if not bound(name, where) or cut_in_a_list(final(name))
+    ]
     unbound.extend(name for name in expected if refers_to(final(name)))
     return unbound, True
 
