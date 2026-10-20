@@ -236,9 +236,10 @@ per_field_expectation:
       Per-VRF static routes (``ip route vrf X ...``) are
       harvested from the Arista source onto
       ``CanonicalStaticRoute.vrf``, but the aruba_aoss target
-      has no VRF / routing-instance model and renders every
-      route into the global table, dropping the per-VRF
-      binding.  IPv6 default routes
+      has no VRF / routing-instance model, so such a route is
+      left out of the output under a ``; review:`` line (the
+      ``MGMT`` default route of both EVPN-leaf cells) rather
+      than written into the switch's one table.  IPv6 default routes
       (``ipv6 route ::/0 <gw>``) are not reliably parsed on the
       Aruba side either, so cross-vendor IPv6 routes also drop.
       Known target-side gap (aruba_aoss has no VRF model).

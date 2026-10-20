@@ -556,7 +556,11 @@ class TestTheRendererWritesTheDevicesForm:
         rendered = AOSS.render(tree)
         assert "trunk 51-52 trk1 lacp" in rendered
         assert "   tagged Trk1" in rendered and "interface Trk1" in rendered
-        assert "ip route 10.1.0.0/16 Trk1" in rendered
+        # A trunk is no next hop of AOS-S's (an address, a VLAN, the
+        # discard): the route is left out, and the line that says so
+        # names the trunk as the device does.
+        assert "ip route 10.1.0.0/16" not in rendered
+        assert "; review: static route 10.1.0.0/16 goes out Trk1," in rendered
         assert held not in rendered or held in {"trk1", "Trk1"}
 
     @pytest.mark.parametrize("held", ["trk1", "Trk1", "TRK1"])
@@ -765,24 +769,19 @@ class TestTheEdgesOfOneRecordPerName:
     twice, a third source the collision line did not name, and a cost
     that grew with the square of the ``trunk`` lines one LAG is given."""
 
-    def test_a_next_hop_that_names_the_lag_is_read_in_the_one_spelling(self) -> None:
-        """The renderer writes a next hop ``Trk1``.  Read back as typed
-        it named no interface of the tree -- the interface is ``trk1``
-        by then -- so the route stayed behind when the LAG was renamed
-        or dropped, in a job that said ``completed``."""
+    def test_a_next_hop_that_names_the_lag_is_said_not_read(self) -> None:
+        """The renderer wrote a next hop ``Trk1``, and the parser read
+        it back.  HPE: "The next-hop can be either a gateway IP address,
+        a VLAN, or the keyword "reject" or "blackhole"": a trunk is none
+        of them, so the switch takes no such line, and the parser reads
+        none -- it says the line, whatever the spelling."""
         text = _ONE_LAG + "ipv6 route 2001:db8:1::/48 Trk1\nipv6 route 2001:db8:2::/48 trk1\n"
         tree = AOSS.parse(text)
-        assert [route.gateway for route in tree.static_routes] == ["trk1", "trk1"]
-        assert _spellings(collect_port_names(tree), "trk1") == {"trk1"}
-        # The text comes back: what the renderer writes, the parser reads.
-        rendered = AOSS.render(tree)
-        assert "ipv6 route 2001:db8:1::/48 Trk1" in rendered
-        assert AOSS.parse(rendered).static_routes == tree.static_routes
-        # And the route goes where the LAG goes.
+        assert tree.static_routes == []
+        said = [row for row in tree.dropped_tier3_sections if row.startswith("ipv6 route 2001:db8:")]
+        assert len(said) == 2, tree.dropped_tier3_sections
         job = run_plan_with_overrides(AOSS, JUNOS, text, port_rename_map={})
-        assert job.rendered and "Trk1" not in job.rendered and "trk1" not in job.rendered
-        dropped = run_plan_with_overrides(AOSS, JUNOS, text, port_rename_map={"trk1": None})
-        assert dropped.rendered and "2001:db8:1::/48" not in dropped.rendered
+        assert job.rendered and "2001:db8:1::/48" not in job.rendered
 
     def test_a_next_hop_that_is_an_address_is_read_as_it_is(self) -> None:
         tree = AOSS.parse(_ONE_LAG + "ip route 10.9.0.0/16 192.0.2.1\nipv6 route 2001:db8:3::/48 2001:db8::1\n")

@@ -2069,8 +2069,6 @@ def _runs_of_entries() -> dict[tuple[str, str, str], bool]:
 #: broad handler between an expander and its caller turns "too large"
 #: into "could not be parsed".  (file, function) -> why it is safe.
 BROAD_HANDLERS = {
-    ("netcanon/migration/codecs/aruba_aoss/parse.py", "parse_intent"):
-        "wraps one mask conversion; nothing in it counts or loops",
     ("netcanon/migration/canonical/port_names.py", "kind_of"): "wraps one classifier call on one name",
     ("netcanon/migration/__init__.py", "*"): "the package's own imports, at start",
     ("netcanon/migration/vendors/__init__.py", "*"): "loads the vendor declarations at start",

@@ -27,7 +27,15 @@ see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
   on modular 5400R) port-id ranges, descriptions, IPv4 SVI L3
 - VLANs — ID, name, tagged/untagged port lists with comma-separated
   range expansion (`A2-A6,A8-A10,A12-A24`), `primary-vlan`
-- Static routes (incl. `ip default-gateway` form)
+- Static routes (incl. `ip default-gateway` form), with a next hop
+  in the forms HPE's routing guide gives: an address, `vlan <id>`
+  (a route out `Vlan<id>` elsewhere) and `blackhole` (a route to
+  `Null0`), each with its `distance`.  `reject` discards with an ICMP
+  error the canonical tree cannot say, so it is not read; it is listed
+  with every other route line the parser does not read.  A route out
+  another interface (a routed port, a LAG, a tunnel) or in a VRF --
+  AOS-S has none -- is left out of the output under a `; review:`
+  line, and the job is `partial`
 - LAGs (`trk<N>` reconciled with cross-vendor `Port-channel<N>`).  The
   device writes a LAG `trk1` on its `trunk` line and `Trk1` everywhere
   else; it is one name here, `trk1`, as a key of a rename map (`Trk1`

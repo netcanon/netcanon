@@ -429,6 +429,44 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An AOS-S output held static routes the switch does not take, and
+  a route of a VRF in its one table.**  HPE: "The next-hop can be
+  either a gateway IP address, a VLAN, or the keyword "reject" or
+  "blackhole"" (ArubaOS-Switch Multicast and Routing Guide,
+  "Configuring a static route"), and the guide names no VRF.  The
+  renderer wrote whatever the tree held where the next hop goes: a
+  route out an interface came out as `ip route <dest>` with nothing
+  after it -- a route to `Null0` and one out `Vlan20` included -- and
+  a next hop the AOS-S parser had read from `Trk1` as `ip route <dest>
+  Trk1`, a line it read back; 33 such lines over the committed
+  captures, from IOS-XE, IOS XR and FortiOS, and a config whose one
+  route went to `Null0` made a job that said `completed`.  A route in
+  a VRF was written into the switch's one table, where it routed
+  traffic the source routed in another (10 lines over the captures).
+  A route to `Null0` is now written `blackhole`, a route out a VLAN
+  interface `vlan <id>`, both with their `distance`; a route out any
+  other interface (a routed port, a LAG, a tunnel, IOS-XE's `dhcp`) or
+  in a VRF is left out under a `; review:` line that names it, and a
+  route that names an interface makes the job `partial` -- the ones
+  written as `vlan` or `blackhole` too, since the capability matrix
+  reads the field and not its value (`/routing/static-route/interface`
+  is lossy at error level).  The parser reads the `vlan <id>` and
+  `blackhole` forms, IPv4 and IPv6, which it took for nothing, in
+  silence; `reject` (a discard that answers with an ICMP error, which
+  the tree cannot say) and every other route line it does not read --
+  a next hop `Trk1` among them -- is now a row of
+  `dropped_tier3_sections`.  If you translated a config onto AOS-S
+  with 0.7.7 or earlier, look in the output for `ip route` lines with
+  no next hop or a port's name after the destination, and for routes
+  the source held in a VRF.  Guarded by
+  `tests/unit/migration/codecs/aruba_aoss/test_a_route_the_switch_takes.py`,
+  which reads the output with a reader of HPE's grammar typed in the
+  test, never the AOS-S parser, and works out each route's next hop
+  from the source's own tree, over each form from IOS-XE and every
+  committed capture onto AOS-S.  The port-name check's count below
+  moves by one: the IOS-XE umbrella capture onto AOS-S is `partial`
+  for its routes out `dhcp` before any name is checked.
+
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
   motd` are printed with their body as it was typed and a line `EOF`
@@ -2799,13 +2837,13 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  213 of the 588 jobs that said `completed` are `partial`.  67 of
-  them list a shared name, 65 a hardware port that was dropped, 29 a
-  logical name that was dropped and 111 a name left as the source
-  has it (90 of those a hardware port); 48 list more than one kind.
+  212 of the 587 jobs that said `completed` are `partial`.  67 of
+  them list a shared name, 65 a hardware port that was dropped, 28 a
+  logical name that was dropped and 110 a name left as the source
+  has it (89 of those a hardware port); 47 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
-  and none to or from `failed`; 401 jobs that were already `partial`
-  carry the sentence as well.  Each of the 213 is `completed` again,
+  and none to or from `failed`; 402 jobs that were already `partial`
+  carry the sentence as well.  Each of the 212 is `completed` again,
   with one more request, once every listed name has an entry.
 
   **To settle such a job**, decide each name with an entry of

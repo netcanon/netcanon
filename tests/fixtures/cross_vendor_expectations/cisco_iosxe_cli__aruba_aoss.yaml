@@ -216,7 +216,16 @@ per_field_expectation:
       because Aruba has no VRF concept, so the per-VRF semantic has
       no target: cisco_iosxe_cli DOES harvest per-VRF routes on
       parse (``/routing/static-route/vrf`` is a supported surface),
-      but the vrf binding drops on the AOS-S render.
+      and such a route is left out of the AOS-S output under a
+      ``; review:`` line rather than written into the switch's one
+      table.  A next hop that is an interface is written as AOS-S
+      takes one -- ``blackhole`` for ``Null0``, ``vlan <id>`` for a
+      VLAN interface -- and a route out any other interface (a
+      routed port, a loopback, a dialer, a tunnel, the ``dhcp``
+      keyword) is left out under a review line: the
+      ``batfish_cisco_ip_route`` and umbrella cells.  An interface
+      named beside a gateway is not written, so on two cells the
+      default route keeps its gateway and loses ``GigabitEthernet1``.
     references: [static_routes]
 
   # ── Tier 2 — auto-translate with review ──
