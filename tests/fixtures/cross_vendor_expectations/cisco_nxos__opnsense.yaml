@@ -249,22 +249,31 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The most frequent drift on the pair and the least consequential: 1102
-      record-occurrences, always `ianaift:ethernetCsmacd` -> `""`.  OPNsense's
+      record-occurrences, always `ianaift:ethernetCsmacd` -> `""`. OPNsense's
       `<interfaces>` block has no type element, so the IANA ifType is dropped
-      on render and re-inferred from the interface name on the target.  The
+      on render and re-inferred from the interface name on the target. The
       interface, its addressing and its state all survive; only the
-      discriminator is lost.
+      discriminator is lost. The OPNsense parser types a `<vlan>` device
+      `ianaift:l3ipvlan`, so a VLAN interface the render writes as one comes
+      back with that type; every other interface comes back untyped.
     references: [nxos-opnsense-surface]
 
   "interfaces[].name":
     disposition: good
     note: >
-      Preserved on 13 of 13 cells — the render carries the source-native name
-      verbatim into `<if>` (`<ethernet1_3><if>Ethernet1/3</if>`), so the
-      cross-mesh name-STABILITY score is clean.  A real deployment still needs
-      the orchestrator's port-rename layer, which this path does not engage:
-      OPNsense's operator-facing labels are zone tags (`wan` / `lan` / `optN`)
-      over BSD device names (`em0`, `igb1`), not `Ethernet1/3`.
+      Every source name comes back verbatim on every cell — the render carries
+      the source-native name into `<if>` (`<ethernet1_3><if>Ethernet1/3</if>`)
+      — and no record is lost. On 7 of 13 cells the inventory GROWS: a VLAN
+      the render links to no VLAN interface of the source is written as a
+      `<parent>_vlan<id>` `<vlan>` device (`Ethernet1/1_vlan100`), which the
+      OPNsense parser reads back as an interface record of its own
+      (`ianaift:l3ipvlan`). The reconciler attributes that count drift to
+      `interfaces[].switchport_mode`, the key it picks as the list's owner,
+      not to this one; the addition is stated here, where it belongs. A real
+      deployment still needs the orchestrator's port-rename layer, which this
+      path does not engage: OPNsense's operator-facing labels are zone tags
+      (`wan` / `lan` / `optN`) over BSD device names (`em0`, `igb1`), not
+      `Ethernet1/3`.
     references: [nxos-opnsense-surface]
 
   "interfaces[].description":
@@ -338,22 +347,28 @@ per_field_expectation:
     references: [nxos-opnsense-surface]
 
   "vlans[].name":
-    disposition: good
-    note: >
-      Preserved on all 5 cells that populate it — the NX-OS `vlan / name <X>`
-      lands in the VLAN entry's `<descr>` and comes back as the canonical
-      name.
+    disposition: lossy
+    reason: >
+      The name does not come back. The OPNsense render writes each VLAN as a
+      `<vlan>` device: under the name of the source's VLAN interface where
+      there is one (`Vlan15`), otherwise as `<parent>_vlan<id>` on a port that
+      carries the VLAN or a default one (`Ethernet1/1_vlan100`); and it writes
+      the VLAN's name as the device's `<descr>` where the VLAN has no
+      description. An OPNsense `<vlan>` has no name of its own: the OPNsense
+      parser names a VLAN after its device (`<vlanif>`) and reads `<descr>` as
+      its description. So `oob_mgmt` comes back as the description of a VLAN
+      named `Vlan15`; a VLAN with no name comes back named after its device.
+      Drifts on every cell.
     references: [nxos-opnsense-surface]
 
   "vlans[].description":
-    disposition: not_applicable
-    note: >
-      Source-side absence: the cisco_nxos parser folds `vlan / name <X>` into
-      `vlans[].name` and never populates a separate description, so 0 of 13
-      cells carry one.  Worth knowing for a future source that does: the
-      opnsense matrix declares `/vlans/vlan/description` lossy because
-      `<descr>` is a single slot already holding the VLAN name, so the two
-      canonical fields would collide and one would drop.
+    disposition: lossy
+    reason: >
+      NX-OS (`vlan / name <X>` is the name) states no VLAN description; the
+      round trip gives each named VLAN one, its name, which the OPNsense
+      render writes as the device's `<descr>` (see `vlans[].name`). Drifts on
+      the cells whose VLANs are named, by gaining the name, never by losing a
+      value.
     references: [nxos-opnsense-surface]
 
   "vlans[].tagged_ports":

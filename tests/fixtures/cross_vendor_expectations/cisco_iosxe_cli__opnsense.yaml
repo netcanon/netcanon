@@ -11,9 +11,10 @@
 #   * DNS / NTP / syslog / timezone — lossy until OPNsense parse + render
 #     wires up the corresponding `<system>` children
 #   * interfaces (IP, MTU, enable, descr) — good
-#   * VLANs — id good; name/description collapse; port-membership and
-#     SVI sub-fields unsupported (OPNsense has no VLAN-centric port
-#     lists, no first-class SVI)
+#   * VLANs — id good; a VLAN comes back named after its OPNsense
+#     device, its name in the description; port-membership and SVI
+#     sub-fields unsupported (OPNsense has no VLAN-centric port lists,
+#     no first-class SVI)
 #   * Static routes — lossy (OPNsense `<gateways>` + `<staticroutes>`
 #     model is two-stage, codec doesn't currently render either)
 #   * DHCP server scopes — lossy (interface-keyed pool model on
@@ -206,12 +207,16 @@ per_field_expectation:
   interfaces[].name:
     disposition: lossy
     reason: >
-      Cisco ``GigabitEthernet0/0/0`` does not survive on OPNsense.
-      The operator-facing label on OPNsense is the zone tag
-      (``<wan>`` / ``<lan>`` / ``<optN>``); the BSD device name
-      lives in ``<if>``.  Port-rename mesh handles the conversion
-      via the codec's ``classify_port_name`` / ``format_port_identity``
-      delegates.  Canonical preserves the source string verbatim.
+      Cisco ``GigabitEthernet0/0/0`` does not survive on OPNsense. The
+      operator-facing label on OPNsense is the zone tag (``<wan>`` / ``<lan>``
+      / ``<optN>``); the BSD device name lives in ``<if>``. Port-rename mesh
+      handles the conversion via the codec's ``classify_port_name`` /
+      ``format_port_identity`` delegates. Canonical preserves the source
+      string verbatim. What the round trip measures on this key is an
+      addition, not a loss: a VLAN the render links to no VLAN interface of
+      the source is written as a `<parent>_vlan<id>` device, which the
+      OPNsense parser reads back as an interface record of its own
+      (`ianaift:l3ipvlan`). No source record is lost.
     references: [opnsense-interfaces, cisco-iface-cmd-ref]
 
   interfaces[].description:
@@ -241,8 +246,10 @@ per_field_expectation:
     disposition: lossy
     reason: >
       Cisco infers from name prefix (GigabitEthernet → ethernetCsmacd,
-      Loopback → softwareLoopback).  OPNsense doesn't surface a
-      type field; the cross-pair drops the type hint.
+      Loopback → softwareLoopback). OPNsense doesn't surface a type field; the
+      cross-pair drops the type hint. The OPNsense parser types a `<vlan>`
+      device `ianaift:l3ipvlan`, so a VLAN interface the render writes as one
+      comes back with that type; every other interface comes back untyped.
 
   interfaces[].mtu:
     disposition: good
@@ -351,8 +358,9 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The list itself round-trips for the id field.  Per-VLAN
-      sub-fields collapse or drop — see ``vlans[].*`` entries
-      below.
+      sub-fields are lost or move (the name to the description,
+      the address to the VLAN's interface) — see ``vlans[].*``
+      entries below.
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].id:
@@ -365,17 +373,25 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      Cisco emits ``name <X>`` (32-char truncation).  OPNsense's
-      nearest equivalent is ``<descr>`` — which is also where the
-      canonical ``description`` lands.  Two canonical fields
-      collapse to one OPNsense XML field; one drops on render.
+      The name does not come back. The OPNsense render writes each VLAN as a
+      `<vlan>` device: under the name of the source's VLAN interface where
+      there is one (`Vlan111`), otherwise as `<parent>_vlan<id>` on a port
+      that carries the VLAN or a default one (`Port-channel1_vlan10`); and it
+      writes the VLAN's name as the device's `<descr>` where the VLAN has no
+      description. An OPNsense `<vlan>` has no name of its own: the OPNsense
+      parser names a VLAN after its device (`<vlanif>`) and reads `<descr>` as
+      its description. So a VLAN comes back named after its device, and its
+      IOS name, where it had one, as its description. Drifts on every cell
+      that holds VLANs.
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Same as ``vlans[].name`` — both canonical fields share the
-      single OPNsense ``<descr>`` slot.
+      IOS states no VLAN description; the round trip gives each named VLAN
+      one, its name, which the OPNsense render writes as the device's
+      `<descr>` (see `vlans[].name`). Drifts on the cells whose VLANs are
+      named, by gaining the name, never by losing a value.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:
@@ -398,13 +414,14 @@ per_field_expectation:
   vlans[].ipv4_addresses:
     disposition: lossy
     reason: >
-      Cisco's ``interface Vlan100`` SVI with an L3 address has no
-      first-class OPNsense equivalent.  The OPNsense pattern is
-      to assign the VLAN sub-interface (``em1_vlan100``) to a
-      zone and put the address on the zone (``<opt2>``).  The
-      canonical model carries the SVI address but the OPNsense
-      render path doesn't synthesise the corresponding zone —
-      operator-curated.
+      Cisco's `interface Vlan<N>` SVI address is carried on the canonical VLAN
+      record as well as on the SVI. The address reaches the output: the render
+      writes the VLAN interface the source states (`interface Vlan10`) as a
+      zone whose `<if>` is the VLAN's `<vlan>` device, with the address on the
+      zone. Read back, the OPNsense parser puts the address on that interface
+      record, not on the VLAN — an OPNsense `<vlan>` holds no address — so the
+      VLAN record comes back without it. Recorded `lossy` for the record the
+      address sits on, not for the output.
     references: [opnsense-vlans]
 
   static_routes:

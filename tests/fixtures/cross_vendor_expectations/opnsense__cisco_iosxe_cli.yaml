@@ -299,12 +299,10 @@ per_field_expectation:
     references: [vrf-not-modeled]
 
   vlans:
-    disposition: good
-    note: >
-      The canonical VLAN list round-trips across the pair (Wave
-      10β re-flip from lossy to good — per-VLAN sub-field
-      semantics are documented separately on the ``vlans[].*``
-      entries below).
+    disposition: lossy
+    reason: >
+      The list round-trips for the id and the name; each VLAN's description is
+      lost (see `vlans[].description`).
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].id:
@@ -314,22 +312,23 @@ per_field_expectation:
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].name:
-    disposition: lossy
-    reason: >
-      OPNsense's ``<descr>`` lands in canonical ``name`` (per
-      ``parse.py``).  Cisco's distinct ``name`` and ``description``
-      fields are collapsed; the round-trip emits the OPNsense
-      description into the Cisco ``name`` line.  No data loss but
-      semantic conflation.
+    disposition: good
+    note: >
+      Preserved on both cells that hold VLANs: the canonical name is the
+      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
+      its own), which IOS writes as `name vlan0.10` and reads back. The
+      operator's label (`USER VLAN`) is the VLAN's description, and is lost:
+      see `vlans[].description`.
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      OPNsense doesn't model a separate description field; the
-      ``<descr>`` lands in canonical ``name`` instead, leaving
-      ``description`` empty.  Cisco render emits no separate
-      description line.
+      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
+      (`USER VLAN`) is the canonical description, and the IOS render writes a
+      VLAN's `name` line and no description. The job says so: IOS-XE CLI
+      declares `/vlans/vlan/description` lossy, which the validation report
+      lists for each VLAN.
     references: [opnsense-vlans]
 
   vlans[].tagged_ports:
