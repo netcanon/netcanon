@@ -169,15 +169,13 @@ per_field_expectation:
       key drifts on the 4 VLAN-bearing cells, but that is the parent list
       changing length — already claimed by `interfaces[].name` — so a loss
       declared here could never be evidenced by a cell and would fail the
-      per-pair ratchet by construction.  One genuine artefact is recorded in
-      the reference note rather than swept into a disposition: three routed
-      dot1q sub-interfaces (`GigabitEthernet0/0/0/1.35` on both
-      `batfish_ebgp_border*`, `GigabitEthernet0/0/0/1.100` on `kitchen_sink`)
-      lose their description because the render emits a sub-interface only as
-      the target of an `/ip address` row, with no interface row to hang a
-      comment on.  All three fall on the same VLAN-bearing cells — one root
-      cause with the count growth, not a second independent one.  The other 152
-      surviving records keep their description exactly.
+      per-pair ratchet by construction.  Every surviving record keeps its
+      description, the three routed dot1q sub-interfaces that have one
+      included (`GigabitEthernet0/0/0/1.35` on both `batfish_ebgp_border*`,
+      `GigabitEthernet0/0/0/1.100` on `kitchen_sink`): each is a VLAN
+      interface on its port with a `comment=`.  Up to 0.7.7 the render
+      emitted a sub-interface only as the target of an `/ip address` row,
+      with no interface row to hang a comment on, and the three lost it.
     references: [iosxr-routeros-surface]
 
   "interfaces[].enabled":
@@ -283,10 +281,19 @@ per_field_expectation:
   # below safe rather than lazy.
 
   "vlans[].id":
-    disposition: good
-    note: >
-      VLAN IDs preserved on all 4 cells that populate them (35, 35, 200, 100).
-      The id survives as `vlan-id=` on the synthesised `/interface vlan` row.
+    disposition: lossy
+    reason: >
+      No id is lost, and the list grows by one record on each of the 4 cells
+      that populate it (1 -> 2: 35, 35, 200, 100).  The IOS-XR codec makes a
+      VLAN record of each sub-interface tag, which the render writes as
+      `vlan<id>` on the synthesised `bridge1`; the sub-interface itself is a
+      VLAN interface on its port (`/interface vlan add
+      interface=GigabitEthernet0/0/0/1 name=GigabitEthernet0/0/0/1.35
+      vlan-id=35`), and the RouterOS parser reads every VLAN interface as a
+      VLAN of its tag, so the re-parse holds two records of one id.  The
+      target declares `/interfaces/interface/dot1q-vlan` lossy for exactly
+      this read-back: a VLAN interface on a port and one on a bridge are one
+      line shape to its parser.
     references: [iosxr-routeros-surface]
 
   "vlans[].name":

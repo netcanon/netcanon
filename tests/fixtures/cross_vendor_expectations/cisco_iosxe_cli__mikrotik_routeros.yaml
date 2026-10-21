@@ -200,7 +200,10 @@ per_field_expectation:
       (Plane 2), which the MikroTik codec parses partially in v1.
       SVI addressing (``interfaces[].ipv4_addresses`` on a vlan-
       named interface) round-trips good via /interface vlan + /ip
-      address.
+      address.  A routed sub-interface (``encapsulation dot1Q N``)
+      is a VLAN interface on its port, which the RouterOS parser
+      reads back as a VLAN of its tag as well: the list grows by a
+      record for each sub-interface.
     references: [mikrotik_vlan, mikrotik_bridge_vlan]
 
   static_routes:
