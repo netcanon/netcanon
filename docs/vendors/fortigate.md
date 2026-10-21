@@ -217,9 +217,14 @@ and 100E physical hardware.
   on save.  ⚠️ Up to 0.7.7 it was written `set password ENC
   <password>` — a claim that it is a blob this FortiGate encrypted —
   so the account did not hold the password; translate such a config
-  again.  Names and secrets FortiOS takes in quotes (an admin's name
-  and access profile, the SNMP community, an SNMPv3 user and its keys,
-  a VRRP key) are written with FortiOS's escape for a `"` and a `\`.
+  again.  Every value FortiOS takes in quotes -- an admin's name and
+  access profile, the SNMP community, an SNMPv3 user and its keys, a
+  VRRP key, an interface's name, a LAG's members, a VLAN's parent, a
+  route's device, a DHCP pool's interface and domain, a RADIUS server,
+  a description -- is written with FortiOS's escape for a `"` and a
+  `\` (`\"`, `\\`), and the parser reads an `edit` name back through
+  the same escape.  Not yet under it: a RADIUS key typed in the source
+  is written bare (`set secret <key>`).
 - **Declaring a FortiGate as the source device** — with both devices
   declared (in the Interface rename modal or on the API), a correctly
   declared FortiGate is still

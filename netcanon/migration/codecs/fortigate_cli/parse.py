@@ -208,6 +208,24 @@ def _tokenize_set(value: str) -> list[str]:
         return value.split()
 
 
+def _edit_id(text: str) -> str:
+    """The id of an ``edit`` line.
+
+    FortiOS quotes a name as it quotes a ``set`` value, with ``\\`` the
+    escape inside the quotes (``edit "a\\"b"`` is ``a"b``), so an id
+    that is one token is read as :func:`_tokenize_set` reads a value.
+    Anything else -- an unbalanced quote, words with no quotes round
+    them -- keeps the old reading: the text, its outer quotes stripped.
+    """
+    try:
+        tokens = shlex.split(text, posix=True)
+    except ValueError:
+        tokens = []
+    if len(tokens) == 1:
+        return tokens[0]
+    return text.strip().strip('"').strip("'")
+
+
 def _parse_blocks(raw: str) -> list[_ConfigBlock]:
     """Parse a FortiOS CLI text into a list of top-level ``config`` blocks.
 
@@ -265,7 +283,7 @@ def _parse_blocks(raw: str) -> list[_ConfigBlock]:
 
         em = _EDIT_HEADER_RE.match(line)
         if em:
-            edit_id = em.group(1).strip().strip('"').strip("'")
+            edit_id = _edit_id(em.group(1))
             stack.append(_EditBlock(edit_id=edit_id))
             continue
 

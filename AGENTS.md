@@ -1508,6 +1508,18 @@ tests use these exclusively — never CSS classes or element structure.  See
   (or a committed capture that prints such a line),
   counts the places a name goes before and after, and is handed each
   defect it is for.
+  **And a target that quotes is escaped in EVERY place it quotes, and
+  read back through the same escape.**  The FortiOS renderer escaped a
+  description, a host name and an account's name, and wrote an
+  interface's own name, a LAG's members, a VLAN's parent, a route's
+  device, a DHCP pool's interface and the RADIUS server between quotes
+  as they stood -- a member `port"1` was two members -- and its parser
+  read an `edit` name with the escapes left in, so an escaped name came
+  back as another name.  An escape added line by line covers the lines
+  someone looked at: the guard reads the renderer's SOURCE for a value
+  between quotes that skips `_esc`, as well as the output, with a
+  reader of its own
+  (`tests/unit/migration/codecs/fortigate_cli/test_every_quoted_value_is_escaped.py`).
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,
