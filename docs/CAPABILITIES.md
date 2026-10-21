@@ -407,6 +407,7 @@ text").
 | `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/type` | Lossy | RouterOS does not expose IANA `ifType`; codec infers it from interface-name prefix (`etherN` → ethernetCsmacd, `vlanN` → l3ipvlan). |
+| `/interfaces/interface/dot1q-vlan` | Lossy | A routed sub-interface of another vendor (`encapsulation dot1Q 10`, Junos `unit 10 vlan-id 10`) is written as RouterOS's own VLAN interface on its port, `/interface vlan add interface=ether2 name=ether2.10 vlan-id=10`, with its description, MTU and admin state.  Read back, it is a VLAN interface and a VLAN of its tag, not a sub-interface: RouterOS writes a VLAN interface on a port and on a bridge alike.  A sub-interface that an entry names with no port in it (`wan10`) rides on the parent chosen for every VLAN, under a `# review:` line that says so. |
 | `/vlans/vlan/name` | Lossy | MikroTik stores a VLAN's name as the L3 interface name (e.g. `vlan10`), not a separate descriptive name field; cross-vendor rendering may conflate the two. |
 | `/vlans/vlan/description` | Lossy | RouterOS exposes a single per-VLAN `comment` field, which the parser maps to the VLAN name; a separate description collides with it on render. |
 | `/filter/rule` | Unsupported | Firewall filter rules are Tier 3 (informational) and not auto-rendered. |

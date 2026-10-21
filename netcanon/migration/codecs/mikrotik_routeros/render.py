@@ -239,10 +239,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # carries the interface name forward instead of silently
     # dropping the whole row.  The /interface vlan, /interface
     # bridge and /interface bonding sections below own their
-    # own ifaces so we exclude those by name shape.
+    # own ifaces so we exclude those by name shape.  A routed
+    # sub-interface is a VLAN interface whatever its name: an entry
+    # can give it one with no dot.
     ethernet_ifaces = [
         i for i in tree.interfaces
         if not _looks_like_vlan_iface(i.name)
+        and i.dot1q_vlan is None
         and not _looks_like_bridge_iface(i.name)
         and not _looks_like_lag_iface(i.name)
         and i.interface_type != "ianaift:bridge"
@@ -360,9 +363,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # RouterOS docs:
     # https://help.mikrotik.com/docs/spaces/ROS/pages/328068/VLAN
     # — ``interface=`` must reference an existing parent.
+    # A routed sub-interface rides on the port its name is a unit of,
+    # and needs no parent chosen for it unless its name has none.
     has_vlan_to_render = bool(tree.vlans) or any(
-        i.interface_type == "ianaift:l3ipvlan"
-        or _is_vlan_name(i.name)
+        (
+            (
+                i.interface_type == "ianaift:l3ipvlan"
+                or _is_vlan_name(i.name)
+            )
+            and i.dot1q_vlan is None
+        )
+        or (i.dot1q_vlan is not None and _port_of_unit(i.name) is None)
         for i in tree.interfaces
     )
     vlan_parent_iface = (
@@ -533,16 +544,42 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # Surfaced by routeros-diff's verbose_export.rsc (the
     # "gn-mgmt" VLAN interface named after its purpose, not its
     # ID).
+    #
+    # A routed sub-interface (``dot1q_vlan``: IOS-XE ``encapsulation
+    # dot1Q 10`` under ``Gi1/0/2.10``, Junos ``unit 10 vlan-id 10``) is
+    # RouterOS's own VLAN interface on its port: ``add interface=ether2
+    # name=ether2.10 vlan-id=10``.  Its tag is the tree's, not a VLAN
+    # record's, and its port is the one its name is a unit of (the
+    # translator sends a unit after its port as ``<port>.<unit>``); a
+    # name that is no unit of a port (an entry renamed it) rides on the
+    # parent chosen for every VLAN, under a ``# review:`` line that says
+    # so.  Left out, the address was on an interface the output did not
+    # define.  The tag is local to the port, so it is not a VLAN of the
+    # switch: the VLANs below are written whether or not a sub-interface
+    # has their id.
     vlan_ifaces = [
         i for i in tree.interfaces
         if i.interface_type == "ianaift:l3ipvlan"
         or _is_vlan_name(i.name)
+        or i.dot1q_vlan is not None
     ]
     if vlan_ifaces or tree.vlans:
         lines.append("/interface vlan")
         rendered_vlan_ids: set[int] = set()
         for iface in vlan_ifaces:
-            vid = _vlan_id_for(iface.name, tree.vlans)
+            if iface.dot1q_vlan is not None:
+                vid = iface.dot1q_vlan
+                port = _port_of_unit(iface.name)
+                parent = port or vlan_parent_name
+                if port is None:
+                    lines.append(
+                        f"# review: {iface.name} is a routed sub-interface "
+                        f"(tag {vid}) whose name gives no port; it is "
+                        f"written on {parent} -- move it to its port"
+                    )
+            else:
+                vid = _vlan_id_for(iface.name, tree.vlans)
+                parent = vlan_parent_name
             if vid is None:
                 # Can't render a VLAN interface without an id.
                 continue
@@ -552,8 +589,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             # Bind to the parent we resolved above — either an
             # identified source-side parent's renamed target name
             # (router-on-stick: OPNsense ixl0 → sfp-sfpplus0) or
-            # the synthesised ``bridge1`` (switching topology).
-            parts.append(f"interface={_quote_if_needed(vlan_parent_name)}")
+            # the synthesised ``bridge1`` (switching topology) -- or,
+            # for a sub-interface, its own port.
+            parts.append(f"interface={_quote_if_needed(parent)}")
             parts.append(f"name={_quote_if_needed(iface.name)}")
             parts.append(f"vlan-id={vid}")
             # ``mtu`` is the VLAN interface's layer-3 MTU (default
@@ -569,7 +607,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if not iface.enabled:
                 parts.append("disabled=yes")
             lines.append(" ".join(parts))
-            rendered_vlan_ids.add(vid)
+            if iface.dot1q_vlan is None:
+                rendered_vlan_ids.add(vid)
         # VLANs defined in intent.vlans but without a matching
         # interface still get rendered so the id survives the
         # round-trip.  Dedupe by vlan-id (not name) so we don't
@@ -920,7 +959,8 @@ def _identify_vlan_parent(tree: CanonicalIntent) -> str | None:
     The "single anchor" is identified by:
 
       1. Excluding VLAN-shape, bridge-shape, LAG-shape and loopback
-         interfaces (those have their own sections).
+         interfaces, and routed sub-interfaces (those have their own
+         sections).
       2. From the rest, picking interfaces that look like an L3
          port (non-empty ``ipv4_addresses`` / ``ipv6_addresses``)
          OR an L2 trunk (non-empty ``trunk_allowed_vlans``).  A
@@ -952,7 +992,8 @@ def _identify_vlan_parent(tree: CanonicalIntent) -> str | None:
     of_every_vlan: list[str] = []
     a_trunk_names_a_vlan = False
     for iface in tree.interfaces:
-        if _looks_like_vlan_iface(iface.name):
+        # A routed sub-interface is a VLAN interface, whatever its name.
+        if _looks_like_vlan_iface(iface.name) or iface.dot1q_vlan is not None:
             continue
         if _looks_like_bridge_iface(iface.name):
             continue
@@ -1203,6 +1244,18 @@ def _routeros_auth_kv(authentication: str) -> list[str]:
             f"password={_quote_if_needed(password)}",
         ]
     return []
+
+
+def _port_of_unit(name: str) -> str | None:
+    """The port a sub-interface named ``<port>.<unit>`` is a unit of.
+
+    ``ether2.10`` is a unit of ``ether2``.  ``None`` for a name that is
+    not a port, a dot and ASCII digits.
+    """
+    port, dot, unit = name.rpartition(".")
+    if dot and port and unit.isascii() and unit.isdigit():
+        return port
+    return None
 
 
 def _vlan_id_for(name: str, vlans: list[CanonicalVlan]) -> int | None:
