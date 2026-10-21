@@ -1280,9 +1280,14 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             return True
         return False
 
-    def _on_line(line: str, current: dict[str, Any]) -> None:
+    def _note_body_indent(line: str, current: dict[str, Any]) -> None:
+        # The indent of the stanza's first body line: the
+        # interface's own lines are there, a submode's deeper.
         if current["body_indent"] is None and line.strip():
             current["body_indent"] = len(line) - len(line.lstrip())
+
+    def _on_line(line: str, current: dict[str, Any]) -> None:
+        _note_body_indent(line, current)
         dm = _DESC_RE.match(line)
         if dm:
             current["description"] = dm.group(1).strip()

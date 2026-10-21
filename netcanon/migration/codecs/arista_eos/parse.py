@@ -67,10 +67,10 @@ from ...limits import charge, ticked
 from .._helpers import (
     VLAN_IDS,
     GrowingIndex,
+    Tags,
     TrunksByName,
     Uniques,
     _mask_to_prefix,
-    Tags,
     a_tag,
     merge_trunk_allowed,
     tags_every_native_vlan,

@@ -2033,7 +2033,7 @@ def _tags_of_unit(statements: list[list[str]]) -> Tags | str:
                 and set(keys) <= {"outer", "inner"}
                 and None not in read
             ):
-                for key, vid in zip(keys, read):
+                for key, vid in zip(keys, read, strict=True):
                     if key == "outer":
                         outer = vid
                     else:
