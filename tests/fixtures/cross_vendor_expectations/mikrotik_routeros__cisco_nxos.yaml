@@ -322,22 +322,23 @@ per_field_expectation:
   "vlans[].name":
     disposition: good
     note: >
-      Preserved on every cell.  The mikrotik_routeros matrix declares
-      `/vlans/vlan/name` lossy on its own side (RouterOS has no separate VLAN
-      name — the codec derives one from the `/interface vlan` object name),
-      but the derived name survives the render to NX-OS `vlan <id> / name
-      <name>` unchanged, so the cross-pair disposition is good.
+      Preserved on every cell that holds VLANs. RouterOS names a VLAN
+      after its `/interface vlan` (`vlan10`), and its `comment=` is the
+      VLAN's description. NX-OS has one label for a VLAN: a VLAN
+      whose name is only an interface's is written with its description
+      as its name (`_vlan_labels`), and one with none with its
+      interface's name. The reconciler reads the first as preserved
+      (`_vlan_label_moved`).
     references: [routeros-nxos-surface]
 
   "vlans[].description":
     disposition: lossy
     reason: >
-      Drops on every VLAN that carries one (8 occurrences; `User` -> `""`).
-      The NX-OS render emits `name <name>` but has no second, longer
-      description line, and the cisco_nxos matrix declares
-      `/vlans/vlan/description` lossy for exactly this reason.  Operator-
-      authored VLAN documentation is lost; fold anything you need to keep
-      into the VLAN name (NX-OS caps it at 32 characters) before migrating.
+      Comes back empty on every VLAN that carries one: NX-OS writes a VLAN's `name`
+      and no description, and the `comment=` of a RouterOS `/interface vlan` is written AS the name (see
+      `vlans[].name`), so the label is in the output and this field is
+      not. A description beside a name of the VLAN's own is lost, and
+      the cisco_nxos matrix declares `/vlans/vlan/description` lossy for it.
     references: [routeros-nxos-surface]
 
   "vlans[].tagged_ports":

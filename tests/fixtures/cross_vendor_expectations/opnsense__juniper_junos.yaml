@@ -417,22 +417,25 @@ per_field_expectation:
   vlans[].name:
     disposition: good
     note: >
-      Preserved on both cells that hold VLANs: the canonical name is the
-      OPNsense device name (`vlan0.10` — an OPNsense `<vlan>` has no name of
-      its own), which is a legal Junos VLAN name (letters, digits, hyphens,
-      periods), which Junos writes and reads back. The operator's label (`USER
-      VLAN`) is the VLAN's description, and is lost: see
-      `vlans[].description`.
+      Preserved on both cells that hold VLANs. An OPNsense `<vlan>` has no
+      name of its own: the canonical name is its device's (`vlan0.10`), and
+      its `<descr>` (`USER VLAN`) the description. Junos has one
+      label for a VLAN, and a VLAN whose name is only an interface's is
+      written with its description as its name (`_vlan_labels`): `set vlans "USER VLAN"`, quoted, as the vendor
+      reference says Junos takes a name with a space,
+      read back as the name. The reconciler reads that move as preserved
+      (`_vlan_label_moved`); the device keeps its own name as the VLAN
+      interface's.
     references: [opnsense-vlans, junos-vlans-statement]
 
   vlans[].description:
     disposition: lossy
     reason: >
-      Lost on both cells that hold VLANs: an OPNsense `<vlan>`'s `<descr>`
-      (`USER VLAN`) is the canonical description, and the Junos render writes
-      a VLAN's name and no `description`. The job says so: Junos declares
-      `/vlans/vlan/description` lossy, which the validation report lists for
-      each VLAN.
+      Comes back empty on every VLAN that carries one: the Junos render writes a VLAN's name
+      and no description, and the `<descr>` of an OPNsense `<vlan>` is written AS the name (see
+      `vlans[].name`), so the label is in the output and this field is
+      not. A description beside a name of the VLAN's own is lost, and
+      Junos declares `/vlans/vlan/description` lossy for it.
     references: [opnsense-vlans, junos-vlans-statement]
 
   vlans[].tagged_ports:

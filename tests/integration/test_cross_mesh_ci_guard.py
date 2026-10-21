@@ -450,6 +450,10 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # OPNsense gives a VLAN device's zone is not in the output, on both cells that
 # hold one -- and no cell's comparison shows it; the YAML's reason says so.
 # The same re-measure lowered seven OPNsense entries to what they observe.
+#
+# Re-measured again after a VLAN's label became its name onto the targets
+# whose VLAN has only a name: mikrotik_routeros__juniper_junos falls to 1,
+# its ``vlans[].name`` now declared good (the comment is the name there).
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -497,7 +501,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "mikrotik_routeros__cisco_iosxe": 1,
     "mikrotik_routeros__cisco_iosxe_cli": 1,
     "mikrotik_routeros__fortigate_cli": 3,
-    "mikrotik_routeros__juniper_junos": 2,
+    "mikrotik_routeros__juniper_junos": 1,
     "mikrotik_routeros__opnsense": 5,
     "opnsense__arista_eos": 3,
     "opnsense__cisco_iosxe": 3,
