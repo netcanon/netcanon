@@ -429,6 +429,36 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A sub-interface of another vendor was written onto OPNsense as a
+  zone of a device the output did not have.**  IOS-XE `interface
+  GigabitEthernet0/0/1.100` with `encapsulation dot1Q 200`, a Junos
+  `unit 100 vlan-id 200`: OPNsense was written a zone whose `<if>` was
+  `igb1.100` and no `<vlan>`, so the zone assigned a device nothing
+  made and the tag was nowhere, in a job that was `partial` for
+  `/interfaces/interface/dot1q-vlan` (unsupported).  OPNsense's own
+  form is a VLAN device: the sub-interface is now a `<vlan>` on its
+  port (`<if>igb1</if>`), with its own tag (`<tag>200</tag>`) under
+  its name (`<vlanif>igb1.100</vlanif>`), which the zone assigns --
+  on the port its name is a unit of, whether or not the output has a
+  zone for that port; a sub-interface that holds nothing a zone holds
+  is the device alone.  The path is lossy where it was unsupported:
+  the parser reads the device back as a VLAN device and a VLAN of its
+  tag, not as a sub-interface, and OPNsense's VLAN form refuses a
+  device name with a dot in it when the VLAN is saved, which the
+  `<!-- review: -->` comment beside it already said.  A sub-interface
+  that an entry names with no port in it rides on the parent chosen
+  for every VLAN, under a review comment, and is never itself chosen
+  as a VLAN's parent; a VLAN the IOS XR parser makes of a
+  sub-interface's tag is that sub-interface's device, not a second
+  device of the tag.  OPNsense keeps one VLAN device for a tag on a
+  parent (`Vlan.xml`), so where the output has a tag twice on one
+  parent the second `<vlan>` holds a review comment that names the
+  first.  Over the committed captures one more job onto OPNsense
+  passes the validation report: the IOS-XE carrier capture, whose six
+  Q-in-Q units, read with their outer tag alone, are six devices on
+  one tag, five of them with that comment; the port-name check
+  (below) now makes 216 of 593 jobs `partial`.
+
 - **A sub-interface of another vendor was written onto VyOS with its
   unit number for its tag.**  On VyOS the number of a `vif` IS the
   802.1Q tag it carries (`ethernet eth1 { vif 200 }` is `eth1.200`,
@@ -3021,7 +3051,7 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  216 of the 592 jobs that said `completed` are `partial`.  63 of
+  216 of the 593 jobs that said `completed` are `partial`.  63 of
   them list a shared name, 66 a hardware port that was dropped, 29 a
   logical name that was dropped and 112 a name left as the source
   has it (99 of those a hardware port); 46 list more than one kind.

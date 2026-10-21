@@ -278,15 +278,32 @@ def _fortios_block_says(text: str, name: str, tag: int) -> bool:
     return False
 
 
+def _opnsense_device_says(text: str, name: str, tag: int) -> bool:
+    """A ``<vlan>`` of ``<vlans>`` in *text* is the device *name*
+    (``<vlanif>``) with ``<tag>`` *tag*."""
+    from xml.etree import ElementTree as ET
+
+    return any(
+        (vlan.findtext("vlanif") or "").strip() == name
+        and (vlan.findtext("tag") or "").strip() == str(tag)
+        for vlan in ET.fromstring(text).iterfind("vlans/vlan")
+    )
+
+
 #: Targets whose parser reads a sub-interface's tag otherwise than as
 #: ``dot1q_vlan``, with a reader of the text that states it.  FortiOS
 #: writes a sub-interface as a VLAN interface on its port (``edit
 #: "port1.54"`` / ``set vlanid 300`` / ``set interface "port1"``),
 #: and a VLAN interface on a port and on a switch interface alike, so
 #: its parser reads the block as a VLAN interface and a VLAN of the
-#: tag under the interface's name.  The tag is taken where the parser
-#: reads it so AND the text states it.
-_TAG_AS_A_VLAN_OF_ITS_NAME = {"fortigate_cli": _fortios_block_says}
+#: tag under the interface's name.  OPNsense writes it as a VLAN
+#: device on its port (``<vlan>`` with ``<if>``, ``<tag>`` and
+#: ``<vlanif>``), which its parser reads the same way.  The tag is
+#: taken where the parser reads it so AND the text states it.
+_TAG_AS_A_VLAN_OF_ITS_NAME = {
+    "fortigate_cli": _fortios_block_says,
+    "opnsense": _opnsense_device_says,
+}
 
 
 def _tags(target_name: str, out, iface, rendered: str) -> set[int]:
@@ -404,6 +421,39 @@ class TestASubInterfaceOnEveryPair:
         assert lost == expected
         if expected:
             assert job.status == MigrationJobStatus.completed
+
+    @pytest.mark.parametrize("source_name", sorted(_UNITS))
+    def test_opnsense_is_read_for_the_device_it_wrote(
+        self, source_name: str, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Handed the OPNsense renderer that wrote a sub-interface's
+        zone and no VLAN device -- the defect OPNsense's reading is
+        for -- the reading finds no tag on any unit, and the job says
+        ``completed``: the check above fails."""
+        import copy
+
+        from netcanon.migration.codecs.opnsense import codec as opn_codec
+
+        real = opn_codec.render_intent
+
+        def render(tree, *args, **kwargs):
+            tree = copy.deepcopy(tree)
+            for iface in tree.interfaces:
+                iface.dot1q_vlan = None
+            return real(tree, *args, **kwargs)
+
+        monkeypatch.setattr(opn_codec, "render_intent", render)
+        target = get_codec("opnsense")
+        _, text = _UNITS[source_name]
+        job = run_plan_with_overrides(get_codec(source_name), target, text, port_rename_map={})
+        out = target.parse(job.rendered)
+        lost = [
+            ip for unit, ip in _UNIT_ADDRESSES
+            if _tag_of(source_name, unit)
+            not in _tags("opnsense", out, _holders(out, ip)[0], job.rendered)
+        ]
+        assert lost == [ip for _, ip in _UNIT_ADDRESSES]
+        assert job.status == MigrationJobStatus.completed
 
     @pytest.mark.parametrize(
         ("source_name", "target_name"), sorted(_PORT_HAS_NO_NAME),

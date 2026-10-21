@@ -305,19 +305,25 @@ class OPNsenseCodec(CodecBase):
                 ),
                 severity="warn",
             ),
-        ],
-        unsupported=[
-            UnsupportedPath(
+            LossyPath(
                 path="/interfaces/interface/dot1q-vlan",
                 reason=(
-                    "Routed sub-interface 802.1Q tag (Cisco "
-                    "`encapsulation dot1Q N` / Junos `unit N vlan-id`) is "
-                    "not yet wired for this codec.  Declared unsupported "
-                    "(ship-before-wire, GAP 7) so a routed sub-interface "
-                    "tag is flagged as a drop, not silently mis-rendered "
-                    "as an L2 access-mode VLAN."
+                    "A routed sub-interface (Cisco `encapsulation dot1Q "
+                    "N`, Junos `unit N vlan-id`) is written as an "
+                    "OPNsense VLAN device on its port (`<vlan>` with "
+                    "`<if>igb1</if>`, `<tag>N</tag>` and "
+                    "`<vlanif>igb1.100</vlanif>`), with the "
+                    "sub-interface's own tag, and its zone assigns that "
+                    "device.  The parser reads it back as a VLAN device "
+                    "and a VLAN of its tag, not as a sub-interface of the "
+                    "port, and OPNsense's VLAN form refuses a device name "
+                    "with a dot in it when the VLAN is saved (a review "
+                    "comment says so)."
                 ),
+                severity="warn",
             ),
+        ],
+        unsupported=[
             UnsupportedPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(
