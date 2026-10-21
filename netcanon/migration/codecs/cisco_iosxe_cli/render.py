@@ -401,9 +401,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # ``secondary`` token before storing in the canonical list.
         # GAP 7: routed sub-interface 802.1Q tag.  Emitted before the IP
         # so the tag precedes the routed address (IOS-XE convention).
-        # Capital Q matches Cisco's canonical style.
+        # Capital Q matches Cisco's canonical style.  A Q-in-Q
+        # sub-interface's inner tag is ``second-dot1q`` on the same line
+        # (IOS-XE 17, "IEEE 802.1Q-in-Q VLAN Tag Termination").
         if iface.dot1q_vlan is not None:
-            body.append(f" encapsulation dot1Q {iface.dot1q_vlan}")
+            second = (
+                f" second-dot1q {iface.dot1q_inner_vlan}"
+                if iface.dot1q_inner_vlan is not None else ""
+            )
+            body.append(f" encapsulation dot1Q {iface.dot1q_vlan}{second}")
         for idx, addr in enumerate(iface.ipv4_addresses):
             mask = _prefix_to_mask(addr.prefix_length, vendor="cisco_iosxe_cli")
             suffix = " secondary" if idx > 0 else ""

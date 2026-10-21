@@ -205,6 +205,10 @@ def _is_v6(addr: str) -> bool:
 _SETFORM_TAG_NODES = frozenset({
     "ethernet", "loopback", "dummy", "bonding", "vxlan", "bridge",
     "wireguard", "tunnel", "vti", "pppoe", "geneve", "vif",
+    # ``vif-s <id> { vif-c <id> { ... } }``, as VyOS prints a QinQ
+    # block: read as containers, a set-form ``vif-s`` was a block with
+    # no id, and its row could not say which.
+    "vif-s", "vif-c",
     "route", "route6", "next-hop",
     "name",            # `vrf name <X>` (and Tier-3 `firewall name <X>`)
     "community", "user", "server", "interface",
@@ -505,6 +509,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     # ``system name-server`` dedup (perf review P2): a ``seen`` set keeps the
     # per-line membership test O(1) instead of an O(N^2) growing-list scan.
     seen_dns_servers = set(intent.dns_servers)
+    # The row of each ``vif-s`` block, once each (the codec's
+    # ``parse()`` keeps them beside the Tier-3 rows).
+    vif_s_rows: dict[str, None] = {}
     for raw_line in ticked(raw.splitlines()):
         line = raw_line.strip()
         if (
@@ -530,6 +537,23 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
                 _current_iface(stack)
                 if node[0] == "bonding" and node[1]:
                     _touch_lag(node[1])
+            # ``vif-s <id>`` is a service VLAN, its ``vif-c <id>`` blocks
+            # the sub-interfaces inside it, and the S-tag "uses the
+            # Ethertype 0x88a8 by default" (VyOS, "QinQ (802.1ad)"): an
+            # 802.1ad tag, which the tree has no form for.  Not read, the
+            # block and its addresses were gone with nothing said, in
+            # jobs that said ``completed``.  It is not translated, and a
+            # row says so.
+            elif (
+                node[0] == "vif-s"
+                and len(stack) == 3
+                and stack[0][0] == "interfaces"
+            ):
+                vif_s_rows[
+                    f"interfaces {stack[1][0]} {stack[1][1]} vif-s {node[1]}: "
+                    f"an 802.1ad service VLAN; it and its vif-c "
+                    f"sub-interfaces are not translated"
+                ] = None
             # A ``user <name>`` block under ``system { login { ... } }``.
             elif (
                 node[0] == "user" and node[1]
@@ -888,6 +912,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             )
         )
     intent.vxlan_vnis = sorted(vxlan_vnis, key=lambda v: v.vni)
+    intent.dropped_tier3_sections = list(vif_s_rows)
 
     logger.debug(
         "vyos parsed: hostname=%r ifaces=%d routes=%d users=%d lags=%d "

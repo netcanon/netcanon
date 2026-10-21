@@ -429,6 +429,58 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A sub-interface's tag statement was read for its first id.**
+  `encapsulation dot1Q 2234 second-dot1q 15` was VLAN 2234: the six
+  Q-in-Q units the carrier capture has on `GigabitEthernet2/0/4`, each
+  a customer's tag inside service VLAN 2234, came out as six
+  sub-interfaces of VLAN 2234 alone onto every target that writes a
+  tag, IOS-XE itself among them, in jobs that said `completed` (it was
+  a known limitation).  The tree holds an inner tag now
+  (`dot1q_inner_vlan`, both tags 802.1Q), which IOS-XE and IOS XR
+  (`encapsulation dot1q N second-dot1q M`), EOS (`encapsulation dot1q
+  vlan N inner M`) and Junos (`vlan-tags outer N inner M`) read and
+  write; onto the other targets the validation report lists it and the
+  job is `partial`.  A tag statement that is not one tag and at most
+  one inner tag was read as the id it begins with, or as no tag at
+  all: `second-dot1q any`, a range or a list of inner tags,
+  `encapsulation dot1Q N native`, an IOS XR `dot1ad` tag, an EOS
+  FlexEncap block (`encapsulation vlan`), a Junos `vlan-id-range`,
+  `vlan-id none`, an `inner-range`, two tag statements on one unit, or
+  a TPID other than `0x8100`.  Such a sub-interface is now left out,
+  its addresses and its VRF with it, and a row says so (`interface
+  GigabitEthernet0/0/1.20: encapsulation dot1Q 20 second-dot1q any --
+  not one 802.1Q tag and at most one inner tag, so the sub-interface is
+  not translated`): written with fewer tags than it matches, it is
+  another sub-interface.  The row does not change the job's status.
+  A tag statement in a submode -- the `encapsulation` of an IOS-XE
+  `service instance` -- is the submode's, and no longer tags the port
+  it is under.  The Junos renderer wrote a unit's `vlan-id` and never
+  the statement on its device that makes a tag mean anything:
+  `vlan-tagging` for units of one tag, `stacked-vlan-tagging` for
+  units of two, and `flexible-vlan-tagging` for both (Juniper,
+  "Binding VLAN IDs to Logical Interfaces"), on a port, an `ae`
+  bundle, a channel or a `reth` -- Junos to Junos included, though
+  both committed captures that have tagged units say `vlan-tagging`.
+  A routed port's `native-vlan-id`, read and then written on no path,
+  is written with `flexible-vlan-tagging` beside it ("To accept
+  untagged packets, include the native-vlan-id statement and the
+  flexible-vlan-tagging statement").  A unit with an address and no
+  tag beside tagged units -- the address on the port of an IOS-XE
+  router-on-a-stick -- is written as it stands with a `# review:`
+  line: Juniper documents untagged frames on such a device only
+  through `native-vlan-id` and a unit of that id, which the output
+  cannot choose without a guess, and a forum report has a unit with no
+  tag there refused at commit.  A device's own unit 0 tag (`unit 0
+  vlan-id 5`), read and not written, is written.  A VLAN map that
+  drops a sub-interface's outer tag clears its inner tag with it and
+  says so; a map does not move an inner tag, which is a customer's,
+  not a VLAN of the device.  VyOS QinQ (`vif-s <id> vif-c <id>`),
+  dropped with nothing said, is left out with a row: its service tag
+  is 802.1ad, Ethertype 0x88a8 by default (VyOS, "QinQ (802.1ad)"),
+  which the tree has no form for.  If you translated a Q-in-Q config,
+  or a Junos config with tagged units onto Junos, with 0.7.7 or
+  earlier, translate it again.
+
 - **A unit of a Junos loopback, tunnel, aggregate or management port
   was written under a name Junos refuses.**  The parser reads `set
   interfaces lo0 unit 10 ...` as an interface `lo0.10`, and the
@@ -2121,7 +2173,8 @@ timestamp if your timezone matters for an audit.
   `partial`.  A unit now goes with a port the translator drops,
   where it stayed behind (NX-OS sub-interfaces onto AOS-S, which has
   no name for `Ethernet1/1`).  And Junos `vlan-tagging` on the parent
-  port is read and written on no path.
+  port was read and written on no path (it is written now: a
+  sub-interface's tag statement is read whole, above).
 
   One more thing to check on an output with sub-interfaces.  VyOS
   and FortiOS take the VLAN id from the NUMBER in the interface's
@@ -3037,13 +3090,28 @@ timestamp if your timezone matters for an audit.
 
 ### Known limitations
 
-- **An IOS-XE Q-in-Q sub-interface is read as its outer tag alone.**
-  `encapsulation dot1Q 2234 second-dot1q 15` is read as `dot1q 2234`,
-  and a target that writes a sub-interface's tag (EOS, NX-OS and
-  Junos among them) is written that one tag: the six units the
-  carrier capture has on `GigabitEthernet2/0/4` come out with one tag
-  between them, in jobs that say `completed`.  Write the inner tags
-  by hand.
+- **A Q-in-Q sub-interface reaches four targets.**  IOS-XE, IOS XR,
+  EOS and Junos write a sub-interface's inner tag; onto NX-OS, whose
+  sub-interface statement this codec writes is one tag, and onto the
+  targets with no routed sub-interface of their own, the job is
+  `partial` and the validation report lists the inner tag.  A
+  RouterOS `/interface vlan` or a FortiOS VLAN interface whose own
+  interface is a VLAN interface -- Q-in-Q on those platforms -- is
+  read as a VLAN interface of one tag on that VLAN interface, not as
+  a sub-interface of two tags; the job is `partial` onto a target
+  that writes tags.  A VyOS `vif-s` block, and an 802.1ad tag from
+  any source, is left out with a row.  A VyOS `vif 0` is read as a
+  sub-interface of tag 0, which no 802.1Q VLAN has, and is written
+  so onto the targets that write a tag; the IOS-XE, IOS XR and EOS
+  parsers leave such a stanza out, with a row, when they read it.
+
+- **A Junos routed port's native VLAN reaches Junos alone.**  `set
+  interfaces ge-0/0/0 native-vlan-id 100` on a port of routed units
+  is read into the field a trunk's native VLAN is kept in, so the
+  IOS-XE renderer writes it as `switchport trunk native vlan 100` on
+  a routed port and EOS drops it, with nothing said.
+  `encapsulation flexible-ethernet-services` on a Junos port is not
+  read, and is not written, with nothing said either.
 
 - **A config pasted without its indentation is not translated by most
   block parsers: they refuse it in words.**  The IOS XR parser

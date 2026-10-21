@@ -193,6 +193,30 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
 
 ## Common gotchas
 
+- **Tagged units and their device.**  A unit's tag is `vlan-id N`,
+  or `vlan-tags outer N inner M` for two (a TPID of `0x8100` is read);
+  the output gives the device the statement its units need --
+  `vlan-tagging` for units of one tag, `stacked-vlan-tagging` for units
+  of two, `flexible-vlan-tagging` for both (Juniper, "Binding VLAN IDs
+  to Logical Interfaces") -- on a port, an `ae` bundle, a channel or a
+  `reth`.  ⚠️ Up to 0.7.7 no such statement was written, from any
+  source, Junos included; translate a config with tagged units again.
+  A routed port's `native-vlan-id` is written with
+  `flexible-vlan-tagging` ("To accept untagged packets, include the
+  native-vlan-id statement and the flexible-vlan-tagging statement").
+  Onto another vendor it is read as a trunk's native VLAN: IOS-XE
+  writes it as `switchport trunk native vlan` on a routed port and
+  EOS drops it, with nothing said -- set the native sub-interface by
+  hand.  `encapsulation flexible-ethernet-services` is not read.  A
+  unit with an address and no tag beside tagged units -- the address
+  on the port of an IOS-XE router-on-a-stick -- is written as it
+  stands with a `# review:` line: Juniper documents untagged frames on
+  such a device through `native-vlan-id` and a unit of that id, and
+  the output cannot choose the id without a guess.  A unit whose tag
+  statement matches more than one tag (`vlan-id-range`, `vlan-id
+  none`, an `inner-range`, a TPID other than `0x8100`, or two tag
+  statements) is left out, with a row of the Tier-3 banner (`... -- not one 802.1Q tag and at most one inner tag, so the
+  sub-interface is not translated`).
 - **Block-form input is counted in the set commands it becomes.**  A
   block-form config is converted to set commands before it is read,
   and the whole path is written again for every statement under it, so

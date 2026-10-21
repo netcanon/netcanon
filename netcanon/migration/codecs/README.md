@@ -903,6 +903,21 @@ the policy locally:
   address there is the gateway.  (`cisco_nxos`, `aruba_aoscx` and
   `dell_os10` read their headers themselves.)
 
+* **`netcanon/migration/codecs/_helpers.py::without_unread_tags`**,
+  **`second_dot1q_tags`** and **`a_tag`** -- a sub-interface's tag
+  statement, read whole or not at all (IOS-XE CLI, IOS XR and EOS;
+  Junos reads a unit's statements itself and makes the same row with
+  `unread_tags_row`).  `a_tag(word)` is one 802.1Q id (1 to 4094, in
+  ASCII digits), never the id a range, a list or a keyword begins
+  with; `second_dot1q_tags(statement)` is the `(outer, inner)` of a
+  Cisco `encapsulation dot1q N [second-dot1q M]`, or `None`.
+  `without_unread_tags(raw, is_tag_statement, tags_of)` takes out
+  each `interface` stanza whose own tag statement (at the stanza's
+  own depth: a submode's is not the stanza's) the parser's `tags_of`
+  cannot read, and returns a row for each; the parser runs it before
+  any reader, so that a sub-interface is never written with fewer
+  tags than it matches.
+
 * **`netcanon/migration/codecs/_scanner.py::without_text_bodies`** --
   `without_text_bodies(raw, opens, unended, *, codec, command=...)`:
   the text with every line of each body of text in it (a banner, a

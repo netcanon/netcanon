@@ -70,9 +70,12 @@ from .._helpers import (
     TrunksByName,
     Uniques,
     _mask_to_prefix,
+    Tags,
+    a_tag,
     merge_trunk_allowed,
     tags_every_native_vlan,
     tags_its_native_vlan,
+    without_unread_tags,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import LINE_END_MESSAGE, first_flat_stanza, scan_stanzas
@@ -746,6 +749,13 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     intent = CanonicalIntent(
         source_vendor="arista_eos",
         source_format="cli-arista",
+    )
+    # A sub-interface whose tag statement is not read whole (a range,
+    # a FlexEncap ``encapsulation vlan`` block) is taken out before
+    # any reader sees it, and its row says the statement.  The codec's
+    # ``parse()`` keeps the rows beside the Tier-3 ones.
+    raw, intent.dropped_tier3_sections = without_unread_tags(
+        raw, _is_tag_statement, _tags_of,
     )
 
     # --- Top-level scalar fields (regex-based, single-pass) ---
@@ -1469,6 +1479,47 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:
         # CanonicalRoutingInstance.redistribute_*.
 
 
+def _is_tag_statement(statement: str) -> bool:
+    """Whether *statement* is a sub-interface's tag statement:
+    ``encapsulation dot1q ...``, or ``encapsulation vlan``, which opens
+    a FlexEncap block ("Flexible Interface Encapsulation", Arista TOI)
+    whose ``client`` / ``network`` lines the tree has no form for."""
+    words = statement.split(None, 2)
+    return (
+        len(words) >= 2
+        and words[0].lower() == "encapsulation"
+        and words[1].lower() in ("dot1q", "vlan")
+    )
+
+
+def _tags_of(statement: str) -> Tags | None:
+    """The tags of an EOS tag statement, read whole, else ``None``.
+
+    ``encapsulation dot1q vlan <outer>`` and ``encapsulation dot1q vlan
+    <outer> inner <inner>`` (the FlexEncap TOI's own example is
+    ``encapsulation dot1q vlan 10 inner 20``), and the bare
+    ``encapsulation dot1q <outer>`` this parser has always tolerated.
+    """
+    words = statement.split()
+    if [w.lower() for w in words[:2]] != ["encapsulation", "dot1q"]:
+        return None
+    if len(words) == 3:
+        outer = a_tag(words[2])
+        return None if outer is None else (outer, None)
+    if len(words) < 4 or words[2].lower() != "vlan":
+        return None
+    outer = a_tag(words[3])
+    if outer is None:
+        return None
+    if len(words) == 4:
+        return (outer, None)
+    if len(words) == 6 and words[4].lower() == "inner":
+        inner = a_tag(words[5])
+        if inner is not None:
+            return (outer, inner)
+    return None
+
+
 def _apply_iface_subcommand(  # noqa: C901
     iface: CanonicalInterface,
     line: str,
@@ -1678,14 +1729,16 @@ def _apply_iface_subcommand(  # noqa: C901
         return
     # GAP 7: routed sub-interface 802.1Q tag.  EOS writes
     # ``encapsulation dot1q vlan N`` (the ``vlan`` keyword is required —
-    # verified vs an independent Batfish parse); ``split()[-1]`` also
-    # tolerates a bare ``encapsulation dot1q N``.  Stored on the dedicated
-    # dot1q_vlan field, NOT access_vlan (a routed sub-iface is L3).
-    if line.startswith("encapsulation dot1q "):
-        try:
-            iface.dot1q_vlan = int(line.split()[-1])
-        except ValueError:
-            pass
+    # verified vs an independent Batfish parse), and ``encapsulation
+    # dot1q vlan N inner M`` for a sub-interface of two tags; a bare
+    # ``encapsulation dot1q N`` is tolerated.  Stored on the dedicated
+    # dot1q_vlan / dot1q_inner_vlan fields, NOT access_vlan (a routed
+    # sub-iface is L3).  Read whole (:func:`_tags_of`): ``split()[-1]``
+    # took the INNER tag of ``vlan 10 inner 20`` for the outer one.
+    if _is_tag_statement(line):
+        tags = _tags_of(line)
+        if tags is not None:
+            iface.dot1q_vlan, iface.dot1q_inner_vlan = tags
         return
     # ``switchport mode access`` / ``switchport access vlan N`` /
     # ``switchport trunk allowed vlan L`` — parse-and-record.

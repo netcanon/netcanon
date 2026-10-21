@@ -159,6 +159,13 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
 
 ## Common gotchas
 
+- **A VLAN on a VLAN is one tag on a VLAN interface.**  An
+  `/interface vlan` whose `interface=` is another `/interface vlan`
+  (Q-in-Q on RouterOS) is read as a VLAN interface of one tag on that
+  VLAN interface, not as a sub-interface of two tags.  Onto a target
+  that writes tags the job is `partial`; a source's sub-interface of
+  two tags (IOS-XE `second-dot1q`, EOS `inner`, Junos `vlan-tags`) has
+  no form here, and is `partial` too.
 - **VLAN interfaces, bridges and names of your own, onto another
   vendor** — the port translator reads the names RouterOS gives a
   port or a bond (`ether2`, `sfp-sfpplus1`, `bonding1`).  A VLAN

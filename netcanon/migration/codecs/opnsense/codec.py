@@ -317,6 +317,16 @@ class OPNsenseCodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "`encapsulation dot1Q N second-dot1q M`, Junos `vlan-tags "
+                    "outer N inner M`) has no form in this codec, whose "
+                    "routed sub-interface tag is itself not wired: declared "
+                    "so that it is reported as a drop."
+                ),
+            ),
+            UnsupportedPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(
                     "OPNsense renders no VRF / routing-instance (see "

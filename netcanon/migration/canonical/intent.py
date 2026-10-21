@@ -214,6 +214,21 @@ class CanonicalInterface(BaseModel):
             Kept separate so a routed sub-interface never mis-renders as
             ``switchport access vlan N`` on a switchport-centric target
             (GAP 7).
+        dot1q_inner_vlan: The inner 802.1Q tag of a routed
+            sub-interface that matches two (Q-in-Q): the tag inside
+            the outer one, which is ``dot1q_vlan``.  Cisco
+            ``encapsulation dot1Q <outer> second-dot1q <inner>``,
+            Arista ``encapsulation dot1q vlan <outer> inner <inner>``,
+            Junos ``vlan-tags outer <outer> inner <inner>``.  Both
+            tags are 802.1Q tags (TPID 0x8100): an 802.1ad service
+            tag (VyOS ``vif-s``, IOS XR ``dot1ad``, a Junos TPID of
+            ``0x88a8``) is not this field.  ``None`` = one tag, or
+            none.  Never set without ``dot1q_vlan``.  A statement
+            that matches more than one inner tag (``any``, a range,
+            a list) has no form here: the parser leaves such a
+            sub-interface out, with a row of
+            ``dropped_tier3_sections``, rather than keep its first
+            value.
         trunk_allowed_vlans: VLAN IDs allowed on trunk.  On a trunk
             the list means what it says: ``[]`` is NO VLAN, every id
             (1-4094) is EVERY VLAN, and any other list is the list.
@@ -325,6 +340,7 @@ class CanonicalInterface(BaseModel):
     switchport_mode: str | None = None
     access_vlan: int | None = None
     dot1q_vlan: int | None = None
+    dot1q_inner_vlan: int | None = None
     trunk_allowed_vlans: list[int] = Field(default_factory=list)
     trunk_native_vlan: int | None = None
     voice_vlan: int | None = None

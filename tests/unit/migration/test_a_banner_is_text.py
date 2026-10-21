@@ -997,7 +997,8 @@ def _digest(codec: str, path: str) -> str:
 #: was before a banner was read as text (``8210c697``; IOS XR's on
 #: ``efda1659``, before its parser read one).  A value changes
 #: only when a parser's reading of that input is changed on purpose; the
-#: failing assertion prints the new one.
+#: failing assertion prints the new one.  Changed since: the carrier
+#: capture, whose ``second-dot1q`` units hold their inner tag.
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
@@ -1025,7 +1026,7 @@ BEFORE: dict[str, str] = {
     # IOS-XE CLI parser refuses it, and it is kept under ``refused/``
     # (``test_a_flat_text_is_refused.py``).
     "real/cisco_iosxe/cml_saumur_iosxe1712_pvrstp.txt": "2425f79888f2",
-    "real/cisco_iosxe/ntc_carrier_interfaces.txt": "3c1760c9d5cd",
+    "real/cisco_iosxe/ntc_carrier_interfaces.txt": "806b463dfba1",
     "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "0bd80061c03b",
     "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "bcdfaa8ebcef",
     "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "768e0992850c",

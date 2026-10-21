@@ -78,11 +78,13 @@ from .._helpers import (
     _normalise_mac_to_colon_hex,
     address_key,
     keyword_stanza_rows,
+    second_dot1q_tags,
     spaced_port_name,
     tags_every_native_vlan,
     tags_its_native_vlan,
     untags_its_native_vlan,
     without_keyword_stanzas,
+    without_unread_tags,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import (
@@ -232,12 +234,24 @@ _FABRIC_AG_MODE_RE = re.compile(
     r"^\s+fabric\s+forwarding\s+mode\s+anycast-gateway\s*$",
     re.IGNORECASE,
 )
-#: GAP 7: routed sub-interface 802.1Q tag, ``encapsulation dot1Q <vlan>``
-#: (IOS-XE writes a capital Q; ``re.IGNORECASE`` tolerates lowercase).
-#: The optional trailing ``native`` keyword is not modelled here.
-_ENCAP_DOT1Q_RE = re.compile(
-    r"^\s+encapsulation\s+dot1q\s+(\d+)\b", re.IGNORECASE,
-)
+def _is_tag_statement(statement: str) -> bool:
+    """Whether *statement* is a sub-interface's tag statement,
+    ``encapsulation dot1Q ...`` (IOS-XE writes a capital Q; any letter
+    case is read).
+
+    Its tags are read whole by
+    :func:`~netcanon.migration.codecs._helpers.second_dot1q_tags`, and a
+    stanza whose statement is not read whole is taken out before any
+    reader sees it (``without_unread_tags``): ``second-dot1q any``, a
+    range or a list of inner tags, and ``native``, which the tree has
+    no form for.
+    """
+    words = statement.split(None, 2)
+    return (
+        len(words) >= 2
+        and words[0].lower() == "encapsulation"
+        and words[1].lower() == "dot1q"
+    )
 
 
 def _parse_iface_l3_markers(line: str, current: dict[str, Any]) -> bool:
@@ -252,16 +266,23 @@ def _parse_iface_l3_markers(line: str, current: dict[str, Any]) -> bool:
       every primary IPv4 address gets ``virtual_gateway_address = ip`` to
       mirror the NX-OS / IOS-XE SD-Access shape (the primary IP IS the
       anycast IP).
-    * ``encapsulation dot1Q <vlan>`` (GAP 7) — the 802.1Q tag on a routed
-      sub-interface (e.g. ``GigabitEthernet0/1.100``).  Stored on the
-      dedicated ``dot1q_vlan`` field, NOT access_vlan (an L2 concept).
+    * ``encapsulation dot1Q <vlan> [second-dot1q <inner>]`` (GAP 7) — the
+      802.1Q tags of a routed sub-interface (e.g.
+      ``GigabitEthernet0/1.100``).  Stored on the dedicated
+      ``dot1q_vlan`` and ``dot1q_inner_vlan`` fields, NOT access_vlan
+      (an L2 concept).  Only the interface's own line is its
+      statement: a ``service instance`` under it has an
+      ``encapsulation`` of its own, indented deeper.
     """
     if _FABRIC_AG_MODE_RE.match(line):
         current["fabric_forwarding_anycast"] = True
         return True
-    em = _ENCAP_DOT1Q_RE.match(line)
-    if em:
-        current["dot1q_vlan"] = int(em.group(1))
+    statement = line.strip()
+    if _is_tag_statement(statement):
+        if len(line) - len(line.lstrip()) == current["body_indent"]:
+            tags = second_dot1q_tags(statement)
+            if tags is not None:
+                current["dot1q_vlan"], current["dot1q_inner_vlan"] = tags
         return True
     return False
 
@@ -816,7 +837,14 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # translated, and its header line is a row of
     # ``dropped_tier3_sections``.
     raw, headers = without_keyword_stanzas(raw)
-    intent.dropped_tier3_sections = keyword_stanza_rows(headers)
+    # So is a sub-interface whose tag statement is not read whole
+    # (``second-dot1q any``, a range or a list, ``native``): written
+    # with its first tag alone it was another sub-interface on every
+    # target.  Its row says the statement.
+    raw, unread = without_unread_tags(
+        raw, _is_tag_statement, second_dot1q_tags,
+    )
+    intent.dropped_tier3_sections = [*keyword_stanza_rows(headers), *unread]
 
     # System-level fields
     intent.hostname = _extract_hostname(raw)
@@ -1230,6 +1258,9 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             # address gets ``virtual_gateway_address = ip`` (the
             # NX-OS / IOS-XE SD-Access mirror semantic).
             "fabric_forwarding_anycast": False,
+            # The indent of the stanza's first body line: the
+            # interface's own lines are there, a submode's deeper.
+            "body_indent": None,
         }
 
     def _native_line(line: str, current: dict[str, Any]) -> bool:
@@ -1250,6 +1281,8 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
         return False
 
     def _on_line(line: str, current: dict[str, Any]) -> None:
+        if current["body_indent"] is None and line.strip():
+            current["body_indent"] = len(line) - len(line.lstrip())
         dm = _DESC_RE.match(line)
         if dm:
             current["description"] = dm.group(1).strip()
@@ -1664,6 +1697,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         switchport_mode=switchport_mode,
         access_vlan=raw.get("access_vlan"),
         dot1q_vlan=raw.get("dot1q_vlan"),  # GAP 7: routed-subif 802.1Q tag
+        dot1q_inner_vlan=raw.get("dot1q_inner_vlan"),  # ``second-dot1q``
         voice_vlan=raw.get("voice_vlan"),
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),

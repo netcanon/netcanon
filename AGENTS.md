@@ -1455,6 +1455,38 @@ tests use these exclusively — never CSS classes or element structure.  See
   strength of `trunk 1,my port trk1 lacp`, a line the parser does
   not read, and port 1 came back in no record.  Guarded by
   `tests/unit/migration/codecs/aruba_aoss/test_no_stanza_for_enable_alone.py`.
+- **Never** read a statement for its first value.  A reader that
+  takes the first id of a line and ignores the rest has read another
+  statement: `encapsulation dot1Q 2234 second-dot1q 15` was VLAN
+  2234, and the six Q-in-Q units of a committed IOS-XE capture -- each
+  a customer's tag inside service VLAN 2234 -- came out as six
+  sub-interfaces of VLAN 2234 alone onto every target that writes a
+  tag, IOS-XE itself among them, in jobs that said `completed`.  So
+  were `second-dot1q any`, a range or a list of inner tags, an IOS XR
+  `dot1ad` tag, an EOS FlexEncap block and a Junos `vlan-id-range`:
+  each read as the tag it begins with, or as no tag at all.  A
+  statement is read WHOLE -- every word accounted for, by a reader
+  that says which forms it takes (`second_dot1q_tags` and `a_tag` in
+  `codecs/_helpers.py`) -- or it is not read: where the tree has no
+  form for what it says, what it governs is left out and a row says
+  so (`without_unread_tags`), since a sub-interface written with
+  fewer tags than it matches is another sub-interface.  And a
+  statement is the stanza's only at the stanza's own depth: the
+  `encapsulation` of an IOS-XE `service instance` is the instance's,
+  and tagged the port it was under.  **The blind spot:** the
+  capture's units round-tripped -- a codec that reads the first id
+  and writes the first id agrees with itself, and the mesh compares
+  two trees that both lost the inner tag.  A field the target
+  needs a second statement for is the same defect from the other
+  side: the Junos renderer wrote each unit's `vlan-id` and never the
+  device's `vlan-tagging`, the statement Juniper puts on the device
+  for its units' tags ("Binding VLAN IDs to Logical Interfaces"),
+  Junos to Junos included.  When a renderer writes a value, ask what
+  else on the device the value depends on.  Guarded by
+  `tests/unit/migration/test_a_tag_statement_is_read_whole.py`,
+  which reads each output with a reader of its own per target, from
+  the capture and from a source typed in each grammar, and hands
+  each check the defect it is for.
 - **Never** push to an online / public repository (GitHub, GitLab,
   Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
   destination — including private repos that may later go public,

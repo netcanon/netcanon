@@ -261,8 +261,9 @@ per_field_expectation:
       measurement is the authority for that.
       The sixth drifting cell moves the OTHER way: `ntc_carrier_interfaces.txt`
       has 0 source VLANs and 1 after the round-trip, because the XR render
-      writes `encapsulation dot1q 2234` on its sub-interfaces and re-parsing
-      that line materialises a VLAN record the source never had.  A fabricated
+      writes `encapsulation dot1q 2234 second-dot1q <inner>` on its
+      sub-interfaces and re-parsing that line materialises a VLAN record (the
+      outer tag, 2234) the source never had.  A fabricated
       record, not a rescued one.
       `unsupported` rather than `lossy` per #436 — `lossy` warns and stays
       compatible, which would badly understate a switch losing its entire VLAN

@@ -509,6 +509,17 @@ class CiscoNXOSCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/dot1q-inner-vlan",
+                reason=(
+                    "The inner 802.1Q tag of a Q-in-Q sub-interface (Cisco "
+                    "IOS-XE `encapsulation dot1Q N second-dot1q M`, Junos "
+                    "`vlan-tags outer N inner M`): the NX-OS sub-interface "
+                    "statement this codec reads and writes, `encapsulation "
+                    "dot1q <id>`, is one tag, so a source's inner tag is "
+                    "reported as a drop."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/voice-vlan",
                 reason=(
                     "This codec does not model NX-OS per-port voice VLAN; "
