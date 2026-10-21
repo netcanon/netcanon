@@ -122,6 +122,10 @@ class VyOSCodec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: ``vif <vid>`` is the sub-interface and its tag at once: ``eth1.200``
+    #: carries VLAN 200.  See ``CodecBase.units_are_named_by_their_tag``.
+    units_are_named_by_their_tag: ClassVar[bool] = True
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="vyos",
         vendor_id="vyos",
@@ -344,19 +348,24 @@ class VyOSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
-        ],
-        unsupported=[
-            UnsupportedPath(
+            LossyPath(
                 path="/interfaces/interface/dot1q-vlan",
                 reason=(
-                    "Routed sub-interface 802.1Q tag (Cisco "
-                    "`encapsulation dot1Q N` / Junos `unit N vlan-id`) is "
-                    "not yet wired for this codec.  Declared unsupported "
-                    "(ship-before-wire, GAP 7) so a routed sub-interface "
-                    "tag is flagged as a drop, not silently mis-rendered "
-                    "as an L2 access-mode VLAN."
+                    "A routed sub-interface (Cisco `encapsulation dot1Q "
+                    "N`, Junos `unit N vlan-id`) is a `vif` under its "
+                    "port, and a vif's number IS its 802.1Q tag: the "
+                    "port translator names it `<port>.<tag>`, so its "
+                    "unit number is not kept where it is not its tag, "
+                    "and two units of one port with one tag are one "
+                    "vif.  Only the port translator makes that name: "
+                    "a sub-interface whose name is not a VyOS port's "
+                    "(the bare pipeline translates no port names) is "
+                    "written under its source name with no tag."
                 ),
+                severity="warn",
             ),
+        ],
+        unsupported=[
             UnsupportedPath(
                 path="/interfaces/interface/vrrp-groups/group",
                 reason=(

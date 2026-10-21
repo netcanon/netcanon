@@ -254,6 +254,13 @@ def _tag_of(source_name: str, unit: str) -> int:
     return 300 if unit == "54" and source_name != "vyos" else int(unit)
 
 
+#: Targets whose sub-interface is NAMED by its tag: VyOS, where
+#: ``eth1.300`` is ``vif 300`` and carries VLAN 300.  Onto these a
+#: unit goes with its tag after its port, not its number.  Typed
+#: here, not read from the codec.
+_NAMED_BY_TAG = {"vyos"}
+
+
 def _fortios_block_says(text: str, name: str, tag: int) -> bool:
     """The ``edit`` block of *name* in ``config system interface``
     states ``set vlanid <tag>``."""
@@ -304,7 +311,8 @@ class TestASubInterfaceOnEveryPair:
     def test_it_is_an_interface_of_its_own(self, source_name: str, target_name: str) -> None:
         """Read from the output, by address: each unit is on one
         interface, no interface holds two, and its name is what its
-        port became with the unit after it.  A unit that is not in the
+        port became with the unit after it -- or, onto a target whose
+        sub-interface is named by its tag, the tag.  A unit that is not in the
         output at all has to be in ``port_drops``, with its port."""
         source, target = get_codec(source_name), get_codec(target_name)
         port, text = _UNITS[source_name]
@@ -324,8 +332,13 @@ class TestASubInterfaceOnEveryPair:
             (iface,) = holders
             others = {address.ip for address in iface.ipv4_addresses} - {ip}
             assert not others, f"{name} shares {iface.name!r} with {sorted(others)}"
-            assert job.port_renames.get(name, name) == f"{where}.{unit}"
-            assert iface.name == f"{where}.{unit}", f"{name} is on {iface.name!r}"
+            after = (
+                str(_tag_of(source_name, unit))
+                if target_name in _NAMED_BY_TAG and source_name != target_name
+                else unit
+            )
+            assert job.port_renames.get(name, name) == f"{where}.{after}"
+            assert iface.name == f"{where}.{after}", f"{name} is on {iface.name!r}"
 
     @pytest.mark.parametrize(
         ("source_name", "target_name"),

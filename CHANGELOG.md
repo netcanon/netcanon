@@ -429,6 +429,36 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A sub-interface of another vendor was written onto VyOS with its
+  unit number for its tag.**  On VyOS the number of a `vif` IS the
+  802.1Q tag it carries (`ethernet eth1 { vif 200 }` is `eth1.200`,
+  VLAN 200).  IOS-XE `interface GigabitEthernet0/0/1.100` with
+  `encapsulation dot1Q 200` and a Junos `unit 100 vlan-id 200` were
+  sent after their port as `eth1.100` and written `vif 100`: VLAN 100
+  on the wire, in a job that was `partial` for
+  `/interfaces/interface/dot1q-vlan` (unsupported), whose reason said
+  the tag was flagged as a drop rather than mis-rendered.  The port
+  translator now sends a unit with a tag onto a target whose
+  sub-interface is named by its tag
+  (`CodecBase.units_are_named_by_their_tag`, VyOS alone) with its
+  tag: `eth1.200`, `vif 200`.  The path is lossy where it was
+  unsupported: the unit number is not kept where it is not the tag,
+  and a sub-interface of another vendor's name, which only the port
+  translator makes a VyOS name of, carries no tag -- the bare
+  pipeline writes it under its source name with a `/* review */`
+  line that says so.  Two units of one port with one tag are one
+  name, as a port carries a VLAN once: the job lists them
+  (`fused_ports`) and is `partial`, and its sentence no longer
+  offers a pair of devices for two sub-interfaces of one port, which
+  a pairing sends to one port again.  An entry that names a unit
+  with another number is a warning and a `/* review */` line before
+  its `vif`.  Over the committed captures two more jobs onto VyOS
+  pass the validation report: the IOS-XE carrier capture, whose six
+  Q-in-Q units -- read with their outer tag 2234 alone -- were six
+  vifs numbered 223415 and the like and are now one name the job
+  lists, and the Junos EVPN leaf, held for its `fxp0`; the port-name
+  check (below) now makes 216 of 592 jobs `partial`.
+
 - **A sub-interface of another vendor was written onto FortiOS with
   the number in its name for its tag.**  IOS-XE `interface
   GigabitEthernet0/0/1.100` with `encapsulation dot1Q 200`, a Junos
@@ -2991,13 +3021,13 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  214 of the 590 jobs that said `completed` are `partial`.  62 of
-  them list a shared name, 65 a hardware port that was dropped, 29 a
+  216 of the 592 jobs that said `completed` are `partial`.  63 of
+  them list a shared name, 66 a hardware port that was dropped, 29 a
   logical name that was dropped and 112 a name left as the source
   has it (99 of those a hardware port); 46 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
-  and none to or from `failed`; 400 jobs that were already `partial`
-  carry the sentence as well.  Each of the 214 is `completed` again,
+  and none to or from `failed`; 399 jobs that were already `partial`
+  carry the sentence as well.  Each of the 216 is `completed` again,
   with one more request, once every listed name has an entry.
 
   **To settle such a job**, decide each name with an entry of

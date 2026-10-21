@@ -1323,8 +1323,8 @@ class TestPortNamesWithNoDevices:
             "each: a name of its own, or null, for all but one of the names "
             "that share one; a target name for a dropped name, or null to "
             "say it is to go. Declaring both devices pairs the hardware "
-            "ports among these by position; the names that are not hardware "
-            "ports need an entry either way."
+            "ports among these by position; the other names need an entry "
+            "either way."
         ), path
         assert job["port_mapping_plan"] is None, path
         # The output is as it was: nothing is renamed or dropped for it.

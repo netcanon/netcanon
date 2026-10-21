@@ -305,6 +305,24 @@ class CodecBase(ABC):
     #: name, which is every other platform that ships.
     ports_keep_a_factory_name: ClassVar[bool] = False
 
+    #: This platform's sub-interface is NAMED by its 802.1Q tag: the
+    #: number after the dot is the VLAN the device carries on it, and
+    #: there is no tag apart from it (VyOS ``vif 200`` is ``eth1.200``
+    #: and carries VLAN 200).
+    #:
+    #: Read by the port translator
+    #: (:func:`~netcanon.migration.canonical.port_names.translate_port_names`).
+    #: Across vendors a sub-interface goes where its port goes; onto
+    #: such a target one with a tag goes as ``<port>.<tag>``, not
+    #: ``<port>.<unit>`` -- written with its unit number, a Junos
+    #: ``unit 100 vlan-id 200`` carried VLAN 100.  ``False`` where the
+    #: number in a sub-interface's name is free and the tag is a line
+    #: of its own (``encapsulation dot1Q``, ``vlan-id``, ``set
+    #: vlanid``), which is every other platform that ships;
+    #: ``test_a_sub_interface_onto_vyos.py`` holds the codecs that say
+    #: ``True`` to a set typed by hand.
+    units_are_named_by_their_tag: ClassVar[bool] = False
+
     #: This platform's VLAN has a name and no label apart from it, so
     #: the renderer writes ``CanonicalVlan.name`` and nothing of
     #: ``.description`` (IOS-XE, NX-OS, EOS and AOS-S ``name``, Junos

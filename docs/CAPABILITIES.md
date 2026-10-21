@@ -569,6 +569,7 @@ curly-brace form.  The lossy / unsupported exceptions:
 | `/routing-instances/instance/table` | Lossy | VyOS requires a numeric `table <id>` on every `vrf name <X>`; the canonical RoutingInstance carries no table number, so a deterministic id (`100 + sort-index`) is synthesised on render.  The original table id is not preserved. |
 | `/vxlan-vnis/source-interface` | Lossy | The VTEP source is `source-address <ip>` (or `source-interface <if>`) on the vxlan netdev; the opaque string round-trips same-vendor but a cross-vendor source (e.g. `Loopback0`) is re-emitted verbatim and may need an operator port-rename. |
 | `/vxlan-vnis/vlan-id` | Lossy | VyOS models ONE VNI per `vxlan vxlanN` netdev with no on-device VLAN (the L2 binding lives on a separate `bridge`); the required canonical `vlan_id` is synthesised from the VNI and the netdev name regenerated `vxlan<index>` on render — both deterministic (stable same-vendor, advisory cross-vendor). |
+| `/interfaces/interface/dot1q-vlan` | Lossy | A routed sub-interface of another vendor (`encapsulation dot1Q 200` under `GigabitEthernet0/0/1.100`, Junos `unit 100 vlan-id 200`) is a `vif` under its port, and a vif's number IS its tag: the port translator names it `eth1.200`, `vif 200`, so its unit number is not kept where it is not its tag, and two units of one port with one tag are one name (listed in `fused_ports`; the job is `partial`).  Only the port translator makes that name: the bare pipeline writes a sub-interface of another vendor's name under that name with no tag, beneath a `/* review */` line that says so.  An entry that names a unit with another number is a warning and a `/* review */` line. |
 | `/vlans/vlan/id` | Unsupported | VyOS has no top-level VLAN database; 802.1Q VLANs are `vif <vid>` sub-interfaces (rendered as `ethN.<vid>` interfaces), which ARE supported. |
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static routes (`vrf name <X> { protocols static route … }`) are deferred past the Phase-3 VRF wire-up; the `vrf name` instances + per-interface binding ARE supported. |
 | `/vxlan-vnis/l2vni-route-target` | Unsupported | EVPN per-VNI RD/RT lives under `protocols bgp … address-family l2vpn-evpn` (Tier-3, dropped); the L2 VLAN↔VNI binding is supported but the control-plane RD/RT is not auto-translated. |
@@ -1233,7 +1234,12 @@ Two things that translation by shape does not do:
   tag is not part of its name: where none was read for it from the
   source, the unit is written without one and a warning says so
   (`... went with its port to 'Ethernet1.54' with no 802.1Q tag
-  ...`).  Section G lists what is not followed.
+  ...`).  Onto VyOS, where the number of a `vif` IS its tag, a unit
+  with a tag goes with its tag instead: `ge-0/0/1.100` with
+  `vlan-id 200` is `eth1.200`, `vif 200`.  Two units of one port
+  with one tag are then one name, which the job lists, and an entry
+  that gives such a unit another number is warned about.  Section G
+  lists what is not followed.
 
 Neither held up to 0.7.7 — a same-vendor job renamed and dropped
 ports nobody had mapped, and a sub-interface was written onto its
@@ -1945,13 +1951,13 @@ nothing, as before.
   vendor none of that is said — and a tag the parser does not read
   (AOS-CX, OS10) is lost there as well, as it is on every path,
   with nothing in the job to report it.
-  And **VyOS takes the VLAN id from the number in the name** (`vif
-  <unit>`): a source unit whose number is not its tag — IOS
-  `GigabitEthernet0/0/1.54` with `encapsulation dot1Q 300` — comes
-  out tagged 54, in a `partial` job.  Check the VLAN id of every
-  sub-interface there.  FortiOS writes the source's own tag (`set
-  vlanid 300`, on the port the name is a unit of), and the job says
-  that the block is read back as a VLAN interface.
+  **VyOS and FortiOS write the source's own tag**, where the number
+  in the name was once taken for it: IOS `GigabitEthernet0/0/1.54`
+  with `encapsulation dot1Q 300` is `vif 300` onto VyOS, whose vif's
+  number IS its tag (so the unit number 54 is not kept, and two
+  units of one port with one tag are one name, listed in
+  `fused_ports`), and `set vlanid 300` onto FortiOS, on the port the
+  name is a unit of.
 
   Not followed across vendors: a unit of a **loopback** or of a
   **management port** (a Junos `lo0.5` is put on the target's

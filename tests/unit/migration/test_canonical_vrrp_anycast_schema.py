@@ -448,9 +448,11 @@ class TestShipBeforeWireUnsupportedDeclarations:
             "/routing/static-route/vrf",
             "/interfaces/interface/dot1q-vlan",
         },
-        # VyOS: none of the six graduated yet — every new path stays
-        # unsupported (ship-before-wire).
-        "vyos": set(),
+        # VyOS: routed sub-interface dot1q graduated to lossy (a
+        # vif's number IS its tag, so the port translator names a
+        # unit by its tag); every other new path stays unsupported
+        # (ship-before-wire).
+        "vyos": {"/interfaces/interface/dot1q-vlan"},
         # Dell OS10 (Phase 4 registration).  OS10 runs REAL VRRP, so the
         # group anchor is ``supported`` outright rather than normalised
         # from another FHRP family the way NX-OS's HSRP render is, and

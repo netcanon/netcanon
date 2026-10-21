@@ -62,8 +62,9 @@ a sub-interface
 (``<port>.<unit>``) goes where its port goes, with its unit: no
 classifier keeps the unit -- :class:`PortIdentity` has no place for one
 -- so left to them it lands ON its port (Junos, VyOS) or stays behind
-under its source name (IOS, EOS, NX-OS, IOS-XR).  See
-:func:`translate_port_names`.
+under its source name (IOS, EOS, NX-OS, IOS-XR).  Onto a target
+whose sub-interface is named by its tag (VyOS ``vif``) it goes with
+its tag instead.  See :func:`translate_port_names`.
 
 **Modular boundary:** each codec knows ONLY its own vendor's naming
 convention.  Cisco's codec classifies ``Gi1/0/24`` → ``PortIdentity``
@@ -699,9 +700,9 @@ UNIT_PARENT_KINDS: frozenset[str] = frozenset({"physical", "breakout", "lag"})
 #: run of digits is no sub-interface another platform has, and is
 #: left to the classifier.  The bound is what keeps such a name out
 #: of another vendor's renderer: sent after its port it arrives as
-#: ``<port>.<digits>``, which FortiOS and VyOS make a VLAN id of,
-#: and a pasted config can write more digits than an integer is
-#: converted from.  Between two configs of one codec there is no
+#: ``<port>.<digits>``, which FortiOS and VyOS make a VLAN id of
+#: where the tree holds no tag for it, and a pasted config can write
+#: more digits than an integer is converted from.  Between two configs of one codec there is no
 #: bound: the name is the same on both sides, and its own renderer
 #: is handed nothing it was not handed already.
 UNIT_MAX_DIGITS = 10
@@ -870,7 +871,15 @@ def translate_port_names(  # noqa: C901
            The unit's 802.1Q tag is not in its name: it travels in
            the tree (``dot1q_vlan``).  Across vendors, a unit that
            went with its port and has no tag there is written
-           without one, and a warning says so.  The tree has none
+           without one, and a warning says so.  Onto a target
+           whose sub-interface is NAMED by its tag
+           (``CodecBase.units_are_named_by_their_tag``: VyOS, where
+           ``eth1.200`` is ``vif 200`` and carries VLAN 200), a
+           unit with a tag goes as ``<what the port became>.<tag>``:
+           with its unit number it carried that number as its VLAN.
+           Two units of one port with one tag are then one name,
+           which is what the device allows, and the plan path
+           reports them as two ports on one name.  The tree has none
            where the platform's parser reads none for a
            sub-interface (AOS-CX, OS10) and where the config states
            none.
@@ -1081,12 +1090,16 @@ def translate_port_names(  # noqa: C901
         iface.name for iface in intent.interfaces
         if iface.interface_type in ("ianaift:l3ipvlan", "ianaift:l2vlan")
     )
-    # Interfaces the tree holds an 802.1Q tag for.  The tag of a
-    # sub-interface is not in its name, so one that is not here is
-    # written without a tag wherever it goes.
-    tagged: frozenset[str] = frozenset(
-        iface.name for iface in intent.interfaces if iface.dot1q_vlan is not None
-    )
+    # Interfaces the tree holds an 802.1Q tag for, and the tag.  The
+    # tag of a sub-interface is not in its name, so one that is not
+    # here is written without a tag wherever it goes -- and onto a
+    # target that names a sub-interface by its tag, the tag is its
+    # name.
+    tags: dict[str, int] = {
+        iface.name: iface.dot1q_vlan
+        for iface in intent.interfaces if iface.dot1q_vlan is not None
+    }
+    named_by_tag = target_codec.units_are_named_by_their_tag
 
     def kind_of(name: str) -> str:
         try:
@@ -1156,6 +1169,22 @@ def translate_port_names(  # noqa: C901
             port = one_way.get(fold) or mapped_one_way.get(fold) or port
         return port, unit
 
+    def say_if_an_entry_moves_the_tag(name: str, out: str) -> None:
+        """An entry decides the name, and on a target whose name is
+        the tag that can be another VLAN than the source config
+        tags.  Written as named, and said."""
+        if not named_by_tag or name not in tags:
+            return
+        split = split_unit(out)
+        if split is not None and split[1] == str(tags[name]):
+            return
+        warnings.append(
+            f"port_rename: the entry for {name!r} names it {out!r}; on "
+            f"{target_codec.name} the number after the dot is the VLAN "
+            f"a sub-interface carries, and the source config tags it "
+            f"{tags[name]} — name it '<port>.{tags[name]}' to keep its tag"
+        )
+
     def resolve(name: str) -> str:
         # Idempotent + cached: resolving the same input twice returns
         # the same output without re-classifying.
@@ -1173,6 +1202,7 @@ def translate_port_names(  # noqa: C901
             memo[name] = out
             if out != name:
                 applied[name] = out
+            say_if_an_entry_moves_the_tag(name, out)
             return out
         # A sub-interface goes where its port goes.  No classifier
         # keeps a unit: asked, it either folds the name onto the port
@@ -1195,7 +1225,10 @@ def translate_port_names(  # noqa: C901
                 auto_dropped.add(name)
                 memo[name] = name
                 return name
-            out = f"{where}.{unit}"
+            # The target's number after the dot may be the VLAN it
+            # carries (VyOS ``vif``): sent with its unit number, a
+            # Junos ``unit 100 vlan-id 200`` was ``vif 100``.
+            out = f"{where}.{tags[name] if named_by_tag and name in tags else unit}"
             memo[name] = out
             if out != name:
                 applied[name] = out
@@ -1205,7 +1238,7 @@ def translate_port_names(  # noqa: C901
                 # port is dropped, and the unit with it).  The unit
                 # went where the port went, which is nowhere.
                 untranslated[name] = None
-            if not same_codec and name not in tagged:
+            if not same_codec and name not in tags:
                 # Its name says which port it is on; its tag is a
                 # field, and there is none.  Not said between two
                 # configs of one codec, where a unit is written as
