@@ -506,6 +506,30 @@ timestamp if your timezone matters for an audit.
   RouterOS renderer already did.  The OPNsense capability matrix says
   what moved: a VLAN's name is its device (`lossy`), its `<descr>` its
   description (`supported`).
+- **A VLAN's label was not its name onto a target whose VLAN has only
+  a name.**  RouterOS names a VLAN after its `/interface vlan`
+  (`clustervlan100`) and the label an operator typed is its
+  `comment=`, which the tree holds as the VLAN's description; since
+  the OPNsense VLAN device (above) an OPNsense VLAN is the same, named
+  after its device (`vlan0.10`) with its `<descr>` (`USER VLAN`) the
+  description.  IOS-XE CLI, NX-OS, EOS, AOS-S and Junos write one
+  label for a VLAN, its name, and no description: the label was not
+  in their output, and the name they wrote was a device name, or --
+  once the port translator had renamed that device to `Vlan10` -- a
+  name nothing else in the output held.  A target now says its VLAN
+  has only a name (`CodecBase.vlans_have_only_a_name`), and onto such
+  a target a VLAN whose name is empty or only the name of an
+  interface of the config is written with its description as its
+  name (`_vlan_labels.py`): `name USER VLAN`, `USER_VLAN` on EOS,
+  `set vlans "USER VLAN"` on Junos.  The rule is applied in
+  `run_plan` before the port translator and at the render boundary,
+  and moves the label rather than copying it, so the job no longer
+  lists `/vlans/vlan/description` as a loss for a label that is in
+  the output.  A name of the VLAN's own (an AOS-CX `name`) is kept,
+  and the description beside it is still listed.  The reconciler
+  reads the move as preserved (`_vlan_label_moved`).  The RouterOS
+  capability matrix said the parser maps a `comment=` to the VLAN's
+  name; it maps it to the description, and the reason now says so.
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
@@ -3683,17 +3707,24 @@ timestamp if your timezone matters for an audit.
 - **An OPNsense 802.1ad (QinQ) device is not translated.**  It is left
   out with its zone and what rides on it, and said in a row: the
   canonical tree holds no 802.1ad tag.
-- **An OPNsense VLAN's label is not in the output onto most other
-  vendors.**  An OPNsense `<vlan>` has no name of its own: its label
-  is its `<descr>`, which the tree holds as the VLAN's description,
-  the VLAN named after its device (`vlan0.10`).  IOS-XE CLI, NX-OS,
-  EOS, Junos and FortiOS write no description for a VLAN, AOS-S and
-  OS10 have one label for it, which holds the name, and RouterOS
-  gives a VLAN interface's one `comment=` to the interface's own
-  description: onto those the label (`USER VLAN`) is not in the
-  output, and the job lists `/vlans/vlan/description` as a loss for
-  each VLAN.  Until this change the label was the VLAN's name there.
-  AOS-CX writes both.
+- **An OPNsense VLAN's label is not in the output onto FortiOS, OS10
+  or RouterOS.**  An OPNsense `<vlan>` has no name of its own: its
+  label is its `<descr>`, which the tree holds as the VLAN's
+  description, the VLAN named after its device (`vlan0.10`).  FortiOS
+  writes no description for a VLAN, OS10 has one label for it, which
+  holds the name, and RouterOS gives a VLAN interface's one
+  `comment=` to the interface's own description: onto those the
+  label (`USER VLAN`) is not in the output, and the job lists
+  `/vlans/vlan/description` as a loss for each VLAN.  Until the
+  OPNsense VLAN device (Fixed, above) the label was the VLAN's name
+  there.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S and Junos it is the
+  VLAN's name (Fixed, above); AOS-CX writes both.
+- **Onto OS10 a VLAN's name is not written where the config has that
+  VLAN's SVI.**  OS10 has one label for a VLAN, its SVI's
+  `description`, and the renderer writes the VLAN's name there only
+  on an SVI it makes for the VLAN: IOS-XE `vlan 10` / `name USERS`
+  with an `interface Vlan10` comes out with no `USERS`, in a job
+  that says `completed`.
 - **A VLAN onto OPNsense keeps one label.**  An OPNsense `<vlan>`
   has one, `<descr>`: the renderer writes the VLAN's description
   there, or its name where it has none, so a VLAN with both loses its

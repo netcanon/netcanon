@@ -336,10 +336,12 @@ class MikroTikRouterOSCodec(CodecBase):
             LossyPath(
                 path="/vlans/vlan/description",
                 reason=(
-                    "RouterOS exposes a single per-VLAN ``comment`` field, "
-                    "which the parser maps to the VLAN name; a separate "
-                    "description collides with it on render and may be "
-                    "conflated with the name."
+                    "RouterOS has one label for a VLAN, the ``comment=`` "
+                    "of its /interface vlan.  The parser reads it as the "
+                    "description of the VLAN and of its interface; the "
+                    "render writes the interface's description there (for "
+                    "a VLAN with no interface, the VLAN's name), so a "
+                    "VLAN's own description is not written."
                 ),
                 severity="warn",
             ),

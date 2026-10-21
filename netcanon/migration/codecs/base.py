@@ -305,6 +305,21 @@ class CodecBase(ABC):
     #: name, which is every other platform that ships.
     ports_keep_a_factory_name: ClassVar[bool] = False
 
+    #: This platform's VLAN has a name and no label apart from it, so
+    #: the renderer writes ``CanonicalVlan.name`` and nothing of
+    #: ``.description`` (IOS-XE, NX-OS, EOS and AOS-S ``name``, Junos
+    #: ``set vlans <name>``).  Where a VLAN's name is only the name of an
+    #: interface of the config, or empty, and it has a description, the
+    #: description is written as its name
+    #: (:mod:`netcanon.migration._vlan_labels`): applied by
+    #: ``run_plan`` before the port translator, and by the render
+    #: boundary below.  ``False`` where the VLAN has a label of its own
+    #: (OPNsense, AOS-CX), where its name is an interface name other
+    #: lines refer to (FortiOS, RouterOS), or where no VLAN name is
+    #: written; ``test_a_vlan_label_is_its_name.py`` names each codec
+    #: that leaves it ``False`` and why.
+    vlans_have_only_a_name: ClassVar[bool] = False
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Wrap each subclass's ``parse`` at the class boundary so a pydantic
         ``ValidationError`` raised while building a canonical model surfaces
@@ -322,7 +337,10 @@ class CodecBase(ABC):
         what it is about to make without being handed anything, the
         finished tree is counted whoever made it, and the length of
         every output is held to the limit.  A caller that opened no
-        scope is counted against the standard limits.
+        scope is counted against the standard limits.  And on a
+        target whose VLAN has only a name, the tree a ``render`` is
+        handed has its VLAN labels as names first
+        (``vlans_have_only_a_name``), whoever calls it.
 
         Applied only to a subclass that DEFINES ``parse`` (or ``render``)
         in its own body (inherited implementations are already wrapped on
@@ -366,6 +384,10 @@ class CodecBase(ABC):
         def _wrapped_render(self: CodecBase, tree: Any) -> str:
             codec_name = getattr(self, "name", None) or cls.__name__
             with metered("render", codec_name) as meter:
+                if self.vlans_have_only_a_name:
+                    from .._vlan_labels import vlan_labels_as_names
+
+                    tree = vlan_labels_as_names(tree)
                 rendered = raw_render(self, tree)
                 if isinstance(rendered, str):
                     meter.settle("text", len(rendered))

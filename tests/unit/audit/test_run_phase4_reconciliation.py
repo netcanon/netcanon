@@ -1188,3 +1188,81 @@ def test_slim_for_commit_keeps_codec_bug_drops_lower_severity() -> None:
     # The input result is not mutated.
     assert len(result["cells"]) == 3
     assert "latest_json_slimmed" not in result
+
+
+# ---------------------------------------------------------------------------
+# A VLAN's label written as its name.
+#
+# A target whose VLAN has only a name writes a VLAN's description as its
+# name where the name is only an interface's (``_vlan_labels``): the
+# source's ``vlan0.10`` / ``USER VLAN`` comes back as ``USER VLAN`` and no
+# description.  ``vlans[].name`` stays ALIGNED; every other shape of the
+# two fields is drift.
+# ---------------------------------------------------------------------------
+
+
+def _vlan_cell(record_diffs: dict) -> dict:
+    return {
+        "fixture": "f.xml",
+        "fixture_kind": "real",
+        "source_codec": "opnsense",
+        "target_codec": "cisco_iosxe_cli",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "vlans": {
+                "preserved": False,
+                "source_count": 1,
+                "target_count": 1,
+                "drift": {"vlans[0] {'id': 10}": record_diffs},
+            },
+        },
+    }
+
+
+_VLAN_NAME_GOOD = {"per_field_expectation": {"vlans[].name": {"disposition": "good"}}}
+
+
+@pytest.mark.parametrize("record_diffs", [
+    pytest.param(
+        {"name": {"source": "vlan0.10", "target": "USER VLAN"},
+         "description": {"source": "USER VLAN", "target": ""}},
+        id="device-name-gives-way-to-the-label",
+    ),
+    pytest.param(
+        {"name": {"source": "", "target": "Printers"},
+         "description": {"source": "Printers", "target": None}},
+        id="no-name-at-all",
+    ),
+])
+def test_a_vlan_label_written_as_its_name_is_preserved(record_diffs: dict) -> None:
+    result = reconcile_cell(_vlan_cell(record_diffs), _VLAN_NAME_GOOD)
+    assert result["field_variances"]["vlans[].name"]["variance"] == recon.VAR_ALIGNED
+
+
+@pytest.mark.parametrize("record_diffs", [
+    pytest.param(
+        {"name": {"source": "vlan0.10", "target": "USERS"}},
+        id="a-name-from-nowhere",
+    ),
+    pytest.param(
+        {"name": {"source": "vlan0.10", "target": "USER_VLAN"},
+         "description": {"source": "USER VLAN", "target": ""}},
+        id="the-label-as-another-name",
+    ),
+    pytest.param(
+        {"name": {"source": "vlan0.10", "target": "USER VLAN"},
+         "description": {"source": "USER VLAN", "target": "USER VLAN"}},
+        id="the-description-stayed-too",
+    ),
+    pytest.param(
+        {"name": {"source": "vlan0.10", "target": ""},
+         "description": {"source": "", "target": ""}},
+        id="a-blank-label",
+    ),
+])
+def test_any_other_vlan_name_drift_is_still_drift(record_diffs: dict) -> None:
+    result = reconcile_cell(_vlan_cell(record_diffs), _VLAN_NAME_GOOD)
+    entry = result["field_variances"]["vlans[].name"]
+    assert entry["variance"] == recon.VAR_CODEC_BUG
+    assert list(entry["drift_detail"]["per_record"]) == ["vlans[0] {'id': 10}"]

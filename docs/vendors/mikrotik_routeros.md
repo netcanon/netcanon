@@ -250,6 +250,17 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   the renderer chooses: the config's one port with an address or an
   allowed list, or a `bridge1` it adds where there is not exactly
   one.
+- **A VLAN's `comment=` is its label.**  RouterOS names a VLAN after
+  its `/interface vlan` (`vlan10`, `clustervlan100`), and the parser
+  reads the `comment=` as the description of the VLAN and of the
+  interface.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S and Junos, which
+  write one label for a VLAN, the comment is written as the VLAN's
+  name (`name Cluster`; spaces become `_` on EOS, and Junos quotes a
+  name that has one); a VLAN with no comment is named after its
+  interface.  The comment is also the VLAN interface's description,
+  and a target that writes that interface writes it there (FortiOS
+  as its `alias`); a VLAN's own description apart from it is not
+  written onto RouterOS.
 - **6.x vs 7.x grammar drift** — RouterOS 7 reorganises some
   sections (`/snmp` vs `/snmp community`, `/routing/bgp/instance`
   vs `/routing bgp instance`); the parser handles both.

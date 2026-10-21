@@ -256,6 +256,48 @@ _LAG_NAME_FIELDS: frozenset[str] = frozenset({
 })
 
 
+def _vlan_label_moved(record_diffs: dict[str, Any]) -> bool:
+    """True iff a VLAN record's ``name`` drift is its label, written
+    as its name.
+
+    A target whose VLAN has only a name writes a VLAN's description
+    as its name where the name is only the name of an interface of
+    the config, or empty (``netcanon/migration/_vlan_labels.py``):
+    the source holds the interface's name (``vlan0.10``) and the
+    label (``USER VLAN``) as its description, the target reads back
+    that label as the name and no description.  The interface keeps
+    the name it had.  Any other pair of values (a name that is not
+    the label as it was stated, a description that came back as
+    well) is not equivalent and surfaces as drift.
+
+    Args:
+        record_diffs: One record's Phase 1 diffs, keyed by sub-field,
+            each ``{"source": ..., "target": ...}``.
+
+    Returns:
+        ``True`` when the record's name drift is that move.
+    """
+    name = record_diffs.get("name")
+    description = record_diffs.get("description")
+    if not isinstance(name, dict) or not isinstance(description, dict):
+        return False
+    label = description.get("source")
+    return (
+        isinstance(label, str)
+        and bool(label.strip())
+        and not description.get("target")
+        and name.get("target") == label
+    )
+
+
+#: YAML field-keys whose per-record drift is read with the WHOLE
+#: record's diffs, for a value one side holds in a sibling field.
+#: See :func:`_vlan_label_moved`.
+_RECORD_EQUIVALENCES: dict[str, Callable[[dict[str, Any]], bool]] = {
+    "vlans[].name": _vlan_label_moved,
+}
+
+
 # ---------------------------------------------------------------------------
 # Variance derivation (the single load-bearing decision in this module)
 # ---------------------------------------------------------------------------
@@ -441,6 +483,7 @@ def _subfield_drift_in_list(
     subfield: str,
     *,
     equivalence: Callable[[dict[str, Any]], bool] | None = None,
+    record_equivalence: Callable[[dict[str, Any]], bool] | None = None,
 ) -> bool | None:
     """For a list-of-records canonical field (e.g. ``interfaces``,
     ``vlans``), determine whether a specific sub-field (e.g. ``name``,
@@ -473,6 +516,15 @@ def _subfield_drift_in_list(
             per-record diffs that satisfy the equivalence are skipped
             so they don't fire drift.  See :data:`_LAG_NAME_FIELDS` /
             :func:`_canonical_lag_name` for the LAG case.
+        record_equivalence: Optional callable mapping one record's
+            whole diffs dict to ``True`` when the sub-field's drift is
+            a value the record holds in another field (see
+            :data:`_RECORD_EQUIVALENCES`).  Such records are skipped
+            too.
+
+    Returns:
+        ``True`` if the sub-field drifted on a record no equivalence
+        accounts for, ``False`` otherwise.
     """
     if parent_record.get("preserved"):
         return False
@@ -492,6 +544,10 @@ def _subfield_drift_in_list(
             slice_ = record_diffs[subfield]
             if isinstance(slice_, dict) and equivalence(slice_):
                 continue
+        if record_equivalence is not None and record_equivalence(
+            record_diffs,
+        ):
+            continue
         return True
     # Drift dict exists but doesn't mention this sub-field — it was
     # preserved across every record that drifted on OTHER fields.
@@ -588,12 +644,15 @@ def actual_disposition(
             if yaml_field_key in _LAG_NAME_FIELDS
             else None
         )
+        record_equivalence = _RECORD_EQUIVALENCES.get(yaml_field_key)
         sub_drifted = _subfield_drift_in_list(
             parent, subfield, equivalence=equivalence,
+            record_equivalence=record_equivalence,
         )
         if sub_drifted:
             return "drifted", _slice_list_subfield(
                 parent, subfield, equivalence=equivalence,
+                record_equivalence=record_equivalence,
             )
         # Cascade Wave 10α's TRIVIAL_EMPTY signal to sub-fields: if the
         # parent list is empty on both sides, every sub-field thereof
@@ -695,6 +754,7 @@ def _slice_list_subfield(
     subfield: str,
     *,
     equivalence: Callable[[dict[str, Any]], bool] | None = None,
+    record_equivalence: Callable[[dict[str, Any]], bool] | None = None,
 ) -> dict[str, Any]:
     """Build a compact drift-detail snippet for a list sub-field — the
     per-record diffs filtered down to just the requested attribute.
@@ -724,6 +784,10 @@ def _slice_list_subfield(
             equivalence is not None
             and isinstance(slice_, dict)
             and equivalence(slice_)
+        ):
+            continue
+        if record_equivalence is not None and record_equivalence(
+            record_diffs,
         ):
             continue
         per_record[record_key] = slice_

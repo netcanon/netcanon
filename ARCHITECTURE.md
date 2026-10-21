@@ -852,6 +852,29 @@ in hostname / domain / VRF-name tokens; renderers call
 target's own parser.  Source state preserved on canonical, sanitised
 only at the wire boundary.
 
+**A VLAN's label as its name** (`netcanon/migration/_vlan_labels.py`).
+OPNsense and RouterOS have no name for a VLAN of its own: the tree
+names it after its interface (`vlan0.10`, `vlan10`) and holds the
+label an operator typed (an OPNsense `<descr>`, a RouterOS
+`comment=`) as its description.  IOS-XE CLI, NX-OS, EOS, AOS-S and
+Junos write one label for a VLAN, its name, and say so
+(`CodecBase.vlans_have_only_a_name`).  Onto those,
+`vlan_labels_as_names` MOVES a VLAN's description into its name
+where the name is empty or only the name of an interface of the
+config; a name of the VLAN's own (an AOS-CX `name`) is kept, and its
+description stays the loss the matrix declares.  It is applied
+twice: in `run_plan` before the transforms, since the port
+translator renames the interface and leaves the VLAN's name, which
+then matches nothing; and at the render boundary
+(`CodecBase.render`), on a copy, for a tree that did not come
+through the pipeline.  Moved, not copied: the job's validation then
+lists no description loss for a label that is in the output.
+FortiOS, RouterOS and OS10 are not among them -- a VLAN is an
+interface whose name other lines refer to, or (OS10) the name is
+written only as the description of an SVI the renderer makes --
+and `tests/unit/migration/test_a_vlan_label_is_its_name.py` names
+every public codec that is not, with its reason.
+
 **Switchport ↔ VLAN projection**
 (`netcanon/migration/canonical/transforms.py`).  The
 canonical model carries L2 membership both ways: per-iface
@@ -2010,7 +2033,12 @@ normally.  Added in commit `faf925f` (Wave 9β); the variance-class
 set was 7 at that time — TRIVIAL_EMPTY landed later in Wave 10α
 (commit `35c7bf0`).  The LAG equivalence callable just shifts where
 individual cells land between ALIGNED and CODEC_BUG; it doesn't add
-or remove a class.
+or remove a class.  One equivalence reads a record's whole diffs
+rather than one value (`_RECORD_EQUIVALENCES`): `vlans[].name` is
+preserved where the record's name drift is its non-blank description
+written as its name, with no description back (`_vlan_label_moved`;
+the move is `_vlan_labels`, above).  The label is in the output
+either way; any other pair of values is drift.
 
 Per-source-vendor investigation reports under
 `tests/fixtures/real/phase4_findings_<vendor>.md` carry per-cell
