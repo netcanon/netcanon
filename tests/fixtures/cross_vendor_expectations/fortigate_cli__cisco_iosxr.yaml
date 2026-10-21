@@ -251,9 +251,10 @@ per_field_expectation:
       individually truthful: cisco_iosxr declares `/vlans/vlan/id` and
       `/vlans/vlan/name` supported but scopes that, in its own supported-path
       comment, to VLANs SYNTHESISED from `encapsulation dot1q <tag>` on a
-      routed sub-interface; fortigate_cli declares
-      `/interfaces/interface/dot1q-vlan` unsupported and sets `dot1q_vlan` on
-      none of the 86 source interface records.  FortiOS carries the tag on
+      routed sub-interface; fortigate_cli sets `dot1q_vlan` on none of the
+      86 source interface records (it declares
+      `/interfaces/interface/dot1q-vlan` lossy, for its render of another
+      vendor's sub-interface).  FortiOS carries the tag on
       the VLAN record itself (`set type vlan` + `set vlanid <N>`), so the
       only path by which XR could re-emit a VLAN is the one the source never
       populates.  Recorded `unsupported` rather than `lossy` because a

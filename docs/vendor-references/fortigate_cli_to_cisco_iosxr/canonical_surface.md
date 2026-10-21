@@ -77,8 +77,10 @@ precisely because both matrices are individually truthful:
   — but its own supported-path comment scopes that to VLANs *synthesised from
   `encapsulation dot1q <tag>` on a routed sub-interface* ("no port
   membership; name always empty").
-- `fortigate_cli` declares `/interfaces/interface/dot1q-vlan` **unsupported**,
-  and sets `dot1q_vlan` on **none** of the 86 source interface records.
+- `fortigate_cli` sets `dot1q_vlan` on **none** of the 86 source interface
+  records.  (It declares `/interfaces/interface/dot1q-vlan` lossy, for its
+  render of another vendor's sub-interface; its parser keeps a VLAN
+  interface's tag on the VLAN record.)
 
 FortiOS carries the tag on the VLAN record itself (`set type vlan` +
 `set vlanid 100` under `config system interface`). The only path by which
@@ -141,8 +143,11 @@ parser infers type from a name prefix and FortiGate names (`port1`, `dmz`,
 *source* it never emits them:
 
 `/system/timezone` · `/system/syslog-server` · `/routing-instances/instance`
-· `/vlans/vlan/tagged-ports` · `/vlans/vlan/untagged-ports` ·
-`/interfaces/interface/dot1q-vlan`
+· `/vlans/vlan/tagged-ports` · `/vlans/vlan/untagged-ports`
+
+`/interfaces/interface/dot1q-vlan` is declared lossy, for the render of
+another vendor's sub-interface; as a source the parser sets it on no
+record either.
 
 Two of those are worth separating from the rest, because the device config
 *does* carry the data and the codec drops it at parse time — verified by

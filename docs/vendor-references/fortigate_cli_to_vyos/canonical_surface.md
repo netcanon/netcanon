@@ -66,9 +66,9 @@ independently.
 Be precise about what does survive: the FortiGate VLAN child-interface `VL_100`
 comes back as an interface record called `VL_100` with its `192.168.100.1/24`
 intact. **The INTERFACE survives; the VLAN DATABASE RECORD does not** — and
-neither does the 802.1Q tag, because *both* codecs declare
-`/interfaces/interface/dot1q-vlan` unsupported. The migrated box has an
-interface named after a VLAN that is not on a VLAN.
+neither does the 802.1Q tag: the FortiGate parser keeps it on the VLAN
+record, which VyOS has no form for, and sets no interface's `dot1q_vlan`.
+The migrated box has an interface named after a VLAN that is not on a VLAN.
 
 ## Per-field measurement (4 cells)
 
@@ -132,8 +132,12 @@ for a reason that is entirely about naming.
 `/vxlan-vnis/{vni,source-interface,udp-port}` ·
 `/routing-instances/instance` · `/routing-instances/instance/instance-type` ·
 `/anycast-gateway-mac` · `/system/timezone` · `/system/syslog-server` ·
-`/interfaces/interface/{dot1q-vlan,trunk-allowed-vlans}` ·
+`/interfaces/interface/trunk-allowed-vlans` ·
 `/vlans/vlan/{tagged-ports,untagged-ports}`
+
+`/interfaces/interface/dot1q-vlan` is declared lossy, for the render of
+another vendor's sub-interface; as a source the parser sets it on no
+record either.
 
 Neither codec declares any `/evpn-type5-routes/*` path at all, and neither
 declares `/apply-groups` or `/group-content`; all three are empty on every cell.

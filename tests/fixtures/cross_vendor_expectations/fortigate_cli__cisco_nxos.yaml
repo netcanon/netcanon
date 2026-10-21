@@ -222,7 +222,8 @@ per_field_expectation:
   "interfaces[].dot1q_vlan":
     disposition: not_applicable
     note: >
-      Declared unsupported by the FortiGate matrix and never populated.
+      Never populated by the FortiGate parser (the matrix declares the path
+      lossy, for its render of another vendor's sub-interface).
       FortiOS models a tagged routed sub-interface as a child interface with
       `set type vlan / set vlanid <N>`, which the codec projects onto the
       `vlans` list rather than onto this field.
