@@ -873,7 +873,16 @@ lists no description loss for a label that is in the output.
 FortiOS and RouterOS are not among them -- a VLAN is an interface
 whose name other lines refer to -- and
 `tests/unit/migration/test_a_vlan_label_is_its_name.py` names
-every public codec that is not, with its reason.
+every public codec that is not, with its reason.  Their one
+label for a VLAN is its interface's (`set alias`, `comment=`),
+and their renderers ask `vlan_labels` what the config calls each
+VLAN: written there where the interface states no description of
+its own, and in a review line beside it where it does.  They ask
+after the port translator, which renames the interface and not
+the VLAN, so whether a VLAN's name is only an interface's is read
+from the platform the tree was parsed from
+(`NAMES_A_VLAN_AFTER_ITS_INTERFACE`: OPNsense, RouterOS, FortiOS),
+not from the tree.
 
 **Switchport ↔ VLAN projection**
 (`netcanon/migration/canonical/transforms.py`).  The
@@ -2038,7 +2047,15 @@ rather than one value (`_RECORD_EQUIVALENCES`): `vlans[].name` is
 preserved where the record's name drift is its non-blank description
 written as its name, with no description back (`_vlan_label_moved`;
 the move is `_vlan_labels`, above).  The label is in the output
-either way; any other pair of values is drift.
+either way; any other pair of values is drift.  And
+`interfaces[].description` is preserved where an interface that
+had none comes back with its VLAN's name, on a target whose VLAN
+is that interface (`_vlan_label_on_its_interface`): the cell's
+VLAN renamed after the interface must have come back with the
+same text as its description, and had it as its name -- or the
+start of it, an alias holding fewer characters.  Read per record,
+not declared per pair, so a description lost on any other
+interface of the cell still surfaces.
 
 Per-source-vendor investigation reports under
 `tests/fixtures/real/phase4_findings_<vendor>.md` carry per-cell

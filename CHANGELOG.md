@@ -556,6 +556,35 @@ timestamp if your timezone matters for an audit.
   one interface, applied the description of the stanza written
   last -- the SVI's own -- in place of the VLAN's name, with nothing
   said.  An SVI is now what the OS10 parser reads as one.
+- **A VLAN's label was not written onto RouterOS or FortiOS where
+  the config has the VLAN's interface, and FortiOS's own was not
+  read as one.**  On both a VLAN is an interface (`/interface
+  vlan`, `set type vlan`) with one label, its `comment=` or `set
+  alias`.  The renderers wrote the interface's own description
+  there and nothing else: IOS-XE `vlan 10` / `name USERS` beside an
+  `interface Vlan10` came out with no `USERS`, and an OPNsense
+  `<descr>` was lost on both, in jobs that said `completed`.
+  FortiOS wrote no alias for a VLAN it makes an interface for
+  either, and its matrix listed `/vlans/vlan/name` as supported.
+  The interface's own description is now written there where it
+  states one, and otherwise the VLAN's label (`vlan_labels` in
+  `_vlan_labels.py`: its name where the source chose one, else its
+  description); where the interface has a description of its own,
+  the label is written in a `# review:` line beside it, and the
+  FortiOS matrix lists `/vlans/vlan/name` as lossy (warn), as
+  RouterOS's does.  An alias holds 25 characters.  The FortiOS parser
+  read a VLAN interface's alias as the interface's description
+  only; it is the VLAN's too now, as a RouterOS `comment=` is, so
+  `edit "VL_100"` / `set alias "Users"` / `set vlanid 100` is
+  `name Users` onto IOS-XE, where it was `name VL_100`.  Whether a
+  VLAN's name is only its interface's is read from the platform
+  the tree was parsed from (`NAMES_A_VLAN_AFTER_ITS_INTERFACE`):
+  the port translator renames the interface and not the VLAN, so
+  after it OPNsense's `vlan0.60` names no interface, and the tree
+  alone cannot tell it from a name an operator chose.  The
+  reconciler reads an interface that had no description and comes
+  back with its VLAN's name as preserved
+  (`_vlan_label_on_its_interface`).
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
@@ -3733,17 +3762,19 @@ timestamp if your timezone matters for an audit.
 - **An OPNsense 802.1ad (QinQ) device is not translated.**  It is left
   out with its zone and what rides on it, and said in a row: the
   canonical tree holds no 802.1ad tag.
-- **An OPNsense VLAN's label is not in the output onto FortiOS or
-  RouterOS.**  An OPNsense `<vlan>` has no name of its own: its
+- **An OPNsense VLAN's label is only in a review line onto FortiOS
+  or RouterOS where its device is assigned to a zone with a
+  `<descr>`.**  An OPNsense `<vlan>` has no name of its own: its
   label is its `<descr>`, which the tree holds as the VLAN's
-  description, the VLAN named after its device (`vlan0.10`).  FortiOS
-  writes no description for a VLAN, and RouterOS gives a VLAN
-  interface's one `comment=` to the interface's own description:
-  onto those the label (`USER VLAN`) is not in the output, and the
-  job lists `/vlans/vlan/description` as a loss for each VLAN.
-  Until the OPNsense VLAN device (Fixed, above) the label was the
-  VLAN's name there.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and
-  OS10 it is the VLAN's name (Fixed, above); AOS-CX writes both.
+  description, the VLAN named after its device (`vlan0.10`).
+  FortiOS and RouterOS have one label for a VLAN, its interface's
+  alias or `comment=`, and give it to the interface's own
+  description, which is the zone's: where the zone states one, the
+  VLAN's label is in a `# review:` line beside it, and the job
+  lists `/vlans/vlan/description` as a loss.  Where it states none,
+  the label is the alias or `comment=` (Fixed, above).  Onto IOS-XE
+  CLI, NX-OS, EOS, AOS-S, Junos and OS10 it is the VLAN's name
+  (Fixed, above); AOS-CX writes both.
 - **Onto OS10 a VLAN's name and its SVI's own description are one
   label.**  OS10 has one label for a VLAN, its SVI's `description`.
   Where the source's SVI has a description of its own that is not

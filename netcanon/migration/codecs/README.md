@@ -548,7 +548,13 @@ the policy locally:
 
 * **`netcanon/migration/_vlan_labels.py`** — a VLAN's label as its
   name.  Public API: `vlan_labels_as_names(tree)`,
-  `label_is_its_name(vlan, interface_names)`.  A codec whose VLAN has
+  `label_is_its_name(vlan, interface_names)`, `vlan_labels(tree)`,
+  `NAMES_A_VLAN_AFTER_ITS_INTERFACE`.  A renderer whose VLAN is an
+  interface (RouterOS, FortiOS) asks `vlan_labels` for each VLAN's
+  label and writes it as the interface's where the interface states
+  no description; a parser that names every VLAN after its interface
+  is in the set, which a test holds equal to the parsers that do so
+  on the committed captures.  A codec whose VLAN has
   only a name sets `vlans_have_only_a_name = True` in its class body
   and calls nothing: `run_plan` and `CodecBase.render` apply the rule
   (a VLAN named after an interface of the config, or not named, is

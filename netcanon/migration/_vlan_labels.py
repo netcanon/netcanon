@@ -30,6 +30,17 @@ a no-op on a tree the first has seen.  The label is MOVED: the
 description is emptied, so the validation report does not count it
 lost, and the name it replaces is the name of an interface that still
 has it.
+
+A target whose VLAN IS an interface (RouterOS ``/interface vlan``,
+FortiOS ``set type vlan``) names it as an interface and labels it as
+one, with ``comment=`` or ``set alias``.  Its renderer writes the
+interface's own description there and, where the interface states
+none, the VLAN's label (:func:`vlan_labels`); where the interface has a
+description of its own, the label is written in a review line beside
+it.  The renderer asks after the port translator, which renames the
+interface and leaves the VLAN's name as it was, so "the name is an
+interface's" cannot be read from the tree there: it is read from the
+platform the tree was parsed from (``NAMES_A_VLAN_AFTER_ITS_INTERFACE``).
 """
 
 from __future__ import annotations
@@ -38,6 +49,51 @@ from collections.abc import Set as AbstractSet
 from typing import Any
 
 from .canonical.intent import CanonicalIntent, CanonicalVlan
+
+#: The platforms (``CanonicalIntent.source_vendor``) whose parser names
+#: every VLAN after the interface it is defined on: OPNsense after its
+#: device (``vlan0.10``), RouterOS and FortiOS after the VLAN
+#: interface.  On their trees a VLAN's name is never a label, though
+#: once the port translator has renamed the interface it is the name of
+#: none.  Measured, not assumed: ``test_a_vlan_label_on_its_interface.py``
+#: holds the set equal to the parsers that do so on the committed
+#: captures.
+NAMES_A_VLAN_AFTER_ITS_INTERFACE = frozenset({
+    "fortigate", "mikrotik_routeros", "opnsense",
+})
+
+
+def vlan_labels(tree: CanonicalIntent) -> dict[int, str]:
+    """What the config calls each VLAN of *tree*, apart from an
+    interface's name, by VLAN id.
+
+    A VLAN's name, where the config chose one: not empty, not the name
+    of an interface of *tree*, and from a platform that does not name
+    a VLAN after its interface.  Otherwise its description.  A VLAN
+    with both a name and a description of its own (AOS-CX) is called
+    by its name; its description is lost on a target with one label,
+    as that target's matrix declares.  The first VLAN of an id is the
+    one asked, as the renderers find a VLAN by its id.
+
+    Args:
+        tree: The tree being rendered, after any transform.
+
+    Returns:
+        ``{VLAN id: label}``, the label ``""`` where a VLAN has none.
+    """
+    names = {iface.name for iface in tree.interfaces}
+    named_after_one = tree.source_vendor in NAMES_A_VLAN_AFTER_ITS_INTERFACE
+    labels: dict[int, str] = {}
+    for vlan in tree.vlans:
+        if vlan.id in labels:
+            continue
+        if vlan.name.strip() and not named_after_one and vlan.name not in names:
+            labels[vlan.id] = vlan.name
+        elif vlan.description.strip():
+            labels[vlan.id] = vlan.description
+        else:
+            labels[vlan.id] = ""
+    return labels
 
 
 def label_is_its_name(vlan: CanonicalVlan, interface_names: AbstractSet[str]) -> bool:

@@ -23,6 +23,13 @@ same VIP-row pattern for ``v3-protocol=ipv6`` groups), ``/ip route``,
 ``/system dns``, ``/system ntp client``.  Non-``vrrp`` modes (HSRP /
 CARP / anycast) surface as ``# review:`` comments and skip.
 
+A VLAN is an ``/interface vlan``, and its one label is the interface's
+``comment=``: the interface's own description where it states one,
+and otherwise the VLAN's label (``_vlan_labels.vlan_labels``: an
+IOS-XE ``name``, an OPNsense ``<descr>``).  Where the interface has a
+description of its own, the VLAN's label is written in a ``# review:``
+line above it.
+
 Shared name/type helpers (``_is_ethernet_name``, ``_is_vlan_name``)
 live in :mod:`.parse` and are imported here — the README's split-codec
 guidance keeps those edges directional (parse → render is invalid;
@@ -44,6 +51,7 @@ from ..._radius_secrets import (
 )
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ..._usm_keys import user_usm_is_migratable, user_usm_kind
+from ..._vlan_labels import vlan_labels
 from ...canonical.intent import CanonicalIntent, CanonicalVlan
 from ...canonical.transforms import is_every_vlan
 from .._helpers import same_vendor_version
@@ -59,6 +67,14 @@ from .parse import (
 # ---------------------------------------------------------------------------
 # Render-only constants
 # ---------------------------------------------------------------------------
+
+#: Above a VLAN interface whose own description holds the one label
+#: RouterOS has, the label the source gives the VLAN.
+_LABEL_NOT_WRITTEN_REVIEW = (
+    "# review: VLAN {vid} is called {label} in the source; RouterOS "
+    "has one label for a VLAN interface, its comment, which holds the "
+    "description the source gives the interface -- choose which to keep"
+)
 
 
 _CANONICAL_MODE_TO_ROUTEROS_BONDING = {
@@ -547,14 +563,23 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     if vlan_ifaces or tree.vlans:
         lines.append("/interface vlan")
         rendered_vlan_ids: set[int] = set()
+        labels = vlan_labels(tree)
         for iface in vlan_ifaces:
             vid = _vlan_id_for(iface.name, tree.vlans)
             if vid is None:
                 # Can't render a VLAN interface without an id.
                 continue
+            # The interface's own description, and otherwise the
+            # VLAN's label: RouterOS has one for the two.
+            label = labels.get(vid, "")
+            comment = iface.description or (
+                label if label != iface.name else ""
+            )
+            if iface.description and label and label != iface.description:
+                lines.append(_LABEL_NOT_WRITTEN_REVIEW.format(vid=vid, label=label))
             parts = ["add"]
-            if iface.description:
-                parts.append(f'comment="{_escape(iface.description)}"')
+            if comment:
+                parts.append(f'comment="{_escape(comment)}"')
             # Bind to the parent the config states, and otherwise
             # to the one chosen above -- either an identified
             # source-side parent's renamed target name
@@ -580,8 +605,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 continue
             synthetic_name = f"vlan{vlan.id}"
             parts = ["add"]
-            if vlan.name and vlan.name != synthetic_name:
-                parts.append(f'comment="{_escape(vlan.name)}"')
+            label = labels.get(vlan.id, "")
+            if label and label != synthetic_name:
+                parts.append(f'comment="{_escape(label)}"')
             parts.append(f"interface={_quote_if_needed(vlan_parent_name)}")
             parts.append(f"name={synthetic_name}")
             parts.append(f"vlan-id={vlan.id}")

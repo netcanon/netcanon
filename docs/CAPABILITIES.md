@@ -388,6 +388,8 @@ text").
 | `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/description` | Lossy | FortiOS limits the interface alias to 25 characters; longer descriptions from other vendors are truncated. |
+| `/vlans/vlan/name` | Lossy | A FortiOS VLAN is an interface (`set type vlan`), and its name is that interface's, which other lines refer to.  Another platform's VLAN name is written as the interface's alias, which holds 25 characters, where the interface states no description of its own, and in a `# review:` line beside the alias where it does; the parser reads the alias as the VLAN's description. |
+| `/vlans/vlan/description` | Lossy | FortiOS has one label for a VLAN, the alias of its interface (25 characters).  The parser reads it as the description of the VLAN and of its interface; the render writes the interface's own description there, and otherwise the VLAN's label (its name where the source chose one, else its description).  A label the interface's own description displaces is written in a `# review:` line, and a VLAN description beside a name of its own is lost.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and OS10 the alias is written as the VLAN's name (see "Cross-paradigm exceptions"). |
 | `/interfaces/interface/config/type` | Lossy | FortiOS has no IANA `ifType`; inferred from `type vlan` sub-setting or name shape. |
 | `/filter/rule` | Unsupported | `config firewall policy` is Tier 3 — session-based, zone-aware, UTM-enabled semantics don't translate cleanly. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | `set auth-pwd "ENC <v>"` claims the value is encrypted under this FortiGate's key, true only of a value this device produced, so a key belonging to another agent is refused (review comment, no `edit` block).  A source passphrase is portable and is emitted WITHOUT the `ENC` prefix, which is how an operator types one and FortiOS encrypts it on save. |
@@ -405,8 +407,8 @@ text").
 | `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/type` | Lossy | RouterOS does not expose IANA `ifType`; codec infers it from interface-name prefix (`etherN` → ethernetCsmacd, `vlanN` → l3ipvlan). |
-| `/vlans/vlan/name` | Lossy | MikroTik stores a VLAN's name as the L3 interface name (e.g. `vlan10`), not a separate descriptive name field; cross-vendor rendering may conflate the two. |
-| `/vlans/vlan/description` | Lossy | RouterOS has one label for a VLAN, the `comment=` of its `/interface vlan`.  The parser reads it as the description of the VLAN and of its interface; the render writes the interface's description there (for a VLAN with no interface, the VLAN's name), so a VLAN's own description is not written.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and OS10 the comment is written as the VLAN's name (see "Cross-paradigm exceptions"). |
+| `/vlans/vlan/name` | Lossy | A RouterOS VLAN is an interface (`/interface vlan`), and its name is that interface's (`vlan10`), which other lines refer to.  Another platform's VLAN name is written as the interface's `comment=` where the interface states no description of its own, and in a `# review:` line above it where it does; the parser reads the comment as the VLAN's description. |
+| `/vlans/vlan/description` | Lossy | RouterOS has one label for a VLAN, the `comment=` of its `/interface vlan`.  The parser reads it as the description of the VLAN and of its interface; the render writes the interface's own description there, and otherwise the VLAN's label (its name where the source chose one, else its description).  A label the interface's own description displaces is written in a `# review:` line, and a VLAN description beside a name of its own is lost.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and OS10 the comment is written as the VLAN's name (see "Cross-paradigm exceptions"). |
 | `/filter/rule` | Unsupported | Firewall filter rules are Tier 3 (informational) and not auto-rendered. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | `authentication-password=` takes the operator's passphrase and RouterOS derives the localised USM key from it, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `add name=` line).  A source passphrase is portable and is emitted unchanged. |
 | `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — refused with the user unless it is a portable passphrase or came from RouterOS itself. |
@@ -2250,9 +2252,10 @@ matter; the matrix is honest about both.
   permits only `plaintext` for `mikrotik_routeros`.  Cross-vendor
   hashes always trigger a review comment.
 * **A VLAN's label on a target whose VLAN has only a name.**
-  OPNsense and RouterOS name a VLAN after its interface (`vlan0.10`,
-  `vlan10`); the label an operator typed (an OPNsense `<descr>`, a
-  RouterOS `comment=`) is the VLAN's description.  Onto
+  OPNsense, RouterOS and FortiOS name a VLAN after its interface
+  (`vlan0.10`, `vlan10`, `VL_10`); the label an operator typed (an
+  OPNsense `<descr>`, a RouterOS `comment=`, a FortiOS `alias`) is
+  the VLAN's description.  Onto
   `cisco_iosxe_cli`, `cisco_nxos`, `arista_eos`, `aruba_aoss`,
   `juniper_junos` and `dell_os10`, which write one label for a VLAN
   (on OS10 its SVI's `description`), a VLAN whose
@@ -2264,8 +2267,12 @@ matter; the matrix is honest about both.
   with a description of its own keeps it, and the VLAN's name is in
   a `! review:` line of its stanza (`/vlans/vlan/name`, lossy).
   `aruba_aoscx` and `opnsense` write both.  Onto `fortigate_cli` and
-  `mikrotik_routeros` the label is not written, and the job lists
-  `/vlans/vlan/description` as a loss.
+  `mikrotik_routeros`, whose VLAN is an interface, the label is the
+  interface's alias or `comment=` where the interface states no
+  description of its own (`vlan_labels`): an IOS-XE `name USERS`
+  beside an `interface Vlan10`.  Where it states one, the
+  interface keeps it and the label is in a `# review:` line beside
+  it (`/vlans/vlan/name` and `/vlans/vlan/description`, lossy).
 * **Aruba AOS-S as DHCP target.**  AOS-S is a DHCP relay platform
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP
   pools surface as a comment block, not as `dhcp-server pool`

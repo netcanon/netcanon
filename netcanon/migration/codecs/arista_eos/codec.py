@@ -212,7 +212,8 @@ class AristaEOSCodec(CodecBase):
                     "description line.  Where the VLAN's name is only the "
                     "name of an interface of the config, or empty, its "
                     "description is written as its name (_vlan_labels: an "
-                    "OPNsense <descr>, a RouterOS comment); any other "
+                    "OPNsense <descr>, a RouterOS comment, a FortiOS "
+                    "alias); any other "
                     "description drops on render (silent-loss guard, "
                     "Bucket-C stage 2)."
                 ),

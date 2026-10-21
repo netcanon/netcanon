@@ -1266,3 +1266,139 @@ def test_any_other_vlan_name_drift_is_still_drift(record_diffs: dict) -> None:
     entry = result["field_variances"]["vlans[].name"]
     assert entry["variance"] == recon.VAR_CODEC_BUG
     assert list(entry["drift_detail"]["per_record"]) == ["vlans[0] {'id': 10}"]
+
+
+# ---------------------------------------------------------------------------
+# A VLAN's label written on its interface.
+#
+# A target whose VLAN IS an interface (RouterOS ``/interface vlan``, FortiOS
+# ``set type vlan``) writes a VLAN's name as that interface's one label where
+# the interface states no description, and reads it back as the description
+# of the VLAN and of the interface: an SVI with no description comes back
+# with its VLAN's name.  ``interfaces[].description`` stays ALIGNED for that
+# record alone; a description the interface had of its own, or a text no VLAN
+# of it was named, is drift.
+# ---------------------------------------------------------------------------
+
+
+_SVI_KEY = "interfaces[3] {'name': 'Vlan10'}"
+
+
+def _svi_cell(interface_diffs: dict, vlan_drift: dict | None) -> dict:
+    vlans: dict = {"preserved": vlan_drift is None, "source_count": 1, "target_count": 1}
+    if vlan_drift is not None:
+        vlans["drift"] = vlan_drift
+    return {
+        "fixture": "f.cfg",
+        "fixture_kind": "real",
+        "source_codec": "cisco_nxos",
+        "target_codec": "fortigate_cli",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "interfaces": {
+                "preserved": False,
+                "source_count": 4,
+                "target_count": 4,
+                "drift": {_SVI_KEY: interface_diffs},
+            },
+            "vlans": vlans,
+        },
+    }
+
+
+def _vlan_named(source: str, target: str, description: str) -> dict:
+    return {"vlans[0] {'id': 10, 'name': '" + source + "'}": {
+        "name": {"source": source, "target": target},
+        "description": {"source": "", "target": description},
+    }}
+
+
+_IFACE_DESCRIPTION_GOOD = {
+    "per_field_expectation": {"interfaces[].description": {"disposition": "good"}},
+}
+
+_LONG = "BUILDING-B-SECOND-FLOOR-USERS"
+
+
+@pytest.mark.parametrize(("interface_diffs", "vlan_drift"), [
+    pytest.param(
+        {"description": {"source": "", "target": "USERS"}},
+        _vlan_named("USERS", "Vlan10", "USERS"),
+        id="the-vlans-name-on-its-svi",
+    ),
+    pytest.param(
+        {"name": {"source": "Vlan10", "target": "vlan10"},
+         "description": {"source": None, "target": "USERS"}},
+        _vlan_named("USERS", "vlan10", "USERS"),
+        id="on-the-svi-the-target-renamed",
+    ),
+    pytest.param(
+        {"description": {"source": "", "target": _LONG[:25]}},
+        _vlan_named(_LONG, "Vlan10", _LONG[:25]),
+        id="cut-to-what-an-alias-holds",
+    ),
+])
+def test_a_vlan_label_on_its_interface_is_preserved(
+    interface_diffs: dict, vlan_drift: dict,
+) -> None:
+    result = reconcile_cell(_svi_cell(interface_diffs, vlan_drift), _IFACE_DESCRIPTION_GOOD)
+    entry = result["field_variances"]["interfaces[].description"]
+    assert entry["variance"] == recon.VAR_ALIGNED
+
+
+@pytest.mark.parametrize(("interface_diffs", "vlan_drift"), [
+    pytest.param(
+        {"description": {"source": "camera gateway", "target": "USERS"}},
+        _vlan_named("USERS", "Vlan10", "USERS"),
+        id="a-description-of-its-own-replaced",
+    ),
+    pytest.param(
+        {"description": {"source": "", "target": "USERS"}},
+        None,
+        id="no-vlan-drift-to-read-it-from",
+    ),
+    pytest.param(
+        {"description": {"source": "", "target": "USERS"}},
+        _vlan_named("USERS", "Vlan20", "USERS"),
+        id="the-vlan-of-another-interface",
+    ),
+    pytest.param(
+        {"description": {"source": "", "target": "USERS"}},
+        _vlan_named("STAFF", "Vlan10", "USERS"),
+        id="a-text-the-vlan-was-not-named",
+    ),
+    pytest.param(
+        {"description": {"source": "", "target": "USERS"}},
+        _vlan_named("USERS", "Vlan10", "STAFF"),
+        id="the-vlan-came-back-with-another-label",
+    ),
+    pytest.param(
+        {"description": {"source": "", "target": "  "}},
+        _vlan_named("  ", "Vlan10", "  "),
+        id="a-blank-label",
+    ),
+    pytest.param(
+        {"description": {"source": "", "target": "USERS"}},
+        _vlan_named("USERS-AND-GUESTS", "Vlan10", "USERS-AND-GUESTS"),
+        id="not-the-label-the-vlan-came-back-with",
+    ),
+])
+def test_any_other_interface_description_drift_is_still_drift(
+    interface_diffs: dict, vlan_drift: dict | None,
+) -> None:
+    result = reconcile_cell(_svi_cell(interface_diffs, vlan_drift), _IFACE_DESCRIPTION_GOOD)
+    entry = result["field_variances"]["interfaces[].description"]
+    assert entry["variance"] == recon.VAR_CODEC_BUG
+    assert list(entry["drift_detail"]["per_record"]) == [_SVI_KEY]
+
+
+@pytest.mark.parametrize(("record_key", "identity"), [
+    ("interfaces[65] {'name': 'Vlan10'}", {"name": "Vlan10"}),
+    ("vlans[0] {'id': 10, 'name': 'USERS'}", {"id": 10, "name": "USERS"}),
+    ("interfaces[65]", {}),
+    ("interfaces[65] ['Vlan10']", {}),
+    ("interfaces[65] {'name': ", {}),
+])
+def test_a_record_key_gives_its_identity(record_key: str, identity: dict) -> None:
+    assert recon._record_identity(record_key) == identity

@@ -326,10 +326,14 @@ class MikroTikRouterOSCodec(CodecBase):
             LossyPath(
                 path="/vlans/vlan/name",
                 reason=(
-                    "MikroTik stores a VLAN's name as the L3 interface "
-                    "name (e.g. vlan10), NOT a separate descriptive "
-                    "name field.  Cross-vendor rendering may conflate "
-                    "the two."
+                    "A RouterOS VLAN is an interface (/interface vlan), "
+                    "and its name is that interface's (vlan10), which "
+                    "other lines refer to.  Another platform's VLAN "
+                    "name is written as the interface's ``comment=`` "
+                    "where the interface states no description of its "
+                    "own, and in a ``# review:`` line above it where it "
+                    "does; the parser reads the comment as the VLAN's "
+                    "description."
                 ),
                 severity="warn",
             ),
@@ -339,9 +343,12 @@ class MikroTikRouterOSCodec(CodecBase):
                     "RouterOS has one label for a VLAN, the ``comment=`` "
                     "of its /interface vlan.  The parser reads it as the "
                     "description of the VLAN and of its interface; the "
-                    "render writes the interface's description there (for "
-                    "a VLAN with no interface, the VLAN's name), so a "
-                    "VLAN's own description is not written."
+                    "render writes the interface's own description "
+                    "there, and otherwise the VLAN's label (its name "
+                    "where the source chose one, else its description).  "
+                    "A label the interface's own description displaces "
+                    "is written in a ``# review:`` line, and a VLAN "
+                    "description beside a name of its own is lost."
                 ),
                 severity="warn",
             ),

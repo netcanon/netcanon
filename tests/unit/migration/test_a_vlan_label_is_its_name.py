@@ -366,10 +366,15 @@ def test_a_codec_that_writes_no_vlan_name_writes_none() -> None:
 
 
 def test_a_codec_named_by_an_interface_keeps_the_interfaces_name() -> None:
+    """And writes the label as the interface's (``Spare``), or beside
+    the interface's own in a review line (``Guest Wifi``):
+    ``test_a_vlan_label_on_its_interface.py`` reads each."""
     tree = get_codec("opnsense").parse(OPNSENSE)
     for name, reason in NOT_NAME_ONLY.items():
         if reason is _NAMED_BY_AN_INTERFACE:
-            assert "vlan0.20" in get_codec(name).render(tree), name
+            out = get_codec(name).render(tree)
+            assert "vlan0.20" in out, name
+            assert "Guest Wifi" in out and "Spare" in out and "Printers" in out, name
 
 
 # ---------------------------------------------------------------------------

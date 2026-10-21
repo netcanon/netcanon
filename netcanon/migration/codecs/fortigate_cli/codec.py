@@ -141,7 +141,6 @@ class FortiGateCLICodec(CodecBase):
             "/interfaces/interface/config/mtu",
             "/interfaces/interface/dhcp-client-v6",          # set ip6-mode dhcp
             "/vlans/vlan/id",
-            "/vlans/vlan/name",
             "/routing/static-route",
             "/routing/static-route/gateway",     # audit e5b77d7 — next-hop round-trips
             "/routing/static-route/interface",   # run3 — `set device <iface>`
@@ -200,12 +199,31 @@ class FortiGateCLICodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/vlans/vlan/name",
+                reason=(
+                    "A FortiOS VLAN is an interface (`set type vlan`), "
+                    "and its name is that interface's, which other lines "
+                    "refer to.  Another platform's VLAN name is written "
+                    "as the interface's alias, which holds 25 characters, "
+                    "where the interface states no description of its "
+                    "own, and in a `# review:` line beside the alias "
+                    "where it does; the parser reads the alias as the "
+                    "VLAN's description."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/description",
                 reason=(
-                    "Render emits the VLAN name but not a separate "
-                    "description line, so the canonical VLAN description "
-                    "(distinct from the name) drops on render (silent-loss "
-                    "guard, Bucket-C stage 2)."
+                    "FortiOS has one label for a VLAN, the alias of its "
+                    "interface (25 characters).  The parser reads it as "
+                    "the description of the VLAN and of its interface; "
+                    "the render writes the interface's own description "
+                    "there, and otherwise the VLAN's label (its name "
+                    "where the source chose one, else its description).  "
+                    "A label the interface's own description displaces "
+                    "is written in a `# review:` line, and a VLAN "
+                    "description beside a name of its own is lost."
                 ),
                 severity="warn",
             ),

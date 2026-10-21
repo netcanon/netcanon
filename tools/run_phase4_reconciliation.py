@@ -106,13 +106,14 @@ Constraints honoured
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import sys
 from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from typing import Any
 
@@ -256,7 +257,11 @@ _LAG_NAME_FIELDS: frozenset[str] = frozenset({
 })
 
 
-def _vlan_label_moved(record_diffs: dict[str, Any]) -> bool:
+def _vlan_label_moved(
+    record_key: str,
+    record_diffs: dict[str, Any],
+    field_disposition: dict[str, Any],
+) -> bool:
     """True iff a VLAN record's ``name`` drift is its label, written
     as its name.
 
@@ -271,8 +276,10 @@ def _vlan_label_moved(record_diffs: dict[str, Any]) -> bool:
     well) is not equivalent and surfaces as drift.
 
     Args:
+        record_key: The record's Phase 1 key (unused).
         record_diffs: One record's Phase 1 diffs, keyed by sub-field,
             each ``{"source": ..., "target": ...}``.
+        field_disposition: The cell's Phase 1 dispositions (unused).
 
     Returns:
         ``True`` when the record's name drift is that move.
@@ -290,11 +297,112 @@ def _vlan_label_moved(record_diffs: dict[str, Any]) -> bool:
     )
 
 
+def _record_identity(record_key: str) -> dict[str, Any]:
+    """The id keys of a Phase 1 per-record drift key.
+
+    Phase 1 keys a record ``"<field>[<i>] <ident>"``, ``<ident>``
+    the ``repr`` of a dict of the record's id keys on the SOURCE
+    side (``"interfaces[65] {'name': 'Vlan10'}"``).
+
+    Args:
+        record_key: The key.
+
+    Returns:
+        The dict, or ``{}`` for a key of another shape.
+    """
+    _, _, ident = record_key.partition("] ")
+    try:
+        value = ast.literal_eval(ident)
+    except (ValueError, SyntaxError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _vlan_label_on_its_interface(
+    record_key: str,
+    record_diffs: dict[str, Any],
+    field_disposition: dict[str, Any],
+) -> bool:
+    """True iff an interface's ``description`` drift is its VLAN's
+    name, written as the one label of a target whose VLAN IS that
+    interface.
+
+    RouterOS (``/interface vlan``) and FortiOS (``set type vlan``)
+    label a VLAN with its interface's ``comment=`` or alias, and
+    write the VLAN's label there where the interface states no
+    description of its own (``netcanon/migration/_vlan_labels.py``).
+    The target's parser reads it back as the description of the
+    VLAN and of the interface, so an SVI that had none (NX-OS
+    ``interface Vlan10`` beside ``vlan 10`` / ``name VLAN10``) comes
+    back with ``VLAN10``: the VLAN's name, in the one place the
+    target has for it.  Equivalent only where the interface had no
+    description, and the cell's VLAN that the target names after
+    this interface came back with the same text as its description
+    and had it as its name in the source -- or the start of its
+    name, where the target holds fewer characters (a FortiOS alias
+    holds 25; that loss is the VLAN's, declared on ``vlans[].name``
+    and ``vlans[].description``).  An interface that lost
+    or changed a description of its own, or gained a text no VLAN
+    of it was named, surfaces as drift -- as does a label read from
+    a VLAN whose record did not drift, which this cannot see.
+
+    Read per record, not declared per pair: the move touches only
+    the SVIs of named VLANs, and a pair's ``lossy`` would hide a
+    lost description on every other interface of its cells.
+
+    Args:
+        record_key: The interface record's Phase 1 key.
+        record_diffs: Its Phase 1 diffs, keyed by sub-field.
+        field_disposition: The cell's Phase 1 dispositions, for its
+            ``vlans`` records.
+
+    Returns:
+        ``True`` when the description drift is that label.
+    """
+    description = record_diffs.get("description")
+    if not isinstance(description, dict) or description.get("source"):
+        return False
+    label = description.get("target")
+    if not isinstance(label, str) or not label.strip():
+        return False
+    renamed = record_diffs.get("name")
+    name = (
+        renamed.get("target") if isinstance(renamed, dict)
+        else _record_identity(record_key).get("name")
+    )
+    if not isinstance(name, str) or not name:
+        return False
+    vlans = field_disposition.get("vlans")
+    drift = vlans.get("drift") if isinstance(vlans, dict) else None
+    if not isinstance(drift, dict):
+        return False
+    for vlan_diffs in drift.values():
+        if not isinstance(vlan_diffs, dict):
+            continue
+        vlan_name = vlan_diffs.get("name")
+        vlan_description = vlan_diffs.get("description")
+        if (
+            isinstance(vlan_name, dict)
+            and isinstance(vlan_description, dict)
+            and isinstance(vlan_name.get("source"), str)
+            and vlan_name["source"].startswith(label)
+            and vlan_name.get("target") == name
+            and vlan_description.get("target") == label
+        ):
+            return True
+    return False
+
+
 #: YAML field-keys whose per-record drift is read with the WHOLE
-#: record's diffs, for a value one side holds in a sibling field.
-#: See :func:`_vlan_label_moved`.
-_RECORD_EQUIVALENCES: dict[str, Callable[[dict[str, Any]], bool]] = {
+#: record's diffs and the cell's other records, for a value one side
+#: holds in a sibling field or in a record of another list.  Each is
+#: called ``(record_key, record_diffs, field_disposition)``.  See
+#: :func:`_vlan_label_moved` and :func:`_vlan_label_on_its_interface`.
+_RECORD_EQUIVALENCES: dict[
+    str, Callable[[str, dict[str, Any], dict[str, Any]], bool]
+] = {
     "vlans[].name": _vlan_label_moved,
+    "interfaces[].description": _vlan_label_on_its_interface,
 }
 
 
@@ -483,7 +591,7 @@ def _subfield_drift_in_list(
     subfield: str,
     *,
     equivalence: Callable[[dict[str, Any]], bool] | None = None,
-    record_equivalence: Callable[[dict[str, Any]], bool] | None = None,
+    record_equivalence: Callable[[str, dict[str, Any]], bool] | None = None,
 ) -> bool | None:
     """For a list-of-records canonical field (e.g. ``interfaces``,
     ``vlans``), determine whether a specific sub-field (e.g. ``name``,
@@ -517,8 +625,8 @@ def _subfield_drift_in_list(
             so they don't fire drift.  See :data:`_LAG_NAME_FIELDS` /
             :func:`_canonical_lag_name` for the LAG case.
         record_equivalence: Optional callable mapping one record's
-            whole diffs dict to ``True`` when the sub-field's drift is
-            a value the record holds in another field (see
+            key and whole diffs dict to ``True`` when the sub-field's
+            drift is a value held in another field or record (see
             :data:`_RECORD_EQUIVALENCES`).  Such records are skipped
             too.
 
@@ -545,7 +653,7 @@ def _subfield_drift_in_list(
             if isinstance(slice_, dict) and equivalence(slice_):
                 continue
         if record_equivalence is not None and record_equivalence(
-            record_diffs,
+            record_key, record_diffs,
         ):
             continue
         return True
@@ -644,7 +752,11 @@ def actual_disposition(
             if yaml_field_key in _LAG_NAME_FIELDS
             else None
         )
-        record_equivalence = _RECORD_EQUIVALENCES.get(yaml_field_key)
+        cell_equivalence = _RECORD_EQUIVALENCES.get(yaml_field_key)
+        record_equivalence = (
+            partial(cell_equivalence, field_disposition=field_disposition)
+            if cell_equivalence is not None else None
+        )
         sub_drifted = _subfield_drift_in_list(
             parent, subfield, equivalence=equivalence,
             record_equivalence=record_equivalence,
@@ -754,7 +866,7 @@ def _slice_list_subfield(
     subfield: str,
     *,
     equivalence: Callable[[dict[str, Any]], bool] | None = None,
-    record_equivalence: Callable[[dict[str, Any]], bool] | None = None,
+    record_equivalence: Callable[[str, dict[str, Any]], bool] | None = None,
 ) -> dict[str, Any]:
     """Build a compact drift-detail snippet for a list sub-field — the
     per-record diffs filtered down to just the requested attribute.
@@ -787,7 +899,7 @@ def _slice_list_subfield(
         ):
             continue
         if record_equivalence is not None and record_equivalence(
-            record_diffs,
+            record_key, record_diffs,
         ):
             continue
         per_record[record_key] = slice_

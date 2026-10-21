@@ -259,8 +259,12 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   name that has one); a VLAN with no comment is named after its
   interface.  The comment is also the VLAN interface's description,
   and a target that writes that interface writes it there (FortiOS
-  as its `alias`); a VLAN's own description apart from it is not
-  written onto RouterOS.
+  as its `alias`).  Onto RouterOS another platform's VLAN label (an
+  IOS-XE `name`, an OPNsense `<descr>`) is the `comment=` of the
+  VLAN's `/interface vlan` where that interface states no
+  description of its own; where it states one, the comment is the
+  interface's description and the label is in a `# review:` line
+  above it.
 - **6.x vs 7.x grammar drift** — RouterOS 7 reorganises some
   sections (`/snmp` vs `/snmp community`, `/routing/bgp/instance`
   vs `/routing bgp instance`); the parser handles both.
