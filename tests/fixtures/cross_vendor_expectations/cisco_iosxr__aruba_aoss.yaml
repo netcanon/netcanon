@@ -156,7 +156,8 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: lossy
     reason: >
-      `9216` -> `null`: the aruba_aoss codec neither parses nor renders a
+      `9202` -> `null` (IOS XR `mtu 9216` counts the 14-byte Ethernet
+      header, so the canonical payload is 9202): the aruba_aoss codec neither parses nor renders a
       per-interface MTU, so jumbo-frame configuration is dropped while the
       interface and its addressing survive intact.  Measured on all 4 cells
       that set it (`9216` x3, `9192` x1); the render contains no `mtu` line of

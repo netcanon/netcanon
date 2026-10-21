@@ -198,7 +198,8 @@ per_field_expectation:
       and 2 of the 3 affected cells (`batfish_ibgp_border01` 17->17,
       `batfish_ibgp_rr` 16->16) have no interface-count change at all.  The
       mechanism is in the render: `/interface ethernet` rows carry `mtu=`
-      (`set [ find name=TenGigE0/0/0/20 ] disabled=no mtu=9216` survives) while
+      (`set [ find name=TenGigE0/0/0/20 ] disabled=no mtu=9202` survives -- the
+      payload of IOS XR's `mtu 9216`, which counts the Ethernet header) while
       `/interface bonding` rows do not, so MTU on a physical port survives and
       MTU on a bundle does not.  On an SP box where the jumbo setting lives on
       the bundle rather than its members, that is the entire jumbo

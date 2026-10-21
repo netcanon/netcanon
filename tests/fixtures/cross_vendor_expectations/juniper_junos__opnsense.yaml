@@ -808,8 +808,9 @@ per_field_expectation:
       two-pass parse (GAP 8 / 9b) flattens group content into the
       canonical tree before render, so the operator's INTENT survives
       (every interface that inherited MTU 9000 from a group still
-      carries MTU 9000 on the flattened canonical layer, and OPNsense
-      ``<mtu>9000</mtu>`` lands on each consuming zone).  The
+      carries it on the flattened canonical layer, as the payload 8986
+      -- a Junos ``mtu`` counts the 14-byte header -- and OPNsense
+      ``<mtu>8986</mtu>`` lands on each consuming zone).  The
       apply_groups statement names + group_content themselves drop
       on OPNsense render (no analogue).  Lossy because the structure
       drops; intent preserved on the flattened content.
