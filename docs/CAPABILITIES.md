@@ -1945,11 +1945,13 @@ nothing, as before.
   vendor none of that is said — and a tag the parser does not read
   (AOS-CX, OS10) is lost there as well, as it is on every path,
   with nothing in the job to report it.
-  And **VyOS and FortiOS take the VLAN id from the number in the
-  name** (`vif <unit>`, `set vlanid <unit>`): a source unit whose
-  number is not its tag — IOS `GigabitEthernet0/0/1.54` with
-  `encapsulation dot1Q 300` — comes out tagged 54, in a `partial`
-  job.  Check the VLAN id of every sub-interface on those two.
+  And **VyOS takes the VLAN id from the number in the name** (`vif
+  <unit>`): a source unit whose number is not its tag — IOS
+  `GigabitEthernet0/0/1.54` with `encapsulation dot1Q 300` — comes
+  out tagged 54, in a `partial` job.  Check the VLAN id of every
+  sub-interface there.  FortiOS writes the source's own tag (`set
+  vlanid 300`, on the port the name is a unit of), and the job says
+  that the block is read back as a VLAN interface.
 
   Not followed across vendors: a unit of a **loopback** or of a
   **management port** (a Junos `lo0.5` is put on the target's
