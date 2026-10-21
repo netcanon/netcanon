@@ -241,23 +241,23 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      VLAN id round-trips cleanly when the FortiGate source has
-      explicit ``set type vlan / set vlanid <N>`` child interfaces.
-      FortiGate uses the interface edit ID as canonical VLAN name
-      (``VL_100`` or ``agg1.100``); Aruba renders ``vlan 100 /
-      name "VL_100"`` which is mechanical but not operator-
-      readable.  Per-VLAN description is empty after FortiGate
-      parse.  The VLAN-centric port list (``tagged_ports`` /
-      ``untagged_ports``) is empty after FortiGate parse —
-      FortiGate's child-interface model encodes membership via
-      the parent's identity, not as a port list per VLAN.  Cross-
-      vendor migration on FortiGate -> Aruba loses port-membership
-      intent; the operator must manually reconstruct ``tagged
-      <port-list>`` / ``untagged <port-list>`` on the Aruba
-      target.  vlans[].ipv4_addresses (SVI absorption) does
-      round-trip cleanly via the FortiGate VL-iface ``set ip``;
-      Aruba's ``vlan 100 / ip address X/N`` form lands the SVI
-      inside the VLAN stanza (absorbs_svi_into_vlan=True).
+      VLAN ids round-trip when the FortiGate source has explicit `set type
+      vlan / set vlanid <N>` child interfaces.  A FortiOS VLAN is named after
+      its interface (`VL_100`, `agg1.100`) and labelled by that interface's
+      alias, which the FortiGate parser reads as the VLAN's description; AOS-S
+      writes one label for a VLAN, its name, so the alias is moved into the
+      name (`vlan 100 / name "TEST100"`, `_vlan_labels`) and the VLAN comes
+      back with no description.  An alias equal to the interface's own name
+      (`user-vlan`) is the VLAN's name already, and its repeat as a
+      description drops.  The VLAN-centric port list (`tagged_ports` /
+      `untagged_ports`) is empty after FortiGate parse -- FortiGate's
+      child-interface model encodes membership via the parent's identity, not
+      as a port list per VLAN.  Cross-vendor migration on FortiGate -> Aruba
+      loses port-membership intent; the operator must manually reconstruct
+      `tagged <port-list>` / `untagged <port-list>` on the Aruba target.
+      vlans[].ipv4_addresses (SVI absorption) does round-trip via the
+      FortiGate VL-iface `set ip`; Aruba's `vlan 100 / ip address X/N` form
+      lands the SVI inside the VLAN stanza (absorbs_svi_into_vlan=True).
     references: [vlans]
 
   static_routes:

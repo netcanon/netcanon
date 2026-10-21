@@ -228,22 +228,22 @@ per_field_expectation:
     references: [interfaces, interfaces_arista]
 
   vlans:
-    disposition: good
-    note: >
-      The CanonicalVlan list itself round-trips cleanly at the
-      list / id level: FortiGate ``set type vlan / set vlanid <N>``
-      child interfaces project to canonical entries, and Arista's
-      ``vlan <N>`` declarations re-parse with matching ids.  Per-
-      VLAN sub-field caveats are documented at sub-field level
-      rather than collapsing to a single ``lossy`` claim on the
-      list: name (mechanical FortiGate edit-ID -> Arista name),
-      description / tagged_ports / untagged_ports (empty after
-      FortiGate parse — child-interface model encodes membership
-      via the parent's identity, so cross-vendor migration loses
-      the per-port intent and the operator MUST reconstruct
-      switchport state on the Arista target).  vlans[].ipv4_addresses
-      (SVI absorption) round-trips via the FortiGate VL-iface
-      ``set ip`` ↔ Arista ``interface Vlan100 / ip address X/N``.
+    disposition: lossy
+    reason: >
+      VLAN ids round-trip.  A FortiOS VLAN is named after its interface
+      (`VL_100`, `agg1.100`) and labelled by that interface's alias, which the
+      FortiGate parser reads as the VLAN's description.  EOS writes one label
+      for a VLAN, its name, so the alias is MOVED into the name (`vlan 100 /
+      name TEST100`, `_vlan_labels`) and the VLAN comes back with no
+      description: the label is in the output, and `vlans[].name` reads the
+      move as preserved.  An alias equal to the interface's own name
+      (`user-vlan`) is the VLAN's name already, and its repeat as a
+      description drops.  The VLAN-centric port lists (`tagged_ports` /
+      `untagged_ports`) are empty after FortiGate parse -- the child-interface
+      model encodes membership via the parent's identity -- so the operator
+      must configure switchport membership on the Arista target.
+      vlans[].ipv4_addresses (SVI absorption) round-trips via the FortiGate
+      VL-iface `set ip` <-> `interface Vlan100 / ip address X/N`.
     references: [vlans]
 
   static_routes:

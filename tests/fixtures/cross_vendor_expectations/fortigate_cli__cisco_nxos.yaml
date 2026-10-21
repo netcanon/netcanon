@@ -344,12 +344,13 @@ per_field_expectation:
   "vlans[].description":
     disposition: lossy
     reason: >
-      Declared lossy by BOTH matrices: the NX-OS render emits the VLAN NAME
-      but no separate description line, so a canonical VLAN description
-      (distinct from the name) drops.  No fixture on this pair populates one,
-      so this rests on the declarations rather than an observed drop.
-      Operator-authored text -- re-enter it on the target if it carries
-      meaning for your change process.
+      Declared lossy by BOTH matrices.  The FortiGate parser reads a VLAN
+      interface's alias as the VLAN's description, and NX-OS writes one label
+      for a VLAN, its name: the alias is moved into the name (`vlan 100 / name
+      TEST100`, `_vlan_labels`), so the VLAN comes back with no description
+      and the label is in the output.  An alias equal to the interface's own
+      name (`user-vlan`) is the VLAN's name already, and its repeat as a
+      description drops.
     references: [fg-nxos-surface]
 
   "vlans[].tagged_ports":

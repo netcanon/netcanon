@@ -325,21 +325,16 @@ per_field_expectation:
   "vlans[].name":
     disposition: lossy
     reason: >
-      Drifts on all 4 cells that populate VLANs, on 4 of 4 VLAN records, and
-      the direction is worth reading carefully: the source name is EMPTY on
-      every record and the target MANUFACTURES one.  Measured: `''` ->
-      `vlan35` (twice), `''` -> `vlan200`, `''` -> `vlan100` — the re-parse
-      recovers the name from the synthesised child interface's identifier
-      rather than from anything the source said.  Lossy rather than
-      unsupported because the VLAN record survives and forwards; only the label
-      is substituted.
-      The practical consequence is on reconciliation, not on traffic: any
-      tooling that diffs VLAN names across the cutover will report a change on
-      every VLAN, and a name that looks authored is in fact derived from the
-      id.  Note for a codec follow-up rather than for this file: fortigate_cli
-      declares `/vlans/vlan/name` SUPPORTED, which the measurement contradicts
-      on every record.  That is a target matrix over-declaration, left for a
-      codec change.
+      The source name is EMPTY on every populated VLAN record and the target
+      MANUFACTURES one: `''` -> `vlan35`, `''` -> `vlan200`, `''` -> `vlan100`
+      -- a FortiOS VLAN is an interface, and the re-parse names the VLAN after
+      the interface the render made for it rather than after anything the
+      source said.  Lossy rather than unsupported because the VLAN record
+      survives and forwards; only the label is substituted.  The practical
+      consequence is on reconciliation, not on traffic: any tooling that diffs
+      VLAN names across the cutover will report a change on every VLAN, and a
+      name that looks authored is in fact derived from the id.  fortigate_cli
+      declares `/vlans/vlan/name` lossy.
     references: [iosxr-fortigate-surface]
 
   "vlans[].ipv4_addresses":
@@ -391,12 +386,11 @@ per_field_expectation:
   "vlans[].description":
     disposition: not_applicable
     note: >
-      Source-side gap: cisco_iosxr declares no path under `/vlans/vlan/` beyond
-      `id` and `name`, and emits no VLAN description on any committed cell —
-      measured empty on all 4 populated VLAN records.  fortigate_cli declares
-      `/vlans/vlan/description` LOSSY ("Render emits the VLAN name but not a
-      separate description line"), which would matter only for a source that
-      actually produces one.
+      Source-side gap: cisco_iosxr declares no path under `/vlans/vlan/`
+      beyond `id` and `name`, and emits no VLAN description or name on any
+      committed cell.  fortigate_cli declares `/vlans/vlan/description` LOSSY
+      (one label for a VLAN, the alias of its interface), which would matter
+      only for a source that produces one.
     references: [iosxr-fortigate-surface]
 
   # -- Routing --------------------------------------------------------------

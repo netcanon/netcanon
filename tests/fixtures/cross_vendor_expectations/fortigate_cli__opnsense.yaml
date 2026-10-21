@@ -448,9 +448,10 @@ per_field_expectation:
   vlans[].description:
     disposition: good
     note: >
-      No FortiGate VLAN on this corpus carries a description, so nothing is
-      measured. OPNsense keeps a VLAN's description as its `<vlan>`'s
-      `<descr>`, with no length limit, so one would fit.
+      Preserved on every cell that holds VLANs: the FortiGate parser reads a
+      VLAN interface's alias as the VLAN's description, and OPNsense writes it
+      as the `<vlan>`'s `<descr>`, with no length limit, which its parser
+      reads back.
     references: [fgt-vlans, opn-vlans]
 
   vlans[].tagged_ports:

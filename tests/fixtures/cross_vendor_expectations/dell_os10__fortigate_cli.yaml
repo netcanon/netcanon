@@ -383,11 +383,17 @@ per_field_expectation:
     references: [os10-fortigate-surface]
 
   vlans[].description:
-    disposition: good
-    note: >
-      No cell populates this field on either side (1 of 1 trivially
-      empty), and neither codec declares the surface unsupported, so
-      nothing is claimed lost.
+    disposition: lossy
+    reason: >
+      OS10 has one label for a VLAN, its SVI's `description`, which the OS10
+      parser reads as the VLAN's name; it keeps no VLAN description.
+      FortiOS's one label for a VLAN is the alias of its interface, which the
+      render writes from the VLAN's name, cut to the 25 characters an alias
+      holds, and which the FortiGate parser reads back as the VLAN's
+      description.  So each named VLAN comes back with its name, or the start
+      of it, as a description the source did not have
+      (`Edge_Transport_Management_Network` -> `Edge_Transport_Management`).
+      fortigate_cli declares `/vlans/vlan/description` lossy.
     references: [os10-fortigate-surface]
 
   vlans[].id:

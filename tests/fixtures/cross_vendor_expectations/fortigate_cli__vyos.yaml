@@ -398,13 +398,10 @@ per_field_expectation:
   "vlans[].description":
     disposition: good
     note: >
-      Empty on all 10 source VLAN records — FortiOS carries the VLAN name
-      and nothing else that maps here — so there is no value for the target
-      to degrade.  fortigate_cli declares `/vlans/vlan/description` LOSSY on
-      its own side (its render emits the VLAN name but no separate
-      description line), which would matter for a FortiGate TARGET, not for
-      this direction.  Recorded `good`; the record-level loss is claimed
-      once under `vlans[].id`.
+      The FortiGate parser reads a VLAN interface's alias as the VLAN's
+      description.  The VLAN records themselves drop on this pair, so there is
+      no VLAN on the target for it to degrade on; recorded `good`, and the
+      record-level loss is claimed once under `vlans[].id`.
     references: [fgt-vyos-surface]
 
   # -- Routing --------------------------------------------------------------

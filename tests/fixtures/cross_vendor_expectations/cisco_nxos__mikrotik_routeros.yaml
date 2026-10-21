@@ -282,13 +282,15 @@ per_field_expectation:
   "vlans[].description":
     disposition: lossy
     reason: >
-      Drifts on 9 records, and in the surprising direction: source `''`
-      re-parses as `IBGP connection`.  RouterOS exposes a single per-VLAN
-      `comment` field which the parser maps to the VLAN name/description, so
-      the SVI's interface description leaks onto the VLAN record.  The matrix
-      declares `/vlans/vlan/description` lossy for this conflation.  Nothing
-      is destroyed, but the VLAN inventory on the target carries text the
-      source never had there.
+      Drifts in the surprising direction: source `''` re-parses as text.
+      RouterOS has one label for a VLAN, the `comment=` of its `/interface
+      vlan`, which the parser reads as the description of the VLAN and of the
+      interface.  The render writes there the SVI's own description where it
+      has one (`IBGP connection`, with the VLAN's name, if any, in a `#
+      review:` line) and otherwise the VLAN's name
+      (`user_svi_1_vrf_service_cust_1`).  So the VLAN inventory on the target
+      carries text the source never had there; nothing is destroyed.  The
+      matrix declares `/vlans/vlan/description` lossy for this conflation.
     references: [nxos-routeros-surface]
 
   "vlans[].ipv4_addresses":

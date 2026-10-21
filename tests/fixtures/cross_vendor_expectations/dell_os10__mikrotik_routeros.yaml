@@ -407,9 +407,10 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. MikroTik stores a VLAN's name as the L3 interface name
-      (e.g. vlan10), NOT a separate descriptive name field. Cross-
-      vendor rendering may conflate the two. Measured over 1 cell:
+      trip. A RouterOS VLAN is an interface (/interface vlan), and its
+      name is that interface's (vlan10); another platform's VLAN name
+      is written as the interface's comment=, which the RouterOS
+      parser reads back as the VLAN's description. Measured over 1 cell:
       drifted on 1, preserved on 0, both sides empty on 0.
     references: [os10-routeros-surface]
 

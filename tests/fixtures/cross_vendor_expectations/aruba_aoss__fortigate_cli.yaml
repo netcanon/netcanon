@@ -247,24 +247,21 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      VLAN id round-trips cleanly.  Aruba's ``vlan 100 / name
-      "USERS"`` separate name does not survive on FortiGate (the
-      FortiOS codec uses the interface edit ID as the VLAN's
-      identity; the canonical name is preserved through parse but
-      FortiGate render emits ``edit "VL_100"`` with a synthesised
-      name).  Per-VLAN description is FortiGate-unsupported.  Most
-      importantly, the VLAN-centric port list (Aruba's ``tagged
-      1-24`` / ``untagged 25-26``) is a model-translation gap:
-      FortiGate expresses VLAN membership as child interfaces
-      hanging off a parent (``edit "agg1.100" / set type vlan / set
-      vlanid 100 / set interface "agg1"``), not as a port list per
-      VLAN.  Cross-vendor migration on Aruba -> FortiGate requires
-      synthesising multiple VLAN-child interfaces (one per VLAN per
-      parent) which the v1 render does not do; the operator must
-      manually reconstruct multi-port VLAN membership.  SVI
-      absorption: Aruba's ``vlan 100 / ip address X/N`` populates
-      CanonicalVlan.ipv4_addresses; the FortiGate render emits the
-      address on the synthesised VLAN child interface (``set ip``).
+      VLAN id round-trips cleanly.  Aruba's `vlan 100 / name "USERS"` is not
+      the VLAN's name on FortiGate, whose VLAN is an interface named after
+      itself (`VL_100`): the name is written as that interface's alias (25
+      characters), which the FortiGate parser reads back as the VLAN's
+      description.  Most importantly, the VLAN-centric port list (Aruba's
+      `tagged 1-24` / `untagged 25-26`) is a model-translation gap: FortiGate
+      expresses VLAN membership as child interfaces hanging off a parent
+      (`edit "agg1.100" / set type vlan / set vlanid 100 / set interface
+      "agg1"`), not as a port list per VLAN.  Cross-vendor migration on Aruba
+      -> FortiGate requires synthesising multiple VLAN-child interfaces (one
+      per VLAN per parent) which the v1 render does not do; the operator must
+      manually reconstruct multi-port VLAN membership.  SVI absorption:
+      Aruba's `vlan 100 / ip address X/N` populates
+      CanonicalVlan.ipv4_addresses; the FortiGate render emits the address on
+      the synthesised VLAN child interface (`set ip`).
     references: [vlans]
 
   static_routes:

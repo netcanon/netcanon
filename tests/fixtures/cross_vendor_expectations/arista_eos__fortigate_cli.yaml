@@ -224,25 +224,24 @@ per_field_expectation:
   vlans:
     disposition: lossy
     reason: >
-      VLAN id round-trips cleanly.  Arista's ``vlan 100 / name
-      USERS`` separate name does not survive on FortiGate (the
-      FortiOS codec uses the interface edit ID as the VLAN's
-      identity; render synthesises ``VL_100`` or ``<parent>.100``).
-      Per-VLAN description is FortiGate-unsupported.  Most
-      importantly, the VLAN-centric port list (``tagged_ports`` /
-      ``untagged_ports``, populated on parse via
-      project_switchport_to_vlan) is a model-translation gap:
-      FortiGate expresses VLAN membership as child interfaces
-      hanging off a parent (``edit "<parent>.100" / set type vlan
-      / set vlanid 100 / set interface "<parent>"``), not as a
-      port list per VLAN.  Cross-vendor migration on Arista ->
-      FortiGate requires synthesising multiple VLAN-child
-      interfaces (one per VLAN per parent port) which the v1
-      render does not do; the operator must manually reconstruct
-      multi-port VLAN membership.  SVI absorption: Arista's
-      ``interface Vlan100 / ip address X/N`` populates
-      CanonicalVlan.ipv4_addresses; FortiGate render emits the
-      address on the synthesised VLAN child interface (``set ip``).
+      VLAN id round-trips cleanly.  Arista's `vlan 100 / name USERS` is not
+      the VLAN's name on FortiGate, whose VLAN is an interface named after
+      itself (`VL_100` or `<parent>.100`): the name is written as that
+      interface's alias (25 characters) where the SVI states no description of
+      its own, and in a `# review:` line beside it where it does; the
+      FortiGate parser reads the alias back as the VLAN's description.  Most
+      importantly, the VLAN-centric port list (`tagged_ports` /
+      `untagged_ports`, populated on parse via project_switchport_to_vlan) is
+      a model-translation gap: FortiGate expresses VLAN membership as child
+      interfaces hanging off a parent (`edit "<parent>.100" / set type vlan /
+      set vlanid 100 / set interface "<parent>"`), not as a port list per
+      VLAN.  Cross-vendor migration on Arista -> FortiGate requires
+      synthesising multiple VLAN-child interfaces (one per VLAN per parent
+      port) which the v1 render does not do; the operator must manually
+      reconstruct multi-port VLAN membership.  SVI absorption: Arista's
+      `interface Vlan100 / ip address X/N` populates
+      CanonicalVlan.ipv4_addresses; FortiGate render emits the address on the
+      synthesised VLAN child interface (`set ip`).
     references: [vlans]
 
   static_routes:
