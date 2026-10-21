@@ -229,6 +229,11 @@ a VRF, in jobs that said `completed`.  Detection still reads the text as it came
   target, and IOS-XE `mtu 9000` an IP MTU of 8986 here.  Check MTUs
   migrated then.  The vendors' sentences are in the
   [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
+- **`ipv4 mtu` is the IP MTU, a field of its own.**  It is read and
+  written as `ipv4 mtu`, and where it is the payload the `mtu` line
+  says it (Cisco: "IP MTU value in the hardware is Ethernet
+  MTU-14B").  `ipv6 mtu` is not read.  ⚠️ Up to 0.7.7 `ipv4 mtu` was
+  not read.
 - **Paste the config as the router prints it, with its
   indentation.**  IOS XR places each line of a configuration by its
   indentation when it loads a file: a line at the left margin is a

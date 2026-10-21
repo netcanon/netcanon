@@ -80,6 +80,7 @@ from .._helpers import (
     _prefix_to_mask,
     charge_id_lines,
     every_native_vlan_tagged,
+    ip_mtu_written,
     native_vlan_stated,
     switchport_trunk_allowed_value,
     switchport_trunk_native_value,
@@ -558,6 +559,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             body.append(f"{_ALLOWED_VLAN_LEAD}{vlan_list}")
         if iface.mtu is not None:
             body.append(f" mtu {iface.mtu}")
+        ip_mtu = ip_mtu_written("cisco_iosxe_cli", iface)
+        if ip_mtu is not None:
+            body.append(f" ip mtu {ip_mtu}")
         # LAG-membership marker.  Mode normalisation: canonical
         # ``active`` → LACP active; ``passive`` → LACP passive;
         # ``static`` → mode ``on`` (no LACP).

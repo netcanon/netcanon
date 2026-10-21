@@ -70,6 +70,7 @@ from ...canonical.intent import (
     CanonicalLAG,
 )
 from ...canonical.transforms import is_every_vlan
+from .._helpers import one_mtu_written
 from ..base import RenderError
 from .parse import (
     _CANONICAL_MODE_TO_FORTIGATE_LACP,
@@ -475,7 +476,7 @@ def _iface_is_empty_stub(iface: CanonicalInterface) -> bool:
         iface.description
         or iface.ipv4_addresses
         or iface.ipv6_addresses
-        or iface.mtu is not None
+        or one_mtu_written(iface) is not None
         or iface.switchport_mode
         or iface.access_vlan is not None
         or iface.trunk_allowed_vlans
@@ -750,12 +751,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     f"        ! review: dhcp_client_v6="
                     f"{iface.dhcp_client_v6} has no FortiOS equivalent"
                 )
-            if iface.mtu is not None:
+            # One MTU here: the IP MTU where the tree states no
+            # payload.
+            mtu = one_mtu_written(iface)
+            if mtu is not None:
                 # FortiOS requires mtu-override enable before
                 # set mtu has effect on physical ports.  Emit
                 # both so the config is deployable.
                 out.append("        set mtu-override enable")
-                out.append(f"        set mtu {iface.mtu}")
+                out.append(f"        set mtu {mtu}")
             if iface.enabled:
                 out.append("        set status up")
             else:

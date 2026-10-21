@@ -19,7 +19,13 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
 - `hostname` (`/system identity`)
 - Interfaces — physical (`ether<N>`, `sfp-sfpplus<N>`), bridge
   (`/interface bridge`), VLAN (`/interface vlan` named e.g.
-  `gn-mgmt`); IPv4 (`/ip address`), IPv6 (`/ipv6 address`)
+  `gn-mgmt`, with its `mtu`; ⚠️ not written or read up to 0.7.7);
+  IPv4 (`/ip address`), IPv6 (`/ipv6 address`).  RouterOS has one
+  MTU: another vendor's IP MTU of its own is written as `mtu` where
+  no other MTU is stated, and is lost where one is (the job's
+  report says so).  A sub-interface of another vendor gets no
+  `/interface vlan` line yet: its address names an interface the
+  output does not define, and the job is `partial`.
 - Tunnels — `/interface gre`, `/interface eoip`, `/interface ipip`:
   name, comment and `mtu`.  The endpoints are not translated: they
   come out as `remote-address=0.0.0.0`, for you to fill in.

@@ -463,13 +463,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 )
             # A unit has no ``mtu`` of its own in Junos: it is set per
             # family (``family inet mtu``), and written for each family
-            # the unit has.  A unit with no family has nowhere to take
-            # it, and says so.
-            if iface.mtu is not None:
-                _emit_unit_mtu(
-                    out, parent, unit_num, iface, mtu_of.get(parent),
-                    media_mtu.get(parent),
-                )
+            # the unit has.
+            _emit_unit_mtu(
+                out, parent, unit_num, iface, mtu_of.get(parent),
+                media_mtu.get(parent),
+            )
             # Sub-finding 9b: DHCP client.  Junos models the DHCP
             # client as a property of ``family inet`` (replacing the
             # ``address`` clause).  Emit the family inet dhcp form
@@ -585,6 +583,9 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append(f"set interfaces {name} disable")
         if emit_mtu:
             out.append(f"set interfaces {name} mtu {media_mtu[name]}")
+        # The IP MTU, where it is not the payload: ``family inet mtu``
+        # on unit 0.
+        _emit_unit_mtu(out, name, 0, iface, iface.mtu, media_mtu.get(name))
         # Sub-finding 9b: DHCP client.  Junos models the DHCP client
         # as ``family inet dhcp`` on ``unit 0``, replacing the static
         # ``address`` clause.  Emit only when no static IPv4 address
@@ -1672,13 +1673,17 @@ def _emit_unit_mtu(
     device_mtu: int | None,
     device_media_mtu: int | None = None,
 ) -> None:
-    """Write a unit's MTU as ``family <f> mtu`` for each family it has.
+    """Write a unit's MTUs as ``family <f> mtu``, for each family it has.
 
     Junos has no ``mtu`` on a unit: the protocol MTU is set per
-    family, and the parser reads either back into the unit's ``mtu``.
-    A unit with no address takes it on ``family inet``, the family an
-    MTU stated without one is for (an unnumbered ``st0`` unit's only
-    family line is often its ``family inet mtu``).  Juniper requires
+    family.  ``family inet`` takes the IP MTU (``ip_mtu``, else the
+    unit's ``mtu``) and ``family inet6`` the unit's ``mtu``, and the
+    parser reads them back so.  Unit 0 is the device's own record,
+    whose ``mtu`` is the device's media MTU: only an IP MTU is
+    written there.  A unit with no address takes it on ``family
+    inet``, the family an MTU stated without one is for (an
+    unnumbered ``st0`` unit's only family line is often its ``family
+    inet mtu``), and so does a unit with an IP MTU.  Juniper requires
     the device's media MTU to hold a family MTU and its encapsulation
     overhead, so where the device states no MTU (and the unit's is
     above the default protocol MTU) or a smaller one, a review line
@@ -1689,30 +1694,39 @@ def _emit_unit_mtu(
     *device_media_mtu* is the device's ``mtu`` as it is written.
     """
     families = []
-    if iface.ipv4_addresses or iface.dhcp_client:
+    if iface.ipv4_addresses or iface.dhcp_client or iface.ip_mtu is not None:
         families.append("inet")
     if iface.ipv6_addresses or iface.dhcp_client_v6 == "dhcp6":
         families.append("inet6")
     if not families:
         families.append("inet")
+    unit_mtu = None if unit_num == 0 else iface.mtu
+    of_family = {
+        "inet": unit_mtu if iface.ip_mtu is None else iface.ip_mtu,
+        "inet6": unit_mtu,
+    }
+    mtus = {f: of_family[f] for f in families if of_family[f] is not None}
+    if not mtus:
+        return
+    largest = max(mtus.values())
     if device_mtu is None:
-        too_small = iface.mtu > _DEFAULT_PROTOCOL_MTU
+        too_small = largest > _DEFAULT_PROTOCOL_MTU
     elif media_mtu_counts_a_header(parent):
-        too_small = device_mtu < iface.mtu
+        too_small = device_mtu < largest
     else:
-        too_small = device_mtu <= iface.mtu
+        too_small = device_mtu <= largest
     if too_small:
         written = device_mtu if device_media_mtu is None else device_media_mtu
         stated = "no mtu" if device_mtu is None else f"mtu {written}"
         out.append(
-            f"# review: family mtu {iface.mtu} of {parent} unit "
+            f"# review: family mtu {largest} of {parent} unit "
             f"{unit_num} needs a media MTU on {parent} of at least that "
             f"plus the encapsulation overhead; {parent} states {stated}"
         )
-    for family in families:
+    for family, value in mtus.items():
         out.append(
             f"set interfaces {parent} unit {unit_num} "
-            f"family {family} mtu {iface.mtu}"
+            f"family {family} mtu {value}"
         )
 
 

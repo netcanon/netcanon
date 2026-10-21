@@ -255,29 +255,34 @@ def test_a_units_family_mtu_round_trips(lines: list[str], written: list[str], sa
     out = run_plan(_junos(), _junos(), src).rendered or ""
     assert _unit_mtu_lines(out) == written
     assert any(line.startswith("# review: family mtu") for line in out.splitlines()) is said
-    back = {i.name: i.mtu for i in _junos().parse(out).interfaces}
-    assert back == {i.name: i.mtu for i in tree.interfaces}
+    back = {i.name: (i.mtu, i.ip_mtu) for i in _junos().parse(out).interfaces}
+    assert back == {i.name: (i.mtu, i.ip_mtu) for i in tree.interfaces}
 
 
 def test_unit_0s_family_mtu_is_not_the_devices() -> None:
     """Unit 0 is the device's own record, whose ``mtu`` is the device's
-    media MTU: a family MTU of unit 0 is not read into it."""
+    media MTU: a family MTU of unit 0 is not read into it.  Its
+    ``family inet mtu`` is the device's IP MTU (``ip_mtu``)."""
     tree = _junos().parse(
         "set interfaces ge-0/0/1 mtu 9192\n"
         "set interfaces ge-0/0/1 unit 0 family inet mtu 9000\n"
         "set interfaces ge-0/0/2 unit 0 family inet mtu 9000\n"
     )
-    mtus = {i.name: i.mtu for i in tree.interfaces}
-    assert mtus["ge-0/0/1"] == 9178  # the media MTU less its Ethernet header
-    assert mtus.get("ge-0/0/2") is None
+    mtus = {i.name: (i.mtu, i.ip_mtu) for i in tree.interfaces}
+    # The media MTU less its Ethernet header, and the IP MTU apart.
+    assert mtus["ge-0/0/1"] == (9178, 9000)
+    assert mtus["ge-0/0/2"] == (None, 9000)
 
 
-def test_where_both_families_state_an_mtu_inets_is_kept() -> None:
+def test_where_both_families_state_an_mtu_each_is_kept() -> None:
+    """``family inet mtu`` is the unit's IP MTU; ``family inet6 mtu`` is
+    its MTU, the tree having no IPv6 MTU of its own."""
     tree = _junos().parse(
         "set interfaces ge-0/0/1 unit 7 family inet6 mtu 1400\n"
         "set interfaces ge-0/0/1 unit 7 family inet mtu 1450\n"
     )
-    assert {i.name: i.mtu for i in tree.interfaces}["ge-0/0/1.7"] == 1450
+    unit = {i.name: i for i in tree.interfaces}["ge-0/0/1.7"]
+    assert (unit.mtu, unit.ip_mtu) == (1400, 1450)
 
 
 @pytest.mark.parametrize(

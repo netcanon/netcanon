@@ -376,7 +376,13 @@ for the reference pattern).
    -- the codec's own classifier says which.  A platform with no
    interface MTU is named, with its reason, in `NO_INTERFACE_MTU` in
    `tests/unit/migration/test_an_mtu_counts_the_payload.py`, which
-   fails for a public codec that is in neither.
+   fails for a public codec that is in neither.  And say what it
+   does with an IP MTU of its own (`ip_mtu`): read and write its
+   statement, write it as the one `mtu` (`one_mtu_written`), or
+   name the codec in `_SAID_LOST` in
+   `tests/unit/migration/test_an_ip_mtu_of_its_own.py`, with the
+   matrix saying so; that test fails for a public codec that is
+   in none of them.
 3. **Write `render()`** against the same synthetic fixtures, driving
    toward round-trip stability (`parse(render(parse(raw))) == parse(raw)`
    at the canonical level).  **A trunk's list is one of three
@@ -904,6 +910,18 @@ the policy locally:
   port on Junos, not a loopback).  The vendors' sentences are in
   `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md`.
   Callers: `grep -rn "mtu_read\|mtu_written" netcanon/migration`.
+
+* **`netcanon/migration/codecs/_helpers.py::IP_MTU_THAT_IS_NOT_STATED`**
+  — the IP MTU of an interface whose config states none, on a
+  platform where it is a setting with a default of its own that a
+  raised `mtu` does not raise (`aruba_aoscx`: 1500).  Its readers
+  are **`ip_mtu_read(codec, stated, payload, ipv4=)`**, for a
+  parser (`None` where the stated IP MTU is the payload, the
+  default where none is stated under a larger payload), and
+  **`ip_mtu_written(codec, iface)`**, for a renderer.  A platform
+  with one MTU writes **`one_mtu_written(iface)`**: the IP MTU
+  where the tree states no payload.
+  Callers: `grep -rn "ip_mtu_read\|ip_mtu_written\|one_mtu_written" netcanon/migration`.
 
 * **`netcanon/migration/codecs/_helpers.py::spaced_port_name`** and
   **`without_keyword_stanzas`** — two readings of a Cisco header

@@ -92,7 +92,14 @@ from ...canonical.intent import (
 )
 from ...canonical.port_names import HARDWARE_PORT_KINDS
 from ...limits import LimitExceeded, charge, tick, ticked
-from .._helpers import GrowingIndex, Uniques, mtu_read, unstated_trunk_list, vlan_id_run
+from .._helpers import (
+    GrowingIndex,
+    Uniques,
+    ip_mtu_read,
+    mtu_read,
+    unstated_trunk_list,
+    vlan_id_run,
+)
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 from .port_names import classify_port_name, media_mtu_counts_a_header, media_mtu_counts_a_tag
@@ -641,6 +648,17 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # ``xe-0/0/6:2``, ``so-0/0/0``, ``reth0`` -- is a name
             # like any other here.)
             continue
+        # interface-range / structural collapse: mtu may have been
+        # populated from a ``set interfaces interface-range <r> mtu
+        # <N>`` line via the range-fold pass.  A unit above 0 has no
+        # media MTU, and its ``family inet6 mtu`` -- the largest
+        # IPv6 packet, for which the tree has no field of its own --
+        # is read as its MTU; ``family inet mtu`` is its IP MTU.
+        payload = (
+            _media_mtu_read(name, state["mtu"], name in tagged_devices)
+            if "mtu" in state
+            else state.get("inet6_mtu")
+        )
         iface = CanonicalInterface(
             name=name,
             enabled=state.get("enabled", True),
@@ -652,16 +670,12 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # (not access_vlan).  None = untagged (the common case for
             # unit 0) or not a tagged routed sub-interface.
             dot1q_vlan=state.get("dot1q_vlan"),
-            # interface-range / structural collapse: mtu may
-            # have been populated from a ``set interfaces
-            # interface-range <r> mtu <N>`` line via the
-            # range-fold pass.
-            mtu=(
-                _media_mtu_read(name, state["mtu"], name in tagged_devices)
-                if "mtu" in state
-                # A unit's MTU, read from its family (inet's first):
-                # the largest IP packet already.
-                else state.get("inet_mtu", state.get("inet6_mtu"))
+            mtu=payload,
+            # ``family inet mtu``, of unit 0 or of a unit above it:
+            # the IP MTU, the largest IP packet already.
+            ip_mtu=ip_mtu_read(
+                "juniper_junos", state.get("inet_mtu"), payload,
+                ipv4=bool(state.get("ipv4")) or state.get("dhcp_client", False),
             ),
             # Phase 4 rank-4: L2 switchport semantics.
             switchport_mode=state.get("switchport_mode"),
@@ -938,6 +952,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             or sub_iface.ipv6_addresses
             or sub_iface.lag_member_of
             or sub_iface.mtu is not None
+            or sub_iface.ip_mtu is not None
         ):
             # Load-bearing — leave the iface alone, don't fold to vlan.
             continue
@@ -2166,23 +2181,23 @@ def _apply_interfaces(  # noqa: C901
             stated.add(sub_name)
         if len(tokens) < 4:
             return
-        # ``unit <N> family inet|inet6 mtu <M>``: a unit's MTU, which
-        # Junos sets per family; the renderer writes it so for a unit
-        # above 0.  The record holds one MTU, and where both families
-        # state one, inet's is kept.  Unit 0 is the device's own
-        # record, whose ``mtu`` is the device's media MTU, so a family
-        # MTU is not read there.
+        # ``unit <N> family inet|inet6 mtu <M>``: the largest packet of
+        # the family, which Junos sets per family.  ``family inet``'s
+        # is the record's IP MTU, on any unit.  ``family inet6``'s is
+        # a unit's MTU above unit 0; unit 0 is the device's own
+        # record, whose ``mtu`` is the device's media MTU, and the
+        # tree has no IPv6 MTU, so it is not read there.
         if (
-            unit_num != 0
-            and len(tokens) == 7
+            len(tokens) == 7
             and tokens[3] == "family"
             and tokens[4] in ("inet", "inet6")
             and tokens[5] == "mtu"
         ):
-            try:
-                target_state[f"{tokens[4]}_mtu"] = int(tokens[6])
-            except ValueError:
-                pass
+            if tokens[4] == "inet" or unit_num != 0:
+                try:
+                    target_state[f"{tokens[4]}_mtu"] = int(tokens[6])
+                except ValueError:
+                    pass
             return
         # ``unit <N> family inet address <ip>/<prefix>`` and the
         # Wave-B/C extensions on the same line:

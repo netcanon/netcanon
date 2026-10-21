@@ -999,15 +999,19 @@ def _digest(codec: str, path: str) -> str:
 #: only when a parser's reading of that input is changed on purpose; the
 #: failing assertion prints the new one.  Moved on purpose: every IOS XR
 #: and OS10 input that states an ``mtu``, when the tree's MTU became the
-#: payload (``MTU_BEYOND_THE_PAYLOAD`` in ``codecs/_helpers.py``).
+#: payload (``MTU_BEYOND_THE_PAYLOAD`` in ``codecs/_helpers.py``); every
+#: input that states an IP MTU apart from its MTU, and every AOS-CX input
+#: that raises the MTU of an IPv4 interface and leaves its IP MTU at 1500,
+#: when the tree gained an IP MTU of its own
+#: (``CanonicalInterface.ip_mtu``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
-    "real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg": "1438f3eb976a",
-    "real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg": "51c85d20a673",
-    "real/aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg": "181fdcc21fb2",
-    "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "48321a06dd41",
-    "synthetic/aruba_aoscx/kitchen_sink.cfg": "87f524b49e58",
+    "real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg": "ed95de985915",
+    "real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg": "272c7cdc2be8",
+    "real/aruba_aoscx/canu_csm17_spine001_ipv6_vrf.cfg": "46ec779d1ff1",
+    "real/aruba_aoscx/netutils_aoscx_snmpv3_glcx1009.cfg": "23ea36b661bf",
+    "synthetic/aruba_aoscx/kitchen_sink.cfg": "1c1097aeb766",
     "real/aruba_aoss/aruba_central_5memberstack_rendered.cfg": "834fc796df65",
     "real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg": "12aa29d82a17",
     "real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg": "06c7aeab8a24",
@@ -1030,7 +1034,7 @@ BEFORE: dict[str, str] = {
     "real/cisco_iosxe/ntc_carrier_interfaces.txt": "3c1760c9d5cd",
     "real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt": "0bd80061c03b",
     "real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt": "bcdfaa8ebcef",
-    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "768e0992850c",
+    "real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt": "454f509eaaf8",
     "real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt": "7192fbc5fd5e",
     "synthetic/cisco_iosxe_cli/kitchen_sink.txt": "c2f10d43a64e",
     "iosxe/show_run_simple.txt": "fba5436f7b17",

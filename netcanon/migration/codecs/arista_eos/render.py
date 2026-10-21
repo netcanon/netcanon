@@ -55,6 +55,7 @@ from ...canonical.intent import CanonicalIntent
 from .._helpers import (
     charge_id_lines,
     native_vlan_stated,
+    one_mtu_written,
     switchport_trunk_allowed_value,
     switchport_trunk_native_value,
     wants_no_untagged_vlan,
@@ -610,7 +611,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             or bool(iface.ipv6_addresses)
             or bool(iface.dhcp_client_v6)
             or bool(iface.tunnel_type)
-            or iface.mtu is not None
+            or one_mtu_written(iface) is not None
             or not iface.enabled
             or iface.switchport_mode is not None
             or iface.access_vlan is not None
@@ -914,8 +915,10 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append(
                     f"   channel-group {chan_id} mode {mode_token}"
                 )
-        if iface.mtu is not None:
-            out.append(f"   mtu {iface.mtu}")
+        # One MTU here: the IP MTU where the tree states no payload.
+        mtu = one_mtu_written(iface)
+        if mtu is not None:
+            out.append(f"   mtu {mtu}")
         if not iface.enabled:
             out.append("   shutdown")
         out.append("!")

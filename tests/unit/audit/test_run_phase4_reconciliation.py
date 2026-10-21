@@ -1188,3 +1188,81 @@ def test_slim_for_commit_keeps_codec_bug_drops_lower_severity() -> None:
     # The input result is not mutated.
     assert len(result["cells"]) == 3
     assert "latest_json_slimmed" not in result
+
+
+# ---------------------------------------------------------------------------
+# An IP MTU that moved between ``mtu`` and ``ip_mtu`` of one record.
+#
+# A platform with one MTU writes an IP MTU of its own as that MTU where
+# the record states no payload, and an IPv4 Junos unit's MTU is its
+# ``family inet mtu``, read back as ``ip_mtu``.  The same IP packets are
+# sent; ``interfaces[].mtu`` stays ALIGNED.  Every other shape of the two
+# fields is drift.
+# ---------------------------------------------------------------------------
+
+
+def _mtu_cell(record_diffs: dict) -> dict:
+    return {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "aruba_aoscx",
+        "target_codec": "cisco_nxos",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "interfaces": {
+                "preserved": False,
+                "source_count": 2,
+                "target_count": 2,
+                "drift": {"interfaces[1] {'name': 'vlan 101'}": record_diffs},
+            },
+        },
+    }
+
+
+_MTU_GOOD = {"per_field_expectation": {"interfaces[].mtu": {"disposition": "good"}}}
+
+
+@pytest.mark.parametrize("record_diffs", [
+    pytest.param(
+        {"mtu": {"source": None, "target": 9198},
+         "ip_mtu": {"source": 9198, "target": None}},
+        id="ip-mtu-written-as-the-one-mtu",
+    ),
+    pytest.param(
+        {"mtu": {"source": 1546, "target": None},
+         "ip_mtu": {"source": None, "target": 1546}},
+        id="payload-read-back-as-family-inet-mtu",
+    ),
+])
+def test_an_ip_mtu_that_moved_field_is_preserved(record_diffs: dict) -> None:
+    result = reconcile_cell(_mtu_cell(record_diffs), _MTU_GOOD)
+    assert result["field_variances"]["interfaces[].mtu"]["variance"] == recon.VAR_ALIGNED
+
+
+@pytest.mark.parametrize("record_diffs", [
+    pytest.param(
+        {"mtu": {"source": None, "target": 9198}},
+        id="a-payload-from-nowhere",
+    ),
+    pytest.param(
+        {"mtu": {"source": None, "target": 9000},
+         "ip_mtu": {"source": 9198, "target": None}},
+        id="another-number",
+    ),
+    pytest.param(
+        {"mtu": {"source": 9198, "target": 1500},
+         "ip_mtu": {"source": None, "target": 9198}},
+        id="the-payload-changed-as-well",
+    ),
+    pytest.param(
+        {"mtu": {"source": None, "target": 9198},
+         "ip_mtu": {"source": 9198, "target": 9198}},
+        id="the-ip-mtu-stayed-too",
+    ),
+])
+def test_any_other_mtu_drift_is_still_drift(record_diffs: dict) -> None:
+    result = reconcile_cell(_mtu_cell(record_diffs), _MTU_GOOD)
+    entry = result["field_variances"]["interfaces[].mtu"]
+    assert entry["variance"] == recon.VAR_CODEC_BUG
+    assert list(entry["drift_detail"]["per_record"]) == ["interfaces[1] {'name': 'vlan 101'}"]

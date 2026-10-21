@@ -352,6 +352,24 @@ class ArubaAOSSCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/config/ip-mtu",
+                reason=(
+                    "AOS-S has no per-interface MTU of any kind: its IP MTU is "
+                    "the global `jumbo ip-mtu`. An interface's IP MTU (IOS-XE "
+                    "or AOS-CX `ip mtu`, IOS XR `ipv4 mtu`, Junos `family inet "
+                    "mtu`) is not in the output."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/config/ip-mtu-beside-mtu",
+                reason=(
+                    "AOS-S has no per-interface MTU of any kind: its IP MTU is "
+                    "the global `jumbo ip-mtu`. An interface's IP MTU (IOS-XE "
+                    "or AOS-CX `ip mtu`, IOS XR `ipv4 mtu`, Junos `family inet "
+                    "mtu`) is not in the output."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/dot1q-vlan",
                 reason=(
                     "Routed sub-interface 802.1Q tag (Cisco "

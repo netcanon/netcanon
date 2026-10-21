@@ -38,6 +38,7 @@ from .._helpers import (
     _coalesce_vlan_ids,
     every_native_vlan_tagged,
     native_vlan_stated,
+    one_mtu_written,
     same_vendor_version,
     switchport_trunk_allowed_value,
     switchport_trunk_native_value,
@@ -600,8 +601,10 @@ def _render_interface(iface, lag_mode_by_name: dict, may_review: bool = False) -
         block.append("  shutdown")
     else:
         block.append("  no shutdown")
-    if iface.mtu is not None:
-        block.append(f"  mtu {iface.mtu}")
+    # One MTU here: the IP MTU where the tree states no payload.
+    mtu = one_mtu_written(iface)
+    if mtu is not None:
+        block.append(f"  mtu {mtu}")
 
     # Tunnel encapsulation mode.  NX-OS spells GRE ``tunnel mode gre ip``
     # and IP-in-IP ``tunnel mode ipip``.  Only gre/ipip have a clean NX-OS

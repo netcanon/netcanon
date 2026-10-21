@@ -373,9 +373,15 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   and a unit of an aggregate lost its `vlan-id`; translate such a
   config again.  A unit's MTU is written and read per family
   (`family inet mtu`, `family inet6 mtu`; on `family inet` where the
-  unit has no address).  Where both families state one, inet's is
-  kept, and unit 0's family MTU is not read: its record holds the
-  device's own (media) MTU.  Juniper requires the device's media MTU
+  unit has no address).  `family inet mtu`, on any unit, unit 0
+  included, is the IP MTU (`ip_mtu`): IOS-XE and AOS-CX write it
+  `ip mtu`, IOS XR `ipv4 mtu`, and a target with one MTU writes it
+  as that MTU where the device states no other, and says it is lost
+  where it does.  A unit's `family inet6 mtu` above unit 0 is the
+  unit's MTU, there being no IPv6 MTU in the tree; unit 0's is not
+  read: its record holds the device's own (media) MTU.  ⚠️ Up to
+  0.7.7 a unit's `family inet mtu` came out as an interface `mtu` on
+  IOS-XE and IOS XR.  Juniper requires the device's media MTU
   to hold a family MTU and its encapsulation overhead, so where the
   device states no MTU (and the unit's is above 1500) or one that
   cannot hold it, a `# review:` line says so.  ⚠️ Up to

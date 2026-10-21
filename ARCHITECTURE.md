@@ -2010,7 +2010,16 @@ normally.  Added in commit `faf925f` (Wave 9β); the variance-class
 set was 7 at that time — TRIVIAL_EMPTY landed later in Wave 10α
 (commit `35c7bf0`).  The LAG equivalence callable just shifts where
 individual cells land between ALIGNED and CODEC_BUG; it doesn't add
-or remove a class.
+or remove a class.  One equivalence reads a record's whole diffs
+rather than one value (`_RECORD_EQUIVALENCES`): `interfaces[].mtu`
+is preserved where the record's only MTU drift is one number moving
+between `mtu` and `ip_mtu` with nothing in the other field (an IP
+MTU that a platform with one MTU writes as its `mtu`, or an IPv4
+Junos unit's MTU, which is its `family inet mtu`).  The same IP
+packets are sent either way; any other pair of values is drift.
+`ip_mtu` itself has no key in the expectation YAMLs: its losses are
+declared in the capability matrices and read from each output's
+text by `tests/unit/migration/test_an_ip_mtu_of_its_own.py`.
 
 Per-source-vendor investigation reports under
 `tests/fixtures/real/phase4_findings_<vendor>.md` carry per-cell

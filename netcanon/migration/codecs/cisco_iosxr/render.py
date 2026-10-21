@@ -41,7 +41,7 @@ import re
 
 from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
-from .._helpers import _prefix_to_mask, mtu_written, same_vendor_version
+from .._helpers import _prefix_to_mask, ip_mtu_written, mtu_written, same_vendor_version
 from . import port_names as _port_names
 
 #: Canonical algorithm token -> the IOS-XR keyword + type that consumes it.
@@ -359,6 +359,9 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
         if addr.is_secondary:
             line += " secondary"
         block.append(line)
+    ip_mtu = ip_mtu_written("cisco_iosxr", iface)
+    if ip_mtu is not None:
+        block.append(f" ipv4 mtu {ip_mtu}")
     for addr in iface.ipv6_addresses:
         block.append(f" ipv6 address {addr.ip}/{addr.prefix_length}")
     if iface.lag_member_of:

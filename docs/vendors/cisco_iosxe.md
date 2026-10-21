@@ -55,7 +55,9 @@ vendors (or vice versa), use `cisco_iosxe_cli`.
   does not round-trip; the NETCONF `cisco_iosxe` stub renders interfaces
   only, so the rest of this list applies to `cisco_iosxe_cli`.
 - Interfaces — name, description, enabled state, IPv4 + IPv6
-  addresses, MTU, VRF binding, `kind` override
+  addresses, MTU, `ip mtu` (the IP MTU, a field of its own; ⚠️ not
+  read up to 0.7.7), VRF binding, `kind` override.  `ipv6 mtu` is
+  not read.
 - VLANs — ID, name, tagged/untagged port lists, SVI L3 (via
   VLAN-centric projection from the `switchport` per-interface form)
 - Static routes

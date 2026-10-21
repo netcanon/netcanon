@@ -202,6 +202,16 @@ class CanonicalInterface(BaseModel):
             1514``).  A codec whose platform counts more converts at
             its edge (``MTU_BEYOND_THE_PAYLOAD`` in
             ``codecs/_helpers.py``).  ``None`` = use vendor default.
+        ip_mtu: The largest IPv4 packet the interface sends, where it
+            is not the payload ``mtu`` says: IOS-XE and AOS-CX ``ip
+            mtu``, IOS XR ``ipv4 mtu``, Junos ``family inet mtu``.  It
+            counts the IP packet, its header included, on every
+            platform.  ``None`` = the payload (``mtu``, or the
+            platform's default where that is ``None``); a parser
+            leaves it ``None`` where the config states the payload
+            itself, and fills it where its platform's IP MTU is a
+            setting of its own that the config does not state
+            (``IP_MTU_THAT_IS_NOT_STATED`` in ``codecs/_helpers.py``).
         ipv4_addresses: IPv4 address records on this interface.
         ipv6_addresses: IPv6 address records on this interface.
         switchport_mode: Switchport state.  ``"access"`` | ``"trunk"`` |
@@ -325,6 +335,7 @@ class CanonicalInterface(BaseModel):
     enabled: bool = True
     interface_type: str = ""
     mtu: int | None = None
+    ip_mtu: int | None = None
     ipv4_addresses: list[CanonicalIPv4Address] = Field(default_factory=list)
     ipv6_addresses: list[CanonicalIPv6Address] = Field(default_factory=list)
     switchport_mode: str | None = None
