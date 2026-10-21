@@ -1142,7 +1142,14 @@ provenance can verify each:
   stage (compiles wheels with `build-essential`) from a `runtime`
   stage that installs prebuilt wheels with `pip install --no-index`.
   No compilers in the runtime layer; no network during the runtime
-  install.
+  install.  And no pip: the runtime stage uninstalls it once netcanon
+  is installed.  pip carries its own copies of third-party libraries,
+  pinned by the base image's pip release rather than by
+  `requirements.lock`, and the certifi CA bundle that pip 26.2.1
+  vendors is a CRITICAL advisory (GHSA-6q48-6c7w-9gw2) the gating scan
+  found in an image whose own dependencies were clean.  Nothing in
+  the server uses pip.  Guarded by
+  `tests/unit/test_dockerfile_runtime_pip.py`.
 - **No build cache on the release path.**  The tag-triggered publish
   builds clean from source with no `cache-from` / `cache-to`.  A
   writable shared cache (e.g. `type=gha`) could otherwise launder a
