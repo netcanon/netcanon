@@ -207,11 +207,15 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: good
     note: >
-      Preserved on 143 of 143 name-matched records; MTU is actually
-      populated on 5 of them and all 5 round-trip unchanged.  Coverage is
-      thin — 5 records is stated plainly rather than generalised — but
-      the measurement is clean, including the 1546-byte carrier
-      sub-interfaces on `ntc_carrier_interfaces.txt`.
+      Preserved on 137 of 137 name-matched records; an MTU is actually
+      populated on 6 of them.  5 round-trip unchanged, including the
+      1546-byte carrier sub-interfaces on `ntc_carrier_interfaces.txt`;
+      the sixth is the umbrella capture's `Tunnel100`, whose `ip mtu
+      1440` is an IP MTU of its own (`ip_mtu`) with no `mtu` beside it
+      and is written as VyOS's one `mtu 1440` -- the same IP packets,
+      which the reconciler reads as preserved.  Coverage is thin -- 6
+      records is stated plainly rather than generalised -- but the
+      measurement is clean.
     references: [iosxecli-vyos-surface]
 
   "interfaces[].ipv6_addresses":
