@@ -336,16 +336,14 @@ per_field_expectation:
     references: [opnsense-nxos-surface]
 
   "vlans[].ipv4_addresses":
-    disposition: lossy
-    reason: >
+    disposition: not_applicable
+    note: >
       Not exercised by the corpus — no VLAN record in any cell carries L3
       addressing, since OPNsense hangs the address on the zone interface
-      instead — so this rests on the target's declaration.  The cisco_nxos
-      matrix declares `/vlans/vlan/ipv4/address/ip` (and its secondary /
-      virtual-gateway companions) lossy: the codec renders an SVI only from a
-      sibling interface stanza, so an address carried on the VLAN record
-      itself is dropped.  Re-declare such SVIs as `interface Vlan<N>` on the
-      target.
+      instead — so the field is empty on both sides of every cell.  For a
+      source that does carry one, cisco_nxos writes the address as
+      `interface Vlan<N>` (`synthesize_svis_from_vlan_l3`); its secondary and
+      virtual-gateway companions are declared lossy there.
     references: [opnsense-nxos-surface]
 
   # -- Static routes.  Top-level key omitted: the route record survives 1->1

@@ -300,10 +300,11 @@ per_field_expectation:
       Not populated on either side of any of the 8 cells.  OPNsense mounts
       VLAN L3 on a `vlan0.<id>` interface record rather than on the VLAN
       record, so the canonical VLAN-SVI address stays empty and the addressing
-      migrates through `interfaces[].ipv4_addresses` instead.  Both matrices
-      declare `/vlans/vlan/ipv4/address/ip` lossy, so a source that DID mount
-      L3 on the VLAN record would degrade — but no committed cell exercises
-      that, and this file does not claim a loss it has not seen.
+      migrates through `interfaces[].ipv4_addresses` instead.  opnsense
+      declares `/vlans/vlan/ipv4/address/ip` lossy, and aruba_aoscx writes
+      such an address as `interface vlan <N>`
+      (`synthesize_svis_from_vlan_l3`) — but no committed cell exercises
+      either, and this file does not claim a loss it has not seen.
     references: [opnsense-aoscx-surface]
 
   "vlans[].untagged_ports":

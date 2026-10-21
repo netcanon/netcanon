@@ -56,6 +56,7 @@ from ..._usm_keys import (
     user_usm_kind,
 )
 from ...canonical.intent import CanonicalIntent
+from ...canonical.transforms import synthesize_svis_from_vlan_l3
 from .._helpers import (
     TRUNK_ALL,
     TRUNK_NONE,
@@ -138,9 +139,23 @@ def render_intent(tree: CanonicalIntent) -> str:
         lines.append(_render_static_route(route))
 
     # ── Interfaces (AOS-CX show-output order) ──
+    # An address the tree holds on a VLAN record (a Junos ``irb`` unit
+    # folded onto its VLAN, an AOS-S VLAN's ``ip address``) with no
+    # VLAN interface beside it is written as ``interface vlan <N>``,
+    # as EOS and IOS-XE write theirs: AOS-CX states a VLAN's L3 on
+    # that interface only.  Non-mutating -- rendered alongside
+    # ``tree.interfaces``.
+    from . import port_names as _port_names
+
+    synth_svis = synthesize_svis_from_vlan_l3(
+        tree,
+        name=lambda vid: _port_names.format_port_identity(
+            _port_names.PortIdentity(kind="svi", index=vid, original=""),
+        ),
+    )
     lag_mode_by_name = {lag.name: lag.mode for lag in tree.lags}
     stated = native_vlan_stated(tree.interfaces)
-    for iface in _sort_interfaces(tree.interfaces):
+    for iface in _sort_interfaces([*tree.interfaces, *synth_svis]):
         lines.extend(_render_interface(
             iface, lag_mode_by_name, tree.anycast_gateway_mac, stated,
         ))

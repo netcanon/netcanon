@@ -396,15 +396,17 @@ per_field_expectation:
   vlans[].ipv4_addresses:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Renders VLAN SVI / management L3 only from a sibling
-      interface stanza; an L3 address carried on the VLAN record
-      itself (the Junos irb / Aruba SVI-on-VLAN shape, folded onto
-      CanonicalVlan.ipv4_addresses) is dropped on render because this
-      codec does not synthesize an SVI from the VLAN record. Declared
-      lossy so validate_against surfaces the loss instead of reporting
-      severity:ok (blind-audit 3ec11f3 T0-2). Measured over 1 cell:
-      drifted on 1, preserved on 0, both sides empty on 0.
+      Drifts on 8 of 10 cells (both sides empty on the other 2), and it
+      is a change of mount, not a loss.  OS10 states a VLAN's address
+      on `interface vlan<N>`, which the OS10 parser keeps as an
+      interface beside the VLAN record.  This path translates no name,
+      so the AOS-CX render writes the address from that stanza under
+      the OS10 name (`synthesize_svis_from_vlan_l3` writes no second
+      interface for a VLAN that has one in any spelling), and the
+      AOS-CX parser does not fold an interface called `vlan700` onto
+      VLAN 700: the address re-parses onto `interfaces[]`.  With port
+      names translated, as the API and the demo do, the interface is
+      `vlan 700` and every such address folds back onto its VLAN.
     references: [os10-aoscx-surface]
 
   vlans[].name:

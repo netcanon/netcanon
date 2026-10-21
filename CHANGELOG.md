@@ -429,6 +429,41 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An address held on a VLAN record was not written by NX-OS or
+  AOS-CX, and EOS wrote a second one as a primary address.**  A tree
+  can hold a VLAN's address on the VLAN record with no interface for
+  it: the Junos parser folds the address of an `irb.<N>` that a VLAN
+  binds with `l3-interface` onto the VLAN, and keeps no interface for
+  the unit.  EOS and IOS-XE write an `interface Vlan<N>` for such a
+  VLAN (`synthesize_svis_from_vlan_l3`).  NX-OS and AOS-CX wrote
+  nothing and declared the path lossy, so the job's validation report
+  listed it and the address was in no line: on the committed
+  `saidvandeklundert_snmpv3_junos172`, the gateway of VLAN 698 was in
+  neither output.  Both now write the interface (`interface Vlan<N>`,
+  with `feature interface-vlan`, on NX-OS; `interface vlan <N>` on
+  AOS-CX), and neither matrix declares `/vlans/vlan/ipv4/address/ip`
+  lossy any more; the address's anycast virtual gateway is still not
+  written, and stays declared lossy.  A VLAN record's addresses after
+  the first are now marked secondary when the interface is written:
+  the EOS renderer writes `secondary` from that mark, and wrote a
+  Junos `irb` unit with two addresses as two `ip address` lines with
+  no `secondary`, in a job that said `completed`.  (IOS-XE writes it
+  for every address after the first, and was right.)  And the
+  interface was looked for by the name `Vlan<N>` alone, so where port
+  names are not translated -- a `render` of a tree another codec
+  parsed, as the cross-mesh audit does; not the API or the demo,
+  which translate them -- an AOS-CX tree, whose interface of VLAN 101
+  is `vlan 101`, got an `interface Vlan101` beside it on EOS and
+  IOS-XE: one address on two interfaces, the second without the
+  first's description or `shutdown`.  An interface of the VLAN is now
+  found however a codec spells it (`Vlan10`, `vlan10`, `vlan 10`).
+  On that path the AOS-CX address no longer reaches EOS at all (the
+  EOS parser reads no `interface vlan 101`, as it reads no `lag 1`),
+  and its expectation says so.  If you translated onto NX-OS or AOS-CX
+  with 0.7.7 or earlier a Junos config whose VLANs hold their gateway
+  on an `irb` unit, translate it again; onto EOS, check every `irb`
+  unit that has more than one address.
+
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
   motd` are printed with their body as it was typed and a line `EOF`

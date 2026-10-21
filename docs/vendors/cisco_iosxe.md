@@ -365,6 +365,15 @@ translate it again from `show running-config` as the device prints it.
 
 ## Common gotchas
 
+- **A VLAN's address with no interface of its own gets one, once**
+  (CLI codec).  A source can hold a VLAN's address on the VLAN
+  itself: Junos folds the address of an `irb` unit that a VLAN binds
+  with `l3-interface` onto the VLAN.  As a target, IOS-XE writes
+  `interface Vlan<N>` for it.  An interface of the VLAN the source
+  already has is found in any spelling, so an AOS-CX `interface vlan
+  101` that reaches the renderer untranslated no longer gets an
+  `interface Vlan101` beside it (the API and the demo translate the
+  name, and were not affected).
 - **Renaming or dropping `Vlan<N>` in the rename modal is not
   always shown by the output** (CLI codec).  A translation from
   IOS-XE to IOS-XE lists each VLAN interface under *Other names in

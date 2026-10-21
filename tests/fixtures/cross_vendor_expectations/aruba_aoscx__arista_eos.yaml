@@ -225,15 +225,22 @@ per_field_expectation:
     references: [aoscx-arista-surface]
 
   "vlans[].ipv4_addresses":
-    disposition: lossy
+    disposition: unsupported
     reason: >
-      SVI addressing drifts on all 5 cells that populate it.  AOS-CX carries
-      an active-gateway address alongside the interface address on a VLAN
-      SVI; the canonical `virtual_gateway_address` / `virtual_gateway_mac`
-      pair does not survive into the EOS render, so the SVI arrives with its
-      own address but without the shared gateway.  This is the field most
-      likely to break first-hop reachability on cutover — re-author the
-      EOS-side virtual-router addressing explicitly.
+      Dropped in full on all 5 cells that populate it, on the path this audit
+      measures (no port name translated): the render writes the AOS-CX SVI
+      under its own name, `interface vlan 101`, and the EOS parser reads no
+      interface of that spelling -- the same loss as every `lag N` and
+      `loopback N` of the pair (`interfaces[].name`) -- so the VLAN comes
+      back with no address.  (A synthesized `interface Vlan101` beside it
+      carried the address back until `synthesize_svis_from_vlan_l3` knew the
+      AOS-CX spelling for a VLAN interface; it was one SVI written twice.)
+      With port names translated, as the API and the demo do, the SVI is
+      written `interface Vlan101` with `ip address virtual` and `ip address`
+      lines, and the address arrives; read back, the active-gateway address
+      is not kept on the VLAN.  This is the field most likely to break
+      first-hop reachability on cutover — check the SVI addresses and
+      re-author the EOS-side virtual-router addressing explicitly.
     references: [aoscx-arista-surface]
 
   "vlans[].untagged_ports":

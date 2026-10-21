@@ -26,7 +26,8 @@ IPv4 Distributed Anycast Gateway.
 - L2 switchport — access / trunk mode, access-VLAN, trunk allowed-VLAN
   list, trunk native VLAN, port-channel (`channel-group`) membership
 - VLANs — ID, name, tagged/untagged port lists (VLAN-centric
-  projection from the per-interface `switchport` form)
+  projection from the per-interface `switchport` form), and an
+  address held on the VLAN record (see Common gotchas)
 - Static routes — default VRF **and** per-VRF (`ip route … vrf X`)
 - LAGs (`port-channel<N>` reconciled with cross-vendor names like
   `ae<N>` / `Port-channel<N>` / `trk<N>`)
@@ -261,6 +262,16 @@ translate it again from `show running-config` as the switch prints it.
 
 ## Common gotchas
 
+- **A VLAN's address with no interface of its own gets one.**  A
+  source can hold a VLAN's address on the VLAN itself: Junos folds
+  the address of an `irb` unit that a VLAN binds with `l3-interface`
+  onto the VLAN.  As a target, NX-OS writes `interface Vlan<N>` for
+  it (and `feature interface-vlan`), with the addresses after the
+  first `secondary`; an interface of the VLAN the source already
+  has, in any spelling, is the one written.  The address's anycast
+  virtual gateway is not written.  Release 0.7.7 and earlier wrote
+  nothing for such an address, and the job's validation report
+  listed it as lossy.
 - **A trunk's allowed list means what it says.**  A trunk with no
   `switchport trunk allowed vlan` line — a vPC peer link, usually —
   is read as a trunk of EVERY VLAN, the NX-OS default, and reaches

@@ -1,5 +1,7 @@
 # NX-OS → ArubaOS-CX: measured canonical surface
 
+> **Update 2026-10-20 — the AOS-CX render now writes a VLAN interface for an address held on a VLAN record, and its matrix no longer declares `/vlans/vlan/ipv4/address/ip` lossy.**  Where a VLAN carries an address and the tree has no interface for it in any spelling, the render writes `interface vlan <N>` for it (`synthesize_svis_from_vlan_l3`).  No measurement of this pair moved: every VLAN of it that carries an address already has an interface of its own, so nothing is written beside it.  The VLAN-record list still measures empty on this path, which translates no name: the render writes `interface Vlan10` as it stands and the AOS-CX parser does not fold an interface of that name onto VLAN 10.  With port names translated, as the API and the demo do, the interface is `vlan 10` and every such address folds back onto its VLAN.  Sentences below that quote the lossy declaration, or say the render never writes an SVI from the VLAN record, describe the render before that change.  Current dispositions are in `tests/fixtures/cross_vendor_expectations/cisco_nxos__aruba_aoscx.yaml`.
+
 Cached measurement backing
 `tests/fixtures/cross_vendor_expectations/cisco_nxos__aruba_aoscx.yaml`.
 
