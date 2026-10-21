@@ -57,15 +57,16 @@ on all 12 cells:
 and so do description, admin state, MTU, IPv4 and IPv6 addressing and LAG
 membership — zero drift on every one of those, on every cell.
 
-> **Since the VLAN-device change** (the table above was measured before it):
-> no source record is lost, but the inventory now **grows** by one record on
-> each cell that holds a VLAN. The render links the VLAN that the IOS-XR parser
-> makes from a sub-interface's `encapsulation dot1q` tag to no interface, so it
-> writes it as a `<vlan>` device of its own, `<parent>_vlan<id>` on a port it
-> picks (`MgmtEth0/RP0/CPU0/0_vlan35` on `batfish_ebgp_border01`), which the
-> OPNsense parser reads back as an interface record (`ianaift:l3ipvlan`). The
-> pair's expectation YAML holds the current disposition (`interfaces[].name`
-> lossy, for the shape of the inventory, not its contents).
+> **Since a sub-interface is a VLAN device on its port** (0.7.8): the table
+> holds again. Between the VLAN-device change and then the inventory grew by
+> one record on each cell that holds a VLAN: the render linked the VLAN that
+> the IOS-XR parser makes from a sub-interface's `encapsulation dot1q` tag to
+> no interface, and wrote it as a `<vlan>` device of its own on a port it
+> picked (`MgmtEth0/RP0/CPU0/0_vlan35` on `batfish_ebgp_border01`). The
+> sub-interface is that VLAN's device now — `GigabitEthernet0/0/0/1.35` is a
+> `<vlan>` of tag 35 on `GigabitEthernet0/0/0/1` — so no record is added,
+> and `interfaces[].name` is `good`. The 4 sub-interfaces come back typed
+> `ianaift:l3ipvlan` (below).
 
 So the losses on this pair are **real per-attribute and per-record losses**,
 each independently caused, not one structural signal reflected in a dozen
@@ -180,23 +181,26 @@ is the `<vlan>`'s `<descr>`), so a source that supplied one would keep it.
 `vlans[].name` is the exception since the VLAN-device change, recorded `lossy`:
 the round trip gives each VLAN a name it did not have. An OPNsense `<vlan>` has
 no name of its own, so the OPNsense parser names a VLAN after the device the
-render wrote for it (`MgmtEth0/RP0/CPU0/0_vlan35`). It drifts by gaining a
-name, never by losing one.
+render wrote for it, which is the sub-interface (`GigabitEthernet0/0/0/1.35`).
+It drifts by gaining a name, never by losing one.
 
-**Do not read `vlans[].id: good` as "the VLAN migrated."** On all 4 of those
-cells the sub-interface tag that *generated* the VLAN record —
-`interfaces[].dot1q_vlan` — drops to null (4 records, 4 cells), because
-`opnsense` declares `/interfaces/interface/dot1q-vlan` unsupported. The VLAN id
-survives as a bare number in a list; the routed sub-interface it belonged to
-arrives untagged. That is a reachability change, and it is invisible in the
-`vlans[].id` key.
+**`vlans[].id: good` is the sub-interface's own tag.** The render writes each
+sub-interface as a `<vlan>` device of its tag on its port, and the OPNsense
+parser reads that device back as the VLAN and as the interface. The tag
+that *generated* the VLAN record — `interfaces[].dot1q_vlan` — still reads
+back null (4 records, 4 cells), because the parser reads a device, not a
+sub-interface: `opnsense` declares `/interfaces/interface/dot1q-vlan` lossy
+for that reading. The tag is on the wire. Up to 0.7.7 the path was
+unsupported, and the routed sub-interface arrived untagged.
 
 ## `interfaces[].interface_type` — a dropped attribute, not a dropped record
 
 `interface_type` drifts on **155 of 155** interface records, on all 12 cells:
 `ianaift:ethernetCsmacd`, `ianaift:softwareLoopback` and
-`ianaift:ieee8023adLag` all arrive as the empty string. OPNsense's
-`config.xml` `<interfaces>` block has no element that carries an ianaift type.
+`ianaift:ieee8023adLag` arrive as the empty string, and the 4 sub-interfaces
+as `ianaift:l3ipvlan`, the type the OPNsense parser gives a `<vlan>` device.
+OPNsense's `config.xml` `<interfaces>` block has no element that carries an
+ianaift type.
 
 This is declared **`lossy`, not `unsupported`**, and the distinction was
 checked rather than assumed. The repo's `_vanish` heuristic — "every drifting

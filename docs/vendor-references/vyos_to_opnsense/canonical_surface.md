@@ -91,7 +91,7 @@ PY
 | timezone | 0 | 0 | 13 |
 | syslog_servers | 0 | 0 | 13 |
 | interfaces | 11 | 2 | 0 |
-| vlans | 0 | 0 | 13 |
+| vlans | 0 | **1** | 12 |
 | static_routes | 0 | **4** | 9 |
 | dhcp_servers | 0 | 0 | 13 |
 | snmp | 2 | 2 | 9 |
@@ -127,13 +127,18 @@ nobody mistakes them for one of the nine:
 | attribute | records | shape |
 |---|---|---|
 | `dot1q_vlan` | 2 (`eth1.100`, `eth1.200`, kitchen sink) | value → null |
+| `interface_type` | 2 (`eth1.100`, `eth1.200`, kitchen sink) | empty → `ianaift:l3ipvlan` |
 | `vrf` | 1 (`eth0`, kitchen sink) | `BLUE` → empty |
 | `dhcp_client_v6` | 1 (`eth0`, DHCPv6-PD cell) | `dhcpv6` → empty |
 
-opnsense declares `/interfaces/interface/dot1q-vlan` unsupported (routed
-sub-interface tagging is not yet wired, ship-before-wire GAP 7), and the `vrf`
-emptying is the interface-side face of the whole-VRF drop described below.
-Neither is cited as evidence for any audited key.
+opnsense declares `/interfaces/interface/dot1q-vlan` lossy: the render
+writes `eth1.100` as a `<vlan>` device of tag 100 on `eth1`, and the
+OPNsense parser reads that device back — typed `ianaift:l3ipvlan`, and as a
+VLAN of its tag — not as the interface's tag, so the tag is on the wire and
+`dot1q_vlan` reads back null. The same reading makes two VLAN records (100,
+200) appear on the kitchen sink, which the YAML carries under
+`vlans[].id` and `interface_type` (both `lossy`). The `vrf` emptying is the
+interface-side face of the whole-VRF drop described below.
 
 ## Source-side gaps vs target-side drops
 
@@ -156,7 +161,9 @@ groups, **zero** EVPN type-5 routes, **zero** raw sections, no apply-groups, no
 group content, no anycast gateway MAC, no timezone, no syslog servers and no
 `interface_type` on any of the 55 interface records.
 
-These are recorded `not_applicable`, not `unsupported`. The distinction is
+These are recorded `not_applicable`, not `unsupported` — except
+`vlans[].id` and `interface_type`, which the target's reading of a
+sub-interface fills (above). The distinction is
 operational: opnsense declares `/vlans/vlan/id` and `/vlans/vlan/description`
 **supported** (`/vlans/vlan/name` is **lossy**: an OPNsense `<vlan>` has no
 name of its own, so a VLAN is named after its device, `<vlanif>`), and declares

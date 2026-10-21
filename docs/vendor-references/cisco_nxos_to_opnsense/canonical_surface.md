@@ -76,7 +76,9 @@ sub-field of the same parent is preserved on every cell that exercises it, so
 | `local_users` | `role` | 10 |
 | `snmp` | `v3_users` | 11 cells |
 
-Sub-fields with NO data anywhere on the corpus (measured, not assumed):
+Sub-fields with NO data anywhere on the corpus (measured, not assumed;
+`dot1q_vlan` is declared lossy on the opnsense side, a sub-interface being a
+`<vlan>` device of its tag on its port):
 `interfaces[].dot1q_vlan`, `interfaces[].voice_vlan`,
 `interfaces[].tunnel_type`, `interfaces[].dhcp_client_v6`,
 `interfaces[].default_name`, `interfaces[].kind`, `vlans[].description`.
