@@ -178,13 +178,16 @@ per_field_expectation:
     references: [nxos-fortigate-surface]
 
   "interfaces[].dot1q_vlan":
-    disposition: unsupported
+    disposition: lossy
     reason: >
-      Routed sub-interface 802.1Q tags are declared unsupported on the
-      fortigate_cli matrix (ship-before-wire, GAP 7).  The NX-OS source never
-      populates the field on this corpus, so nothing was measured.  A migrated
-      router-on-a-stick sub-interface would lose its tag and need re-creating
-      as a FortiOS VLAN child interface.
+      Routed sub-interface 802.1Q tags are declared lossy on the
+      fortigate_cli matrix: a sub-interface is written as FortiOS's VLAN
+      interface on its port (`set vlanid <tag>` / `set interface
+      "<port>"`), and the FortiGate parser reads it back as a VLAN
+      interface and a VLAN of its tag, not as the interface's tag.  The
+      NX-OS source never populates the field on this corpus, so nothing was
+      measured.  Up to 0.7.7 the path was unsupported and the tag written
+      was the number in the sub-interface's name.
     references: [nxos-fortigate-surface]
 
   "interfaces[].vrf":

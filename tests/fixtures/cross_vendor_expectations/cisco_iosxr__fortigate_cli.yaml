@@ -17,14 +17,13 @@
 # READ THIS BEFORE COMPARING WITH `cisco_iosxr__arista_eos.yaml`: on that pair
 # the interface inventory is fully preserved and the LAG surface is dropped
 # outright.  Here it is the other way round on BOTH counts.  The LAGs survive
-# byte-identical, and the interface list GROWS — 155 records in, 159 out, ZERO
-# lost, 4 added — because the FortiOS renderer synthesises an 802.1Q child
-# interface `vlan<id>` for every canonical VLAN and the re-parse reads each one
-# back as a new interface record.  The comparator sees a record-count change on
-# the parent list, so on those 4 cells EVERY `interfaces[].*` sub-field
-# measures as drifted for one reason.  `interfaces[].name` carries that signal;
-# the rest are `good` because they measure what happens to the VALUE on a
-# record that survives, and every one of them survives.
+# byte-identical, and the interface list is kept whole — 155 records in, 155
+# out.  Each dot1q sub-interface is written as FortiOS's own VLAN interface on
+# its port, with its own tag, and the re-parse reads it back as a VLAN
+# interface (`ianaift:l3ipvlan`) and a VLAN of its tag named after it.  Up to
+# 0.7.7 the renderer also wrote a `vlan<id>` child for the VLAN record IOS-XR
+# makes of each sub-interface's tag, on a parent it chose (a loopback on two
+# cells), and the list grew by 4; the child is the sub-interface now.
 #
 # The real losses on this pair are the VRF surface (dropped outright, taking
 # the per-interface and per-route bindings with it), the VLAN name, and
@@ -138,13 +137,12 @@ per_field_expectation:
       `config log syslogd setting` on the FortiGate outside the migration.
     references: [iosxr-fortigate-surface]
 
-  # -- Interfaces -- the inventory inflates, the values survive ---------------
+  # -- Interfaces -- the inventory is kept, two values are not --------------
   #
-  # One cause hits the first key and shadows the other eight: on the 4 cells
-  # that carry a canonical VLAN the record count grows by one.  Each entry
-  # below states separately whether it has INDEPENDENT per-record evidence
-  # (measured on records present on BOTH sides) or whether the count inflation
-  # is the whole story, so that no key is read as corroborating another.
+  # Every record is present on both sides on all 12 cells, so each key below
+  # is measured record by record.  Up to 0.7.7 the 4 cells that carry a
+  # canonical VLAN grew by one record each, and that count change hid the
+  # per-record values of every key here on those cells.
   #
   # One loss inside this list has no key of its own and is recorded in the
   # reference doc instead: `interfaces[].vrf` is emptied on 16 of the 155
@@ -153,34 +151,24 @@ per_field_expectation:
   # every binding to it go together — and it is declared once, there.
 
   "interfaces[].name":
-    disposition: lossy
-    reason: >
-      Measured across all 12 cells: ZERO interface records are lost and 4 are
-      added — 15 -> 16 on `batfish_ebgp_border01` and `..._border02`, 54 -> 55
-      on `iosxr_design_cst_pa3_xr752.cfg`, 9 -> 10 on `kitchen_sink.cfg`, and
-      the interface set is identical on the other 8 cells.  Surviving names
-      come back verbatim: IOS-XR 4-segment naming, channelized and dot1q
-      sub-interfaces, `Bundle-Ether`, `BVI` and `MgmtEth0/RP0/CPU0/0` all
-      survive the FortiOS render intact.  The additions are the renderer
-      synthesising `edit "vlan<id>" / set type vlan / set vlanid <id> / set
-      interface "<parent>"` for every canonical VLAN, which the re-parse reads
-      back as a new interface record.  That count change is why every
-      `interfaces[].*` key measures as drifted on those 4 cells.
-      Recorded `lossy` rather than `unsupported` deliberately: nothing is
-      dropped or blocked, so the migration stays compatible — but the inventory
-      an operator reviews is not the inventory they wrote.  One thing to fix
-      before pushing the render: the synthesised child is misparented on every
-      cell.  The renderer resolves the parent as the first `CanonicalLAG` on
-      the tree, falling back to a LAN-preference scorer when there is none, so
-      `vlan200` lands on `Bundle-Ether321`, `vlan100` on `Bundle-Ether1` and —
-      on both `batfish_ebgp_border0*` cells — `vlan35` lands on `Loopback123`,
-      a loopback.  On IOS-XR the VLAN's real parent is the dot1q
-      sub-interface's physical port.  Re-parent the children by hand.
+    disposition: good
+    note: >
+      155 of 155 records come back, by name, on all 12 cells: IOS-XR
+      4-segment naming, channelized and dot1q sub-interfaces,
+      `Bundle-Ether`, `BVI` and `MgmtEth0/RP0/CPU0/0` all survive the
+      FortiOS render intact.  A dot1q sub-interface is written on its own
+      port (`edit "GigabitEthernet0/0/0/1.35"` / `set type vlan` / `set
+      vlanid 35` / `set interface "GigabitEthernet0/0/0/1"`).  Up to 0.7.7
+      the renderer also wrote `edit "vlan<id>"` for the VLAN record IOS-XR
+      makes of the sub-interface's tag, on the first LAG or a scored parent
+      (`vlan35` on `Loopback123` on both `batfish_ebgp_border0*` cells),
+      and the list grew 15 -> 16, 15 -> 16, 54 -> 55 and 9 -> 10; the tag's
+      VLAN is now taken for the sub-interface's own and no child is made.
     references: [iosxr-fortigate-surface]
 
   "interfaces[].description":
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       151 of 155 records round-trip byte-identical.  The 4 that do not are all
       on `iosxr_design_cst_pa3_xr752.cfg` and all fail the same way —
       truncated to exactly 25 characters (`Bundle-Ether500` 30 -> 25,
@@ -188,13 +176,10 @@ per_field_expectation:
       43 -> 25), the surviving text being the first 25 characters of the
       source.  fortigate_cli declares
       `/interfaces/interface/config/description` lossy for exactly that reason
-      ("FortiOS limits alias to 25 characters").
-      Recorded `good` rather than `lossy`, and the reason is a property of THIS
-      corpus rather than of the pair: xr752 is also one of the 4 cells where
-      the interface list changes length, so the mesh records only the wholesale
-      count-drift string for it and never emits a per-record description slice.
-      A loss declared here could not be evidenced by any cell.  The truncation
-      is real regardless — IOS-XR circuit descriptions routinely encode the
+      ("FortiOS limits alias to 25 characters").  Recorded `good` up to 0.7.7,
+      when xr752's interface list changed length and the mesh emitted no
+      per-record slice for it; the list is kept whole now, and the 4 are
+      measured.  IOS-XR circuit descriptions routinely encode the
       far-end device and port, which is exactly the part that falls off the
       end.  Shorten them on the source or capture them separately before
       migrating.
@@ -205,12 +190,8 @@ per_field_expectation:
     note: >
       Admin state is identical on every one of the 155 records present on both
       sides — 0 drifting, measured across all 12 cells.  A port that was
-      `shutdown` on IOS-XR arrives `set status down` on the FortiGate.  This
-      key drifts on 4 cells only because the parent record list grows
-      (`interfaces[].name`); it carries no independent signal, which is stated
-      plainly because a reader could otherwise take it as evidence that
-      shutdown state is at risk.  The one thing to check is the 4 synthesised
-      `vlan<id>` children, which are emitted without a status line.
+      `shutdown` on IOS-XR arrives `set status down` on the FortiGate, a
+      dot1q sub-interface on its VLAN interface included.
     references: [iosxr-fortigate-surface]
 
   "interfaces[].mtu":
@@ -221,9 +202,7 @@ per_field_expectation:
       and comes back unchanged.  cisco_iosxr declares
       `/interfaces/interface/config/mtu` supported; fortigate_cli declares no
       path for it either way, so the declaration coverage is thin — the
-      measurement is what carries this one.  The synthesised `vlan<id>`
-      children carry no MTU, so any jumbo-frame setting expected on a dot1q
-      child must be re-applied after cutover.
+      measurement is what carries this one.
     references: [iosxr-fortigate-surface]
 
   "interfaces[].ipv6_addresses":
@@ -248,29 +227,29 @@ per_field_expectation:
       the widest-populated field on the pair and the one the migration most
       depends on.  IOS-XR `ipv4 address A.B.C.D/N` renders as `set ip A.B.C.D
       <dotted-mask> / set mode static` and the prefix comes back intact.
-      Unlike the AOS-CX source pair there is no duplicate-address hazard here:
-      the synthesised `vlan<id>` children carry NO IP on any of the 4 cells,
-      because IOS-XR mounts L3 on the dot1q sub-interface record rather than on
-      the VLAN record, so the addressing stays on a surviving interface.
+      A dot1q sub-interface keeps its address on the VLAN interface it is
+      written as.
     references: [iosxr-fortigate-surface]
 
   "interfaces[].interface_type":
-    disposition: good
-    note: >
-      154 of 155 records keep their IANA type hint, including all 18
-      `ianaift:softwareLoopback` records.  The one that does not is on
-      `iosxr_design_cst_pa3_xr752.cfg` — `BVI500`,
+    disposition: lossy
+    reason: >
+      150 of 155 records keep their IANA type hint, including all 18
+      `ianaift:softwareLoopback` records.  The 4 dot1q sub-interfaces (one
+      on each of the 4 cells that carry one) come back
+      `ianaift:ethernetCsmacd` -> `ianaift:l3ipvlan`: each is written as
+      FortiOS's VLAN interface on its port, and read back as one
+      (fortigate_cli declares `/interfaces/interface/dot1q-vlan` lossy for
+      it).  The fifth is on `iosxr_design_cst_pa3_xr752.cfg` — `BVI500`,
       `ianaift:other` -> `ianaift:ethernetCsmacd`.  Both matrices declare
       `/interfaces/interface/config/type` lossy in their own right, and
       fortigate_cli states the mechanism ("FortiOS has no IANA ifType; inferred
       from 'type vlan' sub-setting or name shape") — an IOS-XR BVI has neither
-      signal to infer from, so it falls back to plain Ethernet.
-      Recorded `good` for the same corpus-specific reason as
-      `interfaces[].description`: xr752 is one of the 4 count-drift cells, so
-      the mesh emits no per-record type slice and a loss declared here could
-      not be evidenced by any cell.  The lost hint costs no forwarding state;
-      it is the BVI's identity as a bridge interface that no longer reads from
-      the config.
+      signal to infer from, so it falls back to plain Ethernet.  Recorded
+      `good` up to 0.7.7, when these cells' interface lists changed length
+      and the mesh emitted no per-record type slice for them.  The lost hint
+      costs no forwarding state; it is the BVI's identity as a bridge
+      interface that no longer reads from the config.
     references: [iosxr-fortigate-surface]
 
   "interfaces[].lag_member_of":
@@ -311,29 +290,32 @@ per_field_expectation:
   # an id (35, 35, 200, 100).  These are the encapsulation VLANs behind a dot1q
   # sub-interface, not a campus VLAN database: name, description, addressing
   # and port membership are empty on every one.  That measurement is what
-  # grounds the four entries after `vlans[].name`.
+  # grounds the entries after `vlans[].name`.  On FortiOS the VLAN is the
+  # sub-interface's own VLAN interface, and the re-parse gives it that
+  # interface's name and alias.
 
   "vlans[].id":
     disposition: good
     note: >
       Preserved on all 4 cells that populate VLANs.  Both matrices declare
       `/vlans/vlan/id` supported, and the dot1q encapsulation ID survives as
-      `set vlanid <id>` on the synthesised child interface.  This is the only
-      part of the VLAN record that round-trips intact.
+      `set vlanid <id>` on the sub-interface's VLAN interface.  This is the
+      only part of the VLAN record that round-trips intact.
     references: [iosxr-fortigate-surface]
 
   "vlans[].name":
     disposition: lossy
     reason: >
       The source name is EMPTY on every populated VLAN record and the target
-      MANUFACTURES one: `''` -> `vlan35`, `''` -> `vlan200`, `''` -> `vlan100`
-      -- a FortiOS VLAN is an interface, and the re-parse names the VLAN after
-      the interface the render made for it rather than after anything the
-      source said.  Lossy rather than unsupported because the VLAN record
-      survives and forwards; only the label is substituted.  The practical
-      consequence is on reconciliation, not on traffic: any tooling that diffs
-      VLAN names across the cutover will report a change on every VLAN, and a
-      name that looks authored is in fact derived from the id.  fortigate_cli
+      MANUFACTURES one: `''` -> `GigabitEthernet0/0/0/1.35` on both border
+      cells, `''` -> `GigabitEthernet0/0/0/12.200`, `''` ->
+      `GigabitEthernet0/0/0/1.100` -- a FortiOS VLAN is an interface, and the
+      re-parse names the VLAN after the interface that carries its tag, the
+      sub-interface, rather than after anything the source said of the VLAN.
+      Lossy rather than unsupported because the VLAN record survives and
+      forwards; only the label is substituted.  The practical consequence is
+      on reconciliation, not on traffic: any tooling that diffs VLAN names
+      across the cutover will report a change on every VLAN.  fortigate_cli
       declares `/vlans/vlan/name` lossy.
     references: [iosxr-fortigate-surface]
 
@@ -348,7 +330,7 @@ per_field_expectation:
       to lose here.  The corresponding addressing lives in
       `interfaces[].ipv4_addresses`, which is `good`.
       fortigate_cli would hold a VLAN-mounted address (it renders `set ip` on
-      the synthesised child), so a source that did populate this would migrate
+      the VLAN's child interface), so a source that did populate this would migrate
       — with the caveat that `.../secondary-ip`, `.../virtual-gateway-address`
       and `.../virtual-gateway-mac` are all declared unsupported on the target.
     references: [iosxr-fortigate-surface]
@@ -384,13 +366,19 @@ per_field_expectation:
     references: [iosxr-fortigate-surface]
 
   "vlans[].description":
-    disposition: not_applicable
-    note: >
-      Source-side gap: cisco_iosxr declares no path under `/vlans/vlan/`
-      beyond `id` and `name`, and emits no VLAN description or name on any
-      committed cell.  fortigate_cli declares `/vlans/vlan/description` LOSSY
-      (one label for a VLAN, the alias of its interface), which would matter
-      only for a source that produces one.
+    disposition: lossy
+    reason: >
+      cisco_iosxr declares no path under `/vlans/vlan/` beyond `id` and
+      `name`, and the VLAN record it makes of a sub-interface's tag has no
+      description on any committed cell.  On FortiOS that VLAN is the
+      sub-interface's VLAN interface, and the re-parse reads the interface's
+      alias -- the sub-interface's description -- as the VLAN's: `''` ->
+      `Azure-EAST` and `AZURE-EAST` on the two border cells, `''` ->
+      `customer vlan 100 subif` on `kitchen_sink.cfg`; the xr752
+      sub-interface has none.  The description is not lost -- it stays on
+      the interface, `interfaces[].description` -- it is read twice.
+      fortigate_cli declares `/vlans/vlan/description` LOSSY (one label for
+      a VLAN, the alias of its interface).
     references: [iosxr-fortigate-surface]
 
   # -- Routing --------------------------------------------------------------

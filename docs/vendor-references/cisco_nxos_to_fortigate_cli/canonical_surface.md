@@ -142,8 +142,10 @@ sub-field of the same parent is preserved on every cell that exercises it, so
   list-count-drift cells, so the corpus never isolates its behaviour. It is
   declared `unsupported` on the fortigate_cli matrix's own account
   ("FortiOS has no native-VLAN on a routed port"), not on measurement.
-  `voice_vlan` and `dot1q_vlan` are declared unsupported by the same matrix
-  and are never populated by the NX-OS source at all.
+  `voice_vlan` is declared unsupported by the same matrix and `dot1q_vlan`
+  lossy (a sub-interface is written as a VLAN interface on its port and read
+  back as a VLAN of its tag); neither is populated by the NX-OS source at
+  all.
 * **`timezone` / `dns_servers`** are untested by the corpus.
   `/system/timezone` is declared unsupported on BOTH matrices with the same
   reason ("Render emits no clock/timezone stanza"), so it is a target-side

@@ -345,19 +345,22 @@ per_field_expectation:
       `edit "eth1.100" / set type vlan / set vlanid 100 / set interface
       "eth1"`, and the re-parse rebuilds it as a `vlans[]` entry while
       `dot1q_vlan` on those two interface records drops to null.
-      fortigate_cli declares `/interfaces/interface/dot1q-vlan` UNSUPPORTED
-      ("Routed sub-interface 802.1Q tag … is not yet wired for this codec",
-      ship-before-wire GAP 7), which is the other half of the same single
-      mechanism.
+      fortigate_cli declares `/interfaces/interface/dot1q-vlan` LOSSY for
+      that reading (the tag is written as `set vlanid` and read back as a
+      VLAN of the interface's name), which is the other half of the same
+      single mechanism.  Up to 0.7.7 it was unsupported, and the tag
+      written was the number in the sub-interface's name; on this corpus
+      the two agree.
       Recorded `lossy` rather than `unsupported` deliberately: fortigate_cli
       declares `/vlans/vlan/id` and `/vlans/vlan/name` supported and the
       records arrive rather than vanish, so the #436 rule that forces
       `unsupported` for a disappearing record does not apply — the loss is
       the tag's binding to its parent port and the operator-chosen VLAN name,
       not the tag.
-      Check the parent-interface binding on the FortiGate after migration:
-      the VLAN name is synthesised from the child-interface name
-      (`eth1.100`), not carried from anything the operator wrote.
+      The parent is the port the sub-interface is a unit of (`eth1`).  The
+      VLAN name is synthesised from the child-interface name (`eth1.100`),
+      and its description is the sub-interface's (`tenant vlan 100`), not
+      carried from anything the operator wrote of a VLAN.
     references: [vyos-fortigate-surface]
 
   "vlans[].name":

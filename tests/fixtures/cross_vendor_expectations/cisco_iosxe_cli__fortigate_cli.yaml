@@ -200,7 +200,13 @@ per_field_expectation:
       parent, not as a port list per VLAN.  Cross-vendor migration on Cisco ->
       FortiGate requires synthesising multiple VLAN-child interfaces (one per
       VLAN per parent) which the v1 render does not do; the operator must
-      manually reconstruct multi-port VLAN membership.
+      manually reconstruct multi-port VLAN membership.  The list also
+      GROWS where the source has a routed sub-interface: it is written as
+      FortiOS's VLAN interface on its port, with its tag, and the FortiGate
+      parser reads every VLAN interface back as a VLAN of its tag too --
+      `ntc_carrier_interfaces.txt` goes from no VLAN record to six, each of
+      2234 (the outer tag of six Q-in-Q units, which the IOS-XE parser
+      reads alone), named and described after its unit.
     references: [vlans]
 
   static_routes:

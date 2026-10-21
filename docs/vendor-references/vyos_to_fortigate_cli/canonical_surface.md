@@ -199,8 +199,10 @@ canonical VLAN record. On `kitchen_sink.conf`:
 - `interfaces[].dot1q_vlan` on those two records: **tag → null**
 
 So the 802.1Q tag survives the migration; the canonical slot it lives in does
-not. FortiOS declares `/interfaces/interface/dot1q-vlan` unsupported (not yet
-wired, ship-before-wire GAP 7), which is the other half of the same move.
+not. FortiOS declares `/interfaces/interface/dot1q-vlan` lossy for that
+reading, which is the other half of the same move. (Up to 0.7.7 it was
+unsupported and the tag written was the number in the sub-interface's name;
+on this corpus the two agree.)
 `vlans[].id` carries the record-level signal and is `lossy`; the other five
 `vlans[].*` keys are `good`, because there is no surviving source VLAN record
 whose value could have degraded — the source produces none at all.

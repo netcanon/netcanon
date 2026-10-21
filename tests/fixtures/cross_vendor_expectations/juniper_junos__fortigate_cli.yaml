@@ -319,10 +319,10 @@ per_field_expectation:
       render defaults to ``port<N>`` for sequentially-numbered
       Junos ports.  Junos's per-unit form (``ge-0/0/0 unit 100``)
       materialises in canonical as a separate child interface
-      named ``ge-0/0/0.100``; FortiGate render must emit a
-      ``config system interface / edit "ge-0-0-0.100"`` (or rename-
-      mesh-mapped child name) with ``type vlan`` and the parent
-      reference.  Names containing slashes are not directly
+      named ``ge-0/0/0.100``; a unit with a ``vlan-id`` is written
+      as FortiOS's VLAN interface on its port (``set type vlan`` /
+      ``set vlanid <its vlan-id>`` / ``set interface "<port>"``).
+      Names containing slashes are not directly
       legal on FortiOS — the rename mesh sanitises ``/`` -> ``-``
       on render.
     references: [junos-iface-naming, fortios-interface-settings]
@@ -352,7 +352,10 @@ per_field_expectation:
       matrix lists ``/interfaces/interface/config/type`` under lossy
       and infers from ``set type vlan|aggregate|loopback``.
       Aggregation and loopback survive; tunnel / management
-      subtypes drift.
+      subtypes drift.  A unit with a ``vlan-id`` comes back
+      ``ianaift:l3ipvlan``: it is written as FortiOS's VLAN
+      interface on its port and read back as one (the four units
+      of ``tsg8139_evpn_leaf_dhcpv6_junos232.set``).
     references: [junos-iface-naming, fortios-interface-settings]
 
   interfaces[].mtu:
@@ -477,10 +480,22 @@ per_field_expectation:
   # ── Tier 1 — VLANs ──
 
   vlans[].id:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Junos's ``set vlans <name> vlan-id N`` -> FortiGate's
-      ``edit "<name>" / set type vlan / set vlanid N``.
+      ``edit "<name>" / set type vlan / set vlanid N``, and every
+      VLAN of the source comes back with its id.  The list GROWS
+      where the source has a routed unit with a ``vlan-id``: it is
+      written as FortiOS's VLAN interface on its port, and the
+      FortiGate parser reads every VLAN interface back as a VLAN of
+      its tag as well -- 6 -> 9 on
+      ``ksator_labmgmt_qfx10k2_junos173.set`` (units 10, 30 and 100
+      of ``xe-0/0/6:2``), 0 -> 4 on
+      ``tsg8139_evpn_leaf_dhcpv6_junos232.set`` (units 54 and 55 of
+      two ports, one VLAN record for each).  The tag is the unit's
+      own; up to 0.7.7 it was the number in its name and the dot1q
+      path was unsupported.  fortigate_cli declares
+      ``/interfaces/interface/dot1q-vlan`` lossy for this reading.
     references: [junos-vlans-statement, fortios-vlan-cookbook]
 
   vlans[].name:
@@ -490,8 +505,10 @@ per_field_expectation:
       back named after the interface the render writes for it, and its Junos
       name is that interface's alias (25 characters), which the FortiGate
       parser reads back as the VLAN's description -- `V2021` comes back named
-      `vlan2021` and described `V2021`.  fortigate_cli declares
-      `/vlans/vlan/name` lossy.
+      `vlan2021` and described `V2021`.  A VLAN whose id is a routed unit's
+      tag is the unit's VLAN interface on FortiOS and comes back named after
+      the unit (`TENANT_A_DATA` -> `ge-0/0/1.100` on `kitchen_sink.set`).
+      fortigate_cli declares `/vlans/vlan/name` lossy.
     references: [junos-vlans-statement, fortios-vlan-cookbook]
 
   vlans[].description:
