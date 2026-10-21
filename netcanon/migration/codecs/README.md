@@ -365,6 +365,18 @@ for the reference pattern).
    port the parser takes for a trunk from a trunk line alone gets
    none.  A test fails for a codec that is in one of the three
    tables and not in all of them.
+   **And say what the platform's interface `mtu` counts.**  The
+   tree's MTU is the payload, the largest IP packet; a platform whose
+   number counts a header, a tag or a whole frame converts it at its
+   edge.  Add the codec's row to `MTU_BEYOND_THE_PAYLOAD`
+   (`_helpers.py`, below), with the vendor's sentence in
+   `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md`,
+   read a stated `mtu` through `mtu_read` and write one through
+   `mtu_written` for the interfaces whose number is an Ethernet one
+   -- the codec's own classifier says which.  A platform with no
+   interface MTU is named, with its reason, in `NO_INTERFACE_MTU` in
+   `tests/unit/migration/test_an_mtu_counts_the_payload.py`, which
+   fails for a public codec that is in neither.
 3. **Write `render()`** against the same synthetic fixtures, driving
    toward round-trip stability (`parse(render(parse(raw))) == parse(raw)`
    at the canonical level).  **A trunk's list is one of three
@@ -879,6 +891,19 @@ the policy locally:
     trunk line is not counted).  Otherwise each such trunk has a
     `! review:` line.
   Callers: `grep -rn "unstated_native_vlan\|switchport_trunk_native_value\|wants_no_untagged_vlan" netcanon/migration`.
+
+* **`netcanon/migration/codecs/_helpers.py::MTU_BEYOND_THE_PAYLOAD`**
+  — what a platform's interface `mtu` counts beyond the payload, by
+  codec (`MtuCounts(header, per_tag)`): 14 and 4 a tag on
+  `juniper_junos` (the media MTU) and `cisco_iosxr`, 22 on
+  `dell_os10` (a frame), nothing on the others.  The ONE place it is
+  written; `CanonicalInterface.mtu` is the payload.  Its readers are
+  **`mtu_read(codec, stated, tags=)`**, for a parser, and
+  **`mtu_written(codec, payload, tags=)`**, for a renderer; which
+  interfaces they apply to is the codec's own to say (`irb` and a
+  port on Junos, not a loopback).  The vendors' sentences are in
+  `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md`.
+  Callers: `grep -rn "mtu_read\|mtu_written" netcanon/migration`.
 
 * **`netcanon/migration/codecs/_helpers.py::spaced_port_name`** and
   **`without_keyword_stanzas`** — two readings of a Cisco header

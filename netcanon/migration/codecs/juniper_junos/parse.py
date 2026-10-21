@@ -92,10 +92,10 @@ from ...canonical.intent import (
 )
 from ...canonical.port_names import HARDWARE_PORT_KINDS
 from ...limits import LimitExceeded, charge, tick, ticked
-from .._helpers import GrowingIndex, Uniques, unstated_trunk_list, vlan_id_run
+from .._helpers import GrowingIndex, Uniques, mtu_read, unstated_trunk_list, vlan_id_run
 from .._input_shape import detect_input_shape
 from ..base import ParseError
-from .port_names import classify_port_name
+from .port_names import classify_port_name, media_mtu_counts_a_header, media_mtu_counts_a_tag
 
 logger = logging.getLogger(__name__)
 
@@ -596,6 +596,13 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # vendor cells like fortigate_cli -> juniper_junos.  When the
     # operator IS configuring per-iface attrs under ae<N>, the
     # iface_state entry is non-empty and we materialise normally.
+    # A device whose units carry a VLAN tag is an 802.1Q device: its
+    # media MTU counts the tag as well as the Ethernet header.
+    tagged_devices = {
+        name.rsplit(".", 1)[0] if "." in name else name
+        for name, st in iface_state.items()
+        if st.get("dot1q_vlan") is not None
+    }
     for name in sorted(iface_state.keys(), key=_natural_port_sort_key):
         state = iface_state[name]
         if name in lag_state and not state:
@@ -650,8 +657,10 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
             # interface-range <r> mtu <N>`` line via the
             # range-fold pass.
             mtu=(
-                state["mtu"] if "mtu" in state
-                # A unit's MTU, read from its family (inet's first).
+                _media_mtu_read(name, state["mtu"], name in tagged_devices)
+                if "mtu" in state
+                # A unit's MTU, read from its family (inet's first):
+                # the largest IP packet already.
                 else state.get("inet_mtu", state.get("inet6_mtu"))
             ),
             # Phase 4 rank-4: L2 switchport semantics.
@@ -1171,6 +1180,22 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
 #: on it.  Every other name (``irb``, ``st0``, ``lo0``, ``vlan``, a
 #: tunnel device, a name the classifier does not read) is a record
 #: only where a line configures the device itself or its unit 0.
+def _media_mtu_read(device: str, stated: int, tagged: bool) -> int:
+    """The payload of a device whose config states media ``mtu``
+    *stated*: the number less the Ethernet header, and the tag on an
+    802.1Q device (:func:`media_mtu_counts_a_header`).  The tree's MTU
+    is the largest IP packet, and a Junos media MTU counts the bytes
+    in front of it; copied as it stood, ``mtu 1514`` -- the default of
+    a Junos Ethernet port -- was written ``mtu 1514`` on IOS-XE, NX-OS,
+    EOS and AOS-CX, an IP MTU 14 bytes larger than the source's.
+    """
+    if not media_mtu_counts_a_header(device):
+        return stated
+    return mtu_read(
+        "juniper_junos", stated, tags=1 if tagged and media_mtu_counts_a_tag(device) else 0,
+    )
+
+
 _HAS_A_RECORD_UNSTATED: frozenset[str] = HARDWARE_PORT_KINDS | {"lag", "hw_aggregate"}
 
 #: A word of a line with no quote and no backslash in it.

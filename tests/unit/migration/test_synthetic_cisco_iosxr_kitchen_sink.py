@@ -161,7 +161,7 @@ def test_dual_stack_and_mtu_on_the_core_uplink(tree) -> None:
     assert [a.ip for a in core.ipv6_addresses] == ["2001:db8:ff::1"], (
         "IPv6 is a distinct surface; only this port exercises it"
     )
-    assert core.mtu == 9192
+    assert core.mtu == 9178  # ``mtu 9192`` less the Ethernet header: the payload
 
 
 def test_shutdown_interface_is_recorded_as_disabled(tree) -> None:

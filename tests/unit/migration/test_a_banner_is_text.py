@@ -997,7 +997,9 @@ def _digest(codec: str, path: str) -> str:
 #: was before a banner was read as text (``8210c697``; IOS XR's on
 #: ``efda1659``, before its parser read one).  A value changes
 #: only when a parser's reading of that input is changed on purpose; the
-#: failing assertion prints the new one.
+#: failing assertion prints the new one.  Moved on purpose: every IOS XR
+#: and OS10 input that states an ``mtu``, when the tree's MTU became the
+#: payload (``MTU_BEYOND_THE_PAYLOAD`` in ``codecs/_helpers.py``).
 BEFORE: dict[str, str] = {
     "real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg": "ce2d0d8a21e9",
     "real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg": "c04121960505",
@@ -1045,16 +1047,16 @@ BEFORE: dict[str, str] = {
     "real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg": "34109f2ee06c",
     "real/cisco_nxos/networklessons_clab_vxlan_mcast_leaf2_nxos.cfg": "a473a68a8205",
     "synthetic/cisco_nxos/kitchen_sink.cfg": "f3cb7a5a89f3",
-    "real/dell_os10/azlocal_tor1.txt": "12f5f4f56315",
-    "real/dell_os10/azlocal_tor2.txt": "521e6b441cdb",
-    "real/dell_os10/azsupport_TOR1_Sample.cfg": "0a2cbd0d5200",
-    "real/dell_os10/azsupport_TOR2_Sample.cfg": "514e02bd8eb7",
-    "real/dell_os10/canu_sw-leaf-bmc-001.cfg": "d15cbc035264",
-    "real/dell_os10/dellgeos_S5212F-TOR1-Advanced.cfg": "dfa58f478ee8",
-    "real/dell_os10/dellgeos_S5212F-TOR1-Universal.cfg": "f440c137762c",
-    "real/dell_os10/dellgeos_S5212F-TOR2-Advanced.cfg": "3a78e4d91421",
-    "real/dell_os10/dellgeos_S5212F-TOR2-Universal.cfg": "d7d4ead22562",
-    "synthetic/dell_os10/kitchen_sink.cfg": "0cc500ce11ab",
+    "real/dell_os10/azlocal_tor1.txt": "254896e1a85a",
+    "real/dell_os10/azlocal_tor2.txt": "88bb0da08716",
+    "real/dell_os10/azsupport_TOR1_Sample.cfg": "4751d5837437",
+    "real/dell_os10/azsupport_TOR2_Sample.cfg": "c67c68101040",
+    "real/dell_os10/canu_sw-leaf-bmc-001.cfg": "048abe38dae0",
+    "real/dell_os10/dellgeos_S5212F-TOR1-Advanced.cfg": "34857fa6db7b",
+    "real/dell_os10/dellgeos_S5212F-TOR1-Universal.cfg": "621b35863c2d",
+    "real/dell_os10/dellgeos_S5212F-TOR2-Advanced.cfg": "a115f3940371",
+    "real/dell_os10/dellgeos_S5212F-TOR2-Universal.cfg": "c6abd209a7bc",
+    "synthetic/dell_os10/kitchen_sink.cfg": "2afb408e4714",
     "real/arista_eos/batfish_duplicateprivate_eos4211.txt": "92358f840447",
     "real/arista_eos/batfish_eos_evpn_vlan_based_leaf.txt": "0760df6623db",
     "real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt": "06ce2c081564",
@@ -1063,16 +1065,16 @@ BEFORE: dict[str, str] = {
     "synthetic/arista_eos/kitchen_sink.txt": "5f8ca989330b",
     "real/cisco_iosxr/batfish_ebgp_border01.txt": "d17cfb52335f",
     "real/cisco_iosxr/batfish_ebgp_border02.txt": "eb970a141bb2",
-    "real/cisco_iosxr/batfish_ibgp_border01.txt": "04fb1591aafb",
-    "real/cisco_iosxr/batfish_ibgp_rr.txt": "26dee33685ac",
+    "real/cisco_iosxr/batfish_ibgp_border01.txt": "639b6fd2954a",
+    "real/cisco_iosxr/batfish_ibgp_rr.txt": "0432b72eff4e",
     "real/cisco_iosxr/batfish_vpnv4_pe1.txt": "d3c44fa0bb3b",
     "real/cisco_iosxr/batfish_vpnv4_pe2.txt": "fa0c9f8fddb3",
     "real/cisco_iosxr/batfish_vpnv4_pe3.txt": "63fcc6d7a988",
-    "real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg": "22396ca5c243",
+    "real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg": "700193459777",
     "real/cisco_iosxr/xrdtools_isis_r1.cfg": "178d0314da43",
     "real/cisco_iosxr/xrdtools_sr_xrd1.cfg": "74c70c975078",
     "real/cisco_iosxr/xrdtools_srv6_pe1.cfg": "0e4e6ddc0250",
-    "synthetic/cisco_iosxr/kitchen_sink.cfg": "87347d0d4a5c",
+    "synthetic/cisco_iosxr/kitchen_sink.cfg": "75b5a4a7443e",
 }
 
 #: The committed inputs that hold a banner: the body pass changes their

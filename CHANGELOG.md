@@ -429,6 +429,33 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **An interface's MTU was copied between platforms that count it
+  differently.**  IOS-XE, NX-OS, EOS, AOS-CX and RouterOS count the
+  payload -- the largest IP packet -- and Junos (the media MTU) and
+  IOS XR count the 14-byte Ethernet header as well, and 4 bytes more
+  for a tag; a Dell OS10 link MTU is a frame.  Every parser read the
+  number as it stood and every renderer wrote it so: a Junos `mtu
+  1514` -- its own default, for a 1500-byte packet -- came out as
+  IOS-XE `mtu 1514`, an IP MTU 14 bytes larger than the source's, and
+  IOS-XE `mtu 9000` as Junos or IOS XR `mtu 9000`, an IP MTU of 8986
+  (the example Cisco itself gives), with OS10 a further 8 bytes off,
+  in jobs that said `completed`.  Every check agreed with the copy:
+  the target's parser read back the number the renderer wrote, and
+  the cross-mesh audit compared two trees that held the same number.
+  `CanonicalInterface.mtu` is now the payload, and each platform's
+  count is taken to it and from it at the codec's edge, from one
+  table (`MTU_BEYOND_THE_PAYLOAD` in `codecs/_helpers.py`): a Junos
+  port, aggregate or `irb` and an IOS XR port, management port or
+  bundle subtract 14, and 4 for a tagged port or sub-interface; an
+  OS10 port, lane, port-channel or VLAN interface subtracts 22.  A
+  job from a codec to itself writes the number it read.  Every IOS XR
+  and OS10 input that states an MTU parses to a tree it did not
+  before, on purpose.  The vendors' sentences, and what is inferred,
+  are in `docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md`.
+  ⚠️ Check the MTUs of configs migrated from or to Junos, IOS XR or
+  OS10 with 0.7.7 or earlier.  Guarded by
+  `tests/unit/migration/test_an_mtu_counts_the_payload.py`, which
+  reads each target's output as text against offsets typed by hand.
 - **A Junos IRB unit's MTU was lost where the unit was folded onto
   its VLAN.**  The Junos parser folds an IRB unit that a VLAN names
   (`set vlans v100 l3-interface irb.100`) onto that VLAN -- its
@@ -3049,6 +3076,19 @@ timestamp if your timezone matters for an audit.
   profile under `tests/fixtures/target_profiles/`.
 
 ### Known limitations
+
+- **An MTU is converted only where the codec reads the interface's
+  name.**  A name its classifier does not read -- a Junos `reth0` or
+  channelised `xe-0/0/6:2`, a wildcard `interface-range` member, an
+  IOS XR `BVI` -- and a loopback or tunnel are copied as they stand,
+  since what their number counts is not established here.  A second
+  IOS XR tag (Q-in-Q) is not read, and its 4 bytes are counted in the
+  payload.  Whether the media MTU of a Junos trunk in `family
+  ethernet-switching` has to hold a tag is not established, and none
+  is counted.  A jumbo value near a platform's maximum can pass it
+  once converted (IOS-XE `mtu 9216` is Junos `mtu 9230`, above the EX
+  range); the device refuses the line at commit.  The IOS-XE NETCONF
+  codec carries no MTU into the tree.
 
 - **An IOS-XE Q-in-Q sub-interface is read as its outer tag alone.**
   `encapsulation dot1Q 2234 second-dot1q 15` is read as `dot1q 2234`,

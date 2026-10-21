@@ -2244,6 +2244,17 @@ matter; the matrix is honest about both.
   the supplied password itself, so `_user_secrets._TARGET_ACCEPTS`
   permits only `plaintext` for `mikrotik_routeros`.  Cross-vendor
   hashes always trigger a review comment.
+* **An interface's MTU counts different bytes on different
+  platforms.**  The tree holds the payload, the largest IP packet:
+  the number IOS-XE, NX-OS, EOS, AOS-CX, RouterOS, FortiOS, VyOS and
+  OPNsense state.  A Junos media MTU and an IOS XR `mtu` count the
+  14-byte Ethernet header as well, and 4 bytes more for a tag; a Dell
+  OS10 link MTU is a frame, taken as 22 bytes more.  So IOS-XE `mtu
+  9000` is written Junos `mtu 9014`, and OS10 `mtu 9216` is IOS-XE
+  `mtu 9194`.  A loopback, a tunnel, or a name the codec's classifier
+  does not read is copied as it stands.  The IP MTU (`ip mtu`,
+  `family inet mtu`) is another field.  The vendors' sentences are in
+  [the vendor reference](vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
 * **Aruba AOS-S as DHCP target.**  AOS-S is a DHCP relay platform
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP
   pools surface as a comment block, not as `dhcp-server pool`

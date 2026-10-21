@@ -490,6 +490,22 @@ not read, so a trunk stated that way has no VLANs in any output.  The
 vendors' own sentences are in the
 [vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md#a-trunks-untagged-vlan-and-its-allowed-list-platform-by-platform).
 
+**An interface's `mtu` is a frame size.**  Dell: `mtu` "Sets the link
+maximum transmission unit (MTU) frame size", and its example gives
+tagged members a link MTU of 1522 for an IP MTU of 1500.  The tree's
+MTU is the payload, so a port's `mtu 9216` is `mtu 9194` on IOS-XE,
+NX-OS, EOS and AOS-CX, and their `mtu 1500` is written `mtu 1522`
+here.  The tagged figure, 22 bytes, is used for every interface: the
+same example gives an untagged member 1518, and a frame 4 bytes
+larger than it needs cuts nothing.  A port, a breakout lane, the
+management port, a port-channel and a VLAN interface are converted;
+a loopback is copied as it stands.  ⚠️ Up to 0.7.7 the number was
+copied as it stood: an OS10 `mtu 9216` was a payload 22 bytes too
+large on the target, and an IOS-XE `mtu 1500` a link MTU here that
+cuts every 1500-byte packet.  Check MTUs migrated then.  The vendors'
+sentences are in the
+[vendor reference](../vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md).
+
 ## Two things that would have been silent bugs
 
 Recorded here because they change how you should read a migration report:

@@ -22,7 +22,7 @@ import ipaddress
 import re
 from bisect import bisect_left
 from collections.abc import Callable, Hashable, Iterable, Sequence
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, NamedTuple, TypeVar
 
 from .._tier3_detection import left_out_rows
 from ..canonical.transforms import is_every_vlan
@@ -829,6 +829,113 @@ def switchport_trunk_allowed_value(
     if coalesce:
         return _coalesce_vlan_ids(sorted(set(allowed)))
     return ",".join(str(vid) for vid in allowed)
+
+
+class MtuCounts(NamedTuple):
+    """What an interface's ``mtu`` counts on a platform beyond the
+    payload: *header* bytes on an untagged Ethernet interface, and
+    *per_tag* bytes more for each 802.1Q tag the interface carries."""
+
+    header: int
+    per_tag: int = 0
+
+
+#: What a platform's interface ``mtu`` counts beyond the PAYLOAD, by
+#: codec.  The ONE place this is written.  ``CanonicalInterface.mtu``
+#: counts the payload: the largest IP packet the interface carries,
+#: with no Ethernet header, tag or FCS -- the number IOS-XE, NX-OS,
+#: EOS and AOS-CX print for the same link.  A parser takes a stated
+#: ``mtu`` to the payload (:func:`mtu_read`) and a renderer writes the
+#: payload as its platform counts it (:func:`mtu_written`), for an
+#: Ethernet interface: a loopback or a tunnel has no Ethernet header,
+#: and what its number counts is the codec's to say.
+#:
+#: * Junos: the media MTU counts the Ethernet header, 14 bytes, and
+#:   not the FCS; Juniper's "Encapsulation Overhead by Interface
+#:   Encapsulation Type" table gives "Ethernet version 2 | 14" and
+#:   "802.1Q/Ethernet version 2 | 18", and the media MTU has to hold
+#:   the protocol MTU and that overhead.  A device whose units carry
+#:   a VLAN tag is an 802.1Q device (a unit's ``vlan-id`` needs
+#:   ``vlan-tagging`` on it).
+#: * IOS XR: "the mtu command that configures the L2 MTU includes 14
+#:   bytes for an Ethernet interface", and on a sub-interface "add 4
+#:   bytes for each VLAN tag configured on the sub-interface" (Cisco,
+#:   the IOS XR MTU article).
+#: * OS10: the link MTU is a frame size, header and FCS included:
+#:   Dell's example puts "tagged members with Link MTU of 1522 and IP
+#:   MTU of 1500".  An untagged member is given 1518 in the same
+#:   example, and the tagged figure is the one used for both, so that
+#:   no tagged packet the payload allows is cut.  (The same page says
+#:   the IP MTU must be at least 32 bytes below the link MTU, which
+#:   its example does not keep.)
+#: * IOS-XE: "the interface mtu command configures the L2 payload
+#:   size, but does not include the L2 header".  NX-OS: the MTU
+#:   matches the IP MTU, "excluding the 14-18 Ethernet header size"
+#:   (Cisco's APIC guide, which names NX-OS).  EOS: ``mtu``
+#:   "configures the IPv4 and IPv6 Maximum Transmission Unit".
+#:   AOS-CX: "the maximum Ethernet payload, which represents the same
+#:   bytes as the Layer 3 MTU" (HPE's VSG).  RouterOS: "Layer3
+#:   Maximum transmission unit" (``l2mtu`` is another setting, not
+#:   read).
+#: * FortiOS, VyOS and OPNsense: the payload, inferred -- each vendor
+#:   computes a TCP MSS as the MTU less 40, which fits no other count;
+#:   no sentence says it, and VyOS's own pages disagree.
+#:
+#: The vendors' sentences, with their sources, are in
+#: ``docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/mtu.md``.  A public codec is here, or it is
+#: named with its reason among the codecs that read no interface MTU in
+#: ``tests/unit/migration/test_an_mtu_counts_the_payload.py`` (AOS-S,
+#: whose frame size and IP MTU are global settings, and the IOS-XE
+#: NETCONF codec, which carries no MTU between OpenConfig's
+#: ``config/mtu`` and the tree); the test fails for one that is in
+#: neither.
+MTU_BEYOND_THE_PAYLOAD: dict[str, MtuCounts] = {
+    "arista_eos": MtuCounts(0),
+    "aruba_aoscx": MtuCounts(0),
+    "cisco_iosxe_cli": MtuCounts(0),
+    "cisco_iosxr": MtuCounts(14, per_tag=4),
+    "cisco_nxos": MtuCounts(0),
+    "dell_os10": MtuCounts(22),
+    "fortigate_cli": MtuCounts(0),
+    "juniper_junos": MtuCounts(14, per_tag=4),
+    "mikrotik_routeros": MtuCounts(0),
+    "opnsense": MtuCounts(0),
+    "vyos": MtuCounts(0),
+}
+
+
+def mtu_read(codec: str, stated: int, *, tags: int = 0) -> int:
+    """The payload of an Ethernet interface whose config states
+    ``mtu`` *stated* on *codec*, carrying *tags* 802.1Q tags.
+
+    Args:
+        codec: The registry name of the codec whose config it is.
+        stated: The number the config states.
+        tags: How many 802.1Q tags the interface carries.
+
+    Returns:
+        The largest IP packet the interface carries
+        (:data:`MTU_BEYOND_THE_PAYLOAD`).
+    """
+    counts = MTU_BEYOND_THE_PAYLOAD[codec]
+    return stated - counts.header - counts.per_tag * tags
+
+
+def mtu_written(codec: str, payload: int, *, tags: int = 0) -> int:
+    """The ``mtu`` an Ethernet interface carrying *tags* 802.1Q tags
+    is written with on *codec*, for a payload of *payload* bytes: the
+    inverse of :func:`mtu_read`.
+
+    Args:
+        codec: The registry name of the codec whose config is written.
+        payload: ``CanonicalInterface.mtu``, the largest IP packet.
+        tags: How many 802.1Q tags the interface carries.
+
+    Returns:
+        The number the target's ``mtu`` line states.
+    """
+    counts = MTU_BEYOND_THE_PAYLOAD[codec]
+    return payload + counts.header + counts.per_tag * tags
 
 
 def same_vendor_version(
