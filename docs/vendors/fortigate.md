@@ -49,9 +49,11 @@ firewall translation is your primary need, see
   number) has no cross-vendor equivalent at all and warns separately.
 - VLANs — VLAN sub-interface form (`config system interface` →
   `set type vlan` + `set vlanid <N>`), on the interface its
-  `set interface` names.  The parent is kept onto FortiOS and
-  RouterOS; onto any other vendor it is not carried, and nothing
-  reports it.  Where the output has no interface of that name, a
+  `set interface` names, with the tag its `set vlanid` states --
+  not the digits of its name (`edit "vlan100"` may `set vlanid 20`;
+  an OPNsense device `vlan01` may be VLAN 20).  The parent is kept
+  onto FortiOS, RouterOS and OPNsense; onto any other vendor it is
+  not carried, and nothing reports it.  Where the output has no interface of that name, a
   parent is chosen and a `# review:` line in the VLAN's block names
   the one the source stated.  A VLAN that states no parent, or one
   from another vendor, is on the parent the renderer chooses

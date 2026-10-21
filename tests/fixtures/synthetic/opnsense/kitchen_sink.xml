@@ -25,7 +25,10 @@
             (incl. link-local scope normalisation for fe80::/10)
     * CanonicalIntent.vlans              via <vlans><vlan>
         - .id                            from <tag>
-        - .name                          from <descr>
+        - .name                          from <vlanif> (the device)
+        - .description                   from <descr>
+      and the device's CanonicalInterface (its zone's, or one of
+      its own): interface_type l3ipvlan, vlan_parent from <if>
     * CanonicalIntent.dhcp_servers       via <dhcpd><zone>
         - .interface, .start_ip, .end_ip, .gateway, .dns_servers,
           .domain_name, .lease_time

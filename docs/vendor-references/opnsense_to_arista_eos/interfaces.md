@@ -87,10 +87,10 @@ Canonical fields covered (`CanonicalInterface`).
   rationale.
 - `enabled`: **good** — OPNsense `<enable>` element ↔ Arista `no
   shutdown` / `shutdown`.
-- `interface_type`: **lossy** — OPNsense doesn't surface a type
-  field; Arista codec defaults to `gig` speed-hint for unknown
-  speeds (capability matrix lossy entry).  Cross-pair drops the
-  hint.
+- `interface_type`: **good** — the OPNsense parser types its VLAN
+  devices (`ianaift:l3ipvlan`) and leaves every other interface
+  untyped; the Arista round trip gives each the type it had
+  (`vlan0.10` reads back as a VLAN interface).
 - `mtu`: **good** — OPNsense `<mtu>` ↔ Arista `mtu N`.
 - `ipv4_addresses`: **good** — OPNsense `<ipaddr>` + `<subnet>`
   ↔ Arista CIDR.  OPNsense's non-static keywords (`dhcp`,

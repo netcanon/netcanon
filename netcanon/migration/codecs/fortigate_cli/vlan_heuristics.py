@@ -89,25 +89,33 @@ def vlan_id_for(
     """Resolve the VLAN id for an interface name.
 
     Checks (in order):
-      1. ``vlan<N>`` naming — id is the numeric suffix.
-      2. ``<parent>.<N>`` dotted form — id is after the dot.
-      3. Canonical VLAN list — returns the matching
+      1. Canonical VLAN list — returns the matching
          :class:`CanonicalVlan` id if any entry's ``name`` equals
-         *name* (covers user-named VLANs via the canonical tree's
-         VLAN records).
+         *name*: how the FortiOS, RouterOS and OPNsense parsers state
+         a VLAN interface's tag.
+      2. ``vlan<N>`` naming — id is the numeric suffix.
+      3. ``<parent>.<N>`` dotted form — id is after the dot.
+
+    The tree's own link comes FIRST because a name's digits need not
+    be its tag: FortiOS ``edit "vlan100"`` may ``set vlanid 20``, and
+    OPNsense names its VLAN devices ``vlan01``, ``vlan02``... whatever
+    their tags.  Read the other way round, ``vlan01`` of VLAN 20 came
+    out as ``set vlanid 1``, and VLAN 20 was given a second interface
+    of its own.  The RouterOS renderer's ``_vlan_id_for`` had the same
+    defect and was mended the same way.
 
     Returns None when no signal is available — caller should warn
     or suppress the ``set vlanid`` line in rendered output.
     """
+    for v in vlans:
+        if v.name == name:
+            return v.id
     m1 = _VLAN_NAME_RE.match(name)
     if m1:
         return int(m1.group(1))
     m2 = _DOTTED_VLAN_RE.match(name)
     if m2 and not _NON_VLAN_DOTTED_PARENT_RE.match(m2.group(1)):
         return int(m2.group(2))
-    for v in vlans:
-        if v.name == name:
-            return v.id
     return None
 
 

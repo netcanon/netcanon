@@ -99,9 +99,12 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     # opnsense/parse.py::_parse_interface_zone_canonical) so cross-
     # vendor round-trips preserve the original port-name identity
     # through the lossy zone-tag sanitisation in render.
+    # Then the VLAN devices no zone assigns, each a record of its own
+    # (opnsense/parse.py::_parse_vlan_devices).
     iface_names = [i.name for i in intent.interfaces]
     assert iface_names == [
         "em0", "em1", "vlan0.20", "vlan0.30", "em2", "em3", "em4",
+        "vlan0.10", "vlan0.100", "vlan0.200",
     ]
 
     by_name = {i.name: i for i in intent.interfaces}
@@ -140,13 +143,18 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     # opt5 zone (<if>em4</if>) — disabled (no <enable/> element).
     assert by_name["em4"].enabled is False
 
-    # ── Tier 1 — VLANs (id + name) ──
+    # ── Tier 1 — VLANs (id, device, description) ──
     vlan_ids = sorted(v.id for v in intent.vlans)
     assert vlan_ids == [10, 20, 30, 100, 200]
     vlan_by_id = {v.id: v for v in intent.vlans}
-    assert vlan_by_id[10].name == "USER VLAN"
-    assert vlan_by_id[20].name == "VOICE VLAN"
-    assert vlan_by_id[200].name == "MGMT VLAN"
+    assert vlan_by_id[10].name == "vlan0.10"
+    assert vlan_by_id[10].description == "USER VLAN"
+    assert vlan_by_id[20].description == "VOICE VLAN"
+    assert vlan_by_id[200].description == "MGMT VLAN"
+    # Each device rides on the <if> its <vlan> states.
+    for device in ("vlan0.10", "vlan0.20", "vlan0.30", "vlan0.100", "vlan0.200"):
+        assert by_name[device].interface_type == "ianaift:l3ipvlan"
+        assert by_name[device].vlan_parent == "em1"
 
     # ── Tier 2 — local users (>= 3) ──
     user_names = [u.name for u in intent.local_users]

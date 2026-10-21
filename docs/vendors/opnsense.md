@@ -25,8 +25,10 @@ Netcanon translates the shared-network-function subset.
 - Interfaces — `<interfaces>` block with per-zone `<descr>`
   (USERVLAN / MGMTVLAN / SERVERVLAN etc.); IPv4 (`<ipaddr>`),
   IPv6 (`<ipaddrv6>`); track-interface forms
-- VLANs — `<vlans><vlan>` block (tagged form with parent interface
-  binding)
+- VLANs — `<vlans><vlan>` block: each `<vlan>` is a VLAN device,
+  kept on the parent (`<if>`) and tag it states, under its own name
+  (`<vlanif>`), which the zone that assigns it names (see "VLAN
+  devices" below)
 - DHCP server pools — `<dhcpd>` with per-zone configuration; a
   pool is on the device its zone is assigned to
 
@@ -135,6 +137,12 @@ XML element mapping:
 - See per-codec `CapabilityMatrix.lossy` declarations in the codec
   source.  Most fields parse + render cleanly within the
   documented surface.
+- **A VLAN's name is its device.**  An OPNsense `<vlan>` has no name
+  of its own: the parser names a VLAN after its device (`<vlanif>`),
+  and the renderer writes another vendor's VLAN name as the `<descr>`
+  where the VLAN has no description, and drops it where it has one
+  (`/vlans/vlan/name` is lossy; `/vlans/vlan/description` is
+  supported).
 - **Static routes are source-side only.**  The parser harvests
   `<staticroutes>` + `<gateways>` into `CanonicalStaticRoute` (since
   #350), so OPNsense-*as-source* routes translate outward — but the
@@ -272,6 +280,28 @@ Provenance in
   `CanonicalVlan` entries because there was no `<vlans>` render
   block; fix + regression test landed in the same commit
   (operator-contributed fixture surfaced this).
+- **VLAN devices** — a `<vlan>` is a device, named by its
+  `<vlanif>`: OPNsense names a new one `vlan01`, `vlan02` ... (older
+  configs `<parent>_vlan<tag>`), or takes a typed `vlan0` and digits
+  and dots, so the digits of the name are NOT the tag.  The parser
+  gives each device the record of the zone that assigns it (or a
+  record of its own, typed `ianaift:l3ipvlan`, where none does), with
+  its parent from `<if>`, and names the VLAN after the device; the
+  `<descr>` is the VLAN's description.  The renderer writes each VLAN
+  interface as the device of that name on its parent, and no zone for
+  a device that holds nothing a zone holds.  A name OPNsense's VLAN
+  form would refuse (`Vlan.php`: `vlan0` and digits and dots, `qinq0`
+  ... on a parent whose name holds `vlan`, or `<parent>_vlan<tag>`) is
+  written with a `<!-- review: -->` comment beside it; an SVI from
+  another vendor is named `vlan0.<id>`.  Not translated, and said in
+  a row: a device that is not one 802.1Q tag (`802.1ad`, or a blank
+  `<proto>` on a device another VLAN rides on, which OPNsense sends as
+  802.1ad; a tag outside 1-4094), with what rides on it, its zone and
+  a DHCP pool on it; and a `<pcp>` other than 0, whose VLAN is kept.
+  Known limitation: onto another vendor, a device `vlan0.<n>` is the
+  SVI of VLAN `n` whatever its tag (CHANGELOG, known limitations).
+  Guarded by
+  `tests/unit/migration/codecs/opnsense/test_a_vlan_device_is_defined.py`.
 - **Backup-side**: requires `paramiko_shell` collector strategy
   in the device-definition YAML (`opnsense_shell_menu: true`).
 

@@ -85,7 +85,7 @@ OPNsense does NOT model:
 
 | Field | Disposition | Reason |
 |---|---|---|
-| `interfaces[].name` | lossy | round-trips through rename mesh; Cisco speed-encoded shape doesn't match OPNsense zone label or BSD device name |
+| `interfaces[].name` | lossy | round-trips through rename mesh; Cisco speed-encoded shape doesn't match OPNsense zone label or BSD device name.  The round trip also adds a record: VLAN 10, which the render links to no interface, is written as a `GigabitEthernet0/0/0_vlan10` device, which the OPNsense parser reads back as an interface of its own (`ianaift:l3ipvlan`); no source record is lost |
 | `interfaces[].description` | good | free-text |
 | `interfaces[].enabled` | good | YANG bool -> OPNsense `<enable/>` |
 | `interfaces[].interface_type` | lossy | OPNsense doesn't surface a type field; canonical hint dropped on render |
