@@ -9,6 +9,8 @@ Cached measurement backing
 - Render errors: **0** · re-parse errors: **0**
 - Retrieved: 2026-09-21
 
+> **Update 2026-10-21 — three rows moved.**  OS10 has one label for a VLAN, its SVI's `description`, which the parser reads as the VLAN's name, and the render now writes a VLAN's name there on the SVI the config has, where that SVI states no description.  An SVI with a description of its own keeps it, and the VLAN's name is written in a `! review:` line of its stanza.  AOS-CX writes an SVI's name with a space (`interface vlan 101`), which the render had not taken for an SVI: it wrote the VLAN a second `interface vlan101`, and OS10 applied the description written last.  With one stanza for each SVI, `vlans[].name` is `lossy` (the DCN core's `PROD-WEB-SVI` beside `name PROD-WEB` reads back as the name; drifted on 4 of 7 cells, two of them on the record count only, preserved on 3), and `interfaces[].enabled` and `interfaces[].mtu` are `good` (preserved on 2 of 7 cells; the other 5 drift on the record count only).  `interfaces[].description` stays `lossy`, drifted on 5 of 7.  The other rows of this file are as retrieved.
+
 > **No device-vendor documentation was consulted for this file.** Everything below is derived from in-repo artefacts: the two codecs' `CapabilityMatrix` declarations and the measured mesh run. Where a disposition rests on a declaration rather than an observed round-trip, the YAML says so explicitly.
 
 ## Why the dispositions could not be written in advance

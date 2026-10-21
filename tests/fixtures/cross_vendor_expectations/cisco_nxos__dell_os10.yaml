@@ -128,8 +128,11 @@ per_field_expectation:
     disposition: lossy
     reason: >
       The anchor renders but the value does not survive the round
-      trip. Measured over 13 cells: drifted on 7, preserved on 2, both
-      sides empty on 4.
+      trip. OS10 has one label for a VLAN, its SVI's `description`:
+      an SVI the source states no description for is written its
+      VLAN's name, which reads back as the interface's description
+      too. Measured over 13 cells: drifted on 9, preserved on 2, both
+      sides empty on 2.
     references: [nxos-os10-surface]
 
   interfaces[].enabled:
@@ -427,8 +430,13 @@ per_field_expectation:
   vlans[].name:
     disposition: lossy
     reason: >
-      The anchor renders but the value does not survive the round
-      trip. Measured over 13 cells: drifted on 9, preserved on 1, both
+      OS10 has one label for a VLAN, its SVI's `description`, which
+      the parser reads as the VLAN's name. An SVI that states a
+      description of its own keeps it, and the VLAN's name is
+      written only in a `! review:` line of its stanza; a VLAN with
+      no name whose SVI has a description reads back with it as its
+      name. Measured over 13 cells: drifted on 7 (four of them on
+      the record count only, see vlans[].id), preserved on 3, both
       sides empty on 3.
     references: [nxos-os10-surface]
 

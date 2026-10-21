@@ -9,6 +9,8 @@ Cached measurement backing
 - Render errors: **0** · re-parse errors: **0**
 - Retrieved: 2026-09-21
 
+> **Update 2026-10-21 — one row moved, one re-measured.**  OS10 has one label for a VLAN, its SVI's `description`, which the parser reads as the VLAN's name, and the render now writes a VLAN's name there on the SVI the config has, where that SVI states no description.  An SVI with a description of its own keeps it, and the VLAN's name is written in a `! review:` line of its stanza.  `interfaces[].description` is `lossy`: an SVI the source states no description for comes back with its VLAN's name as one (`interface Vlan100` beside `vlan 100` / `name Servers`; drifted on 1 of 14 cells, preserved on 7, empty on both sides on 6).  `vlans[].name` stays `lossy`, drifted on 1 of 14 cells (the kitchen sink's SVIs have descriptions of their own), preserved on 1, empty on both sides on 12.  The other rows of this file are as retrieved.
+
 > **No device-vendor documentation was consulted for this file.** Everything below is derived from in-repo artefacts: the two codecs' `CapabilityMatrix` declarations and the measured mesh run. Where a disposition rests on a declaration rather than an observed round-trip, the YAML says so explicitly.
 
 ## Why the dispositions could not be written in advance
