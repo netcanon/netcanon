@@ -429,6 +429,41 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A sub-interface of another vendor was written onto FortiOS with
+  the number in its name for its tag.**  IOS-XE `interface
+  GigabitEthernet0/0/1.100` with `encapsulation dot1Q 200`, a Junos
+  `unit 100 vlan-id 200`: FortiOS was written `edit "port1.100"` /
+  `set vlanid 100`, a VLAN the sub-interface is not tagged with, and
+  a unit whose number is no VLAN id (`GigabitEthernet2/0/4.223415`)
+  was `set vlanid 223415`, which no FortiGate takes.  The job was
+  `partial` for `/interfaces/interface/dot1q-vlan` (unsupported),
+  whose reason said the tag was flagged as a drop rather than
+  mis-rendered.  The tag is now the sub-interface's own (`set vlanid
+  200`), on the port its name is a unit of (`set interface
+  "port1"`) whether or not the output has a block for that port,
+  and the job's report says that the block is read back as a VLAN
+  interface and a VLAN of its tag (`/interfaces/interface/dot1q-vlan`
+  is lossy, where it was unsupported).  A sub-interface that an entry
+  names with no port in it rides on the parent chosen for every VLAN,
+  under a `# review:` line, and is never itself chosen as a VLAN's
+  parent.  A VLAN of the switch whose id is a sub-interface's unit
+  number and not its tag is no longer taken for that sub-interface's
+  VLAN and left out.  A FortiGate takes a VLAN id once on an
+  interface (Fortinet's "Rules about VLAN configuration and VDOM
+  interface assignment"), so where the output has a VLAN id twice on
+  one parent -- two units of a port with one tag, or a VLAN interface
+  whose parent is chosen landing on a port a sub-interface tags with
+  its id -- the second block is written under a `# review:` line
+  that names the first.  Over the committed captures two more jobs
+  onto FortiOS pass the validation report: the IOS-XE carrier
+  capture, which is `completed` -- the IOS-XE parser reads
+  `encapsulation dot1Q 2234 second-dot1q 15` as its outer tag alone,
+  so its six Q-in-Q units come out on one tag, as they do onto every
+  target that writes a sub-interface's tag, five of them under that
+  line -- and the IOS XR CST capture,
+  which the port-name check (below) holds `partial` for its names,
+  so that check now makes 214 of 590 jobs `partial`.
+
 - **A RouterOS line broken by an export was joined with a space, and
   a value carried onto the next line was lost.**  An `export` breaks
   a long line at any column -- between two words, right after a key
@@ -2956,13 +2991,13 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  213 of the 588 jobs that said `completed` are `partial`.  67 of
+  214 of the 590 jobs that said `completed` are `partial`.  62 of
   them list a shared name, 65 a hardware port that was dropped, 29 a
-  logical name that was dropped and 111 a name left as the source
-  has it (90 of those a hardware port); 48 list more than one kind.
+  logical name that was dropped and 112 a name left as the source
+  has it (99 of those a hardware port); 46 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
-  and none to or from `failed`; 401 jobs that were already `partial`
-  carry the sentence as well.  Each of the 213 is `completed` again,
+  and none to or from `failed`; 400 jobs that were already `partial`
+  carry the sentence as well.  Each of the 214 is `completed` again,
   with one more request, once every listed name has an entry.
 
   **To settle such a job**, decide each name with an entry of

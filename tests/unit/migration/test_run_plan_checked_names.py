@@ -1732,7 +1732,14 @@ _MOVES: dict[str, tuple[int, int, int, int, int, int]] = {
     # longer among the captures (it is under `refused/`); two of its
     # jobs had a name shared with a hardware port.
     "cisco_iosxe_cli": (8, 0, 0, 0, 3, 20),
-    "cisco_iosxr": (4, 0, 13, 0, 1, 2),
+    # From (4, 0, 13, 0, 1, 2): onto FortiOS a routed sub-interface is
+    # a VLAN interface on its port with its own tag, and
+    # `/interfaces/interface/dot1q-vlan` is lossy where it was
+    # unsupported.  The PA3 design capture onto FortiOS had been
+    # `partial` for that path alone; the validation report passes it
+    # now, and its two TenGigE ports on `port1` and its `BVI500`, left
+    # as the source has it, hold it (+1 several).
+    "cisco_iosxr": (4, 0, 13, 0, 1, 3),
     "cisco_nxos": (0, 0, 11, 0, 0, 0),
     "dell_os10": (0, 0, 14, 0, 0, 0),
     "fortigate_cli": (0, 0, 0, 0, 0, 11),
@@ -1814,8 +1821,8 @@ class TestEveryCommittedCapture:
     def test_the_totals(self) -> None:
         """What the documents say moved, kept true by the table."""
         by_reason = [sum(row[i] for row in _MOVES.values()) for i in range(6)]
-        assert by_reason == [40, 0, 61, 1, 66, 45]
-        assert sum(by_reason) == 213
+        assert by_reason == [40, 0, 61, 1, 66, 46]
+        assert sum(by_reason) == 214
         assert sum(sum(row.values()) for row in _STANDS.values()) == 94
 
     @pytest.mark.parametrize("codec_name", sorted(_MOVES))

@@ -405,6 +405,10 @@ class TestShipBeforeWireUnsupportedDeclarations:
         # Wave B — see commit feat(fortigate_cli): wire VRRP groups.
         "fortigate_cli": {
             "/interfaces/interface/vrrp-groups/group",
+            # Lossy: a routed sub-interface is written as FortiOS's own
+            # VLAN interface on its port, with its own tag, and read
+            # back as a VLAN interface and a VLAN of the tag.
+            "/interfaces/interface/dot1q-vlan",
         },
         # Wave B — see commit feat(mikrotik_routeros): wire VRRP.
         "mikrotik_routeros": {

@@ -254,6 +254,46 @@ def _tag_of(source_name: str, unit: str) -> int:
     return 300 if unit == "54" and source_name != "vyos" else int(unit)
 
 
+def _fortios_block_says(text: str, name: str, tag: int) -> bool:
+    """The ``edit`` block of *name* in ``config system interface``
+    states ``set vlanid <tag>``."""
+    section = block = False
+    for line in text.splitlines():
+        words = line.split()
+        if words == ["config", "system", "interface"]:
+            section = True
+        elif section and words[:1] == ["edit"]:
+            block = line.strip() in (f'edit "{name}"', f"edit {name}")
+        elif section and words == ["next"]:
+            block = False
+        elif block and words == ["set", "vlanid", str(tag)]:
+            return True
+    return False
+
+
+#: Targets whose parser reads a sub-interface's tag otherwise than as
+#: ``dot1q_vlan``, with a reader of the text that states it.  FortiOS
+#: writes a sub-interface as a VLAN interface on its port (``edit
+#: "port1.54"`` / ``set vlanid 300`` / ``set interface "port1"``),
+#: and a VLAN interface on a port and on a switch interface alike, so
+#: its parser reads the block as a VLAN interface and a VLAN of the
+#: tag under the interface's name.  The tag is taken where the parser
+#: reads it so AND the text states it.
+_TAG_AS_A_VLAN_OF_ITS_NAME = {"fortigate_cli": _fortios_block_says}
+
+
+def _tags(target_name: str, out, iface, rendered: str) -> set[int]:
+    """The tags the output carries on *iface*, read the target's way."""
+    tags = {iface.dot1q_vlan} - {None}
+    says = _TAG_AS_A_VLAN_OF_ITS_NAME.get(target_name)
+    if says is not None and iface.interface_type == "ianaift:l3ipvlan":
+        tags |= {
+            vlan.id for vlan in out.vlans
+            if vlan.name == iface.name and says(rendered, iface.name, vlan.id)
+        }
+    return tags
+
+
 class TestASubInterfaceOnEveryPair:
     """Every pair that can be made of the source grammars above and
     the public targets -- not every pair of codecs: AOS-S, AOS-CX,
@@ -308,11 +348,49 @@ class TestASubInterfaceOnEveryPair:
         for unit, ip in _UNIT_ADDRESSES:
             tag = _tag_of(source_name, unit)
             holders = _holders(out, ip)
-            if len(holders) != 1 or holders[0].dot1q_vlan != tag:
+            if len(holders) != 1 or tag not in _tags(target_name, out, holders[0], job.rendered):
                 assert job.status != MigrationJobStatus.completed, (
                     f"{ip}: tag {tag} is not in the output "
                     f"({[(h.name, h.dot1q_vlan) for h in holders]}) and the job is completed"
                 )
+
+    @pytest.mark.parametrize("source_name", sorted(_UNITS))
+    def test_fortios_is_read_for_a_tag_it_wrote(
+        self, source_name: str, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Handed the FortiOS renderer that wrote the number in a
+        unit's name for its tag -- the defect FortiOS's reading is
+        for -- the reading finds no tag where the two differ, and the
+        job says ``completed``: the check above fails."""
+        import copy
+
+        from netcanon.migration.codecs.fortigate_cli import codec as fgt_codec
+
+        real = fgt_codec.render_intent
+
+        def render(tree):
+            tree = copy.deepcopy(tree)
+            for iface in tree.interfaces:
+                iface.dot1q_vlan = None
+            return real(tree)
+
+        monkeypatch.setattr(fgt_codec, "render_intent", render)
+        target = get_codec("fortigate_cli")
+        _, text = _UNITS[source_name]
+        job = run_plan_with_overrides(get_codec(source_name), target, text, port_rename_map={})
+        out = target.parse(job.rendered)
+        lost = [
+            ip for unit, ip in _UNIT_ADDRESSES
+            if _tag_of(source_name, unit) != int(unit)
+            and _tag_of(source_name, unit)
+            not in _tags("fortigate_cli", out, _holders(out, ip)[0], job.rendered)
+        ]
+        expected = [
+            ip for unit, ip in _UNIT_ADDRESSES if _tag_of(source_name, unit) != int(unit)
+        ]
+        assert lost == expected
+        if expected:
+            assert job.status == MigrationJobStatus.completed
 
     @pytest.mark.parametrize(
         ("source_name", "target_name"), sorted(_PORT_HAS_NO_NAME),

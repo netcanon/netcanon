@@ -77,6 +77,7 @@ from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
+    CanonicalVlan,
 )
 from ...canonical.transforms import is_every_vlan
 from ..base import RenderError
@@ -170,6 +171,31 @@ def _port_index_for(name: str) -> int:
 _NOT_SCORED: Any = object()
 
 
+def _tag_of(
+    iface: CanonicalInterface, vlans: list[CanonicalVlan],
+) -> int | None:
+    """The 802.1Q tag a VLAN interface is written with.
+
+    A routed sub-interface states its own (``dot1q_vlan``: IOS-XE
+    ``encapsulation dot1Q 200`` under ``GigabitEthernet0/0/1.100``,
+    Junos ``unit 100 vlan-id 200``), and its name says only which
+    unit it is: read from the name, the tag was 100.  Any other
+    interface's tag is what :func:`_vlan_id_for` reads from its name
+    and the VLAN list.
+    """
+    if iface.dot1q_vlan is not None:
+        return iface.dot1q_vlan
+    return _vlan_id_for(iface.name, vlans)
+
+
+def _port_of_unit(name: str) -> str | None:
+    """The port a sub-interface is a unit of, by its name: what is
+    before ``.<unit>`` (the translator sends a unit after its port as
+    ``<port>.<unit>``), or ``None`` for a name with no unit in it."""
+    port, dot, unit = name.rpartition(".")
+    return port if dot and port and unit.isdigit() else None
+
+
 def _scored_parent(deduped_ifaces: list[CanonicalInterface]) -> str | None:
     """The port the LAN-preference scorer makes the parent of a VLAN
     sub-interface, or ``None`` where no port has LAN evidence.
@@ -215,6 +241,7 @@ def _scored_parent(deduped_ifaces: list[CanonicalInterface]) -> str | None:
         i for i in deduped_ifaces
         if not _looks_like_vlan_iface(i.name)
         and i.interface_type != "ianaift:l3ipvlan"
+        and i.dot1q_vlan is None
     ]
     if not candidates:
         return None
@@ -366,7 +393,11 @@ def _build_vlan_children(
         # child names are ``vlan<id>`` (no dot) so the scorer's
         # signal-based ranking applies — dotted-form fast path is
         # not relevant here.
-        parent_name = _parent_for_vlan_iface("vlan", deduped_ifaces, scored)
+        # A routed sub-interface is no VLAN's parent, whatever its
+        # name (an entry can give it one with no unit in it).
+        parent_name = _parent_for_vlan_iface(
+            "vlan", [i for i in deduped_ifaces if i.dot1q_vlan is None], scored,
+        )
 
     iface_by_name = {i.name: i for i in deduped_ifaces}
 
@@ -379,7 +410,7 @@ def _build_vlan_children(
     for cand in deduped_ifaces:
         if not cand.ipv4_addresses:
             continue
-        cand_vid = _vlan_id_for(cand.name, tree.vlans)
+        cand_vid = _tag_of(cand, tree.vlans)
         if cand_vid is not None and cand_vid not in iface_by_vlan_id:
             iface_by_vlan_id[cand_vid] = cand
 
@@ -637,12 +668,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
     # The parent the scorer gives a VLAN sub-interface: the same for
     # every one of them, so it is asked for once, here.
     scored_parent = _scored_parent(deduped_ifaces)
+    # What a VLAN interface may ride on when the parent is chosen: no
+    # routed sub-interface, whatever its name.  Made once, here.
+    vlan_parents = [i for i in deduped_ifaces if i.dot1q_vlan is None]
 
     # VLAN child interface synthesis (Issue #6).
     vlan_children = _build_vlan_children(tree, deduped_ifaces, scored_parent)
     existing_vlan_ids = set()
     for cand in deduped_ifaces:
-        vid = _vlan_id_for(cand.name, tree.vlans)
+        vid = _tag_of(cand, tree.vlans)
         if vid is not None:
             existing_vlan_ids.add(vid)
     vlan_children = [
@@ -656,18 +690,32 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         for c in collision_comments:
             out.append(f"    {c}")
         labels = vlan_labels(tree)
+        # The VLAN interface written first on each (parent, VLAN id):
+        # a FortiGate takes a VLAN id once on an interface (Fortinet,
+        # "Rules about VLAN configuration and VDOM interface
+        # assignment"), and the output says where it has it twice.
+        first_on: dict[tuple[str, int], str] = {}
         for iface in deduped_ifaces:
             out.append(f'    edit "{iface.name}"')
             # LAG aggregate marker takes precedence over VLAN.
             lag = lag_by_name.get(iface.name)
+            # A routed sub-interface is a VLAN interface on its port
+            # whatever its name: an entry can name it anything.
+            is_sub = lag is None and iface.dot1q_vlan is not None
             is_vlan = lag is None and (
                 iface.interface_type == "ianaift:l3ipvlan"
+                or is_sub
                 or _looks_like_vlan_iface(iface.name)
             )
-            vid = _vlan_id_for(iface.name, tree.vlans) if is_vlan else None
+            vid = _tag_of(iface, tree.vlans) if is_vlan else None
             # The interface's own description, and otherwise the
-            # VLAN's label: FortiOS has one for the two.
-            label = labels.get(vid, "") if vid is not None else ""
+            # VLAN's label: FortiOS has one for the two.  A
+            # sub-interface's tag is its port's own, and a VLAN of
+            # the switch with the same id is another thing.
+            label = (
+                labels.get(vid, "") if vid is not None and not is_sub
+                else ""
+            )
             alias = iface.description or (
                 label if label != iface.name else ""
             )
@@ -700,15 +748,41 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # iface, which would incorrectly anchor every VLAN
                 # child to the WAN.
                 stated = iface.vlan_parent
+                # A sub-interface rides on the port its name is a unit
+                # of, whether or not this output has a block for that
+                # port: a FortiGate's ports are on the device whatever
+                # the config says of them.
+                port = _port_of_unit(iface.name) if is_sub else None
+                no_port = is_sub and port is None
                 if stated and stated in seen_iface_names:
                     parent = stated
+                elif port is not None:
+                    parent = port
+                elif no_port:
+                    # An entry gave it a name with no port in it: the
+                    # parent chosen for every VLAN, and a line that
+                    # says so.
+                    parent = _parent_for_vlan_iface(
+                        "vlan", vlan_parents, scored_parent,
+                    )
                 else:
                     parent = _parent_for_vlan_iface(
-                        iface.name, deduped_ifaces, scored_parent,
+                        iface.name, vlan_parents, scored_parent,
                     )
                 if vid is not None:
                     out.append("        set type vlan")
                     out.append(f"        set vlanid {vid}")
+                    if no_port and not stated:
+                        out.append(
+                            f"        # review: a routed sub-interface "
+                            f"(tag {vid}) whose name gives no port; it "
+                            f"is written on \"{parent}\" -- move it to "
+                            f"its port"
+                            if parent else
+                            f"        # review: a routed sub-interface "
+                            f"(tag {vid}) whose name gives no port, and "
+                            f"this output has none to write it on"
+                        )
                     if stated and parent != stated:
                         out.append(
                             f"        # review: rides on \"{stated}\" in "
@@ -719,6 +793,14 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                             f"the source, which is not in this output"
                         )
                     if parent:
+                        first = first_on.setdefault((parent, vid), iface.name)
+                        if first != iface.name:
+                            out.append(
+                                f"        # review: VLAN {vid} is on "
+                                f"\"{parent}\" already (\"{first}\"); a "
+                                f"FortiGate takes a VLAN id once on an "
+                                f"interface"
+                            )
                         out.append(f'        set interface "{parent}"')
             # Only rows with a real IP can render as FortiOS ``set ip`` — a
             # VARP virtual-gateway anycast row carries ip='' +
