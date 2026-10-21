@@ -429,6 +429,21 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **A RouterOS tunnel that was shut came out enabled.**  The
+  RouterOS renderer writes a tunnel as an `add` line under
+  `/interface gre`, `eoip` or `ipip`, and wrote no `disabled=` there,
+  though the parser reads one and every other section it writes says
+  so of a shut item: an `add` without it makes the tunnel enabled.  A
+  tunnel that was shut on the source -- a RouterOS `disabled=yes`, an
+  IOS-XE `shutdown` -- was therefore up on the target, in a job that
+  reported nothing.  Such a tunnel is now written `disabled=yes`.
+  MikroTik's GRE and EoIP pages list `disabled (yes | no; Default:
+  no)`; the IPIP page lists no such row but prints the `X - disabled`
+  flag, so an IPIP item takes it too (inferred).  No committed input
+  holds a shut tunnel, so no committed output moves.  Guarded by
+  `tests/unit/migration/codecs/mikrotik_routeros/test_a_disabled_tunnel_is_written.py`,
+  which reads each output with a key=value reader of its own and with
+  the parser, and hands its check the defect.
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
   motd` are printed with their body as it was typed and a line `EOF`

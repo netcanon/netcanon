@@ -514,6 +514,16 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 # ``remote-address`` RouterOS rejects the add line; we
                 # pick 0.0.0.0 as an obvious sentinel.
                 parts.append("remote-address=0.0.0.0")
+                # A tunnel that is shut is written so, as every other
+                # section here writes one: the parser reads
+                # ``disabled=`` on these lines, and an ``add`` without
+                # it makes the tunnel enabled.  MikroTik's GRE and EoIP
+                # pages list ``disabled (yes | no; Default: no)``; the
+                # IPIP page lists no such row but prints the ``X -
+                # disabled`` flag, so an IPIP item takes it too
+                # (inferred).
+                if not iface.enabled:
+                    parts.append("disabled=yes")
                 lines.append(" ".join(parts))
             lines.append("")
 
