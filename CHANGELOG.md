@@ -2830,10 +2830,10 @@ timestamp if your timezone matters for an audit.
   before, and the warnings are the ones the job had.
 
   Over the committed captures, each onto each codec with no port map,
-  213 of the 588 jobs that said `completed` are `partial`.  67 of
+  213 of the 588 jobs that said `completed` are `partial`.  61 of
   them list a shared name, 65 a hardware port that was dropped, 29 a
   logical name that was dropped and 111 a name left as the source
-  has it (90 of those a hardware port); 48 list more than one kind.
+  has it (98 of those a hardware port); 45 list more than one kind.
   None is a job from a vendor to itself, no job moves the other way,
   and none to or from `failed`; 401 jobs that were already `partial`
   carry the sentence as well.  Each of the 213 is `completed` again,
