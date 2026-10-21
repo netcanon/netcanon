@@ -371,9 +371,10 @@ per_field_expectation:
     disposition: not_applicable
     note: >
       Same source-side gap as `vlans[].untagged_ports`, same measurement:
-      empty on all 13 cells.  vyos additionally declares
-      `/interfaces/interface/dot1q-vlan` unsupported, so even the sub-netdev
-      tag does not surface as trunk membership on a VLAN record.
+      empty on all 13 cells.  A VyOS `vif` is read as a sub-interface
+      with its own tag on the interface record (`dot1q_vlan`), not as
+      trunk membership on a VLAN record, so even the sub-netdev tag does
+      not surface here.
     references: [vyos-iosxe-cli-surface]
 
   "vlans[].description":

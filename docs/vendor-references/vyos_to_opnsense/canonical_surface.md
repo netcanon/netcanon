@@ -143,8 +143,12 @@ never emits them and there is nothing for OPNsense to lose:
 `/vlans/vlan/id` · `/vlans/vlan/ipv4/address/{secondary-ip,virtual-gateway-address,virtual-gateway-mac}` ·
 `/dhcp-servers/pool` · `/radius-servers/server/{host,key}` ·
 `/interfaces/interface/vrrp-groups/group/*` ·
-`/interfaces/interface/{switchport-mode,access-vlan,trunk-allowed-vlans,trunk-native-vlan,voice-vlan}` ·
-`/interfaces/interface/dot1q-vlan`
+`/interfaces/interface/{switchport-mode,access-vlan,trunk-allowed-vlans,trunk-native-vlan,voice-vlan}`
+
+`/interfaces/interface/dot1q-vlan` is not among them: `vyos` declares it
+lossy (for its render of another vendor's sub-interface, a `vif` of its
+tag), and the parser does set it — `eth1.100` and `eth1.200` of the
+kitchen sink carry tags 100 and 200.
 
 Measured, not merely declared: on all 13 cells the vyos parser emitted **zero**
 VLAN records, **zero** DHCP pools, **zero** RADIUS servers, **zero** VRRP

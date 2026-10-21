@@ -336,7 +336,12 @@ never emits them and there is nothing for EOS to lose:
 `/radius-servers/server/key` · `/anycast-gateway-mac` ·
 `/system/syslog-server` · `/routing/static-route/vrf` ·
 `/interfaces/interface/vrrp-groups/group` and all seven of its sub-paths ·
-`/interfaces/interface/{switchport-mode,access-vlan,dot1q-vlan,trunk-allowed-vlans,trunk-native-vlan,voice-vlan}`
+`/interfaces/interface/{switchport-mode,access-vlan,trunk-allowed-vlans,trunk-native-vlan,voice-vlan}`
+
+`/interfaces/interface/dot1q-vlan` is not among them: `vyos` declares it
+lossy (for its render of another vendor's sub-interface, a `vif` of its
+tag), and the parser does set it — `eth1.100` and `eth1.200` of the
+kitchen sink carry tags 100 and 200.
 
 These are recorded `not_applicable`, not `unsupported`, and the distinction is
 operational: `arista_eos` declares most of them **supported** — DHCP pools,

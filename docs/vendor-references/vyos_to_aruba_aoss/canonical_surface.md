@@ -122,7 +122,8 @@ are administratively down. All of it round-trips unchanged.
 `dot1q_vlan`, `dhcp_client`, `dhcp_client_v6` and `vrf` are not keys in the
 expectation YAML; they are recorded here because they are real and because
 `vrf` is the interface-side half of the routing-instance drop discussed below.
-`dot1q_vlan` is declared `unsupported` on **both** codecs, so the VyOS
+`dot1q_vlan` is declared `unsupported` on the AOS-S side (VyOS sets it, and
+declares it lossy for its own render), so the VyOS
 `eth1.100` / `eth1.200` sub-interfaces arrive as ordinary interfaces with their
 addressing intact but with the 802.1Q tag stripped from the canonical record;
 `dhcp_client_v6` is declared lossy on the AOS-S side (no DHCPv6 client grammar).

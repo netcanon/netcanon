@@ -142,11 +142,10 @@ Recorded so the next reader does not re-hunt them as unexplained:
 - `interfaces[].dot1q_vlan` — `100` → `null` on `eth1.100` and `200` → `null`
   on `eth1.200` (`kitchen_sink.conf`). The Junos render writes the VyOS netdev
   name `eth1.100` verbatim rather than `set interfaces eth1 unit 100 vlan-id
-  100`, so the tag has no `unit` to ride on. Standing observation, not a
-  pair-specific fact: the `vyos` matrix declares
-  `/interfaces/interface/dot1q-vlan` **unsupported** while the parser
-  demonstrably populates it. That is a source-side matrix under-declaration and
-  belongs to a codec change, not to this file.
+  100`, so the tag has no `unit` to ride on. The `vyos` matrix declared
+  `/interfaces/interface/dot1q-vlan` **unsupported** up to 0.7.7 while the
+  parser populated it; it is declared lossy now, for its render of another
+  vendor's sub-interface (a `vif` of its tag).
 - `interfaces[].dhcp_client_v6` — `dhcpv6` → `""` on one record
   (`houdev_vyos_dhcpv6_pd_client.conf:eth0`), despite `juniper_junos` declaring
   `/interfaces/interface/dhcp-client-v6` supported.

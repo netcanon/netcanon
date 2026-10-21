@@ -134,7 +134,12 @@ never emits them and there is nothing for NX-OS to lose:
 `/system/syslog-server` · `/interfaces/interface/vrrp-groups/group/*` ·
 `/vlans/vlan/id` · `/anycast-gateway-mac` ·
 `/routing-instances/instance/l3-vni` · `/routing/static-route/vrf` ·
-`/interfaces/interface/{switchport-mode,access-vlan,trunk-allowed-vlans,trunk-native-vlan,voice-vlan,dot1q-vlan}`
+`/interfaces/interface/{switchport-mode,access-vlan,trunk-allowed-vlans,trunk-native-vlan,voice-vlan}`
+
+`/interfaces/interface/dot1q-vlan` is not among them: `vyos` declares it
+lossy (for its render of another vendor's sub-interface, a `vif` of its
+tag), and the parser does set it — `eth1.100` and `eth1.200` of the
+kitchen sink carry tags 100 and 200.
 
 Those that map onto an audited key are recorded `not_applicable`, not
 `unsupported`, and the distinction is operational: for most of them
