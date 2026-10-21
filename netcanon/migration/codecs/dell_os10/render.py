@@ -68,6 +68,19 @@ Deliberate non-emissions, each load-bearing for round-trip stability:
   cannot fire on a same-vendor round-trip, where a named VLAN always
   came from an SVI's description and therefore already has one.
 
+* **A VLAN's name is its SVI's description.**  OS10 has one label for
+  a VLAN (``show vlan`` prints it as the VLAN's ``Description``), and
+  the parser reads it as the VLAN's name.  So the name is written as
+  the description of the SVI the config has, where that SVI states
+  none, as it is on an SVI made for the VLAN.  An SVI with a
+  description of its own keeps it -- it is the interface's statement,
+  as on RouterOS, whose VLAN interface's one ``comment=`` is the
+  interface's -- and a name it does not hold is written in a
+  ``! review:`` line of the stanza (:func:`_vlan_names_on_svis`).
+  An SVI is what the parser reads as one (:func:`_svi_of`): OS10
+  takes ``interface vlan 101`` for ``vlan101``, so a VLAN whose SVI
+  the tree spells so is given no second one.
+
 * **``hostname`` is emitted only when set.**  Substituting a default for
   an empty hostname (the NX-OS render does this because its ``vdc``
   wrapper needs a name) would re-parse as that default and drift.
@@ -95,6 +108,7 @@ from .._helpers import (
     trunk_list_written,
     trunk_untagged_vlan,
 )
+from . import parse as _parse
 from . import port_names as _port_names
 
 #: Canonical SNMPv3 auth protocol → OS10 keyword.  OS10 offers ONLY
@@ -194,8 +208,12 @@ def render_intent(tree: CanonicalIntent) -> str:
     # ── Interfaces ──
     lag_mode_by_name = {lag.name: lag.mode for lag in tree.lags}
     untagged_stated = _untagged_stated(tree.interfaces)
+    _, name_not_written = _vlan_names_on_svis(tree)
     for iface in _sort_interfaces(_interfaces_to_render(tree)):
-        lines.extend(_render_interface(iface, lag_mode_by_name, untagged_stated))
+        lines.extend(_render_interface(
+            iface, lag_mode_by_name, untagged_stated,
+            vlan_name=name_not_written.get(iface.name, ""),
+        ))
         lines.append("!")
 
     # ── Static routes ──
@@ -320,21 +338,17 @@ def _render_snmp(snmp, source_vendor: str = "") -> list[str]:
 def _interfaces_to_render(tree: CanonicalIntent) -> list[CanonicalInterface]:
     """Every interface stanza to emit.
 
-    The tree's own interfaces, plus a synthesised SVI for any VLAN that
-    carries a name or an IP address but has no ``vlan<N>`` interface.
-    That synthesis is the ONLY way OS10 can express such a VLAN — it has
-    no top-level ``vlan <id>`` stanza — but it is deliberately withheld
-    from VLANs that carry neither, because those are reconstructed from
-    switchport membership on re-parse and synthesising one would add an
+    The tree's own interfaces, each SVI with its VLAN's name where it
+    states no description (:func:`_vlan_names_on_svis`), plus a
+    synthesised SVI for any VLAN that carries a name or an IP address
+    but has no ``vlan<N>`` interface.  That synthesis is the ONLY way
+    OS10 can express such a VLAN — it has no top-level ``vlan <id>``
+    stanza — but it is deliberately withheld from VLANs that carry
+    neither, because those are reconstructed from switchport
+    membership on re-parse and synthesising one would add an
     interface the source tree never had.
     """
-    existing_svi_ids = {
-        ident.index
-        for ident in (
-            _port_names.classify_port_name(i.name) for i in tree.interfaces
-        )
-        if ident.kind == "svi" and ident.index is not None
-    }
+    existing_svi_ids = set(_svis_by_vlan(tree.interfaces))
     synthesised = [
         CanonicalInterface(
             name=f"vlan{vlan.id}",
@@ -346,7 +360,92 @@ def _interfaces_to_render(tree: CanonicalIntent) -> list[CanonicalInterface]:
         if vlan.id not in existing_svi_ids
         and (vlan.name or vlan.ipv4_addresses)
     ]
-    return list(tree.interfaces) + synthesised
+    named, _ = _vlan_names_on_svis(tree)
+    return named + synthesised
+
+
+def _svi_of(name: str) -> int | None:
+    """The VLAN whose SVI the line ``interface <name>`` is, as the
+    OS10 parser reads that line, or ``None``.
+
+    The render writes a name as the tree holds it, and OS10 takes
+    ``vlan 101`` and ``Vlan 101`` for ``vlan101`` (the parser does
+    too).  The classifier reads only ``vlan<N>``: asked instead, an
+    AOS-CX ``vlan 101`` was no SVI here, the render made a second
+    ``interface vlan101`` for its VLAN, and the description of the
+    stanza OS10 applies last was the VLAN's label.
+    """
+    header = _parse._IFACE_RE.match(f"interface {name}")
+    if header is None:
+        return None
+    svi = _parse._SVI_NAME_RE.match(_parse._iface_name(header))
+    return int(svi.group(1)) if svi else None
+
+
+def _svis_by_vlan(interfaces: list[CanonicalInterface]) -> dict[int, list[int]]:
+    """``{VLAN id: [position of each SVI record of it]}``, in the
+    order of *interfaces* (a config can hold one interface's stanza
+    more than once), by :func:`_svi_of`."""
+    out: dict[int, list[int]] = {}
+    for pos, iface in enumerate(interfaces):
+        vid = _svi_of(iface.name)
+        if vid is not None:
+            out.setdefault(vid, []).append(pos)
+    return out
+
+
+#: Written in an SVI's stanza, below a description that is not its
+#: VLAN's name.  ``{vid}`` and ``{name}`` are the output's.
+_NAME_NOT_WRITTEN_REVIEW = (
+    " ! review: VLAN {vid} is named {name} in the source; OS10 has one "
+    "label for a VLAN, this interface's description, which holds the "
+    "description the source gives the interface -- choose which to keep"
+)
+
+
+def _vlan_names_on_svis(
+    tree: CanonicalIntent,
+) -> tuple[list[CanonicalInterface], dict[str, str]]:
+    """The tree's interfaces with each VLAN's name on its SVI, and the
+    VLAN name of each SVI that keeps a description of its own.
+
+    OS10 has one label for a VLAN, the description of its ``interface
+    vlan<N>``, which the parser reads as the VLAN's name.  An SVI of
+    the config that states no description is given its VLAN's name as
+    one -- on the first of its records, where the config holds its
+    stanza more than once.  One that states a description keeps it:
+    the last record that states one is what OS10 applies, and where
+    that is not the VLAN's name, the name is not configuration on the
+    target, and each stanza of the SVI whose description is not the
+    name says it in a ``! review:`` line (:func:`_render_interface`).
+    Never changes *tree*: an SVI given a description is a copy.
+
+    Args:
+        tree: The tree to render.
+
+    Returns:
+        ``(interfaces, not_written)``: the tree's interfaces in its
+        order, and ``{SVI name: its VLAN's name}`` for each SVI whose
+        description is not its VLAN's name.
+    """
+    interfaces = list(tree.interfaces)
+    not_written: dict[str, str] = {}
+    name_of: dict[int, str] = {}
+    for vlan in tree.vlans:
+        name_of.setdefault(vlan.id, vlan.name)
+    for vid, positions in _svis_by_vlan(interfaces).items():
+        name = name_of.get(vid, "")
+        if not name:
+            continue
+        stated = [pos for pos in positions if interfaces[pos].description]
+        if not stated:
+            first = positions[0]
+            interfaces[first] = interfaces[first].model_copy(
+                update={"description": name},
+            )
+        elif interfaces[stated[-1]].description != name:
+            not_written[interfaces[stated[-1]].name] = name
+    return interfaces, not_written
 
 
 def _untagged_stated(interfaces: list[CanonicalInterface]) -> frozenset[str]:
@@ -518,16 +617,24 @@ def _render_switchport_lines(
 def _render_interface(
     iface: CanonicalInterface, lag_mode_by_name: dict,
     untagged_stated: frozenset[str] = frozenset(),
+    vlan_name: str = "",
 ) -> list[str]:
     """Render one interface stanza.
 
     ``ip vrf forwarding`` precedes ``ip address`` because changing an
     interface's VRF clears its addresses on commit.  *untagged_stated*
     is :func:`_render_switchport_lines`' argument of that name.
+    *vlan_name* is the name of the VLAN of an SVI whose description
+    OS10 applies is not that name (:func:`_vlan_names_on_svis`): a
+    stanza that writes another description says it in a review line.
     """
     block = [f"interface {iface.name}"]
     if iface.description:
         block.append(f" description {iface.description}")
+        if vlan_name and iface.description != vlan_name:
+            block.append(
+                _NAME_NOT_WRITTEN_REVIEW.format(vid=_svi_of(iface.name), name=vlan_name),
+            )
     block.append(" no shutdown" if iface.enabled else " shutdown")
 
     if iface.lag_member_of:

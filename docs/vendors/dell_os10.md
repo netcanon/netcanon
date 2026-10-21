@@ -215,7 +215,19 @@ distributed-anycast-gateway concept at all:
   re-emits `secondary`, the IPv6 form does not.
 - **`/vlans/vlan/description`** — OS10 carries exactly one human label
   per VLAN (the SVI's `description`) and the render spends it on the
-  VLAN **name**.
+  VLAN **name**.  A VLAN whose name is only an interface's, or
+  empty (an OPNsense or RouterOS VLAN), has its description written
+  as its name instead.
+- **`/vlans/vlan/name`** — written as the description of the VLAN's
+  SVI: the one the config has, where it states no description, or
+  one made for the VLAN.  An SVI with a description of its own keeps
+  it, and the name is written in a `! review:` line of the stanza:
+
+  ```
+  interface vlan20
+   description voice gateway
+   ! review: VLAN 20 is named VOICE in the source; OS10 has one label for a VLAN, this interface's description, which holds the description the source gives the interface -- choose which to keep
+  ```
 - **`/routing/static-route/description`** — destination, next-hop and
   administrative distance only.
 

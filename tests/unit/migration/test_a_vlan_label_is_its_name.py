@@ -5,7 +5,8 @@ names it after its interface (an OPNsense ``<vlanif>``, a RouterOS
 ``/interface vlan``), and the label an operator typed -- an OPNsense
 ``<descr>``, a RouterOS ``comment=`` -- is its description.  IOS-XE,
 NX-OS, EOS, AOS-S and Junos write one label for a VLAN, its name, and
-no description: the label was not in their output at all, and the
+no description, and OS10 one, its SVI's description: the label was
+not in their output at all, and the
 name they wrote was a device name (``vlan0.10``) or, once the port
 translator had renamed that interface, a name nothing else held.
 
@@ -15,7 +16,9 @@ says its VLAN has only a name (``CodecBase.vlans_have_only_a_name``),
 by one shared rule (``netcanon/migration/_vlan_labels.py``) applied in
 ``run_plan`` before the port translator and at the render boundary.
 A name of the VLAN's own (an AOS-CX ``name``) is kept, and its
-description stays the loss the matrix declares.
+description stays the loss the matrix declares.  On OS10 an SVI of
+the output with a description of its own keeps it, and the label
+is said in a review line of its stanza.
 
 The output is read three ways: as text, by a reader typed here for
 each target's grammar; with the target's own parser; and on the plan
@@ -43,7 +46,10 @@ pytestmark = pytest.mark.unit
 _REPO = Path(__file__).resolve().parents[3]
 
 #: The targets whose VLAN has only a name.
-TARGETS = ("arista_eos", "aruba_aoss", "cisco_iosxe_cli", "cisco_nxos", "juniper_junos")
+TARGETS = (
+    "arista_eos", "aruba_aoss", "cisco_iosxe_cli", "cisco_nxos", "dell_os10",
+    "juniper_junos",
+)
 
 _LABEL_OF_ITS_OWN = "a VLAN has a label of its own beside its name, and both are written"
 _NAMED_BY_AN_INTERFACE = (
@@ -58,11 +64,6 @@ NOT_NAME_ONLY = {
     "aruba_aoscx": _LABEL_OF_ITS_OWN,
     "fortigate_cli": _NAMED_BY_AN_INTERFACE,
     "mikrotik_routeros": _NAMED_BY_AN_INTERFACE,
-    "dell_os10": (
-        "writes a VLAN's name only as the description of an SVI it makes for "
-        "the VLAN, and none where the config has that SVI (an open defect): a "
-        "label moved into the name would be lost there"
-    ),
     "vyos": _WRITES_NO_VLAN_NAME,
     "cisco_iosxr": _WRITES_NO_VLAN_NAME,
     "cisco_iosxe": _WRITES_NO_VLAN_NAME,
@@ -157,6 +158,25 @@ def _routeros_labels(text: str) -> dict[int, str]:
     return out
 
 
+def _opnsense_interface_labels(text: str) -> dict[int, str]:
+    """``{tag: <descr>}`` of every assigned interface whose device is
+    a ``<vlan>``'s ``<vlanif>``, from the XML: the label the interface
+    has of its own."""
+    root = ElementTree.fromstring(text)
+    tag_of = {
+        (vlan.findtext("vlanif") or "").strip(): int(vlan.findtext("tag") or "0")
+        for vlan in root.iter("vlan")
+    }
+    out: dict[int, str] = {}
+    for section in root.iter("interfaces"):
+        for iface in section:
+            device = (iface.findtext("if") or "").strip()
+            descr = (iface.findtext("descr") or "").strip()
+            if device in tag_of and descr:
+                out[tag_of[device]] = descr
+    return out
+
+
 def _capture(path: str, reader) -> tuple[str, dict[int, str]]:
     text = (_REPO / path).read_text(encoding="utf-8")
     return text, reader(text)
@@ -165,6 +185,18 @@ def _capture(path: str, reader) -> tuple[str, dict[int, str]]:
 CAPTURES = {
     "supergate": ("opnsense", "tests/fixtures/real/opnsense/user_contrib_supergate_opn25.xml", _opnsense_labels),
     "crs310": ("mikrotik_routeros", "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc", _routeros_labels),
+}
+
+
+#: Onto OS10, on the plan path, the VLANs whose SVI has a label of its
+#: own: the port translator makes an OPNsense VLAN's device the SVI,
+#: and the interface assigned to it has a ``<descr>``.  OS10 has one
+#: label for a VLAN; the SVI keeps its own, and the VLAN's label is
+#: in a review line of the stanza.  Read from the XML, never from the
+#: tree.
+OS10_SVI_OF_ITS_OWN = {
+    "opnsense": lambda: _opnsense_interface_labels(OPNSENSE),
+    "supergate": lambda: _opnsense_interface_labels(_source("supergate")[1]),
 }
 
 
@@ -213,12 +245,52 @@ def _junos_names(text: str) -> dict[int, str]:
     return out
 
 
+def _os10_descriptions(text: str) -> dict[int, str]:
+    """``interface vlan<id>`` in column 0 (any letter case, as the
+    bare path writes the source's spelling), then an indented
+    ``description <value>``: the last one, as OS10 applies them."""
+    out: dict[int, str] = {}
+    current: int | None = None
+    for line in text.splitlines():
+        head = re.fullmatch(r"interface [Vv]lan(\d+)\s*", line)
+        if head:
+            current = int(head.group(1))
+            continue
+        if not line[:1].isspace():
+            current = None
+            continue
+        found = re.fullmatch(r" description (.*?)\s*", line)
+        if current is not None and found:
+            out[current] = found.group(1)
+    return out
+
+
+def _os10_review_names(text: str) -> dict[int, str]:
+    """``{VLAN id: name}`` of each review line that says a VLAN's name
+    is not its SVI's description, in the stanza of that SVI."""
+    out: dict[int, str] = {}
+    current: int | None = None
+    for line in text.splitlines():
+        head = re.fullmatch(r"interface [Vv]lan(\d+)\s*", line)
+        if head:
+            current = int(head.group(1))
+            continue
+        if not line[:1].isspace():
+            current = None
+            continue
+        found = re.fullmatch(r" ! review: VLAN (\d+) is named (.*) in the source; .*", line)
+        if current is not None and found and int(found.group(1)) == current:
+            out[current] = found.group(2)
+    return out
+
+
 READERS = {
     "cisco_iosxe_cli": lambda text: _names_in_stanzas(text, quoted=False),
     "cisco_nxos": lambda text: _names_in_stanzas(text, quoted=False),
     "arista_eos": lambda text: _names_in_stanzas(text, quoted=False),
     "aruba_aoss": lambda text: _names_in_stanzas(text, quoted=True),
     "juniper_junos": _junos_names,
+    "dell_os10": _os10_descriptions,
 }
 
 
@@ -242,13 +314,22 @@ def _misses(source_key: str, target: str, path: str) -> list[str]:
     out = _render(source, text, target, path)
     by_text = READERS[target](out)
     by_parser = {vlan.id: vlan.name for vlan in get_codec(target).parse(out).vlans}
+    own = (
+        OS10_SVI_OF_ITS_OWN[source_key]()
+        if target == "dell_os10" and path == "plan" and source_key in OS10_SVI_OF_ITS_OWN
+        else {}
+    )
+    reviewed = _os10_review_names(out) if target == "dell_os10" else {}
     misses = []
     for vid, label in sorted(labels.items()):
-        want = _as_written(target, label)
+        want = _as_written(target, own.get(vid, label))
         if by_text.get(vid) != want:
             misses.append(f"text: VLAN {vid} is {by_text.get(vid)!r}, not {want!r}")
         if by_parser.get(vid) != want:
             misses.append(f"parser: VLAN {vid} is {by_parser.get(vid)!r}, not {want!r}")
+        said = label if vid in own and own[vid] != label else None
+        if reviewed.get(vid) != said:
+            misses.append(f"review: VLAN {vid} says {reviewed.get(vid)!r}, not {said!r}")
     return misses
 
 
@@ -309,6 +390,14 @@ def test_the_captures_have_labels_to_move() -> None:
         assert len(_source(key)[2]) >= 2, key
 
 
+def test_the_svis_of_their_own_are_read() -> None:
+    """The reader of an OPNsense interface's own label finds labels
+    that are not the VLAN's, or the OS10 cells test nothing."""
+    for key, read in OS10_SVI_OF_ITS_OWN.items():
+        own, labels = read(), _source(key)[2]
+        assert own and all(own[vid] != labels[vid] for vid in own), key
+
+
 @pytest.mark.parametrize("target", TARGETS)
 def test_a_target_without_the_flag_misses_the_label(target: str, monkeypatch) -> None:
     monkeypatch.setattr(type(get_codec(target)), "vlans_have_only_a_name", False)
@@ -316,7 +405,9 @@ def test_a_target_without_the_flag_misses_the_label(target: str, monkeypatch) ->
         assert _misses("opnsense", target, path), path
 
 
-@pytest.mark.parametrize("target", ["arista_eos", "cisco_iosxe_cli", "cisco_nxos", "juniper_junos"])
+@pytest.mark.parametrize(
+    "target", ["arista_eos", "cisco_iosxe_cli", "cisco_nxos", "dell_os10", "juniper_junos"],
+)
 def test_the_plan_path_needs_its_own_step(target: str, monkeypatch) -> None:
     """The port translator renames ``vlan0.20`` to the target's VLAN
     interface and leaves the VLAN's name as it was, so the render's

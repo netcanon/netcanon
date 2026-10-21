@@ -1240,7 +1240,9 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
     config are stated.  The SVI's description becomes the VLAN name —
     that is the only human label OS10 carries for a VLAN — and its IPv4
     addresses are mirrored onto the VLAN record so VLAN-centric target
-    codecs can render the SVI.
+    codecs can render the SVI.  Where the config holds an SVI's stanza
+    more than once, OS10 applies them in turn: the name is the last
+    description one of them states.
     """
     existing_by_id: dict[int, CanonicalVlan] = {v.id: v for v in intent.vlans}
     once = Uniques()
@@ -1261,5 +1263,7 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
             intent.vlans.append(synthesised)
             existing_by_id[vid] = synthesised
             continue
+        if iface.description:
+            existing.name = iface.description
         for addr in iface.ipv4_addresses:
             once.add(existing.ipv4_addresses, addr, address_key)

@@ -406,7 +406,7 @@ text").
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/type` | Lossy | RouterOS does not expose IANA `ifType`; codec infers it from interface-name prefix (`etherN` → ethernetCsmacd, `vlanN` → l3ipvlan). |
 | `/vlans/vlan/name` | Lossy | MikroTik stores a VLAN's name as the L3 interface name (e.g. `vlan10`), not a separate descriptive name field; cross-vendor rendering may conflate the two. |
-| `/vlans/vlan/description` | Lossy | RouterOS has one label for a VLAN, the `comment=` of its `/interface vlan`.  The parser reads it as the description of the VLAN and of its interface; the render writes the interface's description there (for a VLAN with no interface, the VLAN's name), so a VLAN's own description is not written.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S and Junos the comment is written as the VLAN's name (see "Cross-paradigm exceptions"). |
+| `/vlans/vlan/description` | Lossy | RouterOS has one label for a VLAN, the `comment=` of its `/interface vlan`.  The parser reads it as the description of the VLAN and of its interface; the render writes the interface's description there (for a VLAN with no interface, the VLAN's name), so a VLAN's own description is not written.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and OS10 the comment is written as the VLAN's name (see "Cross-paradigm exceptions"). |
 | `/filter/rule` | Unsupported | Firewall filter rules are Tier 3 (informational) and not auto-rendered. |
 | `/snmp/v3-user/auth-passphrase` | Lossy | `authentication-password=` takes the operator's passphrase and RouterOS derives the localised USM key from it, so a value that is already another agent's key cannot be re-derived: the render refuses it (review comment, no `add name=` line).  A source passphrase is portable and is emitted unchanged. |
 | `/snmp/v3-user/priv-passphrase` | Lossy | Same as the auth key — refused with the user unless it is a portable passphrase or came from RouterOS itself. |
@@ -604,7 +604,8 @@ text").  The lossy / unsupported exceptions:
 | `/interfaces/interface/tunnel-type` | Lossy | v1 models no OS10 tunnel encapsulation; the port renders as a plain `interface <name>` stanza while its encapsulation type drops. |
 | `/interfaces/interface/{ipv4,ipv6}/address/virtual-gateway-address` | Lossy | OS10 has **no VARP / distributed-anycast-gateway concept** — first-hop redundancy is real VRRP (`vrrp-group` + `virtual-address`).  The interface address renders; the anycast virtual IP does not.  Re-author it as a VRRP group on the target. |
 | `/interfaces/interface/{ipv4,ipv6}/address/virtual-gateway-mac` | Lossy | Drops with the anycast virtual-gateway IP above. |
-| `/vlans/vlan/description` | Lossy | OS10 carries exactly ONE human label for a VLAN — the SVI's `description` — and the render spends it on `CanonicalVlan.name`.  A separate canonical description has no second place to go. |
+| `/vlans/vlan/description` | Lossy | OS10 carries exactly ONE human label for a VLAN — the SVI's `description` — and the render spends it on `CanonicalVlan.name`.  A separate canonical description has no second place to go, except where the VLAN's name is empty or only an interface's: then the description is written as the name. |
+| `/vlans/vlan/name` | Lossy | The parser reads an SVI's `description` as its VLAN's name, and the render writes the name there: on the SVI the config has, where it states no description, or on one made for the VLAN.  An SVI with a description of its own that is not the name keeps it, and the name is written only in a `! review:` line of its stanza (IOS-XE `vlan 20` / `name VOICE` beside `interface Vlan20` / `description voice gateway`). |
 | `/vlans/vlan/ipv4/address/{virtual-gateway-address,virtual-gateway-mac}` | Lossy | The VLAN's address renders (an `interface vlan<N>` SVI is synthesised for a VLAN that carries one), but the anycast virtual gateway has no OS10 form. |
 | `/routing-instances/instance/instance-type` | Lossy | Renders as `ip vrf <name>`, which has no mac-vrf form, so the mac-vrf vs vrf discriminator downgrades to `vrf`.  The instance itself round-trips. |
 | `/routing-instances/instance/{description,route-distinguisher,rt-imports,rt-exports,l3-vni}` | Lossy | The `ip vrf <name>` stanza carries the name and nothing else — RD, route-targets and the L3VNI binding all live under Tier-3 `router bgp` / the deferred `virtual-network` indirection. |
@@ -2252,15 +2253,18 @@ matter; the matrix is honest about both.
   OPNsense and RouterOS name a VLAN after its interface (`vlan0.10`,
   `vlan10`); the label an operator typed (an OPNsense `<descr>`, a
   RouterOS `comment=`) is the VLAN's description.  Onto
-  `cisco_iosxe_cli`, `cisco_nxos`, `arista_eos`, `aruba_aoss` and
-  `juniper_junos`, which write one label for a VLAN, a VLAN whose
+  `cisco_iosxe_cli`, `cisco_nxos`, `arista_eos`, `aruba_aoss`,
+  `juniper_junos` and `dell_os10`, which write one label for a VLAN
+  (on OS10 its SVI's `description`), a VLAN whose
   name is only an interface's, or empty, is written with its
   description as its name (`name USER VLAN`; EOS writes `USER_VLAN`,
   having no white space in a name, and Junos quotes it:
   `set vlans "USER VLAN"`).  A name of the VLAN's own is kept, and a
-  description beside it is listed as a loss.  `aruba_aoscx` and
-  `opnsense` write both.  Onto `fortigate_cli`, `mikrotik_routeros` and
-  `dell_os10` the label is not written, and the job lists
+  description beside it is listed as a loss.  On `dell_os10` an SVI
+  with a description of its own keeps it, and the VLAN's name is in
+  a `! review:` line of its stanza (`/vlans/vlan/name`, lossy).
+  `aruba_aoscx` and `opnsense` write both.  Onto `fortigate_cli` and
+  `mikrotik_routeros` the label is not written, and the job lists
   `/vlans/vlan/description` as a loss.
 * **Aruba AOS-S as DHCP target.**  AOS-S is a DHCP relay platform
   (`ip helper-address`) — it is not a DHCP server.  Source DHCP

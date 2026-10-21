@@ -125,6 +125,11 @@ class DellOS10Codec(CodecBase):
     #: See ``CodecBase.port_names_case_sensitive``.
     port_names_case_sensitive: ClassVar[bool] = False
 
+    #: OS10's one label for a VLAN is its SVI's description, which
+    #: the renderer writes the VLAN's name into.
+    #: See ``CodecBase.vlans_have_only_a_name``.
+    vlans_have_only_a_name: ClassVar[bool] = True
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="dell_os10",
         vendor_id="dell_os10",
@@ -157,7 +162,6 @@ class DellOS10Codec(CodecBase):
             "/interfaces/interface/lag-member-of",
             # VLANs — SVI-derived (OS10 has no top-level `vlan <id>` stanza)
             "/vlans/vlan/id",
-            "/vlans/vlan/name",
             "/vlans/vlan/tagged-ports",
             "/vlans/vlan/untagged-ports",
             # LAGs
@@ -214,7 +218,26 @@ class DellOS10Codec(CodecBase):
                     "OS10 carries exactly one human label for a VLAN — the "
                     "SVI's `description` — and the render spends it on "
                     "CanonicalVlan.name.  A separate canonical VLAN "
-                    "description has no second place to go and is dropped."
+                    "description has no second place to go and is dropped, "
+                    "except where the VLAN's name is empty or only the name "
+                    "of an interface of the config: then the description is "
+                    "written as the name."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vlans/vlan/name",
+                reason=(
+                    "OS10 carries exactly one human label for a VLAN — the "
+                    "SVI's `description` — which the parser reads as the "
+                    "VLAN's name.  The render writes the name there, on "
+                    "the SVI the config has or on one it makes for the "
+                    "VLAN.  Where the config's SVI has a description of "
+                    "its own that is not the name (IOS-XE `vlan 20` / "
+                    "`name VOICE` beside `interface Vlan20` / `description "
+                    "voice gateway`), the SVI keeps its description and the "
+                    "name is written only in a `! review:` line of its "
+                    "stanza."
                 ),
                 severity="warn",
             ),

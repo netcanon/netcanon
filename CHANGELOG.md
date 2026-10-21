@@ -530,6 +530,32 @@ timestamp if your timezone matters for an audit.
   reads the move as preserved (`_vlan_label_moved`).  The RouterOS
   capability matrix said the parser maps a `comment=` to the VLAN's
   name; it maps it to the description, and the reason now says so.
+- **Onto OS10 a VLAN's name was not written where the config has
+  that VLAN's SVI.**  OS10 has one label for a VLAN, the
+  `description` of its `interface vlan<N>` (`show vlan` prints it
+  as the VLAN's), which the parser reads as the VLAN's name.  The
+  renderer wrote the name there only on an SVI it made for a VLAN
+  that had none: IOS-XE `vlan 10` / `name USERS` with an `interface
+  Vlan10` came out with no `USERS`, in a job that said `completed`,
+  and the OS10 matrix listed `/vlans/vlan/name` as supported.  An
+  SVI of the config that states no description is now given its
+  VLAN's name.  One with a description of its own keeps it, as a
+  RouterOS VLAN interface keeps its `comment=`, and the VLAN's name
+  is written in a `! review:` line of its stanza; the matrix lists
+  `/vlans/vlan/name` as lossy (warn) for that case.  With its name
+  written, OS10 is a target whose VLAN has only a name (above): an
+  OPNsense or RouterOS VLAN's label is its SVI's description, where
+  the SVI has none of its own.  And where a config holds an SVI's
+  stanza more than once, the parser takes the VLAN's name from the
+  last description one of them states, as OS10 applies them in
+  turn; it took the first stanza's, empty or not.  That reading
+  showed one more: an SVI the tree spells with a space, as AOS-CX
+  does (`interface vlan 101`), was no SVI to the renderer, which
+  asked a classifier that reads only `vlan<N>`.  It made a second
+  `interface vlan101` for the VLAN, and OS10, which takes both for
+  one interface, applied the description of the stanza written
+  last -- the SVI's own -- in place of the VLAN's name, with nothing
+  said.  An SVI is now what the OS10 parser reads as one.
 
 - **An EOS banner was read as lines of the config, and an account
   came out of it** (Security, above).  `banner login` and `banner
@@ -3707,24 +3733,26 @@ timestamp if your timezone matters for an audit.
 - **An OPNsense 802.1ad (QinQ) device is not translated.**  It is left
   out with its zone and what rides on it, and said in a row: the
   canonical tree holds no 802.1ad tag.
-- **An OPNsense VLAN's label is not in the output onto FortiOS, OS10
-  or RouterOS.**  An OPNsense `<vlan>` has no name of its own: its
+- **An OPNsense VLAN's label is not in the output onto FortiOS or
+  RouterOS.**  An OPNsense `<vlan>` has no name of its own: its
   label is its `<descr>`, which the tree holds as the VLAN's
   description, the VLAN named after its device (`vlan0.10`).  FortiOS
-  writes no description for a VLAN, OS10 has one label for it, which
-  holds the name, and RouterOS gives a VLAN interface's one
-  `comment=` to the interface's own description: onto those the
-  label (`USER VLAN`) is not in the output, and the job lists
-  `/vlans/vlan/description` as a loss for each VLAN.  Until the
-  OPNsense VLAN device (Fixed, above) the label was the VLAN's name
-  there.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S and Junos it is the
-  VLAN's name (Fixed, above); AOS-CX writes both.
-- **Onto OS10 a VLAN's name is not written where the config has that
-  VLAN's SVI.**  OS10 has one label for a VLAN, its SVI's
-  `description`, and the renderer writes the VLAN's name there only
-  on an SVI it makes for the VLAN: IOS-XE `vlan 10` / `name USERS`
-  with an `interface Vlan10` comes out with no `USERS`, in a job
-  that says `completed`.
+  writes no description for a VLAN, and RouterOS gives a VLAN
+  interface's one `comment=` to the interface's own description:
+  onto those the label (`USER VLAN`) is not in the output, and the
+  job lists `/vlans/vlan/description` as a loss for each VLAN.
+  Until the OPNsense VLAN device (Fixed, above) the label was the
+  VLAN's name there.  Onto IOS-XE CLI, NX-OS, EOS, AOS-S, Junos and
+  OS10 it is the VLAN's name (Fixed, above); AOS-CX writes both.
+- **Onto OS10 a VLAN's name and its SVI's own description are one
+  label.**  OS10 has one label for a VLAN, its SVI's `description`.
+  Where the source's SVI has a description of its own that is not
+  the VLAN's name -- IOS-XE `vlan 20` / `name VOICE` beside
+  `interface Vlan20` / `description voice gateway`, or an OPNsense
+  interface's `<descr>` on the plan path, where the port translator
+  makes its VLAN device the SVI -- the SVI keeps its description
+  and the name is only in a `! review:` line of its stanza.  The job
+  lists `/vlans/vlan/name` as lossy, and stays `completed`.
 - **A VLAN onto OPNsense keeps one label.**  An OPNsense `<vlan>`
   has one, `<descr>`: the renderer writes the VLAN's description
   there, or its name where it has none, so a VLAN with both loses its
