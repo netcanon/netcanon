@@ -881,7 +881,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     #      irb.<vid>`` binding (signalling SVI intent), AND
     #    * The irb.<vid> interface has no load-bearing fields
     #      beyond IPv4 (no VRF binding, no description, no IPv6,
-    #      no LAG membership).
+    #      no LAG membership, no MTU).
     #
     #    A real-capture fixture from Batfish (``junos2541``) carries
     #    irb.<vid> bindings inside ``routing-instances`` (VRF) — we
@@ -920,11 +920,15 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
         # Check whether the irb.<vid> interface (if it exists) has
         # any load-bearing field that would be lost on prune.
         sub_iface = iface_by_name.get(f"irb.{vid}")
+        # An MTU is the unit's own as well: a VLAN record holds none,
+        # so a unit folded with one (``family inet mtu 9000``) lost it,
+        # Junos to Junos included.
         if sub_iface is not None and (
             sub_iface.vrf
             or sub_iface.description
             or sub_iface.ipv6_addresses
             or sub_iface.lag_member_of
+            or sub_iface.mtu is not None
         ):
             # Load-bearing — leave the iface alone, don't fold to vlan.
             continue
@@ -982,7 +986,7 @@ def read_intent(raw: str) -> tuple[CanonicalIntent, str]:  # noqa: C901
     # 4. Prune any ``irb.<vid>`` sub-interface that was folded onto
     #    a CanonicalVlan in step 3.  ``bound_vids`` only contains
     #    vids that were safely foldable (no VRF / description / v6 /
-    #    LAG).  The bare ``irb`` is not pruned here: a record of that
+    #    LAG / MTU).  The bare ``irb`` is not pruned here: a record of that
     #    name exists only when a line configures the device itself or
     #    its unit 0 (``found.stated``), and what such a line states --
     #    an MTU, an address on unit 0 -- is not a unit's to fold.
