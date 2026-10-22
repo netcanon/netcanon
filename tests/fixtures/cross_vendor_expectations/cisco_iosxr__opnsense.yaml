@@ -46,8 +46,10 @@ meta:
     OPNsense firewall carrying the same physical interface layout, addressing
     and uplink bundles.  Hostname, domain, the full interface inventory
     (names, descriptions, admin state, MTU, IPv4 and IPv6 addressing, LAG
-    membership), `Bundle-Ether` LAGs, VLAN ids and local usernames all
-    survive.  What does not is the entire routing plane — static routes and
+    membership -- except that a bundle member is written in its lagg
+    alone, so its own description is not), `Bundle-Ether` LAGs, VLAN ids
+    and local usernames all survive.  What does not is the entire routing
+    plane — static routes and
     VRFs are dropped wholesale — along with NTP servers, the interface type
     discriminator, IOS-XR task-group roles and most user password material.
   certainty: medium
@@ -157,13 +159,17 @@ per_field_expectation:
     references: [iosxr-opnsense-surface]
 
   "interfaces[].description":
-    disposition: good
-    note: >
-      Preserved on all 9 cells that populate it, with zero drifting records
-      out of 155.  opnsense declares `/interfaces/interface/config/description`
-      LOSSY, but its recorded reason is about length limits OTHER vendors
-      impose (Cisco 240 characters, Juniper 900) — OPNsense itself imposes
-      none, so that declaration does not bite on this pair.
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 10 of the 39 records that carry a
+      description are bundle members and lose it.  Every other record
+      keeps its text, untruncated (OPNsense imposes no length limit).
     references: [iosxr-opnsense-surface]
 
   "interfaces[].enabled":

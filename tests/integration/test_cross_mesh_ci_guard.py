@@ -470,6 +470,12 @@ def test_expectation_yaml_coverage_not_reduced(mesh_and_recon, baseline):
 # (2 to 1).  A VLAN name that holds white space is written on IOS-XE as one
 # word, with a review line, and the VLAN list is compared whole: the loss
 # each of the three declared is now what their cells show.
+#
+# And fortigate_cli__opnsense down by one (5 to 4), for
+# ``interfaces[].description``: a member of an aggregate has a record of its
+# own, written onto OPNsense in its lagg's ``<members>`` alone, so its
+# ``set alias`` is not written -- the loss the YAML now names, which the
+# synthetic kitchen sink's two members show.
 # ---------------------------------------------------------------------------
 
 _UNEVIDENCED_BASELINE: dict[str, int] = {
@@ -505,7 +511,7 @@ _UNEVIDENCED_BASELINE: dict[str, int] = {
     "fortigate_cli__cisco_iosxe_cli": 1,
     "fortigate_cli__juniper_junos": 5,
     "fortigate_cli__mikrotik_routeros": 2,
-    "fortigate_cli__opnsense": 5,
+    "fortigate_cli__opnsense": 4,
     "juniper_junos__arista_eos": 2,
     "juniper_junos__aruba_aoss": 2,
     "juniper_junos__cisco_iosxe": 2,

@@ -35,6 +35,7 @@ of keeping both directions adjacent to the code that uses them.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from xml.etree import ElementTree as ET
 
@@ -50,7 +51,7 @@ from ..._user_secrets import (
     format_review_comment,
     is_migratable,
 )
-from ...canonical.intent import CanonicalIntent
+from ...canonical.intent import CanonicalIntent, CanonicalInterface
 from ...canonical.transforms import is_every_vlan
 from ..base import RenderError
 
@@ -248,10 +249,23 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
     #      empty so disabled / sparse ifaces survive round-trip.
     #   2. Zone-tag mangling — ``_zone_tag_for`` is lossy; the ``<if>``
     #      child carries the unmangled name so reparse can recover it.
-    if intent.interfaces:
+    #
+    # A member of a LAG is not assigned: OPNsense adds only an
+    # unassigned interface to a LAGG ("Only unassigned interfaces can
+    # be added to LAGG", docs.opnsense.org, Other Types).  It is
+    # written in its ``<lagg>``'s ``<members>`` alone, and what it held
+    # that a zone would have carried is said there (``_members_of``,
+    # ``_held_by``).  A member is a RECORD, not a name: another record
+    # under the member's name keeps its zone.
+    lagg_members = _members_of(intent)
+    member_records = {
+        id(record) for _, record in lagg_members.values() if record is not None
+    }
+    zones = [i for i in intent.interfaces if id(i) not in member_records]
+    if zones:
         ifaces_el = ET.SubElement(root, "interfaces")
         used_tags: dict[str, int] = {}
-        for iface in intent.interfaces:
+        for iface in zones:
             base_tag = _zone_tag_for(iface.name)
             # Disambiguate collisions: if two distinct canonical names
             # sanitise to the same tag (e.g. ``A1`` and ``a1`` both
@@ -264,54 +278,7 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
                 zone_name = f"{base_tag}_{seen + 1}"
             used_tags[base_tag] = seen + 1
             zone_el = ET.SubElement(ifaces_el, zone_name)
-            # Always emit ``<if>`` FIRST carrying the canonical name
-            # verbatim — keeps the iface name round-trippable across
-            # the lossy zone-tag sanitisation, and ensures sparse /
-            # disabled-only interfaces are never empty (so the parser
-            # doesn't drop them under the empty-stub rule).
-            ET.SubElement(zone_el, "if").text = iface.name
-            # kind=mgmt cascade marker — when the canonical interface
-            # carries the explicit mgmt role (cisco_iosxe_cli's
-            # Mgmt-vrf promotion, arista's Management<N> classifier,
-            # junos's fxp0), surface a ``<descr>Management</descr>``
-            # so the OPNsense UI labels the zone clearly even when
-            # the source had no human-readable description.  An
-            # operator-supplied description still wins.  Documented
-            # at docs.opnsense.org/manual/interfaces.html — the
-            # ``<descr>`` element is the zone label in the GUI.
-            if iface.description:
-                ET.SubElement(zone_el, "descr").text = iface.description
-            elif iface.kind == "mgmt":
-                ET.SubElement(zone_el, "descr").text = "Management"
-            if iface.enabled:
-                ET.SubElement(zone_el, "enable")
-            if iface.mtu is not None:
-                ET.SubElement(zone_el, "mtu").text = str(iface.mtu)
-            # Sub-finding 9a round-trip: a CanonicalInterface with
-            # ``dhcp_client=True`` represents the OPNsense WAN-DHCP
-            # shape (``<ipaddr>dhcp</ipaddr>``).  Emit the keyword
-            # form so parse → render → parse preserves the flag.
-            # Static IPs take precedence — a DHCP-client interface
-            # with a manually-pinned address shouldn't exist in
-            # OPNsense's data model, but if both are set the static
-            # wins (matches the parser's IF/ELIF order).
-            if iface.ipv4_addresses:
-                ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
-                ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
-            elif iface.dhcp_client:
-                ET.SubElement(zone_el, "ipaddr").text = "dhcp"
-            # GAP-EVPN-3: IPv6 emits to ``<ipaddrv6>`` + ``<subnetv6>``.
-            # Only one v6 address fits the OPNsense schema.
-            #
-            # ``dhcp_client_v6`` (dhcp6 / slaac / track6 / 6rd / 6to4)
-            # is the keyword form on ``<ipaddrv6>`` — no ``<subnetv6>``
-            # accompanies it.  Static address takes precedence (OPNsense
-            # doesn't accept both); the parser's IF/ELIF order matches.
-            if iface.ipv6_addresses:
-                ET.SubElement(zone_el, "ipaddrv6").text = iface.ipv6_addresses[0].ip
-                ET.SubElement(zone_el, "subnetv6").text = str(iface.ipv6_addresses[0].prefix_length)
-            elif iface.dhcp_client_v6:
-                ET.SubElement(zone_el, "ipaddrv6").text = iface.dhcp_client_v6
+            _zone_body(zone_el, iface)
 
     # VLANs — emit <vlans><vlan> per CanonicalVlan.  Real OPNsense
     # <vlan> elements REQUIRE a <if> child naming the parent
@@ -390,11 +357,21 @@ def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
         for lag in intent.lags:
             lagg_el = ET.SubElement(laggs_el, "lagg")
             ET.SubElement(lagg_el, "laggif").text = lag.name
-            if lag.members:
-                ET.SubElement(lagg_el, "members").text = ",".join(lag.members)
+            members = [m for m, of in lagg_members.items() if of[0] == lag.name]
+            if members:
+                ET.SubElement(lagg_el, "members").text = ",".join(members)
             ET.SubElement(lagg_el, "proto").text = (
                 _CANONICAL_MODE_TO_OPNSENSE_PROTO.get(lag.mode, "lacp")
             )
+            for member in members:
+                record = lagg_members[member][1]
+                held = _held_by(record) if record is not None else []
+                if held:
+                    lagg_el.append(ET.Comment(
+                        f" review: {_dashes_apart(member)} is a member of this"
+                        " LAGG, and OPNsense assigns no member of a LAGG:"
+                        f" not written: {', '.join(held)} "
+                    ))
 
     # SNMP (Tier 2) — OPNsense snmpd plugin element.
     if intent.snmp is not None and (
@@ -585,6 +562,114 @@ def _render_interface_zone(iface: dict[str, Any], parent: ET.Element) -> None:
 def _render_enable_flag(value: Any) -> str:
     """No-op converter for the ``enable`` flag — empty element, no text."""
     return ""
+
+
+def _members_of(
+    intent: CanonicalIntent,
+) -> dict[str, tuple[str, CanonicalInterface | None]]:
+    """Every member of a LAG the output writes, with its LAG and its
+    interface record (``None`` where it has none).
+
+    A member is one the LAG lists or one whose record names the LAG
+    (the tree states it twice); the first LAG that claims a port has
+    it.  Members of a LAG are in ``<members>``, never in
+    ``<interfaces>``.
+
+    A member's record is the one that names a LAG, and only where no
+    record of the name does, the first of the name.  Two source ports
+    a port map put on one name are two records: the one that is no
+    member keeps its zone and what it holds (the job says the names
+    are fused), and nothing it holds is said of the member.
+    """
+    lag_names = {lag.name for lag in intent.lags}
+    first: dict[str, CanonicalInterface] = {}
+    in_a_lag: dict[str, CanonicalInterface] = {}
+    for iface in intent.interfaces:
+        first.setdefault(iface.name, iface)
+        if iface.lag_member_of in lag_names:
+            in_a_lag.setdefault(iface.name, iface)
+    members: dict[str, tuple[str, CanonicalInterface | None]] = {}
+    for lag in intent.lags:
+        for name in lag.members:
+            members.setdefault(
+                name, (lag.name, in_a_lag.get(name) or first.get(name)),
+            )
+    for iface in intent.interfaces:
+        if iface.lag_member_of in lag_names:
+            members.setdefault(iface.name, (iface.lag_member_of, iface))
+    return members
+
+
+def _zone_body(zone_el: ET.Element, iface) -> None:
+    """Write one interface's children into its zone element."""
+    # Always emit ``<if>`` FIRST carrying the canonical name
+    # verbatim — keeps the iface name round-trippable across
+    # the lossy zone-tag sanitisation, and ensures sparse /
+    # disabled-only interfaces are never empty (so the parser
+    # doesn't drop them under the empty-stub rule).
+    ET.SubElement(zone_el, "if").text = iface.name
+    # kind=mgmt cascade marker — when the canonical interface
+    # carries the explicit mgmt role (cisco_iosxe_cli's
+    # Mgmt-vrf promotion, arista's Management<N> classifier,
+    # junos's fxp0), surface a ``<descr>Management</descr>``
+    # so the OPNsense UI labels the zone clearly even when
+    # the source had no human-readable description.  An
+    # operator-supplied description still wins.  Documented
+    # at docs.opnsense.org/manual/interfaces.html — the
+    # ``<descr>`` element is the zone label in the GUI.
+    if iface.description:
+        ET.SubElement(zone_el, "descr").text = iface.description
+    elif iface.kind == "mgmt":
+        ET.SubElement(zone_el, "descr").text = "Management"
+    if iface.enabled:
+        ET.SubElement(zone_el, "enable")
+    if iface.mtu is not None:
+        ET.SubElement(zone_el, "mtu").text = str(iface.mtu)
+    # Sub-finding 9a round-trip: a CanonicalInterface with
+    # ``dhcp_client=True`` represents the OPNsense WAN-DHCP
+    # shape (``<ipaddr>dhcp</ipaddr>``).  Emit the keyword
+    # form so parse → render → parse preserves the flag.
+    # Static IPs take precedence — a DHCP-client interface
+    # with a manually-pinned address shouldn't exist in
+    # OPNsense's data model, but if both are set the static
+    # wins (matches the parser's IF/ELIF order).
+    if iface.ipv4_addresses:
+        ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
+        ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
+    elif iface.dhcp_client:
+        ET.SubElement(zone_el, "ipaddr").text = "dhcp"
+    # GAP-EVPN-3: IPv6 emits to ``<ipaddrv6>`` + ``<subnetv6>``.
+    # Only one v6 address fits the OPNsense schema.
+    #
+    # ``dhcp_client_v6`` (dhcp6 / slaac / track6 / 6rd / 6to4)
+    # is the keyword form on ``<ipaddrv6>`` — no ``<subnetv6>``
+    # accompanies it.  Static address takes precedence (OPNsense
+    # doesn't accept both); the parser's IF/ELIF order matches.
+    if iface.ipv6_addresses:
+        ET.SubElement(zone_el, "ipaddrv6").text = iface.ipv6_addresses[0].ip
+        ET.SubElement(zone_el, "subnetv6").text = str(iface.ipv6_addresses[0].prefix_length)
+    elif iface.dhcp_client_v6:
+        ET.SubElement(zone_el, "ipaddrv6").text = iface.dhcp_client_v6
+
+
+def _held_by(iface: CanonicalInterface) -> list[str]:
+    """The zone elements *iface* would have been written with, beyond
+    its name and its ``<enable>`` -- what a member of a LAGG, which
+    OPNsense does not assign, cannot carry -- and ``disabled`` for a
+    member that is down.  Element names only: no value of the config
+    goes into the comment that says them."""
+    scratch = ET.Element("zone")
+    _zone_body(scratch, iface)
+    held = [child.tag for child in scratch if child.tag not in ("if", "enable")]
+    if not iface.enabled:
+        held.append("disabled")
+    return held
+
+
+def _dashes_apart(name: str) -> str:
+    """*name* with no two dashes together, which an XML comment may not
+    hold."""
+    return re.sub(r"-(?=-)", "- ", name)
 
 
 def _vlan_parent_default(intent: CanonicalIntent) -> str:

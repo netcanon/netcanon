@@ -119,10 +119,17 @@ per_field_expectation:
     references: [os10-opnsense-surface]
 
   interfaces[].description:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 9 of the 175 records that carry a
+      description are port-channel members and lose it.  Every other
+      record keeps its text.
     references: [os10-opnsense-surface]
 
   interfaces[].enabled:
@@ -166,10 +173,17 @@ per_field_expectation:
     references: [os10-opnsense-surface]
 
   interfaces[].mtu:
-    disposition: good
-    note: >
-      Preserved on 1 of 1 cells; no cell drifts. Both codecs model
-      this surface.
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 8 of the 121 records that carry an MTU are
+      port-channel members and lose it.  Every other record keeps its
+      value.
     references: [os10-opnsense-surface]
 
   interfaces[].name:

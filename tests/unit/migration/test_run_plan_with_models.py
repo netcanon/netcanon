@@ -5400,16 +5400,16 @@ class TestAPortTheOutputDoesNotLookUp:
         """The parser cuts a member list at a comma, and a next hop
         at ``@`` and ``%`` as well; a list is a string where a name in
         it holds white space, and is read whole.  A port with no
-        interface under such a name is judged by the part that is
+        interface under such a name is judged by the parts that are
         read."""
         job = SimpleNamespace(rendered=_OUTPUT_THAT_REFERS_TO_ODD_NAMES, port_drops=[], port_renames={
             "1": "my port", "3": "a,b", "5": "up@link", "7": "to core", "9": "a%b", "11": "not used",
             "13": ",x",
         })
         expected = {name: f"sfp-sfpplus{name}" for name in ("1", "3", "5", "7", "9", "11", "13")}
-        # ``,x`` is cut to nothing.  The route with no next hop puts
-        # an empty name among those the output uses, and that is not
-        # a use of this one.
+        # ``,x`` is cut to nothing and ``x``, neither of which the
+        # output uses.  The route with no next hop puts an empty name
+        # among those it uses, and that is not a use of this one.
         assert migration_pipeline._unbound_hardware(
             get_codec("mikrotik_routeros"), job, {}, expected, list(expected),
         ) == (["1", "3", "5", "7", "9"], True)
@@ -5564,6 +5564,23 @@ _OPNSENSE_LAGG = """<?xml version="1.0"?>
 """
 
 _PROTECTLI = "opnsense/Protectli-FW4B-IGB"
+
+
+class _NoRecordForALaggMember(type(get_codec("opnsense"))):
+    """The OPNsense parser as it was until a lagg's member was given
+    a record: no interface for a member, which OPNsense assigns to no
+    zone.  No parser of the product leaves a member a LAG lists with
+    no record now (``test_vlan_members_reach_the_output.py``); what a
+    job says of one stays checked, with this."""
+
+    def parse(self, text, *args, **kwargs):
+        tree = super().parse(text, *args, **kwargs)
+        tree.interfaces = [i for i in tree.interfaces if i.lag_member_of is None]
+        return tree
+
+
+#: :data:`_OPNSENSE_LAGG`'s members with no record.
+_LAGG_AS_IT_WAS = _NoRecordForALaggMember()
 
 #: A VRRP group that tracks a port the config has no stanza for.
 _IOS_TRACKS_A_PORT_WITH_NO_STANZA = """hostname sw
@@ -5738,6 +5755,89 @@ class TestAPortIsJudgedByItsOwnLine:
         assert job.status == MigrationJobStatus.completed
 
 
+class TestALaggMemberHasARecord:
+    """OPNsense assigns no member of a lagg to a zone, and the parser
+    gives each member a record of its own: so the member is looked up
+    by the hardware it was paired with, under the name an entry gives
+    it, as any port with an interface is."""
+
+    @pytest.fixture(scope="class")
+    def devices(self):
+        return _profile(_PROTECTLI), _profile(_CCR2004)
+
+    def test_each_member_has_a_record(self) -> None:
+        parsed = get_codec("opnsense").parse(_OPNSENSE_LAGG)
+        assert [(i.name, i.lag_member_of) for i in parsed.interfaces] == [
+            ("lagg0", None), ("igb0", "lagg0"), ("igb1", "lagg0"),
+        ]
+
+    @pytest.mark.parametrize("name", ["up-a", "SFP-SFPPLUS1"])
+    def test_named_by_an_entry_it_is_looked_up_by_its_hardware(self, devices, name: str) -> None:
+        """``SFP-SFPPLUS1`` is a name on RouterOS, not the port
+        ``sfp-sfpplus1``; a line of its own defines it."""
+        job = run_plan_with_models(
+            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            port_rename_map={"igb0": name},
+        )
+        plan = job.port_mapping_plan
+        assert f"set [ find default-name=sfp-sfpplus1 ] name={name} disabled=no" in job.rendered
+        assert f"slaves={name},sfp-sfpplus2" in job.rendered
+        assert plan.unbound_ports == {}
+        assert plan.target_hardware == {"igb0": "sfp-sfpplus1"}
+        assert job.status == MigrationJobStatus.completed
+
+    @pytest.mark.parametrize(("name", "written"), [
+        ("my port", 'slaves="my port,sfp-sfpplus2"'),
+        ("sfp-sfpplus2@x", 'slaves="sfp-sfpplus2@x,sfp-sfpplus2"'),
+    ])
+    def test_a_name_the_list_gives_back_whole_is_found(
+        self, devices, name: str, written: str,
+    ) -> None:
+        """White space puts the member list in a string, which is read
+        back whole; and a member list is not cut at ``@`` (a next hop
+        is: ``sfp-sfpplus2`` ahead of it is the other member, not a
+        piece of this name)."""
+        job = run_plan_with_models(
+            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            port_rename_map={"igb0": name},
+        )
+        plan = job.port_mapping_plan
+        assert f'set [ find default-name=sfp-sfpplus1 ] name="{name}" disabled=no' in job.rendered
+        assert written in job.rendered
+        assert plan.unbound_ports == {}
+        assert plan.target_hardware == {"igb0": "sfp-sfpplus1"}
+        assert job.status == MigrationJobStatus.completed
+
+    @pytest.mark.parametrize(("name", "written"), [
+        ("a,b", "slaves=a,b,sfp-sfpplus2"),
+        ("a b,c", 'slaves="a b,c,sfp-sfpplus2"'),
+        (",a", "slaves=,a,sfp-sfpplus2"),
+        ("a%b,c", "slaves=a%b,c,sfp-sfpplus2"),
+    ])
+    def test_a_name_a_list_cuts_is_reported_though_its_own_line_finds_it(
+        self, devices, name: str, written: str,
+    ) -> None:
+        """A comma parts two members, written bare or in a string: the
+        LAG has a member ``a`` (or ``c``), which nothing defines.  That a
+        line of its own finds the port's hardware does not make the
+        list right, and the port is reported.  It is judged by every
+        piece of the name: by the part before the first comma, ``@``
+        or ``%``, the last two were not."""
+        # Not through the wrapper: such a name breaks the member list
+        # itself, and the wrapper rightly finds a port in it that the
+        # job does not report.
+        job = migration_pipeline.run_plan_with_models(
+            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            port_rename_map={"igb0": name},
+        )
+        plan = job.port_mapping_plan
+        assert "set [ find default-name=sfp-sfpplus1 ] name=" in job.rendered
+        assert written in job.rendered
+        assert plan.unbound_ports == {"igb0": "sfp-sfpplus1"}
+        assert plan.off_target == [] and plan.target_hardware == {}
+        assert job.status == MigrationJobStatus.partial
+
+
 class TestAPortTheConfigHasNoInterfaceFor:
     """The pairing is over every port the config USES: an interface
     stanza, a VLAN's membership, a LAG's member list, a route.  The
@@ -5745,7 +5845,11 @@ class TestAPortTheConfigHasNoInterfaceFor:
     none -- the members of an OPNsense lagg, which are NICs assigned
     to nothing; a port an IOS route or a VRRP group names and no
     stanza configures -- so there is nothing to write a factory name
-    on and no line for the renderer to write.  Under the name of the
+    on and no line for the renderer to write.  (No parser makes such a
+    LAG member now; the lagg tests here hand the pipeline the OPNsense
+    parser as it was, :data:`_LAGG_AS_IT_WAS`, and
+    ``TestALaggMemberHasARecord`` has what the OPNsense parser does
+    now.)  Under the name of the
     target port it was paired with it needs none.  Under a name an
     operator gave it, it is looked up by nothing -- and the job once
     said ``completed`` with that name in ``slaves=`` or ``gateway=``.
@@ -5759,7 +5863,7 @@ class TestAPortTheConfigHasNoInterfaceFor:
         return _profile(_PROTECTLI), _profile(_CCR2004)
 
     def test_under_the_mappings_name_it_needs_no_line(self, devices) -> None:
-        opnsense = get_codec("opnsense")
+        opnsense = _LAGG_AS_IT_WAS
         job = run_plan_with_models(
             opnsense, get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
         )
@@ -5773,7 +5877,7 @@ class TestAPortTheConfigHasNoInterfaceFor:
 
     def test_named_by_an_entry_it_is_reported(self, devices) -> None:
         job = run_plan_with_models(
-            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            _LAGG_AS_IT_WAS, get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
             port_rename_map={"igb0": "up-a"},
         )
         plan = job.port_mapping_plan
@@ -5796,7 +5900,7 @@ class TestAPortTheConfigHasNoInterfaceFor:
         # itself, and the wrapper rightly finds a port in it (``a``)
         # that the job does not report.
         job = migration_pipeline.run_plan_with_models(
-            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            _LAGG_AS_IT_WAS, get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
             port_rename_map={"igb0": "a,b"},
         )
         plan = job.port_mapping_plan
@@ -5811,7 +5915,7 @@ class TestAPortTheConfigHasNoInterfaceFor:
         name.  (Written bare, ``my port`` was two words, and the
         parser read a member ``my``.)"""
         job = run_plan_with_models(
-            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            _LAGG_AS_IT_WAS, get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
             port_rename_map={"igb0": "my port"},
         )
         plan = job.port_mapping_plan
@@ -5826,7 +5930,7 @@ class TestAPortTheConfigHasNoInterfaceFor:
         """On RouterOS ``SFP-SFPPLUS1`` is not ``sfp-sfpplus1``: it is
         a name, defined by nothing."""
         job = run_plan_with_models(
-            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            _LAGG_AS_IT_WAS, get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
             port_rename_map={"igb0": "SFP-SFPPLUS1"},
         )
         assert "slaves=SFP-SFPPLUS1,sfp-sfpplus2" in job.rendered
@@ -5840,6 +5944,9 @@ class TestAPortTheConfigHasNoInterfaceFor:
             ("GigabitEthernet1/0/3", "up@link", 'gateway="up@link"'),
             ("GigabitEthernet1/0/3", "a%b", "gateway=a%b"),
             ("GigabitEthernet1/0/5", "to core", 'gateway="10.0.5.2%to core"'),
+            # Judged by every piece: nothing is ahead of the first.
+            ("GigabitEthernet1/0/3", ",a", "gateway=,a"),
+            ("GigabitEthernet1/0/3", "%a", "gateway=%a"),
         ],
     )
     def test_a_route_by_such_a_name(self, port: str, name: str, line: str) -> None:
@@ -5855,7 +5962,7 @@ class TestAPortTheConfigHasNoInterfaceFor:
 
     def test_given_a_port_of_the_target_it_is_that_port(self, devices) -> None:
         job = run_plan_with_models(
-            get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
+            _LAGG_AS_IT_WAS, get_codec("mikrotik_routeros"), _OPNSENSE_LAGG, *devices,
             port_rename_map={"igb0": "sfp-sfpplus9"},
         )
         assert "slaves=sfp-sfpplus9,sfp-sfpplus2" in job.rendered
@@ -6344,7 +6451,7 @@ class TestTheWrapperAppliesEveryCheck:
         self._engine_that(spoils, monkeypatch)
         with pytest.raises(AssertionError, match="uses a name for a paired port that nothing defines"):
             run_plan_with_models(
-                get_codec("opnsense"), get_codec("mikrotik_routeros"), _OPNSENSE_LAGG,
+                _LAGG_AS_IT_WAS, get_codec("mikrotik_routeros"), _OPNSENSE_LAGG,
                 _profile(_PROTECTLI), _profile(_CCR2004),
                 port_rename_map={"igb0": "up-a"},
             )
@@ -6372,20 +6479,22 @@ class TestTheWrapperAppliesEveryCheck:
             )
 
     def test_the_oracle_looks_past_the_engines_own_rule(self) -> None:
-        """A next hop that begins with a comma is read back as two, the
-        first of them empty.  The engine judges a name by the part
-        before its first comma, ``@`` or ``%``; this one has nothing
-        before it, and is not reported -- a limit the documents state.
-        The oracle looks in the text, whatever is odd about a name, so
-        it refuses the job with nothing spoiled.  (A name in double
-        quotes was this test's name while the renderer wrote its lists
-        bare: it is a string now, read back whole, and reported.)"""
+        """A next hop that begins with ``@`` is read back as a route
+        with no gateway, in the routing table ``q``.  The engine judges
+        a name by the pieces the parser gives back of it; this one has
+        none that is a name, and is not reported -- a limit the
+        documents state.  The oracle looks in the text, whatever is odd
+        about a name, so it refuses the job with nothing spoiled.  (A
+        name in double quotes was this test's name while the renderer
+        wrote its lists bare, and then one that begins with a comma
+        while the engine judged a name by the part before its first
+        comma, ``@`` or ``%``: each is reported now.)"""
         with pytest.raises(AssertionError, match="uses a name for a paired port that nothing defines"):
             run_plan_with_models(
                 get_codec("cisco_iosxe_cli"), get_codec("mikrotik_routeros"),
                 _IOS_ROUTES_BY_PORTS_WITH_NO_STANZA,
                 _profile("cisco_iosxe/C9300-24P"), _profile(_CCR2004),
-                port_rename_map={"GigabitEthernet1/0/3": ",q"},
+                port_rename_map={"GigabitEthernet1/0/3": "@q"},
             )
 
     def test_a_name_in_double_quotes_is_reported(self) -> None:

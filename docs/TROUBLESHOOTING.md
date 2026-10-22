@@ -1111,7 +1111,8 @@ The message can also say **"N port(s) are not looked up by their
 hardware in the output"** — on a RouterOS target only.
 `port_mapping_plan.unbound_ports` lists them, each with the factory
 name it should be looked up by.  RouterOS finds a port by its factory
-name, and there are three ways to end without a line that does:
+name, and there are four ways to end without a line that does, or
+with one that a list does not lead to:
 
 * The port's name reads as a VLAN, a bridge, a LAG or a loopback
   (`bond1`, `bridge-uplink`, `vlan-trunk`, `uplink.10`, `lo0`).  The
@@ -1129,11 +1130,16 @@ name, and there are three ways to end without a line that does:
 * Two ports of another vendor were given one name.  The output finds
   the first by it, and the second is listed.  Give each a name of its
   own.
+* The port has a line of its own, and an entry gave it a name that a
+  list cuts: a LAG's members (`slaves=`) are cut at a comma, a route's
+  next hop (`gateway=`) at a comma, an `@` or a `%`.  The list then
+  names something nothing defines.  Give the port a name without
+  them.
 
 If the job also says **"the output could not be read back with the
 target codec"**, no port could be checked at all: every port that
 could have been checked is listed for that reason, whatever its name,
-and the three causes above do not apply.  That is a fault in netcanon
+and the four causes above do not apply.  That is a fault in netcanon
 — report it with the config.
 
 If the plan lists `emptied_lags`, `shrunk_lags`, `lost_routes`,

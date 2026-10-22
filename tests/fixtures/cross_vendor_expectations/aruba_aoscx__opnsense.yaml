@@ -48,9 +48,10 @@ meta:
     Campus/aggregation-to-firewall re-home: an ArubaOS-CX switch replaced at
     the routed boundary by an OPNsense appliance.  Hostname, the complete
     interface inventory (all 157 records, with names, descriptions, admin
-    state, MTU, and every IPv4 and IPv6 address), LACP bundles and their member
-    ports, VLAN IDs and VLAN names, and SNMP scalars all survive.  What does
-    not survive:
+    state, MTU, and every IPv4 and IPv6 address -- except that a LACP
+    member is written in its lagg alone, so its own description and MTU
+    are not), LACP bundles and their member ports, VLAN IDs and VLAN
+    names, and SNMP scalars all survive.  What does not survive:
     port-to-VLAN membership and the whole switchport surface, the VLAN-mounted
     SVI record (the subnet relocates, the anycast gateway does not), every
     static route, every VRF, VXLAN, the SNMPv3 user store, the anycast-gateway
@@ -161,15 +162,19 @@ per_field_expectation:
     references: [aoscx-opnsense-surface]
 
   "interfaces[].description":
-    disposition: good
-    note: >
-      Preserved on 7 of 7 cells.  The AOS-CX port description renders to
-      `<descr>` and re-parses unchanged.  opnsense declares
-      `/interfaces/interface/config/description` LOSSY, but read its reason
-      before treating that as a caveat here: "OPNsense imposes no length limit
-      on description text; other vendors (Cisco 240 chars, Juniper 900) may
-      truncate on render."  The declaration is about what OTHER targets do, not
-      about this one — nothing was truncated on any of the 157 records.
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 27 of the 66 records that carry a
+      description are LAG members and lose it.  Every other record
+      keeps its text: the AOS-CX port description renders to `<descr>`
+      and re-parses unchanged, and nothing is truncated (OPNsense
+      imposes no length limit).
     references: [aoscx-opnsense-surface]
 
   "interfaces[].enabled":
@@ -182,12 +187,17 @@ per_field_expectation:
     references: [aoscx-opnsense-surface]
 
   "interfaces[].mtu":
-    disposition: good
-    note: >
-      Preserved on 7 of 7 cells; jumbo uplinks keep their value (`<mtu>9198`
-      on the `core1_1` access ports).  Because no interface record is dropped
-      on this pair, there is no silent revert-to-default hiding behind this
-      disposition.
+    disposition: lossy
+    reason: >
+      A member of a LAG is written in its lagg's ``<members>`` and in
+      no zone of ``<interfaces>``: OPNsense adds only an unassigned
+      interface to a LAGG ("Only unassigned interfaces can be added to
+      LAGG", Other Types).  So what a member's own record holds that a
+      zone would carry is not written, and a comment in the ``<lagg>``
+      names the member and the elements left out, never their values.
+      Measured 2026-10-20: 43 of the 50 records that carry an MTU are
+      LAG members and lose it.  Every other record keeps its value,
+      jumbo included.
     references: [aoscx-opnsense-surface]
 
   "interfaces[].ipv6_addresses":

@@ -10,7 +10,7 @@ Retrieved: 2026-04-30
 <laggs version="1.0.0">
   <lagg uuid="...">
     <laggif>lagg0</laggif>
-    <members>opt3,opt4</members>
+    <members>igb2,igb3</members>
     <proto>lacp</proto>
     <descr>Bonded uplink to core switch</descr>
   </lagg>
@@ -68,9 +68,11 @@ mesh canonicalises.
 
 ### members
 
-OPNsense ``<members>opt3,opt4</members>`` ↔ RouterOS
+OPNsense ``<members>igb2,igb3</members>`` ↔ RouterOS
 ``slaves=ether3,ether4``.  Member identities differ; port-rename
-mesh canonicalises.
+mesh canonicalises.  A member is a BSD device name in no zone:
+"Only unassigned interfaces can be added to LAGG" (same page, Other
+Types); the example listed zone names until 2026-10-20.
 
 ### mode
 

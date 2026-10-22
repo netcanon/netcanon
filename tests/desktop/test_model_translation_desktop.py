@@ -124,9 +124,10 @@ interface Ethernet1
 end
 """
 
-#: An OPNsense lagg.  Its members are NICs assigned to nothing: the
-#: config has an interface for ``lagg0`` and none for ``igb0`` or
-#: ``igb1``, and the parser makes no record for them.
+#: An OPNsense lagg.  Its members are NICs assigned to nothing (OPNsense
+#: adds no other to a lagg): the config has an interface for ``lagg0``
+#: and none for ``igb0`` or ``igb1``, and the parser gives each a
+#: record of its own.
 _OPNSENSE_LAGG = """<?xml version="1.0"?>
 <opnsense>
   <system>
@@ -661,9 +662,10 @@ class TestModelTranslationServedByEmbeddedServer:
                     "target_profile": "mikrotik_routeros/CCR2004-1G-12S+2XS",
                     "port_rename_map": {"Ethernet1": "bridge-uplink"},
                 })
-                # ...and so is a placed port the config has no interface
-                # for -- a member of an OPNsense lagg, a NIC assigned to
-                # nothing -- that an entry names.
+                # ...while a member of an OPNsense lagg, a NIC assigned
+                # to nothing, has a record of its own: named by an
+                # entry, it is looked up by the hardware it was paired
+                # with.
                 loose = _post(port, "/api/v1/migration/plan", {
                     "source": "opnsense", "target": "mikrotik_routeros",
                     "raw_text": _OPNSENSE_LAGG,
@@ -715,9 +717,11 @@ class TestModelTranslationServedByEmbeddedServer:
         assert unbound["port_mapping_plan"]["unbound_ports"] == {"Ethernet1": "sfp-sfpplus1"}
         assert unbound["status"] == "partial"
 
+        assert "set [ find default-name=sfp-sfpplus1 ] name=up-a disabled=no" in loose["rendered"]
         assert "slaves=up-a,sfp-sfpplus2" in loose["rendered"]
-        assert loose["port_mapping_plan"]["unbound_ports"] == {"igb0": "sfp-sfpplus1"}
-        assert loose["status"] == "partial"
+        assert loose["port_mapping_plan"]["unbound_ports"] == {}
+        assert loose["port_mapping_plan"]["target_hardware"] == {"igb0": "sfp-sfpplus1"}
+        assert loose["status"] == "completed"
 
         assert "set [ find default-name=sfp-sfpplus1 ] name=up-a" in listed["rendered"]
         assert "slaves=up-a,sfp-sfpplus2" in listed["rendered"]

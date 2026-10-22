@@ -9,6 +9,13 @@ against a full in-process `tools/run_full_mesh.py` run over the committed
 corpus.
 Retrieved: 2026-08-20
 
+> **2026-10-20:** a member of a LAG is now written onto OPNsense in its
+> lagg's `<members>` alone, since OPNsense adds only an unassigned
+> interface to a LAGG.  A member's own description is no longer
+> written (a comment in the `<lagg>` names what is left out), so the
+> zero-drift figures below for `description` predate that change; the
+> paired expectation YAML has the current measure.
+
 `cisco_nxos` is a DC leaf/spine switch codec (`device_classes = [switch,
 router]`); `opnsense` is a FreeBSD router/firewall codec that reads and writes
 `config.xml`. Nearly all of the loss measured below is that role mismatch plus

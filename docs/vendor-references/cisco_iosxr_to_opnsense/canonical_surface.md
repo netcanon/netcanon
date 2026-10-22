@@ -11,6 +11,13 @@ the ratchet agree by construction. Every claim below that names a count was
 re-derived by parsing the fixture with `cisco_iosxr` and rendering it with
 `opnsense` directly, not read off the drift matrix.
 
+> **2026-10-20:** a member of a LAG is now written onto OPNsense in its
+> lagg's `<members>` alone, since OPNsense adds only an unassigned
+> interface to a LAGG.  A member's own description is no longer
+> written (a comment in the `<lagg>` names what is left out), so the
+> zero-drift figures below for `description` predate that change; the
+> paired expectation YAML has the current measure.
+
 - Fixture cells: **12** (11 real IOS-XR captures + the synthetic kitchen sink)
 - Render errors: **0** · re-parse errors: **0**
 - Retrieved: 2026-08-25

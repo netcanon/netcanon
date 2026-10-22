@@ -60,6 +60,13 @@ Notes:
   driver naming (`lagg0`, `lagg1`, ...).  Numbering is ZERO-based.
 - `<members>` is a comma-separated string of BSD device names
   (`em2,em3` not space-separated).
+- A member is an UNASSIGNED interface: "Only unassigned interfaces can
+  be added to LAGG" (same page, Other Types).  So a member is named in
+  `<laggs>` and in no zone of `<interfaces>`, and has no description,
+  MTU, address or `<enable/>` of its own in the config.  Netcanon
+  writes a LAG member onto OPNsense in `<members>` alone, and says in a
+  comment in the `<lagg>` which elements the source gave the member
+  that are not written (added 2026-10-20).
 - `<proto>` enumerates `lacp` / `failover` / `loadbalance` /
   `roundrobin` / `none` (static).  FreeBSD's lagg(4) driver always
   advertises actively when LACP is selected (no separate

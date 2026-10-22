@@ -287,8 +287,15 @@ per_field_expectation:
       free-form field) has no destination on OPNsense.  FortiGate
       codec capability matrix declares
       ``/interfaces/interface/config/description`` lossy with this
-      rationale.
-    references: [fgt-interfaces, opn-interfaces]
+      rationale.  And a member of an aggregate is written in its
+      lagg's ``<members>`` and in no zone of ``<interfaces>``:
+      OPNsense adds only an unassigned interface to a LAGG ("Only
+      unassigned interfaces can be added to LAGG", Other Types), so a
+      member's own ``set alias`` is not written, and a comment in the
+      ``<lagg>`` names the member and the elements left out, never
+      their values.  The synthetic kitchen sink's two members of
+      ``agg1`` lose theirs.
+    references: [fgt-interfaces, opn-interfaces, opn-laggs]
 
   interfaces[].enabled:
     disposition: good

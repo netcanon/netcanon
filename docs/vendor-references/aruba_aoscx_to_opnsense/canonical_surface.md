@@ -11,6 +11,13 @@ dispositions were resolved through the audit's own `actual_disposition()`
 rather than inferred from the drift shape, so this file and the ratchet agree
 by construction.
 
+> **2026-10-20:** a member of a LAG is now written onto OPNsense in its
+> lagg's `<members>` alone, since OPNsense adds only an unassigned
+> interface to a LAGG.  A member's own description and MTU are no longer
+> written (a comment in the `<lagg>` names what is left out), so the
+> zero-drift figures below for `description` and `mtu` predate that change; the
+> paired expectation YAML has the current measure.
+
 - Fixture cells: **7**
 - Render errors: **0** · re-parse errors: **0**
 - Retrieved: 2026-08-25

@@ -1186,22 +1186,19 @@ What still says `completed`, and is yours to check:
   10.50.0.0 255.255.0.0 Null0` onto
   RouterOS is `gateway=Null0`, in a job that can be `completed`.
   Read a finished job's warnings for that line.
-* **A LAG member the config has no interface for.**  The members
-  of an OPNsense lagg are as a rule NICs assigned to nothing, and a
-  FortiGate aggregate can name a member that has no `edit` stanza.
-  Those two parsers make no interface record for such a member, and
-  a target that writes a LAG on each member's own stanza — EOS,
-  AOS-CX, IOS-XE CLI, IOS-XR, NX-OS, OS10, Junos — writes the LAG
-  with no member, in a job that can be `completed`.  (AOS-S, FortiOS,
-  RouterOS and OPNsense write the member list.  So does VyOS for a
-  LAG it writes as `bond<N>`; one left under a name it does not read
-  as a LAG — a FortiGate `agg1` — comes out an `ethernet` interface
-  with no member, in a `partial` job that lists it.)  Compare each
-  LAG's members in the output with the source.  An AOS-S port that
-  a config names only in a VLAN's list or on a `trunk` line was such
-  a port too, VLAN membership included, in release 0.7.7 and
-  earlier; its parser now gives it a record
-  (see [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md)).
+* **A LAG under a name the target does not read as a LAG.**  A
+  FortiGate aggregate keeps its own name (`agg1`) where the
+  translator cannot read it, and EOS, OS10 and VyOS then write an
+  interface of that name that is no LAG, its members beside it as
+  plain ports, in a `partial` job that lists the name
+  (`untranslated_ports`).  Give the aggregate a name in the port
+  map.  A member the config has no interface for — an OPNsense
+  lagg's, which OPNsense assigns to no zone, one a FortiGate
+  aggregate names with no `edit` of its own, an AOS-S port named only
+  on a `trunk` line — was no member on seven targets in release 0.7.7
+  and earlier; each parser now gives it a record
+  (see [`vendors/opnsense.md`](vendors/opnsense.md),
+  [`vendors/aruba_aoss.md`](vendors/aruba_aoss.md)).
 * **A port on AOS-CX under a name AOS-CX cannot read as a port.**
   That renderer writes a port's VLANs only where the port's name
   reads as a port or a LAG.  A port left under its source name, or
@@ -1824,7 +1821,7 @@ What you get back, on the job's `port_mapping_plan`:
 * **`unbound_ports`** — RouterOS targets only: ports that no line of
   their own in the output looks up by their hardware, each with that
   hardware.  The finished output is read back to find them, and each
-  port is judged by its own line.  Three ways.  The port's name reads
+  port is judged by its own line.  Four ways.  The port's name reads
   as another kind of interface: RouterOS output has no Ethernet line
   for a name shaped like a VLAN, a bridge, a LAG or a loopback
   (`bond1`, `bridge-uplink`, `vlan-trunk`, `uplink.10`, `lo0`),
@@ -1835,7 +1832,11 @@ What you get back, on the job's `port_mapping_plan`:
   route — and your entry gave it a name that is no port of the
   target, which the output then uses (`slaves=`, `gateway=`) and
   nothing defines.  Or you gave two ports of another vendor one name:
-  the output finds the first by it, and the second is listed.  The
+  the output finds the first by it, and the second is listed.  Or the
+  port has a line of its own, and a list that names it cuts your
+  name — `slaves=` at a comma, `gateway=` at a comma, an `@` or a
+  `%`: the LAG or the route then names something nothing defines
+  (`a`, for `a,b`).  The
   entry for such a port is not listed in `off_target` as well.  The
   job is `partial` while this is not empty: name the port with a port
   of the target (that moves it there), or — where the config has an
@@ -2010,14 +2011,18 @@ nothing, as before.
   nothing — and that is said in a line of the plan, not in
   `unbound_ports`: the job is `completed`, because keeping it was
   your decision.
-* RouterOS output writes a LAG's members and a route's next hop
-  unquoted, so a name with white space or a comma in it breaks the
-  line it is written into, whether or not the port has an interface.
-  A placed port with no interface is still reported under such a
-  name in the ordinary cases (`my port`, `a,b`).  It is not where the
-  name begins with a comma, `@` or `%`, holds `@` or `%` ahead of the
-  white space or comma, is wrapped in double quotes, or has a line
-  break in it: the entry is then listed in `off_target` only.
+* A RouterOS LAG's members (`slaves=`) are cut at a comma, and a
+  route's next hop (`gateway=`) at a comma, an `@` or a `%`, so a
+  name that holds one is pieces there, whether or not the port has
+  an interface.  (White space no longer cuts either: a list that
+  holds it is written as a string, and read back whole.)  A placed
+  port under such a name is reported (`a,b`, `,a`, `a%b,c`), whether
+  or not a line of its own finds it.  It is not where no piece of
+  the name is read back as a name — a next hop that begins with `@`
+  (`@a`: what follows is read as a routing table) — nor where the
+  name has a line break in it: the entry of a port with no interface
+  is then listed in `off_target` only, and a next hop by a port that
+  has one is not reported at all.
 * **A next hop that is not exactly an interface's name is not
   followed** when the interface moves: a RouterOS route with several
   gateways or a routing-table suffix, and — across vendors — a Junos

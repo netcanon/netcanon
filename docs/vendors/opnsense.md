@@ -254,13 +254,21 @@ Provenance in
   output bound its DHCP server to `interface lan`, FortiOS wrote
   `set interface "lan"`, and an OPNsense output had `<dhcpd><lan>`
   beside an `<interfaces>` with no `<lan>` in it.
-- **A lagg's members onto a switch** — the members of a lagg are
-  as a rule NICs assigned to nothing, so the config has no interface
-  for them and Netcanon makes no port record for them.  A target
-  that writes a LAG on each member's own stanza (EOS, AOS-CX, IOS-XE,
-  IOS-XR, NX-OS, OS10, Junos) then writes the LAG with no member, in
-  a job that can be `completed`.  Add the members on the target by
-  hand.  See [`../CAPABILITIES.md`](../CAPABILITIES.md) § D1.
+- **A lagg's members** — OPNsense adds only an unassigned interface
+  to a lagg ("Only unassigned interfaces can be added to LAGG",
+  docs.opnsense.org, Other Types), so a member is named in `<laggs>`
+  alone, and Netcanon gives it a port record of its own that names
+  its lagg.  Onto OPNsense, a member of a LAG is written in the
+  lagg's `<members>` and in no zone of `<interfaces>`; where the
+  source gave the member something a zone would carry (a
+  description, an MTU, an address, a disabled state), a comment in
+  the `<lagg>` names the member and the elements not written, never
+  their values.
+  ⚠️ Up to 0.7.7 the members had no record: a target that writes a
+  LAG on each member's own stanza (EOS, AOS-CX, IOS-XE, IOS-XR,
+  NX-OS, OS10, Junos) wrote the LAG with no member, or none at all,
+  in a job that could be `completed`; and an OPNsense output
+  assigned each member a zone of its own.
 - **Declaring an OPNsense device** — BSD device names are the
   system's and are lower-case, so with both devices declared on the
   API or in the Interface rename modal an override typed in another
