@@ -759,6 +759,19 @@ timestamp if your timezone matters for an audit.
   or a Junos config with tagged units onto Junos, with 0.7.7 or
   earlier, translate it again.
 
+- **A Junos IRB unit's MTU was lost where the unit was folded onto
+  its VLAN.**  The Junos parser folds an IRB unit that a VLAN names
+  (`set vlans v100 l3-interface irb.100`) onto that VLAN -- its
+  address goes on the VLAN record and its own record is taken out --
+  unless the unit holds something a VLAN record cannot: a
+  description, a VRF, an IPv6 address.  A VLAN record holds no MTU
+  either, and an MTU was not on that list, so a unit with `family
+  inet mtu 9000` was folded and its MTU lost on every target, Junos
+  to Junos included, in a job that reported nothing.  Such a unit is
+  now left as it is (`irb.100`, with its address and its MTU).  No
+  committed input has an IRB unit with an MTU, so no committed parse
+  moves.  Guarded by
+  `tests/unit/migration/codecs/juniper_junos/test_an_irb_units_mtu_is_kept.py`.
 - **A unit of a Junos loopback, tunnel, aggregate or management port
   was written under a name Junos refuses.**  The parser reads `set
   interfaces lo0 unit 10 ...` as an interface `lo0.10`, and the

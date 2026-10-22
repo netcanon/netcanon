@@ -421,7 +421,11 @@ EVPN-Type-5 and MPLS L3VPN snapshots).
   device states no MTU (and the unit's is above 1500) or one no
   larger than the unit's, a `# review:` line says so.  ⚠️ Up to
   0.7.7 a unit's MTU was not read, and was written only under a name
-  Junos refuses.  `vlan-tagging` on the parent port is not
+  Junos refuses.  An IRB unit that a VLAN names (`l3-interface
+  irb.100`) is folded onto the VLAN -- its address goes on the VLAN
+  -- unless it holds what a VLAN record cannot: a description, a
+  VRF, an IPv6 address or an MTU.  Such a unit stays `irb.100`.
+  ⚠️ Until then an IRB unit's MTU was lost where it was folded.  `vlan-tagging` on the parent port is not
   read and not written: add it to an output that has tagged units.
 - **Declaring a Junos device** — every interface name is the system's
   and is lower-case, so an override typed in another case
